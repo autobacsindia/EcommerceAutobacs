@@ -43,6 +43,15 @@ const itemLines = (rr) =>
  *                                    Optional: absent means no EMI notice, never a throw.
  * @returns {{ subject: string, text: string, html: string }}
  */
+/** How to describe an offline payout to the customer who received it. */
+const OFFLINE_METHOD_WORDS = Object.freeze({
+  cash: 'cash',
+  bank_transfer: 'bank transfer',
+  upi: 'UPI',
+  cheque: 'cheque',
+  other: 'an offline payment',
+});
+
 export const returnEmail = ({ event, rr, order, company, payment = null }) => {
   const ref = order?.orderNumber || String(rr.order);
   const items = itemLines(rr);
@@ -114,6 +123,27 @@ export const returnEmail = ({ event, rr, order, company, payment = null }) => {
       break;
     case 'refunded': {
       const amt = rr.refund?.finalAmount || 0;
+      // A refund settled OUTSIDE the gateway is already in the customer's hands — cash
+      // over the counter, a bank transfer, UPI. Telling them it "is on its way" and to
+      // allow 5-9 business days would be plainly wrong, and invites a support ticket
+      // (or a chargeback) asking where the second payment went.
+      const isOffline = rr.refund?.method === 'offline';
+      if (isOffline) {
+        const how = OFFLINE_METHOD_WORDS[rr.refund?.offlineMethod] || 'an offline payment';
+        const refText = rr.refund?.reference ? ` Reference: ${rr.refund.reference}.` : '';
+        subject = `Refund confirmed — ${inr(amt)} — Order #${ref}`;
+        heading = 'Your refund has been processed';
+        intro = `This confirms a refund of <strong>${inr(amt)}</strong> for order #${ref}, paid to you by <strong>${esc(how)}</strong>.${esc(refText)}`;
+        const offlineParts = [];
+        if (rr.refund?.shippingDeduction) offlineParts.push(`Shipping deduction: ${inr(rr.refund.shippingDeduction)}`);
+        if (rr.refund?.restockingDeduction) offlineParts.push(`Restocking (10%): ${inr(rr.refund.restockingDeduction)}`);
+        textLines = [
+          `This confirms a refund of ${inr(amt)} for order #${ref}, paid to you by ${how}.${refText}`,
+          ...offlineParts,
+          `If you have not received it, reply to this email and we'll sort it out.`,
+        ];
+        break;
+      }
       subject = `Refund initiated — ${inr(amt)} — Order #${ref}`;
       heading = 'Your refund is on its way';
       intro = `We’ve initiated a refund of <strong>${inr(amt)}</strong> for order #${ref} to your original payment method. It typically settles in <strong>5–9 business days</strong>, depending on your bank or payment provider.`;

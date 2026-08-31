@@ -228,7 +228,7 @@ export interface CancellationSummaryLine {
  * when stock ran short, the third a week later when the customer changed their mind.
  */
 export const cancelledQuantityForItem = (
-  order: { cancellations?: CancellationSummaryLine[] },
+  order: { cancellations?: CancellationSummaryLine[] } | null | undefined,
   itemId: string,
 ): number =>
   (order?.cancellations || []).reduce(
@@ -252,3 +252,103 @@ export const liveQuantityForItem = (
 /** Has anything on this order been cancelled? Gates all the cancellation UI. */
 export const hasCancellations = (order: { cancellations?: CancellationSummaryLine[] }): boolean =>
   (order?.cancellations || []).length > 0;
+
+/**
+ * Units on this order that could still be cancelled — the client mirror of the server's
+ * `remainingCancellable` (Back-end/server/utils/orderCancellation.js).
+ *
+ * ── WHY THE CUSTOMER PAGE NEEDS THIS ──────────────────────────────────────────────
+ * Split shipments made `shipped` mean "at least one parcel has left", not "the whole
+ * order has left". The customer page keyed its cancel control on the status alone, so a
+ * three-item order with one box in transit rendered "Already Shipped — Can't Cancel"
+ * while two items sat untouched in the warehouse. The server has always allowed those
+ * two to be cancelled; only the UI (and the `canCustomerCancel` gate behind it) said no.
+ *
+ * A unit is cancellable up to `ordered − cancelled − gone`, where `gone` counts only
+ * SHIPPED and DELIVERED parcels. Units in a `packed` box stay cancellable because the
+ * server pulls them out of the parcel first.
+ *
+ * ⚠️ DISPLAY ONLY, like everything else in this section. It decides which button to
+ * render, never what may actually be cancelled or what it is worth — the server
+ * re-derives both and is free to disagree.
+ */
+export const remainingCancellableUnits = (order: (FulfilmentOrder & {
+  items?: Array<{ _id?: string; quantity?: number }>;
+  cancellations?: CancellationSummaryLine[];
+}) | null | undefined): number => {
+  const gone = new Map<string, number>();
+  for (const shipment of order?.shipments || []) {
+    if (shipment.status !== 'shipped' && shipment.status !== 'delivered') continue;
+    for (const line of shipment.lines || []) {
+      const key = String(line.itemId);
+      gone.set(key, (gone.get(key) || 0) + (line.quantity || 0));
+    }
+  }
+
+  return (order?.items || []).reduce((total, item) => {
+    const id = String(item._id ?? '');
+    const available = (item.quantity || 0)
+      - cancelledQuantityForItem(order, id)
+      - (gone.get(id) || 0);
+    return total + Math.max(0, available);
+  }, 0);
+};
+
+/**
+ * What the customer's cancel control should offer.
+ *
+ * `full` — nothing has left yet, so cancelling kills the whole order.
+ * `partial` — a parcel is already in transit but some units are not; only those go.
+ * `none` — everything has gone (or the order is in a state that cannot be cancelled);
+ *          the way back is a return, not a cancellation.
+ *
+ * Mirrors orderStatusService.canCustomerCancel. Kept as one function so the button
+ * label, the confirm copy and the disabled state cannot drift apart.
+ */
+export const customerCancelScope = (order: (FulfilmentOrder & {
+  status?: string;
+  items?: Array<{ _id?: string; quantity?: number }>;
+  cancellations?: CancellationSummaryLine[];
+}) | null | undefined): 'full' | 'partial' | 'none' => {
+  const status = (order?.status || '').toLowerCase();
+  if (status === 'awaiting_payment' || status === 'processing') return 'full';
+  if (status === 'shipped' && remainingCancellableUnits(order) > 0) return 'partial';
+  return 'none';
+};
+
+/**
+ * Return statuses that mean a return is OPEN — the goods decision is not yet settled.
+ *
+ * Mirrors the in-flight set the backend uses (config/returnPolicy.js
+ * IN_FLIGHT_RETURN_STATUSES) via the order's mirrored `returnRequest.status`, whose enum
+ * spells `received` as `item_received`.
+ */
+const RETURN_IN_FLIGHT = ['pending', 'approved', 'item_received'];
+
+/**
+ * Is there a return open on this order that its STATUS does not already show?
+ *
+ * ── WHY THIS EXISTS ───────────────────────────────────────────────────────────────
+ * Approving a return used to flip `Order.status` straight to `returned`, so the admin
+ * table showed "Returned" the moment ops accepted one. That flip is now gated on the
+ * return covering every delivered line — because `returned` is TERMINAL, and on a
+ * 1-of-3 return it stranded the other two items forever.
+ *
+ * Correct, but it would have left the table showing a bare "Delivered" for an order with
+ * a return in flight: less than it showed before. This badge puts the signal back
+ * without lying about the order's state.
+ *
+ * ⚠️ Deliberately says "a return is open", never how MANY items. `returnRequest` is a
+ * mirror of the LATEST return only, so it cannot be summed — counting units needs the
+ * ReturnRequest collection (see the server's utils/orderReturns.js). Claiming
+ * "1 of 3 returned" from this field would be a guess.
+ */
+export const hasOpenReturn = (order: {
+  status?: string;
+  returnRequest?: { status?: string };
+}): boolean => {
+  const orderStatus = (order?.status || '').toLowerCase();
+  // `returned` already says it; anything terminal has nothing in flight.
+  if (orderStatus === 'returned' || orderStatus === 'cancelled') return false;
+  return RETURN_IN_FLIGHT.includes(order?.returnRequest?.status || '');
+};

@@ -75,7 +75,7 @@ const DOOMED = [
     reason: 'ops=0; key {_id:1,"returnRequest.status":1} — leads with _id (already unique, so the '
           + 'compound adds nothing) and `returnRequest.status` exists in 0 docs after the phantom '
           + 'subdoc cleanup. NOT unique despite the name; the real constraint is '
-          + 'ReturnRequest.unique_active_return_per_order_product.',
+          + 'ReturnRequest.unique_inflight_return_per_order_product.',
     recreate: 'db.orders.createIndex({ _id: 1, "returnRequest.status": 1 }, { name: "return_request_per_order" })',
   },
   {

@@ -9,6 +9,7 @@ import { jest } from '@jest/globals';
 
 const mockReturnRepo = {
   findOne: jest.fn(),
+  returnedQuantityByProduct: jest.fn().mockResolvedValue(new Map()),
   findById: jest.fn(),
   create: jest.fn(),
   save: jest.fn(),
@@ -17,6 +18,9 @@ const mockReturnRepo = {
   claimPaymentRecord: jest.fn(),
   countDocuments: jest.fn(),
   find: jest.fn(),
+  // Drives the partial-return coverage check: the order only moves to `returned`
+  // when every delivered unit is accounted for.
+  returnedQuantityByProduct: jest.fn(),
 };
 const mockOrderRepo = {
   findOwnedWithProducts: jest.fn(),
@@ -98,6 +102,7 @@ describe('createReturnRequest — policy guards', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockReturnRepo.findOne.mockResolvedValue(null);
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map());
     mockGetResource.mockImplementation(async (publicId, type) => ({
       bytes: 1000,
       format: type === 'video' ? 'mp4' : 'jpg',
@@ -207,6 +212,7 @@ describe('createReturnRequest — debit-card EMI is all-or-nothing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockReturnRepo.findOne.mockResolvedValue(null);
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map());
     mockGetResource.mockImplementation(async (publicId, type) => ({ bytes: 1000, format: type === 'video' ? 'mp4' : 'jpg' }));
     mockReturnRepo.create.mockImplementation(async (doc) => ({ _id: 'ret-1', ...doc }));
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(twoLineOrder());
@@ -558,9 +564,26 @@ describe('return approval → order fulfillment status', () => {
     };
   }
 
+  /**
+   * An order matching `makeReturn`'s single line. No shipments, so it is treated as a
+   * pre-parcel order whose every live unit was delivered — the legacy fallback in
+   * utils/orderReturns.deliveredQuantityByProduct.
+   */
+  const makeCoverageOrder = (items = [{ _id: 'i1', product: 'prod-1', quantity: 1 }]) => ({
+    _id: 'order-1',
+    status: 'delivered',
+    items,
+    shipments: [],
+    cancellations: [],
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockReturnRepo.save.mockResolvedValue(true);
+    // Default: a one-line order whose only unit is the one being returned, so the
+    // return covers everything and the order legitimately becomes `returned`.
+    mockOrderRepo.findById.mockResolvedValue(makeCoverageOrder());
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map([['prod-1', 1]]));
   });
 
   it('marks the order returned when the return is approved', async () => {
@@ -569,6 +592,82 @@ describe('return approval → order fulfillment status', () => {
     expect(next).not.toHaveBeenCalled();
     expect(mockOrderRepo.markReturnedOnReturnApproval).toHaveBeenCalledWith('order-1', 'a1', expect.any(String));
     expect(mockOrderRepo.revertReturnToDelivered).not.toHaveBeenCalled();
+  });
+
+  /*
+    ── REGRESSION: a partial return must NOT close the whole order ──────────────────
+    Approving a return for 1 of 3 delivered items used to flip Order.status to
+    `returned`, which is TERMINAL in orderStatusService.STATUS_TRANSITIONS — so the
+    customer could never send back the other 2 and the order could never move again.
+    The unique_inflight_return_per_order_product index was deliberately narrowed to
+    permit exactly that follow-up return; this flip defeated it.
+  */
+  it('leaves a partially returned order on `delivered` so the rest stays returnable', async () => {
+    mockOrderRepo.findById.mockResolvedValue(makeCoverageOrder([
+      { _id: 'i1', product: 'prod-1', quantity: 1 },
+      { _id: 'i2', product: 'prod-2', quantity: 2 },
+    ]));
+    // Only the prod-1 unit has been claimed; prod-2 ×2 is still with the customer.
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map([['prod-1', 1]]));
+
+    mockReturnRepo.findById.mockReturnValue(populated(makeReturn()));
+    const { next } = await run(reviewReturn, { params: { id: 'ret-1' }, body: { decision: 'approve' }, user: { _id: 'a1' } });
+
+    expect(next).not.toHaveBeenCalled();
+    expect(mockOrderRepo.markReturnedOnReturnApproval).not.toHaveBeenCalled();
+  });
+
+  it('marks the order returned once the LAST outstanding line comes back', async () => {
+    mockOrderRepo.findById.mockResolvedValue(makeCoverageOrder([
+      { _id: 'i1', product: 'prod-1', quantity: 1 },
+      { _id: 'i2', product: 'prod-2', quantity: 2 },
+    ]));
+    // The earlier prod-1 return plus this one for both prod-2 units = everything.
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(
+      new Map([['prod-1', 1], ['prod-2', 2]]));
+
+    mockReturnRepo.findById.mockReturnValue(populated(makeReturn()));
+    await run(reviewReturn, { params: { id: 'ret-1' }, body: { decision: 'approve' }, user: { _id: 'a1' } });
+
+    expect(mockOrderRepo.markReturnedOnReturnApproval).toHaveBeenCalledWith('order-1', 'a1', expect.any(String));
+  });
+
+  it('counts only what a parcel actually delivered, not what was ordered', async () => {
+    // Two items ordered, only prod-1 has arrived — prod-2's parcel is still in transit.
+    // Returning prod-1 therefore covers everything DELIVERED, but the order must stay
+    // `delivered` because a live parcel is still owed.
+    mockOrderRepo.findById.mockResolvedValue({
+      _id: 'order-1',
+      status: 'delivered',
+      items: [
+        { _id: 'i1', product: 'prod-1', quantity: 1 },
+        { _id: 'i2', product: 'prod-2', quantity: 1 },
+      ],
+      shipments: [
+        { _id: 's1', status: 'delivered', deliveredAt: new Date(), lines: [{ itemId: 'i1', quantity: 1 }] },
+        { _id: 's2', status: 'shipped', lines: [{ itemId: 'i2', quantity: 1 }] },
+      ],
+      cancellations: [],
+    });
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map([['prod-1', 1]]));
+
+    mockReturnRepo.findById.mockReturnValue(populated(makeReturn()));
+    await run(reviewReturn, { params: { id: 'ret-1' }, body: { decision: 'approve' }, user: { _id: 'a1' } });
+
+    // prod-1 is the only delivered unit and it came back, so coverage IS complete.
+    expect(mockOrderRepo.markReturnedOnReturnApproval).toHaveBeenCalled();
+  });
+
+  it('never fails the approval when the status roll-up throws', async () => {
+    mockReturnRepo.returnedQuantityByProduct.mockRejectedValue(new Error('mongo down'));
+    mockReturnRepo.findById.mockReturnValue(populated(makeReturn()));
+
+    const { next } = await run(reviewReturn, { params: { id: 'ret-1' }, body: { decision: 'approve' }, user: { _id: 'a1' } });
+
+    // The goods decision is recorded; only the cached Order.status is left stale.
+    expect(next).not.toHaveBeenCalled();
+    expect(mockReturnRepo.save).toHaveBeenCalled();
+    expect(mockOrderRepo.markReturnedOnReturnApproval).not.toHaveBeenCalled();
   });
 
   it('leaves the order alone when the return is rejected at review', async () => {
@@ -601,6 +700,7 @@ describe('return approval → order fulfillment status', () => {
 
   it('still accepts a return for another item while the order sits in `returned`', async () => {
     mockReturnRepo.findOne.mockResolvedValue(null);
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map());
     mockReturnRepo.create.mockImplementation(async (doc) => ({ _id: 'ret-2', ...doc }));
     mockGetResource.mockImplementation(async (publicId, type) => ({ bytes: 1000, format: type === 'video' ? 'mp4' : 'jpg' }));
     mockOrderRepo.findOwnedWithProducts.mockResolvedValue(makeOrder({ status: 'returned' }));
@@ -767,6 +867,7 @@ describe('createReturnRequest — per-line return window (split shipments)', () 
   beforeEach(() => {
     jest.clearAllMocks();
     mockReturnRepo.findOne.mockResolvedValue(null);
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map());
     mockGetResource.mockImplementation(async (publicId, type) => ({
       bytes: 1000, format: type === 'video' ? 'mp4' : 'jpg',
     }));
@@ -856,5 +957,233 @@ describe('createReturnRequest — per-line return window (split shipments)', () 
     });
     expect(status).toBe(400);
     expect(error.message).toMatch(/window closed/i);
+  });
+});
+
+/**
+ * Returning PART of a multi-item order.
+ *
+ * Two independent axes, and a customer can use both at once: which products they send
+ * back, and how many units of each. On a split order a third axis appears — which of
+ * those have actually arrived yet.
+ */
+describe('createReturnRequest — partial returns', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockReturnRepo.findOne.mockResolvedValue(null);
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map());
+    mockGetResource.mockImplementation(async (publicId, type) => ({
+      bytes: 1000, format: type === 'video' ? 'mp4' : 'jpg',
+    }));
+    mockReturnRepo.create.mockImplementation(async (doc) => ({ _id: 'ret-1', ...doc }));
+  });
+
+  const evidence = {
+    problemDescription: 'It rattles',
+    video: { publicId: 'autobacs/returns/abc/vid', resourceType: 'video' },
+    proofOfPurchase: { publicId: 'autobacs/returns/abc/proof.jpg', resourceType: 'image' },
+  };
+
+  /** Two products: Wiper ×3 and Polish ×1, both delivered a day ago. */
+  const multiItemOrder = (over = {}) => makeOrder({
+    items: [
+      { _id: 'item-a', product: { _id: 'prod-1', name: 'Wiper', returnPolicy: { returnable: true } }, quantity: 3, price: 500, variantId: null },
+      { _id: 'item-b', product: { _id: 'prod-2', name: 'Polish', returnPolicy: { returnable: true } }, quantity: 1, price: 250, variantId: null },
+    ],
+    ...over,
+  });
+
+  it('returns ONE product out of several, leaving the other alone', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder());
+    const { error } = await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-1', quantity: 3, reason: 'manufacturing_defect' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+
+    expect(error).toBeUndefined();
+    const created = mockReturnRepo.create.mock.calls[0][0];
+    expect(created.items).toHaveLength(1);
+    expect(created.items[0]).toMatchObject({ product: 'prod-1', quantity: 3 });
+  });
+
+  // The customer bought 3 wipers and only 2 are faulty.
+  it('returns PART of a line’s quantity', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder());
+    const { error } = await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-1', quantity: 2, reason: 'manufacturing_defect' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+
+    expect(error).toBeUndefined();
+    const created = mockReturnRepo.create.mock.calls[0][0];
+    expect(created.items[0]).toMatchObject({ product: 'prod-1', quantity: 2, unitPrice: 500 });
+  });
+
+  // A tampered or stale client must never be able to claim back more than was bought.
+  it('clamps a quantity larger than the order line', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder());
+    await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-1', quantity: 99, reason: 'manufacturing_defect' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+    expect(mockReturnRepo.create.mock.calls[0][0].items[0].quantity).toBe(3);
+  });
+
+  it('returns several products at once, each with its own quantity and reason', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder());
+    const { error } = await run(createReturnRequest, {
+      body: {
+        orderId: 'order-1',
+        items: [
+          { productId: 'prod-1', quantity: 1, reason: 'transit_damage' },
+          { productId: 'prod-2', quantity: 1, reason: 'wrong_item' },
+        ],
+        ...evidence,
+      },
+      user: { _id: 'u1' },
+    });
+
+    expect(error).toBeUndefined();
+    const created = mockReturnRepo.create.mock.calls[0][0];
+    expect(created.items).toHaveLength(2);
+    expect(created.items.map((i) => i.reason)).toEqual(['transit_damage', 'wrong_item']);
+  });
+
+  /*
+    The three axes together: send back 2 of 3 units of a product that arrived in the FIRST
+    parcel, while a second parcel is still in transit. The order is still `shipped`, so a
+    naive order-status gate would have refused this outright.
+  */
+  it('returns part of a line that arrived in parcel 1 while parcel 2 is still in transit', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder({
+      status: 'shipped',
+      shipments: [
+        { _id: 's1', sequence: 1, status: 'delivered', deliveredAt: daysAgo(1), lines: [{ itemId: 'item-a', quantity: 3 }] },
+        { _id: 's2', sequence: 2, status: 'shipped', lines: [{ itemId: 'item-b', quantity: 1 }] },
+      ],
+    }));
+
+    const { error } = await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-1', quantity: 2, reason: 'manufacturing_defect' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+
+    expect(error).toBeUndefined();
+    expect(mockReturnRepo.create.mock.calls[0][0].items[0]).toMatchObject({ product: 'prod-1', quantity: 2 });
+  });
+
+  it('still refuses the undelivered product from that same order', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder({
+      status: 'shipped',
+      shipments: [
+        { _id: 's1', sequence: 1, status: 'delivered', deliveredAt: daysAgo(1), lines: [{ itemId: 'item-a', quantity: 3 }] },
+        { _id: 's2', sequence: 2, status: 'shipped', lines: [{ itemId: 'item-b', quantity: 1 }] },
+      ],
+    }));
+
+    const { status, error } = await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-2', quantity: 1, reason: 'wrong_item' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/hasn't been delivered yet/i);
+  });
+
+  /*
+    ── COMING BACK FOR THE REST ────────────────────────────────────────────────────
+    A refunded return used to block that product for the life of the order, so a shopper
+    who sent back 1 of 3 faulty wipers could never claim the other 2 — the form invited a
+    partial quantity and the API then made it one-shot. Quantity is the bound now.
+  */
+  it('allows a second return for the units NOT yet sent back', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder());
+    mockReturnRepo.findOne.mockResolvedValue(null);           // nothing rejected, nothing in flight
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map([['prod-1', 1]]));
+
+    const { error } = await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-1', quantity: 2, reason: 'manufacturing_defect' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+
+    expect(error).toBeUndefined();
+    expect(mockReturnRepo.create.mock.calls[0][0].items[0]).toMatchObject({ product: 'prod-1', quantity: 2 });
+  });
+
+  // The ceiling. Three bought, one already returned → two left, not three.
+  it('refuses more than the units still available, and says how many are left', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder());
+    mockReturnRepo.findOne.mockResolvedValue(null);
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map([['prod-1', 1]]));
+
+    const { status, error } = await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-1', quantity: 3, reason: 'manufacturing_defect' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+
+    expect(status).toBe(409);
+    expect(error.message).toMatch(/return 2 more/i);
+  });
+
+  it('refuses once every unit has been returned', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder());
+    mockReturnRepo.findOne.mockResolvedValue(null);
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map([['prod-1', 3]]));
+
+    const { status, error } = await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-1', quantity: 1, reason: 'manufacturing_defect' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+
+    expect(status).toBe(409);
+    expect(error.message).toMatch(/all 3 .* have already been returned/i);
+  });
+
+  // Concurrency guard, mirroring the DB unique index exactly.
+  it('refuses a second return while one is still IN FLIGHT', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder());
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map());
+    mockReturnRepo.findOne.mockImplementation(async (q) =>
+      (q.status === 'rejected' ? null : { _id: 'ret-inflight', status: 'approved' }));
+
+    const { status, error } = await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-1', quantity: 1, reason: 'manufacturing_defect' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+
+    expect(status).toBe(409);
+    expect(error.message).toMatch(/already in progress/i);
+  });
+
+  /*
+    A REJECTED return stays a hard stop. No quantity was consumed — the goods were never
+    taken back — but an operator has already declined it, and re-asking is a support
+    conversation, not a self-serve retry.
+  */
+  it('refuses outright after a return was reviewed and declined', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder());
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map());
+    mockReturnRepo.findOne.mockImplementation(async (q) =>
+      (q.status === 'rejected' ? { _id: 'ret-rejected', status: 'rejected' } : null));
+
+    const { status, error } = await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-1', quantity: 1, reason: 'manufacturing_defect' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+
+    expect(status).toBe(409);
+    expect(error.message).toMatch(/reviewed and declined/i);
+  });
+
+  // A cancelled request frees its units again — the customer withdrew, nothing moved.
+  it('lets a customer re-raise after cancelling their own request', async () => {
+    mockOrderRepo.findOwnedWithProducts.mockResolvedValue(multiItemOrder());
+    mockReturnRepo.findOne.mockResolvedValue(null);
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map()); // cancelled consumes nothing
+
+    const { error } = await run(createReturnRequest, {
+      body: { orderId: 'order-1', items: [{ productId: 'prod-1', quantity: 3, reason: 'manufacturing_defect' }], ...evidence },
+      user: { _id: 'u1' },
+    });
+    expect(error).toBeUndefined();
   });
 });

@@ -8,6 +8,7 @@
     "lint:fix": "eslint controllers/ routes/ services/ --fix",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watch",
+    "test:handles": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --detectOpenHandles --runInBand",
     "test:coverage": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage",
     "start": "node --import=dotenv/config server.js",
     "dev": "cross-env NODE_OPTIONS=--import=dotenv/config nodemon server.js",

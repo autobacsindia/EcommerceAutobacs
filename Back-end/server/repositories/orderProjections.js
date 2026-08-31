@@ -49,7 +49,7 @@ export const CUSTOMER_LIST_FIELDS =
  * Covers the table, the status control, the refund badge and BOTH CSV exports.
  */
 export const ADMIN_LIST_FIELDS =
-  'orderNumber createdAt status paymentStatus cancelledBy totalAmount refundDetails user items shipments cancellations';
+  'orderNumber createdAt status paymentStatus cancelledBy totalAmount refundDetails user items shipments cancellations returnRequest.status';
 
 /**
  * CRM lead detail — narrower still: it renders a purchase timeline, not a basket, so it

@@ -44,6 +44,38 @@ export const ACTIVE_RETURN_STATUSES = Object.freeze([
   'pending', 'approved', 'courier_booked', 'received', 'refunded', 'rejected',
 ]);
 
+/**
+ * Returns still MOVING — raised, accepted, in the courier's hands, or received back but
+ * not yet refunded.
+ *
+ * This is the set the DB unique index is scoped to: at most ONE in-flight return per
+ * (order, product) at a time. That is what makes concurrent submissions safe — two
+ * simultaneous POSTs both target `pending`, so the second hits E11000 instead of
+ * creating a duplicate.
+ *
+ * Deliberately NARROWER than ACTIVE_RETURN_STATUSES. Blocking on the terminal `refunded`
+ * too meant a customer who sent back 1 of 3 faulty items could never return the other 2 —
+ * the UI invited a partial-quantity return and then made it a one-shot. Quantity is now
+ * what bounds a repeat (see RETURN_QUANTITY_CONSUMING_STATUSES); being in flight is what
+ * bounds concurrency.
+ */
+export const IN_FLIGHT_RETURN_STATUSES = Object.freeze([
+  'pending', 'approved', 'courier_booked', 'received',
+]);
+
+/**
+ * Statuses whose quantities are SPENT — the customer either has the return in progress
+ * or has already been refunded for those units, so they cannot be claimed again.
+ *
+ * `rejected` is absent on purpose: those goods were never taken back, so the units are
+ * not consumed. A rejected product is instead blocked outright (see the controller) —
+ * an operator said no, and re-asking is a support conversation, not a self-serve retry.
+ * `cancelled` is absent because the customer withdrew; those units are free again.
+ */
+export const RETURN_QUANTITY_CONSUMING_STATUSES = Object.freeze([
+  'pending', 'approved', 'courier_booked', 'received', 'refunded',
+]);
+
 // Human labels for the reasons (emails, admin UI copy).
 export const RETURN_REASON_LABELS = Object.freeze({
   wrong_item: 'Wrong item shipped',
@@ -72,6 +104,8 @@ export default {
   RETURN_REASONS,
   NON_RETURN_REASONS,
   ACTIVE_RETURN_STATUSES,
+  IN_FLIGHT_RETURN_STATUSES,
+  RETURN_QUANTITY_CONSUMING_STATUSES,
   RETURN_REASON_LABELS,
   suggestedRestockingRupees,
 };

@@ -97,10 +97,14 @@ export const API_ENDPOINTS = {
   RETURN_CANCEL: (id: string) => `/returns/${id}/cancel`,
   // Returns — admin
   ADMIN_RETURNS: '/returns/admin/all',
+  /** Record a return handled off-platform (walk-in / phone / sales rep). */
+  RETURN_OFFLINE_CREATE: '/returns/admin',
   ADMIN_RETURN_DETAIL: (id: string) => `/returns/admin/${id}`,
   RETURN_REVIEW: (id: string) => `/returns/admin/${id}/review`,
   RETURN_COURIER: (id: string) => `/returns/admin/${id}/courier`,
   RETURN_RECEIVED: (id: string) => `/returns/admin/${id}/received`,
+  /** Received WITHOUT the courier + inspection steps — for a return settled in person. */
+  RETURN_OFFLINE_RECEIVED: (id: string) => `/returns/admin/${id}/offline-received`,
   RETURN_INSPECTION: (id: string) => `/returns/admin/${id}/inspection`,
   RETURN_REFUND_PREVIEW: (id: string) => `/returns/admin/${id}/refund-preview`,
   RETURN_REFUND: (id: string) => `/returns/admin/${id}/refund`,

@@ -33,6 +33,8 @@ import {
   parcelProgress,
   cancelledQuantityForItem,
   hasCancellations,
+  customerCancelScope,
+  remainingCancellableUnits,
 } from '@/lib/orderFulfilment';
 import type { ItemFulfilmentState } from '@/lib/orderFulfilment';
 
@@ -315,7 +317,16 @@ export default function OrderDetailPage() {
     return icons[status.toLowerCase()] || <AlertCircle className="h-4 w-4" />;
   };
 
-  const canCancelOrder = (status: string) => ['awaiting_payment', 'processing'].includes(status.toLowerCase());
+  /*
+    What cancelling would actually DO, rather than whether the status word allows it.
+
+    A split order sits at `shipped` from the moment its FIRST parcel leaves, so keying
+    this on the status alone told a customer with two items still in the warehouse
+    "Already Shipped — Can't Cancel". The server has always permitted those two to go
+    (cancellationService accepts `shipped`); this is the UI catching up.
+  */
+  const cancelScope = customerCancelScope(order);
+  const cancellableUnits = remainingCancellableUnits(order);
   /*
     Can ANY line still be returned?
 
@@ -453,17 +464,26 @@ export default function OrderDetailPage() {
                 Retry Payment
               </button>
             )}
-            {canCancelOrder(order.status) ? (
-              <button onClick={() => setShowCancelDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+            {cancelScope !== 'none' ? (
+              <button
+                onClick={() => setShowCancelDialog(true)}
+                title={cancelScope === 'partial'
+                  ? `Part of this order has already shipped. Cancelling now covers the ${cancellableUnits} item(s) that have not left yet.`
+                  : undefined}
+                className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors"
+              >
                 <XCircle className="h-4 w-4" />
-                Cancel Order
+                {/* Naming the scope is the point: "Cancel Order" on a part-shipped order
+                    promises something we cannot do, and the parcel in transit still
+                    arrives afterwards. */}
+                {cancelScope === 'partial' ? 'Cancel Remaining Items' : 'Cancel Order'}
               </button>
             ) : order.status.toLowerCase() === 'shipped' && (
-              // Once it's on its way we can't cancel — the customer would use a return
-              // after delivery instead. Show the disabled control so the "why" is clear.
+              // Everything is in a box now, so there is nothing left to cancel — the way
+              // back is a return once it arrives. Shown disabled so the "why" is clear.
               <button
                 disabled
-                title="This order has already shipped and can no longer be cancelled."
+                title="Every item on this order has shipped. Once it arrives you can raise a return."
                 className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink-muted rounded-sm font-display font-bold uppercase tracking-widest text-sm cursor-not-allowed opacity-60"
               >
                 <XCircle className="h-4 w-4" />
@@ -961,7 +981,18 @@ export default function OrderDetailPage() {
         )}
 
         {showCancelDialog && order && (
-          <CancelOrderModal orderId={order._id} orderNumber={order._id.slice(-8).toUpperCase()} totalAmount={order.totalAmount} hasPayment={!!order.payment} onClose={() => setShowCancelDialog(false)} onSuccess={() => fetchOrderDetail()} />
+          <CancelOrderModal
+            orderId={order._id}
+            orderNumber={order._id.slice(-8).toUpperCase()}
+            totalAmount={order.totalAmount}
+            hasPayment={!!order.payment}
+            /* On a part-shipped order the modal must promise only what will happen:
+               the un-shipped items go, the parcel in transit still arrives. */
+            scope={cancelScope === 'partial' ? 'partial' : 'full'}
+            cancellableUnits={cancellableUnits}
+            onClose={() => setShowCancelDialog(false)}
+            onSuccess={() => fetchOrderDetail()}
+          />
         )}
         {showReturnDialog && order && (
           <ReturnRequestModal

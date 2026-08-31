@@ -200,6 +200,9 @@ export interface ReturnRequestTimeline {
 export type ReturnStatus =
   | 'pending' | 'approved' | 'courier_booked' | 'received' | 'refunded' | 'rejected' | 'cancelled';
 
+/** How money was handed back when it did not go through the gateway. */
+export type OfflineRefundMethod = 'cash' | 'bank_transfer' | 'upi' | 'cheque' | 'other';
+
 export interface ReturnRefund {
   /** What the customer actually PAID for the returned lines — the refundable base. */
   productValue: number;
@@ -209,7 +212,12 @@ export interface ReturnRefund {
   shippingDeduction?: number;
   restockingDeduction?: number;
   finalAmount?: number;
-  method?: 'original_payment';
+  /** `offline` = paid back by hand (cash/NEFT/UPI/cheque) and recorded, not sent to Razorpay. */
+  method?: 'original_payment' | 'offline';
+  offlineMethod?: OfflineRefundMethod;
+  /** UTR / cheque / receipt number — the only evidence an offline payout moved. */
+  reference?: string;
+  paidAt?: string;
   razorpayRefundId?: string;
   status?: 'pending' | 'processing' | 'completed' | 'failed';
   initiatedAt?: string;
@@ -246,6 +254,12 @@ export interface ReturnRequest {
   user: string | { _id?: string; name?: string; email?: string };
   items: ReturnRequestItem[];
   type: 'return';
+  /**
+   * `admin_offline` = the return happened off-platform and an admin recorded it, so it
+   * carries no unboxing video or proof of purchase by design. Don't render the evidence
+   * block as "missing" for these.
+   */
+  origin?: 'customer' | 'admin_offline';
   status: ReturnStatus;
   problemDescription?: string;
   // On the admin DETAIL response these are signed { url } objects; on the list
@@ -272,11 +286,20 @@ export interface PaginatedReturnRequests {
 }
 
 export interface OrderItem {
+  /** The order line's own subdocument id — the unambiguous handle for one line. */
+  _id?: string;
+  /** Set for a line of a variable product; two lines can share a product id. */
+  variantId?: string | null;
+  /**
+   * NULLABLE on imported WooCommerce orders: `Order.items[].product` is only required
+   * when `source !== 'woocommerce'`, so legacy lines carry a snapshotted name/price and
+   * no catalogue reference at all. Never key a list on it without a fallback.
+   */
   product: {
     _id: string;
     name: string;
     images: ProductImage[];
-  };
+  } | null;
   quantity: number;
   price: number;
   name: string;

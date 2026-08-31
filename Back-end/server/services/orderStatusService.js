@@ -5,6 +5,7 @@
 
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
+import { remainingCancellable } from '../utils/orderCancellation.js';
 import leadSyncService from './leadSyncService.js';
 import spinService from './spinService.js';
 import { getOrderQueue, getNotificationsQueue } from '../queue/queues.js';
@@ -620,17 +621,43 @@ class OrderStatusService {
    */
   canCustomerCancel(order) {
     const cancellableStatuses = ['awaiting_payment', 'processing'];
-    
-    if (!cancellableStatuses.includes(order.status)) {
+
+    if (cancellableStatuses.includes(order.status)) {
       return {
-        canCancel: false,
-        reason: `Orders with status '${order.status}' cannot be cancelled by customers. Please contact support.`
+        canCancel: true,
+        reason: 'Order can be cancelled'
+      };
+    }
+
+    /*
+      ── A PARTIALLY SHIPPED ORDER STILL HAS CANCELLABLE GOODS ──────────────────────
+      Split shipments made `shipped` mean "at least one parcel has left", not "the whole
+      order has left". An order can sit at `shipped` with one box in transit and two
+      items still on the shelf — and the customer was told "Already Shipped — Can't
+      Cancel", which is simply untrue about the two items nobody has touched.
+
+      cancellationService has supported this the whole time: its
+      CANCELLABLE_ORDER_STATUSES already includes `shipped`, and remainingCancellable()
+      excludes anything committed to a shipped or delivered parcel. Only this gate (and
+      the customer UI reading it) said no. So the rule is not "what status is it" but
+      "is there anything left that has not gone out".
+
+      Whole-order cancellation is what the customer gets; CHOOSING lines stays admin-only
+      (see routes/orders.js). The controller routes this through cancellationService so
+      each line is priced net of the order's discount and gets its own refund record.
+    */
+    if (order.status === 'shipped' && remainingCancellable(order).length > 0) {
+      return {
+        canCancel: true,
+        reason: 'The items that have not shipped yet can be cancelled'
       };
     }
 
     return {
-      canCancel: true,
-      reason: 'Order can be cancelled'
+      canCancel: false,
+      reason: order.status === 'shipped'
+        ? 'Every item on this order has already shipped, so it can no longer be cancelled. Once it arrives you can raise a return.'
+        : `Orders with status '${order.status}' cannot be cancelled by customers. Please contact support.`
     };
   }
 

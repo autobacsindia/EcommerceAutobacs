@@ -57,6 +57,37 @@ describe('returnEmail — refunded', () => {
     expect(text).toContain('₹600.00');
   });
 
+  it('does not promise a bank settlement for money already handed over offline', () => {
+    // The customer was paid at the counter. "On its way, allow 5-9 business days" reads
+    // as a SECOND payment coming, which is how a support ticket (or a chargeback) starts.
+    const rr = makeReturn({
+      refund: { finalAmount: 600, method: 'offline', offlineMethod: 'cash', reference: 'RCPT-8821' },
+    });
+    const { subject, text, html } = returnEmail({ event: 'refunded', rr, order, company });
+    expect(subject).toContain('Refund confirmed');
+    expect(text).toContain('paid to you by cash');
+    expect(text).toContain('RCPT-8821');
+    expect(text).not.toMatch(/5-9 business days/);
+    expect(text).not.toMatch(/original payment method/);
+    expect(html).toContain('RCPT-8821');
+  });
+
+  it('names the offline method the customer actually received', () => {
+    const rr = makeReturn({
+      refund: { finalAmount: 600, method: 'offline', offlineMethod: 'bank_transfer', reference: 'UTR-42' },
+    });
+    expect(returnEmail({ event: 'refunded', rr, order, company }).text).toContain('paid to you by bank transfer');
+  });
+
+  it('still itemises deductions on an offline refund', () => {
+    const rr = makeReturn({
+      refund: { finalAmount: 450, shippingDeduction: 100, restockingDeduction: 50, method: 'offline', offlineMethod: 'upi', reference: 'U1' },
+    });
+    const { text } = returnEmail({ event: 'refunded', rr, order, company });
+    expect(text).toContain('Shipping deduction: ₹100.00');
+    expect(text).toContain('Restocking (10%): ₹50.00');
+  });
+
   it('itemises deductions when the operator applied them', () => {
     const rr = makeReturn({ refund: { finalAmount: 450, shippingDeduction: 100, restockingDeduction: 50 } });
     const { text } = returnEmail({ event: 'refunded', rr, order, company });

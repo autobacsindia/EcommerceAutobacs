@@ -8,6 +8,13 @@ export default {
 
   // Setup files (run before each test file)
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+
+  // One in-memory MongoDB for the entire run, started before any worker is forked and
+  // stopped after the last one exits. Each test file connects to it under its own
+  // database name (tests/setup.js), which keeps per-suite isolation without paying a
+  // ~2.5s `mongod` spawn per suite.
+  globalSetup: '<rootDir>/tests/globalSetup.js',
+  globalTeardown: '<rootDir>/tests/globalTeardown.js',
   
   // ESM configuration
   transform: {},
@@ -27,9 +34,15 @@ export default {
   resetMocks: true,      // Reset mock implementations
   restoreMocks: true,    // Restore original implementations
   
-  // Detect open handles (prevent hanging tests)
-  detectOpenHandles: true,
-  
+  // NOTE: `detectOpenHandles` is deliberately NOT set here.
+  //
+  // Jest's shouldRunInBand() short-circuits on it — `if (runInBand || detectOpenHandles)
+  // return true` — because it cannot trace handles inside forked workers. Setting it in
+  // the config therefore forced all ~167 suites through a single worker, serially, on
+  // every run. It is available on demand via `npm run test:handles`.
+  //
+  // `forceExit` below already prevents a leaked handle from hanging the run.
+
   // Coverage configuration
   //
   // CI (ci.yml + deploy.yml) runs a curated, fast subset via --testPathPatterns
@@ -38,8 +51,10 @@ export default {
   // that subset actually exercises, so the threshold is a real regression guard
   // rather than an unreachable whole-codebase number. Broaden collectCoverageFrom
   // and the thresholds as the curated suite set grows.
+  // Coverage is opt-in via `--coverage` (npm run test:coverage, which is what CI runs).
+  // It used to be forced on for every run, so a plain `npm test` paid the
+  // instrumentation cost for a report nobody was reading.
   coverageDirectory: 'coverage',
-  collectCoverage: true,
   collectCoverageFrom: [
     'controllers/productImageController.js',
     'middleware/uploadMiddleware.js',

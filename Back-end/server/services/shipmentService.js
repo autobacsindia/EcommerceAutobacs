@@ -321,6 +321,45 @@ class ShipmentService {
   }
 
   /**
+   * Hand every already-packed parcel on this order to the courier.
+   *
+   * ── WHY THIS EXISTS ─────────────────────────────────────────────────────────────
+   * The admin bulk action offers `shipped` across many selected orders, and bulk carries
+   * no tracking number or carrier — there is no honest way to invent one per order. So
+   * bulk cannot CREATE parcels. What it can safely do is dispatch parcels an admin
+   * already packed, which needs no new courier data: each parcel keeps the AWB it was
+   * built with.
+   *
+   * Without this, making bulk-shipped safe would have meant deleting it outright.
+   *
+   * Idempotent: each transition is matched on the parcel still being `packed`, so a
+   * re-run finds nothing to move and sends no second dispatch email.
+   *
+   * ── NO `userId`, FOR THE SAME REASON AS deliverAllOutstanding ────────────────────
+   * The caller runs its own status update immediately afterwards and owns attribution;
+   * rolling up here as well would double every side effect. See that method's note.
+   *
+   * @returns {Promise<{dispatched: number}>} how many parcels this actually moved
+   */
+  async dispatchAllPacked(orderId) {
+    const order = await orderRepository.findById(orderId);
+    if (!order) return { dispatched: 0 };
+
+    const packed = (order.shipments || []).filter((sh) => sh.status === SHIPMENT_STATUS.PACKED);
+
+    let dispatched = 0;
+    for (const parcel of packed) {
+      const updated = await orderRepository.transitionShipment(
+        orderId, parcel._id, SHIPMENT_STATUS.PACKED, SHIPMENT_STATUS.SHIPPED, {});
+      if (updated) {
+        dispatched += 1;
+        this._enqueueShipmentEmail(orderId, String(parcel._id), 'shipped');
+      }
+    }
+    return { dispatched };
+  }
+
+  /**
    * Read-only view for the admin/customer screens.
    * Uses the projected lean read — see orderRepository.findForFulfilment for the
    * measurement that earned it.

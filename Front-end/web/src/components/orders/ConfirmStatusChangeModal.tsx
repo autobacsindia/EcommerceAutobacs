@@ -381,7 +381,9 @@ export default function ConfirmStatusChangeModal({
           {error && (
             <div className="bg-red-500/10 border border-red-500/40 rounded-lg p-4 mb-6 flex gap-3">
               <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-400">{error}</p>
+              {/* whitespace-pre-line: a bulk update reports one line per order it could
+                  not change, and without it they collapse into an unreadable run-on. */}
+              <p className="text-sm text-red-400 whitespace-pre-line">{error}</p>
             </div>
           )}
 

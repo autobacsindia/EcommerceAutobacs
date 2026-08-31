@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { RETURN_REASONS, ACTIVE_RETURN_STATUSES } from "../config/returnPolicy.js";
+import { RETURN_REASONS, IN_FLIGHT_RETURN_STATUSES } from "../config/returnPolicy.js";
 
 /**
  * A private (authenticated) Cloudinary asset attached to a return — the unboxing
@@ -22,7 +22,12 @@ const ReturnRequestSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: true
+    // Required for a customer-raised return (it was raised from their account), but NOT
+    // for one an admin records after the fact: legacy WooCommerce and guest orders carry
+    // no user (Order.user has the same conditional shape), and those are exactly the
+    // orders most likely to be settled over the counter. reverseReturnLtvOnce already
+    // no-ops on a userless return, so net LTV is simply not adjusted for one.
+    required: function () { return this.origin !== "admin_offline"; }
   },
   items: [{
     product: {
@@ -55,6 +60,27 @@ const ReturnRequestSchema = new mongoose.Schema({
     enum: ["return"],
     default: "return"
   },
+  // How this record came into being.
+  //   customer     → raised through the storefront, with the mandatory evidence and
+  //                  inside the 4-day window. The normal path.
+  //   admin_offline → the return happened off-platform (walk-in, phone, sales rep) and
+  //                  an admin is RECORDING it. The policy gates (window, unboxing video,
+  //                  proof of purchase, non-returnable classes, courier + inspection)
+  //                  are deliberately not applied — there is nothing to apply them to.
+  //                  The money guards still are: the refund base is recomputed from the
+  //                  order and capped by remainingRefundable exactly as for any return.
+  // Kept as a first-class field so finance can tell recorded-by-hand money apart from
+  // gateway-driven money without inferring it from a missing video.
+  // No `index: true`: nothing queries by origin today, and prod runs autoIndex:false —
+  // a declared-but-never-built index is exactly the drift `npm run audit-index-drift`
+  // exists to catch. Add it with a migration if an origin filter is ever needed.
+  origin: {
+    type: String,
+    enum: ["customer", "admin_offline"],
+    default: "customer"
+  },
+  // The admin who recorded an offline return (null for a customer-raised one).
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   // Lifecycle:
   //   pending        → submitted, awaiting operations review
   //   approved       → operations approved; return courier to be booked by us
@@ -120,7 +146,17 @@ const ReturnRequestSchema = new mongoose.Schema({
     shippingDeduction:    { type: Number, default: 0 }, // manual, variable
     restockingDeduction:  { type: Number, default: 0 }, // 10% on >₹1L (suggested) / oversized (manual)
     finalAmount:          { type: Number, default: 0 },
-    method:               { type: String, enum: ["original_payment"], default: "original_payment" },
+    // original_payment → sent through Razorpay to the instrument that paid.
+    // offline          → money already handed back outside the gateway (cash at the
+    //                    counter, NEFT, UPI, cheque). Nothing is sent to Razorpay; this
+    //                    is a RECORD of a payout that already happened, which is why
+    //                    `reference` is mandatory for it — that string is the only
+    //                    evidence the money moved.
+    method:               { type: String, enum: ["original_payment", "offline"], default: "original_payment" },
+    // Only for method === 'offline'.
+    offlineMethod:        { type: String, enum: ["cash", "bank_transfer", "upi", "cheque", "other"], default: undefined },
+    reference:            String, // UTR / cheque no / receipt no — required when offline
+    paidAt:               Date,   // when the money actually left, if not now
     razorpayRefundId:     String,
     status:               { type: String, enum: ["pending", "processing", "completed", "failed"], default: "pending" },
     initiatedBy:          { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -161,7 +197,7 @@ const ReturnRequestSchema = new mongoose.Schema({
 ReturnRequestSchema.index({ user: 1, status: 1 });
 ReturnRequestSchema.index({ order: 1 });
 ReturnRequestSchema.index({ status: 1, createdAt: -1 }); // admin queue (filter + sort)
-// DB-level idempotency: one ACTIVE (non-cancelled) return per order+product pair.
+// DB-level idempotency: one IN-FLIGHT return per order+product pair.
 // This is the race-safe backstop the controller pre-check relies on — two
 // concurrent POST /returns for the same line both pass the findOne check, then the
 // second create() hits E11000 here instead of creating a duplicate return.
@@ -171,14 +207,26 @@ ReturnRequestSchema.index({ status: 1, createdAt: -1 }); // admin queue (filter 
 //     form threw at index build and the index was never created at all. The status
 //     list lives in returnPolicy.js so the controller pre-check uses the identical set.
 // Multikey (items.product is an array): each returned line contributes a key, so the
-// uniqueness is per (order, product) across active returns — exactly the guarantee.
+// uniqueness is per (order, product) across in-flight returns — exactly the guarantee.
 // autoIndex is off in prod, so db.js ensureCriticalIndexes builds this there too.
+//
+// ⚠️ SCOPED TO IN-FLIGHT, NOT "ACTIVE". It previously covered the terminal `refunded`
+// and `rejected` too, which made a return one-shot per product for the life of the
+// order: a customer who sent back 1 of 3 faulty items could never claim the other 2,
+// even though the form let them choose a partial quantity. What bounds a repeat is now
+// QUANTITY (checked in returnController against the units actually consumed); what this
+// index bounds is CONCURRENCY — two simultaneous submissions both target `pending`, so
+// the second still hits E11000 rather than creating a duplicate.
+//
+// ⚠️ NEW NAME on purpose. MongoDB refuses to recreate an existing index name with
+// different options, and would fail the whole verification pass — db.js drops the old
+// `unique_active_return_per_order_product` before building this one.
 ReturnRequestSchema.index(
   { order: 1, 'items.product': 1 },
   {
-    name: 'unique_active_return_per_order_product',
+    name: 'unique_inflight_return_per_order_product',
     unique: true,
-    partialFilterExpression: { status: { $in: ACTIVE_RETURN_STATUSES } }
+    partialFilterExpression: { status: { $in: IN_FLIGHT_RETURN_STATUSES } }
   }
 );
 

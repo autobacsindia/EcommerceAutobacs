@@ -176,7 +176,7 @@ export function refundableForLines(order, returnedLines) {
  * below silently picks the first of them. Returns have no item id and keep that
  * behaviour unchanged.
  */
-function matchOrderLine(orderLines, returnedLine) {
+export function matchOrderLine(orderLines, returnedLine) {
   if (returnedLine?.itemId) {
     const wanted = String(returnedLine.itemId);
     const exact = orderLines.find((ol) => String(ol?._id || '') === wanted);
@@ -270,4 +270,4 @@ export function remainingRefundable(
   };
 }
 
-export default { orderGoodsNetPaise, refundableForLines, remainingRefundable };
+export default { orderGoodsNetPaise, refundableForLines, remainingRefundable, matchOrderLine };

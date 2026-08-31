@@ -11,45 +11,46 @@ import { jest } from '@jest/globals';
  * - Error handling
  */
 
-import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { createHash } from 'node:crypto';
 
-let mongoServer;
+import mongoose from 'mongoose';
+
+// The in-memory MongoDB itself is started ONCE per run by tests/globalSetup.js and
+// its URI arrives here on process.env. This file only opens a connection to it.
+//
+// Previously this file created a MongoMemoryReplSet in `beforeAll`, and because
+// setupFilesAfterEnv runs once per *test file*, that spawned one mongod per suite —
+// ~2.5s of fixed cost x ~167 suites, paid even by pure unit suites that never touch
+// the database. Sharing one server is what makes the run parallelisable.
+
+// Each test file gets its own database on the shared server, so suites stay as
+// isolated from each other as they were with a server apiece. Derived from the test
+// path (not a counter) so it is stable and collision-free across parallel workers.
+const testDatabaseName = () => {
+  const testPath = expect.getState()?.testPath ?? `worker-${process.env.JEST_WORKER_ID ?? '1'}`;
+  return `jest_${createHash('sha1').update(testPath).digest('hex').slice(0, 24)}`;
+};
 
 // ── Global Setup ────────────────────────────────────────────────────────────
 
 beforeAll(async () => {
-  // Create in-memory MongoDB
-  // A REPLICA SET, not a standalone — this is the connection every suite actually
-  // uses (this global beforeAll runs first, so tests/db-handler.js finds an open
-  // connection and returns early).
-  //
-  // Order creation wraps order + payment + cart-clear in a MongoDB transaction, as
-  // CLAUDE.md requires for multi-document writes, and transactions need a replica
-  // set or mongos. Against a standalone every checkout returned
-  //   500 "Transaction numbers are only allowed on a replica set member or mongos"
-  // which is why the orders / ordersIntegration / e2eUserJourney suites failed on
-  // anything that placed an order. It read as broken order code rather than a test
-  // harness limitation, so it survived for months.
-  mongoServer = await MongoMemoryReplSet.create({
-    replSet: { count: 1, storageEngine: 'wiredTiger' },
-    instanceOpts: [{ launchTimeout: 120000 }], // 2 minutes for slow CI
-    binary: {
-      version: '7.0.14' // Match production MongoDB version
-    }
-  });
+  const uri = process.env.MONGO_TEST_URI;
 
-  const uri = mongoServer.getUri();
-  
-  // Connect Mongoose
+  // Fail loudly rather than letting every db-touching test time out one by one.
+  if (!uri) {
+    throw new Error(
+      '[Test] MONGO_TEST_URI is not set — tests/globalSetup.js did not run. ' +
+      'Run the suite through the project jest config (npm test), not a bare jest binary.'
+    );
+  }
+
   if (mongoose.connection.readyState === 0) {
     await mongoose.connect(uri, {
+      dbName: testDatabaseName(),
       maxPoolSize: 10, // Limit connections for tests
       serverSelectionTimeoutMS: 5000
     });
   }
-
-  console.log('[Test] Connected to in-memory MongoDB');
 });
 
 // ── Per-Test Cleanup ────────────────────────────────────────────────────────
@@ -58,9 +59,9 @@ afterEach(async () => {
   // Clear all collections (not drop, faster)
   if (mongoose.connection.readyState === 1) {
     const collections = mongoose.connection.collections;
-    
+
     await Promise.all(
-      Object.values(collections).map(collection => 
+      Object.values(collections).map(collection =>
         collection.deleteMany({})
       )
     );
@@ -73,17 +74,16 @@ afterEach(async () => {
 // ── Global Teardown ─────────────────────────────────────────────────────────
 
 afterAll(async () => {
-  // Close Mongoose connection
+  // Drop this file's database so the shared server does not accumulate ~167 of
+  // them over a run, then close the connection. The server itself is stopped once,
+  // by tests/globalTeardown.js.
+  if (mongoose.connection.readyState === 1) {
+    await mongoose.connection.dropDatabase();
+  }
+
   if (mongoose.connection.readyState !== 0) {
     await mongoose.connection.close();
   }
-
-  // Stop in-memory MongoDB
-  if (mongoServer) {
-    await mongoServer.stop();
-  }
-
-  console.log('[Test] In-memory MongoDB stopped');
 });
 
 // ── Global Error Handling ───────────────────────────────────────────────────

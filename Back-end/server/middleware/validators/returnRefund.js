@@ -68,6 +68,99 @@ export const validateReturnReview = [
   validateRequest
 ];
 
+// Admin: record a return handled off-platform. Shape only — the controller owns the
+// order/product context and the money. Note the ABSENT rules: no video, no proof of
+// purchase, no window. Those are exactly what an offline return cannot have.
+export const validateOfflineReturnCreate = [
+  body('orderId')
+    .notEmpty().withMessage('Valid Order ID is required')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid Order ID'),
+  body('items')
+    .isArray({ min: 1 })
+    .withMessage('Select at least one item to return'),
+  // A line is identified by its own `itemId` (the unambiguous handle — two variants of
+  // one product share a product id) OR by productId. Neither is individually mandatory,
+  // but one must be present; the controller resolves the actual order line and owns the
+  // friendlier errors, including the imported-line case that has no productId at all.
+  body('items.*').custom((item) => {
+    if (!item || (!item.itemId && !item.productId)) {
+      throw new Error('Each item needs an order line id or a product id');
+    }
+    return true;
+  }),
+  body('items.*.itemId')
+    .optional()
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid order line id'),
+  body('items.*.productId')
+    .optional()
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid Product ID'),
+  body('items.*.variantId')
+    .optional({ values: 'falsy' })
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid variant id'),
+  body('items.*.quantity')
+    .isInt({ min: 1 })
+    .withMessage('Quantity must be at least 1'),
+  body('items.*.reason')
+    .isIn(RETURN_REASONS)
+    .withMessage('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect'),
+  body('note')
+    .isString().withMessage('A note describing what happened is required')
+    .bail()
+    .trim()
+    .notEmpty().withMessage('A note describing what happened is required')
+    .isLength({ max: 2000 }).withMessage('Note cannot exceed 2000 characters'),
+  body('shippingBorneBy').optional().isIn(['roavion', 'customer']).withMessage('Invalid shipping-borne-by value'),
+  body('markReturned').optional().isBoolean().withMessage('markReturned must be true or false'),
+  body('notifyCustomer').optional().isBoolean().withMessage('notifyCustomer must be true or false'),
+  validateRequest
+];
+
+// Admin: mark a return received with the courier + inspection steps skipped.
+export const validateOfflineReceived = [
+  param('id')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid Return Request ID'),
+  body('note')
+    .isString().withMessage('A note is required')
+    .bail()
+    .trim()
+    .notEmpty().withMessage('A note is required')
+    .isLength({ max: 2000 }).withMessage('Note cannot exceed 2000 characters'),
+  body('notifyCustomer').optional().isBoolean().withMessage('notifyCustomer must be true or false'),
+  validateRequest
+];
+
+// Admin: initiate a refund. `method: 'offline'` records money already paid back by
+// hand and REQUIRES a reference — that string is the only evidence it moved, since
+// there is no gateway record to reconcile against. Amounts are not validated here on
+// purpose: they are recomputed from the order in the controller and never trusted.
+export const validateReturnRefundBody = [
+  param('id')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid Return Request ID'),
+  body('method').optional().isIn(['original_payment', 'offline']).withMessage('Invalid refund method'),
+  body('offlineMethod')
+    .if(body('method').equals('offline'))
+    .isIn(['cash', 'bank_transfer', 'upi', 'cheque', 'other'])
+    .withMessage('How the money was paid back is required'),
+  body('reference')
+    .if(body('method').equals('offline'))
+    .isString().withMessage('A reference (UTR, cheque or receipt number) is required')
+    .bail()
+    .trim()
+    .notEmpty().withMessage('A reference (UTR, cheque or receipt number) is required')
+    .isLength({ max: 120 }).withMessage('Reference cannot exceed 120 characters'),
+  body('paidAt').optional({ values: 'falsy' }).isISO8601().withMessage('The payout date is not a valid date'),
+  body('shippingDeduction').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Shipping deduction cannot be negative'),
+  body('restockingDeduction').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Restocking deduction cannot be negative'),
+  body('notifyCustomer').optional().isBoolean().withMessage('notifyCustomer must be true or false'),
+  validateRequest
+];
+
 export const validateOrderReturn = [
   body('items')
     .isArray({ min: 1 })

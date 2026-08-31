@@ -10,6 +10,16 @@ interface CancelOrderModalProps {
   orderNumber: string;
   totalAmount: number;
   hasPayment: boolean;
+  /*
+    `partial` when a parcel has already left and only the un-shipped items can go.
+    Split shipments made this possible: the order sits at `shipped` from the moment its
+    FIRST box is dispatched, while other items may never have been picked. Promising
+    "your order will be cancelled immediately" there is wrong twice over — the parcel in
+    transit still arrives, and the refund covers only what was actually cancelled.
+  */
+  scope?: 'full' | 'partial';
+  /** How many units the cancellation would actually cover, when `scope` is partial. */
+  cancellableUnits?: number;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -19,9 +29,12 @@ export default function CancelOrderModal({
   orderNumber,
   totalAmount,
   hasPayment,
+  scope = 'full',
+  cancellableUnits = 0,
   onClose,
   onSuccess,
 }: CancelOrderModalProps) {
+  const isPartial = scope === 'partial';
   const [selectedReason, setSelectedReason] = useState('');
   const [notes, setNotes] = useState('');
   const [confirmationChecked, setConfirmationChecked] = useState(false);
@@ -31,6 +44,10 @@ export default function CancelOrderModal({
     refundInitiated: boolean;
     refundAmount: number;
     refundTimeline: string | null;
+    // Read off the RESPONSE, not the prop: the server decides what it actually managed
+    // to cancel, and a parcel could have shipped between this page loading and submit.
+    partial: boolean;
+    cancelledLines: number;
   } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -65,6 +82,8 @@ export default function CancelOrderModal({
         refundInitiated: response.refundInitiated || false,
         refundAmount: response.refundAmount || 0,
         refundTimeline: response.refundTimeline || null,
+        partial: Boolean(response.partial),
+        cancelledLines: response.cancelledLines || 0,
       });
     } catch (err: any) {
       setError(err.message || 'Failed to cancel order. Please try again.');
@@ -94,9 +113,13 @@ export default function CancelOrderModal({
             </div>
 
             {/* Success Message */}
-            <h3 className="text-2xl font-bold text-center mb-2">Order Cancelled Successfully</h3>
+            <h3 className="text-2xl font-bold text-center mb-2">
+              {success.partial ? 'Items Cancelled' : 'Order Cancelled Successfully'}
+            </h3>
             <p className="text-ink-muted text-center mb-6">
-              Your order #{orderNumber} has been cancelled.
+              {success.partial
+                ? `We've cancelled the ${success.cancelledLines} item(s) on order #${orderNumber} that hadn't shipped yet. The rest of your order is still on its way.`
+                : `Your order #${orderNumber} has been cancelled.`}
             </p>
 
             {/* Refund Information */}
@@ -113,7 +136,9 @@ export default function CancelOrderModal({
             {!success.refundInitiated && (
               <div className="bg-obsidian-deep border border-hairline rounded-lg p-4 mb-6">
                 <p className="text-sm text-ink/80">
-                  Your order has been cancelled. No charges were made.
+                  {success.partial
+                    ? 'Those items have been cancelled. No charges were made for them.'
+                    : 'Your order has been cancelled. No charges were made.'}
                 </p>
               </div>
             )}
@@ -146,7 +171,7 @@ export default function CancelOrderModal({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-obsidian">
           <div>
-            <h3 className="text-2xl font-bold">Cancel Order</h3>
+            <h3 className="text-2xl font-bold">{isPartial ? 'Cancel Remaining Items' : 'Cancel Order'}</h3>
             <p className="text-sm text-ink-muted mt-1">Order #{orderNumber}</p>
           </div>
           <button
@@ -165,10 +190,14 @@ export default function CancelOrderModal({
             <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-medium text-yellow-900">
-                Are you sure you want to cancel this order?
+                {isPartial
+                  ? `Cancel the ${cancellableUnits} item(s) that haven't shipped yet?`
+                  : 'Are you sure you want to cancel this order?'}
               </p>
               <p className="text-sm text-yellow-800 mt-1">
-                This action cannot be undone. Your order will be cancelled immediately.
+                {isPartial
+                  ? 'This action cannot be undone. Anything already on its way will still be delivered — once it arrives you can raise a return for it.'
+                  : 'This action cannot be undone. Your order will be cancelled immediately.'}
               </p>
             </div>
           </div>
@@ -283,7 +312,7 @@ export default function CancelOrderModal({
                   <span>Cancelling...</span>
                 </>
               ) : (
-                'Cancel Order'
+                isPartial ? 'Cancel Remaining Items' : 'Cancel Order'
               )}
             </button>
           </div>

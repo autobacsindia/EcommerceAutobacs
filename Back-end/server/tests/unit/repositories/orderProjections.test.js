@@ -58,6 +58,16 @@ describe('ADMIN_LIST_FIELDS', () => {
       'items',            // item count in the CSV
       'shipments',        // ParcelProgressBadge + the delivered-all warning count
       'cancellations',
+      /*
+        A PARTIAL return no longer moves Order.status to `returned` — that flip is now
+        gated on the return covering every delivered line, because `returned` is
+        terminal and stranded the un-returned items. Without this field the admin table
+        would show a bare "Delivered" for an order with a return in flight, i.e. LESS
+        than it showed before the fix. Only `.status` is projected: the mirror holds the
+        latest return, so it can say "a return is open" but must not be used to count
+        units.
+      */
+      'returnRequest.status',
     ]);
   });
 });
