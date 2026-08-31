@@ -184,3 +184,89 @@ describe('diffDefinition', () => {
     expect(drift.filter((d) => d.path === 'brand')).toEqual([]);
   });
 });
+
+/**
+ * Grammar guard: `score` belongs INSIDE the operator, never beside it.
+ *
+ * This is a regression test for a bug that reached production. Every clause was
+ * built as `{ in: {...}, score: {...} }`, which Atlas rejects outright:
+ *
+ *   "compound.should[0]" unrecognized field "score". Expected fields are:
+ *   autocomplete, compound, ..., in, ...
+ *
+ * The correct shape is `{ in: { path, value, score } }`. It was written correctly
+ * for `text`, `phrase` and `autocomplete` and incorrectly for `in`, `equals` and
+ * `exists`, so partial correctness hid it.
+ *
+ * Nothing else caught it. The builders are pure, so unit tests happily asserted
+ * the WRONG structure, and the whole query only fails when a real Atlas cluster
+ * parses it — at which point searchService catches the error and silently serves
+ * the MongoDB fallback, so the storefront looks fine while every search runs a
+ * full collection scan. Structure has to be asserted against Atlas's grammar,
+ * not against what the builder happens to emit.
+ */
+const ATLAS_OPERATORS = new Set([
+  'autocomplete', 'compound', 'embeddedDocument', 'equals', 'exists', 'geoShape',
+  'geoWithin', 'hasAncestor', 'hasRoot', 'in', 'knnBeta', 'moreLikeThis', 'near',
+  'phrase', 'queryString', 'range', 'regex', 'search', 'span', 'term', 'text',
+  'wildcard', 'vectorSearch',
+]);
+
+/** Every clause object reachable from a compound's must/should/filter/mustNot. */
+function collectClauses(node, found = []) {
+  if (Array.isArray(node)) {
+    for (const item of node) collectClauses(item, found);
+    return found;
+  }
+  if (!node || typeof node !== 'object') return found;
+
+  if (node.compound) {
+    for (const key of ['must', 'should', 'filter', 'mustNot']) {
+      if (node.compound[key]) {
+        found.push(...node.compound[key]);
+        collectClauses(node.compound[key], found);
+      }
+    }
+  }
+  return found;
+}
+
+describe('Atlas clause grammar', () => {
+  const stage = maximalStage();
+  const clauses = [
+    ...(stage.compound.must || []),
+    ...(stage.compound.should || []),
+    ...(stage.compound.filter || []),
+    ...(stage.compound.mustNot || []),
+    ...collectClauses(stage.compound),
+  ];
+
+  it('builds a non-trivial number of clauses to check', () => {
+    expect(clauses.length).toBeGreaterThan(8);
+  });
+
+  it('never places `score` as a sibling of the operator', () => {
+    const offenders = clauses
+      .filter((c) => c && typeof c === 'object' && 'score' in c)
+      .map((c) => Object.keys(c).join('+'));
+    expect(offenders).toEqual([]);
+  });
+
+  it('gives every clause exactly one recognised Atlas operator as its only key', () => {
+    for (const clause of clauses) {
+      if (!clause || typeof clause !== 'object') continue;
+      const keys = Object.keys(clause);
+      expect(keys).toHaveLength(1);
+      expect(ATLAS_OPERATORS.has(keys[0])).toBe(true);
+    }
+  });
+
+  it('keeps the boosts that were being carried on the illegal sibling key', () => {
+    // The fix must MOVE the score, not drop it — losing these silently degrades
+    // ranking instead of erroring, which is far harder to notice.
+    const json = JSON.stringify(stage);
+    expect(json).toContain('"constant":{"value":2}');
+    expect(json).toContain('"log1p"');
+    expect(json.match(/"boost":\{"value":2\}/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+});
