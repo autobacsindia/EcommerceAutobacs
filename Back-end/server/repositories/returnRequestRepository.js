@@ -1,4 +1,6 @@
+import mongoose from 'mongoose';
 import ReturnRequest from '../models/ReturnRequest.js';
+import { RETURN_QUANTITY_CONSUMING_STATUSES } from '../config/returnPolicy.js';
 
 /**
  * ReturnRequest data access. Passthrough to the model so query chaining and
@@ -22,6 +24,29 @@ class ReturnRequestRepository {
    * loser matches zero docs and gets `null`, and never reaches the gateway. Returns
    * the updated document (or null if the claim was lost / the gate no longer holds).
    */
+  /**
+   * How many units of each product on this order are already spoken for by a return.
+   *
+   * "Spoken for" = a return that is in flight or already refunded
+   * (RETURN_QUANTITY_CONSUMING_STATUSES). A `rejected` return never took the goods back
+   * and a `cancelled` one was withdrawn, so neither consumes quantity.
+   *
+   * This is what lets a customer come back for the OTHER two of three faulty items:
+   * quantity is the bound, not "have you ever returned this product".
+   *
+   * @param {string} orderId
+   * @returns {Promise<Map<string, number>>} productId → units already claimed
+   */
+  async returnedQuantityByProduct(orderId) {
+    const rows = await ReturnRequest.aggregate([
+      { $match: { order: new mongoose.Types.ObjectId(String(orderId)),
+                  status: { $in: RETURN_QUANTITY_CONSUMING_STATUSES } } },
+      { $unwind: '$items' },
+      { $group: { _id: '$items.product', qty: { $sum: '$items.quantity' } } },
+    ]);
+    return new Map(rows.map((r) => [String(r._id), r.qty || 0]));
+  }
+
   claimForRefund(id, {
     productValue, listValue, discountShare,
     shippingDeduction, restockingDeduction, finalAmount, initiatedBy,

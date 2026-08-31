@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { RETURN_REASONS, ACTIVE_RETURN_STATUSES } from "../config/returnPolicy.js";
+import { RETURN_REASONS, IN_FLIGHT_RETURN_STATUSES } from "../config/returnPolicy.js";
 
 /**
  * A private (authenticated) Cloudinary asset attached to a return — the unboxing
@@ -197,7 +197,7 @@ const ReturnRequestSchema = new mongoose.Schema({
 ReturnRequestSchema.index({ user: 1, status: 1 });
 ReturnRequestSchema.index({ order: 1 });
 ReturnRequestSchema.index({ status: 1, createdAt: -1 }); // admin queue (filter + sort)
-// DB-level idempotency: one ACTIVE (non-cancelled) return per order+product pair.
+// DB-level idempotency: one IN-FLIGHT return per order+product pair.
 // This is the race-safe backstop the controller pre-check relies on — two
 // concurrent POST /returns for the same line both pass the findOne check, then the
 // second create() hits E11000 here instead of creating a duplicate return.
@@ -207,14 +207,26 @@ ReturnRequestSchema.index({ status: 1, createdAt: -1 }); // admin queue (filter 
 //     form threw at index build and the index was never created at all. The status
 //     list lives in returnPolicy.js so the controller pre-check uses the identical set.
 // Multikey (items.product is an array): each returned line contributes a key, so the
-// uniqueness is per (order, product) across active returns — exactly the guarantee.
+// uniqueness is per (order, product) across in-flight returns — exactly the guarantee.
 // autoIndex is off in prod, so db.js ensureCriticalIndexes builds this there too.
+//
+// ⚠️ SCOPED TO IN-FLIGHT, NOT "ACTIVE". It previously covered the terminal `refunded`
+// and `rejected` too, which made a return one-shot per product for the life of the
+// order: a customer who sent back 1 of 3 faulty items could never claim the other 2,
+// even though the form let them choose a partial quantity. What bounds a repeat is now
+// QUANTITY (checked in returnController against the units actually consumed); what this
+// index bounds is CONCURRENCY — two simultaneous submissions both target `pending`, so
+// the second still hits E11000 rather than creating a duplicate.
+//
+// ⚠️ NEW NAME on purpose. MongoDB refuses to recreate an existing index name with
+// different options, and would fail the whole verification pass — db.js drops the old
+// `unique_active_return_per_order_product` before building this one.
 ReturnRequestSchema.index(
   { order: 1, 'items.product': 1 },
   {
-    name: 'unique_active_return_per_order_product',
+    name: 'unique_inflight_return_per_order_product',
     unique: true,
-    partialFilterExpression: { status: { $in: ACTIVE_RETURN_STATUSES } }
+    partialFilterExpression: { status: { $in: IN_FLIGHT_RETURN_STATUSES } }
   }
 );
 

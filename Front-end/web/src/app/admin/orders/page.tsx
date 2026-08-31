@@ -17,7 +17,7 @@ import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/ord
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 import { formatDateIST, formatTimeIST, formatIsoDateIST, formatIsoDateTimeIST } from '@/lib/datetime';
 import ParcelProgressBadge from '@/components/orders/shared/ParcelProgressBadge';
-import { outstandingParcels, hasCancellations } from '@/lib/orderFulfilment';
+import { outstandingParcels, hasCancellations, hasOpenReturn } from '@/lib/orderFulfilment';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
@@ -77,6 +77,13 @@ interface Order {
   shipments?: ShipmentSummary[];
   /** Cancelled lines, for the part-cancelled badge. */
   cancellations?: Array<{ _id: string; lines?: Array<{ itemId: string; quantity: number }> }>;
+  /**
+   * Mirror of the LATEST return's status — status only, deliberately. A partial return
+   * no longer moves the order to `returned` (that state is terminal and stranded the
+   * un-returned lines), so this is what keeps "a return is open" visible on the row.
+   * Not summable into a count: see hasOpenReturn.
+   */
+  returnRequest?: { status?: string };
 }
 
 // Who cancelled the order — mirrors the wording on the order detail page so the list and
@@ -440,8 +447,32 @@ function AdminOrdersPageInner() {
     if (failed.length === 0) {
       toast.success(`Updated ${successful.length} order(s) to ${status}`);
     } else {
-      toast.error(`Updated ${successful.length}, failed ${failed.length}. See console for details.`);
-      console.warn('Bulk update failures:', failed);
+      /*
+        The failures are now ACTIONABLE, so they belong on screen rather than in the
+        console. Bulk refuses to guess on a split order — it will not invent a parcel
+        for un-boxed units (no carrier or AWB in a bulk request), and it will not mark
+        an order delivered while part of it was never shipped. Each rejection names the
+        reason, and "see console" hid exactly the message the admin needs in order to
+        know which orders to open in the Parcels panel.
+
+        Throwing keeps the modal open with the detail inline; a toast would be gone
+        before anyone had read a list of order numbers.
+      */
+      const detail = failed
+        .slice(0, 5)
+        .map((f: { orderId: string; error: string }) => `• ${f.orderId.slice(-8)} — ${f.error}`)
+        .join('\n');
+      const more = failed.length > 5 ? `\n…and ${failed.length - 5} more.` : '';
+
+      // Refresh first: the successful ones really did change, and the admin is about to
+      // act on the rest from this same screen.
+      setCurrentPage(1);
+      await queryClient.invalidateQueries({ queryKey: adminKeys.resource('orders') });
+      setSelectedOrders([]);
+
+      throw new Error(
+        `Updated ${successful.length} order(s); ${failed.length} could not be changed:\n${detail}${more}`
+      );
     }
 
     // A bulk status change can drop orders off a status-filtered page; reset to
@@ -725,6 +756,19 @@ function AdminOrdersPageInner() {
                         */}
                         {hasCancellations(order) && order.status !== 'cancelled' && (
                           <div className="mt-1 text-[11px] font-medium text-red-600">Part cancelled</div>
+                        )}
+                        {/*
+                          A return no longer drags the whole order to `returned` unless it
+                          covers every delivered line — `returned` is terminal, and on a
+                          1-of-3 return it stranded the other two. So a partly-returned
+                          order correctly still reads `Delivered`, and this is what stops
+                          that being LESS information than ops had before.
+
+                          Says only that a return is open: `returnRequest` mirrors the
+                          latest return, so it cannot be summed into "1 of 3".
+                        */}
+                        {hasOpenReturn(order) && (
+                          <div className="mt-1 text-[11px] font-medium text-amber-600">Return in progress</div>
                         )}
                         {/* Cancellation attribution — admin vs customer at a glance, no drill-in. */}
                         {order.status === 'cancelled' && order.cancelledBy && CANCELLED_BY_TEXT[order.cancelledBy] && (

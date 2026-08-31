@@ -42,11 +42,12 @@ import { refundableForLines, remainingRefundable, matchOrderLine } from '../serv
 import { supportsPartialRefund, describeEmiPlan } from '../utils/paymentMethodDetails.js';
 import { toPaise } from '../utils/money.js';
 import { deliveredAtForItem } from '../utils/orderFulfilment.js';
+import { coversEveryDeliveredLine } from '../utils/orderReturns.js';
 import { enqueueNotification } from '../queue/queues.js';
 import {
   RETURN_WINDOW_DAYS,
   RETURN_REASONS,
-  ACTIVE_RETURN_STATUSES,
+  IN_FLIGHT_RETURN_STATUSES,
   suggestedRestockingRupees,
 } from '../config/returnPolicy.js';
 import {
@@ -86,6 +87,65 @@ const daysSince = (date) => (Date.now() - new Date(date).getTime()) / (1000 * 60
 const transition = (rr, status, note, userId) => {
   rr.status = status;
   rr.timeline.push({ status, note, updatedBy: userId, timestamp: new Date() });
+};
+
+/**
+ * Move the order onto the `returned` fulfilment stage — but ONLY if this return
+ * actually accounts for everything the customer received.
+ *
+ * ── WHY THE COVERAGE CHECK ────────────────────────────────────────────────────────
+ * This used to be a bare call to `orderRepository.markReturnedOnReturnApproval`, which
+ * compare-and-sets on `status: 'delivered'` and asks nothing about quantities. That was
+ * correct when an order had one return. With per-line returns it meant sending back 1 of
+ * 3 items flipped the WHOLE order to `returned` — and `returned` is terminal in
+ * orderStatusService.STATUS_TRANSITIONS, so the customer could never return the other 2
+ * and the order could never move again. It also told the admin Orders column that an
+ * order the customer still mostly holds had come back.
+ *
+ * That defeated a decision made deliberately elsewhere: the
+ * `unique_inflight_return_per_order_product` index was narrowed precisely so a customer
+ * "who sent back 1 of 3 faulty items" could claim the other 2 (models/ReturnRequest.js).
+ *
+ * A partial return therefore leaves the order on `delivered`. Partiality is carried as a
+ * DISPLAY label (utils/orderReturns.returnSummary), never as a new status enum — the
+ * same call orderFulfilment.js makes for partial shipping and cancellation.
+ *
+ * ── ORDERING ──────────────────────────────────────────────────────────────────────
+ * MUST be called after the triggering return has been saved in a quantity-consuming
+ * status, because coverage is computed from the persisted returns — including this one.
+ * All three call sites save first.
+ *
+ * Idempotent and race-safe: the underlying write is still a compare-and-set on
+ * `delivered`, so a double-approval, or an order an admin already moved by hand, matches
+ * zero documents and no-ops rather than stacking a duplicate history entry.
+ *
+ * Never throws: a status roll-up must not fail an approval whose goods decision is
+ * already recorded. `Order.status` is a cached conclusion about the returns, and the
+ * next return event on the order recomputes it.
+ *
+ * @param {string|object} orderId
+ * @param {string|object} userId - the acting admin
+ * @param {string} note - status-history note when the flip lands
+ * @returns {Promise<boolean>} true when THIS call flipped the order to `returned`.
+ */
+const syncOrderReturnedStatus = async (orderId, userId, note) => {
+  try {
+    const order = await orderRepository.findById(orderId);
+    if (!order) return false;
+
+    const returnedByProduct = await returnRequestRepository.returnedQuantityByProduct(orderId);
+    if (!coversEveryDeliveredLine(order, returnedByProduct)) return false;
+
+    return await orderRepository.markReturnedOnReturnApproval(orderId, userId, note);
+  } catch (err) {
+    const message =
+      `[Returns] Order-status roll-up to 'returned' FAILED for order ${orderId}: `
+      + `${err?.message || 'unknown error'}. The return itself is recorded; Order.status `
+      + 'is stale until the next return event recomputes it.';
+    console.error(message);
+    Sentry.captureMessage(message, 'error');
+    return false;
+  }
 };
 
 /**
@@ -221,11 +281,17 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     throw new AppError('Order not found', 404);
   }
   /*
-    `returned` is accepted alongside `delivered` because an APPROVED return now moves
-    the order onto the `returned` fulfillment stage (orderRepository.markReturnedOnReturnApproval).
-    A multi-line order must still be able to raise a return for a DIFFERENT item while
-    the first one is in flight — the per-line window below and the per-product
-    active-return guard further down are what actually bound eligibility.
+    `returned` is accepted alongside `delivered` because an approved return can move the
+    order onto the `returned` fulfillment stage (see syncOrderReturnedStatus). A
+    multi-line order must still be able to raise a return for a DIFFERENT item while the
+    first one is in flight — the per-line window below and the per-product active-return
+    guard further down are what actually bound eligibility.
+
+    ⚠️ Accepting `returned` matters MORE since that flip was gated on the return covering
+    every delivered line. Orders already sitting at `returned` from before that gate
+    existed were moved there by a PARTIAL return, so they can still hold items the
+    customer never sent back. Refusing them here would strand exactly the people the
+    gate was added to protect.
 
     ⚠️ `shipped` is accepted TOO, but only for an order that has parcels. A split order
     sits at `shipped` until its LAST parcel lands, so gating on the order status alone
@@ -242,6 +308,13 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
   if (!allowedStatuses.includes(order.status)) {
     throw new AppError('Only delivered orders can be returned.', 400);
   }
+
+  /*
+    Units already claimed by earlier returns on this order, product by product. Read ONCE
+    before the loop — a per-line lookup would be an N+1 against a collection that grows
+    with every return, for an answer that cannot change mid-request.
+  */
+  const consumedByProduct = await returnRequestRepository.returnedQuantityByProduct(orderId);
 
   // 2) Validate + snapshot each requested line.
   const returnItems = [];
@@ -282,17 +355,59 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     if (product?.returnPolicy && product.returnPolicy.returnable === false) {
       throw new AppError(`"${product.name}" is not eligible for return under our policy.`, 400);
     }
-    const qty = Math.min(Number(item.quantity) || 1, orderLine.quantity);
-    // DB unique index is the race-safe backstop; this gives a friendly message.
-    // Uses the SAME active-status set as the index partial filter so the two agree.
-    const existing = await returnRequestRepository.findOne({
-      order: orderId,
-      'items.product': item.productId,
-      status: { $in: ACTIVE_RETURN_STATUSES },
+    const requested = Math.min(Number(item.quantity) || 1, orderLine.quantity);
+    const label = product?.name || 'this item';
+
+    /*
+      ── WHAT BOUNDS A REPEAT RETURN IS QUANTITY, NOT HISTORY ────────────────────────
+      This used to refuse ANY second return for a product once one existed in a
+      non-cancelled state — including the terminal `refunded`. The form invites a
+      partial-quantity return ("2 of your 3"), so a customer who sent back one faulty
+      wiper could never come back for the other two. The UI offered something the API
+      then permanently refused.
+
+      Three distinct rules now, in order:
+    */
+
+    // 1. A REJECTED return is a hard stop. Those goods were never taken back, so no
+    //    quantity was consumed — but an operator has already said no, and re-asking is
+    //    a support conversation rather than a self-serve retry.
+    const rejected = await returnRequestRepository.findOne({
+      order: orderId, 'items.product': item.productId, status: 'rejected',
     });
-    if (existing) {
-      throw new AppError(`A return request already exists for "${product?.name || 'this item'}".`, 409);
+    if (rejected) {
+      throw new AppError(
+        `A return for "${label}" was reviewed and declined. Please contact support if you'd like it looked at again.`,
+        409,
+      );
     }
+
+    // 2. One IN-FLIGHT return per product at a time. This mirrors the DB unique index
+    //    exactly (same status set), so the friendly message and the race-safe backstop
+    //    can never disagree about what is allowed.
+    const inFlight = await returnRequestRepository.findOne({
+      order: orderId, 'items.product': item.productId,
+      status: { $in: IN_FLIGHT_RETURN_STATUSES },
+    });
+    if (inFlight) {
+      throw new AppError(`A return for "${label}" is already in progress.`, 409);
+    }
+
+    // 3. Never give back more units than were bought. Counts everything already in
+    //    flight or refunded across this order's returns.
+    const alreadyReturned = consumedByProduct.get(String(item.productId)) || 0;
+    const remaining = orderLine.quantity - alreadyReturned;
+    if (remaining <= 0) {
+      throw new AppError(`All ${orderLine.quantity} of "${label}" have already been returned.`, 409);
+    }
+    if (requested > remaining) {
+      throw new AppError(
+        `You can return ${remaining} more of "${label}" — ${alreadyReturned} of ${orderLine.quantity} `
+        + 'have already been returned.',
+        409,
+      );
+    }
+    const qty = requested;
     returnItems.push({
       product: item.productId,
       variantId: orderLine.variantId || null,
@@ -648,18 +763,22 @@ export const createOfflineReturn = asyncHandler(async (req, res) => {
     throw new AppError('Select at least one item to return.', 400);
   }
 
-  // The duplicate guard is kept: it is the DB unique index made friendly, and an
-  // admin recording a second return for a line already in flight is a real mistake.
-  //
-  // ONE query for all lines, not one per line. The index is multikey on
-  // (order, items.product), so `$in` uses exactly the same index the per-line lookup
-  // did — it just stops paying a round trip per item. Measured on a 5-line return:
-  // 5 lookups → 1.
+  /*
+    The duplicate guard is kept, and scoped to IN-FLIGHT returns — the same set the DB
+    unique index uses, so this friendly message and the race-safe backstop always agree.
+    An admin recording a second return for a line already in flight is a real mistake;
+    recording one for units that were refunded months ago is not, and used to be refused.
+
+    ONE query for all lines, not one per line. The index is multikey on
+    (order, items.product), so `$in` uses exactly the same index the per-line lookup
+    did — it just stops paying a round trip per item. Measured on a 5-line return:
+    5 lookups → 1.
+  */
   const productIds = returnItems.map((l) => l.product);
   const clash = await returnRequestRepository.findOne({
     order: orderId,
     'items.product': { $in: productIds },
-    status: { $in: ACTIVE_RETURN_STATUSES },
+    status: { $in: IN_FLIGHT_RETURN_STATUSES },
   });
   if (clash) {
     // Name the offending line when we can — with one query the clash is no longer
@@ -668,6 +787,50 @@ export const createOfflineReturn = asyncHandler(async (req, res) => {
     const clashedId = (clash.items || []).map((it) => String(it.product)).find((id) => wanted.has(id));
     const name = order.items.find((oi) => String(oi.product?._id || oi.product) === clashedId)?.product?.name;
     throw new AppError(`A return request already exists for "${name || 'one of these items'}".`, 409);
+  }
+
+  /*
+    ...and the same quantity ceiling as the customer path. Without it the admin route is
+    a way around the bound: record enough offline returns and the order refunds more
+    units than it ever contained.
+  */
+  const consumed = await returnRequestRepository.returnedQuantityByProduct(orderId);
+
+  /*
+    The ceiling is counted PER PRODUCT, across every line that carries it — matching
+    `returnedQuantityByProduct`, which aggregates the same way.
+
+    Taking the first matching line's quantity instead is wrong on a variable product: two
+    variants share one product id and sit on two lines, so a customer who bought 1 black
+    and 2 beige could only ever return 1 beige — the black line's quantity became the cap
+    for both. Requested units are tallied per product for the same reason: two variant
+    lines in ONE request must be weighed against one shared ceiling, or they each pass
+    while together exceeding it.
+  */
+  const orderedByProduct = new Map();
+  for (const oi of order.items) {
+    const id = String(oi.product?._id || oi.product);
+    orderedByProduct.set(id, (orderedByProduct.get(id) || 0) + (Number(oi.quantity) || 0));
+  }
+  const requestedByProduct = new Map();
+  for (const line of returnItems) {
+    const id = String(line.product);
+    requestedByProduct.set(id, (requestedByProduct.get(id) || 0) + line.quantity);
+  }
+
+  for (const [productId, requested] of requestedByProduct) {
+    const ordered = orderedByProduct.get(productId) || 0;
+    const already = consumed.get(productId) || 0;
+    const remaining = ordered - already;
+    if (requested > remaining) {
+      const name = order.items.find((oi) => String(oi.product?._id || oi.product) === productId)?.product?.name
+        || 'one of these items';
+      throw new AppError(
+        `Only ${Math.max(0, remaining)} of "${name}" can still be returned — `
+        + `${already} of ${ordered} already have been.`,
+        409,
+      );
+    }
   }
 
   const { grossRupees, netRupees, discountShareRupees } = refundableForLines(order, returnItems);
@@ -736,9 +899,10 @@ export const createOfflineReturn = asyncHandler(async (req, res) => {
 
   if (markReturned) {
     // Fulfilment axis: the customer path flips this at approval. An offline return has
-    // no approval step, so do it here. Compare-and-set on `delivered`, so it no-ops on
-    // an order an admin already moved by hand.
-    await orderRepository.markReturnedOnReturnApproval(
+    // no approval step, so do it here. Only lands if this return covers every delivered
+    // line — a partial walk-in return leaves the order `delivered` so the rest stays
+    // returnable. The return was created `received` above, so coverage counts it.
+    await syncOrderReturnedStatus(
       orderId, req.user._id, `Offline return ${returnRequest._id} recorded`,
     );
   }
@@ -794,8 +958,9 @@ export const markReturnedOffline = asyncHandler(async (req, res) => {
 
   await orderRepository.setReturnRequestStatus(rr.order, 'item_received');
   // The return may never have been approved (straight from `pending`), so the
-  // approval-time fulfilment flip has to happen here too. Idempotent by compare-and-set.
-  await orderRepository.markReturnedOnReturnApproval(
+  // approval-time fulfilment flip has to happen here too. Only lands when this return
+  // covers every delivered line; idempotent by compare-and-set.
+  await syncOrderReturnedStatus(
     rr.order, req.user._id, `Return ${rr._id} settled offline`,
   );
 
@@ -835,7 +1000,9 @@ export const reviewReturn = asyncHandler(async (req, res) => {
     // Fulfillment axis follows the approval: the Orders column reads "Returned", not a
     // stale "Delivered", for the whole return-in-flight period. Payment/karma/customer
     // email are untouched here — see orderRepository.markReturnedOnReturnApproval.
-    await orderRepository.markReturnedOnReturnApproval(rr.order, req.user._id, `Return ${rr._id} approved`);
+    // A PARTIAL return leaves the order `delivered` so the un-returned lines stay
+    // returnable — see syncOrderReturnedStatus.
+    await syncOrderReturnedStatus(rr.order, req.user._id, `Return ${rr._id} approved`);
     enqueueNotification('send-return-status-email', { returnId: rr._id.toString(), event: 'approved' });
   } else if (decision === 'reject') {
     if (!rejectionReason) {

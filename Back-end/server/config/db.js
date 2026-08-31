@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { ACTIVE_RETURN_STATUSES } from './returnPolicy.js';
+import { IN_FLIGHT_RETURN_STATUSES } from './returnPolicy.js';
 
 const execPromise = promisify(exec);
 
@@ -417,16 +417,39 @@ export async function ensureCriticalIndexes() {
     // which is unsupported in partial indexes) over the shared active-status set.
     // NOTE: if pre-existing duplicate active returns exist this build fails — dedupe
     // (cancel/refund the extras) before it can succeed.
+    /*
+      The unique return index is scoped to IN-FLIGHT statuses, not every non-cancelled
+      one. The old form also covered the terminal `refunded`/`rejected`, which made a
+      return one-shot per product for the life of an order — a customer who sent back
+      1 of 3 faulty items could never claim the other 2. Quantity now bounds a repeat
+      (returnController); this index bounds CONCURRENCY.
+
+      ⚠️ The old index must be DROPPED first. MongoDB refuses to recreate an existing
+      index NAME with different options, and that failure aborts the whole verification
+      pass — which is exactly how AuditLog's TTL silently never got created in this repo.
+      Hence a new name plus an explicit drop of the old one.
+
+      Narrowing is safe on live data: the new filter indexes a strict SUBSET of the
+      documents the old one did, so it cannot fail on a duplicate the old index allowed.
+    */
+    await db.collection('returnrequests')
+      .dropIndex('unique_active_return_per_order_product')
+      .then(() => console.log('✓ Dropped superseded unique_active_return_per_order_product'))
+      // IndexNotFound (27) — already gone, or a fresh database. Nothing to do.
+      .catch((err) => {
+        if (err?.code !== 27 && !/index not found/i.test(err?.message || '')) throw err;
+      });
+
     await db.collection('returnrequests').createIndex(
       { order: 1, 'items.product': 1 },
       {
-        name: 'unique_active_return_per_order_product',
+        name: 'unique_inflight_return_per_order_product',
         unique: true,
-        partialFilterExpression: { status: { $in: ACTIVE_RETURN_STATUSES } },
+        partialFilterExpression: { status: { $in: IN_FLIGHT_RETURN_STATUSES } },
         background: true
       }
     );
-    console.log('✓ ReturnRequest unique active-return index confirmed');
+    console.log('✓ ReturnRequest unique in-flight-return index confirmed');
 
     // ── Spin-to-Win ────────────────────────────────────────────────────────────
     // THE idempotency guarantee for the reward wheel: one spin per order, forever.

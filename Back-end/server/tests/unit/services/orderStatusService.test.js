@@ -112,6 +112,50 @@ describe('OrderStatusService Unit Tests', () => {
       const result = service.canCustomerCancel({ status: 'shipped' });
       expect(result.canCancel).toBe(false);
     });
+
+    /*
+      ── SPLIT SHIPMENTS CHANGED WHAT `shipped` MEANS ──────────────────────────────
+      It now means "at least one parcel has left", not "the whole order has left". The
+      gate therefore asks whether anything is still cancellable, not what the status is.
+      cancellationService has always allowed this (its CANCELLABLE_ORDER_STATUSES
+      includes `shipped`); only this gate, and the customer UI reading it, said no — so
+      the customer was told "Already Shipped — Can't Cancel" about items still on the
+      shelf.
+    */
+    it('allows cancelling the remainder of a PARTIALLY shipped order', () => {
+      const result = service.canCustomerCancel({
+        status: 'shipped',
+        items: [
+          { _id: 'i1', quantity: 1 },
+          { _id: 'i2', quantity: 2 }, // never boxed
+        ],
+        shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: 'i1', quantity: 1 }] }],
+        cancellations: [],
+      });
+      expect(result.canCancel).toBe(true);
+    });
+
+    it('refuses, and explains why, once every item is in a parcel', () => {
+      const result = service.canCustomerCancel({
+        status: 'shipped',
+        items: [{ _id: 'i1', quantity: 1 }],
+        shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: 'i1', quantity: 1 }] }],
+        cancellations: [],
+      });
+      expect(result.canCancel).toBe(false);
+      expect(result.reason).toMatch(/already shipped/i);
+      expect(result.reason).toMatch(/return/i);
+    });
+
+    it('still refuses on a delivered order', () => {
+      const result = service.canCustomerCancel({
+        status: 'delivered',
+        items: [{ _id: 'i1', quantity: 1 }],
+        shipments: [{ _id: 's1', status: 'delivered', lines: [{ itemId: 'i1', quantity: 1 }] }],
+        cancellations: [],
+      });
+      expect(result.canCancel).toBe(false);
+    });
   });
 
   describe('updateOrderStatus', () => {

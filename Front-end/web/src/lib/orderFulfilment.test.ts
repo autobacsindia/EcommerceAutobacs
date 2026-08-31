@@ -17,6 +17,8 @@ import {
   cancelledQuantityForItem,
   liveQuantityForItem,
   hasCancellations,
+  remainingCancellableUnits,
+  customerCancelScope,
 } from './orderFulfilment';
 import type { FulfilmentOrder } from './orderFulfilment';
 
@@ -307,5 +309,106 @@ describe('fulfilmentStateForItem — with cancellations', () => {
       cancellations: [{ lines: [{ itemId: 'a', quantity: 3 }] }],
     } as any;
     expect(fulfilmentStateForItem(o, 'a', 3)).toBe('pending');
+  });
+});
+
+/*
+  ── THE PART-SHIPPED CANCEL GATE ──────────────────────────────────────────────────
+  Split shipments made `shipped` mean "at least one parcel has left", not "the whole
+  order has left". The customer page keyed its cancel button on the status word alone,
+  so a three-item order with one box in transit said "Already Shipped — Can't Cancel"
+  while two items sat untouched in the warehouse. The server always allowed those two
+  to go; these helpers are the UI catching up.
+*/
+describe('remainingCancellableUnits', () => {
+  const twoLines = {
+    status: 'shipped',
+    items: [{ _id: 'a', quantity: 1 }, { _id: 'b', quantity: 2 }],
+    cancellations: [],
+  };
+
+  it('counts the units no parcel has taken', () => {
+    const o = {
+      ...twoLines,
+      shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: 'a', quantity: 1 }] }],
+    } as any;
+    expect(remainingCancellableUnits(o)).toBe(2); // b ×2 never left
+  });
+
+  it('is zero once every unit is in a shipped parcel', () => {
+    const o = {
+      ...twoLines,
+      shipments: [{
+        _id: 's1', status: 'shipped',
+        lines: [{ itemId: 'a', quantity: 1 }, { itemId: 'b', quantity: 2 }],
+      }],
+    } as any;
+    expect(remainingCancellableUnits(o)).toBe(0);
+  });
+
+  // A packed box has not gone anywhere — the server pulls the line back out of it.
+  it('still counts units sitting in a PACKED parcel', () => {
+    const o = {
+      ...twoLines,
+      shipments: [{ _id: 's1', status: 'packed', lines: [{ itemId: 'b', quantity: 2 }] }],
+    } as any;
+    expect(remainingCancellableUnits(o)).toBe(3);
+  });
+
+  it('does not re-offer units that were already cancelled', () => {
+    const o = {
+      ...twoLines,
+      shipments: [],
+      cancellations: [{ lines: [{ itemId: 'b', quantity: 2 }] }],
+    } as any;
+    expect(remainingCancellableUnits(o)).toBe(1);
+  });
+
+  it('never goes negative on inconsistent data', () => {
+    const o = {
+      ...twoLines,
+      shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: 'a', quantity: 9 }] }],
+    } as any;
+    expect(remainingCancellableUnits(o)).toBe(2);
+  });
+
+  it('tolerates a null order rather than throwing during the loading render', () => {
+    expect(remainingCancellableUnits(null)).toBe(0);
+  });
+});
+
+describe('customerCancelScope', () => {
+  it('offers a full cancellation before anything ships', () => {
+    expect(customerCancelScope({ status: 'processing', items: [{ _id: 'a', quantity: 1 }] } as any)).toBe('full');
+    expect(customerCancelScope({ status: 'awaiting_payment', items: [] } as any)).toBe('full');
+  });
+
+  it('offers a PARTIAL cancellation when only some of the order has left', () => {
+    const o = {
+      status: 'shipped',
+      items: [{ _id: 'a', quantity: 1 }, { _id: 'b', quantity: 2 }],
+      shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: 'a', quantity: 1 }] }],
+      cancellations: [],
+    } as any;
+    expect(customerCancelScope(o)).toBe('partial');
+  });
+
+  it('offers nothing once the whole order is in transit', () => {
+    const o = {
+      status: 'shipped',
+      items: [{ _id: 'a', quantity: 1 }],
+      shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: 'a', quantity: 1 }] }],
+      cancellations: [],
+    } as any;
+    expect(customerCancelScope(o)).toBe('none');
+  });
+
+  it('offers nothing on a delivered or cancelled order', () => {
+    expect(customerCancelScope({ status: 'delivered', items: [{ _id: 'a', quantity: 1 }] } as any)).toBe('none');
+    expect(customerCancelScope({ status: 'cancelled', items: [{ _id: 'a', quantity: 1 }] } as any)).toBe('none');
+  });
+
+  it('tolerates a null order', () => {
+    expect(customerCancelScope(null)).toBe('none');
   });
 });

@@ -26,6 +26,10 @@ const mockReturnRepo = {
   claimForRefund: jest.fn(),
   claimPaymentRecord: jest.fn(),
   find: jest.fn(),
+  // productId → units already spoken for by an in-flight/refunded return. The offline
+  // path is held to the same quantity ceiling as the customer path, so that an admin
+  // cannot record their way past the units the order actually contained.
+  returnedQuantityByProduct: jest.fn(),
 };
 const mockOrderRepo = {
   findByIdWithProducts: jest.fn(),
@@ -111,7 +115,11 @@ describe('createOfflineReturn — records what the storefront flow would refuse'
   beforeEach(() => {
     jest.clearAllMocks();
     mockOrderRepo.findByIdWithProducts.mockResolvedValue(makeAwkwardOrder());
+    // syncOrderReturnedStatus re-reads the order to work out whether the return covers
+    // every delivered line before it touches the fulfilment axis.
+    mockOrderRepo.findById.mockResolvedValue(makeAwkwardOrder());
     mockReturnRepo.findOne.mockResolvedValue(null);
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map()); // nothing returned yet
     mockReturnRepo.create.mockImplementation(async (doc) => ({ _id: 'ret-1', ...doc }));
     mockOrderRepo.markReturnedOnReturnApproval.mockResolvedValue(true);
   });
@@ -147,13 +155,51 @@ describe('createOfflineReturn — records what the storefront flow would refuse'
     expect(doc.refund.productValue).toBe(1000);
   });
 
-  it('moves the order onto the returned axis and mirrors the summary as item_received', async () => {
+  /*
+    `baseCreateBody` returns prod-1 ×2 out of the order's THREE delivered units
+    (prod-1 ×2 + prod-2 ×1) — a partial return. The summary mirror still moves to
+    `item_received`, because that describes the RETURN; the order's fulfilment axis must
+    not, because the customer still holds the mat. Before the coverage check this flipped
+    the whole order to `returned`, a terminal state that stranded the un-returned line.
+  */
+  it('mirrors the summary as item_received but leaves a PARTIAL return on the order axis', async () => {
     const order = makeAwkwardOrder();
     mockOrderRepo.findByIdWithProducts.mockResolvedValue(order);
+    /*
+      Read TWICE per request, and the two reads want different answers: the create-path
+      guard runs BEFORE this return exists (nothing claimed yet, so prod-1 ×2 is
+      allowed), while the coverage check runs after (prod-1 ×2 now claimed).
+    */
+    mockReturnRepo.returnedQuantityByProduct
+      .mockResolvedValueOnce(new Map())
+      .mockResolvedValue(new Map([['prod-1', 2]]));
     await run(createOfflineReturn, { body: baseCreateBody, user: ADMIN });
 
     expect(order.returnRequest.status).toBe('item_received');
     expect(order.save).toHaveBeenCalled();
+    expect(mockOrderRepo.markReturnedOnReturnApproval).not.toHaveBeenCalled();
+  });
+
+  it('moves the order onto the returned axis when the offline return covers every line', async () => {
+    const order = makeAwkwardOrder();
+    mockOrderRepo.findByIdWithProducts.mockResolvedValue(order);
+    // Guard read first (nothing claimed), then the coverage read (everything claimed).
+    mockReturnRepo.returnedQuantityByProduct
+      .mockResolvedValueOnce(new Map())
+      .mockResolvedValue(new Map([['prod-1', 2], ['prod-2', 1]]));
+
+    await run(createOfflineReturn, {
+      body: {
+        ...baseCreateBody,
+        items: [
+          { productId: 'prod-1', quantity: 2, reason: 'manufacturing_defect' },
+          { productId: 'prod-2', quantity: 1, reason: 'manufacturing_defect' },
+        ],
+      },
+      user: ADMIN,
+    });
+
+    expect(order.returnRequest.status).toBe('item_received');
     expect(mockOrderRepo.markReturnedOnReturnApproval).toHaveBeenCalledWith('order-1', 'admin-1', expect.stringMatching(/Offline return/));
   });
 
@@ -274,6 +320,83 @@ describe('createOfflineReturn — records what the storefront flow would refuse'
     expect(mockReturnRepo.create).not.toHaveBeenCalled();
   });
 
+  it('holds the offline route to the same quantity ceiling as the customer route', async () => {
+    // prod-1 was bought ×2 and one unit is already spoken for, so only one may be recorded.
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map([['prod-1', 1]]));
+    const { status, error } = await run(createOfflineReturn, {
+      body: { ...baseCreateBody, items: [{ productId: 'prod-1', quantity: 2, reason: 'wrong_item' }] },
+      user: ADMIN,
+    });
+    expect(status).toBe(409);
+    expect(error.message).toMatch(/Only 1 of "Wiper" can still be returned/);
+    expect(mockReturnRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('allows the units that are still outstanding', async () => {
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map([['prod-1', 1]]));
+    const { next } = await run(createOfflineReturn, {
+      body: { ...baseCreateBody, items: [{ productId: 'prod-1', quantity: 1, reason: 'wrong_item' }] },
+      user: ADMIN,
+    });
+    expect(next).not.toHaveBeenCalled();
+    expect(mockReturnRepo.create.mock.calls[0][0].items[0].quantity).toBe(1);
+  });
+
+  it('counts the ceiling across EVERY line carrying the product, not just the first', async () => {
+    // 1 black + 2 beige of one variable product. The beige line alone may be returned in
+    // full; capping on the first matching line would refuse it at 1.
+    mockOrderRepo.findByIdWithProducts.mockResolvedValue(makeAwkwardOrder({
+      subtotal: 1100, totalAmount: 1600,
+      items: [
+        { _id: 'line-a', product: { _id: 'prod-1', name: 'Mat' }, variantId: 'var-black', quantity: 1, price: 300 },
+        { _id: 'line-b', product: { _id: 'prod-1', name: 'Mat' }, variantId: 'var-beige', quantity: 2, price: 400 },
+      ],
+    }));
+    const { next } = await run(createOfflineReturn, {
+      body: { ...baseCreateBody, items: [{ itemId: 'line-b', productId: 'prod-1', variantId: 'var-beige', quantity: 2, reason: 'wrong_item' }] },
+      user: ADMIN,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('weighs two variant lines of one product against a SHARED ceiling', async () => {
+    // 3 units across two variant lines, 1 already spoken for → 2 may still come back.
+    // Requesting both lines in full (1 + 2 = 3) must fail: checked per LINE against the
+    // per-PRODUCT remaining, each line looks affordable and the pair slips through.
+    mockOrderRepo.findByIdWithProducts.mockResolvedValue(makeAwkwardOrder({
+      subtotal: 1100, totalAmount: 1600,
+      items: [
+        { _id: 'line-a', product: { _id: 'prod-1', name: 'Mat' }, variantId: 'var-black', quantity: 1, price: 300 },
+        { _id: 'line-b', product: { _id: 'prod-1', name: 'Mat' }, variantId: 'var-beige', quantity: 2, price: 400 },
+      ],
+    }));
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map([['prod-1', 1]]));
+
+    const { status, error } = await run(createOfflineReturn, {
+      body: {
+        ...baseCreateBody,
+        items: [
+          { itemId: 'line-a', productId: 'prod-1', variantId: 'var-black', quantity: 1, reason: 'wrong_item' },
+          { itemId: 'line-b', productId: 'prod-1', variantId: 'var-beige', quantity: 2, reason: 'wrong_item' },
+        ],
+      },
+      user: ADMIN,
+    });
+    expect(status).toBe(409);
+    expect(error.message).toMatch(/Only 2 of "Mat" can still be returned/);
+    expect(mockReturnRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('clamps an over-entered quantity to what the line actually held', async () => {
+    // The operator typing 99 must not become a 99-unit refund base.
+    const { next } = await run(createOfflineReturn, {
+      body: { ...baseCreateBody, items: [{ productId: 'prod-1', quantity: 99, reason: 'wrong_item' }] },
+      user: ADMIN,
+    });
+    expect(next).not.toHaveBeenCalled();
+    expect(mockReturnRepo.create.mock.calls[0][0].items[0].quantity).toBe(2);
+  });
+
   it('rejects a line that is not on the order', async () => {
     const { status, error } = await run(createOfflineReturn, {
       body: { ...baseCreateBody, items: [{ productId: 'prod-999', quantity: 1, reason: 'wrong_item' }] },
@@ -322,6 +445,16 @@ describe('markReturnedOffline — fast-forwarding a customer-raised return', () 
     jest.clearAllMocks();
     mockReturnRepo.save.mockResolvedValue(true);
     mockOrderRepo.markReturnedOnReturnApproval.mockResolvedValue(true);
+    // A single-line order whose only delivered unit is the one coming back, so the
+    // coverage check passes and the fulfilment axis legitimately moves.
+    mockOrderRepo.findById.mockResolvedValue({
+      _id: 'order-1',
+      status: 'delivered',
+      items: [{ _id: 'i1', product: 'prod-1', quantity: 1 }],
+      shipments: [],
+      cancellations: [],
+    });
+    mockReturnRepo.returnedQuantityByProduct.mockResolvedValue(new Map([['prod-1', 1]]));
   });
 
   it('jumps `pending` straight to received+passed without a courier or an AWB', async () => {

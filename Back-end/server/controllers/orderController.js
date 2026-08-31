@@ -72,6 +72,44 @@ const publicPaymentSummary = (payment) => {
   };
 };
 
+/**
+ * Why this order may not be marked `delivered` as a whole, if it may not.
+ *
+ * ── THE BUG THIS CLOSES ───────────────────────────────────────────────────────────
+ * `shipmentService.deliverAllOutstanding` marks every EXISTING parcel delivered, which
+ * is what keeps the per-line return windows open. But it can only deliver what is in a
+ * box. Ship 1 of 3 items and then flip the order to `delivered` and the other 2 are
+ * still sitting in `remainingToShip` — never parcelled, so `deliveredAtForItem` returns
+ * null for them forever, so their return window never opens — while the customer is
+ * told the whole order arrived. Nothing in validateTransition or the request validator
+ * caught this, because both reason about the order-level status alone.
+ *
+ * ── WHY THE `shipments.length` CONDITION ──────────────────────────────────────────
+ * An order with NO parcels at all is not partially shipped, it is PRE-parcel: every
+ * order placed before split shipments existed, plus offline sales recorded as already
+ * delivered. `remainingToShip` returns every line for those (nothing is in a box), so
+ * guarding on it alone would block `delivered` on all of them. They are safe precisely
+ * because `deliveredAtForItem` falls back to the order-level date when there are no
+ * parcels — the behaviour they have always had.
+ *
+ * So the rejection targets exactly the mixed state: some units parcelled, some not.
+ *
+ * @param {object} order
+ * @returns {string|null} an admin-facing reason, or null when the transition is fine.
+ */
+const blockedFromWholeOrderDelivery = (order) => {
+  if (!(order?.shipments || []).length) return null;
+
+  const outstanding = remainingToShip(order);
+  if (!outstanding.length) return null;
+
+  const named = outstanding
+    .map((l) => `${l.name || 'item'} ×${l.quantity}`)
+    .join(', ');
+  return `Cannot mark this order delivered — ${outstanding.length} line(s) have never been shipped `
+    + `(${named}). Ship or cancel them from the order's Parcels panel first.`;
+};
+
 // @desc    Get all orders for logged-in user with pagination
 // @route   GET /orders
 // @access  Private
@@ -667,7 +705,21 @@ export const cancelOrder = async (req, res) => {
     already-fully-cancelled order — and we fall through to the normal transition, which
     is idempotent about the status.
   */
-  if ((order.cancellations || []).length) {
+  /*
+    A PARTIALLY SHIPPED order goes down the same per-line road, for a different reason.
+
+    At `shipped` one box has left and the rest may still be on the shelf. The plain
+    whole-order transition cannot express that: it would cancel goods already in transit
+    and flag an order-level refund for the FULL total, including the parcel the customer
+    is about to receive. Routing the un-shipped remainder through cancellationService
+    cancels exactly the lines nobody has touched (remainingCancellable excludes anything
+    in a shipped or delivered parcel), prices each net of the order's discount, and
+    leaves the order at `shipped` because a live parcel is still on its way.
+
+    Reached only when something IS still cancellable — canCustomerCancel and the
+    validateCancellation middleware reject a fully-shipped order before we get here.
+  */
+  if ((order.cancellations || []).length || order.status === 'shipped') {
     const live = remainingCancellable(order);
     if (live.length) {
       const result = await cancellationService.cancelLines(
@@ -682,10 +734,21 @@ export const cancelOrder = async (req, res) => {
       if (!result.success) {
         return res.status(400).json({ success: false, message: result.message });
       }
+      /*
+        Say what actually happened. cancelLines only rolls the order up to `cancelled`
+        when the LAST live line goes; on a partially shipped order a parcel is still in
+        transit, so "Order cancelled successfully" would contradict the tracking page the
+        customer is about to open. Read the outcome off the order rather than assuming.
+      */
+      const wholeOrderCancelled = result.order?.status === 'cancelled';
       return res.json({
         success: true,
-        message: 'Order cancelled successfully',
+        message: wholeOrderCancelled
+          ? 'Order cancelled successfully'
+          : `Cancelled ${live.length} item(s) that had not shipped yet. The rest of your order is still on its way.`,
         order: result.order,
+        partial: !wholeOrderCancelled,
+        cancelledLines: live.length,
         refundInitiated: result.refund?.status === 'pending',
         refundAmount: result.refund?.amountRupees ?? 0,
         refundTimeline: result.refund?.status === 'pending' ? '3-5 business days' : null,
@@ -1131,6 +1194,20 @@ export const updateOrderStatus = async (req, res) => {
     */
     let parcelsDelivered = 0;
     if (status === 'delivered') {
+      /*
+        Refuse before delivering anything when part of the order was never parcelled.
+        Checked FIRST so a rejected request leaves no half-delivered parcels behind —
+        deliverAllOutstanding is not reversible.
+      */
+      const existing = await orderRepository.findById(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ success: false, message: 'Order not found' });
+      }
+      const blocked = blockedFromWholeOrderDelivery(existing);
+      if (blocked) {
+        return res.status(400).json({ success: false, message: blocked });
+      }
+
       // No userId: the updateOrderStatus call directly below records this admin's
       // action once. See deliverAllOutstanding's note on why it rolls up nothing itself.
       ({ delivered: parcelsDelivered } =
@@ -1407,12 +1484,92 @@ export const bulkUpdateStatus = async (req, res) => {
 
   await Promise.all(orderIds.map(async (orderId) => {
     try {
+      /*
+        ── BULK MUST GO THROUGH THE PARCEL MODEL TOO ───────────────────────────────
+        This used to call updateOrderStatus directly for every status, which quietly
+        undid both of the guarantees the single-order path at PUT /:id/status works to
+        keep:
+
+          • `delivered` left every parcel sitting at `shipped`. Once an order HAS
+            parcels the per-line return window reads THEIR dates, so every window
+            stayed shut — the customer's Return button never appeared and the backend
+            refused every request. Exactly the bug the single-order path documents
+            having fixed; bulk was simply missed.
+
+          • `shipped` set the status with no parcel and (per validateBulkStatusUpdate)
+            no tracking number at all, leaving an order that claims to be in transit
+            with an empty `shipments[]` and no AWB for anyone to chase.
+
+        Both now behave as the single-order path does. Anything bulk cannot do safely is
+        reported per-order in `failed`, so the admin sees precisely which orders need the
+        Parcels panel instead of getting a silent wrong write.
+      */
+      let parcelsNotified = 0;
+
+      if (status === 'delivered') {
+        const order = await orderRepository.findById(orderId);
+        if (!order) {
+          results.failed.push({ orderId, error: 'Order not found' });
+          return;
+        }
+        const blocked = blockedFromWholeOrderDelivery(order);
+        if (blocked) {
+          results.failed.push({ orderId, error: blocked });
+          return;
+        }
+        ({ delivered: parcelsNotified } = await shipmentService.deliverAllOutstanding(orderId));
+      }
+
+      if (status === 'shipped') {
+        const order = await orderRepository.findById(orderId);
+        if (!order) {
+          results.failed.push({ orderId, error: 'Order not found' });
+          return;
+        }
+        /*
+          Creating a parcel needs a carrier + AWB, and a bulk request carries neither —
+          one shared tracking number across many orders would be wrong data on all but
+          one of them. So bulk refuses to create parcels and says so.
+        */
+        const outstanding = remainingToShip(order);
+        if (outstanding.length) {
+          results.failed.push({
+            orderId,
+            error: `${outstanding.length} line(s) still need a parcel with its own carrier and `
+              + 'tracking number. Ship this order from its Parcels panel.',
+          });
+          return;
+        }
+        // Everything is already boxed — dispatching needs no new courier data, because
+        // each parcel keeps the AWB it was packed with.
+        ({ dispatched: parcelsNotified } = await shipmentService.dispatchAllPacked(orderId));
+
+        /*
+          Nothing left to dispatch and the order already reads `shipped` — every parcel
+          is in transit or delivered. Stop here rather than re-running the status update.
+
+          It would not change the status, but it WOULD enqueue an order-level "your order
+          has shipped" email. The per-parcel emails are keyed on (status, shipmentId) and
+          the order-level one on (status, null), so the order-level key was never
+          recorded for a parcel-shipped order — the idempotency guard would not catch it
+          and the customer gets a second dispatch notice for goods already with them.
+        */
+        if (parcelsNotified === 0 && order.status === 'shipped') {
+          results.successful.push({ orderId, status, note: 'already shipped' });
+          return;
+        }
+      }
+
       const result = await orderStatusService.updateOrderStatus(orderId, status, {
         userId: req.user.id,
         isAdmin: true,
         cancelledBy: 'admin', // only consumed when status === 'cancelled'
         reason: reason || 'bulk_admin_update',
-        notes: notes || 'Bulk status update from admin panel'
+        notes: notes || 'Bulk status update from admin panel',
+        // Each parcel just emailed the customer itself; an order-level email on top
+        // would be a second notification for the same event. Suppressed only when
+        // parcels actually sent one, so a parcel-less order still gets its single email.
+        suppressStatusEmail: parcelsNotified > 0,
       });
 
       if (result.success) {

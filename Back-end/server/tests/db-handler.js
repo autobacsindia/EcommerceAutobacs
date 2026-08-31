@@ -1,10 +1,27 @@
-import mongoose from 'mongoose';
-import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { createHash } from 'node:crypto';
 
-let mongod;
+import mongoose from 'mongoose';
 
 /**
- * Connect to the in-memory database.
+ * Legacy per-suite database helper.
+ *
+ * In practice this is now a thin wrapper: tests/setup.js (setupFilesAfterEnv) has
+ * already opened the connection by the time any suite's own `beforeAll` runs, so
+ * `connect()` returns early for every current caller. It is kept because ~20 suites
+ * still import it.
+ *
+ * It no longer starts a server of its own. The single in-memory MongoDB is booted
+ * once per run by tests/globalSetup.js; starting a second one here would reintroduce
+ * exactly the per-suite `mongod` spawn that made the suite slow.
+ */
+
+const testDatabaseName = () => {
+  const testPath = expect.getState()?.testPath ?? `worker-${process.env.JEST_WORKER_ID ?? '1'}`;
+  return `jest_${createHash('sha1').update(testPath).digest('hex').slice(0, 24)}`;
+};
+
+/**
+ * Connect to the shared in-memory database, under this test file's own db name.
  */
 export const connect = async () => {
   // Prevent connecting if already connected
@@ -12,42 +29,28 @@ export const connect = async () => {
     return;
   }
 
-  // A REPLICA SET, not a standalone.
-  //
-  // Production order creation wraps the order + payment record + cart clear in a
-  // MongoDB transaction (CLAUDE.md requires it for multi-document writes), and
-  // transactions are only available on a replica set or mongos. Against the old
-  // standalone `MongoMemoryServer` every checkout returned:
-  //
-  //   500 "Transaction numbers are only allowed on a replica set member or mongos"
-  //
-  // which is why the orders / ordersIntegration / e2eUserJourney suites failed on
-  // anything that placed an order. The failure looked like broken order code rather
-  // than a test-harness limitation, so it went unfixed for months.
-  //
-  // A single-member replica set boots in roughly the same time as a standalone and
-  // matches the production topology, so the tests now exercise the real code path.
-  mongod = await MongoMemoryReplSet.create({
-    replSet: { count: 1, storageEngine: 'wiredTiger' },
-    instanceOpts: [{ launchTimeout: 120000 }],
-    binary: { version: '7.0.14' },
-  });
-  const uri = mongod.getUri();
+  const uri = process.env.MONGO_TEST_URI;
 
-  await mongoose.connect(uri);
+  if (!uri) {
+    throw new Error(
+      '[Test] MONGO_TEST_URI is not set — tests/globalSetup.js did not run. ' +
+      'Run the suite through the project jest config (npm test), not a bare jest binary.'
+    );
+  }
+
+  await mongoose.connect(uri, { dbName: testDatabaseName() });
 };
 
 /**
- * Drop database, close the connection and stop mongod.
+ * Drop this suite's database and close the connection.
+ *
+ * Does NOT stop the server — it is shared with every other suite in the run and is
+ * stopped once by tests/globalTeardown.js.
  */
 export const closeDatabase = async () => {
   if (mongoose.connection.readyState !== 0) {
     await mongoose.connection.dropDatabase();
     await mongoose.connection.close();
-  }
-  
-  if (mongod) {
-    await mongod.stop();
   }
 };
 
