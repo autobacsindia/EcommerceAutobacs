@@ -36,18 +36,56 @@ export const getProducts = async (req, res) => {
       ...searchResults.pagination,
       products: searchResults.products,
       facets: searchResults.facets,
+      // Surfaced so the storefront can say "no exact matches for X — showing
+      // related results" instead of passing widened results off as direct hits.
+      relaxed: Boolean(searchResults.relaxed),
     };
   };
 
+  /**
+   * Record the search, fire-and-forget.
+   *
+   * This is the write half of search analytics, and until now it did not exist:
+   * SearchService.addToSearchHistory had NO callers anywhere in the codebase, so
+   * the popular-terms counters were never written and the admin analytics screen
+   * had always been empty. The read endpoints were all wired up to a store nothing
+   * filled.
+   *
+   * Logged OUTSIDE the cache wrapper deliberately — inside it, a cache hit would
+   * silently skip the log and popularity would only ever count cache misses.
+   * Never awaited: analytics must not add latency to, or be able to fail, a search.
+   */
+  const logSearch = (term, resultsCount) => {
+    if (!term) return;
+    // Wrapped in try/catch AND Promise.resolve, not just `.catch`. A synchronous
+    // throw — or a stub that returns undefined — would otherwise escape into the
+    // request and turn the whole product listing into a 500. Analytics failing must
+    // never be able to fail a search; that is the entire contract of this call.
+    try {
+      Promise.resolve(
+        SearchService.addToSearchHistory(term, resultsCount, req.user?._id ?? null)
+      ).catch((err) => console.warn('[ProductController] Search logging failed:', err?.message));
+    } catch (err) {
+      console.warn('[ProductController] Search logging threw synchronously:', err?.message);
+    }
+  };
+
+  const searchTerm = req.query.q || req.query.search || null;
+
   try {
     if (isCacheDisabled()) {
-      return res.json(await fetchList());
+      const payload = await fetchList();
+      logSearch(searchTerm, payload.total ?? 0);
+      return res.json(payload);
     }
 
     const cacheKey = buildResponseKey(req, PRODUCT_LIST_PROFILE);
     const cached = await cacheService.get(cacheKey);
     if (cached) {
       res.setHeader('X-Cache', 'HIT');
+      // Logged on hits too — see logSearch. A popular query is the one MOST likely
+      // to be cached, so counting only misses would invert the ranking.
+      logSearch(searchTerm, cached.total ?? 0);
       return res.json(cached);
     }
 
@@ -59,6 +97,7 @@ export const getProducts = async (req, res) => {
       PRODUCT_LIST_PROFILE.ttl,
       tags,
     );
+    logSearch(searchTerm, responseData.total ?? 0);
     res.json(responseData);
   } catch (error) {
     console.error('[ProductController] Error in getProducts:', error);
@@ -119,6 +158,8 @@ export const getProductFacets = async (req, res) => {
   }
 
   try {
+    // Public route: never lifts the active filter. Admin listings take the Mongo
+    // path inside getFacets, which is the one that can see inactive products.
     const facets = await SearchService.getFacets(req.query);
     const responseData = { success: true, facets };
     try {

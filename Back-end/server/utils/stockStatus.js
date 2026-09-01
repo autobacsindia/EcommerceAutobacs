@@ -14,6 +14,50 @@ export const STOCK_STATUS = Object.freeze({
 // Allowed enum values (used by the Mongoose schema and request validators).
 export const STOCK_VALUES = Object.freeze(Object.values(STOCK_STATUS));
 
+/**
+ * The statuses a shopper cannot buy — the single definition both search engines
+ * filter on for `inStock=true`.
+ *
+ * This exists because the two engines disagreed in production. Atlas excluded
+ * ['out','backorder'] while the MongoDB fallback excluded only 'out', so the same
+ * `?inStock=true` URL returned 20 backorder products on one path and hid them on
+ * the other, depending purely on whether the Atlas index happened to be READY.
+ * `isPurchasable()` above already said both are non-purchasable, so the fallback
+ * was the one contradicting the domain model.
+ *
+ * Derived from isPurchasable() rather than written out again, so a future status
+ * cannot be added to the enum and silently missed by the search filters.
+ */
+export const NON_PURCHASABLE_STOCK = Object.freeze(
+  STOCK_VALUES.filter((s) => !isPurchasable(s))
+);
+
+/** The complement — used by the Atlas availability boost, which scores what IS buyable. */
+export const PURCHASABLE_STOCK = Object.freeze(STOCK_VALUES.filter(isPurchasable));
+
+/**
+ * Sort rank for availability: 0 = buyable, 1 = not.
+ *
+ * This exists because sorting on the `stock` STRING is actively wrong. The enum
+ * sorts alphabetically as backorder < in < low < out, so the long-standing
+ * `.sort({ stock: 1 })` — written when the enum was only in/low/out, and commented
+ * "'in' < 'low' < 'out'" — silently inverted the moment `backorder` was added:
+ * every browse page led with the products nobody can buy. Atlas has the same
+ * problem from the other direction, because an explicit `sort` makes it ignore
+ * relevance score entirely, so the availability BOOST does nothing on browse pages.
+ *
+ * A numeric rank is the only thing both engines can sort on and agree about. Two
+ * tiers, not four: the distinction that matters to a shopper is "can I buy this",
+ * and a coarser key keeps the sort stable when a product moves between `in` and
+ * `low`.
+ *
+ * @param {string} status a STOCK_STATUS value
+ * @returns {0|1} 0 for purchasable, 1 for out/backorder
+ */
+export function stockRankFor(status) {
+  return isPurchasable(status) ? 0 : 1;
+}
+
 // Human-readable labels for display / logs.
 export const STOCK_LABELS = Object.freeze({
   [STOCK_STATUS.IN]:  'In Stock',

@@ -29,6 +29,7 @@ import {
   ATLAS_SEARCH_INDEX_NAME,
   ATLAS_SEARCH_INDEX_DEFINITION,
   diffDefinition,
+  diffSynonyms,
 } from '../config/atlasSearchIndex.js';
 
 dotenv.config();
@@ -75,10 +76,22 @@ try {
     );
   }
 
-  const { ok, drift } = diffDefinition(
+  const fieldDiff = diffDefinition(
     ATLAS_SEARCH_INDEX_DEFINITION.mappings.fields,
     live.latestDefinition?.mappings?.fields || {}
   );
+
+  // Synonyms live at the TOP level of the definition, not under mappings.fields, so
+  // diffDefinition cannot see them. Without this the audit would report a clean
+  // index while every synonym silently did nothing — the Elasticsearch
+  // brand-mapping failure repeated exactly.
+  const synonymDiff = diffSynonyms(
+    ATLAS_SEARCH_INDEX_DEFINITION.synonyms || [],
+    live.latestDefinition?.synonyms || []
+  );
+
+  const ok = fieldDiff.ok && synonymDiff.ok;
+  const drift = [...fieldDiff.drift, ...synonymDiff.drift];
 
   // A non-READY index answers queries with zero hits rather than an error, so it
   // is reported as loudly as a drifted definition.

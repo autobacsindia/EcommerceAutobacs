@@ -8,6 +8,7 @@ const mockProduct = {
 
 const mockSearchService = {
   searchProducts: jest.fn(),
+  addToSearchHistory: jest.fn().mockResolvedValue({ success: true }),
   getSearchSuggestions: jest.fn(),
   getSearchAnalytics: jest.fn(),
   getSearchHistory: jest.fn(),
@@ -121,11 +122,57 @@ describe('ProductController Unit Tests', () => {
       expect(mockSearchService.searchProducts).toHaveBeenCalledWith(req.query);
       expect(res.json).toHaveBeenCalledWith({
         success: true,
+        // Always present, on both engines, so the storefront never branches on
+        // undefined when deciding whether to show "showing related results".
+        relaxed: false,
         count: 1,
         ...mockResults.pagination,
         products: mockResults.products,
         facets: mockResults.facets
       });
+    });
+
+    it('records the search, with its result count, for analytics', async () => {
+      // The write half of search analytics did not exist: addToSearchHistory had no
+      // callers anywhere, so the popular-terms counters were never written and the
+      // admin analytics screen had always been empty.
+      mockSearchService.searchProducts.mockResolvedValue({
+        products: [], pagination: { total: 0 }, facets: {},
+      });
+      req.query = { search: 'roof tent' };
+
+      await getProducts(req, res);
+
+      // A zero-result search is the one worth recording — it is the merchandising
+      // worklist. The count must be threaded, not dropped.
+      expect(mockSearchService.addToSearchHistory).toHaveBeenCalledWith('roof tent', 0, null);
+    });
+
+    it('does not log anything for a filters-only browse', async () => {
+      mockSearchService.searchProducts.mockResolvedValue({
+        products: [], pagination: { total: 5 }, facets: {},
+      });
+      req.query = { brand: 'Auxbeam' };
+
+      await getProducts(req, res);
+      expect(mockSearchService.addToSearchHistory).not.toHaveBeenCalled();
+    });
+
+    it('still answers the request when analytics logging throws', async () => {
+      // Analytics must never be able to fail a search. A synchronous throw here
+      // previously escaped into the request and turned the listing into a 500.
+      mockSearchService.searchProducts.mockResolvedValue({
+        products: [], pagination: { total: 1 }, facets: {},
+      });
+      mockSearchService.addToSearchHistory.mockImplementationOnce(() => {
+        throw new Error('redis exploded');
+      });
+      req.query = { search: 'winch' };
+
+      await getProducts(req, res);
+
+      expect(res.status).not.toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
   });
 

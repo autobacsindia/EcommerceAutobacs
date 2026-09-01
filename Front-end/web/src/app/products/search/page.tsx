@@ -38,7 +38,13 @@ async function getProducts(searchParams: any) {
       case 'price_asc':   queryParams.append('sortBy', 'price');         queryParams.append('order', 'asc');  break;
       case 'price_desc':  queryParams.append('sortBy', 'price');         queryParams.append('order', 'desc'); break;
       case 'name_asc':    queryParams.append('sortBy', 'name');          queryParams.append('order', 'asc');  break;
+      case 'createdAt_desc': queryParams.append('sortBy', 'createdAt');   queryParams.append('order', 'desc'); break;
       case 'rating_desc': queryParams.append('sortBy', 'averageRating'); queryParams.append('order', 'desc'); break;
+      case 'sales_desc':  queryParams.append('sortBy', 'salesScore');    queryParams.append('order', 'desc'); break;
+      // Relevance is an EXPLICIT sort now. It used to be inferred from
+      // "sortBy=createdAt plus query text", which meant there was no way to ask
+      // for it and no way back to it once another sort was chosen.
+      case 'relevance':   queryParams.append('sortBy', 'relevance');     break;
       default: break;
     }
   }
@@ -91,6 +97,10 @@ function SearchPageInner() {
   const [loading, setLoading]       = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [corrections, setCorrections] = useState<any[]>([]);
+  // True when the backend found no exact match and widened recall to return
+  // related products. Shown to the shopper — presenting widened results as if
+  // they were direct hits is what makes a search feel broken.
+  const [relaxed, setRelaxed]       = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pageRef = useRef(1);
 
@@ -118,6 +128,7 @@ function SearchPageInner() {
         setProducts(fetched);
         setTotal(result.total || 0);
         setHasNext(result.hasNext || false);
+        setRelaxed(Boolean(result.relaxed));
 
         trackViewItemList({
           listType: 'search',
@@ -164,6 +175,7 @@ function SearchPageInner() {
       setProducts(prev => [...prev, ...(result.products || [])]);
       setTotal(result.total || 0);
       setHasNext(result.hasNext || false);
+      setRelaxed(Boolean(result.relaxed));
       pageRef.current = nextPage;
     } catch (error: any) {
       if (error.name !== 'AbortError') {
@@ -228,6 +240,21 @@ function SearchPageInner() {
 
           {/* Products Grid */}
           <div className="lg:col-span-3">
+            {/* Relaxed-recall notice. Only meaningful when the widened search
+                actually returned something — with zero results the empty state
+                already says there are none. */}
+            {relaxed && !loading && products.length > 0 && (
+              <div
+                className="mb-6 border border-hairline bg-obsidian-raised px-4 py-3"
+                role="status"
+              >
+                <p className="font-display text-[13px] font-light tracking-[0.02em] text-ink-muted">
+                  No exact matches for{' '}
+                  <em className="not-italic text-ink">“{searchTerm}”</em> — showing related results.
+                </p>
+              </div>
+            )}
+
             {/* "Did you mean?" suggestions */}
             {corrections.length > 0 && (
               <div className="mb-6 p-4 bg-gold/10 rounded-md">
@@ -284,6 +311,8 @@ function SearchPageInner() {
                     disabled={loading}
                   >
                     <option value="relevance">Relevance</option>
+                    <option value="sales_desc">Best Selling</option>
+                    <option value="createdAt_desc">Newest</option>
                     <option value="price_asc">Price: Low to High</option>
                     <option value="price_desc">Price: High to Low</option>
                     <option value="name_asc">Name: A to Z</option>
@@ -369,6 +398,19 @@ function SearchPageInner() {
             </div>
             <div className="flex-1 overflow-y-auto p-5">
               <Filters basePath="/products/search" onApplied={() => setDrawerOpen(false)} />
+            </div>
+            {/* Result count on the CTA. A bottom-sheet filter panel without one
+                forces the shopper to close it just to learn whether the filter
+                they picked left anything — the count is what makes the drawer
+                usable rather than a guess. */}
+            <div className="border-t border-hairline p-4">
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                className="w-full bg-gold px-4 py-3 font-display text-[12px] uppercase tracking-[0.16em] text-obsidian-deep"
+              >
+                {typeof total === 'number' ? `Show ${total} ${total === 1 ? 'result' : 'results'}` : 'Show results'}
+              </button>
             </div>
           </div>
         </div>

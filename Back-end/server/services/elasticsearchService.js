@@ -1303,7 +1303,7 @@ class ElasticsearchService {
   /**
    * Log search analytics
    */
-  async logSearchQuery(query, userId = null) {
+  async logSearchQuery(query, resultsCount = null, userId = null) {
     try {
       const analyticsIndex = 'search_analytics';
       
@@ -1332,7 +1332,11 @@ class ElasticsearchService {
           query: query || '',
           timestamp: new Date(),
           userId: userId || 'anonymous',
-          resultsCount: 0 // Will be updated after search
+          // Signature aligned with the Atlas adapter (query, resultsCount, userId)
+          // so SearchService can call either engine identically. Previously this
+          // was hardcoded 0 with a "will be updated after search" note that never
+          // happened; the caller now supplies the real count.
+          resultsCount: Number.isFinite(resultsCount) ? resultsCount : 0
         }
       });
     } catch (error) {

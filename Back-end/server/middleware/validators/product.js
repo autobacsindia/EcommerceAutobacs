@@ -92,13 +92,49 @@ export const validateTopProductsQuery = [
   validateRequest
 ];
 
+/**
+ * Hard ceiling on how deep a list can be paged.
+ *
+ * `limit` was capped at 500 and `page` was not, so the two multiplied without
+ * bound. Capping the product is the only form that cannot be worked around.
+ */
+export const MAX_PAGINATION_DEPTH = 10000;
+
+/**
+ * Sortable fields.
+ *
+ * `relevance` is EXPLICIT now. It used to be inferred — relevance applied only
+ * when sortBy happened to be 'createdAt' AND query text was present — which meant
+ * the storefront had no way to ask for it, and no way back to it once a shopper
+ * chose another sort.
+ *
+ * `salesScore` powers "Best Selling"; see services/salesScoreService.js.
+ */
+export const SORT_FIELDS = Object.freeze([
+  'relevance', 'createdAt', 'price', 'averageRating', 'totalReviews', 'name', 'salesScore',
+]);
+
 export const validateProductSearch = [
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
   query('limit').optional().isInt({ min: 1, max: 500 }).withMessage('Limit must be between 1 and 500'),
+  // Deep-paging cap. `limit` was bounded and `page` was not, so ?page=1000000&limit=500
+  // asked for a $skip of ~500 million — an unauthenticated request that makes the
+  // cluster do unbounded work. Capping the PRODUCT rather than each bound
+  // separately is what stops the two being combined. (Algolia caps at 1000 hits;
+  // Google stops around page 40. Nobody paginates past this legitimately — they
+  // filter instead.)
+  query('page').optional().custom((value, { req }) => {
+    const page = Number(value) || 1;
+    const limit = Number(req.query?.limit) || 12;
+    if (page * limit > MAX_PAGINATION_DEPTH) {
+      throw new Error(`Pagination depth is capped at ${MAX_PAGINATION_DEPTH} results — narrow the search with filters instead`);
+    }
+    return true;
+  }),
   query('q').optional().trim(),
   query('search').optional().trim(),
   query('sort').optional().trim(),
-  query('sortBy').optional().isIn(['createdAt', 'price', 'averageRating', 'totalReviews', 'name']).withMessage('Invalid sort field'),
+  query('sortBy').optional().isIn(SORT_FIELDS).withMessage('Invalid sort field'),
   query('order').optional().isIn(['asc', 'desc']).withMessage('Order must be asc or desc'),
   query('minPrice').optional().isFloat({ min: 0 }).withMessage('Min price must be a positive number'),
   query('maxPrice').optional().isFloat({ min: 0 }).withMessage('Max price must be a positive number'),

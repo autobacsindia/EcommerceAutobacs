@@ -21,6 +21,12 @@ const SORTS: Record<string, { sortBy: string; order: string }> = {
   name_asc: { sortBy: 'name', order: 'asc' },
   rating_desc: { sortBy: 'averageRating', order: 'desc' },
   createdAt_desc: { sortBy: 'createdAt', order: 'desc' },
+  // Time-decayed trailing sales — the commercial ranking signal that replaced the
+  // dead isFastMoving flag. See Back-end/server/services/salesScoreService.js.
+  sales_desc: { sortBy: 'salesScore', order: 'desc' },
+  // Relevance is explicit rather than inferred from "createdAt + query text",
+  // which is what made it unreachable from the UI.
+  relevance: { sortBy: 'relevance', order: 'desc' },
 };
 
 const PASSTHROUGH = [

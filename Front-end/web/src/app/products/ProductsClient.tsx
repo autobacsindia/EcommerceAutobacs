@@ -140,6 +140,10 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
                   aria-label="Sort products"
                 >
                   <option value="createdAt_desc">Newest</option>
+                  {/* Backed by the time-decayed trailing-sales score
+                      (services/salesScoreService.js) — the commercial signal that
+                      replaced the dead isFastMoving flag. */}
+                  <option value="sales_desc">Best Selling</option>
                   <option value="price_asc">Price · Low to High</option>
                   <option value="price_desc">Price · High to Low</option>
                   <option value="name_asc">Name · A–Z</option>
@@ -230,6 +234,19 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
             </div>
             <div className="flex-1 overflow-y-auto p-5">
               <Filters onApplied={() => setDrawerOpen(false)} />
+            </div>
+            {/* Result count on the CTA. A bottom-sheet filter panel without one
+                forces the shopper to close it just to learn whether the filter
+                they picked left anything — the count is what makes the drawer
+                usable rather than a guess. */}
+            <div className="border-t border-hairline p-4">
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                className="w-full bg-gold px-4 py-3 font-display text-[12px] uppercase tracking-[0.16em] text-obsidian-deep"
+              >
+                {typeof total === 'number' ? `Show ${total} ${total === 1 ? 'result' : 'results'}` : 'Show results'}
+              </button>
             </div>
           </div>
         </div>

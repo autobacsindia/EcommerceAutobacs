@@ -125,10 +125,25 @@ describe('logSearchQuery — Redis counters, never Mongo documents', () => {
 });
 
 describe('getSearchAnalytics', () => {
+  /**
+   * Each day now reads TWO sorted sets — `search:analytics:*` for volume and
+   * `search:zero:*` for terms that found nothing. The mock dispatches on the key
+   * rather than on call order, so these stay readable and do not silently
+   * mis-assert if another read is ever added.
+   */
+  const byKey = (perDay) => {
+    mockRedis.zrange.mockImplementation(async (key) => {
+      const date = key.slice(key.lastIndexOf(':') + 1);
+      const entry = perDay[date] || {};
+      return key.startsWith('search:zero:') ? (entry.zero || []) : (entry.terms || []);
+    });
+  };
+
   it('sums a term across days and ranks by total', async () => {
-    mockRedis.zrange
-      .mockResolvedValueOnce(['brake', '3', 'spoiler', '10'])
-      .mockResolvedValueOnce(['brake', '9']);
+    byKey({
+      '2026-08-01': { terms: ['brake', '3', 'spoiler', '10'] },
+      '2026-08-02': { terms: ['brake', '9'] },
+    });
 
     const result = await atlasSearchService.getSearchAnalytics('2026-08-01', '2026-08-02');
     expect(result.popularTerms).toEqual([
@@ -138,9 +153,10 @@ describe('getSearchAnalytics', () => {
   });
 
   it('reports per-day volume for the histogram', async () => {
-    mockRedis.zrange
-      .mockResolvedValueOnce(['brake', '3', 'spoiler', '10'])
-      .mockResolvedValueOnce(['brake', '9']);
+    byKey({
+      '2026-08-01': { terms: ['brake', '3', 'spoiler', '10'] },
+      '2026-08-02': { terms: ['brake', '9'] },
+    });
 
     const result = await atlasSearchService.getSearchAnalytics('2026-08-01', '2026-08-02');
     expect(result.searchesOverTime).toEqual([
@@ -149,22 +165,42 @@ describe('getSearchAnalytics', () => {
     ]);
   });
 
+  it('ranks zero-result terms separately from popular ones', async () => {
+    // The merchandising worklist: what people searched for and did not find. It
+    // must NOT be mixed into popularTerms, which ranks demand regardless of outcome.
+    byKey({
+      '2026-08-01': { terms: ['roof tent', '5'], zero: ['roof tent', '5'] },
+      '2026-08-02': { terms: ['brake', '8'], zero: ['roof tent', '2'] },
+    });
+
+    const result = await atlasSearchService.getSearchAnalytics('2026-08-01', '2026-08-02');
+    expect(result.zeroResultTerms).toEqual([{ term: 'roof tent', count: 7 }]);
+    expect(result.popularTerms).toEqual([
+      { term: 'brake', count: 8 },
+      { term: 'roof tent', count: 5 },
+    ]);
+  });
+
   it('caps the fan-out so an unbounded admin date range cannot storm Redis', async () => {
     await atlasSearchService.getSearchAnalytics('2000-01-01', '2030-01-01');
-    expect(mockRedis.zrange.mock.calls.length).toBeLessThanOrEqual(180);
+    // MAX_DAYS (180) days × 2 sorted sets. The bound that matters is the day cap;
+    // without it an admin date range fans out to thousands of round trips.
+    const days = new Set(mockRedis.zrange.mock.calls.map(([key]) => key.slice(key.lastIndexOf(':') + 1)));
+    expect(days.size).toBeLessThanOrEqual(180);
+    expect(mockRedis.zrange.mock.calls.length).toBeLessThanOrEqual(360);
   });
 
   it('returns empty rather than throwing on an invalid or inverted range', async () => {
     await expect(atlasSearchService.getSearchAnalytics('nonsense', 'also-nonsense'))
-      .resolves.toEqual({ popularTerms: [], searchesOverTime: [] });
+      .resolves.toEqual({ popularTerms: [], zeroResultTerms: [], searchesOverTime: [] });
     await expect(atlasSearchService.getSearchAnalytics('2026-08-05', '2026-08-01'))
-      .resolves.toEqual({ popularTerms: [], searchesOverTime: [] });
+      .resolves.toEqual({ popularTerms: [], zeroResultTerms: [], searchesOverTime: [] });
   });
 
   it('returns empty when Redis is not configured', async () => {
     redisAvailable = false;
     await expect(atlasSearchService.getSearchAnalytics('2026-08-01', '2026-08-02'))
-      .resolves.toEqual({ popularTerms: [], searchesOverTime: [] });
+      .resolves.toEqual({ popularTerms: [], zeroResultTerms: [], searchesOverTime: [] });
   });
 
   it('limits popular terms to 20, as the Elasticsearch aggregation did', async () => {
@@ -213,5 +249,236 @@ describe('shapeFacets — response parity with the Elasticsearch aggregations', 
     expect(facets.categories).toEqual([]);
     expect(facets.ratingRanges).toHaveLength(5);
     expect(facets.ratingRanges.every((b) => b.count === 0)).toBe(true);
+  });
+});
+
+describe('zero-result relaxation', () => {
+  /**
+   * The retry ladder is worth exactly one extra round trip and no more, so what
+   * matters is the CALL COUNT, not just the flag. These stub the aggregation
+   * pipeline directly: mongodb-memory-server has no $search, and the point here is
+   * the control flow around the engine, not the query shape (that is covered by
+   * the query-builder tests).
+   */
+  const Product = mongoose.model('Product');
+  let aggregateSpy;
+  let searchStages;
+
+  const stubResults = (totalsPerPass) => {
+    let pass = 0;
+    searchStages = [];
+    aggregateSpy = jest.spyOn(Product.collection, 'aggregate').mockImplementation((pipeline) => {
+      const stage = pipeline.find((p) => p.$search);
+      if (stage) searchStages.push(stage.$search);
+      // Each pass issues two aggregates (products + facets); the facet one carries
+      // $facet. Pair them up so a pass yields one total.
+      const isFacet = pipeline.some((p) => p.$facet);
+      const total = totalsPerPass[Math.min(pass, totalsPerPass.length - 1)];
+      if (isFacet) pass += 1;
+      return { toArray: async () => (isFacet ? [{ total: total > 0 ? [{ value: total }] : [] }] : []) };
+    });
+  };
+
+  afterEach(() => aggregateSpy?.mockRestore());
+
+  it('retries ONCE with relaxed recall when a text query finds nothing', async () => {
+    stubResults([0, 7]);
+    const result = await atlasSearchService.searchProducts({ q: 'spoiler ferrari' });
+
+    expect(result.relaxed).toBe(true);
+    expect(result.relaxLevel).toBe(1);
+    expect(result.pagination.total).toBe(7);
+    // Two passes, two aggregates each.
+    expect(aggregateSpy).toHaveBeenCalledTimes(4);
+    // And the retry genuinely widened recall rather than re-running the same query.
+    const minShould = searchStages.map((st) => st.compound.must[0].compound.should[0].compound.minimumShouldMatch);
+    expect(minShould[0]).toBe(2);
+    expect(minShould[minShould.length - 1]).toBe(1);
+  });
+
+  it('does NOT retry when the first pass already found results', async () => {
+    // The guard that stops this feature silently doubling the cost of every search.
+    stubResults([12]);
+    const result = await atlasSearchService.searchProducts({ q: 'spoiler' });
+
+    expect(result.relaxed).toBe(false);
+    expect(result.relaxLevel).toBe(0);
+    expect(aggregateSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('does NOT retry a filters-only browse that legitimately matches nothing', async () => {
+    // No query text means an empty result is a real empty set, not a recall
+    // failure — widening would return products the filters excluded.
+    stubResults([0]);
+    const result = await atlasSearchService.searchProducts({ brand: 'NoSuchBrand' });
+
+    expect(result.relaxed).toBe(false);
+    expect(aggregateSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports relaxed even when the retry also finds nothing', async () => {
+    // An honest signal: the search was widened and there is still nothing, which is
+    // what lets the UI show "no results" rather than "showing related results".
+    stubResults([0, 0]);
+    const result = await atlasSearchService.searchProducts({ q: 'zzzznonexistent' });
+
+    expect(result.relaxed).toBe(true);
+    expect(result.pagination.total).toBe(0);
+    // 2 passes × 2 aggregates, PLUS the did-you-mean probe — which runs only after
+    // relaxation has also failed, so it costs nothing on a search that worked.
+    expect(aggregateSpy).toHaveBeenCalledTimes(5);
+  });
+
+  it('runs the correction probe ONLY after relaxation has also failed', async () => {
+    // The probe is the third query a single search can trigger, so the guard that
+    // it never runs on a successful search is worth pinning explicitly.
+    stubResults([9]);
+    const hit = await atlasSearchService.searchProducts({ q: 'winch' });
+    expect(hit.corrections).toEqual([]);
+    expect(aggregateSpy).toHaveBeenCalledTimes(2);
+
+    aggregateSpy.mockRestore();
+    stubResults([0, 0]);
+    await atlasSearchService.searchProducts({ q: 'wnich' });
+    expect(aggregateSpy).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('logSearchQuery — the write half of search analytics', () => {
+  /**
+   * Context: SearchService.addToSearchHistory had NO callers anywhere in the
+   * codebase, so nothing ever wrote these counters and the admin analytics screen
+   * had always been empty while its read endpoints were fully wired. The caller
+   * exists now (productController.getProducts), so these pin the contract it
+   * depends on.
+   */
+  it('counts the term, lowercased, with bounded retention', async () => {
+    await atlasSearchService.logSearchQuery('Brake Pads', 12);
+    expect(mockRedis.zincrby).toHaveBeenCalledWith(expect.stringMatching(/^search:analytics:/), 1, 'brake pads');
+    // 90 days, refreshed on write — bounded retention with no sweeper job.
+    expect(mockRedis.expire).toHaveBeenCalledWith(expect.stringMatching(/^search:analytics:/), 90 * 24 * 60 * 60);
+  });
+
+  it('records a zero-result search in its OWN set', async () => {
+    await atlasSearchService.logSearchQuery('roof tent', 0);
+    const keys = mockRedis.zincrby.mock.calls.map(([key]) => key);
+    expect(keys.some((k) => k.startsWith('search:analytics:'))).toBe(true);
+    // Separate set: "what people search for" and "what they search for and do not
+    // find" answer different questions and are read independently.
+    expect(keys.some((k) => k.startsWith('search:zero:'))).toBe(true);
+  });
+
+  it('does NOT mark a search with results as a zero-result', async () => {
+    await atlasSearchService.logSearchQuery('winch', 42);
+    expect(mockRedis.zincrby.mock.calls.some(([key]) => key.startsWith('search:zero:'))).toBe(false);
+  });
+
+  it('claims nothing about the outcome when the count is unknown', async () => {
+    // `null` means the caller did not tell us. Recording that as a zero-result
+    // would invent a merchandising signal that nobody measured.
+    await atlasSearchService.logSearchQuery('winch', null);
+    expect(mockRedis.zincrby.mock.calls.some(([key]) => key.startsWith('search:zero:'))).toBe(false);
+    expect(mockRedis.zincrby).toHaveBeenCalledWith(expect.stringMatching(/^search:analytics:/), 1, 'winch');
+  });
+
+  it('ignores an empty or whitespace-only term', async () => {
+    await atlasSearchService.logSearchQuery('   ', 0);
+    await atlasSearchService.logSearchQuery('', 0);
+    expect(mockRedis.zincrby).not.toHaveBeenCalled();
+  });
+
+  it('never throws when Redis is unavailable — analytics must not fail a search', async () => {
+    redisAvailable = false;
+    await expect(atlasSearchService.logSearchQuery('winch', 0)).resolves.toBeUndefined();
+  });
+
+  it('swallows a Redis error rather than propagating it into the request', async () => {
+    mockRedis.zincrby.mockRejectedValueOnce(new Error('READONLY'));
+    await expect(atlasSearchService.logSearchQuery('winch', 0)).resolves.toBeUndefined();
+  });
+});
+
+describe('getPopularTerms — feeds the autocomplete query lane', () => {
+  it('sums a term across the requested window and ranks it', async () => {
+    mockRedis.zrange.mockResolvedValue(['winch', '4']);
+    const terms = await atlasSearchService.getPopularTerms(3, 10);
+    // Same term on each of 3 days.
+    expect(terms).toEqual([{ term: 'winch', count: 12 }]);
+    expect(mockRedis.zrange).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns empty rather than throwing when Redis is down', async () => {
+    redisAvailable = false;
+    await expect(atlasSearchService.getPopularTerms()).resolves.toEqual([]);
+  });
+});
+
+describe('engine contract — the surface searchService depends on', () => {
+  /**
+   * Added after an optimization pass silently deleted getFacets and
+   * shapeFacetResponse along with the dead facet branches it was meant to remove,
+   * and the ENTIRE 2,629-test suite still passed — because every facet test
+   * targeted the pure helper functions rather than the service surface. Only the
+   * live verification script caught it, as "engine.getFacets is not a function".
+   *
+   * The lesson is the one this codebase is built around: pure-function tests do not
+   * prove the thing they belong to still exists. This is the cheap structural guard.
+   */
+  const REQUIRED = [
+    'isConnected',
+    'searchProducts',
+    'getFacets',
+    'shapeFacetResponse',
+    'getIndexedDocumentCount',
+    'getSearchSuggestions',
+    'suggestCorrection',
+    'logSearchQuery',
+    'getPopularTerms',
+    'getSearchAnalytics',
+    'getIndexCapabilities',
+    'buildFacetPipeline',
+    'sanitizeQuery',
+    'shutdown',
+    'getConnectionStatus',
+  ];
+
+  it.each(REQUIRED)('exposes %s()', (method) => {
+    expect(typeof atlasSearchService[method]).toBe('function');
+  });
+
+  it('returns the full facet contract shape from shapeFacetResponse', () => {
+    // The filter panel renders values, counts, ordering AND price bounds from this
+    // one response, so a missing key is a silently empty sidebar group.
+    const shaped = atlasSearchService.shapeFacetResponse({
+      total: 3,
+      brands: [{ _id: 'Auxbeam', count: 2 }],
+      categories: [],
+      vehicles: [],
+      priceStats: { min: 100, max: 5000, prices: [100, 2000, 5000] },
+      ratings: { r4: 1, r3: 2, r2: 2, r1: 3 },
+      availability: [{ _id: 'in', count: 2 }, { _id: 'out', count: 1 }],
+      params: {},
+    });
+
+    expect(shaped).toMatchObject({
+      total: 3,
+      brands: [{ name: 'Auxbeam', value: 'Auxbeam', label: 'Auxbeam', count: 2, selected: false }],
+      price: { min: 100, max: 5000 },
+    });
+    expect(shaped.price.histogram.length).toBeGreaterThan(1);
+    expect(shaped.ratings).toHaveLength(4);
+    // Availability counts only what is purchasable — `out` is excluded.
+    expect(shaped.availability[0].count).toBe(2);
+  });
+
+  it('marks the selected brand and sorts it first', () => {
+    const shaped = atlasSearchService.shapeFacetResponse({
+      total: 10,
+      brands: [{ _id: 'Popular', count: 50 }, { _id: 'Chosen', count: 2 }],
+      categories: [], vehicles: [], priceStats: null, ratings: null, availability: [],
+      params: { brand: 'chosen' },
+    });
+    // Selected-first: a checked box must not jump down the list as counts change.
+    expect(shaped.brands[0]).toMatchObject({ label: 'Chosen', selected: true });
   });
 });

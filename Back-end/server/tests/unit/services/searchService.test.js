@@ -633,11 +633,14 @@ describe('SearchService Unit Tests', () => {
 
       const facets = await SearchService.getFacets({ category: 'lighting' });
 
-      expect(facets.brands).toEqual([
+      // toMatchObject, not toEqual: the envelope gained value/label/selected so the
+      // filter panel can render from the facet response alone. The legacy
+      // `name`/`count` pair is retained for existing consumers.
+      expect(facets.brands).toMatchObject([
         { name: 'Auxbeam', count: 12 },
         { name: 'BMC', count: 3 },
       ]);
-      expect(facets.categories).toEqual([{ categoryId: 'cat1', count: 3 }]);
+      expect(facets.categories).toMatchObject([{ categoryId: 'cat1', count: 3 }]);
     });
 
     it('getFacets rolls direct category id sets up the tree so a hub reflects its subtree', async () => {
@@ -656,7 +659,7 @@ describe('SearchService Unit Tests', () => {
 
       const facets = await SearchService.getFacets({});
 
-      expect(facets.categories).toEqual([
+      expect(facets.categories).toMatchObject([
         { categoryId: 'hub', count: 5 },
         { categoryId: 'subA', count: 3 },
         { categoryId: 'subB', count: 2 },
@@ -681,7 +684,7 @@ describe('SearchService Unit Tests', () => {
 
       const facets = await SearchService.getFacets({});
 
-      expect(facets.categories).toEqual([
+      expect(facets.categories).toMatchObject([
         { categoryId: 'hub', count: 3 },
         { categoryId: 'subA', count: 2 },
         { categoryId: 'subB', count: 2 },

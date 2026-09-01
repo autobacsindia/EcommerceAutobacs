@@ -5,6 +5,7 @@ import { runWordPressSync } from './wordpressSyncService.js';
 import { expireEndedSales } from './productSaleService.js';
 import { runFrequentSweeps, runDailySweeps } from './leadSweepService.js';
 import { reconcileStuckPayments } from './paymentReconciliationService.js';
+import { recomputeSalesScores } from './salesScoreService.js';
 import { checkInboundLiveness, sweepSlaBreaches, requeueStuckInbound } from './supportHealthService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 
@@ -53,6 +54,7 @@ class CronService {
     this.scheduleSaleExpiry();
     this.scheduleLeadSweeps();
     this.schedulePaymentReconciliation();
+    this.scheduleSalesScoreRefresh();
     this.scheduleSupportHealth();
 
     if (process.env.NODE_ENV !== 'test') {
@@ -207,6 +209,40 @@ class CronService {
    * best-effort and idempotent regardless. Skipped when Razorpay isn't configured
    * (e.g. local/dev without keys) so the constructor throw never breaks boot.
    */
+  /**
+   * Nightly recompute of Product.salesScore — the commercial signal in search
+   * ranking. Off-peak by default: it rewrites documents, which drives the change
+   * stream that keeps the Atlas index current.
+   */
+  scheduleSalesScoreRefresh() {
+    const schedule = process.env.SALES_SCORE_CRON || '30 2 * * *'; // 02:30 daily
+
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid SALES_SCORE_CRON "${schedule}" — sales-score refresh NOT scheduled`);
+      return;
+    }
+
+    const task = cron.schedule(schedule, () =>
+      // Locked like every other job: two instances recomputing at once would do
+      // identical work and double the write churn on the change stream.
+      this.withDistributedLock('cron:lock:salesScore', 30 * 60, () =>
+        recomputeSalesScores()
+          .then((r) => console.log(`[CronService] Sales scores refreshed: ${r.scored} scored, ${r.cleared} cleared`))
+          .catch((err) => console.error('[CronService] Sales-score refresh failed:', err.message))
+      )
+    );
+    this.scheduledTasks.push({
+      name: 'salesScoreRefresh',
+      task,
+      schedule,
+      description: 'Search: recompute time-decayed trailing-sales ranking signal',
+    });
+
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[CronService] Sales-score refresh scheduled: "${schedule}"`);
+    }
+  }
+
   schedulePaymentReconciliation() {
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
       if (process.env.NODE_ENV !== 'test') {
