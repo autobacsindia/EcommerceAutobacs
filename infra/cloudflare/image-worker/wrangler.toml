@@ -1,0 +1,18 @@
+# Cloudflare Worker serving pre-generated image variants from R2.
+#
+# Deploy:  cd infra/cloudflare/image-worker && npx wrangler deploy
+#
+# Requires the R2 bucket binding below and a route on the delivery hostname.
+# The PUBLIC bucket only — the private bucket (careers PII, return evidence,
+# invoices) must never be bound to a public Worker.
+name = "autobacs-image-worker"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "autobacs-public"
+
+[[routes]]
+pattern = "img.autobacsindia.com/*"
+zone_name = "autobacsindia.com"

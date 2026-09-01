@@ -33,3 +33,6 @@ coverage/
 CLAUDE.local.md
 .vercel
 .env*
+
+# wrangler local build/state cache
+.wrangler/

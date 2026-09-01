@@ -26,6 +26,7 @@ import {
   listApplications,
   getApplication,
   updateApplication,
+  cleanupOrphanedUploads,
 } from '../controllers/jobApplicationController.js';
 import {
   listCategories,
@@ -65,5 +66,12 @@ router.get('/postings/:slug', cacheMiddleware('static-data'), asyncHandler(getOp
 // Signature is fetched once per submission; the submit itself is heavily capped.
 router.post('/applications/upload-signature', contactFormRateLimit, asyncHandler(getUploadSignature));
 router.post('/applications', consultationRateLimit, asyncHandler(submitApplication));
+/*
+  Cleanup for uploads whose submission never completed. Public because the
+  careers form is, and safe because the handler only ever deletes assets under
+  autobacs/careers/ that NO application references — see cleanupOrphanedUploads.
+  Shares the signature endpoint's limiter: it is called on the same failure path.
+*/
+router.post('/applications/cleanup', contactFormRateLimit, asyncHandler(cleanupOrphanedUploads));
 
 export default router;

@@ -330,6 +330,22 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ Lead worklist score index confirmed');
 
+    // Careers media retention sweep lookup: "rejected, rejected before X, media not
+    // yet purged". The daily cron reads this every run; without it the sweep does a
+    // full collection scan of jobapplications. Declared on the JobApplication schema
+    // too, but autoIndex is off in prod so this safety net is what actually builds it.
+    //
+    // Non-unique and non-TTL on purpose. A TTL index here would be the wrong tool
+    // twice over: it would delete the APPLICATION DOCUMENT (the audit record we
+    // deliberately keep) rather than the media, and it cannot express "14 days after
+    // rejection, but only while status is still rejected" — an applicant who is
+    // reconsidered must fall out of the window, which a TTL cannot do.
+    await db.collection('jobapplications').createIndex(
+      { status: 1, rejectedAt: 1, mediaPurgedAt: 1 },
+      { background: true }
+    );
+    console.log('✓ Careers retention index confirmed');
+
     // Back-in-stock dedup — the ONLY thing enforcing "one pending request per
     // (product, variant, user)". stockNotificationRequestRepository.upsertPending
     // relies on this partial-unique index throwing E11000 on a concurrent double

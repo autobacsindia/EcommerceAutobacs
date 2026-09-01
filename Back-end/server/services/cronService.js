@@ -56,9 +56,64 @@ class CronService {
     this.schedulePaymentReconciliation();
     this.scheduleSalesScoreRefresh();
     this.scheduleSupportHealth();
+    this.scheduleCareersMediaRetention();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
+    }
+  }
+
+  /**
+   * Careers media retention sweep — deletes the video answers and CV of
+   * applications rejected more than CAREERS_MEDIA_RETENTION_DAYS ago. The
+   * application record, decision and admin notes are kept; only the media goes.
+   *
+   * ── OFF BY DEFAULT, on purpose ──────────────────────────────────────────────
+   * This job PERMANENTLY deletes applicants' personal data — Cloudinary backup
+   * is not enabled on this account, so there is no restore. A destructive job
+   * that switches itself on the moment the code deploys is the wrong default:
+   * whoever ships an unrelated change should not silently start erasing PII on a
+   * timer they did not know existed. Set CAREERS_MEDIA_RETENTION_ENABLED=true
+   * deliberately, after running the script by hand and reading its dry run.
+   *
+   * The sweep itself is idempotent and safe to re-run: `mediaPurgedAt` marks
+   * completed rows, a partial delete leaves the refs intact so the next pass
+   * retries, and any application whose retention clock cannot be determined is
+   * skipped rather than purged.
+   */
+  scheduleCareersMediaRetention() {
+    if (String(process.env.CAREERS_MEDIA_RETENTION_ENABLED).toLowerCase() !== 'true') {
+      if (process.env.NODE_ENV !== 'test') {
+        console.log('[CronService] Careers media retention sweep DISABLED (set CAREERS_MEDIA_RETENTION_ENABLED=true to enable)');
+      }
+      return;
+    }
+    const schedule = process.env.CAREERS_MEDIA_RETENTION_CRON || '30 3 * * *'; // 03:30 IST daily
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid CAREERS_MEDIA_RETENTION_CRON "${schedule}" — retention sweep NOT scheduled`);
+      return;
+    }
+    try {
+      const task = cron.schedule(schedule, () =>
+        this.withDistributedLock('cron:lock:careersMediaRetention', 600, async () => {
+          const { runCareersMediaRetention } = await import('./careersRetentionRunner.js');
+          return runCareersMediaRetention().catch(err =>
+            console.error('[CronService] Careers media retention sweep failed:', err.message)
+          );
+        }),
+        { scheduled: true, timezone: process.env.WP_SYNC_TZ || 'Asia/Kolkata' }
+      );
+      this.scheduledTasks.push({
+        name: 'careersMediaRetention',
+        task,
+        schedule,
+        description: 'Delete rejected applicants\' video/CV media past the retention window',
+      });
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(`[CronService] Careers media retention sweep scheduled: "${schedule}"`);
+      }
+    } catch (error) {
+      console.error('[CronService] Failed to schedule careers media retention sweep:', error.message);
     }
   }
 

@@ -26,8 +26,11 @@ const nextConfig: NextConfig = {
     removeConsole: process.env.NODE_ENV === "production"
   },
   images: {
-    // Delivery is handled by Cloudinary via a custom loader (see
-    // src/lib/cloudinaryLoader.ts), NOT the built-in Next optimizer. The loader
+    // Delivery goes through a custom provider-aware loader (src/lib/imageLoader.ts),
+    // NOT the built-in Next optimizer. R2-hosted images resolve to a
+    // PRE-GENERATED AVIF/WebP variant (no transformation meter, format chosen at
+    // the edge by infra/cloudflare/image-worker); legacy Cloudinary URLs keep the
+    // on-the-fly transform until the URL rewrite finishes. The loader
     // injects `f_auto,q_auto,c_limit,w_<width>` into every Cloudinary URL, so
     // next/image emits a proper responsive srcset of right-sized WebP/AVIF
     // variants instead of shipping the full-resolution original. This replaces
@@ -39,7 +42,7 @@ const nextConfig: NextConfig = {
     // loader output URL is used verbatim, so there is no open-proxy surface to
     // allowlist. deviceSizes/imageSizes still drive the srcset width candidates.
     loader: 'custom',
-    loaderFile: './src/lib/cloudinaryLoader.ts',
+    loaderFile: './src/lib/imageLoader.ts',
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
