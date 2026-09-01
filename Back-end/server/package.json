@@ -75,6 +75,7 @@
     "backfill-cloudinary-ids": "node scripts/backfill-cloudinary-public-ids.js",
     "check-cloudinary-health": "node scripts/check-cloudinary-health.js",
     "migrate-to-r2": "node --import=dotenv/config scripts/migrate-cloudinary-to-r2.js",
+    "generate-image-variants": "node --import=dotenv/config scripts/generate-image-variants.js",
     "audit-careers-retention": "node --import=dotenv/config scripts/audit-careers-retention.js",
     "purge-abandoned-careers": "node --import=dotenv/config scripts/purge-abandoned-careers-assets.js",
     "purge-rejected-careers-media": "node --import=dotenv/config scripts/purge-rejected-careers-media.js",
