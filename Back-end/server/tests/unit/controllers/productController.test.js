@@ -125,6 +125,10 @@ describe('ProductController Unit Tests', () => {
         // Always present, on both engines, so the storefront never branches on
         // undefined when deciding whether to show "showing related results".
         relaxed: false,
+        // The search page reads corrections from HERE now, not from a second call
+        // to /products/suggestions — one probe per search instead of two, and one
+        // fewer round trip on every zero-result search.
+        corrections: [],
         count: 1,
         ...mockResults.pagination,
         products: mockResults.products,

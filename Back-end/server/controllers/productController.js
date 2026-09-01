@@ -39,6 +39,10 @@ export const getProducts = async (req, res) => {
       // Surfaced so the storefront can say "no exact matches for X — showing
       // related results" instead of passing widened results off as direct hits.
       relaxed: Boolean(searchResults.relaxed),
+      // Passed through for API consistency. The search page reads corrections from
+      // /products/suggestions, but a client hitting only this endpoint should not
+      // have to make a second request to learn the query was misspelled.
+      corrections: searchResults.corrections || [],
     };
   };
 

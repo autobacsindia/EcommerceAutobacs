@@ -482,3 +482,80 @@ describe('engine contract — the surface searchService depends on', () => {
     expect(shaped.brands[0]).toMatchObject({ label: 'Chosen', selected: true });
   });
 });
+
+describe('did-you-mean lives on the RESULTS path, not the keystroke path', () => {
+  /**
+   * Two regressions are pinned here.
+   *
+   * (1) The correction logic was originally wired only into searchProducts while
+   *     the search page fetched corrections from /products/suggestions — so the
+   *     feature worked in the service, was verified in the service, and reached
+   *     the user as a permanently empty array.
+   *
+   * (2) The first fix moved the probe INTO the suggestions endpoint, gated on
+   *     `suggestions.length === 0`. That gate is not a search signal: the
+   *     popular-query lane pads the list from logged search terms, and
+   *     logSearchQuery records misspellings too. So once one shopper searched
+   *     "wnich rope", every later "wnich" would have a non-empty suggestion list
+   *     and the correction would be suppressed — the more a typo was searched, the
+   *     more reliably its correction vanished.
+   *
+   * The resolution is structural: corrections come from the results path, gated on
+   * the real hit count, and the per-keystroke endpoint returns none.
+   */
+  const Product = mongoose.model('Product');
+  let aggregateSpy;
+  afterEach(() => aggregateSpy?.mockRestore());
+
+  it('never probes for corrections on the suggestions endpoint', async () => {
+    // Even with an empty dropdown on a long query — the case that used to trigger
+    // it — the keystroke path must issue no correction probe.
+    aggregateSpy = jest.spyOn(Product.collection, 'aggregate').mockImplementation((pipeline) => {
+      if (pipeline.some((p) => p.$searchMeta)) return { toArray: async () => [{ count: { lowerBound: 0 } }] };
+      return { toArray: async () => [] };
+    });
+
+    const result = await atlasSearchService.getSearchSuggestions('wnich', 6);
+    expect(result.corrections).toEqual([]);
+    // Exactly one $search (the suggestion query) — no second probe.
+    const searchCalls = aggregateSpy.mock.calls.filter(([p]) => p.some((st) => st.$search));
+    expect(searchCalls).toHaveLength(1);
+  });
+
+  it('is immune to popular-term pollution, because it no longer gates on suggestions', async () => {
+    // The self-reinforcing bug: a logged misspelling padding the dropdown must not
+    // be able to influence whether a correction is offered.
+    mockRedis.zrange.mockResolvedValue(['wnich rope', '9']);
+    aggregateSpy = jest.spyOn(Product.collection, 'aggregate').mockImplementation((pipeline) => {
+      if (pipeline.some((p) => p.$searchMeta)) return { toArray: async () => [{ count: { lowerBound: 0 } }] };
+      return { toArray: async () => [] };
+    });
+
+    const result = await atlasSearchService.getSearchSuggestions('wnich', 6);
+    // The popular term still surfaces as a query suggestion...
+    expect(result.suggestions.some((x) => x.type === 'query')).toBe(true);
+    // ...and corrections are unaffected either way, because they are not computed here.
+    expect(result.corrections).toEqual([]);
+  });
+});
+
+describe('suggestCorrection — probe preconditions', () => {
+  it('does not query at all when no token is long enough to correct', async () => {
+    // "h4 blb" is six characters, but pickCorrection only considers tokens of 4+,
+    // so a whole-string length check would fire a maxEdits:2 fuzzy query that
+    // structurally cannot return a result.
+    const spy = jest.spyOn(mongoose.model('Product').collection, 'aggregate');
+    await expect(atlasSearchService.suggestCorrection('h4 blb')).resolves.toEqual([]);
+    await expect(atlasSearchService.suggestCorrection('a b c')).resolves.toEqual([]);
+    await expect(atlasSearchService.suggestCorrection('')).resolves.toEqual([]);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('swallows a probe failure rather than failing the search that triggered it', async () => {
+    const spy = jest.spyOn(mongoose.model('Product').collection, 'aggregate')
+      .mockImplementation(() => ({ toArray: async () => { throw new Error('atlas exploded'); } }));
+    await expect(atlasSearchService.suggestCorrection('wnich')).resolves.toEqual([]);
+    spy.mockRestore();
+  });
+});

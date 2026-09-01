@@ -61,7 +61,10 @@ const CASES = [
   // Relaxation: one real token, one nonsense token. Strict recall requires both, so
   // this returns nothing until the retry widens it.
   { label: 'zero-result relaxation', params: { q: 'spoiler zzzqqx' }, expectRelaxed: true },
-  { label: 'did-you-mean probe', params: { q: 'wnich' }, expectCorrection: true },
+  // The results path is where corrections are computed and where the search page
+  // now reads them. Asserting the VALUE, not just presence: an empty-but-present
+  // array is exactly how this feature was broken before.
+  { label: 'did-you-mean probe', params: { q: 'wnich' }, expectCorrection: 'winch' },
   { label: 'sort by best selling', params: { sortBy: 'salesScore', order: 'desc' } },
   { label: 'explicit relevance sort', params: { q: 'winch', sortBy: 'relevance' } },
   { label: 'facets: data-derived price', facets: {} },
@@ -122,10 +125,13 @@ for (const testCase of CASES) {
       console.error(`❌ ${label} did not relax (total=${result.pagination.total})`);
       continue;
     }
-    if (testCase.expectCorrection && !(result.corrections || []).length) {
-      failures += 1;
-      console.error(`❌ ${label} produced no correction`);
-      continue;
+    if (testCase.expectCorrection) {
+      const got = (result.corrections || []).map((c) => c.suggested);
+      if (!got.includes(testCase.expectCorrection)) {
+        failures += 1;
+        console.error(`❌ ${label} expected correction "${testCase.expectCorrection}", got ${JSON.stringify(got)}`);
+        continue;
+      }
     }
     const prices = result.products.slice(0, 3).map((p) => p.price).join(', ');
     console.log(
