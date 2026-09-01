@@ -67,6 +67,32 @@ const JobApplicationSchema = new mongoose.Schema(
     acknowledgementEmailedAt: { type: Date, default: null },
     rejectionEmailedAt: { type: Date, default: null },
 
+    /*
+      Retention clock for the media-purge sweep: when this application ENTERED
+      the `rejected` state. Cleared if it ever leaves that state.
+
+      Deliberately NOT derived from `updatedAt`, which is the obvious shortcut
+      and is wrong: `updatedAt` moves every time an admin edits a note, so a
+      reviewer adding a comment would silently restart the retention window and
+      the applicant's video would be kept indefinitely. A dedicated stamp makes
+      the window mean what it says.
+
+      Also not `rejectionEmailedAt` — that stamps when the rejection MAIL was
+      accepted by the provider, is null when mail is disabled or fails, and is
+      about idempotency rather than retention. It is used only to BACKFILL this
+      field for applications rejected before it existed.
+    */
+    rejectedAt: { type: Date, default: null },
+
+    /*
+      When the media (videos / CV) was deleted under the retention policy. The
+      application record, notes and decision are kept for audit; only the files
+      go. Set together with clearing `files`, so the admin UI can say "media
+      removed per retention policy" instead of rendering a signed URL for an
+      object that no longer exists.
+    */
+    mediaPurgedAt: { type: Date, default: null },
+
     // Abuse triage only — never surfaced to the applicant.
     meta: {
       ip: { type: String, default: "" },
@@ -78,6 +104,15 @@ const JobApplicationSchema = new mongoose.Schema(
 
 // Admin inbox: newest first, filterable by status.
 JobApplicationSchema.index({ status: 1, createdAt: -1 });
+
+/*
+  Retention sweep lookup: "rejected, rejected before X, media not yet purged".
+  Without this the daily cron scans the whole collection; with it the sweep
+  touches only the rows it can act on. NOTE: prod runs autoIndex:false, so this
+  declaration does NOT create the index on deploy — it needs a migration
+  (npm run audit-index-drift will report it as missing until then).
+*/
+JobApplicationSchema.index({ status: 1, rejectedAt: 1, mediaPurgedAt: 1 });
 JobApplicationSchema.index({ createdAt: -1 });
 JobApplicationSchema.index({ email: 1 });
 JobApplicationSchema.index({ posting: 1 });

@@ -237,7 +237,23 @@ export const updateApplication = async (req, res) => {
     if (!STATUSES.includes(req.body.status)) {
       return res.status(400).json({ success: false, message: 'Invalid status' });
     }
+    const previousStatus = app.status;
     app.status = req.body.status;
+
+    /*
+      Maintain the retention clock on the transition, not in the sweep. Entering
+      `rejected` starts the window; leaving it clears the stamp so an applicant
+      who is reconsidered is no longer queued for media deletion.
+
+      Only stamp on an ACTUAL transition — re-saving an already-rejected
+      application (an admin editing notes) must not restart the window, which is
+      the whole reason this is not derived from `updatedAt`.
+    */
+    if (app.status === 'rejected' && previousStatus !== 'rejected') {
+      app.rejectedAt = new Date();
+    } else if (app.status !== 'rejected' && previousStatus === 'rejected') {
+      app.rejectedAt = null;
+    }
   }
   if (req.body.adminNotes !== undefined) {
     app.adminNotes = str(req.body.adminNotes, 5000);

@@ -107,3 +107,6 @@ db-migration-manifest.json
 
 # Cloudinary→R2 migration audit trails (local run artefacts, can be large)
 migration-manifests/
+
+# Careers retention audit reports (contain applicant PII)
+retention-reports/
