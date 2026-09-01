@@ -176,3 +176,76 @@ describe('encoder settings', () => {
     expect(ENCODE.avif.chromaSubsampling).toBe('4:4:4');
   });
 });
+
+describe('existingKeys — the optimisation that made the backfill viable', () => {
+  const deps = (over = {}) => ({
+    putObject: jest.fn().mockResolvedValue({}),
+    ...over,
+  });
+
+  test('skips via the Set with NO network probe at all', async () => {
+    // A HEAD per variant cost ~316ms each; over 6,243 originals that was
+    // ~62,000 requests and hours of wall time, almost all returning 404.
+    const headObject = jest.fn();
+    const d = deps({ headObject });
+    const buffer = await makeImage(400);
+    // Pre-populate every key the 400px source will plan.
+    const existingKeys = new Set([
+      'variants/autobacs/products/abc/w128.avif', 'variants/autobacs/products/abc/w128.webp',
+      'variants/autobacs/products/abc/w256.avif', 'variants/autobacs/products/abc/w256.webp',
+      'variants/autobacs/products/abc/w384.avif', 'variants/autobacs/products/abc/w384.webp',
+    ]);
+    const r = await generateVariants({ buffer, originalKey: 'autobacs/products/abc.jpg', existingKeys, ...d });
+    expect(r.skipped).toBe(6);
+    expect(r.written).toBe(0);
+    expect(headObject).not.toHaveBeenCalled();
+    expect(d.putObject).not.toHaveBeenCalled();
+  });
+
+  test('renders only the variants missing from the Set', async () => {
+    const d = deps();
+    const existingKeys = new Set(['variants/autobacs/products/abc/w128.avif']);
+    const r = await generateVariants({
+      buffer: await makeImage(400), originalKey: 'autobacs/products/abc.jpg', existingKeys, ...d,
+    });
+    expect(r.skipped).toBe(1);
+    expect(r.written).toBe(5);
+    expect(d.putObject.mock.calls.map((c) => c[0].key))
+      .not.toContain('variants/autobacs/products/abc/w128.avif');
+  });
+
+  test('the Set wins over headObject when both are supplied', async () => {
+    const headObject = jest.fn().mockResolvedValue({ bytes: 1 });
+    const d = deps({ headObject });
+    const r = await generateVariants({
+      buffer: await makeImage(400), originalKey: 'autobacs/products/abc.jpg',
+      existingKeys: new Set(), ...d,
+    });
+    expect(headObject).not.toHaveBeenCalled();
+    expect(r.written).toBe(6);
+  });
+
+  test('force ignores the Set entirely', async () => {
+    const d = deps();
+    const existingKeys = new Set(['variants/autobacs/products/abc/w128.avif']);
+    const r = await generateVariants({
+      buffer: await makeImage(400), originalKey: 'autobacs/products/abc.jpg',
+      existingKeys, force: true, ...d,
+    });
+    expect(r.skipped).toBe(0);
+    expect(r.written).toBe(6);
+  });
+
+  test('one failing variant still does not sink the others, now that they run in parallel', async () => {
+    const d = deps({
+      putObject: jest.fn().mockRejectedValueOnce(new Error('R2 refused')).mockResolvedValue({}),
+    });
+    const r = await generateVariants({
+      buffer: await makeImage(400), originalKey: 'autobacs/products/abc.jpg',
+      existingKeys: new Set(), ...d,
+    });
+    expect(r.failed).toHaveLength(1);
+    expect(r.written).toBe(5);
+    expect(r.failed[0].key).toMatch(/^variants\/autobacs\/products\/abc\/w\d+\.(avif|webp)$/);
+  });
+});

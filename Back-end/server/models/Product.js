@@ -10,6 +10,29 @@ import { slugify, generateUniqueSlug } from '../utils/slug.js';
 // the shopper picks one on the PDP and that variant's price is what gets charged.
 // `_id` (the subdoc id) is the canonical variant identifier used by cart/order/API;
 // `wpVariationId` only maps back to the WooCommerce variation during import/sync.
+/**
+ * Is this an image WE host, and therefore one we are responsible for deleting?
+ *
+ * Kept as an explicit host allowlist rather than "anything that is not
+ * external": a new provider must be added here deliberately, so the failure
+ * mode is a loud validation error on save rather than a silent leak.
+ *
+ * R2_PUBLIC_BASE_URL is read at call time — scripts load dotenv after the model
+ * graph is built, so a value captured at import would be empty and would exempt
+ * every R2 image from the requirement.
+ */
+export const isHostedImageUrl = (url) => {
+  if (typeof url !== 'string' || !url) return false;
+  if (url.includes('cloudinary.com')) return true;
+  const base = process.env.R2_PUBLIC_BASE_URL || '';
+  if (!base) return false;
+  try {
+    return new URL(url).host === new URL(base).host;
+  } catch {
+    return false;
+  }
+};
+
 const VariantSchema = new mongoose.Schema({
   wpVariationId: { type: Number, index: true, sparse: true },
   // Human-facing model name, e.g. "COROLLA ALTIS 1.8 P". Built from the WC
@@ -90,15 +113,30 @@ const ProductSchema = new mongoose.Schema({
     index: true
   },
   images: [{
-    url:        { type: String, required: true },   // Cloudinary secure_url or external URL
-    public_id:  { 
+    url:        { type: String, required: true },   // hosted secure_url or external URL
+    public_id:  {
                   type: String,
-                  // Require public_id ONLY for Cloudinary images
-                  // External images (if any) won't break
-                  required: function() {
-                    return this.url && this.url.includes('cloudinary.com');
-                  }
-                },                   // Cloudinary public_id — required for cleanup
+                  /*
+                    The delete handle. Without it, removing an image from a
+                    product deletes the Mongo row and leaks the object: nothing
+                    references it and nothing can address it, so no cleanup
+                    sweep will ever find it. That is not hypothetical — the same
+                    shape produced 1.68 GB of unreachable careers uploads.
+
+                    Required for every image WE host, on any provider. The
+                    earlier rule tested `url.includes('cloudinary.com')`, which
+                    silently exempted R2 the moment uploads moved there —
+                    a gap that would have started leaking on cutover day with
+                    no error anywhere.
+
+                    Still optional for genuinely external URLs (legacy
+                    wp-content, stock photography): we cannot delete what we do
+                    not own, so demanding a handle for it would only block saves.
+                  */
+                  required: function () {
+                    return isHostedImageUrl(this.url);
+                  },
+                },
     alt:        { type: String },
     isPrimary:  { type: Boolean, default: false }
   }],

@@ -49,7 +49,12 @@ const APPLY = flag('apply');
 const FORCE = flag('force');
 const PREFIX = opt('prefix', '');
 const LIMIT = Number(opt('limit', Infinity));
-const CONCURRENCY = Number(opt('concurrency', 3));
+/*
+  Default raised from 3: the work is network-latency bound, not CPU bound
+  (measured 75% idle CPU while the sequential version ran), so more images in
+  flight is close to free.
+*/
+const CONCURRENCY = Number(opt('concurrency', 12));
 
 const mb = (b) => (b / 1048576).toFixed(1);
 const bar = (c = '─') => console.log(c.repeat(76));
@@ -87,8 +92,22 @@ const main = async () => {
     .filter((o) => IMAGE_EXT.test(o.key))
     .slice(0, LIMIT);
 
-  console.log(`  objects in bucket : ${all.length}`);
+  /*
+    One LIST of the variants/ prefix instead of a HEAD per planned variant.
+
+    Measured: an R2 round-trip from here is ~316ms, and a 1080px source plans 10
+    variants, so per-variant HEADs cost ~3.2s PER IMAGE — and on a first run
+    every one returns 404. Across 6,243 originals that is ~62,000 requests spent
+    proving the bucket is empty. The listing is already in `all`, so this costs
+    nothing extra.
+  */
+  const existingKeys = new Set(
+    all.filter((o) => o.key.startsWith(`${VARIANT_PREFIX}/`)).map((o) => o.key),
+  );
+
+  console.log(`  objects in bucket  : ${all.length}`);
   console.log(`  originals to render: ${originals.length}`);
+  console.log(`  variants present   : ${existingKeys.size} (skipped without a network probe)`);
   bar();
 
   if (!originals.length) {
@@ -115,7 +134,7 @@ const main = async () => {
           buffer,
           originalKey: o.key,
           putObject: r2.putObject,
-          headObject: r2.headObject,
+          existingKeys,          // O(1) membership instead of a HEAD per variant
           force: FORCE,
         });
         written += res.written; skipped += res.skipped; bytesOut += res.bytes;
