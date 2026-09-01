@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { enqueueNotification } from '../queue/queues.js';
-import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue } from '../utils/stockStatus.js';
+import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue, stockRankFor } from '../utils/stockStatus.js';
 import { snapshotStock, diffRecoveredTargets } from '../utils/restockDetect.js';
 import SeoSchema from './shared/seoSchema.js';
 import { slugify, generateUniqueSlug } from '../utils/slug.js';
@@ -110,6 +110,39 @@ const ProductSchema = new mongoose.Schema({
     required: true,
     default: STOCK_STATUS.IN
   },
+
+  /**
+   * Availability sort key: 0 = purchasable, 1 = out/backorder. DERIVED from
+   * `stock` — never set it by hand; see stockRankFor() and the sync hooks below.
+   *
+   * It exists because neither engine can sort correctly on `stock` itself. The
+   * enum sorts alphabetically (backorder < in < low < out), so `.sort({stock:1})`
+   * put backorder FIRST on every browse page, and Atlas ignores relevance score
+   * whenever an explicit sort is set, so the availability boost cannot cover the
+   * browse case either. A number is the only key both can agree on.
+   *
+   * No Mongoose index is declared: prod runs autoIndex:false, so a declared index
+   * is not a built one, and adding it here would show up as drift without ever
+   * being created. If the fallback's browse sort needs one, that is a deliberate
+   * migration plus an ensure-production-indexes.js entry.
+   */
+  stockRank: { type: Number, default: 0, select: true },
+
+  /**
+   * Trailing-sales popularity, time-decayed. DERIVED from paid orders by
+   * services/salesScoreService.js on a nightly cron — never set by hand.
+   *
+   * It replaces `isFastMoving` as the commercial ranking signal. That flag was
+   * manual, dead (its section is never rendered), and set on 3 of 931 products,
+   * so it handed three arbitrary items a permanent boost on every search. With
+   * only 5 products carrying any review or rating, this is the only signal that
+   * distinguishes a best seller from something that has never sold.
+   *
+   * No Mongoose index, deliberately: search ranking reads this from the Atlas
+   * index, not from MongoDB, and prod runs autoIndex:false so a declared index
+   * would show as drift without ever being built.
+   */
+  salesScore: { type: Number, default: 0 },
   sku: {
     type: String,
     unique: true,
@@ -433,6 +466,46 @@ ProductSchema.post('findOneAndUpdate', async function (doc) {
   const returnsNew = opts.new === true || opts.returnDocument === 'after' || opts.returnOriginal === false;
   const after = returnsNew ? doc : await this.model.findById(doc._id).select('stock variants').lean();
   enqueueRestock(this._stockBefore, snapshotStock(after), doc._id);
+});
+
+/**
+ * Keep `stockRank` consistent with `stock`, on every Mongoose write path.
+ *
+ * The field is denormalized, so it is only trustworthy if nothing can change
+ * `stock` without it. Three hooks cover the three ways `stock` actually moves in
+ * this codebase: document saves (admin editor), findOneAndUpdate (admin quick edit,
+ * WooCommerce sync) and updateOne/updateMany (bulk admin actions, importers).
+ *
+ * ⚠ What these CANNOT cover is `bulkWrite` and raw-driver writes, which bypass
+ * middleware entirely. That is not a theoretical gap — it is how the Elasticsearch
+ * index used to drift. The guard for it is scripts/backfill-stock-rank.js (which
+ * both backfills and audits) plus the drift test in tests/unit/models/stockRank.test.js,
+ * NOT a promise that every caller remembers.
+ */
+function applyStockRankToUpdate(update) {
+  if (!update) return;
+  // Mongoose carries fields both at the top level and inside $set (it appends a
+  // $set for timestamps), so a payload can set `stock` in either place.
+  for (const container of [update, update.$set]) {
+    if (container && typeof container === 'object' && 'stock' in container) {
+      const rank = stockRankFor(normalizeStockValue(container.stock));
+      if (update.$set) update.$set.stockRank = rank;
+      else update.stockRank = rank;
+      return;
+    }
+  }
+}
+
+ProductSchema.pre('save', function () {
+  // Runs on create as well as edit: a new product must not default to rank 0 when
+  // it is created out of stock.
+  if (this.isNew || this.isModified('stock')) {
+    this.stockRank = stockRankFor(normalizeStockValue(this.stock));
+  }
+});
+
+ProductSchema.pre(['findOneAndUpdate', 'updateOne', 'updateMany'], function () {
+  applyStockRankToUpdate(this.getUpdate());
 });
 
 export default mongoose.model("Product", ProductSchema);

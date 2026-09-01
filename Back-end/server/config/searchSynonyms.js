@@ -31,6 +31,74 @@ export const SYNONYM_GROUPS = [
   ['portable fridge', 'car fridge', 'cooler'],
 ];
 
+/**
+ * How each group is exposed to Atlas Search.
+ *
+ * This is NOT a mechanical conversion of SYNONYM_GROUPS, and it must not become
+ * one. Those groups were built for the old query-time expansion, which was only
+ * ever applied to SINGLE-TOKEN queries precisely because expanding them
+ * bidirectionally over-recalled — "spoiler" pulled in every bumper and returned
+ * 151 results. Atlas applies synonyms to EVERY query, so shipping all of these as
+ * `equivalent` would reintroduce that bug on a much wider surface.
+ *
+ * Two mapping types, chosen per group:
+ *
+ *  - `equivalent` — the terms genuinely mean the same thing (spelling variants,
+ *    plurals, abbreviations). Expansion is safe in both directions.
+ *
+ *  - `explicit` — a BROAD term should reach specific products, but not the
+ *    reverse. "lights" should find headlights; "headlight" must NOT expand back
+ *    into every lamp, fog light and ambient strip. One-way is the whole point.
+ *
+ * Groups that are neither — where the members are simply DIFFERENT PRODUCTS
+ * ('performance/exhaust/turbo/ecu', 'interior/dashboard/floor mat') — are
+ * deliberately ABSENT. They were never synonyms; they were category hints, and the
+ * category-resolution lane in resolveQueryEntities already covers that intent
+ * against the real taxonomy. Encoding them here would make "exhaust" match a turbo.
+ */
+export const ATLAS_SYNONYM_MAPPINGS = [
+  // ── Equivalent: spelling and morphological variants only ───────────────────
+  { mappingType: 'equivalent', synonyms: ['bodykit', 'body kit', 'body kits', 'body-kit'] },
+  { mappingType: 'equivalent', synonyms: ['accessories', 'accessory', 'add-on', 'add ons', 'addon'] },
+  { mappingType: 'equivalent', synonyms: ['winch', 'recovery winch'] },
+  { mappingType: 'equivalent', synonyms: ['ppf', 'paint protection film', 'paint protection'] },
+  { mappingType: 'equivalent', synonyms: ['drl', 'daytime running light', 'daytime running lamp'] },
+  { mappingType: 'equivalent', synonyms: ['coilover', 'coilovers', 'coil over'] },
+  { mappingType: 'equivalent', synonyms: ['floor mat', 'floor mats', 'floor liner', 'floorliner'] },
+  { mappingType: 'equivalent', synonyms: ['seat cover', 'seat covers', 'seat cover set'] },
+  { mappingType: 'equivalent', synonyms: ['roof rack', 'roof racks', 'roof carrier'] },
+  { mappingType: 'equivalent', synonyms: ['tail light', 'taillight', 'tail lights', 'taillights', 'tail lamp'] },
+  { mappingType: 'equivalent', synonyms: ['head light', 'headlight', 'head lights', 'headlights', 'head lamp', 'headlamp'] },
+  { mappingType: 'equivalent', synonyms: ['fog light', 'foglight', 'fog lights', 'foglights', 'fog lamp'] },
+  { mappingType: 'equivalent', synonyms: ['shock absorber', 'shock', 'shocks', 'damper'] },
+  { mappingType: 'equivalent', synonyms: ['subwoofer', 'sub woofer', 'sub-woofer'] },
+  { mappingType: 'equivalent', synonyms: ['amplifier', 'amp'] },
+  { mappingType: 'equivalent', synonyms: ['portable fridge', 'car fridge', 'car refrigerator'] },
+
+  // ── Explicit: broad term → specific products, ONE WAY ──────────────────────
+  // The reverse direction is what caused the over-recall, so it is not granted.
+  {
+    mappingType: 'explicit',
+    input: ['lights', 'light', 'lighting'],
+    synonyms: ['lamp', 'led', 'headlight', 'taillight', 'foglight', 'drl'],
+  },
+  {
+    mappingType: 'explicit',
+    input: ['audio', 'sound', 'sound system'],
+    synonyms: ['speaker', 'subwoofer', 'amplifier', 'stereo', 'head unit'],
+  },
+  {
+    mappingType: 'explicit',
+    input: ['suspension'],
+    synonyms: ['shock absorber', 'coilover', 'strut', 'lowering spring'],
+  },
+  {
+    mappingType: 'explicit',
+    input: ['protection kit', 'protection-kit'],
+    synonyms: ['ppf', 'paint protection', 'guard'],
+  },
+];
+
 // Filler words that carry no product intent. Stripped from a query before matching
 // so "tailgate spoiler FOR hilux" is treated as [tailgate, spoiler, hilux] and a
 // required-terms match isn't distorted by a word almost no product name contains.

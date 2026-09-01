@@ -6,7 +6,7 @@ import elasticsearchService from "./elasticsearchService.js";
 import atlasSearchService from "./atlasSearchService.js";
 import categoryMappingService from "./categoryMappingService.js";
 import { expand as expandSynonyms, contentTokens } from "../config/searchSynonyms.js";
-import { STOCK_STATUS } from "../utils/stockStatus.js";
+import { NON_PURCHASABLE_STOCK } from "../utils/stockStatus.js";
 
 /**
  * Last observed Elasticsearch availability, so an outage is reported on the
@@ -242,7 +242,11 @@ class SearchService {
 
     if (isFeatured) query.isFeatured = isFeatured === 'true';
     if (isFastMoving) query.isFastMoving = isFastMoving === 'true';
-    if (inStock === 'true') query.stock = { $ne: STOCK_STATUS.OUT };
+    // Shared with the Atlas filter (see utils/stockStatus.js). This line used to
+    // read `{ $ne: STOCK_STATUS.OUT }`, which let the 20 backorder products through
+    // on the MongoDB path while Atlas excluded them — the same URL answering
+    // differently depending on which engine served it.
+    if (inStock === 'true') query.stock = { $nin: [...NON_PURCHASABLE_STOCK] };
 
     if (rating) {
       const ratings = Array.isArray(rating) ? rating : rating.split(',').map(Number);
@@ -314,7 +318,105 @@ class SearchService {
    * what you'd get by (de)selecting each value.
    * @returns {{ brands: Array<{name:string,count:number}>, categories: Array<{categoryId:string,count:number}> }}
    */
-  static async getFacets(params) {
+  static async getFacets(params, { includeInactive = false } = {}) {
+    // Prefer the SAME engine that answers the results grid. Until now this ran
+    // independent MongoDB aggregations while /products was served by Atlas, so the
+    // sidebar counts and the grid could disagree about one URL — different text
+    // matching, different stock semantics, two sources of truth for one screen.
+    //
+    // Admin listings still take the Mongo path: they must see inactive products,
+    // and the Atlas public query filters those out by design.
+    if (!includeInactive && process.env.SEARCH_ENGINE === 'atlas') {
+      try {
+        const engine = getSearchEngine();
+        if (await engine.isConnected()) {
+          const facets = await SearchService.getAtlasFacets(params, engine);
+          recordSearchPath('esServed');
+          return facets;
+        }
+      } catch (error) {
+        // Never fail the sidebar because the engine did — fall through to Mongo.
+        recordSearchPath('fallbackEsError');
+        console.error('[SearchService] Atlas facets failed, falling back to MongoDB:', error.message);
+      }
+    }
+
+    return SearchService.getMongoFacets(params);
+  }
+
+  /**
+   * Facets from Atlas, translated into the sidebar's contract.
+   *
+   * Resolves the same category/vehicle ids the results grid resolves, so the two
+   * cannot disagree about what "this category" means, then hands the raw id sets to
+   * rollUpCategoryCounts — the existing, unchanged subtree rollup.
+   */
+  static async getAtlasFacets(params, engine) {
+    const categoryIds = params.category
+      ? (await SearchService.resolveCategorySubtree(params.category)).ids
+      : [];
+
+    const raw = await engine.getFacets(params, { categoryIds, vehicleFilterIds: null });
+
+    // Category id sets → rolled-up subtree counts. Reused verbatim: a plain sum
+    // double-counts a product tagged with several categories in one subtree.
+    const rolled = SearchService.rollUpCategoryCounts(
+      raw.categoryIdSets.map((c) => ({ _id: c._id, ids: c.ids }))
+    );
+
+    if (!categoryMappingService.initialized) await categoryMappingService.initialize();
+    const selectedCategories = new Set(
+      (Array.isArray(params.category) ? params.category : String(params.category || '').split(','))
+        .map((c) => c.trim()).filter(Boolean)
+        .map((c) => categoryMappingService.findCategory(c)?._id?.toString())
+        .filter(Boolean)
+    );
+
+    const categories = rolled.map((c) => {
+      const meta = categoryMappingService.findCategory(c.categoryId);
+      return {
+        categoryId: c.categoryId,
+        label: meta?.name ?? null,
+        parentId: meta?.parent ? String(meta.parent) : null,
+        count: c.count,
+        selected: selectedCategories.has(c.categoryId),
+      };
+    }).filter((c) => c.label);
+
+    // Vehicle ids → make names, matching what the sidebar's make dropdown sends.
+    const vehicleIds = raw.vehicleIdCounts.map((v) => v._id);
+    const vehicles = vehicleIds.length > 0
+      ? await Vehicle.find({ _id: { $in: vehicleIds } }).select('_id make model').lean().maxTimeMS(2000)
+      : [];
+    const vehicleById = new Map(vehicles.map((v) => [String(v._id), v]));
+    const makeCounts = new Map();
+    const modelCounts = new Map();
+    for (const { _id, count } of raw.vehicleIdCounts) {
+      const v = vehicleById.get(String(_id));
+      if (!v) continue;
+      if (v.make) makeCounts.set(v.make, (makeCounts.get(v.make) || 0) + count);
+      if (v.model) modelCounts.set(v.model, { make: v.make, count: (modelCounts.get(v.model)?.count || 0) + count });
+    }
+
+    const selectedMake = params.vehicleMake || params.vehicleType || '';
+    const selectedModel = params.vehicleModel || '';
+    const byCount = (a, b) => Number(b.selected) - Number(a.selected) || b.count - a.count
+      || String(a.value).localeCompare(String(b.value));
+
+    return {
+      total: raw.total,
+      brands: raw.brands,
+      categories,
+      vehicleMakes: Array.from(makeCounts, ([value, count]) => ({ value, count, selected: value === selectedMake })).sort(byCount),
+      vehicleModels: Array.from(modelCounts, ([value, v]) => ({ value, make: v.make, count: v.count, selected: value === selectedModel })).sort(byCount),
+      price: raw.price,
+      ratings: raw.ratings,
+      availability: raw.availability,
+    };
+  }
+
+  /** The MongoDB facet path — the fallback, and the admin path. */
+  static async getMongoFacets(params) {
     const [brandQuery, categoryQuery] = await Promise.all([
       SearchService.buildBaseQuery(params, { excludeBrand: true }),
       SearchService.buildBaseQuery(params, { excludeCategory: true }),
@@ -346,9 +448,20 @@ class SearchService {
     // the listing (countDocuments over the subtree) would return.
     const rolledCategories = SearchService.rollUpCategoryCounts(categoryAgg);
 
+    // Shaped into the SAME envelope as the Atlas path so the panel never has to
+    // branch on which engine answered. `name` is retained alongside `value`/`label`
+    // for the two existing consumers that still read it.
     return {
-      brands: brandAgg.map(b => ({ name: b._id, count: b.count })),
-      categories: rolledCategories,
+      total: null,
+      brands: brandAgg.map(b => ({ name: b._id, value: b._id, label: b._id, count: b.count, selected: false })),
+      categories: rolledCategories.map(c => ({ ...c, label: null, parentId: null, selected: false })),
+      vehicleMakes: [],
+      vehicleModels: [],
+      // No data-derived bounds available here; the panel treats a zero range as
+      // "unknown" and leaves the price group out rather than inventing a scale.
+      price: { min: 0, max: 0, selectedMin: null, selectedMax: null, histogram: [] },
+      ratings: [],
+      availability: [],
     };
   }
 
@@ -519,12 +632,20 @@ class SearchService {
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Keep out-of-stock products visible but sink them below available ones. The stock
-    // enum sorts alphabetically as 'in' < 'low' < 'out', so an ascending primary sort on
-    // `stock` yields in-stock → low-stock → out-of-stock; the requested sort applies within
-    // each tier.
-    const sortOptions = { stock: 1 };
-    sortOptions[sortBy] = order === 'asc' ? 1 : -1;
+    // Keep out-of-stock products visible but sink them below available ones.
+    //
+    // This sorted on `stock` itself until 2026-09-01, with a comment reasoning that
+    // the enum sorts as 'in' < 'low' < 'out'. That was true when the enum had three
+    // values. Adding `backorder` silently inverted it — b < i < l < o — so the sort
+    // written to sink unavailable stock was instead promoting it, and the first
+    // products on every browse page were the ones nobody could buy. `stockRank` is
+    // numeric and derived (see utils/stockStatus.js), so it cannot invert again, and
+    // it is the same key the Atlas sort uses.
+    const sortOptions = { stockRank: 1 };
+    // The regex fallback has no relevance score to sort by, so `relevance` means
+    // recency here. Accepting the value rather than rejecting it keeps one URL
+    // valid on both engines.
+    sortOptions[sortBy === 'relevance' ? 'createdAt' : sortBy] = order === 'asc' ? 1 : -1;
 
     try {
       const products = await Product.find(query)
@@ -554,6 +675,11 @@ class SearchService {
 
       return {
         products,
+        // The MongoDB fallback has no relaxation ladder — it is a regex scan, not a
+        // scored engine. The field is returned anyway so `relaxed` is always present
+        // in the response shape and the storefront never has to branch on undefined.
+        relaxed: false,
+        relaxLevel: 0,
         pagination: {
           total,
           pages: Math.ceil(total / Number(limit)),
@@ -706,6 +832,7 @@ class SearchService {
     // Return empty analytics if not available
     return {
       popularTerms: [],
+      zeroResultTerms: [],
       searchesOverTime: []
     };
   }
@@ -717,14 +844,15 @@ class SearchService {
    * @param {string} userId - User ID (optional)
    * @returns {Object} Success status
    */
-  static async addToSearchHistory(term, _resultsCount = 0, userId = null) {
+  static async addToSearchHistory(term, resultsCount = null, userId = null) {
     try {
-      // For now, we'll just log the search query using Elasticsearch if available
-      // In a more advanced implementation, we would store this in a database
+      // `resultsCount` used to be accepted and thrown away, which is why the
+      // zero-result report did not exist. It is threaded through now: a search that
+      // found nothing is the one worth acting on.
       if (await getSearchEngine().isConnected()) {
-        await getSearchEngine().logSearchQuery(term, userId);
+        await getSearchEngine().logSearchQuery(term, resultsCount, userId);
       }
-      
+
       return { success: true };
     } catch (error) {
       console.error('Error adding to search history:', error);

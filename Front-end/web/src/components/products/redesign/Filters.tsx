@@ -10,16 +10,53 @@ import Eyebrow from '@/components/ui/Eyebrow';
 import PriceHistogram from '@/components/ui/PriceHistogram';
 import './redesign.css';
 
-const PRICE_MIN = 0;
-const PRICE_MAX = 100000;
+/**
+ * Fallback bounds, used ONLY until the facet response arrives (and if it never
+ * does). These were previously the real, hardcoded bounds: PRICE_MAX was 100000
+ * against a catalogue whose most expensive product is ₹814,200, so 176 products —
+ * 19% of the catalogue — could not be reached by the price filter at all. Worse,
+ * `commit` wrote `hi < PRICE_MAX ? set : delete`, so parking the max handle at
+ * ₹100,000 DELETED maxPrice and silently meant "no upper limit".
+ *
+ * Real bounds now come from facets.price.{min,max}, derived from the current
+ * result set, so the control cannot disagree with the catalogue again.
+ */
+const FALLBACK_PRICE_MIN = 0;
+const FALLBACK_PRICE_MAX = 100000;
 
 /** Read a comma-separated URL param as a list of non-empty values. */
 const csvParam = (sp: URLSearchParams | ReturnType<typeof useSearchParams>, key: string): string[] =>
   (sp.get(key) ?? '').split(',').filter(Boolean);
 
-interface Category { _id: string; name: string; slug: string; parent?: unknown }
-interface Brand { _id: string; name: string }
-interface Vehicle { _id: string; make: string; model: string }
+/**
+ * The facet response is the SINGLE SOURCE OF TRUTH for this panel — values,
+ * counts, ordering and price bounds.
+ *
+ * It previously assembled its own values from three global reference lists
+ * (/categories, /brands, /vehicles) and looked counts up afterwards. That is why
+ * every value with zero results in the current context still rendered and was
+ * still clickable — a dead end on each one — and why vehicle, rating and
+ * availability had no counts at all.
+ */
+interface FacetValue { value: string; label: string; count: number; selected: boolean }
+interface FacetCategory { categoryId: string; label: string; parentId: string | null; count: number; selected: boolean }
+interface FacetVehicle { value: string; make?: string; count: number; selected: boolean }
+interface FacetPrice {
+  min: number; max: number;
+  selectedMin: number | null; selectedMax: number | null;
+  histogram: { from: number; to: number | null; count: number }[];
+}
+interface FacetRating { value: number; count: number; selected: boolean }
+interface Facets {
+  total: number | null;
+  brands: FacetValue[];
+  categories: FacetCategory[];
+  vehicleMakes: FacetVehicle[];
+  vehicleModels: FacetVehicle[];
+  price: FacetPrice;
+  ratings: FacetRating[];
+  availability: FacetValue[];
+}
 
 /** Collapsible section wrapper with an uppercase gold eyebrow. */
 function Group({
@@ -55,16 +92,34 @@ function CheckRow({
   label,
   count,
   checked,
+  disabled = false,
   onChange,
 }: {
   label: React.ReactNode;
   count?: number;
   checked: boolean;
+  /** Zero results in the current context. Rendered but not selectable. */
+  disabled?: boolean;
   onChange: () => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-3 py-1.5 group">
-      <input type="checkbox" className="pf-check" checked={checked} onChange={onChange} />
+    // Disabled rather than hidden: a shopper looking for a specific brand should
+    // see that it exists and simply has nothing under the current filters, rather
+    // than silently not finding it. Previously every zero-count value was fully
+    // clickable and led to an empty grid.
+    <label
+      className={`flex items-center gap-3 py-1.5 group ${
+        disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'
+      }`}
+      aria-disabled={disabled || undefined}
+    >
+      <input
+        type="checkbox"
+        className="pf-check"
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+      />
       <span
         className={`flex-1 font-display text-[13px] tracking-[0.02em] transition-colors ${
           checked ? 'text-ink' : 'text-ink-muted group-hover:text-ink'
@@ -96,12 +151,9 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
   const { formatPrice } = useCurrency();
 
   // ── data ──
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [brands, setBrands] = useState<Brand[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [facetBrands, setFacetBrands] = useState<Record<string, number>>({});
-  const [facetCategories, setFacetCategories] = useState<Record<string, number>>({});
+  const [facets, setFacets] = useState<Facets | null>(null);
   const [brandsExpanded, setBrandsExpanded] = useState(false);
+  const [brandQuery, setBrandQuery] = useState('');
 
   // ── selection (DERIVED from the URL — never mirrored into state) ──
   // The chip strip, the active-filter chips and this sidebar all write the same
@@ -109,8 +161,14 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
   // navigation by one of the others left this panel showing a stale selection,
   // which `commit` would then write back and silently revert. The URL is the
   // single source of truth.
-  const urlMin = Number(searchParams.get('minPrice')) || PRICE_MIN;
-  const urlMax = Number(searchParams.get('maxPrice')) || PRICE_MAX;
+  // Bounds come from the facet response once it lands. Until then the fallbacks
+  // stand in — but they are never used to decide whether to WRITE a bound (see
+  // `commit`), which is what made the old hardcoded ceiling silently mean
+  // "no maximum".
+  const priceMin = facets?.price?.min ?? FALLBACK_PRICE_MIN;
+  const priceMax = facets?.price?.max || FALLBACK_PRICE_MAX;
+  const urlMin = Number(searchParams.get('minPrice')) || priceMin;
+  const urlMax = Number(searchParams.get('maxPrice')) || priceMax;
 
   // Price is the one exception: the slider needs local state to stay smooth
   // while dragging, so it re-syncs from the URL whenever the URL price moves.
@@ -127,55 +185,38 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
   const make = searchParams.get('vehicleMake') ?? '';
   const model = searchParams.get('vehicleModel') ?? '';
 
-  // ── fetch reference data ──
+  // ── one request: the facet response drives every group below ──
+  // Replaces three separate reference fetches (/categories, /brands, /vehicles)
+  // whose values were global rather than contextual, so they rendered options that
+  // matched nothing under the current filters.
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
       try {
-        const res = await apiClient.get<{ categories?: Category[] }>('/categories', { signal: ac.signal });
-        setCategories((res.categories ?? []).filter((c) => !c.parent));
-      } catch { /* non-fatal */ }
-    })();
-    (async () => {
-      try { setBrands(await productService.getBrands()); } catch { /* non-fatal */ }
-    })();
-    (async () => {
-      try {
-        const res = await apiClient.get<{ vehicles?: Vehicle[]; data?: Vehicle[] }>('/vehicles?limit=1000');
-        setVehicles(res.vehicles ?? res.data ?? []);
-      } catch { /* non-fatal */ }
+        const qs = searchParams.toString();
+        const res = await apiClient.get<{ facets?: Facets }>(
+          `/products/facets${qs ? `?${qs}` : ''}`,
+          { signal: ac.signal }
+        );
+        if (res.facets) setFacets(res.facets);
+      } catch { /* non-fatal: the panel keeps its previous values */ }
     })();
     return () => ac.abort();
-  }, []);
-
-  // ── live facet counts for the current query context ──
-  useEffect(() => {
-    let ignore = false;
-    (async () => {
-      try {
-        const qs = searchParams.toString();
-        const res = await apiClient.get<{ facets?: { brands?: { name: string; count: number }[]; categories?: { categoryId: string; count: number }[] } }>(
-          `/products/facets${qs ? `?${qs}` : ''}`
-        );
-        if (ignore) return;
-        const b: Record<string, number> = {};
-        res.facets?.brands?.forEach((x) => { if (x.name) b[x.name.toLowerCase()] = x.count; });
-        const c: Record<string, number> = {};
-        res.facets?.categories?.forEach((x) => { c[x.categoryId] = x.count; });
-        setFacetBrands(b);
-        setFacetCategories(c);
-      } catch { /* non-fatal */ }
-    })();
-    return () => { ignore = true; };
   }, [searchParams]);
 
-  const makes = useMemo(
-    () => Array.from(new Set(vehicles.map((v) => v.make).filter(Boolean))).sort(),
-    [vehicles]
-  );
-  const models = useMemo(
-    () => Array.from(new Set(vehicles.filter((v) => v.make === make).map((v) => v.model).filter(Boolean))).sort(),
-    [vehicles, make]
+  const makes = facets?.vehicleMakes ?? [];
+  // Models are already scoped to the selected make by the facet query's own
+  // filters, so no client-side narrowing is needed — and unlike the old global
+  // vehicle list, every entry here has at least one matching product.
+  const models = facets?.vehicleModels ?? [];
+
+  // Category tree: the panel used to render only top-level hubs (`!c.parent`)
+  // though the taxonomy is two levels deep. parentId lets the children nest.
+  const topCategories = (facets?.categories ?? []).filter((c) => !c.parentId);
+  const childrenOf = (id: string) => (facets?.categories ?? []).filter((c) => c.parentId === id);
+
+  const visibleBrandList = (facets?.brands ?? []).filter((b) =>
+    brandQuery ? b.label.toLowerCase().includes(brandQuery.toLowerCase()) : true
   );
 
   // ── URL writer (live-apply) ──
@@ -195,8 +236,12 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
 
       if (next.price) {
         const [lo, hi] = next.price;
-        lo > PRICE_MIN ? p.set('minPrice', String(lo)) : p.delete('minPrice');
-        hi < PRICE_MAX ? p.set('maxPrice', String(hi)) : p.delete('maxPrice');
+        // Compared against the DATA bounds, not a hardcoded ceiling. With the old
+        // constant, dragging the max handle to ₹100,000 deleted `maxPrice`
+        // entirely — so selecting a maximum silently meant "no maximum", the exact
+        // opposite of the shopper's intent, for every product above that price.
+        lo > priceMin ? p.set('minPrice', String(lo)) : p.delete('minPrice');
+        hi < priceMax ? p.set('maxPrice', String(hi)) : p.delete('maxPrice');
       }
       if (next.cats) set('category', next.cats);
       if (next.brands) set('brand', next.brands);
@@ -219,10 +264,13 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
       }
 
       const qs = p.toString();
-      router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
+      // push, not replace: shoppers expect Back to undo a filter. `replace` made
+      // the browser Back button skip the entire filtering session and leave the
+      // listing altogether.
+      router.push(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
       onApplied?.();
     },
-    [searchParams, router, onApplied, basePath]
+    [searchParams, router, onApplied, basePath, priceMin, priceMax]
   );
 
   // The debounced price commit fires after the URL may have moved on, so it has
@@ -242,113 +290,195 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
   const toggle = <T,>(arr: T[], v: T): T[] =>
     arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v];
 
-  const visibleBrands = brandsExpanded ? brands : brands.slice(0, 6);
+
+  // A dimension the catalogue cannot support must not render. Driven by the facet
+  // response, never hardcoded: 926 of 931 products carry no rating, so four
+  // clickable rating rows were four dead ends. The same rule hides the vehicle
+  // group inside a category with no fitment data.
+  const hasRatingSignal = (facets?.ratings ?? []).some((r) => r.count > 0);
+  const hasVehicleSignal = makes.length > 0;
+  const hasPriceSignal = (facets?.price?.max ?? 0) > (facets?.price?.min ?? 0);
+  const total = facets?.total ?? null;
 
   return (
     <div className="font-display">
-      {/* Vehicle fitment */}
-      <Group title="My Vehicle" defaultOpen={!!make}>
-        <div className="space-y-2">
-          <select
-            value={make}
-            onChange={(e) => commit({ make: e.target.value, model: '' })}
-            className="w-full appearance-none border border-hairline bg-obsidian-raised px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-gold/55"
-            aria-label="Vehicle make"
+      {/* Live result count. Also what the mobile drawer's apply button reads, and
+          announced politely so a screen-reader user hears the set change. */}
+      {total != null && (
+        <p className="sr-only" role="status" aria-live="polite">
+          {total} {total === 1 ? 'product' : 'products'} match the current filters
+        </p>
+      )}
+
+      {/* Nothing matches — name the way out rather than leaving a dead panel. */}
+      {total === 0 && (
+        <div className="mb-4 border border-hairline bg-obsidian-raised px-3.5 py-3">
+          <p className="font-display text-[12px] font-light text-ink-muted">
+            No products match every filter.
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push(basePath, { scroll: false })}
+            className="mt-2 font-display text-[10px] uppercase tracking-[0.2em] text-gold hover:opacity-80"
           >
-            <option value="">All makes</option>
-            {makes.map((mk) => <option key={mk} value={mk}>{mk}</option>)}
-          </select>
-          <select
-            value={model}
-            disabled={!make}
-            onChange={(e) => commit({ model: e.target.value })}
-            className="w-full appearance-none border border-hairline bg-obsidian-raised px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-gold/55 disabled:opacity-50"
-            aria-label="Vehicle model"
-          >
-            <option value="">{make ? 'All models' : 'Select a make first'}</option>
-            {models.map((md) => <option key={md} value={md}>{md}</option>)}
-          </select>
+            Clear all filters
+          </button>
         </div>
-      </Group>
+      )}
 
-      {/* Price */}
-      <Group title="Price Range">
-        <PriceHistogram
-          value={price}
-          min={PRICE_MIN}
-          max={PRICE_MAX}
-          step={500}
-          format={formatPrice}
-          onChange={onPriceChange}
-        />
-      </Group>
+      {/* Vehicle fitment */}
+      {hasVehicleSignal && (
+        <Group title="My Vehicle" defaultOpen={!!make}>
+          <div className="space-y-2">
+            <select
+              value={make}
+              onChange={(e) => commit({ make: e.target.value, model: '' })}
+              className="w-full appearance-none border border-hairline bg-obsidian-raised px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-gold/55"
+              aria-label="Vehicle make"
+            >
+              <option value="">All makes</option>
+              {/* Counts come from the facet response, so a make with no matching
+                  product under the current filters is never offered. */}
+              {makes.map((mk) => (
+                <option key={mk.value} value={mk.value}>{mk.value} ({mk.count})</option>
+              ))}
+            </select>
+            <select
+              value={model}
+              disabled={!make || models.length === 0}
+              onChange={(e) => commit({ model: e.target.value })}
+              className="w-full appearance-none border border-hairline bg-obsidian-raised px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-gold/55 disabled:opacity-50"
+              aria-label="Vehicle model"
+            >
+              <option value="">{make ? 'All models' : 'Select a make first'}</option>
+              {models.map((md) => (
+                <option key={md.value} value={md.value}>{md.value} ({md.count})</option>
+              ))}
+            </select>
+          </div>
+        </Group>
+      )}
 
-      {/* Categories */}
-      {!hideCategories && categories.length > 0 && (
+      {/* Price — bounds and distribution both come from the current result set */}
+      {hasPriceSignal && (
+        <Group title="Price Range">
+          <PriceHistogram
+            value={price}
+            min={priceMin}
+            max={priceMax}
+            step={Math.max(1, Math.round((priceMax - priceMin) / 200))}
+            // The real distribution. This prop already existed and was simply
+            // never passed, so the component fell back to SYNTH — a hardcoded
+            // decorative bell curve unrelated to the catalogue.
+            buckets={(facets?.price?.histogram ?? []).map((b) => b.count)}
+            format={formatPrice}
+            onChange={onPriceChange}
+          />
+        </Group>
+      )}
+
+      {/* Categories — two levels, per the real taxonomy */}
+      {!hideCategories && topCategories.length > 0 && (
         <Group title="Category">
-          <div className="max-h-64 overflow-y-auto sf-noscroll">
-            {categories.map((c) => (
-              <CheckRow
-                key={c._id}
-                label={c.name}
-                count={facetCategories[c._id]}
-                checked={selCats.includes(c._id)}
-                onChange={() => commit({ cats: toggle(selCats, c._id) })}
-              />
+          <div className="max-h-72 overflow-y-auto sf-noscroll">
+            {topCategories.map((c) => (
+              <div key={c.categoryId}>
+                <CheckRow
+                  label={c.label}
+                  count={c.count}
+                  checked={selCats.includes(c.categoryId)}
+                  disabled={c.count === 0 && !selCats.includes(c.categoryId)}
+                  onChange={() => commit({ cats: toggle(selCats, c.categoryId) })}
+                />
+                {childrenOf(c.categoryId).length > 0 && (
+                  <div className="ml-4 border-l border-hairline pl-3">
+                    {childrenOf(c.categoryId).map((child) => (
+                      <CheckRow
+                        key={child.categoryId}
+                        label={child.label}
+                        count={child.count}
+                        checked={selCats.includes(child.categoryId)}
+                        disabled={child.count === 0 && !selCats.includes(child.categoryId)}
+                        onChange={() => commit({ cats: toggle(selCats, child.categoryId) })}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </Group>
       )}
 
       {/* Brands */}
-      {brands.length > 0 && (
+      {(facets?.brands?.length ?? 0) > 0 && (
         <Group title="Brand">
           <div>
-            {visibleBrands.map((b) => (
+            {/* Search-within-facet. 37 brands today and growing; a flat list past
+                ~8 entries stops being scannable. */}
+            {(facets?.brands?.length ?? 0) > 8 && (
+              <input
+                type="search"
+                value={brandQuery}
+                onChange={(e) => setBrandQuery(e.target.value)}
+                placeholder="Search brands"
+                aria-label="Search brands"
+                className="mb-2 w-full border border-hairline bg-obsidian-raised px-3 py-2 text-[12px] text-ink outline-none focus:border-gold/55"
+              />
+            )}
+            {(brandsExpanded || brandQuery ? visibleBrandList : visibleBrandList.slice(0, 8)).map((b) => (
               <CheckRow
-                key={b._id}
-                label={b.name}
-                count={facetBrands[b.name.toLowerCase()]}
-                checked={selBrands.includes(b.name)}
-                onChange={() => commit({ brands: toggle(selBrands, b.name) })}
+                key={b.value}
+                label={b.label}
+                count={b.count}
+                checked={selBrands.includes(b.value)}
+                disabled={b.count === 0 && !b.selected}
+                onChange={() => commit({ brands: toggle(selBrands, b.value) })}
               />
             ))}
-            {brands.length > 6 && (
+            {!brandQuery && visibleBrandList.length > 8 && (
               <button
                 type="button"
                 onClick={() => setBrandsExpanded((v) => !v)}
                 className="mt-2 font-display text-[10px] uppercase tracking-[0.2em] text-gold hover:opacity-80"
               >
-                {brandsExpanded ? 'Show less' : `More brands (${brands.length - 6})`}
+                {brandsExpanded ? 'Show less' : `More brands (${visibleBrandList.length - 8})`}
               </button>
             )}
           </div>
         </Group>
       )}
 
-      {/* Rating */}
-      <Group title="Rating">
-        <div>
-          {[4, 3, 2, 1].map((r) => (
-            <CheckRow
-              key={r}
-              checked={ratings.includes(r)}
-              onChange={() => commit({ ratings: toggle(ratings, r) })}
-              label={
-                <span className="flex items-center gap-1.5">
-                  <span className="text-gold tracking-[2px]">{'★'.repeat(r)}<span className="text-hairline">{'★'.repeat(5 - r)}</span></span>
-                  <span className="text-[11px]">&amp; up</span>
-                </span>
-              }
-            />
-          ))}
-        </div>
-      </Group>
+      {/* Rating — hidden entirely when the catalogue has no rating signal */}
+      {hasRatingSignal && (
+        <Group title="Rating">
+          <div>
+            {(facets?.ratings ?? []).map((r) => (
+              <CheckRow
+                key={r.value}
+                count={r.count}
+                checked={ratings.includes(r.value)}
+                disabled={r.count === 0 && !r.selected}
+                onChange={() => commit({ ratings: toggle(ratings, r.value) })}
+                label={
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-gold tracking-[2px]">
+                      {'★'.repeat(r.value)}<span className="text-hairline">{'★'.repeat(5 - r.value)}</span>
+                    </span>
+                    <span className="text-[11px]">&amp; up</span>
+                  </span>
+                }
+              />
+            ))}
+          </div>
+        </Group>
+      )}
 
       {/* Availability */}
       <Group title="Availability">
         <CheckRow
           label="In stock only"
+          count={facets?.availability?.[0]?.count}
           checked={inStock}
           onChange={() => commit({ inStock: !inStock })}
         />

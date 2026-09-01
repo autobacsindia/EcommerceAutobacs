@@ -53,6 +53,19 @@ const CASES = [
   { label: 'in-stock only', params: { inStock: 'true' } },
   { label: 'rating floor', params: { rating: '4' } },
   { label: 'no results', params: { q: 'zzzznonexistentproduct' } },
+  // Filters that were SILENTLY DROPPED by buildFilters until 2026-09-01: the query
+  // parsed fine and returned the whole catalogue, so only a count assertion catches
+  // it. `expectFewerThan` exists for exactly this class of bug.
+  { label: 'isFeatured filter', params: { isFeatured: 'true' }, expectFewerThan: 100 },
+  { label: 'productType filter', params: { productType: 'variable' }, expectFewerThan: 900 },
+  // Relaxation: one real token, one nonsense token. Strict recall requires both, so
+  // this returns nothing until the retry widens it.
+  { label: 'zero-result relaxation', params: { q: 'spoiler zzzqqx' }, expectRelaxed: true },
+  { label: 'did-you-mean probe', params: { q: 'wnich' }, expectCorrection: true },
+  { label: 'sort by best selling', params: { sortBy: 'salesScore', order: 'desc' } },
+  { label: 'explicit relevance sort', params: { q: 'winch', sortBy: 'relevance' } },
+  { label: 'facets: data-derived price', facets: {} },
+  { label: 'facets: disjunctive brand', facets: { brand: 'Auxbeam' } },
   { label: 'suggestions (autocomplete)', suggest: 'brak' },
 ];
 
@@ -68,6 +81,25 @@ if (!ready) {
 for (const testCase of CASES) {
   const label = testCase.label.padEnd(34);
   try {
+    if (testCase.facets) {
+      const { default: SearchService } = await import('../services/searchService.js');
+      const f = await SearchService.getFacets(testCase.facets);
+      // The price facet was calibrated in USD against an INR catalogue, putting
+      // ALL 931 products in one bucket. A degenerate range or a single bucket means
+      // it has regressed to carrying no information again.
+      const degenerate = !(f.price.max > f.price.min) || f.price.histogram.length < 2;
+      if (degenerate) {
+        failures += 1;
+        console.error(`❌ ${label} price facet is degenerate: ${f.price.min}-${f.price.max}, ${f.price.histogram.length} buckets`);
+      } else {
+        console.log(
+          `✅ ${label} total=${String(f.total).padEnd(5)} brands=${f.brands.length} ` +
+          `price=${f.price.min}-${f.price.max} buckets=${f.price.histogram.length} makes=${f.vehicleMakes.length}`
+        );
+      }
+      continue;
+    }
+
     if (testCase.suggest) {
       const result = await atlasSearchService.getSearchSuggestions(testCase.suggest, 5);
       const kinds = result.suggestions.map((s) => s.type).join(',');
@@ -77,11 +109,32 @@ for (const testCase of CASES) {
 
     const result = await atlasSearchService.searchProducts(testCase.params);
     const first = result.products[0];
+
+    // Assertions that a "the query parsed" check cannot make. A dropped filter
+    // still parses — it just answers with the entire catalogue.
+    if (testCase.expectFewerThan && result.pagination.total >= testCase.expectFewerThan) {
+      failures += 1;
+      console.error(`❌ ${label} returned ${result.pagination.total} — filter looks DROPPED`);
+      continue;
+    }
+    if (testCase.expectRelaxed && !result.relaxed) {
+      failures += 1;
+      console.error(`❌ ${label} did not relax (total=${result.pagination.total})`);
+      continue;
+    }
+    if (testCase.expectCorrection && !(result.corrections || []).length) {
+      failures += 1;
+      console.error(`❌ ${label} produced no correction`);
+      continue;
+    }
     const prices = result.products.slice(0, 3).map((p) => p.price).join(', ');
     console.log(
+      // The list response's `facets` block is deprecated and empty by design — the
+      // sidebar reads /products/facets, exercised by the dedicated facet cases
+      // below. Printing `relaxed` instead surfaces something that is live.
       `✅ ${label} total=${String(result.pagination.total).padEnd(5)} ` +
-        `facets(b/c/v)=${result.facets.brands.length}/${result.facets.categories.length}/${result.facets.vehicleTypes.length} ` +
-        `| ${(first?.name || '(none)').slice(0, 34)}${prices ? ` | ${prices}` : ''}`
+        `${result.relaxed ? 'relaxed ' : '        '}` +
+        `| ${(first?.name || '(none)').slice(0, 40)}${prices ? ` | ${prices}` : ''}`
     );
   } catch (error) {
     failures += 1;

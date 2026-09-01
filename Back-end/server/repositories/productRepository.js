@@ -444,7 +444,38 @@ class ProductRepository {
       .lean()
       .maxTimeMS(QUERY_TIMEOUTS.listing);
   }
+
+  /**
+   * Reset `salesScore` to 0 for products outside the scored set.
+   *
+   * Exists on the repository (rather than as a direct model call in
+   * salesScoreService) because direct model imports outside repositories/ are
+   * eslint-forbidden. Scoped to documents that currently have a non-zero score, so
+   * this stays a small targeted write rather than a full-collection update that
+   * would churn the change stream feeding the Atlas index on every nightly run.
+   */
+  /**
+   * Bulk-apply computed `salesScore` values.
+   *
+   * `ordered: false` so one bad operation cannot abort the rest of a nightly
+   * recompute. Bypassing Mongoose middleware is safe here specifically because
+   * Atlas Search indexes the collection via change streams — there is no separate
+   * search index to enqueue, which is the usual reason bulkWrite drifts a
+   * denormalized field.
+   */
+  async bulkWriteSalesScores(operations) {
+    if (!operations || operations.length === 0) return null;
+    return Product.bulkWrite(operations, { ordered: false });
+  }
+
+  async clearSalesScoresExcept(ids) {
+    return Product.updateMany(
+      { _id: { $nin: ids }, salesScore: { $gt: 0 } },
+      { $set: { salesScore: 0 } }
+    );
+  }
 }
 
 // Singleton instance
+
 export default new ProductRepository();

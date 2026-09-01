@@ -30,7 +30,7 @@ const searchParamsOf = (url: string) => {
 };
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ replace }),
+  useRouter: () => ({ replace, push: replace }),
   usePathname: () => currentUrl.split('?')[0],
   useSearchParams: () => searchParamsOf(currentUrl),
 }));
@@ -45,24 +45,42 @@ const CATEGORIES = [
   { _id: 'cat-brakes', name: 'Brakes', slug: 'brakes' },
 ];
 
+/**
+ * The panel is now driven ENTIRELY by /products/facets — it no longer fetches
+ * /categories, /brands or /vehicles for its values. That is the point of the
+ * change: values assembled from global reference lists rendered options with zero
+ * results in the current context, each one a clickable dead end.
+ *
+ * So this mock supplies a full facet response rather than stalling it.
+ */
+const FACETS = {
+  total: 12,
+  brands: [
+    { name: 'Bosch', value: 'Bosch', label: 'Bosch', count: 4, selected: false },
+    { name: 'Auxbeam', value: 'Auxbeam', label: 'Auxbeam', count: 2, selected: false },
+  ],
+  categories: CATEGORIES.map((c) => ({
+    categoryId: c._id, label: c.name, parentId: null, count: 3, selected: false,
+  })),
+  vehicleMakes: [],
+  vehicleModels: [],
+  price: { min: 100, max: 10000, selectedMin: null, selectedMax: null, histogram: [] },
+  ratings: [],
+  availability: [{ value: 'in', label: 'In stock', count: 9, selected: false }],
+};
+
 jest.mock('@/lib/api', () => ({
   __esModule: true,
   default: {
     get: jest.fn(async (path: string) => {
+      if (path.startsWith('/products/facets')) return { facets: FACETS };
+      // CategoryChips and ActiveFilters still read the taxonomy directly; only
+      // the sidebar migrated to the facet response.
       if (path.startsWith('/categories')) return { categories: CATEGORIES };
       if (path.startsWith('/vehicles')) return { vehicles: [] };
-      // Facet counts are cosmetic here and land asynchronously after each
-      // navigation; leaving them pending keeps the assertions free of an
-      // unrelated state update.
-      if (path.startsWith('/products/facets')) return new Promise(() => {});
       return {};
     }),
   },
-}));
-
-jest.mock('@/lib/services/productService', () => ({
-  __esModule: true,
-  default: { getBrands: jest.fn(async () => [{ _id: 'b1', name: 'Bosch' }]) },
 }));
 
 // The slider itself is not under test; expose a button that reports a drag.

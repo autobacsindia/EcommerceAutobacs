@@ -47,7 +47,35 @@ const lowercaseToken = { type: 'token', normalizer: 'lowercase' };
 export const ATLAS_SEARCH_INDEX_NAME =
   process.env.ATLAS_SEARCH_INDEX || 'products_search';
 
+/** Name the query builder references. Must match the live index or Atlas rejects the query. */
+export const ATLAS_SYNONYM_MAPPING_NAME = 'productSynonyms';
+
+/** Collection the mapping reads from. Seeded by scripts/seed-search-synonyms.js. */
+export const ATLAS_SYNONYM_SOURCE_COLLECTION = 'search_synonyms';
+
 export const ATLAS_SEARCH_INDEX_DEFINITION = {
+  // Engine-native synonyms, replacing the hand-rolled query-time expansion.
+  //
+  // The old approach OR'd whole alternate queries into recall, which over-recalled
+  // so badly ("spoiler" pulled in every bumper — 151 results) that it had to be
+  // switched off for any query longer than one token. Atlas applies synonyms at
+  // ANALYSIS time, per token, so a multi-word query expands each word in place
+  // instead of multiplying the query — which is why it does not have that failure
+  // mode and can stay on for every query.
+  //
+  // ⚠ Atlas forbids `synonyms` and `fuzzy` in the SAME text operator, so the
+  // synonym lane in buildRecall is a separate clause, not a flag on the existing
+  // token clause.
+  synonyms: [
+    {
+      name: ATLAS_SYNONYM_MAPPING_NAME,
+      // Must be a standard/language analyzer — Atlas rejects a synonym mapping
+      // whose analyzer is `keyword`, and the recall lane analyses with
+      // lucene.standard, so the two must agree.
+      analyzer: 'lucene.standard',
+      source: { collection: ATLAS_SYNONYM_SOURCE_COLLECTION },
+    },
+  ],
   mappings: {
     // Explicit, not dynamic. Dynamic mapping is what made the Elasticsearch
     // `categories` fields "exist only because ES happened to infer text+keyword
@@ -104,11 +132,20 @@ export const ATLAS_SEARCH_INDEX_DEFINITION = {
       priceMax: { type: 'number' },
       averageRating: { type: 'number' },
       totalReviews: { type: 'number' },
+      // Time-decayed trailing sales. The commercial ranking signal that replaces
+      // the dead isFastMoving flag — see models/Product.js and salesScoreService.
+      salesScore: { type: 'number' },
 
       // Coarse availability enum (in / low / out / backorder) — a status, never
       // a quantity. Tokenized because the only operation on it is exact
       // set-membership ("exclude out and backorder").
       stock: { type: 'token' },
+      // Numeric availability rank (0 = buyable, 1 = out/backorder), derived from
+      // `stock`. Sortable — which `stock` is not, because the enum sorts
+      // alphabetically and puts `backorder` first. This is the key that lets a
+      // browse page (where an explicit sort makes Atlas ignore relevance score
+      // entirely) still sink what nobody can buy.
+      stockRank: { type: 'number' },
       productType: { type: 'token' },
 
       // `isActive` carries a load-bearing responsibility here. Elasticsearch
@@ -119,7 +156,11 @@ export const ATLAS_SEARCH_INDEX_DEFINITION = {
       // unpublished draft to the storefront.
       isActive: { type: 'boolean' },
       isFeatured: { type: 'boolean' },
-      isFastMoving: { type: 'boolean' },
+      // `isFastMoving` was dropped 2026-09-01. The feature is dead (its section is
+      // never mounted) and only 3 products carry the flag, so the ranking clause it
+      // fed was handing three arbitrary products a permanent boost on every search.
+      // Removing the mapping is what makes the audit report drift until the index is
+      // actually redeployed.
 
       createdAt: { type: 'date' },
       updatedAt: { type: 'date' },
@@ -188,6 +229,49 @@ export function diffDefinition(declaredFields, liveFields) {
   for (const path of live.keys()) {
     if (!declared.has(path)) {
       drift.push({ path, issue: 'extra', live: live.get(path) });
+    }
+  }
+
+  return { ok: drift.every((d) => d.issue === 'extra'), drift };
+}
+
+/**
+ * Compare the declared top-level `synonyms` array against the live one.
+ *
+ * This exists because diffDefinition walks `mappings.fields` and NOTHING ELSE, so
+ * a synonyms declaration was structurally invisible to the audit: adding synonyms
+ * to the definition would leave `npm run audit-atlas-search-index` reporting a
+ * clean index while the mappings never reached Atlas and every synonym silently
+ * did nothing. That is the exact shape of the Elasticsearch brand-mapping failure
+ * — a definition change sitting in the repo, believed shipped, for weeks.
+ *
+ * Compared by NAME and source collection rather than deep-equality, because those
+ * are the two properties that decide whether a query referencing
+ * `synonyms: 'productSynonyms'` resolves at all. A query naming a synonym mapping
+ * the index does not have is rejected outright.
+ *
+ * @returns {{ok: boolean, drift: Array<{path: string, issue: string, declared?: any, live?: any}>}}
+ */
+export function diffSynonyms(declared = [], live = []) {
+  const key = (m) => `${m?.name}:${m?.source?.collection ?? ''}`;
+  const declaredMap = new Map((declared || []).map((m) => [m?.name, m]));
+  const liveMap = new Map((live || []).map((m) => [m?.name, m]));
+  const drift = [];
+
+  for (const [name, mapping] of declaredMap) {
+    const liveMapping = liveMap.get(name);
+    if (!liveMapping) {
+      drift.push({ path: `synonyms.${name}`, issue: 'missing', declared: mapping });
+      continue;
+    }
+    if (key(mapping) !== key(liveMapping)) {
+      drift.push({ path: `synonyms.${name}`, issue: 'mismatch', declared: mapping, live: liveMapping });
+    }
+  }
+
+  for (const name of liveMap.keys()) {
+    if (!declaredMap.has(name)) {
+      drift.push({ path: `synonyms.${name}`, issue: 'extra', live: liveMap.get(name) });
     }
   }
 

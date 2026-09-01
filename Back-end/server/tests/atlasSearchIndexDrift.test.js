@@ -265,7 +265,12 @@ describe('Atlas clause grammar', () => {
     // The fix must MOVE the score, not drop it — losing these silently degrades
     // ranking instead of erroring, which is far harder to notice.
     const json = JSON.stringify(stage);
-    expect(json).toContain('"constant":{"value":2}');
+    // The constant-scored clause was `isFastMoving` (value 2) until 2026-09-01;
+    // it is now the availability boost (value 5). What this guards is unchanged:
+    // a constant-scored signal still exists and still carries its score INSIDE
+    // the operator. Dropping the score would silently degrade ranking rather
+    // than error, which is far harder to notice than a rejected query.
+    expect(json).toContain('"constant":{"value":5}');
     expect(json).toContain('"log1p"');
     expect(json.match(/"boost":\{"value":2\}/g)?.length).toBeGreaterThanOrEqual(2);
   });

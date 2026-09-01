@@ -83,6 +83,8 @@
     "create-atlas-search-index": "node scripts/create-atlas-search-index.js",
     "audit-atlas-search-index": "node scripts/audit-atlas-search-index.js",
     "verify-atlas-search": "node scripts/verify-atlas-search.js",
+    "backfill-stock-rank": "node scripts/backfill-stock-rank.js",
+    "seed-search-synonyms": "node scripts/seed-search-synonyms.js",
     "compact-rate-limit-events": "node scripts/compact-rate-limit-events.js",
     "clear-recommendation-cache": "node scripts/clear-recommendation-cache.js",
     "load-test:quick": "artillery run ../../artillery-quick-test.yml --output ../../quick-report.json",
