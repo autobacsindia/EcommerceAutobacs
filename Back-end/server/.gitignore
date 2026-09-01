@@ -104,3 +104,6 @@ purge-backups/
 
 # Point-in-time migration manifest (scripts/db-migration-manifest.js) — local artifact
 db-migration-manifest.json
+
+# Cloudinary→R2 migration audit trails (local run artefacts, can be large)
+migration-manifests/
