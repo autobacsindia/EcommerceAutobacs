@@ -25,6 +25,21 @@ class JobApplicationRepository {
     return { items, total, page: Math.max(1, page), pages: Math.max(1, Math.ceil(total / limit)) };
   }
 
+  /**
+   * Applications referencing any of `publicIds` in any file slot.
+   *
+   * Used by the orphan-cleanup endpoint to refuse deletion of an asset that a
+   * real application points at — the guard that makes a PUBLIC cleanup endpoint
+   * safe. Projected to the file refs only; the caller needs no applicant PII to
+   * answer "is this attached to something?".
+   */
+  findReferencingFiles(publicIds, slotKeys) {
+    return JobApplication.find(
+      { $or: slotKeys.map((k) => ({ [`files.${k}.publicId`]: { $in: publicIds } })) },
+      slotKeys.map((k) => `files.${k}.publicId`).join(' '),
+    ).lean();
+  }
+
   findByIdPopulated(id) {
     return JobApplication.findById(id).populate('posting', 'title slug department status').lean();
   }

@@ -635,14 +635,38 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
       });
       if (!allOk) { showErr('Please fill in all required fields.'); return; }
 
+      /*
+        4. File formats — checked HERE, before anything uploads.
+
+        The `accept` attribute on the inputs is only a file-picker hint: a user
+        can switch the picker to "All Files", and drag-and-drop bypasses it
+        entirely. So a .jpg would land in the resume slot, upload fine, and only
+        then be rejected by the API's format check — after the applicant had
+        already sent two ~29 MB videos. Their files were then stranded with no
+        application row, and retrying produced a fresh folder and another copy.
+        That is how 1.68 GB of unattributable uploads accumulated in production.
+
+        These lists mirror FILE_SLOTS in jobApplicationController.js. The server
+        still re-validates every asset (a client check is a courtesy, never a
+        control) — the point here is to fail in the half-second BEFORE the upload
+        rather than the minute after it.
+      */
+      const extOf = (f: File) => (f.name.split('.').pop() || '').toLowerCase();
+      const VIDEO_EXT = ['mp4', 'mov', 'webm', 'm4v', 'ogv', 'ogg', '3gp', '3gpp', 'avi', 'mkv', 'mpeg', 'mpg'];
+      const isVideo = (f: File) => f.type.startsWith('video/') || VIDEO_EXT.includes(extOf(f));
+      const isPdf = (f: File) => f.type === 'application/pdf' || extOf(f) === 'pdf';
+
       // 4. Videos
       if (!files.q1 || !files.q2) { showErr('Please upload video answers for both Question One and Question Two.'); return; }
       if (files.q1.size > 30 * 1024 * 1024 || files.q2.size > 30 * 1024 * 1024) { showErr('Each video must be under 30MB.'); return; }
+      if (!isVideo(files.q1) || !isVideo(files.q2)) { showErr('Both answers must be video files (MP4, MOV or WEBM).'); return; }
 
       // 5. Resume
       if (!docs.resume) { showErr('Please upload your resume (PDF) before submitting.'); return; }
       if (docs.resume.size > 10 * 1024 * 1024) { showErr('Resume must be under 10MB.'); return; }
+      if (!isPdf(docs.resume)) { showErr('Your resume must be a PDF.'); return; }
       if (docs.support && docs.support.size > 10 * 1024 * 1024) { showErr('Supporting document must be under 10MB.'); return; }
+      if (docs.support && !isPdf(docs.support)) { showErr('The supporting document must be a PDF.'); return; }
 
       // ── Lock UI ────────────────────────────────────────────────────────────
       const btn = byId<HTMLButtonElement>('rv-submitBtn');
@@ -661,6 +685,13 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
       };
 
       (async () => {
+        /*
+          Declared OUTSIDE the try: the catch below needs it to hand back any
+          file that uploaded before the failure. A `const` inside the try block
+          is not in scope in the catch, so referencing it there throws a
+          ReferenceError that masks the real error the applicant should see.
+        */
+        const uploaded: Record<string, { publicId: string; url: string }> = {};
         try {
           // Step 1: signed upload params from our backend (files never touch us).
           setOverall(3, 'Preparing secure upload…');
@@ -683,10 +714,18 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
             toUpload.push({ file: docs.support, key: 'support', resourceType: 'raw', statusId: 'support-status', progressWrap: 'support-progress-wrap', progressBar: 'support-progress-bar' });
           }
 
-          const uploaded: Record<string, { publicId: string; url: string }> = {};
           let completed = 0;
           const total = toUpload.length;
-          await Promise.all(toUpload.map((item) =>
+          /*
+            allSettled, not all. `Promise.all` rejects on the FIRST failure while
+            its siblings keep uploading — so a batch where the resume failed but
+            both videos succeeded left those videos in storage with nothing
+            tracking them, and the in-flight ones landed after we had already
+            given up. Settling every upload means `uploaded` is complete and
+            accurate by the time we decide what to do, which is what makes the
+            cleanup below able to remove everything.
+          */
+          const results = await Promise.allSettled(toUpload.map((item) =>
             uploadFileToCloudinary(
               item.file, sig, item.resourceType,
               byId(item.statusId), byId(item.progressWrap), byId(item.progressBar),
@@ -696,6 +735,12 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
               setOverall(5 + Math.round((completed / total) * 85), `Uploading files… (${completed}/${total} done)`);
             }),
           ));
+          const failedUpload = results.find((r) => r.status === 'rejected');
+          if (failedUpload) {
+            throw failedUpload.reason instanceof Error
+              ? failedUpload.reason
+              : new Error('One of your files failed to upload. Please try again.');
+          }
 
           // Step 3: submit the application (refs + fields) to our API.
           setOverall(92, 'Saving your application…');
@@ -720,6 +765,28 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
           if (success) success.style.display = 'flex';
           window.scrollTo({ top: 0, behavior: 'smooth' });
         } catch (err) {
+          /*
+            Anything that fails AFTER a file has uploaded leaves that file in
+            storage with no application row pointing at it — and because the
+            folder nonce is minted before the applicant types a name or email,
+            such a file cannot afterwards be attributed to anyone, contacted
+            about, or covered by a data-subject request. Retrying mints a fresh
+            folder, so each attempt used to leak another full set: 237 assets
+            and 1.68 GB accumulated in production this way.
+
+            So we hand back what we uploaded. Best-effort and deliberately
+            silent: the applicant is already looking at an error, and a failure
+            to tidy up must not replace their message with a worse one. The
+            endpoint refuses any id that a real application references, so this
+            can only ever remove genuinely unattached files.
+
+            Note this runs for upload failures AND for a rejected submit — the
+            latter being the common case, since the API re-validates every asset.
+          */
+          const strays = Object.values(uploaded).map((u) => u.publicId).filter(Boolean);
+          if (strays.length) {
+            apiClient.post('/careers/applications/cleanup', { publicIds: strays }).catch(() => {});
+          }
           if (unmounted) return;
           showErr(err instanceof Error ? err.message : 'Something went wrong. Please check your connection and try again.');
           resetBtn();

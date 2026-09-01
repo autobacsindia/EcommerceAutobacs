@@ -14,6 +14,7 @@
 import { jest } from '@jest/globals';
 
 const getCareersResource = jest.fn();
+const deleteCareersAsset = jest.fn();
 const enqueueNotification = jest.fn();
 
 jest.unstable_mockModule('../../../utils/careersCloudinary.js', () => ({
@@ -22,6 +23,7 @@ jest.unstable_mockModule('../../../utils/careersCloudinary.js', () => ({
     cloudName: 'demo', apiKey: 'k', timestamp: 1, folder, type: 'authenticated', signature: 'sig',
   }),
   getCareersResource,
+  deleteCareersAsset,
   signedCareersAssetUrl: (publicId, rt) => `signed:${rt}:${publicId}`,
 }));
 
@@ -316,5 +318,100 @@ describe('admin inbox', () => {
     const app = await seed({ status: 'new' });
     await controller.updateApplication({ params: { id: app._id.toString() }, body: { status: 'shortlisted' } }, mockRes());
     expect(enqueueNotification).not.toHaveBeenCalledWith('send-careers-rejection', expect.anything());
+  });
+});
+
+/**
+ * cleanupOrphanedUploads — the endpoint the careers form calls when a
+ * submission fails after its files have already uploaded.
+ *
+ * It is PUBLIC (the careers form is), so an attacker can call it with any
+ * publicId. Two guards make that harmless, and these tests exist mainly to pin
+ * them: the id must live under autobacs/careers/, and it must not be referenced
+ * by any application. The second is load-bearing — without it this endpoint
+ * would let anyone delete a submitted applicant's video answers.
+ */
+describe('cleanupOrphanedUploads', () => {
+  beforeEach(() => {
+    deleteCareersAsset.mockReset();
+    deleteCareersAsset.mockResolvedValue(true);
+  });
+
+  const call = async (publicIds) => {
+    const res = mockRes();
+    await controller.cleanupOrphanedUploads({ body: { publicIds } }, res);
+    return res;
+  };
+
+  test('deletes unattached careers uploads', async () => {
+    const res = await call(['autobacs/careers/n9/v1', 'autobacs/careers/n9/cv.pdf']);
+    expect(res.body).toEqual({ success: true, deleted: 2 });
+    expect(deleteCareersAsset).toHaveBeenCalledWith('autobacs/careers/n9/v1', 'video');
+  });
+
+  test('REFUSES to delete a file attached to a real application', async () => {
+    // The guard that makes a public cleanup endpoint safe.
+    await JobApplication.create({
+      roleTitle: 'Marketing Manager', fullName: 'Asha K', city: 'Bengaluru',
+      email: 'asha@example.com', whatYouBring: 'things', files: goodFiles(),
+    });
+    const res = await call(['autobacs/careers/n1/v1', 'autobacs/careers/n1/cv.pdf']);
+    expect(res.body).toEqual({ success: true, deleted: 0 });
+    expect(deleteCareersAsset).not.toHaveBeenCalled();
+  });
+
+  test('deletes the unattached ids in a mixed batch and spares the attached one', async () => {
+    await JobApplication.create({
+      roleTitle: 'Marketing Manager', fullName: 'Asha K', city: 'Bengaluru',
+      email: 'asha@example.com', whatYouBring: 'things', files: goodFiles(),
+    });
+    const res = await call(['autobacs/careers/n1/v1', 'autobacs/careers/nX/stray']);
+    expect(res.body.deleted).toBe(1);
+    expect(deleteCareersAsset).toHaveBeenCalledWith('autobacs/careers/nX/stray', 'video');
+    expect(deleteCareersAsset).not.toHaveBeenCalledWith('autobacs/careers/n1/v1', expect.anything());
+  });
+
+  test.each([
+    ['a product image', 'autobacs/products/abc'],
+    ['a traversal attempt', '../../autobacs/products/abc'],
+    ['a near-miss prefix', 'autobacs/careers-public/x'],
+    ['the folder base itself', 'autobacs/careers'],
+  ])('ignores %s', async (_label, id) => {
+    const res = await call([id]);
+    expect(res.body).toEqual({ success: true, deleted: 0 });
+    expect(deleteCareersAsset).not.toHaveBeenCalled();
+  });
+
+  test('caps the batch so it cannot be used for bulk deletion', async () => {
+    const ids = Array.from({ length: 30 }, (_, i) => `autobacs/careers/n/f${i}`);
+    await call(ids);
+    expect(deleteCareersAsset.mock.calls.length).toBeLessThanOrEqual(8);
+  });
+
+  test('falls back to the raw resource type when the video delete misses', async () => {
+    // The client does not know an asset's resource_type, so both are tried.
+    deleteCareersAsset.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const res = await call(['autobacs/careers/n9/cv.pdf']);
+    expect(deleteCareersAsset).toHaveBeenNthCalledWith(1, 'autobacs/careers/n9/cv.pdf', 'video');
+    expect(deleteCareersAsset).toHaveBeenNthCalledWith(2, 'autobacs/careers/n9/cv.pdf', 'raw');
+    expect(res.body.deleted).toBe(1);
+  });
+
+  test('a storage failure is reported as not-deleted, never as an error', async () => {
+    // Cleanup runs while the applicant is already looking at a failure message;
+    // it must not throw and replace it with something worse.
+    deleteCareersAsset.mockResolvedValue(false);
+    const res = await call(['autobacs/careers/n9/v1']);
+    expect(res.body).toEqual({ success: true, deleted: 0 });
+  });
+
+  test('a rejected delete promise does not propagate', async () => {
+    deleteCareersAsset.mockRejectedValue(new Error('cloudinary down'));
+    await expect(call(['autobacs/careers/n9/v1'])).resolves.toMatchObject({ body: { deleted: 0 } });
+  });
+
+  test.each([undefined, null, [], 'nope', {}])('handles a malformed body %p', async (publicIds) => {
+    const res = await call(publicIds);
+    expect(res.body).toEqual({ success: true, deleted: 0 });
   });
 });

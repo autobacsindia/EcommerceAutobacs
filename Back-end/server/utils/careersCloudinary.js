@@ -122,3 +122,34 @@ export const signedCareersAssetUrl = (publicId, resourceType) => {
     secure: true,
   });
 };
+
+/**
+ * Delete a careers asset. Used by the orphan-cleanup endpoint when a submission
+ * fails after its files have already uploaded.
+ *
+ * `not_found` counts as success: the caller's goal is "this object is not
+ * there", and a retry of a cleanup that already partly ran must be able to
+ * finish rather than reporting failure for work that is already done.
+ *
+ * Never throws — cleanup runs on a path where the applicant is already looking
+ * at an error, and a failure to tidy up must not replace or worsen that message.
+ *
+ * @param {string} publicId
+ * @param {'video'|'raw'|'image'} resourceType
+ * @returns {Promise<boolean>} true when the asset is gone
+ */
+export const deleteCareersAsset = async (publicId, resourceType = 'raw') => {
+  if (!publicId || !publicId.startsWith(`${CAREERS_FOLDER_BASE}/`)) return false;
+  const rt = ['video', 'raw', 'image'].includes(resourceType) ? resourceType : 'raw';
+  try {
+    const res = await cloudinary.api.delete_resources([publicId], {
+      resource_type: rt,
+      type: 'authenticated',
+    });
+    const status = res?.deleted?.[publicId];
+    return status === 'deleted' || status === 'not_found';
+  } catch (err) {
+    console.error(`[Careers][CLEANUP_REQUIRED] delete failed ${publicId}: ${err.message}`);
+    return false;
+  }
+};

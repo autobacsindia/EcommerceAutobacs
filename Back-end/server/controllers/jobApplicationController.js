@@ -21,6 +21,7 @@ import jobApplicationRepository from '../repositories/jobApplicationRepository.j
 import jobPostingRepository from '../repositories/jobPostingRepository.js';
 import {
   CAREERS_FOLDER_BASE,
+  deleteCareersAsset,
   generateCareersUploadSignature,
   getCareersResource,
   signedCareersAssetUrl,
@@ -89,6 +90,77 @@ const resourceFormat = (resource, publicId) => {
   if (resource.format) return String(resource.format).toLowerCase();
   const m = String(publicId).match(/\.([a-z0-9]+)$/i);
   return m ? m[1].toLowerCase() : '';
+};
+
+// @desc    Delete careers uploads that never became an application
+// @route   POST /careers/applications/cleanup
+// @access  Public (rate-limited)
+//
+// The careers form uploads files to Cloudinary BEFORE this API validates the
+// submission, so any failure after the upload — a rejected submission, a dropped
+// connection, one file of the batch failing — used to strand those files
+// permanently. They carried no identity either: the folder nonce is minted at
+// signature time, before the applicant has supplied a name or email, so nothing
+// could attribute, contact, or honour a data-subject request for them. 237 such
+// assets (1.68 GB) accumulated in production before this endpoint existed.
+//
+// This is the careers equivalent of the admin flow's POST /uploads/cleanup.
+//
+// ── Why this is safe to expose publicly ────────────────────────────────────
+// The careers form is unauthenticated, so this endpoint is too, which means an
+// attacker can call it with any publicId they like. Two guards make that
+// harmless:
+//
+//   1. the id must live under autobacs/careers/ — nothing else is reachable;
+//   2. the asset must NOT be referenced by any JobApplication.
+//
+// (2) is the load-bearing one. An asset becomes referenced the instant its
+// application is created, so a submitted applicant's video can never be deleted
+// through here — only genuinely unattached uploads can. The remaining window is
+// an in-flight submission, and reaching that needs the server-minted random
+// folder nonce, which is not guessable and never leaves that applicant's browser.
+export const cleanupOrphanedUploads = async (req, res) => {
+  const raw = Array.isArray(req.body?.publicIds) ? req.body.publicIds : [];
+
+  // At most one submission's worth of files (4 slots) — with headroom, not a
+  // bulk-delete channel.
+  const candidates = raw
+    .filter((id) => typeof id === 'string' && id.startsWith(`${CAREERS_FOLDER_BASE}/`))
+    .slice(0, 8);
+
+  if (!candidates.length) return res.json({ success: true, deleted: 0 });
+
+  // Guard 2: refuse anything a real application points at.
+  const referenced = await jobApplicationRepository.findReferencingFiles(
+    candidates,
+    FILE_SLOTS.map((s) => s.key),
+  );
+
+  const protectedIds = new Set();
+  for (const app of referenced) {
+    for (const slot of FILE_SLOTS) {
+      const pid = app.files?.[slot.key]?.publicId;
+      if (pid) protectedIds.add(pid);
+    }
+  }
+
+  const deletable = candidates.filter((id) => !protectedIds.has(id));
+  if (protectedIds.size) {
+    console.warn(`[Careers] cleanup refused ${protectedIds.size} id(s) attached to a real application`);
+  }
+
+  let deleted = 0;
+  for (const publicId of deletable) {
+    // resource_type is unknown to the client, so try the two we ever write.
+    // Best-effort throughout: a failed cleanup must never surface as an error to
+    // an applicant who is already looking at a failure message.
+    for (const resourceType of ['video', 'raw']) {
+      const ok = await deleteCareersAsset(publicId, resourceType).catch(() => false);
+      if (ok) { deleted += 1; break; }
+    }
+  }
+
+  return res.json({ success: true, deleted });
 };
 
 // @desc    Submit a careers application (files already uploaded to Cloudinary)
