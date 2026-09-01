@@ -1,0 +1,11 @@
+{
+  "name": "autobacs-image-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Serves pre-generated AVIF/WebP image variants from R2, negotiating format per request.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  }
+}

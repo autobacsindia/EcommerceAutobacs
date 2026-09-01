@@ -176,7 +176,7 @@ function buildCsp(nonce: string): string {
     // (Verified against a live Vercel preview: the googleadservices.com + doubleclick
     // beacons were CSP-blocked until added here.)
     // Meta Pixel fires tracking as <img> beacons to www.facebook.com/tr.
-    "img-src 'self' data: blob: https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net",
+    "img-src 'self' data: blob: https://img.autobacsindia.com https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net",
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK
     "worker-src blob: 'self'",
