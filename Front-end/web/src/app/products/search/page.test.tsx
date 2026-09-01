@@ -128,19 +128,22 @@ describe('SearchPage', () => {
   it('displays "Did you mean?" suggestions when there are no results', async () => {
     mockSearchParams.set('search', 'tesst');
     
-    // Mock for suggestions endpoint (server component call)
+    // Corrections arrive WITH the results now, not from a second call to
+    // /products/suggestions. That endpoint fires on every keystroke and had no
+    // trustworthy "found nothing" signal to gate a probe on — its suggestion list
+    // is padded by logged search terms, including misspellings — so the backend
+    // computes corrections on the results path instead.
     (apiClient.get as jest.Mock).mockImplementation((url) => {
       if (url.includes('/products/suggestions')) {
-        return Promise.resolve({
-          success: true,
-          corrections: [
-            { original: 'tesst', suggested: 'test', confidence: 0.8 }
-          ]
-        });
+        // Deliberately empty: if the page ever regresses to reading corrections
+        // from here, this test fails.
+        return Promise.resolve({ success: true, suggestions: [], corrections: [] });
       }
       return Promise.resolve({
         products: [],
-        pagination: { total: 0 }
+        total: 0,
+        pagination: { total: 0 },
+        corrections: [{ original: 'tesst', suggested: 'test' }],
       });
     });
     

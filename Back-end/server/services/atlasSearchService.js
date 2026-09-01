@@ -1465,13 +1465,16 @@ class AtlasSearchService {
    * Returns the same {suggestions, corrections, total} envelope Elasticsearch
    * returned, so the frontend needs no change.
    *
-   * ⚠ `corrections` is now ALWAYS EMPTY, by an explicit product decision. ES
-   * populated it from `term` suggesters (suggest_mode: 'always') which proposed a
-   * respelling of a badly mistyped word — "brkae" → "brake". Atlas Search has no
-   * suggester of any kind, and the honest replacement is nothing rather than a
-   * worse thing wearing the same name. The array is still returned so the
-   * frontend contract holds and the feature can be restored without a redeploy of
-   * the client.
+   * ⚠ `corrections` is ALWAYS EMPTY here, and that is deliberate — but it is no
+   * longer because the capability is missing. Atlas Search has no spell suggester,
+   * so the Elasticsearch `term` suggester was replaced by an index-derived probe
+   * (see suggestCorrection). That probe lives on the RESULTS path instead, for two
+   * reasons: this endpoint fires on every keystroke, and it has no trustworthy
+   * "found nothing" signal to gate on (its suggestion list is padded by the
+   * popular-query lane, which is fed by logged searches — including misspellings).
+   *
+   * The key is still returned so the response envelope is stable for any client
+   * that reads it.
    *
    * What survives is the part shoppers actually use: partial words. The
    * `autocomplete` field type (edgeGram, 2–15 grams) matches "brak" → "Brake
@@ -1662,11 +1665,22 @@ class AtlasSearchService {
       console.error('[AtlasSearch] Suggestion count failed:', error.message);
     }
 
-    return {
-      suggestions: [...querySuggestions, ...productSuggestions, ...categorySuggestions].slice(0, limit),
-      corrections: [],
-      total,
-    };
+    const suggestions = [...querySuggestions, ...productSuggestions, ...categorySuggestions].slice(0, limit);
+
+    // `corrections` is deliberately EMPTY on this endpoint — see the note on the
+    // method above. A correction probe briefly lived here and was removed: this
+    // route fires on every keystroke, and its only available "did we find nothing"
+    // signal was `suggestions.length === 0`, which is not a search signal at all.
+    // The popular-query lane injects any logged term that prefixes the input, and
+    // logSearchQuery records misspellings too — so once one shopper searched
+    // "wnich rope", every later search for "wnich" would have a non-empty
+    // suggestion list and the correction would be suppressed. The more a typo was
+    // searched, the more reliably its correction disappeared.
+    //
+    // Corrections now come from the RESULTS path (searchProducts), which gates on
+    // the real hit count, runs once per search rather than per keystroke, and is
+    // where the "Did you mean" is actually rendered.
+    return { suggestions, corrections: [], total };
   }
 
   /** Resolve the first category ObjectId on a product to its display name, or null. */
@@ -1693,6 +1707,16 @@ class AtlasSearchService {
    * Best-effort: a failure here must never fail the search that triggered it.
    */
   async suggestCorrection(query) {
+    // pickCorrection only ever considers tokens of 4+ characters, so a query with
+    // no such token cannot produce a correction no matter what the probe returns.
+    // Checking TOKENS rather than total length matters: "h4 blb" is six characters
+    // but every token is too short, and measuring the whole string would fire a
+    // maxEdits:2 fuzzy query that is structurally incapable of returning anything.
+    const hasCorrectableToken = String(query || '')
+      .split(/\s+/)
+      .some((token) => token.length >= 4);
+    if (!hasCorrectableToken) return [];
+
     try {
       const docs = await Product.collection
         .aggregate([

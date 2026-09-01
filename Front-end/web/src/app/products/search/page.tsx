@@ -68,23 +68,6 @@ async function getProducts(searchParams: any) {
   }
 }
 
-async function getSearchCorrections(searchTerm: string) {
-  try {
-    const data: any = await apiClient.get(
-      `/products/suggestions?q=${encodeURIComponent(searchTerm)}&limit=3`
-    );
-    if (data.success && data.corrections?.length > 0) return data.corrections;
-    return [];
-  } catch (error: any) {
-    if (error.name !== 'AbortError') {
-      console.error('Error fetching search corrections:', {
-        error: error.message || error.toString(),
-        timestamp: new Date().toISOString()
-      });
-    }
-    return [];
-  }
-}
 
 function SearchPageInner() {
   const router = useRouter();
@@ -136,11 +119,14 @@ function SearchPageInner() {
           itemCount: fetched.length,
         });
 
-        if (searchTerm && fetched.length === 0) {
-          const correctionResults = await getSearchCorrections(searchTerm);
-          if (isMounted) setCorrections(correctionResults);
-        } else {
-          if (isMounted) setCorrections([]);
+        // Corrections now arrive WITH the results rather than from a second
+        // request to /products/suggestions. That endpoint fires on every keystroke
+        // and had no trustworthy "found nothing" signal to gate a probe on, so the
+        // backend computes corrections on the results path instead — one probe per
+        // search, on the real hit count. This also drops a round trip from every
+        // zero-result search.
+        if (isMounted) {
+          setCorrections(searchTerm && fetched.length === 0 ? (result.corrections ?? []) : []);
         }
       } catch (error: any) {
         if (error.name !== 'AbortError' && isMounted) {
