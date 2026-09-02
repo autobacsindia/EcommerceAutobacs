@@ -33,6 +33,7 @@
  */
 import crypto from 'crypto';
 import { presignPut } from './r2Provider.js';
+import AppError from '../../utils/AppError.js';
 import { r2Config } from '../../config/storage.js';
 import { toObjectUrl } from './keys.js';
 
@@ -65,9 +66,12 @@ export const buildKey = (folder, contentType) => {
  * @param {string} opts.folder            server-resolved, already allowlisted
  * @param {Array<{contentType:string}>} opts.files
  * @returns {Promise<Array<{uploadUrl,key,url,contentType,expiresIn}>>}
- * @throws  when any content type is not allowlisted — the batch is rejected
- *          whole rather than silently dropping a file, so the client cannot end
- *          up with a product referencing an image that was never uploaded.
+ * @throws  AppError(400, expose) when any content type is not allowlisted — the
+ *          batch is rejected whole rather than silently dropping a file, so the
+ *          client cannot end up with a product referencing an image that was
+ *          never uploaded. It must be an AppError: errorMiddleware only exposes
+ *          messages raised that way, so a plain Error would reach the admin as
+ *          "Something went wrong" and hide which file it objected to.
  */
 export const buildR2UploadTargets = async ({ folder, files = [] }) => {
   const list = Array.isArray(files) ? files.slice(0, MAX_BATCH) : [];
@@ -75,9 +79,11 @@ export const buildR2UploadTargets = async ({ folder, files = [] }) => {
 
   const bad = list.find((f) => !UPLOAD_TYPES[String(f?.contentType || '').toLowerCase()]);
   if (bad) {
-    const err = new Error(`Unsupported file type "${bad.contentType}". Allowed: JPG, PNG, WebP.`);
-    err.statusCode = 400;
-    throw err;
+    // The offending type is echoed because an admin needs to know WHICH file was
+    // refused, but clipped and stripped of anything outside a media-type charset
+    // so a hostile string cannot ride back out in an error body.
+    const shown = String(bad.contentType || '').replace(/[^a-zA-Z0-9/.+-]/g, '').slice(0, 40) || 'unknown';
+    throw new AppError(`Unsupported file type "${shown}". Allowed: JPG, PNG, WebP.`, 400, { expose: true });
   }
 
   return Promise.all(list.map(async (f) => {

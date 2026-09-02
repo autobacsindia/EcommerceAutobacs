@@ -84,7 +84,7 @@ export const selectDue = (apps, opts = {}) => apps.filter((a) => isDue(a, opts))
  *
  * @param {object} app                    a lean JobApplication
  * @param {object} deps
- * @param {Function} deps.deleteAsset     ({publicId, resourceType}) => Promise<boolean>
+ * @param {Function} deps.deleteAsset     ({publicId, resourceType, provider}) => Promise<boolean>
  * @param {Function} deps.persist         (appId, patch) => Promise<void>
  * @param {boolean}  deps.apply           false = dry run
  * @returns {Promise<{applicationId, deleted, failed, bytes, files, status}>}
@@ -106,7 +106,18 @@ export const purgeApplicationMedia = async (app, { deleteAsset, persist, apply }
   let deleted = 0;
   const failed = [];
   for (const f of files) {
-    const ok = await deleteAsset({ publicId: f.publicId, resourceType: f.resourceType || 'image' });
+    /*
+      `provider` is carried through from the stored ref, not read from the
+      current STORAGE_PROVIDER. A purge that looked in the wrong store would
+      report success (an S3 delete of a missing key succeeds), stamp
+      mediaPurgedAt, and leave the applicant's CV in the bucket forever — a
+      retention breach that looks identical to a completed purge.
+    */
+    const ok = await deleteAsset({
+      publicId: f.publicId,
+      resourceType: f.resourceType || 'image',
+      provider: f.provider,
+    });
     if (ok) deleted += 1; else failed.push(f.publicId);
   }
 

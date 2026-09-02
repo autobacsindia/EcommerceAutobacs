@@ -29,7 +29,6 @@
  * business rejection in this file (and paged on-call for each one).
  */
 
-import crypto from 'crypto';
 import asyncHandler from '../middleware/asyncHandler.js';
 import AppError from '../utils/AppError.js';
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
@@ -57,6 +56,17 @@ import {
   signedReturnAssetUrl,
   resourceFormat,
 } from '../utils/returnsCloudinary.js';
+import { storageProvider } from '../config/storage.js';
+import { providerOf } from '../services/storage/privateAssetUrl.js';
+import { headObject, getObjectHead } from '../services/storage/r2Provider.js';
+import { matchesAnyKind, SNIFF_BYTES } from '../services/storage/contentSniff.js';
+import {
+  RETURN_SLOTS,
+  newReturnsFolder,
+  slotFromKey,
+  slotDefFromKey,
+  buildReturnUploadTargets,
+} from '../services/storage/returnsUploadTargets.js';
 import * as Sentry from '@sentry/node';
 
 const MB = 1024 * 1024;
@@ -154,10 +164,57 @@ const syncOrderReturnedStatus = async (orderId, userId, note) => {
  * re-read server-side. Returns { publicId, resourceType, bytes } or throws a
  * response-shaped Error via `fail`.
  */
-const validateAsset = async (raw, { label, allowedResourceTypes, maxBytes, formats, capLabel }) => {
+const validateAsset = async (raw, { label, allowedResourceTypes, maxBytes, formats, capLabel, slotKeys }) => {
   if (!raw || typeof raw !== 'object') return null;
   const publicId = typeof raw.publicId === 'string' ? raw.publicId.trim() : '';
   if (!publicId) return null;
+
+  /*
+    The client says WHERE it uploaded, and we verify there. Safe to take at face
+    value: a lie cannot manufacture a pass, it only sends the lookup to a store
+    that does not hold the file. Routing on the server's current
+    STORAGE_PROVIDER instead would reject every customer who was mid-form when
+    the flag flipped. Absent means Cloudinary — the rule everywhere else.
+  */
+  if (providerOf(raw) === 'r2') {
+    /*
+      One check replaces three. slotFromKey matches the WHOLE minted key shape,
+      so it proves at once that the object is inside our returns prefix, that we
+      minted it, that it carries no traversal segments, and that it was signed
+      for a slot this field accepts — the last of which stops evidence being
+      shuffled between slots to dodge a size cap.
+    */
+    const slotKey = slotFromKey(publicId);
+    if (!slotKey || (slotKeys && !slotKeys.includes(slotKey))) {
+      throw new AppError(`${label}: invalid upload reference.`, 400);
+    }
+    const slotDef = slotDefFromKey(publicId);
+
+    const head = await headObject({ key: publicId, scope: 'private' });
+    if (!head || head.bytes <= 0) {
+      throw new AppError(`${label}: upload could not be verified. Please re-upload.`, 400);
+    }
+    // The cap is enforced against the STORE, never the payload's claim.
+    if (head.bytes > maxBytes) {
+      throw new AppError(`${label} exceeds the ${capLabel} limit.`, 400);
+    }
+    /*
+      R2 does not decode uploads the way Cloudinary did, and does not even
+      enforce the Content-Type its own presigned URL was signed with. So the
+      format is re-derived from the bytes: a ranged read of the first few
+      hundred, identified by magic number.
+    */
+    const magic = await getObjectHead({ key: publicId, scope: 'private', bytes: SNIFF_BYTES });
+    if (!matchesAnyKind(magic, slotDef?.kinds)) {
+      throw new AppError(`${label}: unsupported file type.`, 400);
+    }
+    return {
+      publicId,
+      resourceType: slotDef?.resourceType || allowedResourceTypes[0],
+      bytes: head.bytes,
+      provider: 'r2',
+    };
+  }
 
   let resourceType = typeof raw.resourceType === 'string' ? raw.resourceType.trim() : allowedResourceTypes[0];
   if (!allowedResourceTypes.includes(resourceType)) {
@@ -179,7 +236,7 @@ const validateAsset = async (raw, { label, allowedResourceTypes, maxBytes, forma
   if (formats && !formats.includes(fmt)) {
     throw new AppError(`${label}: unsupported file type.`, 400);
   }
-  return { publicId, resourceType, bytes: resource.bytes };
+  return { publicId, resourceType, bytes: resource.bytes, provider: 'cloudinary' };
 };
 
 /**
@@ -274,12 +331,27 @@ const withSignedEvidence = async (rr) => {
 // @desc    Issue a signed params set for direct browser→Cloudinary return uploads
 // @route   POST /returns/upload-signature
 // @access  Private
-export const getReturnUploadSignature = asyncHandler(async (_req, res) => {
+/*
+  A DISCRIMINATED UNION on `provider`, matching the admin and careers upload
+  endpoints. Cloudinary signs a FOLDER once and every file reuses it; R2 presigns
+  ONE PUT per object key and so must be told which slots are coming. The client
+  branches on `provider` rather than sniffing which fields exist.
+
+  `STORAGE_PROVIDER` is read per request, so flipping it is an env change plus a
+  restart — and flipping back is the rollback. Evidence uploaded under either
+  provider stays readable, because each stored asset carries its own `provider`.
+*/
+export const getReturnUploadSignature = asyncHandler(async (req, res) => {
   // Server-chosen unguessable subfolder — the client never picks the folder, so
   // it can only ever write inside autobacs/returns/<nonce>.
-  const nonce = crypto.randomBytes(12).toString('hex');
-  const folder = `${RETURNS_FOLDER_BASE}/${nonce}`;
-  res.json({ success: true, ...generateReturnUploadSignature({ folder }) });
+  const folder = newReturnsFolder();
+
+  if (storageProvider() === 'r2') {
+    const uploads = await buildReturnUploadTargets({ folder, files: req.body?.files });
+    return res.json({ success: true, provider: 'r2', folder, uploads });
+  }
+
+  res.json({ success: true, provider: 'cloudinary', ...generateReturnUploadSignature({ folder }) });
 });
 
 // @desc    Create a return request
@@ -493,12 +565,14 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
   }
   const videoAsset = await validateAsset(video, {
     label: 'Unboxing video', allowedResourceTypes: ['video'], maxBytes: VIDEO_MAX_BYTES, formats: VIDEO_FORMATS, capLabel: '60MB',
+    slotKeys: ['video'],
   });
   if (!videoAsset) {
     throw new AppError('A continuous unboxing video is required.', 400);
   }
   const proofAsset = await validateAsset(proofOfPurchase, {
     label: 'Proof of purchase', allowedResourceTypes: ['image', 'raw'], maxBytes: PROOF_MAX_BYTES, formats: PROOF_FORMATS, capLabel: '15MB',
+    slotKeys: ['proof'],
   });
   if (!proofAsset) {
     throw new AppError('Proof of purchase (invoice or payment confirmation) is required.', 400);
@@ -508,6 +582,7 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
   for (const raw of (Array.isArray(images) ? images.slice(0, MAX_PHOTOS) : [])) {
     const a = await validateAsset(raw, {
       label: 'Photo', allowedResourceTypes: ['image'], maxBytes: PHOTO_MAX_BYTES, formats: IMAGE_FORMATS, capLabel: '10MB',
+      slotKeys: RETURN_SLOTS.filter((sl) => sl.key.startsWith('photo')).map((sl) => sl.key),
     });
     if (a) photoAssets.push(a);
   }

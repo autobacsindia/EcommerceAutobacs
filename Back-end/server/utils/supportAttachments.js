@@ -29,6 +29,7 @@
 import crypto from 'crypto';
 import path from 'path';
 import cloudinary from '../config/cloudinary.js';
+import { putPrivateAsset } from '../services/storage/privateUploads.js';
 import { providerOf, r2PrivateUrl } from '../services/storage/privateAssetUrl.js';
 import {
   ATTACHMENT_MAX_BYTES,
@@ -42,13 +43,6 @@ export const SUPPORT_FOLDER_BASE = 'autobacs/support';
 
 /** How long an admin's signed view/download link stays valid. */
 const DOWNLOAD_TTL_SECONDS = 60 * 60; // 1 hour
-
-/** Map a MIME type to the Cloudinary resource kind used for storage/delivery. */
-const resourceTypeFor = (mime = '') => {
-  if (mime.startsWith('image/')) return 'image';
-  if (mime.startsWith('video/')) return 'video';
-  return 'raw';
-};
 
 /**
  * Decide whether an attachment may be stored.
@@ -82,26 +76,40 @@ export const validateAttachment = (att = {}) => {
  */
 const uploadOne = async (att, folder) => {
   const mime = String(att.ContentType || '').split(';')[0].trim().toLowerCase();
-  const resourceType = resourceTypeFor(mime);
-  const dataUri = `data:${mime};base64,${att.Content}`;
+  const buffer = Buffer.from(String(att.Content || ''), 'base64');
 
-  const result = await cloudinary.uploader.upload(dataUri, {
+  /*
+    The stored name is server-generated, unguessable, and unrelated to the
+    sender's filename — which is attacker-controlled on an inbound email and is
+    how a `.html` or `.svg` ends up addressable on our own domain. The extension
+    comes from the ALLOWLIST validateAttachment already matched, never from the
+    name itself; it exists only so the object is recognisable in a bucket
+    listing.
+  */
+  const ext = path.extname(String(att.Name || '')).toLowerCase();
+  const safeExt = ATTACHMENT_ALLOWED_EXT.includes(ext) ? ext : '';
+  const basename = `${crypto.randomBytes(12).toString('hex')}${safeExt}`;
+
+  const stored = await putPrivateAsset({
+    buffer,
     folder,
-    // Server-generated, unguessable, and unrelated to the sender's filename.
-    public_id: crypto.randomBytes(12).toString('hex'),
-    resource_type: resourceType,
-    type: 'authenticated',
-    // The file is data, not something to be interpreted. Explicitly off so
-    // Cloudinary never runs format conversion on hostile input.
+    basename,
+    contentType: mime,
+    // Support attachments are already `type: 'authenticated'` on Cloudinary;
+    // keeping that is what makes a leaked URL useless without a signature.
+    cloudinaryPrivate: true,
+    // The basename is random, so an overwrite could only ever mean a collision
+    // we would rather hear about than silently absorb.
     overwrite: false,
   });
 
   return {
-    publicId: result.public_id,
-    resourceType,
+    publicId: stored.publicId,
+    provider: stored.provider,
+    resourceType: stored.resourceType,
     fileName: String(att.Name || '').slice(0, 255),
     contentType: mime,
-    bytes: result.bytes || 0,
+    bytes: stored.bytes || buffer.length,
   };
 };
 

@@ -260,6 +260,49 @@ variable was set.
 It becomes load-bearing at Phase 6, when the URL rewrite starts putting
 R2-hosted URLs into Mongo. From that point the variants must exist first.
 
+### `NEXT_PUBLIC_R2_S3_ENDPOINT` — set this BEFORE flipping `STORAGE_PROVIDER`
+
+```
+NEXT_PUBLIC_R2_S3_ENDPOINT=https://*.<account-id>.r2.cloudflarestorage.com
+```
+
+**The `*.` is required, and this is easy to get wrong.** R2 presigns
+VIRTUAL-HOSTED style, so the bucket is part of the host:
+
+```
+https://autobacs-public.<account-id>.r2.cloudflarestorage.com
+https://autobacs-private.<account-id>.r2.cloudflarestorage.com
+```
+
+A CSP source matches the host EXACTLY unless it carries a wildcard, so
+`https://<account-id>.r2.cloudflarestorage.com` — which reads as correct —
+matches **neither bucket** and blocks every upload. The account-scoped wildcard
+covers both and nothing outside your account. `src/lib/csp.test.ts` asserts the
+configured value actually matches a real bucket host, and fails on the bare
+account endpoint.
+
+Read your account id from `R2_ACCOUNT_ID` in `Back-end/server/.env`, or take it
+from the R2 dashboard (step 2).
+
+Not a credential. It is the origin the browser PUTs direct uploads to (admin
+product images, careers CVs and video answers, return evidence) once the backend
+is on R2, and its only job is to appear in the page's CSP `connect-src`.
+
+**Why it is easy to miss.** Nothing needs it while `STORAGE_PROVIDER=cloudinary`.
+The moment that flips, every direct upload becomes a PUT to this host — and if
+the CSP does not allow it, the browser blocks the request *before it leaves the
+page*. There is no server log, no failed request to find, and the only symptom is
+a generic "upload failed" that the applicant sees and you do not.
+
+Leaving it unset is not fatal: the CSP falls back to
+`https://*.r2.cloudflarestorage.com`, which works. That fallback exists precisely
+so a forgotten variable cannot break uploads. Setting the specific host narrows
+`connect-src` from every R2 account to ours, which is worth doing but is not
+what gates the flip.
+
+Guarded by `src/lib/csp.test.ts`, which fails if the R2 origin ever leaves
+`connect-src`.
+
 ---
 
 ## Ordering (the part that matters)
@@ -274,8 +317,22 @@ R2-hosted URLs into Mongo. From that point the variants must exist first.
    `curl -I -H 'Accept: image/avif' https://img.autobacsindia.com/variants/<key>/w640`
    Expect `200` and `content-type: image/avif`.
 6. **Then** set `NEXT_PUBLIC_IMAGE_BASE_URL` on Vercel.
-7. Later, and separately: `STORAGE_PROVIDER=r2` to send new *uploads* to R2, then
-   the URL rewrite in Mongo (products first as a canary).
+7. Later, and separately, the UPLOAD cutover. In this order:
+   a. Set `NEXT_PUBLIC_R2_S3_ENDPOINT` on Vercel and let it deploy — the CSP is
+      baked into the page, so it must be live *before* the first PUT is attempted.
+   b. Confirm variant generation runs on upload (Phase 5c), or new product images
+      will have no AVIF/WebP and the Worker will serve the original as a
+      short-cached fallback — larger images, not broken ones, and silent.
+   c. `STORAGE_PROVIDER=r2` on Railway, then restart. New uploads land in R2;
+      everything already in Mongo is untouched.
+   d. Upload one product image and one careers application end to end. The
+      careers submit path re-reads the object's first bytes to identify it, so a
+      successful submission proves presign → PUT → head → sniff all work.
+   e. Then, separately, the URL rewrite in Mongo (products first as a canary).
+
+   Rollback for the upload cutover is `STORAGE_PROVIDER=cloudinary` + restart.
+   Files already written to R2 stay readable: every stored ref carries its own
+   `provider`, and reads and deletes follow the ref, not the current setting.
 
 Rollback at any point after step 6 is unsetting `NEXT_PUBLIC_IMAGE_BASE_URL` —
 every image reverts to Cloudinary, because the original URLs are still in Mongo

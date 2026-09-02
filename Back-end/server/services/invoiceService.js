@@ -18,7 +18,7 @@ import PDFDocument from 'pdfkit';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import cloudinary from '../config/cloudinary.js';
+import { putPrivateAsset } from './storage/privateUploads.js';
 import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 import { companyInfo } from '../config/company.js';
@@ -395,31 +395,39 @@ export const generateInvoicePdf = async (order, user = null) => {
 };
 
 /**
- * Best-effort upload of the invoice PDF to Cloudinary (resource_type 'raw').
- * Gated by INVOICE_STORE_CLOUDINARY=true. Never throws — returns null on failure.
- * @returns {Promise<{url: string, publicId: string}|null>}
+ * Best-effort archival copy of the invoice PDF. Gated by
+ * INVOICE_STORE_CLOUDINARY=true (currently OFF — the invoice reaches the
+ * customer as an email attachment, and this is only a re-download copy).
+ *
+ * Never throws: an archival copy failing must not stop the invoice email, which
+ * is the part the customer actually depends on.
+ *
+ * On R2 this lands in the PRIVATE bucket, so the returned `url` is ''. An
+ * invoice carries the customer's name, address and the amount they paid; it had
+ * no business sitting at a permanent unauthenticated URL, which is what the
+ * Cloudinary path gives it. Readers resolve a short-lived signed URL from the
+ * stored ref instead — see services/storage/privateAssetUrl.js.
+ *
+ * @returns {Promise<{url: string, publicId: string, provider: string}|null>}
  */
-export const uploadInvoicePdf = (buffer, order) => {
-  if (process.env.INVOICE_STORE_CLOUDINARY !== 'true') return Promise.resolve(null);
+export const uploadInvoicePdf = async (buffer, order) => {
+  if (process.env.INVOICE_STORE_CLOUDINARY !== 'true') return null;
 
-  return new Promise((resolve) => {
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: process.env.INVOICE_CLOUDINARY_FOLDER || 'invoices',
-        resource_type: 'raw',
-        public_id: invoiceNumber(order),
-        overwrite: true,
-      },
-      (error, result) => {
-        if (error) {
-          console.error(`[Invoice] Cloudinary upload failed for ${invoiceNumber(order)}: ${error.message}`);
-          return resolve(null);
-        }
-        resolve({ url: result.secure_url, publicId: result.public_id });
-      }
-    );
-    stream.end(buffer);
-  });
+  try {
+    const stored = await putPrivateAsset({
+      buffer,
+      folder: process.env.INVOICE_CLOUDINARY_FOLDER || 'invoices',
+      // Deterministic: one object per invoice number, so a re-render of the same
+      // invoice replaces it rather than accumulating near-duplicates.
+      basename: `${invoiceNumber(order)}.pdf`,
+      contentType: 'application/pdf',
+      overwrite: true,
+    });
+    return { url: stored.url, publicId: stored.publicId, provider: stored.provider };
+  } catch (err) {
+    console.error(`[Invoice] archival upload failed for ${invoiceNumber(order)}: ${err.message}`);
+    return null;
+  }
 };
 
 /**
@@ -459,8 +467,9 @@ export const emailOrderInvoice = async (orderId) => {
 
     const stored = await uploadInvoicePdf(pdf, order);
     if (stored) {
-      order.invoiceUrl = stored.url;
+      order.invoiceUrl = stored.url;              // '' on the R2 path — see the model
       order.invoicePublicId = stored.publicId;
+      order.invoiceProvider = stored.provider;
     }
 
     const result = await emailHandler.sendOrderConfirmation({

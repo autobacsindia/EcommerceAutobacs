@@ -55,6 +55,8 @@ import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
 import cloudinary from '../config/cloudinary.js';
+import { listKeys, deleteObjects } from '../services/storage/r2Provider.js';
+import { isR2Configured } from '../config/storage.js';
 
 const argv = process.argv.slice(2);
 const flag = (n) => argv.includes(`--${n}`);
@@ -67,6 +69,18 @@ const MAX = Number(opt('max', 400));
 
 const SLOTS = ['videoOne', 'videoTwo', 'resume', 'support'];
 const CAREERS_PREFIX = 'autobacs/careers';
+/*
+  Compare on the id with any trailing extension removed.
+
+  A Cloudinary VIDEO public_id carries no extension — the format is a separate
+  field — but the R2 object migrated from it does (`…/abc` → `…/abc.mp4`). An
+  exact comparison therefore reports every migrated video copy as unreferenced.
+  Measured against production that was 92 of 146 objects rather than the true 4,
+  and only the folder-in-use guard downstream stopped them being deleted. A
+  PII-deleting script must not depend on a second guard to be correct.
+*/
+const stem = (s) => String(s).replace(/\.[a-z0-9]{1,5}$/i, '');
+
 const nonceOf = (p) => { const m = /^autobacs\/careers\/([^/]+)\//.exec(p || ''); return m ? m[1] : null; };
 const ageDays = (d) => (Date.now() - new Date(d)) / 86400000;
 const mb = (b) => (b / 1048576).toFixed(1);
@@ -93,11 +107,19 @@ const main = async () => {
   for (const a of apps) for (const s of SLOTS) {
     const p = a.files?.[s]?.publicId;
     if (!p) continue;
-    referenced.add(p);
+    referenced.add(stem(p));
     const n = nonceOf(p); if (n) appNonces.add(n);
   }
   console.log(`applications: ${apps.length}  |  referenced assets: ${referenced.size}  |  submission folders in use: ${appNonces.size}`);
 
+  /*
+    Enumerate BOTH stores. During the migration an abandoned upload can be in
+    either, and a sweep that only knows one of them lets the other accumulate
+    unattributable CVs indefinitely — which is exactly how 2.98 GB of them built
+    up before this script existed. The R2 side is skipped (loudly) rather than
+    failing when R2 is not configured, so the script stays runnable on a
+    Cloudinary-only box.
+  */
   const all = [];
   for (const rt of ['image', 'video', 'raw']) {
     let next;
@@ -106,17 +128,55 @@ const main = async () => {
         resource_type: rt, type: 'authenticated', prefix: CAREERS_PREFIX,
         max_results: 500, ...(next ? { next_cursor: next } : {}),
       }).catch(() => ({ resources: [] }));
-      (page.resources || []).forEach((r) => all.push({ ...r, _rt: rt }));
+      (page.resources || []).forEach((r) => all.push({ ...r, _rt: rt, _provider: 'cloudinary' }));
       next = page.next_cursor;
     } while (next);
   }
-  console.log(`careers assets in Cloudinary: ${all.length}`);
+  const cloudinaryCount = all.length;
+
+  /*
+    ⚠ An R2 object's LastModified is when the MIGRATION copied it, not when the
+    applicant uploaded it — so on its own it makes every migrated asset look
+    brand new and the age gate below spares it forever. Where Cloudinary still
+    holds the same asset it carries the true upload date, so we prefer that.
+    (Matched on the stem: a Cloudinary video public_id has no extension, its
+    migrated copy does.) An R2-native upload has no Cloudinary twin and its
+    LastModified IS the upload time, which is correct.
+
+    Where neither applies the object simply looks young and is spared. That is
+    the safe direction for a script that deletes PII irreversibly: sparing costs
+    storage, deleting early costs an applicant their submission.
+  */
+  const cloudinaryAgeByStem = new Map(all.map((r) => [stem(r.public_id), r.created_at]));
+
+  let r2Count = 0;
+  if (isR2Configured()) {
+    // The private bucket — careers assets must never be anywhere else.
+    const objects = await listKeys({ prefix: `${CAREERS_PREFIX}/`, scope: 'private' });
+    for (const o of objects) {
+      // Shape it like a Cloudinary resource so the three spare/doom conditions
+      // below stay provider-agnostic; the resource type is only used for the
+      // report and for Cloudinary's per-type delete API.
+      const ext = (o.key.match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase();
+      all.push({
+        public_id: o.key,
+        bytes: o.bytes,
+        created_at: cloudinaryAgeByStem.get(stem(o.key)) || o.lastModified,
+        _rt: ext === 'pdf' ? 'raw' : 'video',
+        _provider: 'r2',
+      });
+      r2Count += 1;
+    }
+  } else {
+    console.log('⚠ R2 is not configured — the R2 side of this sweep was SKIPPED.');
+  }
+  console.log(`careers assets: ${cloudinaryCount} in Cloudinary + ${r2Count} in R2 = ${all.length}`);
 
   // ── The three conditions, all required ──────────────────────────────────────
   const doomed = [];
   const spared = { referenced: 0, folderInUse: 0, tooYoung: 0, noNonce: 0 };
   for (const r of all) {
-    if (referenced.has(r.public_id)) { spared.referenced++; continue; }
+    if (referenced.has(stem(r.public_id))) { spared.referenced++; continue; }
     const n = nonceOf(r.public_id);
     if (!n) { spared.noNonce++; continue; }           // not under a submission folder — leave alone
     if (appNonces.has(n)) { spared.folderInUse++; continue; }
@@ -142,7 +202,7 @@ const main = async () => {
 
   if (!APPLY || !YES) {
     console.log('\nDRY RUN — nothing deleted. Re-run with --apply --yes to delete permanently.');
-    doomed.slice(0, 10).forEach((r) => console.log(`   would delete  ${r._rt.padEnd(6)} ${mb(r.bytes).padStart(6)} MB  ${r.public_id}`));
+    doomed.slice(0, 10).forEach((r) => console.log(`   would delete  ${r._provider.padEnd(10)} ${r._rt.padEnd(6)} ${mb(r.bytes).padStart(6)} MB  ${r.public_id}`));
     if (doomed.length > 10) console.log(`   … and ${doomed.length - 10} more`);
     await mongoose.disconnect();
     return;
@@ -153,7 +213,7 @@ const main = async () => {
   fs.mkdirSync(dir, { recursive: true });
   const manifestPath = path.join(dir, `purged-abandoned-careers-${new Date().toISOString().replace(/[:.]/g, '-')}.jsonl`);
   const lines = doomed.map((r) => JSON.stringify({
-    publicId: r.public_id, resourceType: r._rt, bytes: r.bytes,
+    publicId: r.public_id, resourceType: r._rt, provider: r._provider, bytes: r.bytes,
     createdAt: r.created_at, folder: `${CAREERS_PREFIX}/${nonceOf(r.public_id)}`,
     ageDays: Math.floor(ageDays(r.created_at)), purgedAt: new Date().toISOString(),
   }));
@@ -165,10 +225,11 @@ const main = async () => {
   }
   console.log(`manifest written: ${manifestPath}`);
 
-  // ── Delete, batched per resource_type (the API is per-type) ────────────────
+  // ── Delete, per store (Cloudinary's API is per-resource_type; R2's is not) ──
   let deleted = 0; const failed = [];
+
   for (const rt of ['image', 'video', 'raw']) {
-    const ids = doomed.filter((r) => r._rt === rt).map((r) => r.public_id);
+    const ids = doomed.filter((r) => r._provider === 'cloudinary' && r._rt === rt).map((r) => r.public_id);
     for (let i = 0; i < ids.length; i += 100) {
       const chunk = ids.slice(i, i + 100);
       try {
@@ -181,14 +242,26 @@ const main = async () => {
         chunk.forEach((id) => failed.push(`${id}: ${err.message}`));
       }
     }
-    if (ids.length) console.log(`  ${rt}: ${ids.length} requested`);
+    if (ids.length) console.log(`  cloudinary/${rt}: ${ids.length} requested`);
+  }
+
+  const r2Ids = doomed.filter((r) => r._provider === 'r2').map((r) => r.public_id);
+  if (r2Ids.length) {
+    // deleteObjects chunks to the S3 batch limit itself and reports per-key
+    // failures, which are counted rather than assumed — an S3 delete succeeds
+    // for a key that was never there, so only real errors may be reported.
+    const res = await deleteObjects({ keys: r2Ids, scope: 'private' });
+    deleted += res.deleted;
+    res.failed.forEach((k) => failed.push(`${k}: r2 delete failed`));
+    console.log(`  r2/private: ${r2Ids.length} requested`);
   }
 
   bar('═');
   console.log(`DELETED: ${deleted} of ${doomed.length}   FAILED: ${failed.length}`);
   if (failed.length) failed.slice(0, 10).forEach((f) => console.log(`   ✗ ${f}`));
   console.log(`manifest: ${manifestPath}`);
-  console.log('No restore path — Cloudinary backup is not enabled on this account.');
+  console.log('No restore path — Cloudinary backup is not enabled on this account, and the');
+  console.log('deletes above are permanent. The manifest is the only record of what went.');
   bar('═');
   await mongoose.disconnect();
 };

@@ -7,7 +7,7 @@ import { API_ENDPOINTS, RETURN_REASONS, RETURN_WINDOW_DAYS } from '@/lib/constan
 import {
   getReturnUploadSignature,
   uploadReturnFile,
-  type ReturnUploadSig,
+  type ReturnCredentials,
   type ReturnResourceType,
 } from '@/lib/returnUploads';
 import OrderItemCard from './shared/OrderItemCard';
@@ -22,7 +22,15 @@ interface OrderItem {
 }
 
 interface SelectedItem { productId: string; quantity: number }
-interface Uploaded { publicId: string; resourceType: ReturnResourceType; fileName: string }
+interface Uploaded {
+  publicId: string;
+  // Which store holds it. Sent back with the ref so the API verifies against the
+  // store the file actually went to — during the migration both hold live
+  // evidence, and a customer may have started this form before a provider flip.
+  provider: 'cloudinary' | 'r2';
+  resourceType: ReturnResourceType;
+  fileName: string;
+}
 
 interface ReturnRequestModalProps {
   orderId: string;
@@ -95,7 +103,12 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
 
 
   // One signed params set is reused for every file in this submission.
-  const sigRef = useRef<ReturnUploadSig | null>(null);
+  /*
+    Cached for the CLOUDINARY path only, where one folder signature covers every
+    file in the submission. The R2 path cannot reuse anything: a presigned PUT is
+    bound to a single object key, so it is minted per file at selection time.
+  */
+  const sigRef = useRef<ReturnCredentials | null>(null);
   const totalSteps = 4;
 
   const daysSinceDelivery = deliveredAt
@@ -151,9 +164,13 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
     );
   }
 
-  const ensureSignature = async () => {
-    if (!sigRef.current) sigRef.current = await getReturnUploadSignature();
-    return sigRef.current;
+  const ensureCredentials = async (slot: string, contentType: string) => {
+    // A cached Cloudinary signature is reusable; anything else (no cache yet, or
+    // an R2 deployment) needs a fresh call bound to this slot and file.
+    if (sigRef.current && sigRef.current.provider !== 'r2') return sigRef.current;
+    const creds = await getReturnUploadSignature(slot, contentType);
+    if (creds.provider !== 'r2') sigRef.current = creds;
+    return creds;
   };
 
   const handleUpload = async (
@@ -165,10 +182,21 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
     }
     setError(null);
     try {
-      const sig = await ensureSignature();
+      /*
+        Photo slots are INDEXED server-side (photo0…photo4) so each upload gets a
+        key bound to its own slot. Using the count of already-uploaded photos as
+        the index is safe because uploads are sequential here — the input is
+        disabled while one is in flight.
+      */
+      const slotName = slot === 'photo' ? `photo${photos.length}` : slot;
+      const creds = await ensureCredentials(slotName, file.type || 'application/octet-stream');
       setUploading({ slot, pct: 0 });
-      const res = await uploadReturnFile(file, sig, resourceType, (pct) => setUploading({ slot, pct }));
-      const up: Uploaded = { publicId: res.publicId, resourceType, fileName: file.name };
+      const res = await uploadReturnFile(
+        file, creds, resourceType, (pct) => setUploading({ slot, pct }), slotName,
+      );
+      const up: Uploaded = {
+        publicId: res.publicId, provider: res.provider, resourceType, fileName: file.name,
+      };
       if (slot === 'video') setVideo(up);
       else if (slot === 'proof') setProof(up);
       else setPhotos((p) => [...p, up].slice(0, 5));
@@ -234,9 +262,14 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
         orderId,
         items: Array.from(selectedItems.values()).map((s) => ({ productId: s.productId, quantity: s.quantity, reason: returnReason })),
         problemDescription: description.trim(),
-        video: { publicId: video!.publicId, resourceType: video!.resourceType },
-        proofOfPurchase: { publicId: proof!.publicId, resourceType: proof!.resourceType },
-        images: photos.map((p) => ({ publicId: p.publicId, resourceType: p.resourceType })),
+        /*
+          `provider` rides along so the API verifies each asset against the store
+          it actually went to. Everything else about the file — size, format —
+          the server re-derives there; these two fields are the whole claim.
+        */
+        video: { publicId: video!.publicId, provider: video!.provider, resourceType: video!.resourceType },
+        proofOfPurchase: { publicId: proof!.publicId, provider: proof!.provider, resourceType: proof!.resourceType },
+        images: photos.map((p) => ({ publicId: p.publicId, provider: p.provider, resourceType: p.resourceType })),
       };
       await apiClient.post(API_ENDPOINTS.RETURN_CREATE, payload);
       setSuccess(true);
