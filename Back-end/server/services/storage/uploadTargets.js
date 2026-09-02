@@ -86,6 +86,20 @@ export const buildR2UploadTargets = async ({ folder, files = [] }) => {
     throw new AppError(`Unsupported file type "${shown}". Allowed: JPG, PNG, WebP.`, 400, { expose: true });
   }
 
+  /*
+    Without a public base URL the target's `url` would be '' — which the browser
+    dutifully stores on the product, where it fails the image host check and the
+    admin is told the save succeeded with no image to show for it. Fail here,
+    where the message can name the cause, rather than three layers downstream.
+  */
+  const publicBase = r2Config().publicBaseUrl;
+  if (!publicBase) {
+    throw new AppError(
+      'Image uploads are misconfigured: R2_PUBLIC_BASE_URL is not set on the server.',
+      500,
+    );
+  }
+
   return Promise.all(list.map(async (f) => {
     const contentType = String(f.contentType).toLowerCase();
     const key = buildKey(folder, contentType);
@@ -97,7 +111,7 @@ export const buildR2UploadTargets = async ({ folder, files = [] }) => {
       key,
       // Where the object will be readable once the PUT completes. Stored as the
       // asset's `url`; the image loader rewrites it to a variant at render time.
-      url: toObjectUrl(r2Config().publicBaseUrl, key),
+      url: toObjectUrl(publicBase, key),
       contentType,
       expiresIn,
     };

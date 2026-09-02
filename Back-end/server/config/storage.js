@@ -24,13 +24,22 @@
  * mistake, and the blast radius is applicant PII.
  */
 
-/** Env vars required before the R2 provider can do anything. */
+/**
+ * Env vars required before the R2 provider can do anything.
+ *
+ * R2_PUBLIC_BASE_URL is in here even though the SDK never reads it: it is the
+ * address a stored public asset is reachable at, so without it an upload target
+ * carries an empty `url`, the ref fails the product-image host check, and the
+ * admin is told the product saved while the image silently never appears.
+ * A missing delivery host is a broken deployment, not an optional extra.
+ */
 const REQUIRED_R2_VARS = [
   'R2_ACCOUNT_ID',
   'R2_ACCESS_KEY_ID',
   'R2_SECRET_ACCESS_KEY',
   'R2_PUBLIC_BUCKET',
   'R2_PRIVATE_BUCKET',
+  'R2_PUBLIC_BASE_URL',
 ];
 
 /**
