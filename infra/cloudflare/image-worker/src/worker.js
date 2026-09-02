@@ -33,6 +33,24 @@ const VARIANT_PREFIX = 'variants/';
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 
 /**
+ * Cache generation. BUMP THIS whenever a response's headers or body change.
+ *
+ * Responses are stored in `caches.default` under `immutable, max-age=31536000`,
+ * so an entry written by an older version of this Worker keeps being served for
+ * a YEAR — a deploy does not invalidate it. That is not theoretical: shipping
+ * the Content-Type clamp and `nosniff` left previously-requested objects still
+ * serving the old headers, and because each Cloudflare PoP caches independently,
+ * the fix appeared to be applied or not depending purely on which edge node you
+ * hit. A stale security header is exactly the thing you must not roll out
+ * probabilistically.
+ *
+ * Folding the generation into the cache KEY sidesteps all of it: a bump makes
+ * every prior entry unreachable, no purge token or dashboard step required, and
+ * it is one line in the same commit as the change it protects.
+ */
+const CACHE_VERSION = 'v2';
+
+/**
  * Content types this host is allowed to serve.
  *
  * ⚠ SECURITY BOUNDARY, not a tidiness rule. R2 does NOT enforce the Content-Type
@@ -114,6 +132,8 @@ export default {
     */
     const cacheUrl = new URL(request.url);
     if (format) cacheUrl.searchParams.set('__fmt', format.ext);
+    // See CACHE_VERSION: a bump orphans every entry written by an older deploy.
+    cacheUrl.searchParams.set('__v', CACHE_VERSION);
     const cacheKey = new Request(cacheUrl.toString(), { method: 'GET' });
 
     const cache = caches.default;
