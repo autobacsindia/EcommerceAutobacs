@@ -13,6 +13,7 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { generateUploadSignature, deleteManyFromCloudinary } from "../utils/cloudinaryHelpers.js";
 import { storageProvider } from "../config/storage.js";
+import { enqueueVariantGeneration } from "../queue/queues.js";
 import { buildR2UploadTargets } from "../services/storage/uploadTargets.js";
 import { deleteObjects } from "../services/storage/r2Provider.js";
 
@@ -65,6 +66,23 @@ router.post(
     */
     if (storageProvider() === 'r2') {
       const uploads = await buildR2UploadTargets({ folder, files: req.body?.files });
+
+      /*
+        Ask for AVIF/WebP derivatives now, while we still have the keys.
+
+        This is the ONLY point every public direct upload passes through, which
+        is why it happens here rather than in the seven controllers that persist
+        an image ref — one missed call site there is a silent gap where images
+        serve at full size forever.
+
+        The object does not exist yet: the browser has only just been handed the
+        URL. The job is delayed and the worker retries, treating "not there yet"
+        as ordinary. Best-effort throughout — variants are an optimisation, and
+        the image Worker serves the original when one is missing, so a queue
+        outage must never fail an upload.
+      */
+      uploads.forEach((u) => enqueueVariantGeneration(u.key));
+
       return res.json({ success: true, provider: 'r2', folder, uploads });
     }
 
