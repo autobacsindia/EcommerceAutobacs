@@ -830,4 +830,140 @@ describe('PUT /products/:id — variable product variants', () => {
     expect(inDb.priceMin).toBe(1499);
     expect(inDb.priceMax).toBe(1499);
   });
+
+  // ── Storage migration: R2 refs must be accepted ─────────────────────────────
+  /*
+    PRODUCTION REGRESSION (2026-09-02). normalizePreUploaded hard-matched
+    `https://res.cloudinary.com/`, so the moment STORAGE_PROVIDER flipped to r2
+    every uploaded image ref was dropped. The bytes were safely in the bucket and
+    the product saved with a 200, so the admin was told "product updated
+    successfully" and no image ever appeared. These tests fail against that code.
+  */
+  describe('pre-uploaded image refs across both storage providers', () => {
+    const R2_BASE = 'https://img.autobacsindia.com';
+    let prevBase;
+    let prevCloud;
+    beforeEach(() => {
+      prevBase = process.env.R2_PUBLIC_BASE_URL;
+      process.env.R2_PUBLIC_BASE_URL = R2_BASE;
+      /*
+        The suite does not otherwise set a cloud name, and the tenant check is
+        skipped when it is absent — so without this the "another tenant" case
+        below passes vacuously. Production always has it set.
+      */
+      prevCloud = process.env.CLOUDINARY_CLOUD_NAME;
+      process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
+    });
+    afterEach(() => {
+      if (prevBase === undefined) delete process.env.R2_PUBLIC_BASE_URL;
+      else process.env.R2_PUBLIC_BASE_URL = prevBase;
+      if (prevCloud === undefined) delete process.env.CLOUDINARY_CLOUD_NAME;
+      else process.env.CLOUDINARY_CLOUD_NAME = prevCloud;
+    });
+
+    const put = async (product, token, uploadedImages) => asAdmin(
+      request(app).put(`/api/v1/products/${product._id}`), token,
+    ).send({
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      stock: product.stock,
+      uploadedImages: JSON.stringify(uploadedImages),
+    });
+
+    test('an R2 ref is attached to the product', async () => {
+      const product = await seedProduct();
+      const token = await getAdminToken();
+      mockUploadMany.mockResolvedValue([]);
+
+      const res = await put(product, token, [
+        { url: `${R2_BASE}/autobacs/products/abc123.jpg`, public_id: 'autobacs/products/abc123.jpg' },
+      ]);
+
+      expect(res.status).toBe(200);
+      const inDb = await Product.findById(product._id);
+      expect(inDb.images.map((i) => i.public_id)).toContain('autobacs/products/abc123.jpg');
+    });
+
+    test('a Cloudinary ref still works — both stores hold live assets', async () => {
+      const product = await seedProduct();
+      const token = await getAdminToken();
+      mockUploadMany.mockResolvedValue([]);
+
+      const res = await put(product, token, [
+        { url: 'https://res.cloudinary.com/test-cloud/image/upload/new9.jpg', public_id: 'autobacs/new9' },
+      ]);
+
+      expect(res.status).toBe(200);
+      const inDb = await Product.findById(product._id);
+      expect(inDb.images.map((i) => i.public_id)).toContain('autobacs/new9');
+    });
+
+    test('a mixed batch attaches both', async () => {
+      const product = await seedProduct();
+      const token = await getAdminToken();
+      mockUploadMany.mockResolvedValue([]);
+
+      const res = await put(product, token, [
+        { url: `${R2_BASE}/autobacs/products/r2one.jpg`, public_id: 'autobacs/products/r2one.jpg' },
+        { url: 'https://res.cloudinary.com/test-cloud/image/upload/cl.jpg', public_id: 'autobacs/cl' },
+      ]);
+
+      expect(res.status).toBe(200);
+      const inDb = await Product.findById(product._id);
+      const ids = inDb.images.map((i) => i.public_id);
+      expect(ids).toEqual(expect.arrayContaining(['autobacs/products/r2one.jpg', 'autobacs/cl']));
+    });
+
+    /*
+      The silent-drop behaviour is what made the original bug invisible. A ref we
+      refuse must FAIL the request: the bytes are already in a bucket, and
+      reporting success loses the admin's intent with nothing to show for it.
+    */
+    test('a foreign host is REJECTED with a 4xx, not silently dropped', async () => {
+      const product = await seedProduct();
+      const token = await getAdminToken();
+      mockUploadMany.mockResolvedValue([]);
+      const before = (await Product.findById(product._id)).images.length;
+
+      const res = await put(product, token, [
+        { url: 'https://evil.example.com/autobacs/products/x.jpg', public_id: 'autobacs/products/x.jpg' },
+      ]);
+
+      expect(res.status).toBe(400);
+      const inDb = await Product.findById(product._id);
+      expect(inDb.images).toHaveLength(before);
+    });
+
+    test('another tenant\'s Cloudinary cloud is REJECTED', async () => {
+      const product = await seedProduct();
+      const token = await getAdminToken();
+      mockUploadMany.mockResolvedValue([]);
+
+      // res.cloudinary.com serves every tenant, so the host alone proves nothing.
+      const res = await put(product, token, [
+        { url: 'https://res.cloudinary.com/someone-else/image/upload/x.jpg', public_id: 'autobacs/x' },
+      ]);
+
+      expect(res.status).toBe(400);
+    });
+
+    /*
+      With no delivery host configured the upload target's url is '', which is
+      how a misconfigured deploy reproduces the same silent loss by another route.
+    */
+    test('an R2 ref is REJECTED when R2_PUBLIC_BASE_URL is unset', async () => {
+      delete process.env.R2_PUBLIC_BASE_URL;
+      const product = await seedProduct();
+      const token = await getAdminToken();
+      mockUploadMany.mockResolvedValue([]);
+
+      const res = await put(product, token, [
+        { url: `${R2_BASE}/autobacs/products/abc123.jpg`, public_id: 'autobacs/products/abc123.jpg' },
+      ]);
+
+      expect(res.status).toBe(400);
+    });
+  });
+
 });

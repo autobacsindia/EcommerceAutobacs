@@ -14,7 +14,7 @@
  *   - Per-product Cloudinary folder: autobacs/products/{productId}
  *   - Structured logging on every upload/delete for production debugging
  */
-import Product from '../models/Product.js';
+import Product, { isHostedImageUrl } from '../models/Product.js';
 import CentralAppError from '../utils/AppError.js';
 import {
   uploadManyToCloudinary,
@@ -61,31 +61,65 @@ const takeSequencing = (fields) => {
 };
 
 /**
- * Validate image refs the browser uploaded DIRECTLY to Cloudinary (bypassing the
- * proxy body limit) and sent back as JSON. We only trust assets that live on OUR
- * Cloudinary cloud — never an arbitrary client-supplied URL — and require a
- * public_id so the asset can be cleaned up on delete/replace.
+ * Validate image refs the browser uploaded DIRECTLY to storage (bypassing the
+ * proxy body limit) and sent back as JSON. We only trust assets on a host WE
+ * own — never an arbitrary client-supplied URL — and require a public_id (or R2
+ * object key) so the asset can be cleaned up on delete/replace.
+ *
+ * ⚠ The host check must accept BOTH stores for as long as both hold live assets.
+ * This function used to hard-match `https://res.cloudinary.com/`, which meant
+ * that the moment STORAGE_PROVIDER flipped to r2 every uploaded image was
+ * dropped here — and dropped SILENTLY: the file was safely in the bucket, the
+ * product saved, the admin saw "updated successfully", and no image appeared.
+ * It is delegated to Product.isHostedImageUrl now so the controller and the
+ * schema validator can never disagree about what a legitimate image URL is.
  *
  * @param {unknown} raw
  * @returns {{ url: string, public_id: string }[]}
+ * @throws  AppError(400) when any ref is rejected — see below.
  */
 const normalizePreUploaded = (raw) => {
   if (!Array.isArray(raw)) return [];
   const cloud = process.env.CLOUDINARY_CLOUD_NAME;
+
+  const isOurs = (i) => {
+    if (!isHostedImageUrl(i.url)) return false;
+    // For a Cloudinary URL, additionally pin it to OUR cloud: res.cloudinary.com
+    // serves every tenant, so the host alone proves nothing about ownership.
+    // R2 URLs are already pinned by host (R2_PUBLIC_BASE_URL is ours alone).
+    if (i.url.includes('res.cloudinary.com')) return !cloud || i.url.includes(`/${cloud}/`);
+    return true;
+  };
+
   const accepted = raw
     .filter((i) => i && typeof i.url === 'string' && typeof i.public_id === 'string' && i.public_id)
-    .filter((i) =>
-      /^https:\/\/res\.cloudinary\.com\//.test(i.url) &&
-      (!cloud || i.url.includes(`/${cloud}/`))
-    )
+    .filter(isOurs)
     .slice(0, MAX_NEW_IMAGES)
     .map((i) => ({ url: i.url, public_id: i.public_id }));
 
-  // Surface silently-dropped refs — otherwise an admin's uploaded image just
-  // vanishes from the product with no error (e.g. an unexpected Cloudinary host).
-  if (accepted.length < raw.length) {
-    console.warn(
-      `[ProductController] normalizePreUploaded dropped ${raw.length - accepted.length} image ref(s) that failed validation`
+  /*
+    FAIL LOUDLY. This used to warn to the server log and carry on, which is how a
+    provider flip turned into "the admin uploaded an image, was told the product
+    saved, and the image was never there". A dropped ref means the bytes are in
+    a bucket with nothing referencing them AND the admin's intent was lost — so
+    the request must not report success.
+
+    Over-cap refs are truncated rather than rejected, hence comparing against the
+    capped length rather than raw.length.
+  */
+  const eligible = raw.filter((i) => i && typeof i.url === 'string').length;
+  const expected = Math.min(eligible, MAX_NEW_IMAGES);
+  if (accepted.length < expected) {
+    const dropped = expected - accepted.length;
+    console.error(
+      `[ProductController] rejected ${dropped} image ref(s) from an unrecognised host — ` +
+      `R2_PUBLIC_BASE_URL=${process.env.R2_PUBLIC_BASE_URL || '(unset)'}`
+    );
+    throw new CentralAppError(
+      `${dropped} uploaded image${dropped === 1 ? '' : 's'} could not be attached because ` +
+      'they are not hosted on a recognised storage domain. Nothing was saved — please retry.',
+      400,
+      { expose: true },
     );
   }
   return accepted;
