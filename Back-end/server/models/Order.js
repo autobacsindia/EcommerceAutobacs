@@ -249,11 +249,19 @@ const OrderSchema = new mongoose.Schema({
   // Invoice/receipt (generated on payment success — see services/invoiceService.js).
   // invoiceNo is the monotonic, human-facing invoice number (assigned once at
   // issuance from the "invoice" Counter, then stable for the life of the order);
-  // invoiceUrl/invoicePublicId are set only when Cloudinary storage is enabled;
+  // invoiceUrl/invoicePublicId are set only when archival storage is enabled;
   // invoiceEmailedAt is the idempotency guard so the invoice email fires once.
+  //
+  // invoiceUrl is EMPTY for anything stored on R2: an invoice lives in the
+  // private bucket, which has no permanent address by design. Readers resolve a
+  // short-lived signed URL from invoicePublicId + invoiceProvider — never assume
+  // invoiceUrl is populated just because an invoice was archived.
   invoiceNo: { type: Number, index: { unique: true, sparse: true } },
   invoiceUrl: String,
   invoicePublicId: String,
+  // Absent means Cloudinary: every reader tests `=== 'r2'`, so rows written
+  // before the migration route to the legacy provider without a backfill.
+  invoiceProvider: { type: String, enum: ['cloudinary', 'r2'], default: undefined },
   invoiceEmailedAt: Date,
   // Fulfillment-status emails already sent to the customer. Idempotency guard so a
   // BullMQ retry of send-order-status-email never double-notifies (see services/orderStatusEmailService.js).
@@ -375,11 +383,23 @@ const OrderSchema = new mongoose.Schema({
       code: String,
       trackingUrl: String
     },
-    // Per-parcel courier slip (PDF on Cloudinary, resource_type 'raw'), attached to
-    // that parcel's shipped email.
+    /*
+      Per-parcel courier slip (PDF), attached to that parcel's shipped email.
+
+      `url` is only populated for slips stored on CLOUDINARY, where they are
+      ordinary public raw assets. On R2 a slip lives in the PRIVATE bucket — it
+      carries the customer's name and delivery address, and nothing external ever
+      needed it public: the shipped email ATTACHES the PDF (the server fetches the
+      bytes itself) and the admin console gets a link minted per view.
+
+      So readers must resolve from `publicId` + `provider`, never assume `url`.
+      Absent provider means Cloudinary — every reader tests `=== 'r2'`, so slips
+      written before the migration keep working with no backfill.
+    */
     shippingSlip: {
       url: String,
       publicId: String,
+      provider: { type: String, enum: ['cloudinary', 'r2'], default: undefined },
       uploadedAt: Date
     },
     estimatedDelivery: Date,
@@ -477,12 +497,13 @@ const OrderSchema = new mongoose.Schema({
     code: String,
     trackingUrl: String
   },
-  // Optional courier shipping slip (PDF) uploaded by an admin when the order ships.
-  // Stored on Cloudinary (resource_type 'raw'); the notification worker downloads
-  // the URL and attaches the PDF to the customer's "order shipped" email.
+  // Legacy single-parcel slip — same contract as the per-parcel one above:
+  // `url` is Cloudinary-only, R2 slips are private and resolved from publicId +
+  // provider. See the parcel-level comment for why.
   shippingSlip: {
     url: String,
     publicId: String,
+    provider: { type: String, enum: ['cloudinary', 'r2'], default: undefined },
     uploadedAt: Date
   },
   trackingEvents: [{

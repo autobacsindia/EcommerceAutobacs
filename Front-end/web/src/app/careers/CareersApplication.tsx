@@ -14,12 +14,24 @@
  * admin without a code change. Dynamic values are HTML-escaped before injection.
  * Two placeholder tokens in the template mark where they go.
  *
- * Submission is IN-HOUSE (no Google): the browser fetches a signed upload params
- * set from our backend, uploads each video/PDF directly to Cloudinary (private
- * `authenticated` delivery), then POSTs only the { publicId, url } refs + form
- * fields to /careers/applications. Files never touch our server; the backend
- * re-validates every ref against Cloudinary. Requires api.cloudinary.com in the
- * page CSP connect-src.
+ * Submission is IN-HOUSE (no Google): the browser fetches upload credentials
+ * from our backend, uploads each video/PDF directly to storage, then POSTs only
+ * the { publicId, provider } refs + form fields to /careers/applications. Files
+ * never touch our server.
+ *
+ * Two storage backends are live at once during the Cloudinary → R2 migration,
+ * and the credential response is a DISCRIMINATED UNION on `provider`:
+ *   - cloudinary — one signature per FOLDER, reused for every file, POSTed as
+ *     multipart to api.cloudinary.com with `authenticated` (private) delivery;
+ *   - r2         — one presigned PUT per object key, into the PRIVATE bucket at
+ *     <account>.r2.cloudflarestorage.com.
+ * Both need their origin in the page CSP connect-src (see middleware.ts).
+ *
+ * Nothing the browser says about a file is trusted: the backend re-reads every
+ * ref from the store it names and re-derives size and format there — by magic
+ * number on the R2 path, since R2 (unlike Cloudinary) does not decode uploads
+ * and does not even enforce the Content-Type its own presigned URL was signed
+ * with.
  *
  * Fonts: dynamic role markup references the next/font CSS variables
  * (var(--font-bebas) / var(--font-inter)) directly; the static template literals
@@ -542,18 +554,74 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
     wireZone('resume-zone', 'resume-file', 'resume-chip', 'resume-fname', 'resume-remove', docs, 'resume', 'application/pdf');
     wireZone('support-zone', 'support-file', 'support-chip', 'support-fname', 'support-remove', docs, 'support', 'application/pdf');
 
-    // ── Signed direct upload of a single file to Cloudinary ───────────────────
-    // `sig` is the params set our backend signed (folder + timestamp + type +
-    // signature). resourceType is 'video' for answers, 'raw' for PDFs. Resolves
-    // to the { publicId, url } we send back to our API for re-validation.
+    // ── Signed direct upload of a single file ────────────────────────────────
+    /*
+      Our backend returns a DISCRIMINATED UNION on `provider`, because the two
+      stores need structurally different credentials: Cloudinary signs a FOLDER
+      once and every file in the batch reuses it, while R2 presigns ONE PUT per
+      object key. So the R2 shape is a list of targets keyed by slot, and the
+      client branches on `provider` rather than guessing from which fields exist.
+
+      Both branches resolve to the same `{ publicId, provider }` ref, which is
+      all we send back — the server re-derives size and format from the store
+      itself, so nothing the browser reports about a file is trusted.
+    */
     interface UploadSig {
       cloudName: string; apiKey: string; timestamp: number;
       folder: string; type: string; signature: string;
     }
+    interface R2Target { slot: string; uploadUrl: string; key: string; contentType: string }
+    type SignatureResponse =
+      | ({ success: boolean; provider?: 'cloudinary' } & UploadSig)
+      | { success: boolean; provider: 'r2'; folder: string; uploads: R2Target[] };
+    interface UploadedRef { publicId: string; provider: 'cloudinary' | 'r2' }
+
+    /*
+      One presigned PUT. XHR rather than fetch() purely for upload progress —
+      a 30 MB video answer on a phone needs a bar, and fetch() still has no
+      request-progress event.
+
+      The Content-Type header must match what the URL was signed with or the
+      signature check fails. Note this is NOT a security control: R2 does not
+      verify that the bytes match the declared type (verified against the live
+      bucket), which is why the server re-reads the object's first bytes and
+      identifies it by magic number before accepting the application.
+    */
+    function uploadFileToR2(
+      file: File, target: R2Target,
+      labelEl: HTMLElement | null, progressWrapEl: HTMLElement | null, progressBarEl: HTMLElement | null,
+    ): Promise<UploadedRef> {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', target.uploadUrl, true);
+        xhr.setRequestHeader('Content-Type', target.contentType);
+
+        if (progressWrapEl) progressWrapEl.style.display = 'block';
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable && progressBarEl) {
+            const pct = Math.round((ev.loaded / ev.total) * 100);
+            progressBarEl.style.width = `${pct}%`;
+            if (labelEl) labelEl.textContent = `Uploading… ${pct}%`;
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            if (labelEl) labelEl.textContent = 'Uploaded ✓';
+            // The key was decided by the server when it signed the URL; we echo
+            // it back rather than deriving anything client-side.
+            resolve({ publicId: target.key, provider: 'r2' });
+          } else {
+            reject(new Error(`Upload failed: HTTP ${xhr.status}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error during upload.'));
+        xhr.send(file);
+      });
+    }
     function uploadFileToCloudinary(
       file: File, sig: UploadSig, resourceType: 'video' | 'raw',
       labelEl: HTMLElement | null, progressWrapEl: HTMLElement | null, progressBarEl: HTMLElement | null,
-    ): Promise<{ publicId: string; url: string }> {
+    ): Promise<UploadedRef> {
       return new Promise((resolve, reject) => {
         const fd = new FormData();
         fd.append('file', file);
@@ -580,7 +648,7 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
             try { resp = JSON.parse(xhr.responseText); } catch { reject(new Error('Bad upload response.')); return; }
             if (!resp.public_id) { reject(new Error('Upload did not return a file id.')); return; }
             if (labelEl) labelEl.textContent = 'Uploaded ✓';
-            resolve({ publicId: resp.public_id, url: resp.secure_url });
+            resolve({ publicId: resp.public_id, provider: 'cloudinary' });
           } else {
             reject(new Error(`Upload failed: HTTP ${xhr.status}`));
           }
@@ -691,17 +759,14 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
           is not in scope in the catch, so referencing it there throws a
           ReferenceError that masks the real error the applicant should see.
         */
-        const uploaded: Record<string, { publicId: string; url: string }> = {};
+        const uploaded: Record<string, UploadedRef> = {};
         try {
-          // Step 1: signed upload params from our backend (files never touch us).
-          setOverall(3, 'Preparing secure upload…');
-          const sig = await apiClient.post<UploadSig & { success: boolean }>(
-            '/careers/applications/upload-signature',
-            {},
-          );
-
-          // Step 2: upload every file straight to Cloudinary (parallel).
-          setOverall(5, 'Uploading files…');
+          /*
+            Step 1: the files we are about to send. This has to be decided BEFORE
+            asking for credentials, because the R2 branch presigns one PUT per
+            object and therefore needs the slot and content type of each file up
+            front. The Cloudinary branch ignores the list entirely.
+          */
           const toUpload: {
             file: File; key: 'videoOne' | 'videoTwo' | 'resume' | 'support';
             resourceType: 'video' | 'raw'; statusId: string; progressWrap: string; progressBar: string;
@@ -714,6 +779,37 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
             toUpload.push({ file: docs.support, key: 'support', resourceType: 'raw', statusId: 'support-status', progressWrap: 'support-progress-wrap', progressBar: 'support-progress-bar' });
           }
 
+          // Step 2: upload credentials from our backend (files never touch us).
+          setOverall(3, 'Preparing secure upload…');
+          const sig = await apiClient.post<SignatureResponse>(
+            '/careers/applications/upload-signature',
+            {
+              files: toUpload.map((u) => ({
+                slot: u.key,
+                // A browser can report an empty type for an unfamiliar
+                // extension; falling back keeps the server's allowlist as the
+                // single place that decides, instead of failing here silently.
+                contentType: u.file.type || (u.resourceType === 'raw' ? 'application/pdf' : 'video/mp4'),
+              })),
+            },
+          );
+
+          /*
+            Targets are matched by SLOT, not by array position: relying on order
+            would break the moment either side reorders or drops the optional
+            supporting document.
+          */
+          const r2Targets = new Map<string, R2Target>(
+            sig.provider === 'r2' ? sig.uploads.map((t) => [t.slot, t]) : [],
+          );
+          if (sig.provider === 'r2') {
+            const missing = toUpload.find((u) => !r2Targets.has(u.key));
+            if (missing) throw new Error('Upload could not be prepared. Please try again.');
+          }
+
+          // Step 3: upload every file straight to storage (parallel).
+          setOverall(5, 'Uploading files…');
+
           let completed = 0;
           const total = toUpload.length;
           /*
@@ -725,16 +821,19 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
             accurate by the time we decide what to do, which is what makes the
             cleanup below able to remove everything.
           */
-          const results = await Promise.allSettled(toUpload.map((item) =>
-            uploadFileToCloudinary(
-              item.file, sig, item.resourceType,
-              byId(item.statusId), byId(item.progressWrap), byId(item.progressBar),
-            ).then((ref) => {
+          const results = await Promise.allSettled(toUpload.map((item) => {
+            const label = byId(item.statusId);
+            const wrap = byId(item.progressWrap);
+            const bar = byId(item.progressBar);
+            const put = sig.provider === 'r2'
+              ? uploadFileToR2(item.file, r2Targets.get(item.key)!, label, wrap, bar)
+              : uploadFileToCloudinary(item.file, sig as UploadSig, item.resourceType, label, wrap, bar);
+            return put.then((ref) => {
               uploaded[item.key] = ref;
               completed++;
               setOverall(5 + Math.round((completed / total) * 85), `Uploading files… (${completed}/${total} done)`);
-            }),
-          ));
+            });
+          }));
           const failedUpload = results.find((r) => r.status === 'rejected');
           if (failedUpload) {
             throw failedUpload.reason instanceof Error

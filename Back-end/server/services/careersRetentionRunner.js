@@ -8,24 +8,19 @@
  * tests; pulling the delete path into that graph would put a live Cloudinary
  * client in every test process.
  */
-import cloudinary from '../config/cloudinary.js';
 import JobApplication from '../models/JobApplication.js';
+import { deleteCareersAssetAnywhere } from './storage/careersAssetStore.js';
 import {
   DEFAULT_RETENTION_DAYS, selectDue, purgeApplicationMedia, summarise,
 } from './careersRetentionService.js';
 
-/** `not_found` counts as success — see the CLI script for the reasoning. */
-const deleteAsset = async ({ publicId, resourceType }) => {
-  const rt = resourceType === 'raw' ? 'raw' : resourceType === 'video' ? 'video' : 'image';
-  try {
-    const res = await cloudinary.api.delete_resources([publicId], { resource_type: rt, type: 'authenticated' });
-    const status = res?.deleted?.[publicId];
-    return status === 'deleted' || status === 'not_found';
-  } catch (err) {
-    console.error(`[CareersRetention][CLEANUP_REQUIRED] delete failed ${publicId}: ${err.message}`);
-    return false;
-  }
-};
+/**
+ * Routed by the stored ref's own `provider`, so this sweep keeps working across
+ * the cutover in both directions. `not_found` counts as success — see the CLI
+ * script for the reasoning.
+ */
+const deleteAsset = ({ publicId, resourceType, provider }) =>
+  deleteCareersAssetAnywhere({ publicId, resourceType, provider });
 
 /**
  * Run one sweep. Returns a summary; never throws for an individual failure.

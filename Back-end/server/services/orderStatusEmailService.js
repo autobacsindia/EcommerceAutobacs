@@ -13,6 +13,7 @@
 import orderRepository from '../repositories/orderRepository.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import emailHandler from './emailHandler.js';
+import { readPrivateAsset } from './storage/privateUploads.js';
 
 /**
  * Download a URL into a Buffer (used to fetch the Cloudinary-hosted shipping slip
@@ -91,10 +92,17 @@ export const emailOrderStatusUpdate = async (orderId, status, opts = {}) => {
   // A parcel's own slip wins over the order-level one: with several boxes in flight,
   // attaching the order's single legacy slip to every email would send the wrong
   // paperwork for every parcel but the first.
-  const slipUrl = shipment ? shipment.shippingSlip?.url : order.shippingSlip?.url;
-  if (status === 'shipped' && slipUrl) {
+  const slip = shipment ? shipment.shippingSlip : order.shippingSlip;
+  /*
+    An R2 slip lives in the private bucket and therefore has NO url — the ref's
+    publicId is the only handle. Testing `url` here (as this did) silently drops
+    the attachment for every R2 slip and sends a tracking-only email that still
+    says "your shipping slip is attached". Test the ref instead and let
+    readPrivateAsset decide how to fetch it.
+  */
+  if (status === 'shipped' && (slip?.publicId || slip?.url)) {
     try {
-      const buffer = await downloadToBuffer(slipUrl);
+      const buffer = await readPrivateAsset(slip, downloadToBuffer);
       const ref = `AB-${order._id.toString().slice(-8).toUpperCase()}`;
       attachments = [{
         Name: `shipping-slip-${ref}.pdf`,

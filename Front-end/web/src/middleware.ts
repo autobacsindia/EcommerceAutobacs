@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose'; // Lightweight JWT verification (edge-compatible)
 import { isGonePath } from '@/lib/legacyPaths';
+import { buildCsp } from '@/lib/csp';
 
 /**
  * Next.js Middleware — single edge entrypoint for the whole app.
@@ -124,84 +125,6 @@ async function silentRefresh(
 }
 
 // ── CSP construction ──────────────────────────────────────────────────────────
-function buildCsp(nonce: string): string {
-  const isDev = process.env.NODE_ENV !== 'production';
-
-  // script-src:
-  //   'nonce-{n}'      — only scripts carrying this nonce may execute inline.
-  //   'strict-dynamic' — trust propagates to scripts loaded by a nonce'd script,
-  //                      so Razorpay can load its own sub-scripts. Domain
-  //                      allow-lists below are a fallback for browsers without it.
-  //   'unsafe-eval'    — dev only, for React Fast Refresh (HMR).
-  //   'wasm-unsafe-eval' — allows WebAssembly.instantiate (the Draco glTF
-  //                      decoder that powers the home 3D car) WITHOUT permitting
-  //                      general eval(); required in prod where 'unsafe-eval' is
-  //                      stripped. Without it the .glb never decodes → blank canvas.
-  const scriptSrc = [
-    "'self'",
-    `'nonce-${nonce}'`,
-    "'strict-dynamic'",
-    "'wasm-unsafe-eval'",
-    ...(isDev ? ["'unsafe-eval'"] : []),
-    'https://checkout.razorpay.com',
-    // Affordability/EMI widget on the PDP (RazorpayAffordabilitySuite).
-    'https://cdn.razorpay.com',
-    'https://maps.googleapis.com',
-    // Google Tag (gtag.js) for Google Ads conversion tracking. 'strict-dynamic'
-    // already trusts the sub-scripts the nonce'd loader pulls in; these explicit
-    // entries are the fallback for browsers that ignore 'strict-dynamic'.
-    // googleadservices.com serves the conversion linker / conversion_async.js.
-    'https://www.googletagmanager.com',
-    'https://www.googleadservices.com',
-    // Meta Pixel loader (fbevents.js). 'strict-dynamic' already trusts it via the
-    // nonce'd init snippet; this is the fallback for browsers ignoring strict-dynamic.
-    'https://connect.facebook.net',
-  ].join(' ');
-
-  return [
-    "default-src 'self'",
-    `script-src ${scriptSrc}`,
-    // 'unsafe-inline' is required for style-src: the CSP spec does not support
-    // nonces on style="" attributes, only on <style> elements. React libraries
-    // (react-hot-toast, next/font, Tailwind utilities) emit inline style
-    // attributes that cannot be nonce'd. CSS-injection risk is low; the
-    // meaningful gain is script-src keeping its strict nonce policy.
-    "style-src 'self' 'unsafe-inline'",
-    // images.unsplash.com = temporary home-redesign placeholder imagery; safe to
-    // remove once all artwork is hosted on Cloudinary (res.cloudinary.com).
-    // cdn.razorpay.com serves the EMI widget's bank/lender logos.
-    // Google Ads / gtag fire conversion tracking as <img> pixel beacons to
-    // google.com/pagead, googleadservices.com and googleads.g.doubleclick.net —
-    // without these the conversion never reaches Google even though the script ran.
-    // (Verified against a live Vercel preview: the googleadservices.com + doubleclick
-    // beacons were CSP-blocked until added here.)
-    // Meta Pixel fires tracking as <img> beacons to www.facebook.com/tr.
-    "img-src 'self' data: blob: https://img.autobacsindia.com https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net",
-    "font-src 'self' data:",
-    // blob: for LogRocket session-replay web workers spawned by the npm SDK
-    "worker-src blob: 'self'",
-    // api.cloudinary.com: admin image uploads AND careers applicant videos/PDFs
-    // go browser→Cloudinary directly (signed), bypassing our API + the proxy
-    // request-body limit. (The careers flow previously used Google Drive + a
-    // Google Apps Script web app — script.google.com / script.googleusercontent.com
-    // / www.googleapis.com — now removed after the in-house migration.)
-    // Trailing Google Tag / Ads entries: gtag.js XHR/beacon endpoints for
-    // loading config and posting the purchase conversion. googleadservices.com +
-    // ad.doubleclick.net + the regional google.co.in are the enhanced-conversion /
-    // conversion-linker fetch targets (were CSP-blocked on the preview until added).
-    "connect-src 'self' https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net",
-    // Razorpay renders its payment UI (checkout) and the EMI affordability
-    // widget's "View plans" modal inside iframes. googletagmanager.com is the
-    // GTM <noscript> ns.html iframe (layout.tsx) — without it that fallback is
-    // CSP-blocked for JS-less visitors, silently and only for them.
-    "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com https://www.googletagmanager.com",
-    "frame-ancestors 'none'",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self' https://api.razorpay.com",
-    "upgrade-insecure-requests",
-  ].join('; ');
-}
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

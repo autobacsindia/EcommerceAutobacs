@@ -157,6 +157,33 @@ export const getObjectBuffer = async ({ key, scope }) => {
 };
 
 /**
+ * Read the first `bytes` of an object.
+ *
+ * Exists so content sniffing costs a few hundred bytes instead of a full
+ * download: a careers answer video is up to 30 MB and the signature that
+ * identifies it lives in the first dozen. Uses an HTTP Range request, so R2
+ * transfers only that slice.
+ *
+ * Returns an empty Buffer when the object is missing, so a caller sniffing an
+ * absent key gets "no signature" rather than an exception — absence is already
+ * caught by the separate existence check.
+ */
+export const getObjectHead = async ({ key, scope, bytes = 512 }) => {
+  const bucket = bucketFor(scope);
+  try {
+    const r = await client().send(new GetObjectCommand({
+      Bucket: bucket, Key: key, Range: `bytes=0-${Math.max(0, bytes - 1)}`,
+    }));
+    return Buffer.from(await r.Body.transformToByteArray());
+  } catch (err) {
+    const status = err?.$metadata?.httpStatusCode;
+    if (status === 404 || err?.name === 'NoSuchKey' || err?.name === 'NotFound') return Buffer.alloc(0);
+    console.error(`[Storage] range read failed — ${bucket}/${key}: ${err.message}`);
+    throw new AppError(`Storage read failed: ${err.message}`, 500);
+  }
+};
+
+/**
  * Delete one object. Resolves even when the key is already gone — S3 delete is
  * idempotent, and a cleanup path that throws on "already deleted" turns a
  * successful retry into a permanent failure.
@@ -208,11 +235,20 @@ export const deleteObjects = async ({ keys = [], scope }) => {
 /**
  * Presigned PUT for a direct browser upload.
  *
- * `contentType` is SIGNED, so the browser must send exactly this Content-Type or
- * R2 rejects the request. That is the first of two gates; it is not sufficient
- * on its own (a client can send a matching header for mismatched bytes), which
- * is why the submit path still re-reads the object with headObject() and
- * validates the real size server-side before attaching it to a record.
+ * ⚠ `contentType` is signed but NOT ENFORCED. Verified against the live bucket:
+ * a URL signed for `image/png` accepted a body sent as `text/html`, and R2 then
+ * stored and served it as `text/html`. Treat the signed Content-Type as a hint
+ * to the client — it shapes the object key and gives an early, friendly
+ * rejection — and never as a control.
+ *
+ * The real gates are elsewhere, and both are required:
+ *   - size and existence come from headObject() at submit time, from the store
+ *     rather than from the client;
+ *   - the FORMAT is re-derived by reading the first bytes back out and matching
+ *     the magic number (services/storage/contentSniff.js). That is what replaces
+ *     the decode Cloudinary used to do for free.
+ * Public delivery adds a third: the image Worker clamps every served
+ * Content-Type to an image allowlist and sends `X-Content-Type-Options: nosniff`.
  */
 export const presignPut = async ({ key, scope, contentType, expiresIn }) => {
   if (!key) throw new AppError('[Storage] presignPut requires a key', 500);
@@ -249,7 +285,15 @@ export const presignGet = async ({ key, scope = 'private', expiresIn, downloadAs
   );
 };
 
-/** List keys under a prefix (migration auditing). Paginates internally. */
+/**
+ * List keys under a prefix (migration auditing, orphan sweeps). Paginates
+ * internally.
+ *
+ * `lastModified` is carried through because the abandoned-asset sweep is
+ * age-gated: it only deletes an unreferenced object once it is old enough that
+ * no in-flight submission could still be about to claim it. Without an
+ * age, that sweep would race a form the applicant is still filling in.
+ */
 export const listKeys = async ({ prefix = '', scope, limit = Infinity }) => {
   const bucket = bucketFor(scope);
   const out = [];
@@ -260,13 +304,15 @@ export const listKeys = async ({ prefix = '', scope, limit = Infinity }) => {
       Prefix: prefix,
       ContinuationToken: token,
     }));
-    (r.Contents || []).forEach((o) => { if (out.length < limit) out.push({ key: o.Key, bytes: o.Size }); });
+    (r.Contents || []).forEach((o) => {
+      if (out.length < limit) out.push({ key: o.Key, bytes: o.Size, lastModified: o.LastModified });
+    });
     token = r.IsTruncated ? r.NextContinuationToken : undefined;
   } while (token && out.length < limit);
   return out;
 };
 
 export default {
-  putObject, headObject, objectExists, getObjectBuffer,
+  putObject, headObject, objectExists, getObjectBuffer, getObjectHead,
   deleteObject, deleteObjects, presignPut, presignGet, listKeys, resetClient,
 };

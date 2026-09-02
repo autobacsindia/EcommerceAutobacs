@@ -43,7 +43,7 @@
 import fs from 'fs';
 import path from 'path';
 import mongoose from 'mongoose';
-import cloudinary from '../config/cloudinary.js';
+import { deleteCareersAssetAnywhere } from '../services/storage/careersAssetStore.js';
 import {
   DEFAULT_RETENTION_DAYS, selectDue, purgeApplicationMedia, summarise, retentionClock, daysSince,
 } from '../services/careersRetentionService.js';
@@ -61,21 +61,18 @@ const mb = (b) => (b / 1048576).toFixed(1);
 const bar = (c = '─') => console.log(c.repeat(78));
 
 /**
- * Delete one asset. `not_found` counts as success: the goal is "the object is
+ * Delete one asset from whichever store holds it, routed by the stored ref's own
+ * `provider` — so this script keeps working through the Cloudinary → R2 cutover
+ * and after a rollback. `not_found` counts as success: the goal is "the object is
  * gone", and a retry after a crash between delete and DB-save must be able to
  * complete rather than jamming on an asset that is already deleted.
+ *
+ * Shared with the scheduled runner (services/careersRetentionRunner.js) on
+ * purpose: a CLI purge and the cron purge deleting from different places is
+ * precisely the divergence that leaves PII behind.
  */
-const deleteAsset = async ({ publicId, resourceType }) => {
-  const rt = resourceType === 'raw' ? 'raw' : resourceType === 'video' ? 'video' : 'image';
-  try {
-    const res = await cloudinary.api.delete_resources([publicId], { resource_type: rt, type: 'authenticated' });
-    const status = res?.deleted?.[publicId];
-    return status === 'deleted' || status === 'not_found';
-  } catch (err) {
-    console.error(`  [CLEANUP_REQUIRED] delete failed ${publicId}: ${err.message}`);
-    return false;
-  }
-};
+const deleteAsset = ({ publicId, resourceType, provider }) =>
+  deleteCareersAssetAnywhere({ publicId, resourceType, provider });
 
 const main = async () => {
   // autoIndex:false — the local .env points at PROD; a bare connect() would

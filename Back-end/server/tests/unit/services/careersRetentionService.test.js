@@ -151,6 +151,32 @@ describe('purgeApplicationMedia', () => {
     expect(r).toMatchObject({ status: 'purged', deleted: 2, failed: [] });
   });
 
+  /*
+    The purge must follow each file's OWN provider, not the deployment's current
+    STORAGE_PROVIDER. Routed to the wrong store, an R2 delete of a key that is
+    not there SUCCEEDS — so the sweep would report a clean purge, stamp
+    mediaPurgedAt, and leave the applicant's CV in the other bucket permanently.
+    A retention breach indistinguishable from a completed purge.
+  */
+  test('threads each file\'s own provider through to the deleter', async () => {
+    const mixed = {
+      ...app(),
+      files: {
+        videoOne: { publicId: 'autobacs/careers/n/v1', resourceType: 'video', bytes: 1, provider: 'r2' },
+        resume:   { publicId: 'autobacs/careers/n/cv.pdf', resourceType: 'raw', bytes: 1 },
+      },
+    };
+    const d = deps();
+    await purgeApplicationMedia(mixed, d);
+    expect(d.deleteAsset).toHaveBeenCalledWith(expect.objectContaining({
+      publicId: 'autobacs/careers/n/v1', provider: 'r2',
+    }));
+    // Absent means Cloudinary — the same rule as privateAssetUrl.providerOf.
+    expect(d.deleteAsset).toHaveBeenCalledWith(expect.objectContaining({
+      publicId: 'autobacs/careers/n/cv.pdf', provider: undefined,
+    }));
+  });
+
   test('storage delete happens BEFORE the DB write', async () => {
     const order = [];
     const d = deps({

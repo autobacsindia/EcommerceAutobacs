@@ -27,6 +27,26 @@ jest.unstable_mockModule('../../../utils/careersCloudinary.js', () => ({
   signedCareersAssetUrl: (publicId, rt) => `signed:${rt}:${publicId}`,
 }));
 
+/*
+  R2 is mocked at the provider boundary, not at careersUploadTargets: the point
+  of the r2 branch tests below is that the controller wires the REAL target
+  builder (private scope, server-chosen folder, slot allowlist), so stubbing that
+  module out would test nothing.
+*/
+const presignPut = jest.fn();
+const deleteObject = jest.fn(async () => true);
+const headObject = jest.fn(async () => null);
+const getObjectHead = jest.fn(async () => Buffer.alloc(0));
+jest.unstable_mockModule('../../../services/storage/r2Provider.js', () => ({
+  presignPut: (...a) => presignPut(...a),
+  presignGet: jest.fn(async () => 'https://r2.example/signed'),
+  headObject: (...a) => headObject(...a),
+  getObjectHead: (...a) => getObjectHead(...a),
+  deleteObjects: jest.fn(async () => ({ deleted: 0, failed: [] })),
+  deleteObject: (...a) => deleteObject(...a),
+  objectExists: jest.fn(async () => false),
+}));
+
 jest.unstable_mockModule('../../../queue/queues.js', () => ({
   enqueueNotification,
   getSearchSyncQueue: () => ({ add: jest.fn() }),
@@ -50,7 +70,17 @@ beforeEach(() => {
   getCareersResource.mockImplementation((publicId, rt) =>
     Promise.resolve({ public_id: publicId, bytes: 1000, format: rt === 'raw' ? undefined : 'mp4' }));
   enqueueNotification.mockReset();
+  presignPut.mockReset();
+  deleteObject.mockReset(); deleteObject.mockResolvedValue(true);
+  headObject.mockReset();   headObject.mockResolvedValue(null);
+  getObjectHead.mockReset(); getObjectHead.mockResolvedValue(Buffer.alloc(0));
+  presignPut.mockImplementation(async ({ key }) => ({
+    url: `https://r2.example/${key}?X-Amz-Signature=x`, key, expiresIn: 900,
+  }));
+  delete process.env.STORAGE_PROVIDER;
 });
+
+afterEach(() => { delete process.env.STORAGE_PROVIDER; });
 
 afterEach(async () => {
   await JobApplication.deleteMany({});
@@ -413,5 +443,222 @@ describe('cleanupOrphanedUploads', () => {
   test.each([undefined, null, [], 'nope', {}])('handles a malformed body %p', async (publicIds) => {
     const res = await call(publicIds);
     expect(res.body).toEqual({ success: true, deleted: 0 });
+  });
+});
+
+
+// ── Upload credentials (provider switch) ─────────────────────────────────────
+/*
+  One endpoint, two shapes. The client branches on `provider`, so a half-migrated
+  deployment is explicit rather than inferred from which fields happen to exist.
+  `STORAGE_PROVIDER` is read PER REQUEST — these tests set and unset it around
+  each case, which is also the proof that flipping it back is a live rollback
+  rather than a redeploy.
+*/
+describe('getUploadSignature', () => {
+  const req = (files) => ({ body: files ? { files } : {} });
+
+  test('defaults to Cloudinary when STORAGE_PROVIDER is unset', async () => {
+    const res = mockRes();
+    await controller.getUploadSignature(req(), res);
+    expect(res.body.provider).toBe('cloudinary');
+    expect(res.body.signature).toBe('sig');
+    expect(presignPut).not.toHaveBeenCalled();
+  });
+
+  test('the Cloudinary folder is server-chosen and unguessable', async () => {
+    const a = mockRes(); const b = mockRes();
+    await controller.getUploadSignature(req(), a);
+    await controller.getUploadSignature(req(), b);
+    expect(a.body.folder).toMatch(/^autobacs\/careers\/[0-9a-f]{24}$/);
+    expect(a.body.folder).not.toBe(b.body.folder);
+  });
+
+  describe('with STORAGE_PROVIDER=r2', () => {
+    beforeEach(() => { process.env.STORAGE_PROVIDER = 'r2'; });
+
+    test('returns one presigned target per requested slot', async () => {
+      const res = mockRes();
+      await controller.getUploadSignature(req([
+        { slot: 'videoOne', contentType: 'video/mp4' },
+        { slot: 'resume', contentType: 'application/pdf' },
+      ]), res);
+
+      expect(res.body.provider).toBe('r2');
+      expect(res.body.uploads).toHaveLength(2);
+      expect(res.body.uploads[0]).toMatchObject({ slot: 'videoOne', contentType: 'video/mp4' });
+      expect(res.body.uploads[0].uploadUrl).toContain('X-Amz-Signature');
+      // No Cloudinary credential leaks into the r2 shape.
+      expect(res.body.signature).toBeUndefined();
+      expect(res.body.apiKey).toBeUndefined();
+    });
+
+    /*
+      The assertion that matters most: a careers upload signed against the public
+      bucket would give every applicant's CV a permanent, unauthenticated address.
+    */
+    test('signs every target against the PRIVATE bucket', async () => {
+      const res = mockRes();
+      await controller.getUploadSignature(req([
+        { slot: 'videoOne', contentType: 'video/mp4' },
+        { slot: 'videoTwo', contentType: 'video/webm' },
+        { slot: 'resume', contentType: 'application/pdf' },
+        { slot: 'support', contentType: 'application/pdf' },
+      ]), res);
+      expect(presignPut).toHaveBeenCalledTimes(4);
+      for (const [args] of presignPut.mock.calls) expect(args.scope).toBe('private');
+    });
+
+    test('keys are confined to a server-chosen applicant folder', async () => {
+      const res = mockRes();
+      await controller.getUploadSignature(req([{ slot: 'resume', contentType: 'application/pdf' }]), res);
+      expect(res.body.folder).toMatch(/^autobacs\/careers\/[0-9a-f]{24}$/);
+      expect(res.body.uploads[0].key.startsWith(`${res.body.folder}/`)).toBe(true);
+    });
+
+    test('never returns a readable URL for a private object', async () => {
+      const res = mockRes();
+      await controller.getUploadSignature(req([{ slot: 'resume', contentType: 'application/pdf' }]), res);
+      expect(res.body.uploads[0]).not.toHaveProperty('url');
+    });
+
+    test('rejects a disallowed type before signing anything', async () => {
+      await expect(controller.getUploadSignature(
+        req([{ slot: 'resume', contentType: 'text/html' }]), mockRes(),
+      )).rejects.toMatchObject({ statusCode: 400, expose: true });
+      expect(presignPut).not.toHaveBeenCalled();
+    });
+
+    test('a client that sends no files gets no targets', async () => {
+      const res = mockRes();
+      await controller.getUploadSignature(req(), res);
+      expect(res.body).toMatchObject({ provider: 'r2', uploads: [] });
+      expect(presignPut).not.toHaveBeenCalled();
+    });
+  });
+
+  test('flipping STORAGE_PROVIDER back returns the Cloudinary shape again', async () => {
+    process.env.STORAGE_PROVIDER = 'r2';
+    const r2 = mockRes();
+    await controller.getUploadSignature(req([{ slot: 'resume', contentType: 'application/pdf' }]), r2);
+    expect(r2.body.provider).toBe('r2');
+
+    process.env.STORAGE_PROVIDER = 'cloudinary';
+    const back = mockRes();
+    await controller.getUploadSignature(req([{ slot: 'resume', contentType: 'application/pdf' }]), back);
+    expect(back.body.provider).toBe('cloudinary');
+  });
+});
+
+
+// ── Submitting files that live in R2 ─────────────────────────────────────────
+/*
+  End-to-end through the controller: the client's JSON is a CLAIM, and the
+  controller must re-derive size and format from the bucket. These go through
+  the REAL careersAssetStore (only the R2 provider is mocked), so they exercise
+  the key-shape guard, the ranged sniff and the stored `provider` together.
+*/
+describe('submitApplication — R2 files', () => {
+  const R2_FOLDER = 'autobacs/careers/0123456789abcdef01234567';
+  const r2 = (slot, ext) => ({ publicId: `${R2_FOLDER}/${slot}-0011223344556677.${ext}`, provider: 'r2' });
+  const MP4 = Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from('ftypisom')]);
+  const PDF = Buffer.from('%PDF-1.7\n');
+
+  const r2Files = () => ({
+    videoOne: r2('videoOne', 'mp4'),
+    videoTwo: r2('videoTwo', 'mp4'),
+    resume:   r2('resume', 'pdf'),
+  });
+
+  beforeEach(() => {
+    headObject.mockResolvedValue({ bytes: 2048 });
+    getObjectHead.mockImplementation(async ({ key }) => (key.endsWith('.pdf') ? PDF : MP4));
+  });
+
+  test('accepts verified files and stores provider + server-derived size', async () => {
+    const res = mockRes();
+    await controller.submitApplication({ headers: {}, body: baseBody({ files: r2Files() }) }, res);
+    expect(res.statusCode).toBe(201);
+
+    const saved = await JobApplication.findOne({ email: 'asha@example.com' }).lean();
+    expect(saved.files.resume).toMatchObject({ provider: 'r2', bytes: 2048, resourceType: 'raw' });
+    expect(saved.files.videoOne.provider).toBe('r2');
+    // Cloudinary was never consulted for an R2 file.
+    expect(getCareersResource).not.toHaveBeenCalled();
+  });
+
+  test('the stored size comes from the bucket, not the payload', async () => {
+    headObject.mockResolvedValue({ bytes: 999 });
+    const files = r2Files();
+    files.resume.bytes = 1;             // the client lies
+    const res = mockRes();
+    await controller.submitApplication({ headers: {}, body: baseBody({ files }) }, res);
+    const saved = await JobApplication.findOne({ email: 'asha@example.com' }).lean();
+    expect(saved.files.resume.bytes).toBe(999);
+  });
+
+  /*
+    The substitution the magic-byte check exists to stop. Extension, signed
+    Content-Type and the client's own claim all say "PDF"; only the bytes say
+    otherwise, and R2 enforces neither of the first two.
+  */
+  test('REJECTS HTML uploaded to the resume slot', async () => {
+    getObjectHead.mockImplementation(async ({ key }) =>
+      (key.endsWith('.pdf') ? Buffer.from('<!DOCTYPE html><script>x</script>') : MP4));
+    const res = mockRes();
+    await controller.submitApplication({ headers: {}, body: baseBody({ files: r2Files() }) }, res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe('Resume must be a PDF.');
+    expect(await JobApplication.countDocuments({})).toBe(0);
+  });
+
+  test('REJECTS a file that was never uploaded', async () => {
+    headObject.mockResolvedValue(null);
+    const res = mockRes();
+    await controller.submitApplication({ headers: {}, body: baseBody({ files: r2Files() }) }, res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toMatch(/could not be verified/);
+  });
+
+  test('REJECTS an oversized video against the store size', async () => {
+    headObject.mockResolvedValue({ bytes: 31 * 1024 * 1024 });
+    const res = mockRes();
+    await controller.submitApplication({ headers: {}, body: baseBody({ files: r2Files() }) }, res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe('Video answer 1 exceeds the 30MB limit.');
+  });
+
+  test('REJECTS attaching one slot\'s object to another slot', async () => {
+    const files = r2Files();
+    files.videoOne = { publicId: `${R2_FOLDER}/resume-0011223344556677.pdf`, provider: 'r2' };
+    const res = mockRes();
+    await controller.submitApplication({ headers: {}, body: baseBody({ files }) }, res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe('Video answer 1: invalid upload reference.');
+    expect(headObject).not.toHaveBeenCalled();
+  });
+
+  test('REJECTS a foreign key pasted into the payload', async () => {
+    const files = r2Files();
+    files.resume = { publicId: 'autobacs/products/hero/photo.jpg', provider: 'r2' };
+    const res = mockRes();
+    await controller.submitApplication({ headers: {}, body: baseBody({ files }) }, res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe('Resume: invalid upload reference.');
+  });
+
+  /*
+    Mid-cutover reality: an applicant who uploaded before the flip submits after
+    it. Each file is verified against the store IT names, so a mixed submission
+    is fine — this is what makes the flip safe for in-flight applications.
+  */
+  test('accepts a submission that mixes both stores', async () => {
+    const files = { ...r2Files(), resume: F('autobacs/careers/n1/cv.pdf') };
+    const res = mockRes();
+    await controller.submitApplication({ headers: {}, body: baseBody({ files }) }, res);
+    expect(res.statusCode).toBe(201);
+    const saved = await JobApplication.findOne({ email: 'asha@example.com' }).lean();
+    expect(saved.files.videoOne.provider).toBe('r2');
+    expect(saved.files.resume.provider).toBe('cloudinary');
   });
 });

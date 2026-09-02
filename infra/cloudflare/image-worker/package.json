@@ -6,6 +6,8 @@
   "description": "Serves pre-generated AVIF/WebP image variants from R2, negotiating format per request.",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "deploy:token": "wrangler deploy",
+    "verify": "node ./verify.mjs"
   }
 }

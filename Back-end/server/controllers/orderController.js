@@ -20,10 +20,11 @@ import { contentIdForLineItem } from '../utils/metaCatalogId.js';
 import { hashToken } from '../utils/tokenUtils.js';
 import { STORE_TZ_OFFSET } from '../utils/storeTime.js';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
-import { uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import { describeEmiPlan, supportsPartialRefund } from '../utils/paymentMethodDetails.js';
 import crypto from 'crypto';
+import { putPrivateAsset, deletePrivateAsset } from '../services/storage/privateUploads.js';
+import { providerOf, r2PrivateUrl } from '../services/storage/privateAssetUrl.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import * as Sentry from '@sentry/node';
@@ -177,6 +178,30 @@ export const getRefunds = async (req, res) => {
 // @desc    Get order by ID
 // @route   GET /orders/:id
 // @access  Private
+/**
+ * Resolve a shipping slip's ref into something a browser can open.
+ *
+ * A Cloudinary slip keeps its stored public URL. An R2 slip has none — it sits
+ * in the private bucket — so one is minted per view, short-lived, and only for a
+ * caller this handler has already authorised. That is the whole reason a slip
+ * can be private at all: the two things that ever read it (this handler and the
+ * shipped-email attachment) are both server-side.
+ *
+ * Returns the slip unchanged when there is nothing to resolve, and never throws:
+ * a signing failure must degrade to "no slip link" rather than 500 the entire
+ * order page.
+ */
+const withSignedSlip = async (slip) => {
+  if (!slip?.publicId || providerOf(slip) !== 'r2') return slip;
+  try {
+    const url = await r2PrivateUrl({ key: slip.publicId, downloadAs: 'shipping-slip.pdf' });
+    return { ...slip, url };
+  } catch (err) {
+    console.error(`[Order] could not sign shipping slip ${slip.publicId}: ${err.message}`);
+    return slip;
+  }
+};
+
 export const getOrderById = async (req, res) => {
   const order = await orderRepository.findWithPopulated(req.params.id);
 
@@ -208,8 +233,24 @@ export const getOrderById = async (req, res) => {
   const hasRealReturnRequest = !!order.returnRequest?.requestedAt;
   const hasRealRefund = !!order.refundDetails?.requestedAt;
 
+  /*
+    Slips are signed for BOTH the legacy order-level field and every parcel.
+    Signing only the order-level one would work today (the admin page renders
+    just that) and break silently the moment the parcel list grows a slip link.
+  */
+  const [signedSlip, signedShipments] = await Promise.all([
+    withSignedSlip(order.shippingSlip),
+    Array.isArray(order.shipments)
+      ? Promise.all(order.shipments.map(async (sh) => ({
+        ...sh, shippingSlip: await withSignedSlip(sh.shippingSlip),
+      })))
+      : Promise.resolve(order.shipments),
+  ]);
+
   const normalizedOrder = {
     ...order,
+    shippingSlip: signedSlip,
+    shipments: signedShipments,
     returnRequest: hasRealReturnRequest ? order.returnRequest : undefined,
     refundDetails: hasRealRefund ? order.refundDetails : undefined,
     // Strip the raw gateway entity (MDR, card id, acquirer data) before it leaves the
@@ -1116,11 +1157,30 @@ export const updateOrderStatus = async (req, res) => {
         opaque, so nothing reads them back by convention.
       */
       const slipNonce = crypto.randomBytes(6).toString('hex');
-      const uploaded = await uploadRawToCloudinary(req.file.buffer, {
+      const uploaded = await putPrivateAsset({
+        buffer: req.file.buffer,
         folder: process.env.SHIPPING_SLIP_CLOUDINARY_FOLDER || 'shipping-slips',
-        publicId: `slip-${req.params.id}-${slipNonce}.pdf`,
+        basename: `slip-${req.params.id}-${slipNonce}.pdf`,
+        contentType: req.file.mimetype || 'application/pdf',
+        // The basename already carries a random suffix, so an overwrite could
+        // only be a collision — and overwriting would resurrect exactly the
+        // wrong-parcel bug described above.
+        overwrite: false,
       });
-      shippingSlip = { url: uploaded.secure_url, publicId: uploaded.public_id, uploadedAt: new Date() };
+      /*
+        `url` is '' on the R2 path: a slip goes to the PRIVATE bucket there,
+        because it carries the customer's name and delivery address and nothing
+        external needs it public — the shipped email attaches the PDF and the
+        admin console gets a link minted per view. Both readers resolve from
+        publicId + provider (see services/storage/privateAssetUrl.js), so the
+        empty url is expected, not a failure.
+      */
+      shippingSlip = {
+        url: uploaded.url,
+        publicId: uploaded.publicId,
+        provider: uploaded.provider,
+        uploadedAt: new Date(),
+      };
     }
 
     // ETA: honour an explicit date, else derive from the carrier's SLA so the
@@ -1165,7 +1225,11 @@ export const updateOrderStatus = async (req, res) => {
 
     if (!created.success) {
       if (shipping?.shippingSlip?.publicId) {
-        await deleteFromCloudinary(shipping.shippingSlip.publicId, 'raw').catch(() => {});
+        await deletePrivateAsset({
+          publicId: shipping.shippingSlip.publicId,
+          resourceType: 'raw',
+          provider: shipping.shippingSlip.provider,
+        }).catch(() => {});
       }
       return res.status(400).json({ success: false, message: created.message });
     }
@@ -1234,7 +1298,11 @@ export const updateOrderStatus = async (req, res) => {
     // in the shipping payload). If the transition was rejected here — e.g. a
     // concurrent status change since the pre-check — don't leave it orphaned. (raw resource)
     if (shipping?.shippingSlip?.publicId) {
-      await deleteFromCloudinary(shipping.shippingSlip.publicId, 'raw').catch(() => {});
+      await deletePrivateAsset({
+        publicId: shipping.shippingSlip.publicId,
+        resourceType: 'raw',
+        provider: shipping.shippingSlip.provider,
+      }).catch(() => {});
     }
     return res.status(400).json({ success: false, message: result.message });
   }

@@ -16,17 +16,25 @@
  * signature endpoint — if abuse volume warrants it.)
  */
 
-import crypto from 'crypto';
 import jobApplicationRepository from '../repositories/jobApplicationRepository.js';
 import jobPostingRepository from '../repositories/jobPostingRepository.js';
 import {
   CAREERS_FOLDER_BASE,
-  deleteCareersAsset,
   generateCareersUploadSignature,
-  getCareersResource,
   signedCareersAssetUrl,
 } from '../utils/careersCloudinary.js';
+import {
+  REASON,
+  verifyCareersAsset,
+  deleteCareersAssetAnywhere,
+  inferCareersProvider,
+} from '../services/storage/careersAssetStore.js';
 import { enqueueNotification } from '../queue/queues.js';
+import { storageProvider } from '../config/storage.js';
+import {
+  buildCareersUploadTargets,
+  newCareersFolder,
+} from '../services/storage/careersUploadTargets.js';
 
 const MB = 1024 * 1024;
 const VIDEO_MAX_BYTES = 30 * MB;
@@ -56,40 +64,85 @@ const clientIp = (req) => (req.headers['x-forwarded-for']?.split(',')[0]?.trim()
 
 // ── Public ──────────────────────────────────────────────────────────────────
 
-// @desc    Issue a signed params set for direct browser→Cloudinary careers uploads
+// @desc    Issue upload credentials for direct browser→storage careers uploads
 // @route   POST /careers/applications/upload-signature
 // @access  Public (rate-limited)
-export const getUploadSignature = async (_req, res) => {
+/*
+  The response is a DISCRIMINATED UNION on `provider`, matching the admin upload
+  endpoint. Cloudinary mints one reusable signature for the folder; R2 needs a
+  presigned PUT bound to a single object key, so it returns one target per file
+  and needs to be told up front which slots are coming. The client branches on
+  `provider` rather than sniffing which fields exist, so a half-migrated deploy
+  is explicit.
+
+  `STORAGE_PROVIDER` is read per request — flipping it is an env change plus a
+  restart, and flipping it back is the rollback. Applications submitted under
+  either provider stay readable, because every stored file ref carries its own
+  `provider` (see services/storage/privateAssetUrl.js).
+*/
+export const getUploadSignature = async (req, res) => {
   // Server-chosen per-applicant subfolder (unguessable) — the client never picks
   // the folder, so it can only ever write inside autobacs/careers/<nonce>.
-  const nonce = crypto.randomBytes(12).toString('hex');
-  const folder = `${CAREERS_FOLDER_BASE}/${nonce}`;
-  res.json({ success: true, ...generateCareersUploadSignature({ folder }) });
+  const folder = newCareersFolder();
+
+  if (storageProvider() === 'r2') {
+    const uploads = await buildCareersUploadTargets({
+      folder,
+      files: req.body?.files,
+      slots: FILE_SLOTS,
+    });
+    return res.json({ success: true, provider: 'r2', folder, uploads });
+  }
+
+  return res.json({
+    success: true,
+    provider: 'cloudinary',
+    ...generateCareersUploadSignature({ folder }),
+  });
 };
 
 /**
- * Extract the ONLY client-supplied file value we trust enough to look up: the
- * publicId. Everything else the client sends about a file (url, bytes, type) is
- * ignored — those are derived server-side from Cloudinary. Returns '' when absent.
+ * Extract the ONLY two client-supplied file values we act on: the publicId (or
+ * R2 object key) and which store it was uploaded to. Everything else the client
+ * sends about a file — url, bytes, type — is ignored, because those are derived
+ * server-side from the store itself.
+ *
+ * `provider` is client-supplied on purpose and is safe to take at face value: it
+ * only chooses WHERE we look, and a lie cannot manufacture a pass — it sends us
+ * to a store that does not hold the file, and verification fails. Routing on the
+ * server's current STORAGE_PROVIDER instead would reject every applicant who was
+ * mid-application when the flag flipped. Absent means Cloudinary, matching
+ * privateAssetUrl.providerOf.
  */
-const pickPublicId = (raw) => {
-  if (!raw || typeof raw !== 'object') return '';
-  return typeof raw.publicId === 'string' ? raw.publicId.trim() : '';
+const pickFileRef = (raw) => {
+  if (!raw || typeof raw !== 'object') return null;
+  const publicId = typeof raw.publicId === 'string' ? raw.publicId.trim() : '';
+  if (!publicId) return null;
+  return { publicId, provider: raw.provider === 'r2' ? 'r2' : 'cloudinary' };
 };
 
 /**
- * Effective format for a Cloudinary resource. Cloudinary populates `format` for
- * DECODED media (video/image) but leaves it undefined for `raw` resources —
- * there the extension is carried in the public_id instead (…/abc.pdf). Fall back
- * to the public_id suffix so raw (PDF) slots validate instead of always failing
- * the format check. NOTE: for raw this is an extension check (the bytes are not
- * decoded); it is one layer alongside the folder scope, size cap, and private
- * `authenticated` storage — not a content-sniff.
+ * Applicant-facing copy for a failed file check.
+ *
+ * The store returns a REASON code, not a sentence, so the two concerns stay
+ * apart: routing and verification live in careersAssetStore, and the words an
+ * applicant reads live here next to the rest of the form's copy. Every branch
+ * has to say something actionable — "upload could not be verified" with no
+ * suggestion is how a candidate abandons the form.
  */
-const resourceFormat = (resource, publicId) => {
-  if (resource.format) return String(resource.format).toLowerCase();
-  const m = String(publicId).match(/\.([a-z0-9]+)$/i);
-  return m ? m[1].toLowerCase() : '';
+const rejectionMessage = (slot, reason) => {
+  if (reason === REASON.TOO_LARGE) {
+    const cap = slot.max === VIDEO_MAX_BYTES ? '30MB' : '10MB';
+    return `${slot.label} exceeds the ${cap} limit.`;
+  }
+  if (reason === REASON.WRONG_TYPE) {
+    const want = slot.resourceType === 'raw' ? 'a PDF' : 'a video (MP4/MOV/WEBM)';
+    return `${slot.label} must be ${want}.`;
+  }
+  if (reason === REASON.INVALID_REF) {
+    return `${slot.label}: invalid upload reference.`;
+  }
+  return `${slot.label}: upload could not be verified. Please re-upload.`;
 };
 
 // @desc    Delete careers uploads that never became an application
@@ -151,11 +204,21 @@ export const cleanupOrphanedUploads = async (req, res) => {
 
   let deleted = 0;
   for (const publicId of deletable) {
-    // resource_type is unknown to the client, so try the two we ever write.
-    // Best-effort throughout: a failed cleanup must never surface as an error to
-    // an applicant who is already looking at a failure message.
-    for (const resourceType of ['video', 'raw']) {
-      const ok = await deleteCareersAsset(publicId, resourceType).catch(() => false);
+    /*
+      The client sends bare ids, so the store is inferred from the key shape —
+      see inferCareersProvider for why attempting both would be wrong rather
+      than merely wasteful. On R2 the key already carries its slot, so one
+      delete suffices; on Cloudinary the resource_type is unknown to the client,
+      so we try the two we ever write.
+
+      Best-effort throughout: a failed cleanup must never surface as an error to
+      an applicant who is already looking at a failure message.
+    */
+    const provider = inferCareersProvider(publicId);
+    const attempts = provider === 'r2' ? [undefined] : ['video', 'raw'];
+    for (const resourceType of attempts) {
+      const ok = await deleteCareersAssetAnywhere({ publicId, resourceType, provider })
+        .catch(() => false);
       if (ok) { deleted += 1; break; }
     }
   }
@@ -191,46 +254,40 @@ export const submitApplication = async (req, res) => {
   const match = await jobPostingRepository.findOpenIdByTitle(roleTitle);
   const posting = match ? match._id : null;
 
-  // ── File validation (server-side, against Cloudinary) ──────────────────────
+  // ── File validation (server-side, against whichever store holds the file) ──
+  /*
+    The client's JSON is a CLAIM, never evidence. Each file is re-read from the
+    store: it must be a reference we could have issued, it must actually exist,
+    its size comes from the store rather than the payload, and its format is
+    re-derived — by extension on the Cloudinary path, by magic number on the R2
+    one, because R2 does not decode uploads the way Cloudinary did.
+    See services/storage/careersAssetStore.js for the routing and its limits.
+  */
   const files = {};
   for (const slot of FILE_SLOTS) {
-    const publicId = pickPublicId(b.files?.[slot.key]);
-    if (!publicId) {
+    const ref = pickFileRef(b.files?.[slot.key]);
+    if (!ref) {
       if (slot.required) {
         return res.status(400).json({ success: false, message: `${slot.label} is required.` });
       }
       continue;
     }
 
-    // The publicId MUST live under our careers folder — blocks attaching a
-    // foreign/other-tenant asset by pasting its id.
-    if (!publicId.startsWith(`${CAREERS_FOLDER_BASE}/`)) {
-      return res.status(400).json({ success: false, message: `${slot.label}: invalid upload reference.` });
-    }
-
-    const resource = await getCareersResource(publicId, slot.resourceType);
-    if (!resource) {
-      return res.status(400).json({ success: false, message: `${slot.label}: upload could not be verified. Please re-upload.` });
-    }
-    if (resource.bytes > slot.max) {
-      const cap = slot.max === VIDEO_MAX_BYTES ? '30MB' : '10MB';
-      return res.status(400).json({ success: false, message: `${slot.label} exceeds the ${cap} limit.` });
-    }
-    // Reject a mismatched asset type (e.g. an HTML/exe smuggled into a raw PDF
-    // slot) — the byte cap alone would let it through.
-    const format = resourceFormat(resource, publicId);
-    if (slot.formats && !slot.formats.includes(format)) {
-      const want = slot.resourceType === 'raw' ? 'a PDF' : 'a video (MP4/MOV/WEBM)';
-      return res.status(400).json({ success: false, message: `${slot.label} must be ${want}.` });
+    const check = await verifyCareersAsset({ ref, slot });
+    if (!check.ok) {
+      return res.status(400).json({ success: false, message: rejectionMessage(slot, check.reason) });
     }
 
     // Persist only server-derived values. The client's `url`/`bytes`/`type` are
     // never trusted or stored — admins view files via a URL we re-sign from the
     // publicId, so no attacker-controlled string ever lands in our data.
+    // `provider` IS stored: it is how a read or a retention purge finds this
+    // file again after the cutover (or after a rollback).
     files[slot.key] = {
-      publicId,
+      publicId: ref.publicId,
       resourceType: slot.resourceType,
-      bytes: resource.bytes,
+      bytes: check.bytes,
+      provider: check.provider,
     };
   }
 
