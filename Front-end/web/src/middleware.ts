@@ -191,8 +191,10 @@ function buildCsp(nonce: string): string {
     // conversion-linker fetch targets (were CSP-blocked on the preview until added).
     "connect-src 'self' https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net",
     // Razorpay renders its payment UI (checkout) and the EMI affordability
-    // widget's "View plans" modal inside iframes.
-    "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com",
+    // widget's "View plans" modal inside iframes. googletagmanager.com is the
+    // GTM <noscript> ns.html iframe (layout.tsx) — without it that fallback is
+    // CSP-blocked for JS-less visitors, silently and only for them.
+    "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com https://www.googletagmanager.com",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
