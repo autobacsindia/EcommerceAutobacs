@@ -93,6 +93,22 @@ export const pickWidth = (requested) => {
   return LADDER.find((rung) => rung >= w) ?? LADDER[LADDER.length - 1];
 };
 
+/**
+ * The prefix every variant of one original shares.
+ *
+ * ⚠ Variant keys are built from the original with its EXTENSION STRIPPED
+ * (`…/photo.jpg` → `variants/…/photo/w640.avif`), so listing with the raw
+ * original key as a prefix matches nothing. That mistake is silent: the caller
+ * concludes no variants exist and re-encodes the entire ladder on every run.
+ * Use this rather than concatenating VARIANT_PREFIX by hand.
+ *
+ * @returns {string} '' when the key yields no usable base
+ */
+export const variantPrefixFor = (originalKey) => {
+  const base = publicIdFromR2Key(String(originalKey || ''), 'image');
+  return base ? `${VARIANT_PREFIX}/${base}/` : '';
+};
+
 /** Every (width, format) pair to generate for one source image. */
 export const plannedVariants = (originalKey, sourceWidth) =>
   widthsFor(sourceWidth).flatMap((width) =>
@@ -101,5 +117,5 @@ export const plannedVariants = (originalKey, sourceWidth) =>
 
 export default {
   LADDER, FORMATS, VARIANT_PREFIX,
-  widthsFor, variantKey, negotiableKey, pickWidth, plannedVariants,
+  widthsFor, variantKey, negotiableKey, pickWidth, plannedVariants, variantPrefixFor,
 };
