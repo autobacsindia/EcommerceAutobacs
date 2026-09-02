@@ -29,6 +29,7 @@
 import crypto from 'crypto';
 import path from 'path';
 import cloudinary from '../config/cloudinary.js';
+import { providerOf, r2PrivateUrl } from '../services/storage/privateAssetUrl.js';
 import {
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_MAX_COUNT,
@@ -175,8 +176,20 @@ export const storeInboundAttachments = async (attachments = [], reference = 'unk
  * @param {'image'|'video'|'raw'} resourceType
  * @returns {string}
  */
-export const signedAttachmentUrl = (publicId, resourceType) => {
+export const signedAttachmentUrl = async (publicId, resourceType, ref) => {
   if (!publicId) return '';
+
+  /*
+    During the Cloudinary -> R2 migration both stores hold live assets, so
+    the read path resolves either. `ref` is the stored file reference; when
+    it is absent or carries no provider the asset predates the migration and
+    is Cloudinary — see providerOf(). Routing on an explicit field rather
+    than the shape of the id, which is identical between the two.
+  */
+  if (providerOf(ref) === 'r2') {
+    return r2PrivateUrl({ key: publicId, });
+  }
+
   const rt = resourceType || 'raw';
   if (rt === 'raw') {
     return cloudinary.utils.private_download_url(publicId, '', {

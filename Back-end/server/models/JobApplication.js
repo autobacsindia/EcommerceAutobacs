@@ -22,6 +22,15 @@ const FileRefSchema = new mongoose.Schema(
     // 'video' | 'raw' (pdf) — needed to mint the correct signed delivery URL.
     resourceType: { type: String, trim: true, default: "" },
     bytes: { type: Number, default: 0 },
+    /*
+      Which store holds this asset. Absent on every row written before the
+      Cloudinary -> R2 migration, and absent MUST mean Cloudinary — the read path
+      tests `=== 'r2'` so a missing value routes to the legacy provider.
+      Explicit rather than inferred: a Cloudinary public_id and an R2 object key
+      are indistinguishable by shape.
+    */
+    provider: { type: String, enum: ['cloudinary', 'r2'], default: 'cloudinary' },
+
   },
   { _id: false }
 );

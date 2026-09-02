@@ -25,6 +25,7 @@ import HelpWidget from "@/components/layout/HelpWidget";
 import { SITE_URL } from "@/lib/siteUrl";
 import { GOOGLE_ADS_ID, isGoogleAdsEnabled } from "@/lib/googleAds";
 import { META_PIXEL_ID, isMetaPixelEnabled } from "@/lib/metaPixel";
+import { GTM_ID, GTM_DATA_LAYER, isGtmEnabled } from "@/lib/gtm";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -204,6 +205,54 @@ export default async function RootLayout({
             image on any page. */}
         <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
 
+        {/* Google Tag Manager. Rendered only when a real container id is set
+            (isGtmEnabled), so Preview/local builds never load a container whose
+            tags would fire into live datasets. nonce={nonce} is REQUIRED — the
+            strict nonce-based CSP (middleware.ts) blocks any unnonce'd inline
+            script; 'strict-dynamic' then propagates trust to every tag GTM
+            injects, and GTM copies the nonce onto them as well.
+
+            GTM does NOT own conversion tracking here: the Google Ads tag below
+            and the Meta Pixel are loaded directly and fire their own events. A
+            duplicate conversion tag built inside the GTM UI would count every
+            order twice — see lib/gtm.ts. */}
+        {isGtmEnabled && (
+          <>
+            {/* GTM's queue must exist before React hydrates, not merely before
+                gtm.js lands: page-mount effects fire the moment a route
+                hydrates, and a push against an undefined array throws inside
+                the effect. The array is a queue — GTM drains whatever
+                accumulated before it loaded, so nothing is lost by loading the
+                container itself afterInteractive. (The Google Ads stub below
+                learned this the expensive way: an afterInteractive stub dropped
+                every mount-time event SILENTLY.)
+
+                Note the name: `gtmDataLayer`, NOT the default `dataLayer`. See
+                lib/gtm.ts — sharing one array let GTM replay gtag's `config`
+                and triple the page_view beacons. */}
+            <Script id="gtm-datalayer" strategy="beforeInteractive" nonce={nonce}>
+              {`window.${GTM_DATA_LAYER} = window.${GTM_DATA_LAYER} || [];`}
+            </Script>
+            {/* Google's stock snippet, plus the `j.setAttribute('nonce', …)`
+                line Google documents for nonce-based CSPs. Without it the
+                injected gtm.js carries no nonce and survives only on
+                'strict-dynamic' — which Chrome honours, but it leaves GTM with
+                no nonce to copy onto the tags IT injects. Any Custom HTML tag
+                added in the GTM UI later would then be blocked on a browser
+                without 'strict-dynamic' support, and blocked inline script
+                fails silently. The nonce is already public in the page source,
+                so interpolating it here reveals nothing. */}
+            <Script id="gtm-init" strategy="afterInteractive" nonce={nonce}>
+              {`(function(w,d,s,l,i,n){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;if(n)j.setAttribute('nonce',n);
+f.parentNode.insertBefore(j,f);
+})(window,document,'script','${GTM_DATA_LAYER}','${GTM_ID}',${JSON.stringify(nonce ?? '')});`}
+            </Script>
+          </>
+        )}
+
         {/* Google Tag (gtag.js) for Google Ads conversion tracking.
             Rendered only when a real AW- id is configured (isGoogleAdsEnabled),
             so unset/preview environments never load a broken tag or fire real
@@ -270,6 +319,19 @@ export default async function RootLayout({
       <body
         className={`${dmSans.variable} ${montserrat.variable} antialiased`}
       >
+        {isGtmEnabled && (
+          /* Google Tag Manager (noscript) — the JS-less fallback, which is why
+             it carries no nonce: it is markup, not script. Needs
+             www.googletagmanager.com in the CSP frame-src (middleware.ts) or the
+             browser blocks the iframe. React cannot render an <iframe> as a
+             child of <noscript> (it would be parsed as real DOM on the client),
+             so the markup is set as raw HTML. */
+          <noscript
+            dangerouslySetInnerHTML={{
+              __html: `<iframe src="https://www.googletagmanager.com/ns.html?id=${GTM_ID}" height="0" width="0" style="display:none;visibility:hidden"></iframe>`,
+            }}
+          />
+        )}
         <LogRocketProvider>
           <PostHogProvider>
           <QueryProvider>

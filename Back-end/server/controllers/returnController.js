@@ -246,14 +246,27 @@ const partialRefundBlockReason = (payment, finalAmount, capturedRupees) => {
 };
 
 /** Signed, viewable copies of a return's private evidence (admin only). */
-const withSignedEvidence = (rr) => {
-  const sign = (a) => (a?.publicId ? { url: signedReturnAssetUrl(a.publicId, a.resourceType), bytes: a.bytes || 0, resourceType: a.resourceType } : null);
-  return {
-    ...rr,
-    video: sign(rr.video),
-    proofOfPurchase: sign(rr.proofOfPurchase),
-    images: Array.isArray(rr.images) ? rr.images.map(sign).filter(Boolean) : [],
-  };
+// Async because signing an R2 asset is a presign call rather than a local HMAC.
+// Every asset on the return is signed in one parallel batch.
+const withSignedEvidence = async (rr) => {
+  // `a` is passed whole so the minter can read its `provider` — a ref written
+  // before the R2 migration has none, which correctly means Cloudinary.
+  const sign = async (a) => (a?.publicId
+    ? {
+      url: await signedReturnAssetUrl(a.publicId, a.resourceType, a),
+      bytes: a.bytes || 0,
+      resourceType: a.resourceType,
+    }
+    : null);
+
+  const images = Array.isArray(rr.images) ? rr.images : [];
+  const [video, proofOfPurchase, signedImages] = await Promise.all([
+    sign(rr.video),
+    sign(rr.proofOfPurchase),
+    Promise.all(images.map(sign)),
+  ]);
+
+  return { ...rr, video, proofOfPurchase, images: signedImages.filter(Boolean) };
 };
 
 // ── Public / customer ─────────────────────────────────────────────────────────
@@ -660,7 +673,7 @@ export const getReturnById = asyncHandler(async (req, res) => {
   if (!rr) {
     throw new AppError('Return request not found', 404);
   }
-  res.json({ success: true, request: withSignedEvidence(rr) });
+  res.json({ success: true, request: await withSignedEvidence(rr) });
 });
 
 // ── Offline (handled off-platform) ────────────────────────────────────────────

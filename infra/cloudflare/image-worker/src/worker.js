@@ -32,6 +32,31 @@
 const VARIANT_PREFIX = 'variants/';
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 
+/**
+ * Content types this host is allowed to serve.
+ *
+ * ⚠ SECURITY BOUNDARY, not a tidiness rule. R2 does NOT enforce the Content-Type
+ * that a presigned PUT was signed with — verified against the live bucket: a URL
+ * signed for `image/png` accepted `text/html` bytes and R2 then served them back
+ * as `text/html`. Because this host is a subdomain of the apex, HTML executing
+ * here is stored XSS with access to parent-domain cookies.
+ *
+ * So the served type is decided HERE from an allowlist rather than trusted from
+ * object metadata. Anything unrecognised degrades to a non-executable type. This
+ * holds no matter how the object got into the bucket, which is the property that
+ * matters — upload-side checks can be bypassed or added to later.
+ */
+const SERVABLE_TYPES = new Set([
+  'image/avif', 'image/webp', 'image/jpeg', 'image/png', 'image/gif',
+]);
+const FALLBACK_TYPE = 'application/octet-stream';
+
+/** Clamp a stored content type to something safe to serve from this host. */
+export function safeContentType(stored) {
+  const t = String(stored || '').split(';')[0].trim().toLowerCase();
+  return SERVABLE_TYPES.has(t) ? t : FALLBACK_TYPE;
+}
+
 /** Formats we pre-generate, best first. Must match FORMATS in variants.js. */
 const CANDIDATES = [
   { ext: 'avif', mime: 'image/avif', token: 'image/avif' },
@@ -111,16 +136,25 @@ export default {
 
       return new Response(original.body, {
         headers: {
-          'Content-Type': original.httpMetadata?.contentType || 'application/octet-stream',
+          'Content-Type': safeContentType(original.httpMetadata?.contentType),
           'Cache-Control': 'public, max-age=300',
+          'X-Content-Type-Options': 'nosniff',
           'X-Variant-Fallback': 'original',
         },
       });
     }
 
     const headers = new Headers();
-    headers.set('Content-Type', format ? format.mime : (object.httpMetadata?.contentType || 'application/octet-stream'));
+    /*
+      For a negotiated variant the type is ours by construction (we chose .avif
+      or .webp); for a pass-through original it comes from object metadata and is
+      therefore untrusted — see SERVABLE_TYPES.
+    */
+    headers.set('Content-Type', format ? format.mime : safeContentType(object.httpMetadata?.contentType));
     headers.set('Cache-Control', object.httpMetadata?.cacheControl || IMMUTABLE);
+    // Belt to the allowlist's braces: stops a browser from sniffing its way to
+    // a different type than the one we declared.
+    headers.set('X-Content-Type-Options', 'nosniff');
     if (object.httpEtag) headers.set('ETag', object.httpEtag);
     if (format) headers.set('Vary', 'Accept');
 
