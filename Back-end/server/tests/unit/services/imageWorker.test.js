@@ -11,7 +11,7 @@
  * which is where the bugs actually live.
  */
 import {
-  chooseFormat, isNegotiableVariant, resolveKey,
+  chooseFormat, isNegotiableVariant, resolveKey, safeContentType,
 } from '../../../../../infra/cloudflare/image-worker/src/worker.js';
 import { FORMATS, negotiableKey, variantKey } from '../../../services/storage/variants.js';
 
@@ -111,5 +111,45 @@ describe('resolveKey', () => {
     const encoded = emitted.split('/').map(encodeURIComponent).join('/');
     expect(resolveKey(`/${encoded}`, 'image/avif').key)
       .toBe(variantKey(original, 384, 'avif'));
+  });
+});
+
+describe('safeContentType — the delivery-side XSS boundary', () => {
+  /*
+    R2 does not enforce the Content-Type a presigned PUT was signed with. Verified
+    against the live bucket: a URL signed for `image/png` accepted `text/html`
+    bytes, and R2 served them back as `text/html`. Since this host is a subdomain
+    of the apex, HTML executing here reaches parent-domain cookies.
+
+    So the served type is decided from an allowlist rather than trusted from
+    object metadata. These tests pin that, because the upload-side signing looks
+    like it protects us and does not.
+  */
+  test('passes through the image types we actually store', () => {
+    ['image/avif', 'image/webp', 'image/jpeg', 'image/png', 'image/gif']
+      .forEach((t) => expect(safeContentType(t)).toBe(t));
+  });
+
+  test('DEGRADES anything executable to a non-executable type', () => {
+    ['text/html', 'image/svg+xml', 'application/javascript', 'text/javascript',
+      'application/xhtml+xml', 'text/xml']
+      .forEach((t) => expect(safeContentType(t)).toBe('application/octet-stream'));
+  });
+
+  test('is case- and parameter-insensitive', () => {
+    expect(safeContentType('IMAGE/PNG')).toBe('image/png');
+    expect(safeContentType('image/png; charset=utf-8')).toBe('image/png');
+    // …and the same normalisation cannot be used to smuggle html through.
+    expect(safeContentType('TEXT/HTML; charset=utf-8')).toBe('application/octet-stream');
+  });
+
+  test.each([undefined, null, '', '   ', 42, {}])('degrades unusable input %p', (t) => {
+    expect(safeContentType(t)).toBe('application/octet-stream');
+  });
+
+  test('image/svg+xml is NOT servable — it executes script', () => {
+    // Worth its own case: it is an image type, which makes it the one most
+    // likely to be added to the allowlist by mistake.
+    expect(safeContentType('image/svg+xml')).toBe('application/octet-stream');
   });
 });

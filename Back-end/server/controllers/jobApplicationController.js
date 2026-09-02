@@ -275,17 +275,22 @@ export const listApplications = async (req, res) => {
 };
 
 /** Replace stored file refs with freshly-signed, viewable delivery URLs. */
-const withSignedFiles = (app) => {
+// Async because signing an R2 asset is a presign call, not a local HMAC as it
+// is for Cloudinary. The slots are signed in parallel: one application has at
+// most four, and doing them in series would add a round-trip each.
+const withSignedFiles = async (app) => {
+  const present = FILE_SLOTS
+    .map((slot) => ({ slot, f: app.files?.[slot.key] }))
+    .filter(({ f }) => f?.publicId);
+
+  const urls = await Promise.all(present.map(({ slot, f }) =>
+    // `f` is passed whole so the minter can read its `provider`.
+    signedCareersAssetUrl(f.publicId, f.resourceType || slot.resourceType, f)));
+
   const signed = {};
-  for (const slot of FILE_SLOTS) {
-    const f = app.files?.[slot.key];
-    if (f?.publicId) {
-      signed[slot.key] = {
-        url: signedCareersAssetUrl(f.publicId, f.resourceType || slot.resourceType),
-        bytes: f.bytes || 0,
-      };
-    }
-  }
+  present.forEach(({ slot, f }, i) => {
+    signed[slot.key] = { url: urls[i], bytes: f.bytes || 0 };
+  });
   return { ...app, files: signed };
 };
 
@@ -295,7 +300,7 @@ const withSignedFiles = (app) => {
 export const getApplication = async (req, res) => {
   const app = await jobApplicationRepository.findByIdPopulated(req.params.id);
   if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
-  res.json({ success: true, application: withSignedFiles(app) });
+  res.json({ success: true, application: await withSignedFiles(app) });
 };
 
 // @desc    Update status / admin notes

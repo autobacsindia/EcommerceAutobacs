@@ -50,12 +50,14 @@ const enqueue = async (name, data) => {
 };
 
 /** Attachments with freshly signed, short-lived URLs. Admin-only callers. */
-const withSignedAttachments = (message) => ({
+// Async because signing an R2 asset is a presign call rather than a local HMAC.
+const withSignedAttachments = async (message) => ({
   ...message,
-  attachments: (message.attachments || []).map((a) => ({
+  attachments: await Promise.all((message.attachments || []).map(async (a) => ({
     ...a,
-    url: signedAttachmentUrl(a.publicId, a.resourceType),
-  })),
+    // `a` is passed whole so the minter can read its `provider`.
+    url: await signedAttachmentUrl(a.publicId, a.resourceType, a),
+  }))),
 });
 
 /**
@@ -303,7 +305,7 @@ router.get(
 
     res.json({
       success: true,
-      data: { ticket, messages: messages.map(withSignedAttachments) },
+      data: { ticket, messages: await Promise.all(messages.map(withSignedAttachments)) },
     });
   })
 );
