@@ -106,7 +106,8 @@
     "load-test:compare": "node scripts/legacy/track-load-test.js --compare",
     "load-test:history": "node scripts/legacy/track-load-test.js --history",
     "backfill-campaign-member-addresses": "node --import=dotenv/config scripts/backfill-campaign-member-addresses.js",
-    "seed-spin-campaign": "node --import=dotenv/config scripts/seed-spin-campaign.js"
+    "seed-spin-campaign": "node --import=dotenv/config scripts/seed-spin-campaign.js",
+    "rewrite-asset-urls": "node --import=dotenv/config scripts/rewrite-asset-urls.js"
   },
   "engines": {
     "node": ">=20.9.0"
@@ -159,7 +160,7 @@
     "nodemon": "^3.0.1",
     "supertest": "^7.2.2"
   },
-  "_overridesNote": "DEP-2: force patched transitive versions inside the artillery (dev-only load-test) tree — clears the protobufjs ACE 'critical' from the audit report without dropping load testing.",
+  "_overridesNote": "DEP-2: force patched transitive versions inside the artillery (dev-only load-test) tree \u2014 clears the protobufjs ACE 'critical' from the audit report without dropping load testing.",
   "overrides": {
     "protobufjs": "^7.6.5"
   }

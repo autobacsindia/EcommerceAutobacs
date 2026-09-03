@@ -108,7 +108,7 @@ export default function LoginPage() {
       <div className="py-8">
         <Link href="/" className="block mx-auto">
           <Image
-            src="https://res.cloudinary.com/dhwxtl6l8/image/upload/e_trim,f_auto,q_auto/v1782814887/roavion-primary_pwywsn.png"
+            src="https://img.autobacsindia.com/autobacs/site/roavion-primary-trimmed.png"
             alt="Roavion"
             width={775}
             height={309}

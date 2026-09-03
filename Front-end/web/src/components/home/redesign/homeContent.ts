@@ -72,7 +72,7 @@ export const brand = {
   // fills its height in the navbar instead of floating tiny and off-centre.
   // f_auto,q_auto = optimised delivery. Display size is controlled in CSS via
   // `.logo-img` (see home-redesign.css), NOT by inflating the asset height.
-  logo: 'https://res.cloudinary.com/dhwxtl6l8/image/upload/e_trim,f_auto,q_auto/v1782814887/roavion-primary_pwywsn.png',
+  logo: 'https://img.autobacsindia.com/autobacs/site/roavion-primary-trimmed.png',
   logoAlt: 'Autobacs India',
   // Profile avatar in the nav (replace with the signed-in user's image later).
   avatar:
@@ -106,7 +106,7 @@ export const hero = {
   // q_auto, w_1200 (this fallback is the MOBILE hero — desktop uses the canvas
   // sequence). Swap the underlying asset by re-uploading the same public_id.
   image:
-    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1200/autobacs/site/hero-performance-vehicle.jpg',
+    'https://img.autobacsindia.com/autobacs/site/hero-performance-vehicle.jpg',
   imageAlt: 'Performance Vehicle',
 };
 
@@ -301,9 +301,9 @@ export const transformation = {
   titleAccent: 'Autobacs',
   titleBottom: 'Effect.',
   before:
-    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1920/v1782907582/before_bmw_hlwaqs.jpg',
+    'https://img.autobacsindia.com/before_bmw_hlwaqs.jpg',
   after:
-    'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1920/v1782907582/after_bmw_svmikn.jpg',
+    'https://img.autobacsindia.com/after_bmw_svmikn.jpg',
 };
 
 export const testimonials: TestimonialItem[] = [
