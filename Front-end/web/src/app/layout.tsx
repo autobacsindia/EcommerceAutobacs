@@ -200,9 +200,20 @@ export default async function RootLayout({
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         {nonce && <meta name="csp-nonce" content={nonce} />}
-        {/* Warm the TLS connection to Cloudinary — it serves the eager mobile
-            hero LCP image and every product image, so this speeds the first
-            image on any page. */}
+        {/* Warm the TLS connection to the image origin — it serves the eager
+            mobile hero LCP image and every product image, so this speeds the
+            first image on any page.
+
+            R2 is FIRST because it is now the origin for essentially everything:
+            the catalog, articles, banners and the brand lockup all moved there.
+            Preconnecting to Cloudinary alone (as this did) spent the handshake
+            on a host the page no longer requests.
+
+            Cloudinary is kept as a second hint until decommission: a handful of
+            assets still point at it — 16 unpublished products and 6 historical
+            order snapshots — and an unused preconnect costs one idle socket,
+            while a missing one costs a full handshake on the LCP image. */}
+        <link rel="preconnect" href="https://img.autobacsindia.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
 
         {/* Google Tag Manager. Rendered only when a real container id is set

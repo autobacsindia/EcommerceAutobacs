@@ -42,7 +42,7 @@ export const generateMetadata = (): Promise<Metadata> =>
   });
 
 const HERO_IMAGE =
-  'https://res.cloudinary.com/dhwxtl6l8/image/upload/f_auto,q_auto,c_limit,w_1920/autobacs/site/hero-performance-vehicle.jpg';
+  'https://img.autobacsindia.com/autobacs/site/hero-performance-vehicle.jpg';
 
 const whatWeDo = [
   {

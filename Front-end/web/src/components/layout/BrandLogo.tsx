@@ -12,7 +12,7 @@ interface BrandLogoProps {
 
 export default function BrandLogo({ variant = 'full', theme = 'dark', className = '' }: BrandLogoProps) {
   // Match the home hero lockup (see homeContent.ts `brand.logo`).
-  const logoSrc = 'https://res.cloudinary.com/dhwxtl6l8/image/upload/e_trim,f_auto,q_auto/v1782814887/roavion-primary_pwywsn.png';
+  const logoSrc = 'https://img.autobacsindia.com/autobacs/site/roavion-primary-trimmed.png';
   const logoAlt = 'Roavion';
   
   // Use inline style for filter to ensure it works regardless of Tailwind config
