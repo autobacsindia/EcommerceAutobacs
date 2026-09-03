@@ -101,6 +101,11 @@ const nextConfig: NextConfig = {
       { source: '/media/videos', destination: '/blog/videos', permanent: true },
       // News was replaced by the Press Coverage page at /media.
       { source: '/media/news', destination: '/media', permanent: true },
+      // `/conditions` was a second, shorter terms page that contradicted `/terms`
+      // on whether prices include tax. It is deleted, not 404'd: it was linked
+      // from the login and register page footers (so it has real inbound traffic
+      // and possibly external links), and a delete-to-404 throws that away.
+      { source: '/conditions', destination: '/terms', permanent: true },
     ];
   },
 

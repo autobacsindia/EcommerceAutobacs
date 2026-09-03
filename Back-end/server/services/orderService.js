@@ -119,6 +119,9 @@ class OrderService {
    * @param {Array}  items            [{product, quantity}]
    * @param {Object} shippingAddress
    * @param {Object} orderData        raw request body (shippingCost, couponCode, redeemKarmaPoints)
+   *                                  plus `buyer` / `legalAcceptance`, already
+   *                                  validated by services/buyerService.js —
+   *                                  this method does NOT re-derive them
    * @param {string} [paymentMethod]
    */
   async createOrder(userId, items, shippingAddress, orderData, paymentMethod) {
@@ -163,7 +166,13 @@ class OrderService {
             status: 'awaiting_payment',
             ...(paymentMethod && { paymentMethod }),
             ...(orderData.sessionId && { sessionId: orderData.sessionId }),
-            ...(orderData.tracking && { tracking: orderData.tracking })
+            ...(orderData.tracking && { tracking: orderData.tracking }),
+            // Buyer identity + legal acceptance are resolved by the CALLER via
+            // services/buyerService.js and passed in already validated. They are
+            // spread conditionally so an individual order carries no empty
+            // subdoc, and so the ~1,500 pre-existing orders stay shape-identical.
+            ...(orderData.buyer && { buyer: orderData.buyer }),
+            ...(orderData.legalAcceptance && { legalAcceptance: orderData.legalAcceptance })
           },
           session
         );

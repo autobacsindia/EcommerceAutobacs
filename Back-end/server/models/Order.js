@@ -124,6 +124,76 @@ const OrderSchema = new mongoose.Schema({
     postalCode: { type: String, required: true },
     country: { type: String, default: "India" }
   },
+  /**
+   * Who is buying, in the legal sense — and, for an enterprise buyer, the GSTIN
+   * and bill-to that go on the receipt.
+   *
+   * ⚠️ EVERY FIELD IS OPTIONAL AND THE WHOLE SUBDOC IS ABSENT ON LEGACY ORDERS.
+   * ~1,500 orders predate this. Readers must treat a missing `buyer` as an
+   * individual buyer, never assume `order.buyer.type` exists. Tests covering
+   * this MUST `$unset` the field rather than build a fixture from the model —
+   * a model-built fixture silently supplies the default and so cannot reproduce
+   * what production actually holds (see the `$size: 0` incident).
+   *
+   * `type` drives which half of /terms §17 governed the sale, so it is part of
+   * the immutable financial record: snapshot, never re-derived from the user's
+   * current profile. A buyer who later registers for GST does not retroactively
+   * make last month's consumer purchase an enterprise one.
+   *
+   * ⚠️ TREAT THIS AS FROZEN ONCE `invoiceNo` IS ASSIGNED. `gstin` and `legalName`
+   * are printed on the receipt PDF, which is emailed as an attachment and is the
+   * customer's only copy (INVOICE_STORE_CLOUDINARY is off) — so editing them
+   * afterwards silently disagrees with a document already in their inbox.
+   * There is deliberately NO guard enforcing this, because there is currently no
+   * write path to guard: every order mutation route is a narrow, specific action
+   * (/status, /cancel, /shipments/*, /return/status) and none of them touch
+   * `buyer`. If you ever add an endpoint that edits this block, reject the edit
+   * on an invoiced order and reissue instead.
+   */
+  buyer: {
+    type: {
+      type: String,
+      enum: ["individual", "enterprise"]
+    },
+    legalName: String,
+    gstin: String,
+    // First two digits of the GSTIN. Stored separately because it is the place
+    // of supply for the registration, and deriving it again at read time means
+    // every reader re-implements the parse.
+    stateCode: String,
+    billingAddress: {
+      addressLine1: String,
+      addressLine2: String,
+      city: String,
+      state: String,      // derived from the GSTIN, never client-supplied
+      stateCode: String,
+      postalCode: String,
+      country: String,
+      phone: String
+    }
+  },
+
+  /**
+   * Which legal documents this buyer accepted, and when.
+   *
+   * This exists because /terms §17B commits enterprise buyers to arbitration
+   * seated in Ernakulam. A waiver that substantial is only defensible if we can
+   * show WHICH text was accepted, on what date — and the terms page is edited
+   * over time, so "look at /terms" is not an answer. `termsVersion` names a
+   * committed snapshot under docs/legal/.
+   *
+   * Written by the server from config/legalDocuments.js. Never from the request.
+   */
+  legalAcceptance: {
+    termsVersion: String,
+    privacyVersion: String,
+    // 'consumer' → §17A, 'enterprise' → §17B. Recorded rather than derived at
+    // read time so that a later change to the mapping cannot rewrite history.
+    track: { type: String, enum: ["consumer", "enterprise"] },
+    acceptedAt: Date,
+    ipHash: String
+  },
+
   payment: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Payment"

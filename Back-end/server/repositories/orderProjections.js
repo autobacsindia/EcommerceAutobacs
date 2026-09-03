@@ -38,18 +38,28 @@
  * failure mode of a projection: the screen simply renders nothing, with no error
  * anywhere — `cancellations` was missed exactly once, and the part-cancelled badge was
  * silently dead until a test caught it.
+ *
+ * ── ON `buyer.type` / `buyer.gstin` ────────────────────────────────────────────────
+ * Both lists render a GST marker on enterprise orders, so both need the two fields —
+ * and ONLY those two. The rest of the block (legal name, billing address) is detail-page
+ * material and is served by getOrderById, which returns the whole document.
+ *
+ * Cost is ~25 B on an enterprise row and exactly ZERO on every other order, because an
+ * individual buyer stores no `gstin` key at all and a legacy order stores no `buyer` at
+ * all. Dotted paths are used rather than a bare `buyer` so a future addition to that
+ * subdocument (a longer billing address, say) cannot silently inflate every list row.
  */
 
 /** Customer /orders list — see Front-end/web/src/app/orders/page.tsx. */
 export const CUSTOMER_LIST_FIELDS =
-  'orderNumber status totalAmount createdAt trackingNumber items shipments cancellations';
+  'orderNumber status totalAmount createdAt trackingNumber items shipments cancellations buyer.type buyer.gstin';
 
 /**
  * Admin /admin/orders table — see Front-end/web/src/app/admin/orders/page.tsx.
  * Covers the table, the status control, the refund badge and BOTH CSV exports.
  */
 export const ADMIN_LIST_FIELDS =
-  'orderNumber createdAt status paymentStatus cancelledBy totalAmount refundDetails user items shipments cancellations returnRequest.status';
+  'orderNumber createdAt status paymentStatus cancelledBy totalAmount refundDetails user items shipments cancellations returnRequest.status buyer.type buyer.gstin';
 
 /**
  * CRM lead detail — narrower still: it renders a purchase timeline, not a basket, so it

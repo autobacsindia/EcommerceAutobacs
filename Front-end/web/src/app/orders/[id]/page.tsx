@@ -12,7 +12,7 @@ import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHOD_LABELS, RETURN_WINDOW_DAYS } from '@/lib/constants';
 import {
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle,
-  XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2, RefreshCcw, ShoppingCart, Star, HelpCircle, ChevronDown
+  XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2, RefreshCcw, ShoppingCart, Star, HelpCircle, ChevronDown, Building2
 } from 'lucide-react';
 import CancelOrderModal from '@/components/orders/CancelOrderModal';
 import ReturnRequestModal from '@/components/orders/ReturnRequestModal';
@@ -57,6 +57,16 @@ interface OrderDetail {
     state: string;
     postalCode: string;
     country: string;
+  };
+  /** Absent on every order placed before buyer capture shipped — render nothing. */
+  buyer?: {
+    type?: 'individual' | 'enterprise';
+    legalName?: string;
+    gstin?: string;
+    billingAddress?: {
+      addressLine1?: string; addressLine2?: string; city?: string;
+      state?: string; postalCode?: string; country?: string;
+    };
   };
   payment?: {
     _id: string;
@@ -612,6 +622,37 @@ export default function OrderDetailPage() {
               <p className="text-ink-muted mt-2">{order.shippingAddress.phone}</p>
             </div>
           </div>
+
+          {/* GST / business details — only on an order actually placed as a
+              business purchase. The customer's own reason for wanting this is
+              matching the order against their accounts, so the GSTIN is
+              monospaced and the registered name is shown exactly as billed. */}
+          {order.buyer?.type === 'enterprise' && (
+            <div className="bg-obsidian border border-hairline rounded-sm p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Building2 className="h-4 w-4 text-gold" />
+                <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Billed To</h3>
+              </div>
+              <div className="font-display text-sm space-y-1">
+                <p className="font-display font-light text-ink tracking-[-0.01em]">{order.buyer.legalName}</p>
+                {order.buyer.gstin && (
+                  <p className="text-ink/70 font-mono text-xs tracking-wide">GSTIN {order.buyer.gstin}</p>
+                )}
+                {order.buyer.billingAddress?.addressLine1 && (
+                  <>
+                    <p className="text-ink/70 pt-1">{order.buyer.billingAddress.addressLine1}</p>
+                    {order.buyer.billingAddress.addressLine2 && (
+                      <p className="text-ink/70">{order.buyer.billingAddress.addressLine2}</p>
+                    )}
+                    <p className="text-ink/70">
+                      {order.buyer.billingAddress.city}, {order.buyer.billingAddress.state}
+                    </p>
+                    <p className="text-ink/70">{order.buyer.billingAddress.postalCode}</p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Payment */}
           <div className="bg-obsidian border border-hairline rounded-sm p-6">

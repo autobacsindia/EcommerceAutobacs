@@ -1,9 +1,28 @@
-'use client';
-
+import type { Metadata } from 'next';
 import Link from 'next/link';
+import { buildPageMetadata } from '@/lib/pageSeo';
+import { CURRENT_TERMS_VERSION } from '@/lib/legal/legalVersions';
+import { formatLongDateIST } from '@/lib/datetime';
+import { LEGAL_LINKS } from '@/lib/constants';
+
+// Server component on purpose. This page has no hooks and no event handlers, so
+// the `'use client'` it used to carry bought nothing — and cost real SEO: a client
+// page cannot export generateMetadata, so `/terms` shipped with no title, no
+// description and no canonical, and the PageSeo override an admin can already edit
+// for this exact path (see Back-end/server/config/staticPages.js) was never read.
+export const generateMetadata = (): Promise<Metadata> =>
+  buildPageMetadata('/terms', {
+    title: 'Terms and Conditions',
+    description:
+      'The terms and conditions governing your use of the Autobacs India website, and every purchase made through it.',
+  });
 
 export default function TermsPage() {
-  const lastUpdated = 'December 9, 2025';
+  // Derived from the version, so an edit that bumps the version cannot leave a
+  // stale "Last Updated" behind. formatLongDateIST rather than a raw
+  // toLocaleDateString: the runtime timezone is UTC on Vercel, which renders the
+  // previous day for an IST reader.
+  const lastUpdated = formatLongDateIST(`${CURRENT_TERMS_VERSION}T00:00:00+05:30`);
 
   const sections = [
     {
@@ -58,7 +77,7 @@ export default function TermsPage() {
       heading: '6. Pricing and Payment',
       content: (
         <>
-          <p className="mb-3">All prices are listed in Indian Rupees (INR) and are subject to change without notice. Prices do not include applicable taxes, which will be added at checkout. We reserve the right to refuse or cancel any order for any reason, including but not limited to:</p>
+          <p className="mb-3">All prices are listed in Indian Rupees (INR) and are inclusive of applicable Goods and Services Tax (GST), unless stated otherwise on the product page. Prices are subject to change without notice. Shipping charges, where applicable, are additional and are shown at checkout or payable on delivery. We reserve the right to refuse or cancel any order for any reason, including but not limited to:</p>
           <ul className="space-y-1.5 pl-4">
             {['Product unavailability', 'Errors in pricing or product information', 'Suspicion of fraudulent activity'].map(item => (
               <li key={item} className="flex items-start gap-2"><span className="text-gold mt-1">—</span><span>{item}</span></li>
@@ -77,7 +96,7 @@ export default function TermsPage() {
     },
     {
       heading: '9. Returns and Refunds',
-      content: <p>Our return policy is outlined in our{' '}<Link href="/returns" className="text-gold hover:text-ink transition-colors">Refund Policy</Link>. Please review this policy before making a purchase.</p>,
+      content: <p>Our return policy is outlined in our{' '}<Link href={LEGAL_LINKS.returns.href} className="text-gold hover:text-ink transition-colors">{LEGAL_LINKS.returns.label}</Link> policy. Please review it before making a purchase.</p>,
     },
     {
       heading: '10. Intellectual Property',
@@ -117,8 +136,42 @@ export default function TermsPage() {
       content: <p>We may terminate or suspend your access to our services immediately, without prior notice, for any reason whatsoever, including without limitation if you breach these Terms and Conditions.</p>,
     },
     {
-      heading: '17. Governing Law',
-      content: <p>These Terms and Conditions are governed by and construed in accordance with the laws of India, without regard to its conflict of law provisions.</p>,
+      heading: '17. Governing Law and Dispute Resolution',
+      content: (
+        <>
+          <p className="mb-4">
+            These Terms and Conditions are governed by and construed in accordance with the laws of India.
+            Which of the two sub-sections below applies to a given purchase depends on the buyer category
+            selected at checkout — see Section 21 for how that category is determined.
+          </p>
+
+          <p className="font-display text-ink mb-2">17A. Individual / Consumer Purchases — Governing Law and Consumer Jurisdiction</p>
+          <ul className="space-y-1.5 pl-4 mb-5">
+            {[
+              'These Terms and any purchase made under them are governed by the laws of India.',
+              'Any dispute arising from an Individual / Consumer purchase shall be subject to the jurisdiction of the courts and statutory consumer authorities having jurisdiction in accordance with applicable Indian law.',
+              'Nothing in these Terms limits or excludes any statutory right of a consumer to approach the Consumer Disputes Redressal Commission or other competent authority having jurisdiction under applicable law, including the jurisdiction in which the consumer resides or personally works for gain.',
+              'We do not require a consumer to submit a dispute to arbitration as a condition of purchase.',
+            ].map(item => (
+              <li key={item} className="flex items-start gap-2"><span className="text-gold mt-1">—</span><span>{item}</span></li>
+            ))}
+          </ul>
+
+          <p className="font-display text-ink mb-2">17B. Enterprise / Commercial Purchases — Governing Law, Dispute Resolution and Jurisdiction</p>
+          <ul className="space-y-1.5 pl-4">
+            {[
+              'These Terms and all Enterprise / Commercial purchases made under them are governed by and construed in accordance with the laws of India.',
+              'The Buyer agrees that the parties shall first attempt to resolve any dispute arising from or relating to an Enterprise Transaction through good-faith discussions.',
+              'If the dispute cannot be resolved through such discussions, it shall be referred to arbitration in accordance with the Arbitration and Conciliation Act, 1996.',
+              'The seat and venue of arbitration shall be Ernakulam, Kerala, and the language of the arbitration shall be English.',
+              'Subject to the arbitration provision above, the courts at Ernakulam, Kerala shall have exclusive jurisdiction over disputes arising from or relating to the Enterprise Transaction, including applications for interim relief and enforcement of an arbitral award.',
+              'By selecting Enterprise / Commercial Buyer and accepting these Enterprise Terms at checkout, the Buyer acknowledges and agrees to the above dispute-resolution and jurisdiction provisions, subject to applicable law.',
+            ].map(item => (
+              <li key={item} className="flex items-start gap-2"><span className="text-gold mt-1">—</span><span>{item}</span></li>
+            ))}
+          </ul>
+        </>
+      ),
     },
     {
       heading: '18. Changes to Terms',
@@ -137,6 +190,29 @@ export default function TermsPage() {
     {
       heading: '20. Entire Agreement',
       content: <p>These Terms and Conditions, together with our Privacy Policy and any other legal notices published by us on our Website, constitute the entire agreement between you and AutoBacs India regarding your use of our Website and services.</p>,
+    },
+    {
+      heading: '21. Enterprise / Commercial Purchases',
+      content: (
+        <>
+          <p className="mb-3">
+            An &quot;Enterprise / Commercial Buyer&quot; is a person or entity that selects the Enterprise /
+            Commercial buyer category at checkout and supplies a valid GSTIN registered to that person or
+            entity. An &quot;Enterprise Transaction&quot; is any order placed on that basis.
+          </p>
+          <ul className="space-y-1.5 pl-4">
+            {[
+              'The Enterprise / Commercial category is available only where a valid GSTIN is supplied. A purchase made without one is an Individual / Consumer purchase and is governed by Section 17A.',
+              'Selecting the Enterprise / Commercial category is a representation that the goods are being purchased in the course or furtherance of business, and not as a consumer.',
+              'Section 17B, including the arbitration provision, applies only to Enterprise Transactions. Every other purchase is governed by Section 17A, and nothing in Section 17B limits a consumer\u2019s statutory rights.',
+              'Documentation for an Enterprise Transaction is issued to the legal name and GSTIN supplied at checkout. It is the Buyer\u2019s responsibility to ensure those details are accurate before placing the order.',
+              'The document issued on payment is a payment receipt and not a GST tax invoice under the CGST Act, 2017. Input tax credit is not claimable against it. A tax invoice will be issued separately where applicable.',
+            ].map(item => (
+              <li key={item} className="flex items-start gap-2"><span className="text-gold mt-1">—</span><span>{item}</span></li>
+            ))}
+          </ul>
+        </>
+      ),
     },
   ];
 
@@ -157,7 +233,9 @@ export default function TermsPage() {
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-obsidian border border-hairline rounded-sm p-8">
-            <p className="text-ink-muted font-display text-sm mb-8">Last Updated: {lastUpdated}</p>
+            <p className="text-ink-muted font-display text-sm mb-8">
+              Last Updated: {lastUpdated} <span className="text-ink-muted/70">(version {CURRENT_TERMS_VERSION})</span>
+            </p>
 
             <div className="space-y-8">
               {sections.map(({ heading, content }, i) => (

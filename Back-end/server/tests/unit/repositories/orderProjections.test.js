@@ -38,6 +38,8 @@ describe('CUSTOMER_LIST_FIELDS', () => {
       'items',            // item names + count
       'shipments',        // ParcelProgressBadge
       'cancellations',    // the "Part cancelled" badge
+      'buyer.type',       // the GST / business-order marker
+      'buyer.gstin',      // the GSTIN shown on the card for enterprise orders
     ]);
   });
 });
@@ -58,6 +60,8 @@ describe('ADMIN_LIST_FIELDS', () => {
       'items',            // item count in the CSV
       'shipments',        // ParcelProgressBadge + the delivered-all warning count
       'cancellations',
+      'buyer.type',       // lets an admin spot B2B orders in the table
+      'buyer.gstin',
       /*
         A PARTIAL return no longer moves Order.status to `returned` — that flip is now
         gated on the return covering every delivered line, because `returned` is

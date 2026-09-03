@@ -1,5 +1,16 @@
+import type { Metadata } from 'next';
 import React from 'react';
 import Link from 'next/link';
+import { buildPageMetadata } from '@/lib/pageSeo';
+
+// Same gap /terms had: this page was already a server component but never exported
+// generateMetadata, so it shipped bare and its admin PageSeo override was inert.
+export const generateMetadata = (): Promise<Metadata> =>
+  buildPageMetadata('/privacy', {
+    title: 'Privacy Policy',
+    description:
+      'How Autobacs India collects, uses, stores and protects your personal information.',
+  });
 
 export default function PrivacyPage() {
   const lastUpdated = 'December 9, 2025';

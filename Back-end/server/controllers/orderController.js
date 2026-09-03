@@ -16,6 +16,8 @@ import leadSyncService from '../services/leadSyncService.js';
 import { remainingRefundable } from '../services/refundMathService.js';
 import { resolveRep } from '../utils/salesRepResolver.js';
 import { extractMetaTracking } from '../utils/metaTracking.js';
+import { resolveBuyerAndAcceptance } from '../services/buyerService.js';
+import { BUYER_TYPES } from '../config/buyer.js';
 import { contentIdForLineItem } from '../utils/metaCatalogId.js';
 import { hashToken } from '../utils/tokenUtils.js';
 import { STORE_TZ_OFFSET } from '../utils/storeTime.js';
@@ -322,6 +324,36 @@ export const downloadInvoice = async (req, res) => {
 // @desc    Create new order from cart
 // @route   POST /orders
 // @access  Private
+/**
+ * Persist an enterprise buyer's details for reuse at the next checkout.
+ *
+ * ⚠️ A CONVENIENCE COPY, NOT A RECORD. The order already snapshotted its own
+ * `buyer` block; this only prefills a future form. It is fire-and-forget on
+ * purpose — the order is committed by the time we get here, so a failed profile
+ * write must be logged, never surfaced as a failed purchase.
+ */
+const saveBusinessProfile = (userId, buyer) =>
+  userRepository.setBusinessProfile(userId, {
+    legalName: buyer.legalName,
+    gstin: buyer.gstin,
+    stateCode: buyer.stateCode,
+    billingAddress: buyer.billingAddress,
+  });
+
+/**
+ * SHA-256 of the real client IP, for the legal-acceptance record.
+ *
+ * `cf-connecting-ip` first, not `req.ip`: behind Cloudflare `req.ip` is the edge,
+ * so every acceptance would record the same hash and the field would prove
+ * nothing. Hashed rather than stored raw — the evidentiary value is "the same
+ * person who placed the order accepted", which a hash carries without us holding
+ * an IP against a name. Mirrors how Order hashes guest IPs.
+ */
+const acceptanceIpHash = (req) => {
+  const ip = req?.headers?.['cf-connecting-ip'] || req?.ip || req?.connection?.remoteAddress;
+  return ip ? crypto.createHash('sha256').update(String(ip)).digest('hex') : null;
+};
+
 export const createOrder = async (req, res) => {
   const { items, shippingAddress } = req.body;
 
@@ -330,12 +362,33 @@ export const createOrder = async (req, res) => {
   }
 
   try {
+    // Buyer category, GSTIN and the accepted terms version are resolved BEFORE
+    // anything is written. Throws a 400 on an invalid GSTIN or a missing
+    // acceptance, so an order can never exist without a recorded consent.
+    const { buyer, legalAcceptance } = resolveBuyerAndAcceptance(req.body, {
+      ipHash: acceptanceIpHash(req),
+    });
+
     const order = await orderService.createOrder(
       req.user.id,
       items,
       shippingAddress,
-      { ...req.body, sessionId: req.headers['x-session-id'], tracking: extractMetaTracking(req) }
+      {
+        ...req.body,
+        buyer,
+        legalAcceptance,
+        sessionId: req.headers['x-session-id'],
+        tracking: extractMetaTracking(req),
+      }
     );
+
+    // Save the enterprise details for next time. Best-effort: a profile write
+    // must never fail an order that is already committed.
+    if (buyer.type === BUYER_TYPES.ENTERPRISE) {
+      saveBusinessProfile(req.user.id, buyer).catch((err) =>
+        console.error('[Order] businessProfile save failed:', err.message)
+      );
+    }
 
     res.status(201).json({
       success: true,
@@ -393,13 +446,28 @@ export const createGuestOrder = async (req, res) => {
       await userRepository.save(user);
     }
 
+    // Same gate as the authenticated path. A guest is not exempt from recording
+    // which terms they accepted — if anything they matter more here, since a
+    // guest has no account whose history could corroborate it later.
+    const { buyer, legalAcceptance } = resolveBuyerAndAcceptance(req.body, {
+      ipHash: acceptanceIpHash(req),
+    });
+
     const order = await orderService.createOrder(
       user._id,
       items,
       shippingAddress,
-      { ...req.body, sessionId: req.headers['x-session-id'] },
+      { ...req.body, buyer, legalAcceptance, sessionId: req.headers['x-session-id'] },
       paymentMethod
     );
+
+    // The guest User row is real (it is what the claim flow later attaches to),
+    // so an enterprise guest's details survive into their claimed account.
+    if (buyer.type === BUYER_TYPES.ENTERPRISE) {
+      saveBusinessProfile(user._id, buyer).catch((err) =>
+        console.error('[Order] guest businessProfile save failed:', err.message)
+      );
+    }
 
     // Persist guest email on the order so admins and notification workers
     // can reach the customer without having to join through the User document
@@ -587,10 +655,25 @@ export const createOfflineOrder = async (req, res) => {
       country: String(shippingAddress.country || 'India').trim(),
     };
 
+    // Offline is the MOST likely enterprise path — an admin recording a dealer or
+    // workshop deal is exactly the B2B case. `requireAcceptance: false` because
+    // the customer is not at a browser to tick a box; acceptance for these is
+    // whatever the sales process captured off-platform. The buyer block (and so
+    // the GSTIN on the receipt) is still validated identically.
+    const { buyer, legalAcceptance } = resolveBuyerAndAcceptance(req.body, {
+      requireAcceptance: false,
+      ipHash: acceptanceIpHash(req),
+    });
+
     let order = await orderRepository.create({
       user: user._id,
       source: 'offline',
       salesRep: salesRepId,
+      ...(buyer.type === BUYER_TYPES.ENTERPRISE && { buyer }),
+      // Recorded with track + versions so an offline enterprise order is not a
+      // hole in the audit trail, but `acceptedAt` reflects when the ADMIN
+      // recorded it, which is why it is not evidence of the customer's click.
+      legalAcceptance,
       // Link flow converts the chosen lead on payment (deferred), so remember it —
       // identity-based conversion alone can miss a phone-only/consultation lead.
       crmLeadId: paymentMode === 'link' ? (leadId || null) : null,
@@ -612,6 +695,12 @@ export const createOfflineOrder = async (req, res) => {
         },
       ],
     });
+
+    if (buyer.type === BUYER_TYPES.ENTERPRISE) {
+      saveBusinessProfile(user._id, buyer).catch((err) =>
+        console.error('[Order] offline businessProfile save failed:', err.message)
+      );
+    }
 
     // ── Settle the order ──────────────────────────────────────────────────────
     let paymentLink = null;

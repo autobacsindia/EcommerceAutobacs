@@ -15,6 +15,18 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
+/**
+ * Tick the Terms + Privacy checkbox on the review step.
+ *
+ * Order placement is gated on it (services/buyerService.js rejects an order with
+ * no recorded acceptance, and the button is disabled until it is ticked), so
+ * every test that reaches Place Order has to do this — which is the point: an
+ * order cannot be placed without it.
+ */
+const acceptTerms = () => {
+  fireEvent.click(screen.getByRole('checkbox', { name: /accept the Terms and Conditions/i }));
+};
+
 const mockPush = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -255,7 +267,8 @@ describe('CheckoutPage', () => {
       }
     });
 
-    // Place Order
+    // Place Order — acceptance first, or the gate short-circuits it.
+    acceptTerms();
     const placeOrderBtn = screen.getByText(/place order/i);
     fireEvent.click(placeOrderBtn);
 
@@ -269,6 +282,72 @@ describe('CheckoutPage', () => {
       expect(mockClearCart).toHaveBeenCalled();
       expect(screen.getByText('Order Placed!')).toBeInTheDocument();
     });
+
+  });
+
+  it('will not place an order until the Terms are accepted', async () => {
+    // Asserted BOTH ways on purpose: the button is disabled, and the call is
+    // refused even if a click gets through. The price-change "Confirm & Pay"
+    // button is a second route into the same function, so a disabled-only guard
+    // would leave that one open.
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+    await waitFor(() => expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText(/full name/i), { target: { value: 'John Doe' } });
+    fireEvent.change(screen.getByPlaceholderText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByPlaceholderText(/city/i), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByPlaceholderText(/state/i), { target: { value: 'Maharashtra' } });
+    fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
+    fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
+    fireEvent.click(screen.getByText(/continue to payment/i));
+    fireEvent.click(screen.getByText('Select COD'));
+    fireEvent.click(screen.getByText(/continue to review/i));
+    await waitFor(() => expect(screen.getByText('Review Your Order')).toBeInTheDocument());
+
+    const placeOrderBtn = screen.getByText(/place order/i).closest('button')!;
+    expect(placeOrderBtn).toBeDisabled();
+
+    (apiClient.post as jest.Mock).mockClear();
+    await act(async () => { fireEvent.click(placeOrderBtn); });
+    expect(apiClient.post).not.toHaveBeenCalled();
+
+    acceptTerms();
+    expect(placeOrderBtn).toBeEnabled();
+  });
+
+  it('sends the buyer block and the acceptance with the order', async () => {
+    // The payload contract. Note what is NOT sent: no terms version (the server
+    // stamps its own) and no billing state (derived from the GSTIN) — so neither
+    // can be chosen by the client.
+    render(<CheckoutPage />);
+    fireEvent.click(screen.getByText(/continue to shipping/i));
+    await waitFor(() => expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByPlaceholderText(/full name/i), { target: { value: 'John Doe' } });
+    fireEvent.change(screen.getByPlaceholderText(/street address/i), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByPlaceholderText(/city/i), { target: { value: 'Mumbai' } });
+    fireEvent.change(screen.getByPlaceholderText(/state/i), { target: { value: 'Maharashtra' } });
+    fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
+    fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
+    fireEvent.click(screen.getByText(/continue to payment/i));
+    fireEvent.click(screen.getByText('Select COD'));
+    fireEvent.click(screen.getByText(/continue to review/i));
+    await waitFor(() => expect(screen.getByText('Review Your Order')).toBeInTheDocument());
+
+    (apiClient.post as jest.Mock).mockResolvedValue({
+      success: true, order: { _id: 'order_123', totalAmount: 118 },
+    });
+
+    acceptTerms();
+    await act(async () => { fireEvent.click(screen.getByText(/place order/i)); });
+
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith(
+      '/orders',
+      expect.objectContaining({ acceptTerms: true, buyer: { type: 'individual' } }),
+    ));
+
+    const payload = (apiClient.post as jest.Mock).mock.calls.at(-1)![1];
+    expect(payload).not.toHaveProperty('termsVersion');
+    expect(payload.buyer).not.toHaveProperty('gstin');
   });
 
   it('completes order with Razorpay', async () => {
@@ -317,7 +396,8 @@ describe('CheckoutPage', () => {
        }
     });
 
-    // Place Order
+    // Place Order — acceptance first, or the gate short-circuits it.
+    acceptTerms();
     const placeOrderBtn = screen.getByText(/place order/i);
     await act(async () => {
         fireEvent.click(placeOrderBtn);
@@ -365,6 +445,7 @@ describe('CheckoutPage — purchase attribution', () => {
     mockProcessPayment.mockImplementation(async () => {
       if (mockRazorpayCallbacks.onSuccess) await mockRazorpayCallbacks.onSuccess('order_123');
     });
+    acceptTerms();
     await act(async () => { fireEvent.click(screen.getByText(/place order/i)); });
     await waitFor(() => expect(trackPurchase).toHaveBeenCalled());
   };

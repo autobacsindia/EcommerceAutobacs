@@ -232,7 +232,11 @@ describe('OrderController Unit Tests', () => {
       req.body = {
         items: [{ product: 'p1', quantity: 2 }],
         shippingAddress: { city: 'Test City' },
-        shippingCost: 10
+        shippingCost: 10,
+        // Order creation now refuses without a recorded acceptance — see
+        // services/buyerService.js. Absent this the request 400s before it ever
+        // reaches pricing.
+        acceptTerms: true
       };
 
       const mockProductDoc = {
@@ -282,7 +286,8 @@ describe('OrderController Unit Tests', () => {
 
     it('should fail if product is out of stock', async () => {
       req.body = {
-        items: [{ product: 'p1', quantity: 1 }]
+        items: [{ product: 'p1', quantity: 1 }],
+        acceptTerms: true
       };
 
       const mockProductDoc = {

@@ -89,6 +89,92 @@ const resolvePaymentLine = async (order) => {
   return { label };
 };
 
+/**
+ * The "not a tax invoice" legend, printed on EVERY receipt.
+ *
+ * Exported so the wording is asserted by tests and reused verbatim anywhere else
+ * that has to state the same thing (see /terms §21) — three near-identical
+ * paraphrases of a legal disclaimer is how one of them ends up saying something
+ * subtly different from the others.
+ */
+export const NOT_A_TAX_INVOICE_TITLE = 'Not a GST tax invoice.';
+export const NOT_A_TAX_INVOICE_LEGEND =
+  'This document is a payment receipt and is not a tax invoice under the CGST Act, 2017. '
+  + 'Input tax credit is not claimable against it. A tax invoice will be issued separately '
+  + 'where applicable.';
+
+/**
+ * Label for the tax row.
+ *
+ * NOT "Tax (incl.)". pricingService back-calculates one blended figure from a
+ * hardcoded /1.18 and its own comment calls it "for display only"; the catalogue
+ * spans 18% and 28%, so every 28% line is understated. The label has to say that
+ * the number is indicative rather than imply a computed tax amount.
+ */
+export const TAX_ROW_LABEL = 'Tax included (indicative):';
+
+/**
+ * Who the receipt is addressed to, and where it was delivered.
+ *
+ * Pure, and exported, because the PDF itself is close to untestable: pdfkit
+ * subsets its embedded font, so asserting on extracted PDF text is unreliable.
+ * Keeping the decision here means the interesting part — WHICH name, WHICH
+ * address, whether a GSTIN line appears at all — is asserted directly, and the
+ * PDF test only has to prove it still renders.
+ *
+ * An enterprise order bills the registered entity at the address tied to its
+ * GSTIN and may ship somewhere else entirely (routinely a different state in
+ * B2B), so `shipTo` is populated only when the two genuinely differ. Individual
+ * orders and the ~1,500 legacy orders with no `buyer` key fall through to
+ * exactly the previous behaviour.
+ *
+ * @param {object} order
+ * @param {object|null} user
+ * @returns {{name: string, lines: string[], shipTo: string[]|null}}
+ */
+export const buildBillToLines = (order, user) => {
+  const addr = order?.shippingAddress || {};
+  const buyer = order?.buyer || {};
+  const isEnterprise = buyer.type === 'enterprise';
+  const billing = isEnterprise ? (buyer.billingAddress || {}) : addr;
+  const recipientEmail = user?.email || order?.guestEmail;
+
+  const name = (isEnterprise && buyer.legalName) || addr.fullName || user?.name || 'Customer';
+
+  const lines = [
+    billing.addressLine1,
+    billing.addressLine2,
+    [billing.city, billing.postalCode].filter(Boolean).join(' ') || null,
+    billing.state,
+    // Directly under the registered name, so it reads as an attribute of the
+    // entity being billed rather than of the seller (whose GSTIN is in the
+    // header block above).
+    isEnterprise && buyer.gstin ? `GSTIN: ${buyer.gstin}` : null,
+    recipientEmail,
+    billing.phone || addr.phone,
+  ].filter(Boolean);
+
+  const shipDiffers = isEnterprise && (
+    billing.addressLine1 !== addr.addressLine1
+    || billing.city !== addr.city
+    || billing.postalCode !== addr.postalCode
+  );
+
+  return {
+    name,
+    lines,
+    shipTo: shipDiffers
+      ? [
+        addr.fullName,
+        addr.addressLine1,
+        addr.addressLine2,
+        [addr.city, addr.postalCode].filter(Boolean).join(' ') || null,
+        addr.state,
+      ].filter(Boolean)
+      : null,
+  };
+};
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ── Bundled Unicode font (ships in the Docker image via `COPY . .`) ────────────
@@ -271,19 +357,22 @@ export const generateInvoicePdf = async (order, user = null) => {
       y = doc.y + 16;
 
       // ── Bill-to (left) + invoice meta (right) ────────────────────────────────
+      // WHO is billed and where it shipped is decided by buildBillToLines above
+      // (pure + tested); this only draws the result.
+      const billTo = buildBillToLines(order, user);
       const billTop = y;
       doc.font(FONT_BOLD).fontSize(10).fillColor('#111')
-        .text(addr.fullName || user?.name || 'Customer', LEFT, billTop, { width: 250 });
+        .text(billTo.name, LEFT, billTop, { width: 250 });
       doc.font(FONT).fontSize(9).fillColor('#444');
-      const recipientEmail = user?.email || order.guestEmail;
-      [
-        addr.addressLine1,
-        addr.addressLine2,
-        [addr.city, addr.postalCode].filter(Boolean).join(' '),
-        addr.state,
-        recipientEmail,
-        addr.phone,
-      ].filter(Boolean).forEach((line) => doc.text(line, LEFT, doc.y, { width: 250 }));
+      billTo.lines.forEach((line) => doc.text(line, LEFT, doc.y, { width: 250 }));
+
+      if (billTo.shipTo) {
+        doc.moveDown(0.4);
+        doc.font(FONT_BOLD).fontSize(8).fillColor('#555')
+          .text('DELIVERED TO', LEFT, doc.y, { width: 250 });
+        doc.font(FONT).fontSize(9).fillColor('#444');
+        billTo.shipTo.forEach((line) => doc.text(line, LEFT, doc.y, { width: 250 }));
+      }
       const billBottom = doc.y;
 
       const metaLabelX = 330;
@@ -357,7 +446,11 @@ export const generateInvoicePdf = async (order, user = null) => {
       if (order.couponDiscount)
         sumRow(`Coupon${order.couponCode ? ` (${order.couponCode})` : ''}:`, `- ${rs(order.couponDiscount)}`);
       if (order.karmaDiscount) sumRow('Karma points:', `- ${rs(order.karmaDiscount)}`);
-      if (order.tax) sumRow('Tax (incl.):', rs(order.tax));
+      // "Tax (incl.)" overstated what this number is. services/pricingService.js
+      // back-calculates ONE blended rate with a hardcoded /1.18 and its own
+      // comment says it is "for display only" — car accessories span 18% and 28%,
+      // so every 28% line is understated. The label now says so.
+      if (order.tax) sumRow(TAX_ROW_LABEL, rs(order.tax));
       sumRow(
         'Shipping Charges (Extra):',
         shippingExtra ? 'Calculated at delivery' : rs(order.shippingCost),
@@ -380,8 +473,35 @@ export const generateInvoicePdf = async (order, user = null) => {
           .text('Shipping to be paid at the time of delivery.');
       }
 
+      /*
+        ── The status legend ────────────────────────────────────────────────────
+        This document is NOT a GST tax invoice and must not be mistaken for one.
+        Three things are missing before it could be: pricingService derives a
+        single blended tax figure from a hardcoded 18% (the catalogue spans 18%
+        and 28%), there is no CGST/SGST vs IGST split even though place of supply
+        is derivable, and there are no HSN codes anywhere.
+
+        That mattered less while no buyer GSTIN appeared on it. Now that one does,
+        a B2B buyer would reasonably read this as a document they can claim input
+        tax credit against — and they cannot. The legend is what closes that gap
+        until the compliance work lands.
+
+        It prints on EVERY invoice, not just enterprise ones. Showing it only on
+        B2B documents would imply the consumer ones ARE tax invoices, which is the
+        same false statement pointed the other way.
+      */
+      const legendTop = 742;
+      doc.save();
+      doc.roundedRect(LEFT, legendTop, RIGHT - LEFT, 40, 4)
+        .fillAndStroke('#faf8f2', '#e0d6bd');
+      doc.restore();
+      doc.font(FONT_BOLD).fontSize(8).fillColor('#6b5b2e')
+        .text(NOT_A_TAX_INVOICE_TITLE, LEFT + 10, legendTop + 8, { width: RIGHT - LEFT - 20 });
+      doc.font(FONT).fontSize(7.5).fillColor('#6b5b2e')
+        .text(NOT_A_TAX_INVOICE_LEGEND, LEFT + 10, doc.y + 1, { width: RIGHT - LEFT - 20 });
+
       doc.font(FONT).fontSize(8).fillColor('#999').text(
-        'This is a computer-generated invoice and does not require a signature.',
+        'This is a computer-generated receipt and does not require a signature.',
         LEFT,
         790,
         { align: 'center', width: RIGHT - LEFT }

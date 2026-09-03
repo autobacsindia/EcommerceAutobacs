@@ -17,7 +17,10 @@ jest.unstable_mockModule('../../../services/emailHandler.js', () => ({ default: 
 jest.unstable_mockModule('../../../config/cloudinary.js', () => ({ default: mockCloudinary }));
 jest.unstable_mockModule('../../../repositories/counterRepository.js', () => ({ default: mockCounter }));
 
-const { generateInvoicePdf, emailOrderInvoice, invoiceNumber, orderNumber, assignInvoiceNumber } = await import(
+const {
+  generateInvoicePdf, emailOrderInvoice, invoiceNumber, orderNumber, assignInvoiceNumber,
+  buildBillToLines, TAX_ROW_LABEL, NOT_A_TAX_INVOICE_LEGEND, NOT_A_TAX_INVOICE_TITLE,
+} = await import(
   '../../../services/invoiceService.js'
 );
 
@@ -191,5 +194,104 @@ describe('invoiceService.emailOrderInvoice', () => {
     await expect(emailOrderInvoice('abcdef1234567890')).rejects.toThrow(/Invoice email failed/);
     // BE-2: the atomic claim is RELEASED (set null) on failure so BullMQ can retry.
     expect(orderDoc.invoiceEmailedAt).toBeNull();
+  });
+});
+
+// ── Buyer GSTIN on the receipt ────────────────────────────────────────────────
+describe('buildBillToLines', () => {
+  const enterpriseOrder = (overrides = {}) => ({
+    ...baseOrder(),
+    buyer: {
+      type: 'enterprise',
+      legalName: 'Roavion Motors Private Limited',
+      gstin: '27AAPFU0939F1ZV',
+      stateCode: '27',
+      billingAddress: {
+        addressLine1: '12 Marine Drive', city: 'Kochi', state: 'Maharashtra',
+        stateCode: '27', postalCode: '682011', country: 'India',
+      },
+    },
+    ...overrides,
+  });
+
+  it('bills an individual order to the shipping address, exactly as before', () => {
+    const result = buildBillToLines(baseOrder(), { name: 'U', email: 'u@x.com' });
+    expect(result.name).toBe('Test Buyer');
+    expect(result.lines).toContain('1 Test St');
+    expect(result.shipTo).toBeNull();
+    // The critical negative: no GSTIN line on a consumer receipt.
+    expect(result.lines.join(' ')).not.toMatch(/GSTIN/);
+  });
+
+  it('bills a LEGACY order (no buyer key at all) unchanged', () => {
+    // ~1,500 production orders look exactly like this. Reading `buyer.type` on
+    // them must not throw and must not change the document.
+    const legacy = baseOrder();
+    delete legacy.buyer;
+    const result = buildBillToLines(legacy, null);
+    expect(result.name).toBe('Test Buyer');
+    expect(result.shipTo).toBeNull();
+    expect(result.lines.join(' ')).not.toMatch(/GSTIN/);
+  });
+
+  it('bills an enterprise order to the registered entity and prints its GSTIN', () => {
+    const result = buildBillToLines(enterpriseOrder(), { email: 'ap@roavion.com' });
+    expect(result.name).toBe('Roavion Motors Private Limited');
+    expect(result.lines).toContain('GSTIN: 27AAPFU0939F1ZV');
+    expect(result.lines).toContain('12 Marine Drive');
+    // The state that appears is the one derived from the GSTIN, not the
+    // shipping state ('MH' on the base order).
+    expect(result.lines).toContain('Maharashtra');
+  });
+
+  it('prints a separate DELIVERED TO block when billing and shipping differ', () => {
+    // The ordinary B2B case: registered office in one state, workshop in another.
+    const result = buildBillToLines(enterpriseOrder(), null);
+    expect(result.shipTo).toEqual(expect.arrayContaining(['Test Buyer', '1 Test St', 'Mumbai 400001']));
+  });
+
+  it('omits the DELIVERED TO block when the two addresses match', () => {
+    // Otherwise the same address prints twice on every same-address B2B order.
+    const order = enterpriseOrder();
+    order.buyer.billingAddress = {
+      ...order.buyer.billingAddress,
+      addressLine1: '1 Test St', city: 'Mumbai', postalCode: '400001',
+    };
+    expect(buildBillToLines(order, null).shipTo).toBeNull();
+  });
+
+  it('falls back gracefully when an enterprise order has no billing address', () => {
+    // Should not be reachable (buyerService requires one), but a receipt must
+    // never fail to render over a missing optional field.
+    const order = enterpriseOrder();
+    delete order.buyer.billingAddress;
+    const result = buildBillToLines(order, null);
+    expect(result.name).toBe('Roavion Motors Private Limited');
+    expect(result.lines).toContain('GSTIN: 27AAPFU0939F1ZV');
+  });
+
+  it('still renders a PDF for an enterprise order', () => {
+    // The pure function is asserted above; this only proves the drawing code
+    // downstream of it does not blow up on the new shape.
+    return generateInvoicePdf(enterpriseOrder(), null).then((pdf) => {
+      expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    });
+  });
+});
+
+describe('the "not a tax invoice" legend', () => {
+  it('says input tax credit is not claimable, and names the Act', () => {
+    // This wording is what stands between a buyer GSTIN on the document and a
+    // B2B customer treating it as an ITC-claimable tax invoice. See the long
+    // note in invoiceService.js — the document is not GST-compliant (blended
+    // hardcoded 18%, no CGST/SGST vs IGST split, no HSN codes).
+    expect(NOT_A_TAX_INVOICE_TITLE).toMatch(/not a gst tax invoice/i);
+    expect(NOT_A_TAX_INVOICE_LEGEND).toMatch(/input tax credit is not claimable/i);
+    expect(NOT_A_TAX_INVOICE_LEGEND).toMatch(/CGST Act, 2017/);
+  });
+
+  it('labels the tax row as indicative rather than as a computed tax', () => {
+    expect(TAX_ROW_LABEL).toMatch(/indicative/i);
+    expect(TAX_ROW_LABEL).not.toMatch(/^Tax \(incl\.\)/);
   });
 });

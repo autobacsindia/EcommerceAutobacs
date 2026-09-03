@@ -95,7 +95,10 @@ describe('Orders API', () => {
           ],
           shippingAddress: testAddress,
           shippingCost: 50,
-          tax: 10
+          tax: 10,
+          // Required since buyerService gated order creation on a recorded
+          // acceptance of the Terms + Privacy Policy.
+          acceptTerms: true
         })
         .expect(201);
         
@@ -125,6 +128,7 @@ describe('Orders API', () => {
           shippingAddress: testAddress,
           shippingCost: 50,
           totalAmount: 1, // attacker-supplied
+          acceptTerms: true,
         })
         .expect(201);
 
@@ -141,7 +145,8 @@ describe('Orders API', () => {
           items: [
             { product: productId, quantity: 1 }
           ],
-          shippingAddress: testAddress
+          shippingAddress: testAddress,
+          acceptTerms: true
         })
         .expect(400);
 
