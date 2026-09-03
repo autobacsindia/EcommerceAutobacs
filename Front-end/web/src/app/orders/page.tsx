@@ -35,6 +35,13 @@ interface Order {
   shipments?: ShipmentSummary[];
   /** Cancelled lines, for the partial-cancellation badge. Also already on the wire. */
   cancellations?: Array<{ _id: string; lines?: Array<{ itemId: string; quantity: number }> }>;
+  /**
+   * Business-purchase marker. Only `type` and `gstin` are projected onto this
+   * list (repositories/orderProjections.js CUSTOMER_LIST_FIELDS) — the rest of
+   * the buyer block is detail-page material. Absent on individual and legacy
+   * orders.
+   */
+  buyer?: { type?: 'individual' | 'enterprise'; gstin?: string };
 }
 
 export default function OrdersPage() {
@@ -296,6 +303,20 @@ export default function OrdersPage() {
                     {hasCancellations(order) && order.status.toLowerCase() !== 'cancelled' && (
                       <span className="px-2 py-0.5 rounded-sm text-[10px] font-display font-bold uppercase tracking-widest border border-red-500/30 text-red-400">
                         Part cancelled
+                      </span>
+                    )}
+                    {/*
+                      Business purchases. A trade customer scanning their history
+                      for the orders that carry a GSTIN is exactly why the two
+                      fields were added to the list projection — the GSTIN itself
+                      is in the title so it is reachable without opening the order.
+                    */}
+                    {order.buyer?.type === 'enterprise' && (
+                      <span
+                        title={order.buyer.gstin ? `GSTIN ${order.buyer.gstin}` : undefined}
+                        className="px-2 py-0.5 rounded-sm text-[10px] font-display font-bold uppercase tracking-widest border border-gold/30 text-gold/90"
+                      >
+                        Business
                       </span>
                     )}
                   </div>

@@ -338,27 +338,37 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
 // list used stale slugs (bodykit/audio/lights) that drifted from the real
 // category data and required backend slug-translation hacks; it was removed.
 
-// Footer Links
-export const FOOTER_LINKS = {
-  company: [
-    { href: '/about', label: 'About Us' },
-    { href: '/contact', label: 'Contact' },
-    { href: '/careers', label: 'Careers' },
-    { href: '/media', label: 'Press' },
-    { href: '/blog', label: 'Blog' },
-  ],
-  support: [
-    { href: '/faq', label: 'FAQ' },
-    { href: '/shipping', label: 'Shipping Info' },
-    { href: '/returns', label: 'Returns' },
-    { href: '/warranty', label: 'Warranty' },
-  ],
-  legal: [
-    { href: '/privacy', label: 'Privacy Policy' },
-    { href: '/terms', label: 'Terms of Service' },
-    { href: '/returns', label: 'Refund Policy' },
-  ],
-};
+// Legal / policy links — the SINGLE source for every route+label pair pointing at
+// a policy document.
+//
+// This exists because the same documents were being called different things in
+// different places. `/terms` was labelled "Conditions of Use" on the auth pages
+// and "Terms of Service" in the (now deleted) legacy footer, while a FOURTH page
+// at `/conditions` rendered a separate, shorter document that contradicted
+// `/terms` on whether prices include tax. Two live pages disagreeing on tax
+// treatment is the kind of thing that gets quoted back at you in a consumer
+// complaint, so `/conditions` was removed (301 → `/terms`, see next.config.ts)
+// and every label now resolves through here.
+//
+// The storefront footer, the login page and the register page all read this.
+// Adding a policy page means adding it here, never inlining a label.
+export const LEGAL_LINKS = {
+  terms:    { href: '/terms',    label: 'Terms and Conditions' },
+  privacy:  { href: '/privacy',  label: 'Privacy Policy' },
+  shipping: { href: '/shipping', label: 'Shipping & Delivery' },
+  // Not in LEGAL_LINK_LIST — the footer already reaches /returns from its
+  // Support column. Present here so /terms §9 cites it by its canonical name.
+  returns:  { href: '/returns',  label: 'Returns & Refunds' },
+  warranty: { href: '/warranty', label: 'Warranty' },
+} as const;
+
+/** Ordered list backing the storefront footer's "Legal" column. */
+export const LEGAL_LINK_LIST = [
+  LEGAL_LINKS.terms,
+  LEGAL_LINKS.privacy,
+  LEGAL_LINKS.shipping,
+  LEGAL_LINKS.warranty,
+] as const;
 
 // Breakpoints (matching Tailwind)
 export const BREAKPOINTS = {

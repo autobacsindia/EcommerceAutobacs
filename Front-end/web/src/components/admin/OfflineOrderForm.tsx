@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { BUYER_TYPES, checkGstin, normalizeGstin } from '@/lib/legal/buyerTypes';
 import { Search, Plus, Trash2 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { SalesRep } from '@/lib/leads';
@@ -49,6 +50,22 @@ export default function OfflineOrderForm({
   // 'paid' = settled offline (mark it done) · 'link' = send a Razorpay payment link.
   const [paymentMode, setPaymentMode] = useState<'paid' | 'link'>('paid');
   const [repId, setRepId] = useState(defaults?.repId || '');
+  /*
+    Business buyer. Offline is the most likely B2B path — an admin recording a
+    dealer or workshop deal — so without these fields the GSTIN capture built for
+    the storefront would simply never fire on the orders most likely to need it.
+
+    The backend validates identically to the storefront (services/buyerService.js)
+    and derives the billing state from the GSTIN, so there is no state field here
+    either.
+  */
+  const [isBusiness, setIsBusiness] = useState(false);
+  const [biz, setBiz] = useState({
+    legalName: '', gstin: '',
+    billingLine1: '', billingLine2: '', billingCity: '', billingPostalCode: '',
+  });
+  const [billingSameAsDelivery, setBillingSameAsDelivery] = useState(true);
+  const gstinCheck = checkGstin(biz.gstin);
   const [submitting, setSubmitting] = useState(false);
 
   const addressComplete = !!(addr.addressLine1.trim() && addr.city.trim() && addr.state.trim() && /^\d{6}$/.test(addr.postalCode.trim()));
@@ -95,6 +112,22 @@ export default function OfflineOrderForm({
           status: paymentMode === 'paid' ? status : undefined,
           leadId: leadId || undefined,
           repId: repId || undefined,
+          buyer: isBusiness
+            ? {
+                type: BUYER_TYPES.ENTERPRISE,
+                legalName: biz.legalName.trim(),
+                gstin: normalizeGstin(biz.gstin),
+                billingAddress: billingSameAsDelivery
+                  ? { addressLine1: addr.addressLine1, city: addr.city, postalCode: addr.postalCode, phone }
+                  : {
+                      addressLine1: biz.billingLine1.trim(),
+                      addressLine2: biz.billingLine2.trim(),
+                      city: biz.billingCity.trim(),
+                      postalCode: biz.billingPostalCode.trim(),
+                      phone,
+                    },
+              }
+            : { type: BUYER_TYPES.INDIVIDUAL },
         }
       );
       if (res.success) onCreated(res.order.orderNumber || res.order._id, res.paymentLink);
@@ -122,6 +155,84 @@ export default function OfflineOrderForm({
           <span className="mb-1 block text-gray-600">Phone <span className="text-red-500">*</span></span>
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputCls} />
         </label>
+      </div>
+
+      {/* Business buyer (GST) */}
+      <div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={isBusiness}
+            onChange={(e) => setIsBusiness(e.target.checked)}
+            className="h-4 w-4"
+          />
+          <span className="font-semibold uppercase tracking-wide text-xs text-gray-500">
+            Business purchase (GST)
+          </span>
+        </label>
+        {isBusiness && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="text-sm sm:col-span-2">
+              <span className="mb-1 block text-gray-600">Registered legal name <span className="text-red-500">*</span></span>
+              <input value={biz.legalName} onChange={(e) => setBiz({ ...biz, legalName: e.target.value })} className={inputCls} />
+            </label>
+            <label className="text-sm sm:col-span-2">
+              <span className="mb-1 block text-gray-600">GSTIN <span className="text-red-500">*</span></span>
+              <input
+                value={biz.gstin}
+                onChange={(e) => setBiz({ ...biz, gstin: e.target.value.toUpperCase() })}
+                placeholder="27AAPFU0939F1ZV"
+                maxLength={20}
+                className={inputCls}
+              />
+              {/* The check digit catches a mistyped GSTIN here rather than after
+                  it has been printed on the customer's receipt. */}
+              <span className="mt-1 block text-xs">
+                {!biz.gstin ? (
+                  <span className="text-gray-400">15-character GST identification number.</span>
+                ) : gstinCheck.valid ? (
+                  <span className="text-green-600">Valid · registered in {gstinCheck.state}</span>
+                ) : (
+                  <span className="text-amber-600">{gstinCheck.message}</span>
+                )}
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={billingSameAsDelivery}
+                onChange={(e) => setBillingSameAsDelivery(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <span className="text-gray-600">Billing address is the same as the delivery address</span>
+            </label>
+            {!billingSameAsDelivery && (
+              <>
+                <label className="text-sm sm:col-span-2">
+                  <span className="mb-1 block text-gray-600">Billing address line 1</span>
+                  <input value={biz.billingLine1} onChange={(e) => setBiz({ ...biz, billingLine1: e.target.value })} className={inputCls} />
+                </label>
+                <label className="text-sm sm:col-span-2">
+                  <span className="mb-1 block text-gray-600">Billing address line 2</span>
+                  <input value={biz.billingLine2} onChange={(e) => setBiz({ ...biz, billingLine2: e.target.value })} className={inputCls} />
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block text-gray-600">Billing city</span>
+                  <input value={biz.billingCity} onChange={(e) => setBiz({ ...biz, billingCity: e.target.value })} className={inputCls} />
+                </label>
+                <label className="text-sm">
+                  <span className="mb-1 block text-gray-600">Billing PIN code</span>
+                  <input value={biz.billingPostalCode} onChange={(e) => setBiz({ ...biz, billingPostalCode: e.target.value.replace(/\D/g, '').slice(0, 6) })} inputMode="numeric" className={inputCls} />
+                </label>
+              </>
+            )}
+            {gstinCheck.valid && (
+              <p className="text-xs text-gray-500 sm:col-span-2">
+                Billing state is taken from the GSTIN: {gstinCheck.state}.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Delivery address */}

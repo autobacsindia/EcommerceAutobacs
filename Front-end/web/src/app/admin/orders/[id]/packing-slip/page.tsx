@@ -42,6 +42,19 @@ interface SlipOrder {
     addressLine1: string; addressLine2?: string;
     city: string; state: string; postalCode: string; country: string;
   };
+  /**
+   * Business buyer details. Absent on individual and legacy orders.
+   *
+   * The GSTIN belongs on this sheet even though money deliberately does not:
+   * trade customers and their transporters check a consignment against a GST
+   * number at gate entry, and it is an identifier rather than a price — so it
+   * does not turn the slip into something that reads like an invoice.
+   */
+  buyer?: {
+    type?: 'individual' | 'enterprise';
+    legalName?: string;
+    gstin?: string;
+  };
   spinReward?: {
     name: string; sku: string | null; kind: string;
     fulfilledAt: string | null; voidedAt: string | null;
@@ -172,6 +185,20 @@ export default function PackingSlipPage() {
           <div>{a.city}, {a.state} {a.postalCode}</div>
           <div>{a.country}</div>
           <div className="mt-1">📞 {a.phone}</div>
+          {/* Business buyer identity. Deliberately inside the ship-to block and
+              styled plainly so it survives a black-and-white print — a trade
+              customer's transporter reads this at gate entry. No money here:
+              the slip stays price-free by design (see the note at the top). */}
+          {order.buyer?.type === 'enterprise' && (
+            <div className="mt-2 border-t border-dashed border-gray-400 pt-2">
+              {order.buyer.legalName && (
+                <div className="font-semibold">{order.buyer.legalName}</div>
+              )}
+              {order.buyer.gstin && (
+                <div className="font-mono text-xs tracking-wide">GSTIN {order.buyer.gstin}</div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

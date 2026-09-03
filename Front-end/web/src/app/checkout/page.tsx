@@ -15,6 +15,10 @@ import { trackGoogleBeginCheckout } from '@/lib/googleAdsEvents';
 import orderService from '@/lib/services/orderService';
 import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
 import { isValidIndianMobile } from '@/lib/utils';
+import { BUYER_TYPES, checkGstin, normalizeGstin, type BuyerType } from '@/lib/legal/buyerTypes';
+import { enterpriseBlockError } from '@/lib/legal/checkoutBuyer';
+import { LEGAL_LINKS } from '@/lib/constants';
+import { CURRENT_TERMS_VERSION } from '@/lib/legal/legalVersions';
 import { Check, CreditCard, MapPin, Package, Loader2, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useRazorpay } from '@/hooks/useRazorpay';
@@ -226,6 +230,25 @@ function CheckoutPageContent() {
     fullName: '', street: '', city: '', state: '', postalCode: '', country: 'India', phone: '',
   });
 
+  // ── Buyer category + legal acceptance ───────────────────────────────────────
+  // `buyerType` decides which half of /terms §17 governs the sale: individual →
+  // §17A (consumer courts + the CDRC route preserved), enterprise → §17B
+  // (arbitration seated in Ernakulam). The server re-derives all of this from a
+  // validated GSTIN — nothing here is trusted — but the UI must not let someone
+  // wander into the arbitration track without seeing that they are doing so.
+  const [buyerType, setBuyerType] = useState<BuyerType>(BUYER_TYPES.INDIVIDUAL);
+  const [business, setBusiness] = useState({
+    legalName: '', gstin: '',
+    billingLine1: '', billingLine2: '', billingCity: '', billingPostalCode: '',
+  });
+  const [billingSameAsShipping, setBillingSameAsShipping] = useState(true);
+  // Unticked by default and never persisted: consent has to be given for THIS
+  // order, so a remembered checkbox would defeat the point of recording it.
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+
+  const gstinCheck = useMemo(() => checkGstin(business.gstin), [business.gstin]);
+  const isEnterprise = buyerType === BUYER_TYPES.ENTERPRISE;
+
   const [paymentMethod, setPaymentMethod] = useState<string>(PAYMENT_METHODS.RAZORPAY);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [shouldSaveAddress, setShouldSaveAddress] = useState(false);
@@ -258,6 +281,28 @@ function CheckoutPageContent() {
       if (isAuthenticated) {
         try {
           const response = await apiClient.get('/profile') as any;
+
+          // Saved enterprise details. Read from THIS response, not from the auth
+          // context: AuthContext's user comes from GET /auth/me, which returns a
+          // fixed whitelist (id/email/name/role/isVerified/avatar/sessionVersion)
+          // and has never carried businessProfile — prefilling from there would
+          // silently never fire. `/profile` returns the full user document.
+          const savedBusiness = response?.user?.businessProfile;
+          if (savedBusiness?.gstin) {
+            setBuyerType(BUYER_TYPES.ENTERPRISE);
+            setBusiness({
+              legalName: savedBusiness.legalName || '',
+              gstin: savedBusiness.gstin || '',
+              billingLine1: savedBusiness.billingAddress?.addressLine1 || '',
+              billingLine2: savedBusiness.billingAddress?.addressLine2 || '',
+              billingCity: savedBusiness.billingAddress?.city || '',
+              billingPostalCode: savedBusiness.billingAddress?.postalCode || '',
+            });
+            // The saved billing address is its own address, so don't silently
+            // mirror the shipping one over it.
+            setBillingSameAsShipping(false);
+          }
+
           if (response.success && response.user && response.user.addresses) {
             setSavedAddresses(response.user.addresses);
             if (response.user.addresses.length === 0) {
@@ -300,6 +345,19 @@ function CheckoutPageContent() {
 
   const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Runs BEFORE the saved-address early return below. Placing it after meant a
+    // returning customer — most repeat B2B buyers — skipped these checks
+    // entirely and only met them as a server 400 at Place Order.
+    const buyerError = enterpriseBlockError({
+      isEnterprise,
+      legalName: business.legalName,
+      gstin: business.gstin,
+      billingSameAsShipping,
+      billing: { line1: business.billingLine1, city: business.billingCity, postalCode: business.billingPostalCode },
+      shipping: { line1: address.street, city: address.city, postalCode: address.postalCode },
+    });
+    if (buyerError) { toast.error(buyerError); return; }
+
     if (!showAddressForm && selectedAddressIndex !== null) { setCurrentStep('payment'); return; }
     if (!address.fullName || !address.street || !address.city || !address.state || !address.postalCode || !address.phone) {
       toast.error('Please fill all address fields');
@@ -330,6 +388,14 @@ function CheckoutPageContent() {
   const handlePlaceOrder = async () => {
     if (isGuest && !guestEmail && !guestPhone) {
       toast.error('Please enter email or phone number for guest checkout');
+      return;
+    }
+    // Early exit for a clearer message before any network call. NOT the only
+    // gate — the price-change "Confirm & Pay" button calls
+    // placeOrderWithValidation directly and never comes through here, so the
+    // authoritative client-side check lives there.
+    if (!acceptedTerms) {
+      toast.error('Please accept the Terms and Conditions to place your order');
       return;
     }
     setLoading(true);
@@ -380,11 +446,46 @@ function CheckoutPageContent() {
   // Step 2: place the order using server-validated prices.
   // Called directly when prices are unchanged, or after the user confirms a price change.
   const placeOrderWithValidation = async (validated: ServerValidation) => {
+    // THE funnel — both the ordinary Place Order button and the price-change
+    // "Confirm & Pay" button reach the API through here, so this is where the
+    // acceptance gate has to be for neither to bypass it. (The server rejects an
+    // unaccepted order anyway; this keeps the buyer from a pointless round-trip.)
+    if (!acceptedTerms) {
+      toast.error('Please accept the Terms and Conditions to place your order');
+      return;
+    }
     setLoading(true);
     setPriceConfirmationPending(false);
     try {
       const orderData = {
         ...(isGuest && { email: guestEmail, phone: guestPhone }),
+        // Buyer category + GSTIN. The server re-validates every field and
+        // DERIVES the billing state from the GSTIN itself, so no state is sent:
+        // GST registration is per state, and a typed one could only disagree.
+        buyer: isEnterprise
+          ? {
+              type: BUYER_TYPES.ENTERPRISE,
+              legalName: business.legalName.trim(),
+              gstin: normalizeGstin(business.gstin),
+              billingAddress: billingSameAsShipping
+                ? {
+                    addressLine1: address.street,
+                    city: address.city,
+                    postalCode: address.postalCode,
+                    phone: address.phone,
+                  }
+                : {
+                    addressLine1: business.billingLine1.trim(),
+                    addressLine2: business.billingLine2.trim(),
+                    city: business.billingCity.trim(),
+                    postalCode: business.billingPostalCode.trim(),
+                    phone: address.phone,
+                  },
+            }
+          : { type: BUYER_TYPES.INDIVIDUAL },
+        // The version is NOT sent — the server stamps its own. This only says
+        // that the box was ticked.
+        acceptTerms: acceptedTerms,
         shippingAddress: {
           fullName: address.fullName, addressLine1: address.street,
           city: address.city, state: address.state, postalCode: address.postalCode,
@@ -721,6 +822,121 @@ function CheckoutPageContent() {
               </div>
             )}
 
+            {/* ── Buyer category ──────────────────────────────────────────────
+                Deliberately OUTSIDE the saved-address / new-address branches
+                below: it applies to the order, not to an address, and putting it
+                inside the new-address form would hide it from every returning
+                customer who picks a saved address — i.e. from most repeat B2B
+                buyers, the exact people this exists for.
+
+                Which option is selected decides which half of /terms §17 governs
+                the sale, so the copy names the consequence rather than just
+                labelling the choice. Enterprise is gated on a valid GSTIN
+                (enforced server-side in services/buyerService.js) so nobody
+                lands in the arbitration track just to get a GST number onto a
+                receipt. */}
+            <div className="bg-obsidian border border-hairline rounded-sm p-5 mb-6">
+              <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-3">
+                Who is this purchase for?
+              </h3>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {[
+                  { value: BUYER_TYPES.INDIVIDUAL, label: 'Individual', hint: 'A personal purchase.' },
+                  { value: BUYER_TYPES.ENTERPRISE, label: 'Business / Enterprise', hint: 'Buying for a GST-registered business.' },
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className={`border rounded-sm p-3 cursor-pointer transition-colors ${
+                      buyerType === option.value ? 'border-gold bg-gold/5' : 'border-hairline bg-obsidian-raised hover:border-gold/40'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="buyerType"
+                        value={option.value}
+                        checked={buyerType === option.value}
+                        onChange={() => setBuyerType(option.value)}
+                        className="h-4 w-4 accent-gold"
+                      />
+                      <span className="font-display text-sm text-ink">{option.label}</span>
+                    </span>
+                    <span className="block text-xs text-ink-muted font-display mt-1 pl-6">{option.hint}</span>
+                  </label>
+                ))}
+              </div>
+
+              {isEnterprise && (
+                <div className="mt-4 space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Registered legal name"
+                    value={business.legalName}
+                    onChange={(e) => setBusiness({ ...business, legalName: e.target.value })}
+                    className={inputClass}
+                    aria-label="Registered legal name"
+                  />
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="GSTIN (e.g. 27AAPFU0939F1ZV)"
+                      value={business.gstin}
+                      onChange={(e) => setBusiness({ ...business, gstin: e.target.value.toUpperCase() })}
+                      className={inputClass}
+                      maxLength={20}
+                      aria-label="GSTIN"
+                      aria-invalid={Boolean(business.gstin) && !gstinCheck.valid}
+                      aria-describedby="gstin-feedback"
+                    />
+                    {/* Immediate feedback. A check-digit failure is a typo, and
+                        catching it while the buyer is looking at the field is the
+                        difference between a correction and a wrong tax number
+                        printed on the receipt we email them. */}
+                    <p id="gstin-feedback" className="text-xs font-display mt-1.5" aria-live="polite">
+                      {!business.gstin ? (
+                        <span className="text-ink-muted">Your 15-character GST identification number.</span>
+                      ) : gstinCheck.valid ? (
+                        <span className="text-green-400">Valid · registered in {gstinCheck.state}</span>
+                      ) : (
+                        <span className="text-yellow-400">{gstinCheck.message}</span>
+                      )}
+                    </p>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-sm text-ink/70 font-display">
+                    <input
+                      type="checkbox"
+                      checked={billingSameAsShipping}
+                      onChange={(e) => setBillingSameAsShipping(e.target.checked)}
+                      className="h-4 w-4 accent-gold rounded border-hairline bg-obsidian-raised"
+                    />
+                    Billing address is the same as the delivery address
+                  </label>
+
+                  {!billingSameAsShipping && (
+                    <div className="space-y-3">
+                      <input type="text" aria-label="Billing address" placeholder="Billing address" value={business.billingLine1} onChange={(e) => setBusiness({ ...business, billingLine1: e.target.value })} className={inputClass} />
+                      <input type="text" aria-label="Billing address line 2" placeholder="Billing address line 2 (optional)" value={business.billingLine2} onChange={(e) => setBusiness({ ...business, billingLine2: e.target.value })} className={inputClass} />
+                      <div className="grid grid-cols-2 gap-3">
+                        <input type="text" aria-label="Billing city" placeholder="Billing city" value={business.billingCity} onChange={(e) => setBusiness({ ...business, billingCity: e.target.value })} className={inputClass} />
+                        <input type="text" aria-label="Billing postal code" placeholder="Billing postal code" value={business.billingPostalCode} onChange={(e) => setBusiness({ ...business, billingPostalCode: e.target.value })} className={inputClass} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* There is deliberately NO billing-state field. GST
+                      registration is per state, so the GSTIN already fixes it;
+                      the server derives and stores it from there. A typed state
+                      could only ever disagree with the number beside it. */}
+                  {gstinCheck.valid && (
+                    <p className="text-xs text-ink-muted font-display">
+                      Billing state is taken from your GSTIN: <span className="text-ink/70">{gstinCheck.state}</span>.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             {!showAddressForm && savedAddresses.length > 0 && (
               <div className="space-y-4 mb-6">
                 {savedAddresses.map((addr, index) => (
@@ -868,7 +1084,7 @@ function CheckoutPageContent() {
                     <div className="flex gap-3">
                       <button
                         onClick={() => placeOrderWithValidation(serverValidation)}
-                        disabled={loading || isRazorpayProcessing}
+                        disabled={loading || isRazorpayProcessing || !acceptedTerms}
                         className="flex-1 bg-green-600 hover:bg-green-700 text-ink font-display font-bold uppercase tracking-widest py-2.5 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
                       >
                         {loading || isRazorpayProcessing ? (
@@ -910,10 +1126,59 @@ function CheckoutPageContent() {
               </div>
             </div>
 
+            {/* ── Legal acceptance ─────────────────────────────────────────
+                Unticked by default and not remembered between orders: consent
+                has to be given for THIS purchase, and a pre-ticked or persisted
+                box is exactly what makes a recorded acceptance worthless.
+
+                The enterprise wording names the arbitration clause explicitly.
+                §17B waives the consumer-forum route and seats disputes in
+                Ernakulam — a buyer agreeing to that should not have to open the
+                terms to discover it. The version shown is the one the server
+                will record. */}
+            <div className="bg-obsidian border border-hairline rounded-sm p-5 mb-6">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="h-4 w-4 mt-0.5 accent-gold rounded border-hairline bg-obsidian-raised shrink-0"
+                  aria-describedby="terms-detail"
+                />
+                <span className="text-sm text-ink/70 font-display">
+                  I have read and accept the{' '}
+                  <Link href={LEGAL_LINKS.terms.href} target="_blank" className="text-gold hover:text-ink transition-colors underline">
+                    {LEGAL_LINKS.terms.label}
+                  </Link>{' '}
+                  and the{' '}
+                  <Link href={LEGAL_LINKS.privacy.href} target="_blank" className="text-gold hover:text-ink transition-colors underline">
+                    {LEGAL_LINKS.privacy.label}
+                  </Link>
+                  .
+                </span>
+              </label>
+              <p id="terms-detail" className="text-xs text-ink-muted font-display mt-2 pl-7">
+                {isEnterprise ? (
+                  <>
+                    As a Business / Enterprise buyer, section 17B applies: disputes go to
+                    arbitration under the Arbitration and Conciliation Act, 1996, seated in
+                    Ernakulam, Kerala, and the courts there have exclusive jurisdiction.
+                  </>
+                ) : (
+                  <>
+                    As an individual buyer, section 17A applies: your right to approach the
+                    Consumer Disputes Redressal Commission is unaffected, and you are not
+                    required to arbitrate.
+                  </>
+                )}{' '}
+                <span className="text-ink-muted/70">(terms version {CURRENT_TERMS_VERSION})</span>
+              </p>
+            </div>
+
             {!priceConfirmationPending && (
               <button
                 onClick={handlePlaceOrder}
-                disabled={loading || isRazorpayProcessing}
+                disabled={loading || isRazorpayProcessing || !acceptedTerms}
                 className="w-full bg-green-600 hover:bg-green-700 text-ink font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
               >
                 {loading || isRazorpayProcessing ? (

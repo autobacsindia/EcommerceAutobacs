@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { safeInternalPath } from '@/lib/utils';
+import { LEGAL_LINKS } from '@/lib/constants';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 import { navigateTo } from '@/lib/utils/navigation';
 import BrandLogo from '@/components/layout/BrandLogo';
@@ -227,12 +228,12 @@ export default function RegisterPage() {
 
           <div className="mt-6 text-xs text-ink-muted font-display">
             By creating an account, you agree to AutoBacs India&apos;s{' '}
-            <Link href="/terms" className="text-gold hover:text-ink transition-colors">
-              Conditions of Use
+            <Link href={LEGAL_LINKS.terms.href} className="text-gold hover:text-ink transition-colors">
+              {LEGAL_LINKS.terms.label}
             </Link>{' '}
             and{' '}
-            <Link href="/privacy" className="text-gold hover:text-ink transition-colors">
-              Privacy Notice
+            <Link href={LEGAL_LINKS.privacy.href} className="text-gold hover:text-ink transition-colors">
+              {LEGAL_LINKS.privacy.label}
             </Link>
             .
           </div>
@@ -295,8 +296,9 @@ export default function RegisterPage() {
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col items-center justify-center space-y-4">
             <div className="flex space-x-8 text-xs text-gold">
-              <Link href="/conditions" className="hover:text-ink transition-colors">Conditions of Use</Link>
-              <Link href="/privacy" className="hover:text-ink transition-colors">Privacy Notice</Link>
+              {/* Was `/conditions` — a second, contradictory terms page. Now permanently redirects (308) to /terms. */}
+              <Link href={LEGAL_LINKS.terms.href} className="hover:text-ink transition-colors">{LEGAL_LINKS.terms.label}</Link>
+              <Link href={LEGAL_LINKS.privacy.href} className="hover:text-ink transition-colors">{LEGAL_LINKS.privacy.label}</Link>
               <Link href="/help" className="hover:text-ink transition-colors">Help</Link>
             </div>
             <p className="text-xs text-ink-muted font-display">

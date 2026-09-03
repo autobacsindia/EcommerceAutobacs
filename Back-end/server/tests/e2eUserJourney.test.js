@@ -207,7 +207,9 @@ describe('E2E User Journey Integration Test', () => {
           country: 'Test Country'
         },
         paymentMethod: 'cod', // Cash on Delivery for simplicity
-        totalAmount: testProduct.price * 2
+        totalAmount: testProduct.price * 2,
+        // Order creation is gated on a recorded acceptance (buyerService.js).
+        acceptTerms: true
       };
 
       const res = await request(app)

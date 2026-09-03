@@ -78,6 +78,12 @@ interface Order {
   /** Cancelled lines, for the part-cancelled badge. */
   cancellations?: Array<{ _id: string; lines?: Array<{ itemId: string; quantity: number }> }>;
   /**
+   * Business-purchase marker. Only `type` and `gstin` reach this table
+   * (repositories/orderProjections.js ADMIN_LIST_FIELDS); the registered name and
+   * billing address are on the order detail page. Absent on legacy orders.
+   */
+  buyer?: { type?: 'individual' | 'enterprise'; gstin?: string };
+  /**
    * Mirror of the LATEST return's status — status only, deliberately. A partial return
    * no longer moves the order to `returned` (that state is terminal and stranded the
    * un-returned lines), so this is what keeps "a return is open" visible on the row.
@@ -756,6 +762,21 @@ function AdminOrdersPageInner() {
                         */}
                         {hasCancellations(order) && order.status !== 'cancelled' && (
                           <div className="mt-1 text-[11px] font-medium text-red-600">Part cancelled</div>
+                        )}
+                        {/*
+                          B2B marker. Ops handle these differently (GST paperwork,
+                          often a different bill-to), so it needs to be visible in
+                          the table rather than only after opening the order. The
+                          GSTIN rides in the tooltip so it can be checked without
+                          a navigation.
+                        */}
+                        {order.buyer?.type === 'enterprise' && (
+                          <div
+                            title={order.buyer.gstin ? `GSTIN ${order.buyer.gstin}` : undefined}
+                            className="mt-1 text-[11px] font-medium text-amber-700"
+                          >
+                            Business (GST)
+                          </div>
                         )}
                         {/*
                           A return no longer drags the whole order to `returned` unless it

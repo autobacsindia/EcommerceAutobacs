@@ -37,6 +37,30 @@ const AddressSchema = new mongoose.Schema({
   }
 }, { _id: false });
 
+/**
+ * Enterprise buyer details saved on an account for reuse at checkout.
+ *
+ * `state`/`stateCode` are DERIVED from the GSTIN (GST registration is per state)
+ * and written by services/buyerService.js — they are never typed by the user, so
+ * they cannot disagree with the GSTIN they sit beside.
+ */
+const BusinessProfileSchema = new mongoose.Schema({
+  legalName: { type: String, required: true },
+  gstin: { type: String, required: true },
+  stateCode: String,
+  billingAddress: {
+    addressLine1: String,
+    addressLine2: String,
+    city: String,
+    state: String,
+    stateCode: String,
+    postalCode: String,
+    country: String,
+    phone: String
+  },
+  updatedAt: Date
+}, { _id: false });
+
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   // lowercase+trim: schema-level safety net so email uniqueness can't be bypassed
@@ -52,6 +76,23 @@ const UserSchema = new mongoose.Schema({
   migratedFromWp: { type: Boolean, default: false },
   mustResetPassword: { type: Boolean, default: false },
   addresses: [AddressSchema],
+
+  /**
+   * Saved enterprise (B2B) buyer details, so a repeat trade customer does not
+   * retype a 15-character GSTIN on every order — which is where a typo enters
+   * the receipt we email them.
+   *
+   * ⚠️ THIS IS A CONVENIENCE COPY, NOT A RECORD. Every order snapshots its own
+   * `buyer` block at creation (see models/Order.js). Editing this profile must
+   * never reach a historical order: orders are immutable financial records, and
+   * a customer who changes their registered name this year did not change what
+   * last year's receipt said.
+   *
+   * A sub-schema with `_id: false` rather than a nested path, so a leaf value
+   * cannot materialise a phantom profile on every user document — the same
+   * Mongoose footgun that put a fake return request on 1,521 orders.
+   */
+  businessProfile: { type: BusinessProfileSchema, default: undefined },
   
   // Email verification fields
   isVerified: { type: Boolean, default: false },

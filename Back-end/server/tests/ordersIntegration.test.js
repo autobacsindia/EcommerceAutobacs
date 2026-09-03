@@ -125,7 +125,10 @@ describe('Orders Integration API', () => {
         },
         shippingCost: 50,
         tax: 0,
-        discount: 0
+        discount: 0,
+        // Order creation is gated on a recorded acceptance of the Terms +
+        // Privacy Policy (services/buyerService.js).
+        acceptTerms: true
       };
 
       const res = await request(app)
@@ -155,7 +158,8 @@ describe('Orders Integration API', () => {
           state: 'Test State',
           postalCode: '12345',
           country: 'India'
-        }
+        },
+        acceptTerms: true
       };
 
       const res = await request(app)
@@ -185,7 +189,10 @@ describe('Orders Integration API', () => {
           state: 'Test State',
           postalCode: '12345',
           country: 'India'
-        }
+        },
+        // Present so the 400 under test is the OUT-OF-STOCK one. Without it the
+        // acceptance gate 400s first and this passes for the wrong reason.
+        acceptTerms: true
       };
 
       const res = await request(app)

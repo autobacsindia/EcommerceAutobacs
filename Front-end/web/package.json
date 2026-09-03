@@ -21,7 +21,8 @@
     "test-makes": "node scripts/test-vehicle-makes.js",
     "analyze-products": "node scripts/analyze-products.js",
     "extract-vehicles": "node scripts/extract-vehicles.js",
-    "import-vehicle-images": "node scripts/download-vehicle-images.js"
+    "import-vehicle-images": "node scripts/download-vehicle-images.js",
+    "snapshot-legal": "node scripts/snapshot-legal-page.mjs"
   },
   "engines": {
     "node": ">=20.9.0"

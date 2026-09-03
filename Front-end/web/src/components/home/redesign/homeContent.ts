@@ -15,6 +15,8 @@
  * at `/images/home/...` paths before the files exist.
  */
 
+import { LEGAL_LINK_LIST } from '@/lib/constants';
+
 /** Neutral placeholder shown when an `image` is empty/missing. */
 export const FALLBACK_IMAGE = '';
 
@@ -453,6 +455,15 @@ export const footer = {
         { label: 'Fitment Guide', href: '/vehicles' },
         { label: 'Contact Us', href: '/contact' },
       ],
+    },
+    {
+      // Sourced from lib/constants LEGAL_LINKS so the footer cannot drift from
+      // the labels used on the auth pages. The storefront had NO legal column at
+      // all before this — Terms and Privacy were reachable only from /login and
+      // /register, i.e. never from a page a signed-in shopper was actually on.
+      // `/returns` is deliberately absent: it is already in Support above.
+      title: 'Legal',
+      links: LEGAL_LINK_LIST.map((l) => ({ label: l.label, href: l.href })),
     },
   ],
   copyright: `© ${new Date().getFullYear()} Autobacs India Pvt. Ltd. All rights reserved.`,

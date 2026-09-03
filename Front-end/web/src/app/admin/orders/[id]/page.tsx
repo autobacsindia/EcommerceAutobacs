@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download } from 'lucide-react';
+import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download, Building2, FileText } from 'lucide-react';
 import { CUSTOMER_NOTIFIED_STATUSES, API_ENDPOINTS } from '@/lib/constants';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
@@ -81,6 +81,28 @@ interface Order {
     state: string;
     postalCode: string;
     country: string;
+  };
+  /**
+   * Buyer identity. OPTIONAL and absent on ~1,500 legacy orders and on every
+   * order placed before this shipped — treat a missing `buyer` as an individual
+   * buyer and render nothing.
+   */
+  buyer?: {
+    type?: 'individual' | 'enterprise';
+    legalName?: string;
+    gstin?: string;
+    stateCode?: string;
+    billingAddress?: {
+      addressLine1?: string; addressLine2?: string; city?: string;
+      state?: string; postalCode?: string; country?: string; phone?: string;
+    };
+  };
+  /** Which terms version this buyer accepted, and when. Absent on legacy orders. */
+  legalAcceptance?: {
+    termsVersion?: string;
+    privacyVersion?: string;
+    track?: 'consumer' | 'enterprise';
+    acceptedAt?: string;
   };
   /**
    * Spin-to-Win reward. Stored beside the order, never inside `items` — a ₹0 entry
@@ -510,6 +532,84 @@ export default function AdminOrderDetailPage() {
             )}
             onChanged={fetchOrder}
           />
+
+          {/* Buyer & legal acceptance — enterprise orders only.
+              Rendered above the shipping address because for a B2B order the
+              question "who is this billed to?" comes before "where did it go?",
+              and the two are routinely different places.
+
+              Individual and legacy orders render nothing at all: `buyer` is
+              absent on ~1,500 existing orders, so every read here is optional-
+              chained. */}
+          {order.buyer?.type === 'enterprise' && (
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Business Buyer
+                </h2>
+              </div>
+              <div className="p-6 space-y-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Registered name</p>
+                  <p className="font-medium">{order.buyer.legalName || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-500">GSTIN</p>
+                  {/* Monospaced: an admin reads this character by character when
+                      checking it against a customer's paperwork. */}
+                  <p className="font-mono font-medium tracking-wide">{order.buyer.gstin || '—'}</p>
+                </div>
+                {order.buyer.billingAddress && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Billing address</p>
+                    <p className="text-gray-600">
+                      {order.buyer.billingAddress.addressLine1}
+                      {order.buyer.billingAddress.addressLine2 && `, ${order.buyer.billingAddress.addressLine2}`}
+                    </p>
+                    <p className="text-gray-600">
+                      {order.buyer.billingAddress.city}, {order.buyer.billingAddress.state}{' '}
+                      {order.buyer.billingAddress.postalCode}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      State is derived from the GSTIN, not entered by the buyer.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Terms acceptance — shown on EVERY order that has one, not just
+              enterprise. This is what support reads during a dispute: which
+              version of the terms this customer agreed to, and when. */}
+          {order.legalAcceptance?.termsVersion && (
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Terms Accepted
+                </h2>
+              </div>
+              <div className="p-6 text-sm space-y-1">
+                <p className="text-gray-600">
+                  Version <span className="font-mono">{order.legalAcceptance.termsVersion}</span>
+                  {order.legalAcceptance.acceptedAt && (
+                    <> on {formatLongDateTimeIST(order.legalAcceptance.acceptedAt)}</>
+                  )}
+                </p>
+                <p className="text-gray-600">
+                  Governing clause:{' '}
+                  {order.legalAcceptance.track === 'enterprise'
+                    ? '§17B — arbitration, seated in Ernakulam'
+                    : '§17A — consumer courts; CDRC route preserved'}
+                </p>
+                <p className="text-xs text-gray-400 pt-1">
+                  The exact text is archived at docs/legal/terms-{order.legalAcceptance.termsVersion}.md
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Shipping Address */}
           <div className="bg-white rounded-lg shadow">
