@@ -73,6 +73,30 @@ if (KEY) {
 
   check('immutable cache header', (avif.h.get('cache-control') || '').includes('immutable'),
     `(got ${avif.h.get('cache-control') || 'ABSENT'})`);
+
+  /*
+    ── The full-rung fallback ────────────────────────────────────────────────
+    The ladder never upscales, so a source narrower than a requested rung has no
+    object there — yet next/image emits a srcset across EVERY rung regardless of
+    the source, and the browser picks a large candidate. Measured on the live
+    PDP: a 533px image was requested at w128 through w1920 and everything above
+    w384 fell through to the raw original — 12.5% of the catalog.
+
+    Ask for the TOP rung of whatever key was supplied. Whichever way it resolves
+    it must not be the raw original: either the rung exists (a big source), or
+    the Worker answers from `full`. `X-Variant-Fallback: original` here means the
+    fallback chain is broken or the generator has not written `full` yet.
+  */
+  const topRungKey = KEY.replace(/\/w\d+$/, '/w1920');
+  const top = await head(`/${topRungKey}`, 'image/avif,image/webp,image/*');
+  const topFallback = top.h.get('x-variant-fallback') || '';
+  check('top rung resolves to a variant, not the raw original',
+    top.status === 200 && topFallback !== 'original',
+    `(got ${top.status} ${top.ct}${topFallback ? ` fallback=${topFallback}` : ''})`);
+
+  if (topFallback === 'full') {
+    console.log('      ↳ served from the full rung — this source is narrower than w1920, as expected');
+  }
 } else {
   console.log('  … pass a variant key as argv[3] to check negotiation + security headers');
   console.log('    e.g. node verify.mjs https://img.autobacsindia.com variants/autobacs/products/<id>/<name>/w640');

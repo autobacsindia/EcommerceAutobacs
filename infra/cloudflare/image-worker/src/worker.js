@@ -48,7 +48,21 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
  * every prior entry unreachable, no purge token or dashboard step required, and
  * it is one line in the same commit as the change it protects.
  */
-const CACHE_VERSION = 'v2';
+/**
+ * The FULL-rung key for a numbered-variant key, or '' when this is not one.
+ *
+ * `variants/a/b/w960.avif` → `variants/a/b/full.avif`
+ *
+ * Exported so it can be unit-tested: the rest of the fallback lives inside the
+ * fetch handler and needs a Workers runtime to exercise.
+ */
+export function fullKeyFor(key, ext) {
+  if (typeof key !== 'string' || !ext) return '';
+  const out = key.replace(/\/w\d+\.(avif|webp)$/, `/full.${ext}`);
+  return out === key ? '' : out;
+}
+
+const CACHE_VERSION = 'v3';
 
 /**
  * Content types this host is allowed to serve.
@@ -140,13 +154,41 @@ export default {
     const hit = await cache.match(cacheKey);
     if (hit) return hit;
 
-    const object = await env.BUCKET.get(key);
+    let object = await env.BUCKET.get(key);
+    let fallback = null;
+
+    /*
+      ── Fallback 1: the FULL rung ─────────────────────────────────────────────
+      The ladder never upscales, so a source narrower than a requested rung has
+      no object at that rung — yet next/image emits a srcset across every rung
+      regardless of the source, and the browser picks a large candidate. Measured
+      on the live PDP: a 533px image was requested at w128 through w1920, and
+      everything above w384 fell through to the raw PNG. That was 12.5% of the
+      catalog serving unoptimised bytes to most visitors.
+
+      `full.<fmt>` is the source at its OWN width, so it has exactly the pixels
+      the original has, in a modern codec. Falling back to the largest available
+      RUNG instead would fix the bytes and break the pixels — a 384px image in a
+      slot asking for more is visibly softer than what we serve today.
+
+      Cached like a normal variant: unlike a missing variant, this is not a
+      temporary state waiting on a generator. It is the correct answer for this
+      image forever.
+    */
+    if (!object && format) {
+      const fullKey = fullKeyFor(key, format.ext);
+      if (fullKey) {
+        object = await env.BUCKET.get(fullKey);
+        if (object) fallback = 'full';
+      }
+    }
+
     if (!object) {
       /*
-        A missing variant means the generator has not caught up with this image
-        yet. Fall back to the ORIGINAL rather than 404ing: a correct but larger
-        image is a far better failure than a hole in the product grid. The
-        fallback is NOT cached long, so it stops as soon as the variant lands.
+        ── Fallback 2: the ORIGINAL ────────────────────────────────────────────
+        The generator has not caught up with this image yet. Serve the original
+        rather than 404ing: a correct but larger image beats a hole in the
+        product grid. NOT cached long, so it stops as soon as a variant lands.
       */
       const originalKey = key
         .replace(new RegExp(`^${VARIANT_PREFIX}`), '')
@@ -171,6 +213,9 @@ export default {
       therefore untrusted — see SERVABLE_TYPES.
     */
     headers.set('Content-Type', format ? format.mime : safeContentType(object.httpMetadata?.contentType));
+    // Observable in a curl, and the signal that this image is source-limited
+    // rather than that a variant is missing.
+    if (fallback) headers.set('X-Variant-Fallback', fallback);
     headers.set('Cache-Control', object.httpMetadata?.cacheControl || IMMUTABLE);
     // Belt to the allowlist's braces: stops a browser from sniffing its way to
     // a different type than the one we declared.

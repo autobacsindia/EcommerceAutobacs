@@ -11,7 +11,7 @@
 import { jest } from '@jest/globals';
 import sharp from 'sharp';
 import { probe, renderVariant, generateVariants, ENCODE } from '../../../services/storage/variantGenerator.js';
-import { LADDER, FORMATS } from '../../../services/storage/variants.js';
+import { LADDER, FORMATS, plannedVariants } from '../../../services/storage/variants.js';
 
 /** A solid-colour source of the given size. */
 const makeImage = (width, height = width) =>
@@ -89,12 +89,20 @@ describe('generateVariants', () => {
     const r = await generateVariants({
       buffer: await makeImage(400), originalKey: 'autobacs/products/abc.jpg', ...d,
     });
-    // 400px source → rungs 128, 256, 384 only.
-    expect(r.written).toBe(3 * FORMATS.length);
+    // 400px source → rungs 128, 256, 384, plus the full rung at 400px.
+    expect(r.written).toBe(4 * FORMATS.length);
     const keys = d.putObject.mock.calls.map((c) => c[0].key);
     expect(keys).toContain('variants/autobacs/products/abc/w384.avif');
     expect(keys).toContain('variants/autobacs/products/abc/w128.webp');
     expect(keys.some((k) => k.includes('w640'))).toBe(false); // no upscale
+    /*
+      The full rung is what the Worker serves when a browser asks for a rung this
+      source cannot fill — next/image emits a srcset across every rung regardless
+      of the source, so that happens constantly. Without it those requests fall
+      through to the raw original.
+    */
+    expect(keys).toContain('variants/autobacs/products/abc/full.avif');
+    expect(keys).toContain('variants/autobacs/products/abc/full.webp');
 
     const avifCall = d.putObject.mock.calls.find((c) => c[0].key.endsWith('.avif'))[0];
     expect(avifCall).toMatchObject({
@@ -119,7 +127,7 @@ describe('generateVariants', () => {
       buffer: await makeImage(400), originalKey: 'autobacs/products/abc.jpg', ...d,
     });
     expect(r.written).toBe(0);
-    expect(r.skipped).toBe(3 * FORMATS.length);
+    expect(r.skipped).toBe(4 * FORMATS.length);   // 3 rungs + full
     expect(d.putObject).not.toHaveBeenCalled();
   });
 
@@ -129,7 +137,7 @@ describe('generateVariants', () => {
       buffer: await makeImage(400), originalKey: 'autobacs/products/abc.jpg', force: true, ...d,
     });
     expect(r.skipped).toBe(0);
-    expect(r.written).toBe(3 * FORMATS.length);
+    expect(r.written).toBe(4 * FORMATS.length);   // 3 rungs + full
   });
 
   test('one failed variant does not abandon the rest', async () => {
@@ -142,15 +150,20 @@ describe('generateVariants', () => {
       buffer: await makeImage(400), originalKey: 'autobacs/products/abc.jpg', ...d,
     });
     expect(r.failed).toHaveLength(1);
-    expect(r.written).toBe(3 * FORMATS.length - 1);
+    expect(r.written).toBe(4 * FORMATS.length - 1);   // 3 rungs + full, minus the one that threw
   });
 
   test('a tiny source still gets the smallest rung rather than nothing', async () => {
     const r = await generateVariants({
       buffer: await makeImage(64), originalKey: 'autobacs/products/tiny.jpg', ...deps(),
     });
-    expect(r.written).toBe(FORMATS.length);
-    expect(r.variants.every((v) => v.width === LADDER[0])).toBe(true);
+    // The smallest rung, plus the full rung at the source's own 64px — so even a
+    // tiny image is served in a modern codec rather than falling back to raw.
+    expect(r.written).toBe(2 * FORMATS.length);
+    // The smallest rung is planned at 128 and the full rung at the source's 64.
+    // sharp's withoutEnlargement means BOTH come out 64px wide — the widths here
+    // are what was planned, not what was produced, and neither is an upscale.
+    expect(r.variants.every((v) => v.width === LADDER[0] || v.width === 64)).toBe(true);
   });
 
   test('works without a headObject probe (skip-check is optional)', async () => {
@@ -189,14 +202,15 @@ describe('existingKeys — the optimisation that made the backfill viable', () =
     const headObject = jest.fn();
     const d = deps({ headObject });
     const buffer = await makeImage(400);
-    // Pre-populate every key the 400px source will plan.
-    const existingKeys = new Set([
-      'variants/autobacs/products/abc/w128.avif', 'variants/autobacs/products/abc/w128.webp',
-      'variants/autobacs/products/abc/w256.avif', 'variants/autobacs/products/abc/w256.webp',
-      'variants/autobacs/products/abc/w384.avif', 'variants/autobacs/products/abc/w384.webp',
-    ]);
+    /*
+      Pre-populate every key the 400px source will plan — DERIVED from
+      plannedVariants rather than listed by hand, so adding a rung (as the full
+      rung was) cannot silently leave this test asserting a stale count.
+    */
+    const planned = plannedVariants('autobacs/products/abc.jpg', 400);
+    const existingKeys = new Set(planned.map((v) => v.key));
     const r = await generateVariants({ buffer, originalKey: 'autobacs/products/abc.jpg', existingKeys, ...d });
-    expect(r.skipped).toBe(6);
+    expect(r.skipped).toBe(planned.length);
     expect(r.written).toBe(0);
     expect(headObject).not.toHaveBeenCalled();
     expect(d.putObject).not.toHaveBeenCalled();
@@ -208,8 +222,9 @@ describe('existingKeys — the optimisation that made the backfill viable', () =
     const r = await generateVariants({
       buffer: await makeImage(400), originalKey: 'autobacs/products/abc.jpg', existingKeys, ...d,
     });
+    const planned = plannedVariants('autobacs/products/abc.jpg', 400);
     expect(r.skipped).toBe(1);
-    expect(r.written).toBe(5);
+    expect(r.written).toBe(planned.length - 1);
     expect(d.putObject.mock.calls.map((c) => c[0].key))
       .not.toContain('variants/autobacs/products/abc/w128.avif');
   });
@@ -222,7 +237,7 @@ describe('existingKeys — the optimisation that made the backfill viable', () =
       existingKeys: new Set(), ...d,
     });
     expect(headObject).not.toHaveBeenCalled();
-    expect(r.written).toBe(6);
+    expect(r.written).toBe(plannedVariants('autobacs/products/abc.jpg', 400).length);
   });
 
   test('force ignores the Set entirely', async () => {
@@ -233,7 +248,7 @@ describe('existingKeys — the optimisation that made the backfill viable', () =
       existingKeys, force: true, ...d,
     });
     expect(r.skipped).toBe(0);
-    expect(r.written).toBe(6);
+    expect(r.written).toBe(plannedVariants('autobacs/products/abc.jpg', 400).length);
   });
 
   test('one failing variant still does not sink the others, now that they run in parallel', async () => {
@@ -245,7 +260,8 @@ describe('existingKeys — the optimisation that made the backfill viable', () =
       existingKeys: new Set(), ...d,
     });
     expect(r.failed).toHaveLength(1);
-    expect(r.written).toBe(5);
-    expect(r.failed[0].key).toMatch(/^variants\/autobacs\/products\/abc\/w\d+\.(avif|webp)$/);
+    expect(r.written).toBe(plannedVariants('autobacs/products/abc.jpg', 400).length - 1);
+    // A rung OR the full variant — both are legitimate members of the plan.
+    expect(r.failed[0].key).toMatch(/^variants\/autobacs\/products\/abc\/(w\d+|full)\.(avif|webp)$/);
   });
 });

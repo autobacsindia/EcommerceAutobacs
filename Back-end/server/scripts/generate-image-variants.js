@@ -38,7 +38,7 @@ import fs from 'fs';
 import path from 'path';
 import * as r2 from '../services/storage/r2Provider.js';
 import { generateVariants } from '../services/storage/variantGenerator.js';
-import { VARIANT_PREFIX } from '../services/storage/variants.js';
+import { VARIANT_PREFIX, variantPrefixFor, FULL_RUNG, LADDER } from '../services/storage/variants.js';
 import { isR2Configured, missingR2Vars } from '../config/storage.js';
 
 const argv = process.argv.slice(2);
@@ -105,6 +105,39 @@ const main = async () => {
     all.filter((o) => o.key.startsWith(`${VARIANT_PREFIX}/`)).map((o) => o.key),
   );
 
+  /*
+    Which originals already have SOME variant. Derived once here rather than
+    scanned per original: `[...existingKeys].some(startsWith)` inside the loop is
+    O(variants × originals) — 60k × 6k — which turns a 3-second dry run into
+    minutes of pure CPU for a number we can precompute in one pass.
+  */
+  const originalsDone = new Set();
+  {
+    const byPrefix = new Map();
+    for (const k of existingKeys) {
+      const cut = k.lastIndexOf('/');
+      if (cut <= 0) continue;
+      const prefix = k.slice(0, cut + 1);
+      const leaf = k.slice(cut + 1);
+      if (!byPrefix.has(prefix)) byPrefix.set(prefix, new Set());
+      byPrefix.get(prefix).add(leaf);
+    }
+    /*
+      "Has some variants" is NOT the same as "is complete" — that assumption
+      broke the moment the full rung was added, when every original had rungs and
+      none had `full`. An original is done when either:
+        - `full.avif` exists (the fallback the Worker needs), or
+        - `w1920.avif` exists, meaning the source is at least as wide as the top
+          rung, so pickWidth can never ask for something it cannot serve and no
+          full variant is planned.
+    */
+    for (const [prefix, leaves] of byPrefix) {
+      if (leaves.has(`${FULL_RUNG}.avif`) || leaves.has(`w${LADDER[LADDER.length - 1]}.avif`)) {
+        originalsDone.add(prefix);
+      }
+    }
+  }
+
   console.log(`  objects in bucket  : ${all.length}`);
   console.log(`  originals to render: ${originals.length}`);
   console.log(`  variants present   : ${existingKeys.size} (skipped without a network probe)`);
@@ -124,9 +157,24 @@ const main = async () => {
       const o = originals[cursor++];
       try {
         if (!APPLY) {
-          // Dry run: report intent without downloading or encoding anything.
+          /*
+            Dry run: report intent without downloading or encoding anything.
+
+            The exact plan needs the source dimensions, which needs the bytes —
+            so instead we ask whether this original has ANY variant already. That
+            is a good proxy: the ladder is written per original in one pass, so
+            "some variants exist" means "this one is done".
+
+            This check used to be absent, and the dry run said "would render" for
+            every original — 6,244 of them when 6,243 were already complete. A
+            dry run that overstates the work by three orders of magnitude is one
+            nobody reads, which defeats the point of having one.
+          */
           done += 1;
-          if (done % 250 === 0) console.log(`  [${done}/${originals.length}] would render ${o.key}`);
+          const prefix = variantPrefixFor(o.key);
+          if (prefix && originalsDone.has(prefix)) { skipped += 1; continue; }
+          written += 1;
+          if (written <= 20) console.log(`  would render ${o.key}`);
           continue;
         }
         const buffer = await r2.getObjectBuffer({ key: o.key, scope: 'public' });

@@ -8,8 +8,9 @@
  * production, not a failing build — so the scheme is pinned exactly here.
  */
 import {
-  LADDER, FORMATS, VARIANT_PREFIX,
+  LADDER, FORMATS, VARIANT_PREFIX, FULL_RUNG,
   widthsFor, variantKey, negotiableKey, pickWidth, plannedVariants,
+  fullVariantKey, variantPrefixFor,
 } from '../../../services/storage/variants.js';
 
 describe('the ladder itself', () => {
@@ -135,7 +136,11 @@ describe('plannedVariants', () => {
 
   test('honours the no-upscale rule', () => {
     const plan = plannedVariants('autobacs/products/abc.jpg', 554);
-    expect(plan).toHaveLength(3 * FORMATS.length);
+    // Three rungs fit under 554 (128/256/384), each in every format, plus the
+    // full rung at the source's own width — which is still not an upscale.
+    expect(plan.filter((v) => !v.full)).toHaveLength(3 * FORMATS.length);
+    expect(plan.filter((v) => v.full)).toHaveLength(FORMATS.length);
+    // The property that actually matters, and the one the rule is named for.
     expect(plan.every((v) => v.width <= 554)).toBe(true);
   });
 
@@ -146,5 +151,73 @@ describe('plannedVariants', () => {
 
   test('drops entries whose key could not be built', () => {
     expect(plannedVariants('', 4000)).toEqual([]);
+  });
+});
+
+// ── The full-resolution rung ────────────────────────────────────────────────
+/*
+  The ladder never upscales, so a source narrower than a rung has nothing at that
+  rung — but next/image emits a srcset across EVERY rung regardless of the
+  source, and the browser picks a large candidate. Measured on the live PDP: a
+  533px image was requested at w128 through w1920 and everything above w384 fell
+  through to the raw PNG. `full` is the source at its own width, so the Worker
+  can answer those requests with the same pixels in a modern codec.
+*/
+describe('fullVariantKey', () => {
+  test('sits beside the numbered rungs, under the same prefix', () => {
+    const k = 'autobacs/products/a/photo.png';
+    expect(fullVariantKey(k, 'avif')).toBe('variants/autobacs/products/a/photo/full.avif');
+    expect(fullVariantKey(k, 'avif').startsWith(variantPrefixFor(k))).toBe(true);
+  });
+
+  test('rejects a format we do not generate', () => {
+    expect(fullVariantKey('autobacs/products/a/photo.png', 'jpeg')).toBe('');
+    expect(fullVariantKey('autobacs/products/a/photo.png', 'gif')).toBe('');
+  });
+
+  test('rejects an empty key', () => {
+    expect(fullVariantKey('', 'avif')).toBe('');
+    expect(fullVariantKey(null, 'avif')).toBe('');
+  });
+});
+
+describe('plannedVariants — the full rung', () => {
+  const K = 'autobacs/products/a/photo.png';
+  const names = (w) => plannedVariants(K, w).map((v) => v.key.split('/').pop());
+
+  test('a source narrower than the top rung gets a full variant per format', () => {
+    const out = names(533);
+    expect(out).toEqual(expect.arrayContaining(['full.avif', 'full.webp']));
+    // and still gets every rung it can actually fill
+    expect(out).toEqual(expect.arrayContaining(['w128.avif', 'w256.avif', 'w384.avif']));
+    // …and none it cannot
+    expect(out).not.toEqual(expect.arrayContaining(['w640.avif']));
+  });
+
+  test('records the SOURCE width for the full rung, so it is never upscaled', () => {
+    const full = plannedVariants(K, 533).filter((v) => v.full);
+    expect(full).toHaveLength(2);
+    full.forEach((v) => expect(v.width).toBe(533));
+  });
+
+  /*
+    A source at or above the top rung needs no full variant: pickWidth caps
+    requests at 1920, so the exact rung always exists and the fallback is
+    unreachable. Generating one anyway would duplicate w1920 for every large
+    image — pure storage waste.
+  */
+  test('a source at or above the top rung gets NO full variant', () => {
+    expect(names(1920)).not.toEqual(expect.arrayContaining(['full.avif']));
+    expect(names(4000)).not.toEqual(expect.arrayContaining(['full.avif']));
+  });
+
+  test('an unknown source width plans rungs but no full variant', () => {
+    expect(names(0)).not.toEqual(expect.arrayContaining(['full.avif']));
+    expect(names(undefined)).not.toEqual(expect.arrayContaining(['full.avif']));
+  });
+
+  test('every planned key is unique — nothing is encoded twice', () => {
+    const keys = plannedVariants(K, 533).map((v) => v.key);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });
