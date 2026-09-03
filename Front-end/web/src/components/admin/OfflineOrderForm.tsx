@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { BUYER_TYPES, checkGstin, normalizeGstin } from '@/lib/legal/buyerTypes';
+import { enterpriseBlockError } from '@/lib/legal/checkoutBuyer';
 import { Search, Plus, Trash2 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { SalesRep } from '@/lib/leads';
@@ -72,7 +73,25 @@ export default function OfflineOrderForm({
   const listTotal = items.reduce((sum, i) => sum + i.listPrice * i.quantity, 0);
   const total = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const discountTotal = Math.max(0, listTotal - total);
-  const canSubmit = !!email && !!phone && items.length > 0 && addressComplete && (!requireRep || !!repId) && !submitting;
+  /*
+    The SAME rule the storefront checkout uses, not a second copy.
+
+    It matters here for one case in particular: "billing same as delivery" sends
+    the delivery street/city/PIN while the server takes the billing STATE from the
+    GSTIN, so mirroring an out-of-state delivery address produces a hybrid that
+    exists nowhere and gets printed on the customer's receipt. An admin keying in
+    a dealer order is at least as likely to hit that as a buyer is.
+  */
+  const buyerError = enterpriseBlockError({
+    isEnterprise: isBusiness,
+    legalName: biz.legalName,
+    gstin: biz.gstin,
+    billingSameAsShipping: billingSameAsDelivery,
+    billing: { line1: biz.billingLine1, city: biz.billingCity, postalCode: biz.billingPostalCode },
+    shipping: { line1: addr.addressLine1, city: addr.city, state: addr.state, postalCode: addr.postalCode },
+  });
+
+  const canSubmit = !!email && !!phone && items.length > 0 && addressComplete && (!requireRep || !!repId) && !buyerError && !submitting;
 
   async function searchProducts() {
     if (!term.trim()) return;
@@ -229,6 +248,11 @@ export default function OfflineOrderForm({
             {gstinCheck.valid && (
               <p className="text-xs text-gray-500 sm:col-span-2">
                 Billing state is taken from the GSTIN: {gstinCheck.state}.
+              </p>
+            )}
+            {buyerError && (
+              <p className="rounded bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 sm:col-span-2">
+                {buyerError}
               </p>
             )}
           </div>

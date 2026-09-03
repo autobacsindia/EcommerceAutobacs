@@ -16,7 +16,7 @@ import fs from 'fs'
 import path from 'path'
 import {
   checkGstin, gstinCheckDigit, normalizeGstin, BUYER_TYPES,
-  GSTIN_PATTERN, GST_STATE_BY_CODE,
+  GSTIN_PATTERN, GST_STATE_BY_CODE, statesMatch,
 } from './buyerTypes'
 
 const REPO = path.join(process.cwd(), '..', '..')
@@ -111,6 +111,19 @@ describe('parity with the server, which is the authority', () => {
     const mismatches = pairs
       .filter(([, code, state]) => GST_STATE_BY_CODE[code] !== state)
       .map(([, code, state]) => `${code}: server "${state}" vs client "${GST_STATE_BY_CODE[code]}"`)
+    expect(mismatches).toEqual([])
+  })
+
+  it('uses the same state-alias table as config/gstStates.js', () => {
+    // Drift here means the client asks for a billing address the server would
+    // have accepted, or stays quiet where the server prints a delivery block.
+    const backend = readBackend('config/gstStates.js')
+    const pairs = [...backend.matchAll(/(\w+): '([^']+)',/g)]
+      .filter(([, k]) => k.length <= 9 && /^[a-z]+$/.test(k))
+    expect(pairs.length).toBeGreaterThan(30)
+    const mismatches = pairs
+      .filter(([, alias, state]) => !statesMatch(alias, state))
+      .map(([, alias, state]) => `${alias} -> ${state}`)
     expect(mismatches).toEqual([])
   })
 

@@ -190,8 +190,24 @@ const OrderSchema = new mongoose.Schema({
     // 'consumer' → §17A, 'enterprise' → §17B. Recorded rather than derived at
     // read time so that a later change to the mapping cannot rewrite history.
     track: { type: String, enum: ["consumer", "enterprise"] },
+    /**
+     * HOW this was recorded — and therefore what it is worth as evidence.
+     *
+     * `checkout` = the buyer ticked the box themselves. `offline_admin` = an admin
+     * keyed in an off-platform sale; the versions in force are on the record but
+     * NOBODY CLICKED ANYTHING. Conflating the two would manufacture evidence of
+     * consent, which matters most on exactly the orders most likely to be
+     * enterprise — where the clause in question is the arbitration one.
+     *
+     * Absent on legacy orders and on the first orders written before this field
+     * existed; treat a missing value as `checkout`.
+     */
+    channel: { type: String, enum: ["checkout", "offline_admin"] },
     acceptedAt: Date,
-    ipHash: String
+    /** The BUYER's hashed IP. Only ever set on a `checkout` acceptance. */
+    ipHash: String,
+    /** Admin who keyed in an offline record. Only ever set on `offline_admin`. */
+    recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
   },
 
   payment: {

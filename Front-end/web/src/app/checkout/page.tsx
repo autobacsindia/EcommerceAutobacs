@@ -242,6 +242,8 @@ function CheckoutPageContent() {
     billingLine1: '', billingLine2: '', billingCity: '', billingPostalCode: '',
   });
   const [billingSameAsShipping, setBillingSameAsShipping] = useState(true);
+  /** Whether the account has saved business details, so we can offer them without preselecting. */
+  const [hasSavedBusiness, setHasSavedBusiness] = useState(false);
   // Unticked by default and never persisted: consent has to be given for THIS
   // order, so a remembered checkbox would defeat the point of recording it.
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -289,7 +291,19 @@ function CheckoutPageContent() {
           // silently never fire. `/profile` returns the full user document.
           const savedBusiness = response?.user?.businessProfile;
           if (savedBusiness?.gstin) {
-            setBuyerType(BUYER_TYPES.ENTERPRISE);
+            /*
+              ⚠️ PREFILL THE FIELDS, NEVER PRESELECT THE TYPE.
+
+              This used to also set buyerType = ENTERPRISE, so once a customer had
+              ever bought for their business, every later checkout defaulted into
+              the enterprise track — and §17B is arbitration in Ernakulam with the
+              consumer-forum route waived. A personal purchase by someone who
+              happens to own a company must not silently become a commercial one.
+
+              The same reasoning as trackForBuyerType on the server: when in
+              doubt, fail towards the weaker waiver. The details are still here
+              the moment they pick Business.
+            */
             setBusiness({
               legalName: savedBusiness.legalName || '',
               gstin: savedBusiness.gstin || '',
@@ -301,6 +315,7 @@ function CheckoutPageContent() {
             // The saved billing address is its own address, so don't silently
             // mirror the shipping one over it.
             setBillingSameAsShipping(false);
+            setHasSavedBusiness(true);
           }
 
           if (response.success && response.user && response.user.addresses) {
@@ -354,7 +369,7 @@ function CheckoutPageContent() {
       gstin: business.gstin,
       billingSameAsShipping,
       billing: { line1: business.billingLine1, city: business.billingCity, postalCode: business.billingPostalCode },
-      shipping: { line1: address.street, city: address.city, postalCode: address.postalCode },
+      shipping: { line1: address.street, city: address.city, state: address.state, postalCode: address.postalCode },
     });
     if (buyerError) { toast.error(buyerError); return; }
 
@@ -865,6 +880,13 @@ function CheckoutPageContent() {
                   </label>
                 ))}
               </div>
+
+              {/* Offered, not assumed — see the prefill note above. */}
+              {hasSavedBusiness && !isEnterprise && (
+                <p className="text-xs text-ink-muted font-display mt-3">
+                  Your saved business details are ready if you pick Business / Enterprise.
+                </p>
+              )}
 
               {isEnterprise && (
                 <div className="mt-4 space-y-3">

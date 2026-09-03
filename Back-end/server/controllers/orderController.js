@@ -18,6 +18,7 @@ import { resolveRep } from '../utils/salesRepResolver.js';
 import { extractMetaTracking } from '../utils/metaTracking.js';
 import { resolveBuyerAndAcceptance } from '../services/buyerService.js';
 import { BUYER_TYPES } from '../config/buyer.js';
+import { ACCEPTANCE_CHANNELS } from '../config/legalDocuments.js';
 import { contentIdForLineItem } from '../utils/metaCatalogId.js';
 import { hashToken } from '../utils/tokenUtils.js';
 import { STORE_TZ_OFFSET } from '../utils/storeTime.js';
@@ -420,6 +421,18 @@ export const createGuestOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No order items provided' });
     }
 
+    /*
+      Resolve and VALIDATE the buyer before anything is written.
+
+      This used to run after the guest User was created, so a mistyped GSTIN 400'd
+      the request and left a stranded account behind — the same shape as the
+      careers upload that wrote PII before validating it. Nothing is persisted
+      until the whole request is known to be good.
+    */
+    const { buyer, legalAcceptance } = resolveBuyerAndAcceptance(req.body, {
+      ipHash: acceptanceIpHash(req),
+    });
+
     // Find or create guest user
     const searchCriteria = email
       ? { email: email.toLowerCase() }
@@ -446,13 +459,6 @@ export const createGuestOrder = async (req, res) => {
       await userRepository.save(user);
     }
 
-    // Same gate as the authenticated path. A guest is not exempt from recording
-    // which terms they accepted — if anything they matter more here, since a
-    // guest has no account whose history could corroborate it later.
-    const { buyer, legalAcceptance } = resolveBuyerAndAcceptance(req.body, {
-      ipHash: acceptanceIpHash(req),
-    });
-
     const order = await orderService.createOrder(
       user._id,
       items,
@@ -461,9 +467,20 @@ export const createGuestOrder = async (req, res) => {
       paymentMethod
     );
 
-    // The guest User row is real (it is what the claim flow later attaches to),
-    // so an enterprise guest's details survive into their claimed account.
-    if (buyer.type === BUYER_TYPES.ENTERPRISE) {
+    /*
+      ⚠️ GUEST ACCOUNTS ONLY.
+
+      This endpoint is UNAUTHENTICATED and looks a user up by email, so `user`
+      here may be a real REGISTERED customer who happens to share the address a
+      stranger typed. Writing the request's buyer block onto that account would
+      let anyone overwrite a real customer's saved legal name and GSTIN — which
+      then prefills their next checkout, so the bad value would be re-submitted on
+      every subsequent order.
+
+      A guest row is safe: it exists only to carry this order until the claim flow
+      attaches it, and it is created from this same request.
+    */
+    if (buyer.type === BUYER_TYPES.ENTERPRISE && user.isGuest) {
       saveBusinessProfile(user._id, buyer).catch((err) =>
         console.error('[Order] guest businessProfile save failed:', err.message)
       );
@@ -594,6 +611,25 @@ export const createOfflineOrder = async (req, res) => {
   }
 
   try {
+    /*
+      Validate the buyer BEFORE creating the customer, for the same reason as the
+      guest path: an admin mistyping a GSTIN would otherwise 400 the request and
+      leave behind a brand-new `mustResetPassword` account for a person who has no
+      order — an account they could be prompted to claim.
+
+      `requireAcceptance: false` because the customer is not at a browser to tick a
+      box; the GSTIN is still validated identically. See the note at the buyer
+      block below.
+    */
+    const { buyer, legalAcceptance } = resolveBuyerAndAcceptance(req.body, {
+      requireAcceptance: false,
+      // The channel is what keeps this distinguishable from a real acceptance.
+      // No ipHash: the only address available here is the ADMIN's, which is not
+      // evidence of anything the customer did.
+      channel: ACCEPTANCE_CHANNELS.OFFLINE_ADMIN,
+      recordedBy: req.user?.id || null,
+    });
+
     // ── Find or create the customer ──────────────────────────────────────────
     const normEmail = email.toLowerCase();
     let user = await userRepository.findByEmail(normEmail);
@@ -656,15 +692,8 @@ export const createOfflineOrder = async (req, res) => {
     };
 
     // Offline is the MOST likely enterprise path — an admin recording a dealer or
-    // workshop deal is exactly the B2B case. `requireAcceptance: false` because
-    // the customer is not at a browser to tick a box; acceptance for these is
-    // whatever the sales process captured off-platform. The buyer block (and so
-    // the GSTIN on the receipt) is still validated identically.
-    const { buyer, legalAcceptance } = resolveBuyerAndAcceptance(req.body, {
-      requireAcceptance: false,
-      ipHash: acceptanceIpHash(req),
-    });
-
+    // workshop deal is exactly the B2B case. Resolved at the top of the try block
+    // so nothing is persisted before the GSTIN is known to be good.
     let order = await orderRepository.create({
       user: user._id,
       source: 'offline',

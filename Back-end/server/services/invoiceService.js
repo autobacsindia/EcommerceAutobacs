@@ -22,6 +22,7 @@ import { putPrivateAsset } from './storage/privateUploads.js';
 import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 import { companyInfo } from '../config/company.js';
+import { statesMatch } from '../config/gstStates.js';
 import counterRepository from '../repositories/counterRepository.js';
 import { formatInvoiceNumber, invoiceFileName } from '../utils/invoiceFormat.js';
 import { formatLongDateIST } from '../utils/datetime.js';
@@ -154,10 +155,25 @@ export const buildBillToLines = (order, user) => {
     billing.phone || addr.phone,
   ].filter(Boolean);
 
+  /*
+    The STATE has to be part of this comparison, not just the street lines.
+
+    A buyer who ticks "billing same as delivery" sends the delivery street, city
+    and PIN — but the server overwrites the state from their GSTIN. So a Kerala
+    delivery address on a Maharashtra registration was printed as
+    "Kochi 682011 / Maharashtra": an address that exists nowhere, with no
+    delivered-to block to explain it, because the three fields being compared all
+    matched.
+
+    `statesMatch` is lenient about free text ("MH" is Maharashtra) and reports a
+    difference whenever it cannot tell — which only ever ADDS the delivery block,
+    never removes information.
+  */
   const shipDiffers = isEnterprise && (
     billing.addressLine1 !== addr.addressLine1
     || billing.city !== addr.city
     || billing.postalCode !== addr.postalCode
+    || !statesMatch(addr.state, billing.state)
   );
 
   return {
@@ -490,9 +506,31 @@ export const generateInvoicePdf = async (order, user = null) => {
         B2B documents would imply the consumer ones ARE tax invoices, which is the
         same false statement pointed the other way.
       */
-      const legendTop = 742;
+      /*
+        ⚠️ POSITIONED IN THE FLOW, NEVER AT A FIXED y.
+
+        This box was originally drawn at a hardcoded y=742 with an OPAQUE fill.
+        Measured on a 13-item order with a coupon and karma, the grand-total row
+        lands at y=766 — inside the box — so the legend painted over the total and
+        the customer's emailed receipt lost the one number that matters. Twelve
+        items cleared it and fourteen spilled to a second page, so the damage sat
+        in a narrow band of order sizes that a casual test would never hit.
+
+        So: start below whatever the totals actually consumed, and take a new page
+        rather than overlap when there is not enough room left.
+      */
+      const LEGEND_H = 44;
+      // A4 is 841.9 tall with a 50pt margin, so the text area ends at 791.9 and
+      // the signature line is drawn at 790. Ending the box by 782 leaves it clear
+      // without spilling onto a fresh page for an order that would have fitted.
+      const PAGE_FLOOR = 782;
+      let legendTop = Math.max(doc.y, y) + 18;
+      if (legendTop + LEGEND_H > PAGE_FLOOR) {
+        doc.addPage();
+        legendTop = 60;
+      }
       doc.save();
-      doc.roundedRect(LEFT, legendTop, RIGHT - LEFT, 40, 4)
+      doc.roundedRect(LEFT, legendTop, RIGHT - LEFT, LEGEND_H, 4)
         .fillAndStroke('#faf8f2', '#e0d6bd');
       doc.restore();
       doc.font(FONT_BOLD).fontSize(8).fillColor('#6b5b2e')

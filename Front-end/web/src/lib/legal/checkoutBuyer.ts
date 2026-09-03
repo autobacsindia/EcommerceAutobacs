@@ -12,7 +12,7 @@
  * the authority; this exists to fail fast and in front of the right field.
  */
 
-import { checkGstin } from './buyerTypes';
+import { checkGstin, statesMatch } from './buyerTypes';
 
 export interface EnterpriseBlockInput {
   isEnterprise: boolean;
@@ -20,7 +20,7 @@ export interface EnterpriseBlockInput {
   gstin: string;
   billingSameAsShipping: boolean;
   billing: { line1: string; city: string; postalCode: string };
-  shipping: { line1: string; city: string; postalCode: string };
+  shipping: { line1: string; city: string; postalCode: string; state: string };
 }
 
 /**
@@ -38,6 +38,22 @@ export function enterpriseBlockError(input: EnterpriseBlockInput): string | null
     // `message` is undefined for an untouched empty field — say something useful
     // rather than showing nothing when the buyer presses Continue.
     return gstin.message || 'Enter a valid GSTIN';
+  }
+
+  /*
+    "Same as delivery" is only true when the delivery address is actually in the
+    state the GSTIN is registered in.
+
+    GST registration is per state, so the server takes the billing STATE from the
+    GSTIN. Mirroring a delivery address from another state therefore produced a
+    hybrid that exists nowhere — a Kerala street and PIN stamped "Maharashtra" —
+    and printed it on the receipt. Asking for the real registered address is a few
+    keystrokes; `statesMatch` reports false when it cannot tell, so the worst case
+    is being asked unnecessarily rather than a wrong address going out.
+  */
+  if (input.billingSameAsShipping && !statesMatch(input.shipping.state, gstin.state || '')) {
+    return `Your GSTIN is registered in ${gstin.state}, but the delivery address is not. `
+      + 'Enter your registered billing address separately.';
   }
 
   const billing = input.billingSameAsShipping ? input.shipping : input.billing;
