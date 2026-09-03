@@ -18,9 +18,9 @@ import Product, { isHostedImageUrl } from '../models/Product.js';
 import CentralAppError from '../utils/AppError.js';
 import {
   uploadManyToCloudinary,
-  deleteFromCloudinary,
   deleteManyFromCloudinary,
 } from '../utils/cloudinaryHelpers.js';
+import { deleteHostedImages } from '../services/storage/publicImageDeletes.js';
 import { invalidateCache } from '../middleware/cacheMiddleware.js';
 import { revalidateFrontendTags } from '../services/frontendRevalidator.js';
 import { productTags as productNextTags } from '../utils/nextTags.js';
@@ -325,10 +325,12 @@ export const createProductWithImages = async (req, res) => {
     console.log(`[ProductController] Saved product: ${savedProduct._id} | "${savedProduct.name}"`);
   } catch (dbError) {
     // Atomic rollback — clean every Cloudinary asset (direct + server-side) before propagating
-    const rollbackIds = allRefs.map((i) => i.public_id).filter(Boolean);
-    if (rollbackIds.length) {
-      console.warn(`[ProductController] DB save failed — rolling back ${rollbackIds.length} Cloudinary asset(s)`);
-      await deleteManyFromCloudinary(rollbackIds);
+    // Refs carry their url, so each rollback lands in the store that actually
+    // holds it — see services/storage/publicImageDeletes.js.
+    const rollback = allRefs.filter((i) => i.public_id);
+    if (rollback.length) {
+      console.warn(`[ProductController] DB save failed — rolling back ${rollback.length} uploaded asset(s)`);
+      await deleteHostedImages(rollback);
     }
     throw dbError;
   }
@@ -406,7 +408,15 @@ export const updateProductWithImages = async (req, res, next) => {
     console.error('[CRITICAL] These images cannot be cleaned up. Run backfill script.');
   }
   
-  const oldPublicIds = product.images.map((img) => img.public_id).filter(Boolean);
+  /*
+    Keep the whole ref, not just the id: the url is what says WHICH STORE holds
+    the asset, and it is only available here on the pre-update document. Reduced
+    to ids, the cleanup below could only guess — and guessing wrong deletes
+    nothing while reporting success.
+  */
+  const oldRefs = product.images
+    .filter((img) => img.public_id)
+    .map((img) => ({ public_id: img.public_id, url: img.url }));
 
   // ── Step 1: Upload new images (if any) ────────────────────────────────
   let newUploads = [];
@@ -487,10 +497,10 @@ export const updateProductWithImages = async (req, res, next) => {
   } catch (dbError) {
     // DB failed after new images landed on Cloudinary — rollback every new asset
     // (direct-uploaded + server-side) so nothing is orphaned.
-    const rollbackIds = newRefs.map((i) => i.public_id).filter(Boolean);
-    if (rollbackIds.length) {
-      console.warn(`[ProductController] DB update failed — rolling back ${rollbackIds.length} new Cloudinary upload(s)`);
-      await deleteManyFromCloudinary(rollbackIds);
+    const rollback = newRefs.filter((i) => i.public_id);
+    if (rollback.length) {
+      console.warn(`[ProductController] DB update failed — rolling back ${rollback.length} new upload(s)`);
+      await deleteHostedImages(rollback);
     }
     // Surface duplicate-key errors as a human-readable 409 instead of a generic 500
     if (dbError.code === 11000) {
@@ -514,17 +524,17 @@ export const updateProductWithImages = async (req, res, next) => {
   // `deletePublicIds` can never reach an asset the product still references
   // (or one belonging to a different product entirely).
   //
-  // Failures here are logged with [CLEANUP_REQUIRED] by deleteFromCloudinary but
+  // Failures here are logged with [CLEANUP_REQUIRED] by deleteHostedImages but
   // do NOT throw — the DB is already consistent at this point, so we never
-  // unwind a successful save over a Cloudinary cleanup failure.
+  // unwind a successful save over a storage cleanup failure.
   const survivingIds = new Set(
     (updatedProduct.images || []).map((img) => img.public_id).filter(Boolean)
   );
-  const toDelete = oldPublicIds.filter((id) => !survivingIds.has(id));
+  const toDelete = oldRefs.filter((ref) => !survivingIds.has(ref.public_id));
 
   if (toDelete.length > 0) {
-    console.log(`[ProductController] Cleaning up ${toDelete.length} orphaned Cloudinary asset(s) post-save`);
-    await deleteManyFromCloudinary(toDelete);
+    console.log(`[ProductController] Cleaning up ${toDelete.length} orphaned asset(s) post-save`);
+    await deleteHostedImages(toDelete);
   }
 
   invalidateCache('products');
@@ -555,9 +565,11 @@ export const deleteProductWithImages = async (req, res) => {
     console.error('[CRITICAL] These images will become orphaned. Run backfill script before deleting products.');
   }
 
-  const publicIds = product.images.map((img) => img.public_id).filter(Boolean);
+  const imageRefs = product.images
+    .filter((img) => img.public_id)
+    .map((img) => ({ public_id: img.public_id, url: img.url }));
 
-  console.log(`[ProductController] DELETE product: ${product._id} | "${product.name}" | ${publicIds.length} image(s) to clean up`);
+  console.log(`[ProductController] DELETE product: ${product._id} | "${product.name}" | ${imageRefs.length} image(s) to clean up`);
 
   // Soft delete first — data is safe even if Cloudinary cleanup partially fails
   product.isActive = false;
@@ -565,9 +577,9 @@ export const deleteProductWithImages = async (req, res) => {
   await product.save();
   console.log(`[ProductController] Soft-deleted product: ${product._id}`);
 
-  // Clean up Cloudinary — failures logged with [CLEANUP_REQUIRED] tag, not thrown
-  if (publicIds.length) {
-    await deleteManyFromCloudinary(publicIds);
+  // Clean up storage — failures logged with [CLEANUP_REQUIRED], never thrown.
+  if (imageRefs.length) {
+    await deleteHostedImages(imageRefs);
   }
 
   invalidateCache('products');
@@ -610,7 +622,12 @@ export const uploadProductImages = async (req, res) => {
   try {
     await product.save();
   } catch (dbError) {
-    console.warn(`[ProductController] DB save failed — rolling back ${uploaded.length} upload(s)`);
+    /*
+      These came from uploadManyToCloudinary — the SERVER-side multer path, which
+      always writes to Cloudinary regardless of STORAGE_PROVIDER — so the
+      rollback is correctly Cloudinary-only. See the note on this route below.
+    */
+    console.warn(`[ProductController] DB save failed — rolling back ${uploaded.length} Cloudinary upload(s)`);
     await deleteManyFromCloudinary(uploaded.map((i) => i.public_id));
     throw dbError;
   }
@@ -644,7 +661,18 @@ export const deleteProductImage = async (req, res) => {
   const imageIndex = product.images.findIndex((img) => img.public_id === publicId);
   if (imageIndex === -1) throw new AppError('Image not found in this product', 404);
 
-  // Remove from DB first, then delete from Cloudinary
+  /*
+    Capture the whole ref BEFORE the splice: the url is what says which store
+    holds this asset, and it is gone from the document a line later. Deleting by
+    id alone would send every R2 image to Cloudinary, which answers `not_found`
+    and leaves the object — and its ~14 variants — orphaned.
+  */
+  const removedRef = {
+    public_id: product.images[imageIndex].public_id,
+    url: product.images[imageIndex].url,
+  };
+
+  // Remove from DB first, then delete from storage
   product.images.splice(imageIndex, 1);
 
   // Promote first remaining image to primary if the deleted one was primary
@@ -655,8 +683,8 @@ export const deleteProductImage = async (req, res) => {
   await product.save();
   console.log(`[ProductController] Image removed from DB: ${product._id}`);
 
-  // Delete from Cloudinary after DB is safe (failure logged, not thrown)
-  await deleteFromCloudinary(publicId);
+  // Delete from storage after the DB is safe (failure logged, never thrown)
+  await deleteHostedImages([removedRef]);
 
   invalidateCache('products');
   revalidateFrontendTags(productNextTags(product));
