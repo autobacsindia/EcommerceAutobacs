@@ -40,6 +40,28 @@ export const FORMATS = ['avif', 'webp'];
 export const VARIANT_PREFIX = 'variants';
 
 /**
+ * Name of the FULL-RESOLUTION rung: the source at its own width, never upscaled.
+ *
+ * ── Why a named rung and not just a number ──────────────────────────────────
+ * The ladder never upscales, so a 533px source only ever gets w128/w256/w384.
+ * But next/image emits a srcset across EVERY rung regardless of the source, so
+ * the browser happily asks for w960 — and on any decent screen it picks one of
+ * the large candidates. Measured on the live PDP: a 533px image was requested at
+ * w128 through w1920, and every request above w384 fell through to the raw
+ * original. Across the bucket that is 782 of 6,244 images (12.5%) serving an
+ * unoptimised PNG/JPEG to most visitors.
+ *
+ * Falling back to the largest available RUNG instead would fix the bytes and
+ * break the pixels: for a 533px source that means serving 384px into a slot
+ * asking for more, i.e. visibly softer than today. So the fallback has to be the
+ * source's own width — same pixels as the original, modern codec.
+ *
+ * The name is fixed rather than the numeric width because the Worker resolves
+ * the fallback without knowing anything about the source.
+ */
+export const FULL_RUNG = 'full';
+
+/**
  * Widths worth generating for a source of `sourceWidth` pixels.
  *
  * Never upscales — a rung wider than the source would be a bigger file with no
@@ -52,6 +74,18 @@ export const widthsFor = (sourceWidth) => {
   if (!Number.isFinite(w) || w <= 0) return [...LADDER];
   const fits = LADDER.filter((rung) => rung <= w);
   return fits.length ? fits : [LADDER[0]];
+};
+
+/**
+ * Object key for the full-resolution rung.
+ * `autobacs/products/abc.jpg` + avif → `variants/autobacs/products/abc/full.avif`
+ */
+export const fullVariantKey = (originalKey, format) => {
+  if (typeof originalKey !== 'string' || !originalKey) return '';
+  if (!FORMATS.includes(format)) return '';
+  const base = publicIdFromR2Key(originalKey, 'image');
+  if (!base) return '';
+  return `${VARIANT_PREFIX}/${base}/${FULL_RUNG}.${format}`;
 };
 
 /**
@@ -109,13 +143,32 @@ export const variantPrefixFor = (originalKey) => {
   return base ? `${VARIANT_PREFIX}/${base}/` : '';
 };
 
-/** Every (width, format) pair to generate for one source image. */
-export const plannedVariants = (originalKey, sourceWidth) =>
-  widthsFor(sourceWidth).flatMap((width) =>
-    FORMATS.map((format) => ({ width, format, key: variantKey(originalKey, width, format) })))
-    .filter((v) => v.key);
+/**
+ * Every (width, format) pair to generate for one source image.
+ *
+ * Includes the FULL rung whenever the source is narrower than the top of the
+ * ladder — that is the object the Worker falls back to when a browser asks for a
+ * rung this source cannot fill. A source at or above the top rung needs no full
+ * variant: requests are capped at 1920 by pickWidth, so the exact rung always
+ * exists and the fallback is never reached.
+ */
+export const plannedVariants = (originalKey, sourceWidth) => {
+  const rungs = widthsFor(sourceWidth).flatMap((width) =>
+    FORMATS.map((format) => ({ width, format, key: variantKey(originalKey, width, format) })));
+
+  const w = Number(sourceWidth);
+  const needsFull = Number.isFinite(w) && w > 0 && w < LADDER[LADDER.length - 1];
+  const full = needsFull
+    ? FORMATS.map((format) => ({
+      width: w, format, full: true, key: fullVariantKey(originalKey, format),
+    }))
+    : [];
+
+  return [...rungs, ...full].filter((v) => v.key);
+};
 
 export default {
   LADDER, FORMATS, VARIANT_PREFIX,
   widthsFor, variantKey, negotiableKey, pickWidth, plannedVariants, variantPrefixFor,
+  FULL_RUNG, fullVariantKey,
 };

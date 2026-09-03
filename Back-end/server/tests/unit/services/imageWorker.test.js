@@ -11,9 +11,9 @@
  * which is where the bugs actually live.
  */
 import {
-  chooseFormat, isNegotiableVariant, resolveKey, safeContentType,
+  chooseFormat, isNegotiableVariant, resolveKey, safeContentType, fullKeyFor,
 } from '../../../../../infra/cloudflare/image-worker/src/worker.js';
-import { FORMATS, negotiableKey, variantKey } from '../../../services/storage/variants.js';
+import { FORMATS, negotiableKey, variantKey, fullVariantKey } from '../../../services/storage/variants.js';
 
 describe('chooseFormat', () => {
   test('prefers AVIF when the browser accepts it', () => {
@@ -151,5 +151,69 @@ describe('safeContentType — the delivery-side XSS boundary', () => {
     // Worth its own case: it is an image type, which makes it the one most
     // likely to be added to the allowlist by mistake.
     expect(safeContentType('image/svg+xml')).toBe('application/octet-stream');
+  });
+});
+
+
+// ── The full-rung fallback ──────────────────────────────────────────────────
+/*
+  The ladder never upscales, so a source narrower than a requested rung has no
+  object there — but next/image emits a srcset across EVERY rung regardless of
+  the source. Measured on the live PDP: a 533px image was requested at w128
+  through w1920, and everything above w384 fell through to the raw PNG. That was
+  12.5% of the catalog serving unoptimised bytes to most visitors.
+*/
+describe('fullKeyFor', () => {
+  test('maps a numbered rung to the full rung, preserving the negotiated format', () => {
+    expect(fullKeyFor('variants/autobacs/products/a/photo/w960.avif', 'avif'))
+      .toBe('variants/autobacs/products/a/photo/full.avif');
+    expect(fullKeyFor('variants/autobacs/products/a/photo/w1920.webp', 'webp'))
+      .toBe('variants/autobacs/products/a/photo/full.webp');
+  });
+
+  /*
+    The requested extension is what the browser accepted, so it must win over
+    whatever the incoming key happened to carry — otherwise a client that only
+    speaks WebP could be handed AVIF it cannot decode.
+  */
+  test('uses the NEGOTIATED extension, not the one in the key', () => {
+    expect(fullKeyFor('variants/a/b/w960.avif', 'webp')).toBe('variants/a/b/full.webp');
+  });
+
+  /*
+    Returning '' rather than the key unchanged matters: the caller treats a
+    truthy result as "worth a bucket lookup", and re-fetching the key that just
+    missed would be a wasted round trip on every single fallback.
+  */
+  test.each([
+    ['an original',        'autobacs/products/a/photo.jpg'],
+    ['an already-full key', 'variants/a/b/full.avif'],
+    ['an extensionless key', 'variants/a/b/w640'],
+    ['empty',              ''],
+    ['not a string',       null],
+  ])('returns empty for %s', (_l, key) => {
+    expect(fullKeyFor(key, 'avif')).toBe('');
+  });
+
+  test('returns empty without a format', () => {
+    expect(fullKeyFor('variants/a/b/w640.avif', '')).toBe('');
+    expect(fullKeyFor('variants/a/b/w640.avif', undefined)).toBe('');
+  });
+});
+
+/*
+  CONTRACT. The Worker derives the full-rung key by string surgery on the URL;
+  the backend derives it from the original's key. They are written independently
+  and must agree exactly — if they drift, the Worker asks for an object the
+  generator never wrote and every sub-rung request silently falls back to the raw
+  original again. That is the same class of drift the LADDER duplication note
+  warns about, so it is pinned from both sides here.
+*/
+describe('full-rung key contract — Worker vs backend', () => {
+  test.each(FORMATS)('agree on the full key for %s', (fmt) => {
+    const original = 'autobacs/products/abc123/photo.png';
+    const backendKey = fullVariantKey(original, fmt);
+    const workerKey = fullKeyFor(variantKey(original, 960, fmt), fmt);
+    expect(workerKey).toBe(backendKey);
   });
 });
