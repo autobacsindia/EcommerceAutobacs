@@ -102,6 +102,8 @@ interface Order {
     termsVersion?: string;
     privacyVersion?: string;
     track?: 'consumer' | 'enterprise';
+    /** 'checkout' = the buyer ticked the box. 'offline_admin' = an admin keyed it in. */
+    channel?: 'checkout' | 'offline_admin';
     acceptedAt?: string;
   };
   /**
@@ -588,14 +590,29 @@ export default function AdminOrderDetailPage() {
               <div className="p-6 border-b">
                 <h2 className="text-xl font-semibold flex items-center gap-2">
                   <FileText className="h-5 w-5" />
-                  Terms Accepted
+                  {order.legalAcceptance.channel === 'offline_admin' ? 'Terms On Record' : 'Terms Accepted'}
                 </h2>
               </div>
               <div className="p-6 text-sm space-y-1">
+                {/* An offline record must NOT read as though the customer clicked
+                    something. The versions in force are on the record, but nobody
+                    ticked a box — and on an enterprise order the clause being
+                    "accepted" is the arbitration one, so overstating this is the
+                    last thing we want in front of whoever handles a dispute. */}
+                {order.legalAcceptance.channel === 'offline_admin' ? (
+                  <p className="rounded bg-amber-50 border border-amber-200 px-3 py-2 text-amber-800">
+                    <strong>Recorded by an admin</strong> for an off-platform sale — the customer
+                    did not accept these terms on the website. Acceptance, if any, is whatever
+                    the sales process captured.
+                  </p>
+                ) : null}
                 <p className="text-gray-600">
                   Version <span className="font-mono">{order.legalAcceptance.termsVersion}</span>
                   {order.legalAcceptance.acceptedAt && (
-                    <> on {formatLongDateTimeIST(order.legalAcceptance.acceptedAt)}</>
+                    <>
+                      {order.legalAcceptance.channel === 'offline_admin' ? ' recorded on ' : ' accepted on '}
+                      {formatLongDateTimeIST(order.legalAcceptance.acceptedAt)}
+                    </>
                   )}
                 </p>
                 <p className="text-gray-600">

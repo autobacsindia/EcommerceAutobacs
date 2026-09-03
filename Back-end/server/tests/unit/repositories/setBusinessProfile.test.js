@@ -19,8 +19,9 @@ const PROFILE = {
   gstin: '27AAPFU0939F1ZV',
   stateCode: '27',
   billingAddress: {
-    addressLine1: '12 Marine Drive', city: 'Kochi',
+    addressLine1: '12 Marine Drive', addressLine2: 'Second floor', city: 'Kochi',
     state: 'Maharashtra', stateCode: '27', postalCode: '682011', country: 'India',
+    phone: '9999999999',
   },
 };
 
@@ -60,6 +61,7 @@ describe('setBusinessProfile', () => {
   it.each([
     ['a corrected GSTIN',       { gstin: '29AAGCB7383J1Z4' }],
     ['a renamed entity',        { legalName: 'Roavion Motors LLP' }],
+    ['a corrected state code',  { stateCode: '29' }],
   ])('still writes when the profile changes: %s', async (_label, change) => {
     const user = await seedUser();
     await userRepository.setBusinessProfile(user._id, PROFILE);
@@ -71,7 +73,14 @@ describe('setBusinessProfile', () => {
     expect(stored.businessProfile).toMatchObject(change);
   });
 
-  it.each([['addressLine1'], ['city'], ['postalCode']])(
+  // EVERY stored billing field, not a hand-picked few: the first version of the
+  // no-op filter compared only addressLine1/city/postalCode, so correcting just a
+  // phone number or an addressLine2 was silently discarded — and this profile
+  // prefills the next checkout, so the stale value came back every order.
+  it.each([
+    ['addressLine1'], ['addressLine2'], ['city'], ['state'],
+    ['stateCode'], ['postalCode'], ['country'], ['phone'],
+  ])(
     'still writes when billing %s changes',
     async (field) => {
       const user = await seedUser();

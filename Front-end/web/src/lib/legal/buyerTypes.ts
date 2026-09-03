@@ -40,6 +40,42 @@ export const GST_STATE_BY_CODE: Record<string, string> = {
   '38': 'Ladakh', '97': 'Other Territory', '99': 'Centre Jurisdiction',
 };
 
+/**
+ * Common short forms typed into a free-text state field. Mirrors the table in
+ * Back-end/server/config/gstStates.js — kept in sync by the parity test.
+ */
+const STATE_ALIASES: Record<string, string> = {
+  ap: 'Andhra Pradesh', ar: 'Arunachal Pradesh', as: 'Assam', br: 'Bihar',
+  cg: 'Chhattisgarh', ch: 'Chandigarh', dl: 'Delhi', ga: 'Goa', gj: 'Gujarat',
+  hr: 'Haryana', hp: 'Himachal Pradesh', jh: 'Jharkhand', jk: 'Jammu and Kashmir',
+  ka: 'Karnataka', kl: 'Kerala', la: 'Ladakh', ld: 'Lakshadweep',
+  mh: 'Maharashtra', ml: 'Meghalaya', mn: 'Manipur', mp: 'Madhya Pradesh',
+  mz: 'Mizoram', nl: 'Nagaland', od: 'Odisha', or: 'Odisha', pb: 'Punjab',
+  py: 'Puducherry', rj: 'Rajasthan', sk: 'Sikkim', tn: 'Tamil Nadu',
+  tg: 'Telangana', ts: 'Telangana', tr: 'Tripura', uk: 'Uttarakhand',
+  ua: 'Uttarakhand', up: 'Uttar Pradesh', wb: 'West Bengal',
+  ncr: 'Delhi', newdelhi: 'Delhi',
+};
+
+const normalizeStateText = (value: string) =>
+  String(value ?? '').toLowerCase().replace(/[^a-z]/g, '');
+
+/**
+ * Does a free-text state plausibly name the same state as a GSTIN-derived one?
+ *
+ * Returns FALSE when it cannot tell. Used only to ask for an explicit billing
+ * address, never to block — a false negative on an odd spelling costs the buyer
+ * a few keystrokes, which is the right way round.
+ */
+export function statesMatch(text: string, canonical: string): boolean {
+  const a = normalizeStateText(text);
+  const b = normalizeStateText(canonical);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const expanded = STATE_ALIASES[a];
+  return expanded ? normalizeStateText(expanded) === b : false;
+}
+
 /** Upper-case and drop the spacing people paste in from an invoice. */
 export const normalizeGstin = (value: string): string =>
   String(value ?? '').replace(/[\s-]/g, '').toUpperCase();

@@ -27,7 +27,7 @@ import {
   BUYER_TYPE_VALUES,
   trackForBuyerType,
 } from '../config/buyer.js';
-import { buildAcceptanceSnapshot } from '../config/legalDocuments.js';
+import { buildAcceptanceSnapshot, ACCEPTANCE_CHANNELS } from '../config/legalDocuments.js';
 
 /** 4xx that actually reaches the buyer — see the `expose` note in utils/AppError.js. */
 const reject = (message) => {
@@ -136,12 +136,24 @@ export const resolveBuyer = (raw) => {
  * @param {object}  body                request body
  * @param {object}  [options]
  * @param {boolean} [options.requireAcceptance=true]  false only for admin-recorded offline orders
+ * @param {string}  [options.channel]   ACCEPTANCE_CHANNELS value; offline orders must pass OFFLINE_ADMIN
+ * @param {string}  [options.recordedBy] admin user id, for an offline record
  * @param {string}  [options.ipHash]    hashed client IP, for the acceptance record
  * @param {Date}    [options.acceptedAt]
  * @returns {{buyer: object, legalAcceptance: object}}
  */
 export const resolveBuyerAndAcceptance = (body = {}, options = {}) => {
-  const { requireAcceptance = true, ipHash = null, acceptedAt = new Date() } = options;
+  const {
+    requireAcceptance = true,
+    ipHash = null,
+    acceptedAt = new Date(),
+    // An admin-recorded sale is a different kind of record from a buyer ticking a
+    // box, and the two must stay distinguishable on the order. Defaults to the
+    // checkout channel so a caller that forgets cannot silently downgrade a real
+    // acceptance into an unattributed one.
+    channel = ACCEPTANCE_CHANNELS.CHECKOUT,
+    recordedBy = null,
+  } = options;
 
   const buyer = resolveBuyer(body.buyer);
 
@@ -156,8 +168,10 @@ export const resolveBuyerAndAcceptance = (body = {}, options = {}) => {
 
   const legalAcceptance = buildAcceptanceSnapshot({
     track: trackForBuyerType(buyer.type),
+    channel,
     acceptedAt,
     ipHash,
+    recordedBy,
   });
 
   return { buyer, legalAcceptance };

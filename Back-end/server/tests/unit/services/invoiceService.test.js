@@ -252,10 +252,43 @@ describe('buildBillToLines', () => {
 
   it('omits the DELIVERED TO block when the two addresses match', () => {
     // Otherwise the same address prints twice on every same-address B2B order.
+    // baseOrder ships to state 'MH', which statesMatch resolves to Maharashtra —
+    // the same state the 27… GSTIN derives — so this really is one address.
     const order = enterpriseOrder();
     order.buyer.billingAddress = {
       ...order.buyer.billingAddress,
       addressLine1: '1 Test St', city: 'Mumbai', postalCode: '400001',
+    };
+    expect(buildBillToLines(order, null).shipTo).toBeNull();
+  });
+
+  it('shows DELIVERED TO when only the STATE differs', () => {
+    // REGRESSION. "Billing same as delivery" sends the delivery street/city/PIN
+    // and the server overwrites the state from the GSTIN, so a Kerala delivery on
+    // a Maharashtra registration printed as "Kochi 682011 / Maharashtra" — an
+    // address that exists nowhere — and the old comparison (street/city/PIN only)
+    // saw no difference, so nothing explained it.
+    const order = enterpriseOrder();
+    order.shippingAddress = {
+      ...order.shippingAddress, addressLine1: '9 Beach Rd', city: 'Kochi', state: 'Kerala', postalCode: '682011',
+    };
+    order.buyer.billingAddress = {
+      addressLine1: '9 Beach Rd', city: 'Kochi', postalCode: '682011',
+      state: 'Maharashtra', stateCode: '27',
+    };
+    expect(buildBillToLines(order, null).shipTo).toEqual(
+      expect.arrayContaining(['9 Beach Rd', 'Kochi 682011', 'Kerala']),
+    );
+  });
+
+  it('treats a state abbreviation as the same state', () => {
+    // "MH" must not be read as different from "Maharashtra", or every B2B order
+    // whose addresses genuinely match would print a redundant delivery block.
+    const order = enterpriseOrder();
+    order.shippingAddress = { ...order.shippingAddress, addressLine1: '1 Test St', city: 'Mumbai', state: 'MH', postalCode: '400001' };
+    order.buyer.billingAddress = {
+      addressLine1: '1 Test St', city: 'Mumbai', postalCode: '400001',
+      state: 'Maharashtra', stateCode: '27',
     };
     expect(buildBillToLines(order, null).shipTo).toBeNull();
   });

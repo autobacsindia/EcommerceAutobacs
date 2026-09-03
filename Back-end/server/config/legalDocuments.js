@@ -54,6 +54,14 @@ export const LEGAL_DOCUMENTS = Object.freeze({
 export const CURRENT_TERMS_VERSION = LEGAL_DOCUMENTS.terms.version;
 export const CURRENT_PRIVACY_VERSION = LEGAL_DOCUMENTS.privacy.version;
 
+/** How an acceptance came to be recorded. */
+export const ACCEPTANCE_CHANNELS = Object.freeze({
+  /** The buyer ticked the box themselves at checkout. Evidence of their consent. */
+  CHECKOUT: 'checkout',
+  /** An admin recorded an off-platform sale. NOT evidence the buyer clicked anything. */
+  OFFLINE_ADMIN: 'offline_admin',
+});
+
 /**
  * The acceptance snapshot to persist with an order.
  *
@@ -61,14 +69,37 @@ export const CURRENT_PRIVACY_VERSION = LEGAL_DOCUMENTS.privacy.version;
  * there is no argument a buyer's browser can pass that changes which contract
  * they are recorded as having accepted.
  *
- * @param {{ track: 'consumer'|'enterprise', acceptedAt?: Date, ipHash?: string }} ctx
+ * ⚠️ `channel` IS LOAD-BEARING, NOT A LABEL. An offline order carries an
+ * acceptance so the versions in force are on the record, but nobody ticked a box:
+ * the customer was never at a browser. Recording that identically to a real
+ * checkout acceptance would manufacture evidence of consent that does not exist —
+ * which matters most for exactly the orders most likely to be enterprise, where
+ * the clause being "accepted" is the arbitration one.
+ *
+ * `ipHash` is therefore only meaningful on a CHECKOUT acceptance. On an offline
+ * one it would be the ADMIN's address, so it is refused rather than stored.
+ *
+ * @param {{ track: 'consumer'|'enterprise', channel?: string, acceptedAt?: Date, ipHash?: string, recordedBy?: string }} ctx
  */
-export const buildAcceptanceSnapshot = ({ track, acceptedAt = new Date(), ipHash = null }) => ({
-  termsVersion: CURRENT_TERMS_VERSION,
-  privacyVersion: CURRENT_PRIVACY_VERSION,
+export const buildAcceptanceSnapshot = ({
   track,
-  acceptedAt,
-  ...(ipHash && { ipHash }),
-});
+  channel = ACCEPTANCE_CHANNELS.CHECKOUT,
+  acceptedAt = new Date(),
+  ipHash = null,
+  recordedBy = null,
+}) => {
+  const isCheckout = channel === ACCEPTANCE_CHANNELS.CHECKOUT;
+  return {
+    termsVersion: CURRENT_TERMS_VERSION,
+    privacyVersion: CURRENT_PRIVACY_VERSION,
+    track,
+    channel,
+    acceptedAt,
+    // Only the buyer's own IP is evidence. An admin's is not, so it never lands here.
+    ...(isCheckout && ipHash && { ipHash }),
+    // Who keyed it in, for the offline case. Absent on a real checkout acceptance.
+    ...(!isCheckout && recordedBy && { recordedBy }),
+  };
+};
 
 export default LEGAL_DOCUMENTS;

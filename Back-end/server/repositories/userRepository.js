@@ -57,14 +57,38 @@ class UserRepository extends BaseRepository {
     */
     const next = { ...profile, updatedAt: new Date() };
     const billing = profile.billingAddress || {};
+
+    /*
+      EVERY stored field is compared, not just the interesting-looking ones.
+
+      The first version listed only gstin/legalName/addressLine1/city/postalCode,
+      so a buyer correcting ONLY their billing addressLine2, phone, country or
+      state matched nothing and the edit was silently dropped — and because this
+      profile prefills the next checkout, the stale value would then be
+      re-submitted on every subsequent order. A comparison that is a subset of
+      what it writes is worse than no comparison at all.
+
+      `?? null` because Mongoose strips `undefined` out of a query: a field the
+      caller omitted would otherwise vanish from the `$or` and stop being
+      compared. Against `null`, a missing stored field correctly reads as equal
+      (Mongo treats missing as null), so an omitted-and-absent field is still a
+      no-op rather than a spurious write.
+    */
+    const differs = (path, value) => ({ [path]: { $ne: value ?? null } });
     const query = {
       _id: userId,
       $or: [
-        { 'businessProfile.gstin': { $ne: profile.gstin } },
-        { 'businessProfile.legalName': { $ne: profile.legalName } },
-        { 'businessProfile.billingAddress.addressLine1': { $ne: billing.addressLine1 } },
-        { 'businessProfile.billingAddress.city': { $ne: billing.city } },
-        { 'businessProfile.billingAddress.postalCode': { $ne: billing.postalCode } },
+        differs('businessProfile.legalName', profile.legalName),
+        differs('businessProfile.gstin', profile.gstin),
+        differs('businessProfile.stateCode', profile.stateCode),
+        differs('businessProfile.billingAddress.addressLine1', billing.addressLine1),
+        differs('businessProfile.billingAddress.addressLine2', billing.addressLine2),
+        differs('businessProfile.billingAddress.city', billing.city),
+        differs('businessProfile.billingAddress.state', billing.state),
+        differs('businessProfile.billingAddress.stateCode', billing.stateCode),
+        differs('businessProfile.billingAddress.postalCode', billing.postalCode),
+        differs('businessProfile.billingAddress.country', billing.country),
+        differs('businessProfile.billingAddress.phone', billing.phone),
       ],
     };
     let q = User.findOneAndUpdate(query, { $set: { businessProfile: next } }, {

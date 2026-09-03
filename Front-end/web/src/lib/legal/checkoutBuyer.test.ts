@@ -8,7 +8,8 @@
 
 import { enterpriseBlockError, type EnterpriseBlockInput } from './checkoutBuyer'
 
-const shipping = { line1: '1 Test St', city: 'Kochi', postalCode: '682011' }
+// state 'MH' matches the 27… (Maharashtra) GSTIN used throughout.
+const shipping = { line1: '1 Test St', city: 'Mumbai', state: 'MH', postalCode: '400001' }
 const billing = { line1: '12 Marine Drive', city: 'Kochi', postalCode: '682011' }
 
 const input = (overrides: Partial<EnterpriseBlockInput> = {}): EnterpriseBlockInput => ({
@@ -73,6 +74,31 @@ describe('enterpriseBlockError', () => {
     expect(enterpriseBlockError(input({
       billingSameAsShipping: true,
       billing: { line1: '', city: '', postalCode: '' },
+    }))).toBeNull()
+  })
+
+  it('refuses "same as delivery" when the delivery state is not the GSTIN state', () => {
+    // REGRESSION. The server takes the billing state from the GSTIN, so mirroring
+    // an out-of-state delivery address produced a hybrid printed on the receipt:
+    // a Kerala street and PIN stamped "Maharashtra".
+    expect(enterpriseBlockError(input({
+      billingSameAsShipping: true,
+      shipping: { line1: '9 Beach Rd', city: 'Kochi', state: 'Kerala', postalCode: '682011' },
+    }))).toMatch(/registered in Maharashtra/)
+  })
+
+  it('accepts "same as delivery" when the states agree via an abbreviation', () => {
+    // "MH" must not be treated as different from Maharashtra, or every in-state
+    // B2B buyer is asked to retype an address they already gave.
+    expect(enterpriseBlockError(input({ billingSameAsShipping: true }))).toBeNull()
+  })
+
+  it('ignores the delivery state entirely when billing is entered separately', () => {
+    // An out-of-state delivery is perfectly ordinary in B2B — it is only the
+    // MIRRORING of it that was incoherent.
+    expect(enterpriseBlockError(input({
+      billingSameAsShipping: false,
+      shipping: { line1: '9 Beach Rd', city: 'Kochi', state: 'Kerala', postalCode: '682011' },
     }))).toBeNull()
   })
 })
