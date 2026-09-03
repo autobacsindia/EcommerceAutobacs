@@ -115,3 +115,59 @@ describe('the always-on hardening', () => {
     expect(csp).toContain("base-uri 'self'");
   });
 });
+
+/*
+  Tags delivered by the GTM container (GTM-PK3BVQR9).
+
+  This is the failure mode 'strict-dynamic' creates: it trusts whatever GTM
+  injects, so a new tag's SCRIPT always runs and GTM Preview reports the tag as
+  firing — while the endpoints it posts data to are blocked by img-src /
+  connect-src and the tool records nothing. Microsoft Clarity ran that way in
+  production on 2026-09-03. The URLs below are the ones Chrome actually reported
+  as blocked, so this pins the fix to observed traffic rather than a guess.
+*/
+describe('tags delivered through GTM', () => {
+  /** Approximates the browser's host matching; `*.` covers one or more labels. */
+  const allows = (directiveValue: string, url: string) => {
+    const host = new URL(url).host;
+    return directiveValue.split(/\s+/).some((source) => {
+      if (!source.startsWith('https://')) return false;
+      const pattern = source.slice('https://'.length);
+      if (!pattern.startsWith('*.')) return host === pattern;
+      const base = pattern.slice(2);
+      return host === base || host.endsWith(`.${base}`);
+    });
+  };
+
+  const csp = () => buildCsp('n0nc3');
+
+  test('img-src allows the Clarity pixel that was blocked in production', () => {
+    expect(allows(directive(csp(), 'img-src'), 'https://c.clarity.ms/c.gif')).toBe(true);
+  });
+
+  test('img-src allows the Bing host that pixel REDIRECTS to', () => {
+    // c.clarity.ms/c.gif → 302 → c.bing.com/c.gif. CSP checks every hop, and the
+    // violation is reported against the original url — so allowing clarity.ms
+    // alone still blocks the pixel while making it look like the wildcard failed.
+    expect(allows(directive(csp(), 'img-src'), 'https://c.bing.com/c.gif')).toBe(true);
+  });
+
+  test.each([
+    'https://l.clarity.ms/collect',
+    'https://k.clarity.ms/collect',
+    'https://e.clarity.ms/collect',
+  ])('connect-src allows the Clarity ingest host %s', (url) => {
+    // Clarity shards ingest across single-letter region hosts, so pinning one
+    // host would break the day a visitor is routed to a different shard.
+    expect(allows(directive(csp(), 'connect-src'), url)).toBe(true);
+  });
+
+  test('script-src still lists the tag host for browsers without strict-dynamic', () => {
+    expect(allows(directive(csp(), 'script-src'), 'https://www.clarity.ms/tag/abc123')).toBe(true);
+  });
+
+  test('the GTM noscript iframe is framable', () => {
+    // Only JS-disabled visitors hit this, so a regression here is invisible.
+    expect(allows(directive(csp(), 'frame-src'), 'https://www.googletagmanager.com/ns.html?id=x')).toBe(true);
+  });
+});

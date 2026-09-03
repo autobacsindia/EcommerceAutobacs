@@ -63,6 +63,9 @@ export function buildCsp(nonce: string): string {
     // Meta Pixel loader (fbevents.js). 'strict-dynamic' already trusts it via the
     // nonce'd init snippet; this is the fallback for browsers ignoring strict-dynamic.
     'https://connect.facebook.net',
+    // Microsoft Clarity (session replay), injected by the GTM container. Same
+    // fallback role — 'strict-dynamic' already trusts what GTM injects.
+    'https://*.clarity.ms',
   ].join(' ');
 
   return [
@@ -83,7 +86,24 @@ export function buildCsp(nonce: string): string {
     // (Verified against a live Vercel preview: the googleadservices.com + doubleclick
     // beacons were CSP-blocked until added here.)
     // Meta Pixel fires tracking as <img> beacons to www.facebook.com/tr.
-    "img-src 'self' data: blob: https://img.autobacsindia.com https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net",
+    //
+    // *.clarity.ms — Microsoft Clarity, added as a tag in the GTM container. It
+    // posts session data to <region>.clarity.ms/collect and a c.clarity.ms/c.gif
+    // pixel; both were blocked in PRODUCTION on 2026-09-03 while the tag script
+    // itself loaded fine on 'strict-dynamic'. So GTM Preview showed the tag
+    // firing, Clarity looked installed, and it recorded NOTHING. Every tag added
+    // in the GTM UI needs its endpoints here — the script loading is not evidence
+    // that the tag works. The region host varies (l./k./e./z.), hence a wildcard.
+    //
+    // c.bing.com is not a second tracker to approve — it is the SAME pixel:
+    // c.clarity.ms/c.gif answers 302 → c.bing.com/c.gif (Clarity's MUID sync).
+    // CSP is enforced on every redirect hop, and Chrome reports the violation
+    // against the ORIGINAL url, so allowing *.clarity.ms alone still logged
+    // "img-src blocked https://c.clarity.ms/c.gif" and read as if the wildcard
+    // had not worked. Exact host, not a wildcard: nothing else on bing.com is
+    // wanted. Drop this line if the Clarity↔Microsoft Advertising sync is not
+    // used — replay works without it, at the cost of one violation per page.
+    "img-src 'self' data: blob: https://img.autobacsindia.com https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net https://*.clarity.ms https://c.bing.com",
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK
     "worker-src blob: 'self'",
@@ -100,7 +120,7 @@ export function buildCsp(nonce: string): string {
     // loading config and posting the purchase conversion. googleadservices.com +
     // ad.doubleclick.net + the regional google.co.in are the enhanced-conversion /
     // conversion-linker fetch targets (were CSP-blocked on the preview until added).
-    `connect-src 'self' ${R2_UPLOAD_ORIGIN} https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net`,
+    `connect-src 'self' ${R2_UPLOAD_ORIGIN} https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net https://*.clarity.ms`,
     // Razorpay renders its payment UI (checkout) and the EMI affordability
     // widget's "View plans" modal inside iframes. googletagmanager.com is the
     // GTM <noscript> ns.html iframe (layout.tsx) — without it that fallback is
