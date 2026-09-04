@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
@@ -201,7 +201,16 @@ function AdminOrdersPageInner() {
   const router = useRouter();
   
   const queryClient = useQueryClient();
-  const [currentPage, setCurrentPage] = useState(1);
+  /*
+    Seeded from the URL, not hardcoded to 1. The filters have always lived in the query
+    string, but the page number did not — so returning to this screen (in particular via
+    Back from an order, which the "Shipped" hand-off now does routinely) always dropped
+    the admin on page 1. That directly undercuts the "work through many orders quickly"
+    workflow the hand-off is built around: shipping order #3 on page 7 sent you back to
+    page 1 to find #4.
+  */
+  const [currentPage, setCurrentPage] = useState(
+    () => Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1));
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [pageSize, setPageSize] = useState(20);
@@ -292,8 +301,68 @@ function AdminOrdersPageInner() {
   const pagination = data?.pagination ?? { total: 0, pages: 0, currentPage, hasNext: false, hasPrev: false };
   const loading = isFetching;
 
+  /*
+    Picking "Shipped" on an order that could travel in more than one box hands over to
+    the order's Parcels panel instead of shipping everything here.
+
+    ── WHY NOT SHIP IT INLINE ────────────────────────────────────────────────────────
+    This dialog has one tracking field and no way to say what is IN the box, so
+    confirming it puts every outstanding unit in a single parcel. On a multi-item order
+    that is only right by accident — the 3-item order where 2 are in stock is exactly the
+    case, and it recorded all 3 as gone. The detail page already intercepts `shipped` for
+    this reason; the list did not, so the same click meant two different things depending
+    on which screen it was made from. A warning banner named the problem but still let it
+    through.
+
+    Routing to the panel rather than duplicating a line-picker here keeps ONE place that
+    builds parcels, and keeps it on the properly-validated POST /:id/shipments endpoint
+    (PUT /:id/status accepts `lines` but its validator does not cover them).
+
+    ── WHY THIS IS NOT UNCONDITIONAL, UNLIKE THE DETAIL PAGE ─────────────────────────
+    This screen exists to work through many orders quickly, and a single-unit order has
+    nothing to split — there is exactly one honest parcel. Sending those through a page
+    navigation would be pure friction for the common case. So the fast path survives
+    precisely where it cannot be wrong.
+
+    An order that ALREADY has parcels is treated as splittable whatever its unit count:
+    a second box is by definition a split, and the panel is where its contents are chosen.
+  */
+  /*
+    States in which a NEW parcel can exist at all — mirrors `SHIPPABLE_STATUSES` in
+    Back-end/server/services/shipmentService.js, which rejects anything else outright.
+
+    The dropdown still offers "Shipped" from `delivered`, `returned` and `cancelled`
+    (getAdminNextStatuses only blocks a cancel after delivery), and those orders have
+    nothing left to put in a box. Handing one to the Parcels panel is a dead end: the
+    panel's open-effect requires something outstanding, so the form never appears and the
+    admin gets no dialog, no toast and no error — the click silently does nothing. The
+    modal, by contrast, sends the request and surfaces the server's rejection inline,
+    which is the same answer a single-unit order in that state already gets.
+
+    So the hand-off is for orders that can genuinely be shipped; everything else keeps the
+    dialog and therefore keeps its error message.
+  */
+  const SHIPPABLE_STATUSES = ['processing', 'shipped'];
+
+  const shippableInOneBox = (order: Order) => {
+    const units = (order.items ?? []).reduce(
+      (n: number, i: { quantity?: number }) => n + (i?.quantity ?? 1), 0);
+    return units <= 1 && (order.shipments?.length ?? 0) === 0;
+  };
+
   // Open the confirmation modal instead of firing the API immediately.
   const requestStatusChange = (order: Order, newStatus: string) => {
+    if (
+      newStatus === 'shipped'
+      && SHIPPABLE_STATUSES.includes(order.status)
+      && !shippableInOneBox(order)
+    ) {
+      // `parcel=1` opens the panel's create-parcel form and scrolls to it, so the admin
+      // lands on the same form the detail page's own dropdown would have opened.
+      router.push(`/admin/orders/${order._id}?parcel=1`);
+      return;
+    }
+
     setPendingChange({
       orderId: order._id,
       orderNumber: order.orderNumber,
@@ -341,6 +410,30 @@ function AdminOrdersPageInner() {
     setPendingChange(null);
     toast.success(`Order status updated to ${to}`);
   };
+
+  /*
+    ── ONE OWNER FOR THE `page` PARAM ────────────────────────────────────────────────
+    `updateURL` owns the FILTER params; this owns `page`, and nothing else writes it.
+
+    Five separate handlers reset the page to 1 (filters, sort, page size, bulk status,
+    bulk delete) and more will follow. Mirroring the URL at each call site means the next
+    one added forgets, and the URL silently disagrees with the state — the same
+    "fix one path, miss the other" drift this screen has already been bitten by. Deriving
+    it from `currentPage` instead makes every present and future reset correct for free.
+
+    Loop-safe: the write is skipped when the query string already matches, so the
+    `searchParams` change it causes does not trigger another write.
+  */
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    // Page 1 is the default and stays out of the URL, so a plain /admin/orders never
+    // grows a redundant ?page=1.
+    if (currentPage > 1) params.set('page', String(currentPage));
+    else params.delete('page');
+
+    if (params.toString() === searchParams.toString()) return;
+    router.replace(`/admin/orders?${params.toString()}`, { scroll: false });
+  }, [currentPage, searchParams, router]);
 
   const handleFiltersChange = (newFilters: OrderFilters) => {
     setFilters(newFilters);
@@ -731,7 +824,20 @@ function AdminOrdersPageInner() {
                       <>
                         <select
                           value={order.status}
-                          onChange={(e) => requestStatusChange(order, e.target.value)}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            /*
+                              Put the select back on the order's real status before acting.
+                              It is a controlled input, so every path that changes state
+                              re-renders and resets it anyway — but the "Shipped" hand-off
+                              to the Parcels panel changes NO state on this page, and
+                              without this the row would be left reading "Shipped" for an
+                              order that has not shipped. Same reset the detail page's
+                              dropdown does, for the same reason.
+                            */
+                            e.target.value = order.status;
+                            requestStatusChange(order, next);
+                          }}
                           className={`px-3 py-1 rounded-full text-xs font-medium border-0 focus:ring-2 focus:ring-offset-2 ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-800'}`}
                         >
                           {/* Current status — always shown as selected, disabled so user must pick a different one */}

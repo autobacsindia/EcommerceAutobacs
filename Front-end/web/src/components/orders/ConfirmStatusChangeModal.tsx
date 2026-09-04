@@ -35,6 +35,14 @@ interface ConfirmStatusChangeModalProps {
    * That screen ships everything in one parcel — the fast path, kept on purpose for
    * working through many orders. Saying how many items that covers is what turns it from
    * a silent decision into a deliberate one; splitting happens on the order's own page.
+   *
+   * ⚠️ THIS IS NOW A BACKSTOP, NOT THE PRIMARY GUARD. The orders list hands a `shipped`
+   * pick on any splittable order (>1 unit, or one that already has parcels) straight to
+   * that page's Parcels panel, so this dialog no longer receives a count above 1 and the
+   * warning below should not render in practice. It is kept because it is the correct
+   * disclosure for what this dialog DOES — one tracking field, everything in one box —
+   * and it stays live if that threshold is ever loosened. Do not read its presence as
+   * evidence that the list still ships multi-item orders inline; it does not.
    */
   shipsEverythingCount?: number;
   /**

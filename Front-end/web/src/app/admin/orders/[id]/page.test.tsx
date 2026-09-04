@@ -2,13 +2,15 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import AdminOrderDetailPage from './page';
 import apiClient from '@/lib/api';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 
 // Mock dependencies
 jest.mock('@/lib/api');
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
   useParams: jest.fn(),
+  // Read for the `?parcel=1` hand-off from the orders list.
+  useSearchParams: jest.fn(),
 }));
 jest.mock('lucide-react', () => ({
   ArrowLeft: () => <span data-testid="icon-arrow-left">ArrowLeft</span>,
@@ -29,7 +31,15 @@ describe('AdminOrderDetailPage', () => {
   const mockRouter = {
     back: jest.fn(),
     push: jest.fn(),
+    // The page strips `?parcel=1` once handled, so the one-shot instruction does not
+    // survive a reload or a Back into this entry.
+    replace: jest.fn(),
   };
+
+  /** Stand-in for Next's ReadonlyURLSearchParams — only `get` is used. */
+  const searchParams = (params: Record<string, string> = {}) => ({
+    get: (k: string) => params[k] ?? null,
+  });
 
   const mockOrder = {
     _id: 'order123',
@@ -72,6 +82,7 @@ describe('AdminOrderDetailPage', () => {
     jest.clearAllMocks();
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
     (useParams as jest.Mock).mockReturnValue({ id: 'order123' });
+    (useSearchParams as jest.Mock).mockReturnValue(searchParams());
     (apiClient.get as jest.Mock).mockImplementation((url: string) => {
       if (typeof url === 'string' && url.includes('/tracking/carriers')) {
         return Promise.resolve({ carriers: [{ name: 'Delhivery', code: 'DELHIVERY' }] });
@@ -147,6 +158,63 @@ describe('AdminOrderDetailPage', () => {
     // No tracking-number dialog, and above all no status write.
     expect(screen.queryByPlaceholderText(/123456789012/)).not.toBeInTheDocument();
     expect(apiClient.put).not.toHaveBeenCalled();
+  });
+
+  /*
+    ── THE RECEIVING END OF THE ORDERS-LIST HAND-OFF ──────────────────────────────
+    Picking "Shipped" on a multi-item order in /admin/orders navigates here with
+    `?parcel=1` rather than shipping everything in one box. Landing the admin on the
+    order page with nothing open would turn that into a dead end, so the param opens
+    the create-parcel form — the same form this page's own dropdown opens.
+  */
+  describe('?parcel=1 hand-off from the orders list', () => {
+    it('opens the create-parcel form and strips the param', async () => {
+      (useSearchParams as jest.Mock).mockReturnValue(searchParams({ parcel: '1' }));
+      render(<AdminOrderDetailPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
+      });
+
+      // Stripped so a reload — or a Back into this history entry — does not re-open it.
+      await waitFor(() => {
+        expect(mockRouter.replace).toHaveBeenCalledWith(
+          '/admin/orders/order123', { scroll: false });
+      });
+      // The hand-off must never write a status by itself; it only opens a form.
+      expect(apiClient.put).not.toHaveBeenCalled();
+    });
+
+    it('does nothing without the param', async () => {
+      render(<AdminOrderDetailPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
+      });
+
+      expect(mockRouter.replace).not.toHaveBeenCalled();
+    });
+
+    it('handles the param once, so a refetch cannot re-open the form', async () => {
+      (useSearchParams as jest.Mock).mockReturnValue(searchParams({ parcel: '1' }));
+      const { rerender } = render(<AdminOrderDetailPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
+      });
+      await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledTimes(1));
+
+      /*
+        The effect re-runs on every render, and the panel calls back into `fetchOrder`
+        after each parcel is created. Without the one-shot latch, creating one parcel
+        would immediately re-open the form for another.
+      */
+      rerender(<AdminOrderDetailPage />);
+      await waitFor(() => {
+        expect(screen.getByText(/ORD-001/)).toBeInTheDocument();
+      });
+      expect(mockRouter.replace).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('does not update status when the modal is cancelled', async () => {

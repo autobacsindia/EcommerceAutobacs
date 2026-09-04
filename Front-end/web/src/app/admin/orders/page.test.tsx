@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AdminOrdersPage from './page';
 import apiClient from '@/lib/api';
+import { useSearchParams } from 'next/navigation';
 
 // The page reads orders via TanStack Query, so tests render it in a provider.
 const renderPage = () => {
@@ -16,15 +17,19 @@ const renderPage = () => {
 
 // Mock dependencies
 jest.mock('@/lib/api');
+// Stable across renders so a test can assert on the navigation itself. The previous
+// factory built a fresh jest.fn() per call, so `push` could never be observed.
+const mockPush = jest.fn();
+const mockReplace = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
-    push: jest.fn(),
+    push: mockPush,
     // Filter changes use replace(), not push() — see updateURL in the page.
-    replace: jest.fn(),
+    replace: mockReplace,
   }),
-  useSearchParams: () => ({
-    get: jest.fn(),
-  }),
+  // A real URLSearchParams by default: the page reads `.get()` AND `.toString()` when
+  // it syncs the page number, and a bare `{ get }` stub silently breaks the latter.
+  useSearchParams: jest.fn(() => new URLSearchParams()),
 }));
 jest.mock('next/link', () => {
   return ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -116,6 +121,12 @@ describe('AdminOrdersPage', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    /*
+      `clearAllMocks` clears CALLS but not IMPLEMENTATIONS, so a test that points
+      useSearchParams at `?page=3` would leak that into every test after it and quietly
+      change what the list requests. Re-seed the default explicitly.
+    */
+    (useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams());
     // Carriers endpoint feeds the shipping modal's dropdown; everything else
     // returns the orders list.
     (apiClient.get as jest.Mock).mockImplementation((url: string) => {
@@ -181,6 +192,175 @@ describe('AdminOrdersPage', () => {
           carrierCode: 'DELHIVERY',
         })
       );
+    });
+  });
+
+  /*
+    ── SHIPPING A MULTI-ITEM ORDER FROM THE LIST ──────────────────────────────────
+    This dialog has one tracking field and no way to say what is in the box, so
+    confirming it ships every outstanding unit together. That is fine for a one-unit
+    order and wrong for a 3-item order where only 2 are in stock. Picking "Shipped"
+    on anything splittable therefore hands over to the order's Parcels panel, which
+    is the single place parcels are built.
+  */
+  describe('shipping hand-off to the Parcels panel', () => {
+    const multiItemOrder = {
+      ...mockOrders.orders[0],
+      status: 'processing',
+      items: [
+        { _id: 'i1', name: 'Wax', quantity: 2 },
+        { _id: 'i2', name: 'Polish', quantity: 1 },
+      ],
+    };
+
+    const serveOrder = (order: Record<string, unknown>) => {
+      (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/tracking/carriers')) {
+          return Promise.resolve({ carriers: [{ name: 'Delhivery', code: 'DELHIVERY' }] });
+        }
+        return Promise.resolve({ ...mockOrders, count: 1, orders: [order] });
+      });
+    };
+
+    const pickShipped = async () => {
+      const row = screen.getByText(/ORD-001/).closest('tr');
+      fireEvent.change(within(row!).getByRole('combobox'), { target: { value: 'shipped' } });
+    };
+
+    it('routes a multi-item order to the Parcels panel instead of shipping it in one box', async () => {
+      serveOrder(multiItemOrder);
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      await pickShipped();
+
+      expect(mockPush).toHaveBeenCalledWith('/admin/orders/o1?parcel=1');
+      // The whole point: no one-box dispatch, and no API call behind the admin's back.
+      expect(apiClient.put).not.toHaveBeenCalled();
+      expect(screen.queryByPlaceholderText(/123456789012/)).not.toBeInTheDocument();
+    });
+
+    it('treats an order that ALREADY has parcels as splittable, whatever its unit count', async () => {
+      serveOrder({
+        ...mockOrders.orders[0],
+        status: 'processing',
+        items: [{ _id: 'i1', name: 'Wax', quantity: 1 }],
+        shipments: [{ _id: 's1', status: 'packed', lines: [] }],
+      });
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      await pickShipped();
+
+      expect(mockPush).toHaveBeenCalledWith('/admin/orders/o1?parcel=1');
+    });
+
+    it('keeps the fast inline dialog for a single-unit order with no parcels', async () => {
+      serveOrder({
+        ...mockOrders.orders[0],
+        status: 'processing',
+        items: [{ _id: 'i1', name: 'Wax', quantity: 1 }],
+      });
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      await pickShipped();
+
+      expect(mockPush).not.toHaveBeenCalled();
+      // There is exactly one honest parcel here, so the dialog cannot be wrong.
+      await waitFor(() =>
+        expect(screen.getByPlaceholderText(/123456789012/)).toBeInTheDocument());
+    });
+
+    /*
+      "Shipped" is still offered from `delivered`, `returned` and `cancelled` — the
+      dropdown only blocks a CANCEL after delivery. Those orders have nothing left to
+      box, and the Parcels panel refuses to open an empty picker, so handing one over
+      would be a dead end: no dialog, no toast, no error, click does nothing. The modal
+      at least surfaces the server's rejection.
+    */
+    it.each(['delivered', 'returned', 'cancelled'])(
+      'keeps the dialog for a multi-item order in %s, so the rejection is still visible',
+      async (status) => {
+        serveOrder({ ...multiItemOrder, status });
+        renderPage();
+        await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+        await pickShipped();
+
+        expect(mockPush).not.toHaveBeenCalled();
+        await waitFor(() =>
+          expect(screen.getByRole('button', { name: /confirm/i })).toBeInTheDocument());
+      });
+
+    it('still hands off from `shipped`, where another parcel is legitimate', async () => {
+      serveOrder({
+        ...multiItemOrder,
+        status: 'shipped',
+        shipments: [{ _id: 's1', status: 'shipped', lines: [] }],
+      });
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      await pickShipped();
+
+      expect(mockPush).toHaveBeenCalledWith('/admin/orders/o1?parcel=1');
+    });
+
+    it('leaves the dropdown reading the order\'s real status after handing off', async () => {
+      serveOrder(multiItemOrder);
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      const row = screen.getByText(/ORD-001/).closest('tr');
+      const select = within(row!).getByRole('combobox') as HTMLSelectElement;
+      fireEvent.change(select, { target: { value: 'shipped' } });
+
+      // The hand-off changes no state on this page, so nothing would re-render and
+      // reset the controlled select — the row would claim "Shipped" for an order
+      // that has not shipped.
+      expect(select.value).toBe('processing');
+    });
+
+    it('still opens the dialog for a NON-shipping status on a multi-item order', async () => {
+      serveOrder(multiItemOrder);
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      const row = screen.getByText(/ORD-001/).closest('tr');
+      fireEvent.change(within(row!).getByRole('combobox'), { target: { value: 'cancelled' } });
+
+      expect(mockPush).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /confirm/i })).toBeInTheDocument());
+    });
+  });
+
+  /*
+    ── THE ADMIN'S PLACE IN THE LIST ──────────────────────────────────────────────
+    Filters have always lived in the URL; the page number did not, so coming back to
+    this screen always landed on page 1. That is a standing annoyance, and the
+    "Shipped" hand-off makes it routine — ship an order on page 7, press Back, and the
+    next one is nowhere to be found.
+  */
+  describe('page number in the URL', () => {
+    it('is seeded from ?page on mount', async () => {
+      (useSearchParams as jest.Mock).mockReturnValue(
+        new URLSearchParams('page=3') as unknown as ReturnType<typeof useSearchParams>);
+      renderPage();
+
+      await waitFor(() =>
+        expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('page=3')));
+    });
+
+    it('stays out of the URL on page 1, so a plain list URL never grows ?page=1', async () => {
+      renderPage();
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      // Nothing set the page, so nothing should have written it.
+      const pageWrites = mockReplace.mock.calls.filter(
+        ([url]: [string]) => String(url).includes('page='));
+      expect(pageWrites).toHaveLength(0);
     });
   });
 

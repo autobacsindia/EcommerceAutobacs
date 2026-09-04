@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Package, Truck, CheckCircle2, AlertTriangle } from 'lucide-react';
 import apiClient from '@/lib/api';
@@ -130,12 +130,32 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
 
   useEffect(() => { load(); }, [load]);
 
-  // Opening on the signal, not on mount, so the panel stays collapsed for the ordinary
-  // "just looking at the order" visit.
+  /*
+    Opening on the signal, not on mount, so the panel stays collapsed for the ordinary
+    "just looking at the order" visit.
+
+    ⚠️ EACH SIGNAL VALUE OPENS THE FORM EXACTLY ONCE — hence the ref.
+
+    The condition also depends on `remaining`, which arrives asynchronously and CHANGES
+    every time a parcel is created. A plain `openFormSignal > 0` test therefore re-fired
+    on that change: after `handleCreate` closed the form and reloaded, a partially-shipped
+    order re-opened its own create-parcel form with no one asking. Latching in the PARENT
+    cannot fix this — the parent's signal is unchanged; it is this effect re-running.
+
+    Recording which signal has been consumed makes it one-shot per pick, while a genuinely
+    new pick (a bumped counter) still opens it again — which is the whole reason the prop
+    is a counter rather than a boolean.
+  */
+  const consumedFormSignal = useRef(0);
   useEffect(() => {
+    if (openFormSignal <= consumedFormSignal.current) return;
     // Only if there is actually something left to put in a box. Opening an empty picker
-    // on a fully-shipped order would look broken rather than informative.
-    if (openFormSignal > 0 && (remaining.length > 0 || (summary?.owesGoodie && !summary.rewardShipped))) {
+    // on a fully-shipped order would look broken rather than informative. Deliberately
+    // NOT marked consumed in that case: the signal is still pending, so if the outstanding
+    // units appear a moment later (the first load, or a lost parcel returning its units)
+    // the admin's click is honoured rather than dropped.
+    if (remaining.length > 0 || (summary?.owesGoodie && !summary.rewardShipped)) {
+      consumedFormSignal.current = openFormSignal;
       setOpen(true);
     }
   }, [openFormSignal, remaining.length, summary?.owesGoodie, summary?.rewardShipped]);

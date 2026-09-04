@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
@@ -158,7 +158,7 @@ interface Order {
   };
 }
 
-export default function AdminOrderDetailPage() {
+function AdminOrderDetailPageInner() {
   const router = useRouter();
   const params = useParams();
   const orderId = params.id as string;
@@ -179,6 +179,35 @@ export default function AdminOrderDetailPage() {
       fetchOrder();
     }
   }, [orderId]);
+
+  /*
+    `?parcel=1` — the hand-off from the orders LIST, where picking "Shipped" on a
+    multi-item order routes here instead of shipping everything in one box. Opening the
+    create-parcel form is what makes that a continuation of the admin's click rather than
+    a dead-end drop onto the order page.
+
+    Waits for `order`, because the panel is not mounted until the order has loaded — a
+    signal sent before then would be bumped on an unmounted component and silently lost.
+    Gated on `handledParcelParam` so it fires exactly once: the effect re-runs on every
+    refetch (`onChanged` → `fetchOrder`), and without the latch, creating one parcel
+    would re-open the form for another.
+
+    The param is then stripped with `replace` so a reload, or a Back into this entry,
+    does not re-open the form — and so the URL stops advertising a one-shot instruction.
+  */
+  const searchParams = useSearchParams();
+  const [handledParcelParam, setHandledParcelParam] = useState(false);
+  useEffect(() => {
+    if (handledParcelParam || !order) return;
+    if (searchParams.get('parcel') !== '1') return;
+
+    setHandledParcelParam(true);
+    setOpenParcelForm((n) => n + 1);
+    // Optional-called: scrollIntoView is absent in jsdom, and a missing scroll must
+    // never break the form actually opening.
+    parcelsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    router.replace(`/admin/orders/${orderId}`, { scroll: false });
+  }, [order, searchParams, handledParcelParam, orderId, router]);
 
   const fetchOrder = async () => {
     try {
@@ -894,5 +923,18 @@ export default function AdminOrderDetailPage() {
         />
       )}
     </div>
+  );
+}
+
+/*
+  `useSearchParams` (the `?parcel=1` hand-off from the orders list) forces this into
+  client-side bailout during prerender, and Next 15 fails the BUILD unless the reading
+  component sits under a Suspense boundary. Same wrapper the orders list already uses.
+*/
+export default function AdminOrderDetailPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <AdminOrderDetailPageInner />
+    </Suspense>
   );
 }

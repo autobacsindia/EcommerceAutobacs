@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import OrderShipments from './OrderShipments';
 import apiClient from '@/lib/api';
 
@@ -187,6 +187,63 @@ describe('opening from the status dropdown', () => {
 
     rerender(<OrderShipments {...props} openFormSignal={2} />);
     expect(await screen.findByRole('button', { name: /Create parcel/i })).toBeInTheDocument();
+  });
+
+  /*
+    ── THE SIGNAL IS ONE-SHOT PER PICK ──────────────────────────────────────────────
+    The open-condition also depends on `remaining`, which CHANGES every time a parcel is
+    created. A plain `openFormSignal > 0` test re-fired on that change, so on a partially
+    shipped order the form re-opened itself the moment `handleCreate` closed it and
+    reloaded — with nobody asking for a second parcel.
+
+    Latching in the parent cannot catch this: the signal never changes, it is this
+    effect re-running. So the panel has to record which signal it has consumed.
+  */
+  it('does not re-open itself when creating a parcel changes what is remaining', async () => {
+    /*
+      TWO outstanding lines, one of which ships completely. The effect's dep is
+      `remaining.LENGTH`, so shipping part of a single line would not re-trigger it —
+      the remainder has to lose a line for the old condition to re-fire. Getting this
+      fixture wrong makes the test pass against the bug.
+    */
+    seed({
+      remaining: [
+        { itemId: 'a', name: 'Ceramic Wax', quantity: 1 },
+        { itemId: 'b', name: 'Polish', quantity: 1 },
+      ],
+    });
+    mockPost.mockResolvedValue({ success: true, message: 'Parcel 1 created' });
+
+    render(
+      <OrderShipments
+        orderId="order-1"
+        itemNames={{ a: 'Ceramic Wax', b: 'Polish' }}
+        openFormSignal={1}
+      />);
+    await screen.findByRole('button', { name: /Create parcel/i });
+
+    // The reload after a successful create returns one FEWER line: 2 → 1.
+    seed({ remaining: [{ itemId: 'b', name: 'Polish', quantity: 1 }] });
+    fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: 'AWB1' } });
+    fireEvent.change(screen.getByLabelText('Courier'), { target: { value: 'DELHIVERY' } });
+    fireEvent.click(screen.getByRole('button', { name: /Create parcel/i }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalled());
+
+    /*
+      ⚠️ Assert the SETTLED state, not the first moment the form is gone.
+
+      `handleCreate` closes the form and only THEN reloads, so there is a window where the
+      form is legitimately absent before the reload's new `remaining` re-triggers the open
+      effect. A bare `waitFor(...not.toBeInTheDocument())` passes on that window and is
+      green against the bug. Waiting for the reload to land first is what makes this test
+      able to fail.
+    */
+    const reloads = () => mockGet.mock.calls.filter(([u]: [string]) => !String(u).includes('/carriers'));
+    await waitFor(() => expect(reloads().length).toBeGreaterThanOrEqual(2));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.queryByRole('button', { name: /Create parcel/i })).not.toBeInTheDocument();
   });
 
   // An empty picker on a fully-shipped order looks broken rather than informative.
