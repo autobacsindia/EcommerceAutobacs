@@ -166,6 +166,32 @@ describe('tags delivered through GTM', () => {
     expect(allows(directive(csp(), 'script-src'), 'https://www.clarity.ms/tag/abc123')).toBe(true);
   });
 
+  /**
+   * A CSP host source matches ONE exact host: "www.google.com" does not cover
+   * "google.com". Chrome reported this on prod on 2026-09-04:
+   *
+   *   Refused to connect to 'https://google.com/ccm/form-data/<ads-id>'
+   *
+   * That is the Google tag's enhanced-conversions form-data endpoint, dropped on
+   * every product page while the www host sat in the list looking like it covered
+   * it — the same shape as the clarity.ms → c.bing.com redirect above, and just
+   * as silent.
+   */
+  test.each([
+    ['connect-src', 'https://google.com/ccm/form-data/11434499615'],
+    ['connect-src', 'https://google.co.in/ccm/form-data/11434499615'],
+    ['img-src', 'https://google.com/pagead/1p-user-list/11434499615/'],
+    ['img-src', 'https://google.co.in/pagead/1p-user-list/11434499615/'],
+  ])('%s allows the APEX Google host %s', (name, url) => {
+    expect(allows(directive(csp(), name), url)).toBe(true);
+  });
+
+  test('the www Google hosts are still allowed alongside the apex ones', () => {
+    // Adding the apex must not have replaced the www entries: both are used.
+    expect(allows(directive(csp(), 'connect-src'), 'https://www.google.com/ccm/collect')).toBe(true);
+    expect(allows(directive(csp(), 'img-src'), 'https://www.google.co.in/pagead/1p-user-list/x/')).toBe(true);
+  });
+
   test('the GTM noscript iframe is framable', () => {
     // Only JS-disabled visitors hit this, so a regression here is invisible.
     expect(allows(directive(csp(), 'frame-src'), 'https://www.googletagmanager.com/ns.html?id=x')).toBe(true);

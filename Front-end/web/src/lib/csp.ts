@@ -103,7 +103,7 @@ export function buildCsp(nonce: string): string {
     // had not worked. Exact host, not a wildcard: nothing else on bing.com is
     // wanted. Drop this line if the Clarity↔Microsoft Advertising sync is not
     // used — replay works without it, at the cost of one violation per page.
-    "img-src 'self' data: blob: https://img.autobacsindia.com https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net https://*.clarity.ms https://c.bing.com",
+    "img-src 'self' data: blob: https://img.autobacsindia.com https://res.cloudinary.com https://images.unsplash.com https://*.gstatic.com https://*.googleapis.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.google.com https://www.google.co.in https://google.com https://google.co.in https://googleads.g.doubleclick.net https://www.google-analytics.com https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net https://*.clarity.ms https://c.bing.com",
     "font-src 'self' data:",
     // blob: for LogRocket session-replay web workers spawned by the npm SDK
     "worker-src blob: 'self'",
@@ -120,7 +120,15 @@ export function buildCsp(nonce: string): string {
     // loading config and posting the purchase conversion. googleadservices.com +
     // ad.doubleclick.net + the regional google.co.in are the enhanced-conversion /
     // conversion-linker fetch targets (were CSP-blocked on the preview until added).
-    `connect-src 'self' ${R2_UPLOAD_ORIGIN} https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net https://*.clarity.ms`,
+    //
+    // ⚠ The APEX hosts (google.com / google.co.in) are listed SEPARATELY from the
+    // www ones because a CSP host source matches one exact host — "www.google.com"
+    // does NOT cover "google.com". Chrome reported this on prod on 2026-09-04:
+    //     Refused to connect to 'https://google.com/ccm/form-data/<ads-id>'
+    // which is the Google tag's enhanced-conversions form-data endpoint, silently
+    // dropped on every product page while www.google.com sat in the list looking
+    // like it covered it. Same trap as the clarity.ms → c.bing.com redirect above.
+    `connect-src 'self' ${R2_UPLOAD_ORIGIN} https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://google.com https://google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net https://*.clarity.ms`,
     // Razorpay renders its payment UI (checkout) and the EMI affordability
     // widget's "View plans" modal inside iframes. googletagmanager.com is the
     // GTM <noscript> ns.html iframe (layout.tsx) — without it that fallback is
