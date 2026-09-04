@@ -70,6 +70,57 @@ describe('createShipment', () => {
     expect(saved.status).toBe('shipped');
   });
 
+  /*
+    ── THE PRODUCTION-SHAPED ORDER ────────────────────────────────────────────
+    Every order written before `shipments` was added to the schema has NO such key.
+    A bare `{ shipments: { $size: 0 } }` compare-and-set matches none of them, so the
+    first parcel on each failed all four attempts and reported a phantom race:
+    "Another parcel was created for this order at the same time."
+
+    `Order.create()` cannot reproduce that — Mongoose materialises `shipments: []`
+    from the schema, so a seeded document ALWAYS has the field and a real legacy one
+    never does. The `$unset` is therefore the entire point of these two tests; without
+    it they pass against the broken guard.
+  */
+  it('creates a FIRST parcel on an order written before the shipments field existed', async () => {
+    const order = await seedOrder();
+    await Order.collection.updateOne({ _id: order._id }, { $unset: { shipments: '' } });
+    // Guard the guard: if a future schema change starts backfilling the key, this
+    // test would silently stop covering the case it exists for.
+    const raw = await Order.collection.findOne({ _id: order._id });
+    expect(raw.shipments).toBeUndefined();
+
+    const res = await shipmentService.createShipment(order._id.toString(), {
+      trackingNumber: 'AWB1', carrier: { name: 'Delhivery', code: 'delhivery' },
+    }, { userId: ADMIN });
+
+    expect(res.success).toBe(true);
+    expect(res.message).not.toMatch(/at the same time/);
+    expect(res.shipment.sequence).toBe(1);
+
+    const saved = await Order.findById(order._id);
+    expect(saved.status).toBe('shipped');
+    // The first-parcel mirror must still land on a legacy order.
+    expect(saved.trackingNumber).toBe('AWB1');
+  });
+
+  it('still refuses to over-ship a legacy order once its first parcel exists', async () => {
+    const order = await seedOrder();
+    const [wax] = itemIds(order);
+    await Order.collection.updateOne({ _id: order._id }, { $unset: { shipments: '' } });
+
+    const first = await shipmentService.createShipment(order._id.toString(),
+      { lines: [{ itemId: wax, quantity: 2 }], trackingNumber: 'A' }, { userId: ADMIN });
+    expect(first.success).toBe(true);
+
+    // Relaxing the guard must not relax the over-ship protection it exists for:
+    // the array is now present and non-empty, so the strict `$size` branch applies.
+    const second = await shipmentService.createShipment(order._id.toString(),
+      { lines: [{ itemId: wax, quantity: 1 }], trackingNumber: 'B' }, { userId: ADMIN });
+    expect(second.success).toBe(false);
+    expect(second.message).toMatch(/only 0 left to ship/);
+  });
+
   it('ships a chosen subset and leaves the order shipped with a remainder', async () => {
     const order = await seedOrder();
     const [wax] = itemIds(order);

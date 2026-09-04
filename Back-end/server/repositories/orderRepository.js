@@ -432,7 +432,7 @@ class OrderRepository extends BaseRepository {
    * This is the over-ship guard, and it has to be a compare-and-set rather than a
    * read-then-write: two admins shipping the same order at the same time each read
    * "1 unit left", each validate happily, and each push — committing two units of a
-   * one-unit line. The `$size` precondition means the second push matches no document,
+   * one-unit line. The array-length precondition means the second push matches no document,
    * so the caller re-reads and re-validates against the parcel that actually landed.
    *
    * @param {string} orderId
@@ -476,8 +476,18 @@ class OrderRepository extends BaseRepository {
       for (const [k, v] of Object.entries(mirror)) if (v !== undefined) set[k] = v;
       if (Object.keys(set).length) update.$set = set;
     }
+    /*
+      ⚠️ `arrayUnchanged`, NOT a bare `$size` — see its note at the top of this file.
+      `{ shipments: { $size: 0 } }` matches no order written before `shipments` was
+      added to the schema, because those documents have no such key. That is every
+      pre-split-shipment order in production, so the FIRST parcel on each of them
+      failed all four attempts and surfaced as "Another parcel was created for this
+      order at the same time" — a phantom race on an order nobody else was touching.
+      The identical bug was caught and fixed for `cancellations`; this call site was
+      missed because its guard predates the helper.
+    */
     return Order.findOneAndUpdate(
-      { _id: orderId, shipments: { $size: expectedShipmentCount } },
+      { _id: orderId, ...arrayUnchanged('shipments', expectedShipmentCount) },
       update,
       { new: true },
     );
