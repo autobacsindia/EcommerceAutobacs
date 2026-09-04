@@ -216,12 +216,40 @@ export default async function RootLayout({
         <link rel="preconnect" href="https://img.autobacsindia.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
 
+        {/* ── Third-party tags: raw <script>, deliberately NOT next/script ─────
+            next/script emits EVERY strategy — including beforeInteractive — as a
+            JSON string inside `(self.__next_s=…).push([…])`, which the Next
+            runtime replays once the client bundle boots. In the App Router
+            "beforeInteractive" means before HYDRATION, not "in the HTML head".
+            Measured on prod 2026-09-04, that had two costs:
+
+              1. The served HTML contained NO Google tag at all — only the
+                 <noscript> iframe below was real markup. Google's tag-coverage
+                 report therefore listed live, correctly-firing pages as
+                 "untagged", and so would any other install checker.
+              2. A visitor who left before the bundle executed was never counted,
+                 so Ads silently under-reported the fastest bounces.
+
+            Raw <script> tags run during HTML parse, which fixes both. They cost
+            no render-blocking time: each inline snippet is a few hundred bytes
+            and every library they pull (gtm.js, gtag.js, fbevents.js) is async.
+
+            ⚠ Do NOT "modernise" these back to <Script> — that is the regression.
+            next/script stays in use further down for Razorpay, which genuinely
+            wants lazy loading and is not subject to any coverage report.
+
+            nonce={nonce} is REQUIRED on every one — the strict nonce CSP
+            (lib/csp.ts) blocks any unnonce'd script; 'strict-dynamic' then
+            propagates trust to whatever they inject. Every value interpolated
+            below is shape-validated by its isXEnabled guard (GTM-…, AW-digits,
+            digits) so none of them can break out of the snippet.
+
+            ORDER MATTERS: each queue must be created before the loader that
+            drains it. Keep every queue init immediately above its loader. */}
+
         {/* Google Tag Manager. Rendered only when a real container id is set
             (isGtmEnabled), so Preview/local builds never load a container whose
-            tags would fire into live datasets. nonce={nonce} is REQUIRED — the
-            strict nonce-based CSP (middleware.ts) blocks any unnonce'd inline
-            script; 'strict-dynamic' then propagates trust to every tag GTM
-            injects, and GTM copies the nonce onto them as well.
+            tags would fire into live datasets.
 
             GTM does NOT own conversion tracking here: the Google Ads tag below
             and the Meta Pixel are loaded directly and fire their own events. A
@@ -229,21 +257,21 @@ export default async function RootLayout({
             order twice — see lib/gtm.ts. */}
         {isGtmEnabled && (
           <>
-            {/* GTM's queue must exist before React hydrates, not merely before
-                gtm.js lands: page-mount effects fire the moment a route
-                hydrates, and a push against an undefined array throws inside
-                the effect. The array is a queue — GTM drains whatever
-                accumulated before it loaded, so nothing is lost by loading the
-                container itself afterInteractive. (The Google Ads stub below
-                learned this the expensive way: an afterInteractive stub dropped
-                every mount-time event SILENTLY.)
+            {/* GTM's queue must exist before anything pushes to it: page-mount
+                effects fire the moment a route hydrates, and a push against an
+                undefined array throws inside the effect. The array is a queue —
+                GTM drains whatever accumulated before gtm.js landed, so nothing
+                is lost by the container itself arriving later.
 
                 Note the name: `gtmDataLayer`, NOT the default `dataLayer`. See
                 lib/gtm.ts — sharing one array let GTM replay gtag's `config`
                 and triple the page_view beacons. */}
-            <Script id="gtm-datalayer" strategy="beforeInteractive" nonce={nonce}>
-              {`window.${GTM_DATA_LAYER} = window.${GTM_DATA_LAYER} || [];`}
-            </Script>
+            <script
+              nonce={nonce}
+              dangerouslySetInnerHTML={{
+                __html: `window.${GTM_DATA_LAYER} = window.${GTM_DATA_LAYER} || [];`,
+              }}
+            />
             {/* Google's stock snippet, plus the `j.setAttribute('nonce', …)`
                 line Google documents for nonce-based CSPs. Without it the
                 injected gtm.js carries no nonce and survives only on
@@ -253,52 +281,52 @@ export default async function RootLayout({
                 without 'strict-dynamic' support, and blocked inline script
                 fails silently. The nonce is already public in the page source,
                 so interpolating it here reveals nothing. */}
-            <Script id="gtm-init" strategy="afterInteractive" nonce={nonce}>
-              {`(function(w,d,s,l,i,n){w[l]=w[l]||[];w[l].push({'gtm.start':
+            <script
+              nonce={nonce}
+              dangerouslySetInnerHTML={{
+                __html: `(function(w,d,s,l,i,n){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
 j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;if(n)j.setAttribute('nonce',n);
 f.parentNode.insertBefore(j,f);
-})(window,document,'script','${GTM_DATA_LAYER}','${GTM_ID}',${JSON.stringify(nonce ?? '')});`}
-            </Script>
+})(window,document,'script','${GTM_DATA_LAYER}','${GTM_ID}',${JSON.stringify(nonce ?? '')});`,
+              }}
+            />
           </>
         )}
 
         {/* Google Tag (gtag.js) for Google Ads conversion tracking.
             Rendered only when a real AW- id is configured (isGoogleAdsEnabled),
             so unset/preview environments never load a broken tag or fire real
-            conversions. nonce={nonce} is REQUIRED — the strict nonce-based CSP
-            (middleware.ts) would block these scripts otherwise; 'strict-dynamic'
-            then propagates trust to the sub-scripts gtag loads. The conversion
-            event itself fires from app/order/[orderId]/success (PurchaseTracker). */}
+            conversions. The conversion event itself fires from
+            app/order/[orderId]/success (PurchaseTracker). */}
         {isGoogleAdsEnabled && (
           <>
-            {/* The stub + config MUST run beforeInteractive, i.e. before React
-                hydrates. Page-mount effects fire events the moment a route
-                hydrates (products/[slug] sends view_item from SSR'd data), and
-                with an afterInteractive stub `window.gtag` did not exist yet at
-                that point — every such event was dropped SILENTLY. Events that
-                happen a beat later (begin_checkout, which waits on the cart
-                fetch) got through, which is exactly the half-working funnel we
-                saw in Google Ads.
+            {/* The stub + config MUST exist before any app code calls gtag().
+                Page-mount effects fire events the moment a route hydrates
+                (products/[slug] sends view_item from SSR'd data); when the stub
+                did not exist yet at that point, every such event was dropped
+                SILENTLY. Events that happen a beat later (begin_checkout, which
+                waits on the cart fetch) got through — which is exactly the
+                half-working funnel we once saw in Google Ads.
 
-                The library itself stays afterInteractive: the stub queues
-                commands into window.dataLayer and gtag.js drains that queue in
-                order when it lands, so nothing is lost by loading it late — and
-                'config' is always queued ahead of any event. */}
-            <Script id="gtag-init" strategy="beforeInteractive" nonce={nonce}>
-              {`
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                window.gtag = gtag;
-                gtag('js', new Date());
-                gtag('config', '${GOOGLE_ADS_ID}');
-              `}
-            </Script>
-            <Script
-              id="gtag-src"
+                The library itself stays async: the stub queues commands into
+                window.dataLayer and gtag.js drains that queue in order when it
+                lands, so nothing is lost — and 'config' is always queued ahead
+                of any event. */}
+            <script
+              nonce={nonce}
+              dangerouslySetInnerHTML={{
+                __html: `window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+window.gtag = gtag;
+gtag('js', new Date());
+gtag('config', '${GOOGLE_ADS_ID}');`,
+              }}
+            />
+            <script
+              async
               src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`}
-              strategy="afterInteractive"
               nonce={nonce}
             />
           </>
@@ -306,25 +334,28 @@ f.parentNode.insertBefore(j,f);
 
         {/* Meta Pixel base. Rendered only when a real numeric pixel id is set
             (isMetaPixelEnabled), so unset/preview builds never load it or fire
-            events into the live dataset. nonce={nonce} is REQUIRED for the strict
-            CSP; 'strict-dynamic' then trusts the fbevents.js the snippet injects.
-            Fires PageView here; ViewContent/AddToCart/Purchase fire from their
-            pages via lib/metaPixel.ts (Purchase is deduped with server CAPI). */}
+            events into the live dataset. 'strict-dynamic' trusts the fbevents.js
+            the snippet injects. Fires PageView here; ViewContent/AddToCart/
+            Purchase fire from their pages via lib/metaPixel.ts (Purchase is
+            deduped with server CAPI). Meta's own "pixel not detected" diagnostic
+            reads the served HTML too, which is the other half of why this is a
+            raw <script>. */}
         {isMetaPixelEnabled && (
-          <Script id="meta-pixel-init" strategy="afterInteractive" nonce={nonce}>
-            {`
-              !function(f,b,e,v,n,t,s)
-              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-              n.queue=[];t=b.createElement(e);t.async=!0;
-              t.src=v;s=b.getElementsByTagName(e)[0];
-              s.parentNode.insertBefore(t,s)}(window,document,'script',
-              'https://connect.facebook.net/en_US/fbevents.js');
-              fbq('init', '${META_PIXEL_ID}');
-              fbq('track', 'PageView');
-            `}
-          </Script>
+          <script
+            nonce={nonce}
+            dangerouslySetInnerHTML={{
+              __html: `!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window,document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '${META_PIXEL_ID}');
+fbq('track', 'PageView');`,
+            }}
+          />
         )}
       </head>
       <body

@@ -258,11 +258,6 @@ export default function VehicleModelListing({
     router.push(buildUrl(1, { category: categorySlug }));
   };
 
-  const goToPage = (page: number) => {
-    if (page < 1 || page > totalPages || page === currentPage) return;
-    router.push(buildUrl(page));
-  };
-
   // Products arrive already filtered + paginated from the API.
   const safeTotal = totalProducts || 0;
   const totalPages = Math.max(0, Math.ceil(safeTotal / ITEMS_PER_PAGE));
@@ -323,7 +318,7 @@ export default function VehicleModelListing({
   );
 
   const paginationBtnBase =
-    'px-4 py-2 rounded-sm border font-display font-bold text-sm uppercase tracking-widest transition-colors';
+    'inline-flex items-center px-4 py-2 rounded-sm border font-display font-bold text-sm uppercase tracking-widest transition-colors';
   const paginationBtnActive = `${paginationBtnBase} bg-gold text-obsidian border-gold`;
   const paginationBtnEnabled = `${paginationBtnBase} bg-obsidian-raised text-ink/70 border-hairline hover:border-gold hover:text-ink`;
   const paginationBtnDisabled = `${paginationBtnBase} bg-obsidian-raised text-ink-muted border-hairline cursor-not-allowed`;
@@ -484,33 +479,44 @@ export default function VehicleModelListing({
                 {/* Pagination */}
                 {totalPages > 1 && (
                   <div className="mt-12 flex items-center justify-center">
+                    {/* Real <a href> links, NOT router.push buttons. Pagination that
+                        exists only as an onClick has no crawl path at all: pages 2..n of
+                        every model listing were unreachable to a crawler and are absent
+                        from sitemap.xml, which is why Google knew /model/<slug>/page/3
+                        only as a legacy WordPress URL. <Link> still navigates
+                        client-side, so nothing about the UX changes. The out-of-range
+                        ends stay non-links (a disabled <button> had no href either). */}
                     <nav className="flex items-center gap-2" aria-label="Pagination">
-                      <button
-                        onClick={() => goToPage(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className={currentPage === 1 ? paginationBtnDisabled : paginationBtnEnabled}
-                      >
-                        Previous
-                      </button>
+                      {currentPage <= 1 ? (
+                        <span aria-disabled="true" className={paginationBtnDisabled}>
+                          Previous
+                        </span>
+                      ) : (
+                        <Link href={buildUrl(currentPage - 1)} className={paginationBtnEnabled}>
+                          Previous
+                        </Link>
+                      )}
 
                       {pageWindow.map((pageNum) => (
-                        <button
+                        <Link
                           key={pageNum}
-                          onClick={() => goToPage(pageNum)}
+                          href={buildUrl(pageNum)}
                           aria-current={currentPage === pageNum ? 'page' : undefined}
                           className={currentPage === pageNum ? paginationBtnActive : paginationBtnEnabled}
                         >
                           {pageNum}
-                        </button>
+                        </Link>
                       ))}
 
-                      <button
-                        onClick={() => goToPage(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className={currentPage === totalPages ? paginationBtnDisabled : paginationBtnEnabled}
-                      >
-                        Next
-                      </button>
+                      {currentPage >= totalPages ? (
+                        <span aria-disabled="true" className={paginationBtnDisabled}>
+                          Next
+                        </span>
+                      ) : (
+                        <Link href={buildUrl(currentPage + 1)} className={paginationBtnEnabled}>
+                          Next
+                        </Link>
+                      )}
                     </nav>
                   </div>
                 )}
