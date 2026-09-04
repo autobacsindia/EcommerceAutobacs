@@ -1,5 +1,6 @@
 import express from "express";
 import brandRepository from "../repositories/brandRepository.js";
+import productRepository from "../repositories/productRepository.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
@@ -94,6 +95,44 @@ router.get("/", httpCache('BRAND_LIST'), asyncHandler(async (req, res) => {
       hasNext: page < Math.ceil(total / limit),
       hasPrev: page > 1
     }
+  });
+}));
+
+// @route   GET /brands/sitemap
+// @desc    Lightweight slug+updatedAt list for sitemap generation
+// @access  Public
+// NOTE: must precede the dynamic "/:id" route so "sitemap" isn't captured as an id.
+//
+// Only brands that would make a page worth indexing:
+//   - isActive, has a slug, not seo.noindex  → the same visibility rules as
+//     products/categories
+//   - AND carries at least one active product.
+//
+// That last filter is the reason this can't just reuse the brand list.
+// /brands/:slug renders 200 for ANY brand document, product count irrelevant, so
+// without it the sitemap would submit ~44 empty brand pages — thin content we'd
+// be asking Google to crawl. `Product.brand` is a denormalised NAME string, not a
+// ref, so the join is by name, exactly as productService.getBrandsWithCounts()
+// already does it.
+router.get("/sitemap", asyncHandler(async (_req, res) => {
+  const brands = await brandRepository
+    .find({
+      isActive: true,
+      slug: { $exists: true, $nin: [null, ''] },
+      'seo.noindex': { $ne: true },
+    })
+    .select('name slug updatedAt')
+    .sort({ updatedAt: -1 })
+    .lean();
+
+  const counts = await productRepository.countProductsByBrand(brands.map((b) => b.name));
+  const withProducts = new Set(counts.filter((c) => c.count > 0).map((c) => c._id));
+
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.json({
+    brands: brands
+      .filter((b) => withProducts.has(b.name))
+      .map(({ slug, updatedAt }) => ({ slug, updatedAt })),
   });
 }));
 

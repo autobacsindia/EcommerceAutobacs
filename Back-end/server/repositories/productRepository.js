@@ -20,8 +20,18 @@ import { QUERY_TIMEOUTS } from '../config/db.js';
 class ProductRepository {
   /**
    * Sitemap data: active, indexable products with a minimal projection
-   * (slug + updatedAt only). Excludes seo.noindex products. Paginated for the
-   * sharded sitemap. The pre-find hook already scopes to deletedAt: null.
+   * (slug + updatedAt only). Excludes seo.noindex products. The pre-find hook
+   * already scopes to deletedAt: null.
+   *
+   * ⚠️ The sort MUST stay total — `updatedAt` alone is not unique, and the
+   * caller pages this endpoint with skip/limit. With a non-total sort MongoDB
+   * is free to order tied documents differently per query, so a document can
+   * land on page 2 in one call and page 3 in the next: it is returned twice and
+   * another is never returned at all. On production that silently cost the
+   * sitemap 46 of 931 products — 931 rows came back across 4 pages carrying
+   * only 885 distinct slugs. Bulk writes stamp many products with an identical
+   * `updatedAt`, so ties are the norm here, not an edge case. `_id` is unique,
+   * which makes the ordering total and skip/limit deterministic.
    */
   async findSitemap({ limit = 250, skip = 0 } = {}) {
     return Product.find({
@@ -30,7 +40,7 @@ class ProductRepository {
       'seo.noindex': { $ne: true },
     })
       .select('slug updatedAt')
-      .sort({ updatedAt: -1 })
+      .sort({ updatedAt: -1, _id: 1 })
       .skip(skip)
       .limit(limit)
       .lean()
