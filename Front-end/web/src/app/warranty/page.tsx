@@ -1,5 +1,14 @@
+import type { Metadata } from 'next';
 import React from 'react';
+import { buildPageMetadata } from '@/lib/pageSeo';
 import Link from 'next/link';
+
+// Admin-managed via /admin/seo (override -> this fallback -> site default).
+export const generateMetadata = (): Promise<Metadata> =>
+  buildPageMetadata('/warranty', {
+    title: 'Warranty',
+    description: 'Warranty coverage and claims for products purchased from Autobacs India.',
+  });
 
 export default function WarrantyPage() {
   return (

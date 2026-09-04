@@ -302,6 +302,19 @@ class ProductRepository {
   }
 
   /**
+   * Which of the given vehicle ids have at least one active product mapped to
+   * them. Drives the vehicle sitemap, so a vehicle with no products is never
+   * submitted as an empty listing page.
+   */
+  async distinctCompatibleVehicles(vehicleIds) {
+    if (!vehicleIds?.length) return [];
+    return Product.distinct('compatibleVehicles', {
+      compatibleVehicles: { $in: vehicleIds },
+      isActive: true,
+    }).maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
+  /**
    * Count products by brand
    */
   async countProductsByBrand(brandNames) {

@@ -54,6 +54,26 @@ export const STATIC_PAGES = [
   { path: '/terms', label: 'Terms & Conditions', group: 'Legal',
     defaultTitle: 'Terms & Conditions',
     defaultDescription: 'The terms and conditions governing use of the Autobacs India website and services.' },
+
+  // Catalogue & content
+  { path: '/offers', label: 'Offers', group: 'Catalogue',
+    defaultTitle: 'Offers & Deals',
+    defaultDescription: 'Current deals and discounted prices on automotive accessories, body kits and performance parts at Autobacs India.' },
+  { path: '/super-cars', label: 'Supercars', group: 'Catalogue',
+    defaultTitle: 'Supercar Upgrades',
+    defaultDescription: 'Essential upgrades for supercar owners — performance exhausts, suspension, brakes, aerodynamics and interior work from Autobacs India.' },
+  { path: '/consultation', label: 'Consultation', group: 'Company',
+    defaultTitle: 'Book a Consultation',
+    defaultDescription: 'Build your upgrade profile and get a personalised consultation from the Autobacs India team on parts, fitment and custom builds.' },
+  { path: '/media', label: 'Press & Media', group: 'Company',
+    defaultTitle: 'Press & Media',
+    defaultDescription: 'Autobacs India in the press — coverage of our $1M revenue milestone, structured import model and the premium automotive aftermarket.' },
+  { path: '/blog/gallery', label: 'Photo Gallery', group: 'Content',
+    defaultTitle: 'Photo Gallery',
+    defaultDescription: 'Photographs of completed builds, fitment work and premium automotive accessories from Autobacs India.' },
+  { path: '/blog/videos', label: 'Videos', group: 'Content',
+    defaultTitle: 'Videos',
+    defaultDescription: 'Video walkthroughs of builds, product fitment and premium automotive accessories from Autobacs India.' },
 ];
 
 /** Quick lookup by normalized path. */

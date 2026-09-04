@@ -1,5 +1,6 @@
 import express from "express";
 import vehicleRepository from "../repositories/vehicleRepository.js";
+import productRepository from "../repositories/productRepository.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
@@ -91,6 +92,40 @@ router.get('/slug/:slug', asyncHandler(async (req, res) => {
   res.json({
     success: true,
     vehicle
+  });
+}));
+
+// @route   GET /vehicles/sitemap
+// @desc    Lightweight slug+updatedAt list for sitemap generation
+// @access  Public
+//
+// Only vehicles that have at least one active compatible product. /model/:slug
+// 404s solely on a missing Vehicle document, so a vehicle with no products
+// still renders — an empty listing page titled "<Vehicle> Accessories". Same
+// call as the brands sitemap: submitting those asks Google to crawl pages with
+// nothing on them.
+//
+// `compatibleVehicles` is a real ObjectId ref array (unlike Product.brand,
+// which is a denormalised name string), so this joins on ids — which is also
+// what the listing page itself filters on, so the sitemap and the page can't
+// disagree about which vehicles have products.
+router.get('/sitemap', asyncHandler(async (_req, res) => {
+  const vehicles = await vehicleRepository
+    .find({ isActive: true, slug: { $exists: true, $nin: [null, ''] } })
+    .select('slug updatedAt')
+    .sort({ updatedAt: -1 })
+    .lean();
+
+  const withProducts = await productRepository.distinctCompatibleVehicles(
+    vehicles.map((v) => v._id),
+  );
+  const stocked = new Set(withProducts.map((id) => String(id)));
+
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.json({
+    vehicles: vehicles
+      .filter((v) => stocked.has(String(v._id)))
+      .map(({ slug, updatedAt }) => ({ slug, updatedAt })),
   });
 }));
 

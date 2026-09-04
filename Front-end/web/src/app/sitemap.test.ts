@@ -25,6 +25,7 @@ const PRODUCTS = { products: [{ slug: 'led-bar', updatedAt: '2026-08-01T00:00:00
 const CATEGORIES = { categories: [{ slug: 'lighting', updatedAt: '2026-08-02T00:00:00.000Z' }] }
 const BRANDS = { brands: [{ slug: 'auxbeam', updatedAt: '2026-08-03T00:00:00.000Z' }] }
 const ARTICLES = { data: [{ slug: 'thar-roxx-accessories', publishedAt: '2026-08-04T00:00:00.000Z' }] }
+const VEHICLES = { vehicles: [{ slug: 'mahindra-thar-roxx', updatedAt: '2026-08-05T00:00:00.000Z' }] }
 
 /** Route each upstream path to a canned body; `overrides` can fail one source. */
 function mockApi(overrides: Record<string, { ok?: boolean; body?: unknown }> = {}) {
@@ -37,6 +38,7 @@ function mockApi(overrides: Record<string, { ok?: boolean; body?: unknown }> = {
       if (match('/products/sitemap')) return overrides.products ?? { body: PRODUCTS }
       if (match('/categories/sitemap')) return overrides.categories ?? { body: CATEGORIES }
       if (match('/brands/sitemap')) return overrides.brands ?? { body: BRANDS }
+      if (match('/vehicles/sitemap')) return overrides.vehicles ?? { body: VEHICLES }
       if (match('/media/articles/sitemap')) return overrides.articles ?? { body: ARTICLES }
       return { body: {} }
     }
@@ -73,8 +75,15 @@ describe('sitemap contents', () => {
     expect(found).toContain(`${BASE}/products/led-bar`)
     expect(found).toContain(`${BASE}/categories/lighting`)
     expect(found).toContain(`${BASE}/brands/auxbeam`)
+    expect(found).toContain(`${BASE}/model/mahindra-thar-roxx`)
     // Blog posts live at the site root for WordPress permalink parity (ADR-005).
     expect(found).toContain(`${BASE}/thar-roxx-accessories`)
+  })
+
+  it('submits /model/[slug] but NOT the /vehicles browse tree', async () => {
+    const found = await urls()
+    expect(found).toContain(`${BASE}/model/mahindra-thar-roxx`)
+    expect(found.some((u) => u.startsWith(`${BASE}/vehicles`))).toBe(false)
   })
 
   it('emits the home page without a trailing slash', async () => {
@@ -125,6 +134,7 @@ describe('upstream failure', () => {
     expect(found).toContain(`${BASE}/products/led-bar`)
     expect(found).toContain(`${BASE}/categories/lighting`)
     expect(found).toContain(`${BASE}/brands/auxbeam`)
+    expect(found).toContain(`${BASE}/model/mahindra-thar-roxx`)
     expect(found).not.toContain(`${BASE}/thar-roxx-accessories`)
   })
 
@@ -134,6 +144,7 @@ describe('upstream failure', () => {
       products: { ok: false },
       categories: { ok: false },
       brands: { ok: false },
+      vehicles: { ok: false },
       articles: { ok: false },
     })
     const found = await urls()

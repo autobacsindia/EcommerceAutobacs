@@ -1,6 +1,15 @@
+import type { Metadata } from 'next';
 import React from 'react';
+import { buildPageMetadata } from '@/lib/pageSeo';
 import Link from 'next/link';
 import { RETURN_WINDOW_DAYS } from '@/lib/constants';
+
+// Admin-managed via /admin/seo (override -> this fallback -> site default).
+export const generateMetadata = (): Promise<Metadata> =>
+  buildPageMetadata('/help', {
+    title: 'Help Centre',
+    description: 'Help and support resources for shopping with Autobacs India.',
+  });
 
 export default function HelpPage() {
   return (
