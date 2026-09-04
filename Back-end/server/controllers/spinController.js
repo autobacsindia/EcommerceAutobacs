@@ -375,6 +375,15 @@ export const listPrizes = async (req, res) => {
 
 export const createPrize = async (req, res) => {
   const body = { ...req.body, campaign: req.params.id };
+  // Unlimited stock is the guaranteed prize's privilege alone. Omitting the total on an
+  // ordinary goodie used to leave stockTotal AND stockRemaining null, which the draw
+  // reads as infinite — a silent second floor prize that never runs out.
+  if (body.stockTotal == null && !body.isFloorPrize) {
+    throw new AppError(
+      'Enter how many of this goodie you have. Only the guaranteed prize can have unlimited stock.',
+      422, { expose: true },
+    );
+  }
   // Stock starts full. Accepting a client-sent stockRemaining would let a typo award
   // more units than exist.
   if (body.stockTotal != null) body.stockRemaining = body.stockTotal;
@@ -443,11 +452,33 @@ export const updatePrize = async (req, res) => {
       422, { expose: true },
     );
   }
-  // Restock semantics: raising the total raises what is left by the same amount, rather
-  // than resetting it and silently discarding awarded history.
-  if (patch.stockTotal != null && existing.stockTotal != null) {
-    const delta = patch.stockTotal - existing.stockTotal;
-    patch.stockRemaining = Math.max(0, (existing.stockRemaining || 0) + delta);
+  // Unlimited stock belongs to the guaranteed prize alone — the same rule the publish
+  // gate enforces, repeated here because an edit on a live campaign never passes it.
+  // Without this, clearing the stock field on an ordinary goodie turns it into a second
+  // infinite prize that the draw will award forever.
+  if ('stockTotal' in patch && patch.stockTotal === null && !willBeFloor) {
+    throw new AppError(
+      'Only the guaranteed prize can have unlimited stock. Enter how many of this goodie you have.',
+      422, { expose: true },
+    );
+  }
+  // Restock semantics. `stockRemaining` is server-owned, so it is ALWAYS re-derived
+  // here — never carried over — because a stockTotal that does not imply a remaining
+  // count is the bug this replaces: a prize created with no total has both fields null
+  // (= unlimited to the draw), and the old delta-only branch left it that way, so
+  // setting a total for the first time silently produced an infinite goodie.
+  if (patch.stockTotal != null) {
+    patch.stockRemaining = existing.stockTotal != null
+      // Raising the total raises what is left by the same amount, rather than resetting
+      // it and silently discarding awarded history.
+      ? Math.max(0, (existing.stockRemaining || 0) + (patch.stockTotal - existing.stockTotal))
+      // No previous total means no delta to apply: what is left is the new total minus
+      // whatever has already gone out.
+      : Math.max(0, patch.stockTotal - (existing.stockAwarded || 0));
+  } else if ('stockTotal' in patch && patch.stockTotal === null) {
+    // Floor prize going unlimited: both fields must be null together, or the draw reads
+    // a finite count off a prize the publish gate believes is infinite.
+    patch.stockRemaining = null;
   }
   delete patch.stockAwarded;
   delete patch.campaign;

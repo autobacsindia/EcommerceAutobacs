@@ -36,6 +36,21 @@ import SpinModal from './SpinModal';
  *     someone who has already had their prize. The inline card holds it instead.
  */
 
+/**
+ * The one prize disclaimer that is true of EVERY campaign, so it is code rather than
+ * the admin-editable `terms` field a busy operator can leave blank.
+ *
+ * "Subject to availability" is not decoration here: the draw claims a stock unit
+ * atomically, but a claimed unit can still turn out to be damaged, mispicked or
+ * short-shipped at the packing bench, and a customer who was shown a specific goodie on
+ * a spinning wheel has formed a specific expectation. Naming the substitution up front
+ * — at equal or greater value — is what keeps that honest.
+ */
+export const PRIZE_DISCLAIMER =
+  'All prizes are subject to availability. If an item is unavailable at the time of '
+  + 'packing, Autobacs India may substitute a goodie of equal or greater value. Prizes '
+  + 'carry no cash alternative and are not transferable or exchangeable.';
+
 type Phase = 'checking' | 'pending' | 'ready' | 'spinning' | 'revealed' | 'none';
 
 interface PrizeSnapshot {
@@ -396,9 +411,20 @@ export default function SpinSection({ orderId }: { orderId: string }) {
             </div>
           )}
 
-          {terms && phase !== 'revealed' && (
-            <p className="mx-auto mt-4 max-w-md text-center text-[10px] leading-relaxed text-[#5d7a9e]">{terms}</p>
-          )}
+          {/*
+            The availability/substitution clause is STANDING copy, not the admin's
+            `terms` field. It is the one disclaimer that is true of every campaign — a
+            goodie can be out of stock or damaged at pack time whatever the promotion
+            says — so it must not be something an operator can leave blank. `terms`
+            renders below it for campaign-specific conditions.
+
+            Shown in every phase, revealed included: "you won a dashcam" is precisely the
+            moment a customer forms an expectation about what will arrive.
+          */}
+          <div className="mx-auto mt-4 max-w-md text-center text-[10px] leading-relaxed text-[#5d7a9e]">
+            <p>{PRIZE_DISCLAIMER}</p>
+            {terms && <p className="mt-2">{terms}</p>}
+          </div>
         </>
       )}
         </section>

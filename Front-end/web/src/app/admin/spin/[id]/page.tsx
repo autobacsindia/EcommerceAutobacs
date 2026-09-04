@@ -205,17 +205,34 @@ export default function SpinCampaignDetailPage() {
   };
 
   /**
-   * Save an EXISTING prize.
+   * Save an EXISTING prize, stock included.
    *
-   * Deliberately does not send stock: `stockRemaining` is server-owned (the validator
-   * rejects it outright) and `stockTotal` has restock semantics of its own, so stock
-   * stays with the Restock action rather than being silently rewritten by an edit that
-   * was only meant to change a discount. Structural changes the backend refuses on a
-   * live campaign (swapping the prize type, moving the guaranteed flag) surface as the
-   * server's own message rather than being guessed at here.
+   * Stock used to be excluded here and reachable only through a separate `prompt()`
+   * dialog — while this form still rendered an editable stock box, hydrated from the
+   * prize and then quietly dropped on save. An operator changed the number, saw
+   * "Prize updated", and the stock was untouched. One editable field, one write path.
+   *
+   * Only `stockTotal` is sent: `stockRemaining` is server-owned (the validator rejects
+   * it outright) and the backend applies restock semantics — raising the total raises
+   * what is left by the same amount rather than discarding awarded history. The floor
+   * prize is unlimited by definition, so it sends no stock at all. Structural changes
+   * the backend refuses on a live campaign (swapping the prize type, moving the
+   * guaranteed flag) surface as the server's own message rather than being guessed at
+   * here.
    */
+  /**
+   * Shared stock precondition for both save paths. Only the guaranteed prize may be
+   * unlimited; the server returns 422 for anything else, and saying so here means the
+   * operator finds out beside the field rather than in a banner after a round trip.
+   */
+  const stockIsMissing = () => !prizeForm.isFloorPrize && prizeForm.stockTotal == null;
+
   const updatePrizeFields = async () => {
     if (!editingPrizeId) return;
+    if (stockIsMissing()) {
+      setError('Enter how many of this goodie you have. Only the guaranteed prize can be unlimited.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -225,6 +242,9 @@ export default function SpinCampaignDetailPage() {
         sku: prizeForm.kind === 'goodie' ? prizeForm.sku.trim() : null,
         minOrderValuePaise: Math.round(Number(prizeForm.minOrderValueRupees || 0) * 100),
         maxWinsPerDay: prizeForm.maxWinsPerDay,
+        // The guaranteed prize must stay unlimited, so it is the one prize that never
+        // sends a total — the backend rejects a stocked floor prize outright.
+        ...(prizeForm.isFloorPrize ? {} : { stockTotal: Number(prizeForm.stockTotal) }),
         ...(prizeForm.kind === 'coupon' ? {
           couponType: prizeForm.couponType,
           couponValue: Number(prizeForm.couponValue),
@@ -245,6 +265,10 @@ export default function SpinCampaignDetailPage() {
   };
 
   const addPrize = async () => {
+    if (stockIsMissing()) {
+      setError('Enter how many of this goodie you have. Only the guaranteed prize can be unlimited.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -255,7 +279,7 @@ export default function SpinCampaignDetailPage() {
         sku: prizeForm.kind === 'goodie' ? prizeForm.sku.trim() : null,
         // The floor prize is the guaranteed win, so it must be unlimited: sending null
         // stock is what makes "everyone wins" true once the goodies run out.
-        stockTotal: prizeForm.isFloorPrize ? null : Number(prizeForm.stockTotal ?? 0),
+        stockTotal: prizeForm.isFloorPrize ? null : Number(prizeForm.stockTotal),
         minOrderValuePaise: Math.round(Number(prizeForm.minOrderValueRupees || 0) * 100),
         maxWinsPerDay: prizeForm.maxWinsPerDay,
         isFloorPrize: prizeForm.isFloorPrize,
@@ -273,20 +297,6 @@ export default function SpinCampaignDetailPage() {
       await load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to add prize');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const restock = async (prize: SpinPrize, newTotal: number) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await apiClient.put(API_ENDPOINTS.SPIN_PRIZE_BY_ID(prize._id), { stockTotal: newTotal });
-      setMsg(`${prize.name} restocked.`);
-      await load();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to restock');
     } finally {
       setBusy(false);
     }
@@ -403,6 +413,9 @@ export default function SpinCampaignDetailPage() {
   if (loading) return <div className="p-6 text-gray-500">Loading…</div>;
   if (!campaign) return <div className="p-6 text-gray-500">Campaign not found.</div>;
 
+  // The row behind an open edit form, so the stock box can show what is actually left
+  // and what has already gone out — a bare total is not enough to restock confidently.
+  const editingPrize = editingPrizeId ? prizes.find((p) => p._id === editingPrizeId) ?? null : null;
   const floor = prizes.find((p) => p.isFloorPrize && p.active);
   const goodies = prizes.filter((p) => !p.isFloorPrize && p.active);
 
@@ -715,9 +728,8 @@ export default function SpinCampaignDetailPage() {
             </h3>
             {editingPrizeId && (
               <p className="sm:col-span-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                Stock is changed with <strong>Restock</strong>, not here. Coupons already sent to
-                past winners keep the value they were issued with — this only changes what future
-                winners get.
+                Coupons already sent to past winners keep the value they were issued with —
+                this only changes what future winners get.
               </p>
             )}
             <label className="text-sm">
@@ -829,13 +841,39 @@ export default function SpinCampaignDetailPage() {
             )}
             {!prizeForm.isFloorPrize && (
               <label className="text-sm">
-                <span className="mb-1 block font-medium text-gray-700">How many do you have?</span>
-                <input type="number" min={0} value={prizeForm.stockTotal ?? 0}
-                  onChange={(e) => setPrizeForm({ ...prizeForm, stockTotal: Number(e.target.value) })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2" />
-                <span className="mt-1 block text-xs text-gray-500">
-                  This also sets the odds — rarer items are won less often, automatically.
+                <span className="mb-1 block font-medium text-gray-700">
+                  {editingPrize ? 'How many do you have in total?' : 'How many do you have?'}
                 </span>
+                {/* min is the awarded count, not 0: the server refuses a total below what
+                    has already left the building, so the browser should say so first. */}
+                <input type="number" min={editingPrize?.stockAwarded ?? 0} value={prizeForm.stockTotal ?? ''}
+                  placeholder="e.g. 50"
+                  onChange={(e) => setPrizeForm({
+                    ...prizeForm,
+                    // Empty stays NULL, never 0. Rendering a null total as "0" would let a
+                    // save that never touched this box silently take the prize out of the
+                    // draw; null is refused loudly by saveStock() below instead.
+                    stockTotal: e.target.value === '' ? null : Number(e.target.value),
+                  })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2" />
+                {editingPrize && editingPrize.stockTotal == null && (
+                  <span className="mt-1 block rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                    ⚠️ This goodie has <strong>no stock limit</strong>, so the wheel can award it
+                    forever. Enter how many you have.
+                  </span>
+                )}
+                {editingPrize ? (
+                  <span className="mt-1 block text-xs text-gray-500">
+                    <strong>{editingPrize.stockRemaining ?? 0} left</strong> ·{' '}
+                    {editingPrize.stockAwarded} already given. Raising this total adds the
+                    difference to what is left — it never resets the count already awarded, and
+                    cannot go below {editingPrize.stockAwarded}.
+                  </span>
+                ) : (
+                  <span className="mt-1 block text-xs text-gray-500">
+                    This also sets the odds — rarer items are won less often, automatically.
+                  </span>
+                )}
               </label>
             )}
             <label className="text-sm">
@@ -921,12 +959,8 @@ export default function SpinCampaignDetailPage() {
                       {row ? `${(row.probability * 100).toFixed(1)}%` : '—'}
                     </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
-                      <button
-                        onClick={() => {
-                          const v = prompt(`New TOTAL stock for ${p.name} (currently ${p.stockTotal}):`, String(p.stockTotal ?? 0));
-                          if (v !== null) void restock(p, Number(v));
-                        }}
-                        className="mr-2 text-blue-600 hover:underline">Restock</button>
+                      {/* Restock lives inside Edit, not in a prompt() dialog: two write
+                          paths for one number is how the dead stock field survived. */}
                       <button onClick={() => openEdit(p)} className="mr-2 text-blue-600 hover:underline">Edit</button>
                       <button onClick={() => removePrize(p)} className="text-red-600 hover:underline">Remove</button>
                     </td>

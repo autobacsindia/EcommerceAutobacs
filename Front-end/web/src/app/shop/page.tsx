@@ -1,21 +1,12 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-
+/**
+ * Legacy /shop URL. Server-side redirect, deliberately — this used to be a
+ * client component calling router.replace('/products') in an effect, which
+ * answers crawlers with HTTP 200 and an empty shell. It was also submitted in
+ * the sitemap at priority 0.8, so the blank page outranked the real listing it
+ * pointed at. It is no longer in the sitemap; keep it that way.
+ */
 export default function ShopPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.replace('/products');
-  }, [router]);
-
-  return (
-    <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold mx-auto mb-4"></div>
-        <p className="text-ink/70 font-display">Redirecting to shop...</p>
-      </div>
-    </div>
-  );
+  redirect('/products');
 }
