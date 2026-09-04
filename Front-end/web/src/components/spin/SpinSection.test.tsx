@@ -7,7 +7,7 @@
  * already spun, is worse than no dialog.
  */
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
-import SpinSection from './SpinSection';
+import SpinSection, { PRIZE_DISCLAIMER } from './SpinSection';
 import apiClient from '@/lib/api';
 
 jest.mock('@/lib/api', () => ({ get: jest.fn(), post: jest.fn() }));
@@ -158,6 +158,63 @@ describe('SpinSection presentation', () => {
     mockGet.mockResolvedValue({ success: true, eligible: false, reason: 'no_campaign' });
     const { container } = render(<SpinSection orderId="o1" />);
     await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  /**
+   * The availability/substitution clause.
+   *
+   * It is standing copy rather than the admin's `terms` field precisely so it cannot be
+   * absent — a campaign published with an empty terms box would otherwise show a
+   * customer a specific goodie on a wheel with no notice that a substitute may arrive.
+   * These tests are what stop it being quietly dropped back into optional admin text.
+   */
+  describe('prize disclaimer', () => {
+    const disclaimerRe = /subject to availability/i;
+
+    it('is shown under the wheel before the customer spins', async () => {
+      mockGet.mockResolvedValue({ success: true, eligible: true, segments, campaign: { terms: null } });
+      render(<SpinSection orderId="o1" />);
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByText(disclaimerRe)).toBeInTheDocument();
+    });
+
+    it('names the substitution as equal or greater value', async () => {
+      // "Subject to availability" alone tells a customer their prize might not come.
+      // What they are owed instead is the part that has to be on screen.
+      mockGet.mockResolvedValue({ success: true, eligible: true, segments, campaign: { terms: null } });
+      render(<SpinSection orderId="o1" />);
+      await screen.findByRole('dialog');
+      expect(screen.getByText(/equal or greater value/i)).toBeInTheDocument();
+      expect(PRIZE_DISCLAIMER).toMatch(/no cash alternative/i);
+    });
+
+    it('is STILL shown after the prize is revealed', async () => {
+      // The reveal is exactly when a customer forms an expectation about what arrives,
+      // so this is the one phase the disclaimer must not disappear from.
+      mockGet.mockResolvedValue({
+        success: true, eligible: false, alreadySpun: true,
+        campaign: { terms: null },
+        result: {
+          prize: { name: 'Dashcam', sku: 'D1', kind: 'goodie', imageUrl: null },
+          segmentIndex: 0, segmentLabels: ['Dashcam', 'Cap'], status: 'granted',
+        },
+      });
+      render(<SpinSection orderId="o1" />);
+      fireEvent.click(await screen.findByRole('button', { name: /View your prize/i }));
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByText(disclaimerRe)).toBeInTheDocument();
+    });
+
+    it('renders campaign-specific terms ALONGSIDE it, not instead of it', async () => {
+      mockGet.mockResolvedValue({
+        success: true, eligible: true, segments,
+        campaign: { terms: 'Not valid in Tamil Nadu.' },
+      });
+      render(<SpinSection orderId="o1" />);
+      await screen.findByRole('dialog');
+      expect(screen.getByText(disclaimerRe)).toBeInTheDocument();
+      expect(screen.getByText('Not valid in Tamil Nadu.')).toBeInTheDocument();
+    });
   });
 
   it('keeps the coupon code on the card, not only inside the dialog', async () => {

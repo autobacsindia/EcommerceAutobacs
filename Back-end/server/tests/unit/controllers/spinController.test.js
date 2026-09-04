@@ -57,6 +57,7 @@ const mockPrizeRepo = {
   findByCampaign: jest.fn().mockResolvedValue([]),
   createMany: jest.fn(),
   findDocById: jest.fn(),
+  createPrize: jest.fn(),
   updateById: jest.fn(),
   countFloorPrizes: jest.fn().mockResolvedValue(0),
 };
@@ -375,6 +376,117 @@ describe('editing a prize on a LIVE campaign', () => {
     mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ stockAwarded: 8 }));
     await expect(controller.updatePrize(editReq({ stockTotal: 3 }), res()))
       .rejects.toMatchObject({ statusCode: 422 });
+  });
+
+  /**
+   * Stock edits. `stockRemaining` is never sent by a client — the validator rejects it —
+   * so every one of these asserts what the SERVER derived, because that is the number
+   * the draw actually reads.
+   */
+  it('RESTOCKS by the delta, preserving awarded history', async () => {
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ stockTotal: 10, stockRemaining: 5, stockAwarded: 5 }));
+    await controller.updatePrize(editReq({ stockTotal: 30 }), res());
+    // +20 to the total is +20 on the shelf, not a reset to 30 that forgets the 5 given.
+    expect(mockPrizeRepo.updateById).toHaveBeenCalledWith(
+      String(PRIZE_ID), expect.objectContaining({ stockTotal: 30, stockRemaining: 25 }),
+    );
+  });
+
+  it('LOWERING the total takes the difference off what is left', async () => {
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ stockTotal: 10, stockRemaining: 5, stockAwarded: 5 }));
+    await controller.updatePrize(editReq({ stockTotal: 6 }), res());
+    expect(mockPrizeRepo.updateById).toHaveBeenCalledWith(
+      String(PRIZE_ID), expect.objectContaining({ stockTotal: 6, stockRemaining: 1 }),
+    );
+  });
+
+  it('never derives a NEGATIVE remaining count', async () => {
+    // Cutting the total to exactly what has gone out leaves nothing on the shelf; the
+    // draw must read 0, not a negative that `{ $gt: 0 }` would still reject but that
+    // every admin screen would render as nonsense.
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ stockTotal: 10, stockRemaining: 2, stockAwarded: 8 }));
+    await controller.updatePrize(editReq({ stockTotal: 8 }), res());
+    expect(mockPrizeRepo.updateById).toHaveBeenCalledWith(
+      String(PRIZE_ID), expect.objectContaining({ stockRemaining: 0 }),
+    );
+  });
+
+  it('DERIVES remaining when the prize had no total at all (the infinite-goodie bug)', async () => {
+    // A prize created without a stock number carries stockTotal AND stockRemaining null,
+    // which findEligiblePool reads as UNLIMITED. The old delta branch was skipped when
+    // existing.stockTotal was null, so setting a total for the first time wrote the
+    // total and left remaining null — the goodie kept being awarded forever.
+    mockPrizeRepo.findDocById.mockResolvedValue(
+      existingPrize({ stockTotal: null, stockRemaining: null, stockAwarded: 3 }),
+    );
+    await controller.updatePrize(editReq({ stockTotal: 20 }), res());
+    expect(mockPrizeRepo.updateById).toHaveBeenCalledWith(
+      String(PRIZE_ID), expect.objectContaining({ stockTotal: 20, stockRemaining: 17 }),
+    );
+  });
+
+  it('refuses to make an ORDINARY goodie unlimited', async () => {
+    // Only the floor prize may be infinite. Clearing the field on a goodie would create
+    // a second never-ending prize that the publish gate never gets to see.
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize({ isFloorPrize: false }));
+    await expect(controller.updatePrize(editReq({ stockTotal: null }), res()))
+      .rejects.toMatchObject({ statusCode: 422 });
+    expect(mockPrizeRepo.updateById).not.toHaveBeenCalled();
+  });
+
+  it('clears BOTH stock fields when the guaranteed prize goes unlimited', async () => {
+    // A null total beside a finite remaining is a prize the gate believes is infinite
+    // and the draw treats as finite.
+    mockCampaignRepo.findById.mockResolvedValue({ _id: CAMPAIGN_ID, status: 'off' });
+    mockPrizeRepo.findDocById.mockResolvedValue(
+      existingPrize({ isFloorPrize: true, stockTotal: 10, stockRemaining: 4 }),
+    );
+    await controller.updatePrize(editReq({ stockTotal: null }), res());
+    expect(mockPrizeRepo.updateById).toHaveBeenCalledWith(
+      String(PRIZE_ID), expect.objectContaining({ stockTotal: null, stockRemaining: null }),
+    );
+  });
+
+  it('leaves stock alone when the edit does not mention it', async () => {
+    mockPrizeRepo.findDocById.mockResolvedValue(existingPrize());
+    await controller.updatePrize(editReq({ couponValue: 250 }), res());
+    const [, patch] = mockPrizeRepo.updateById.mock.calls[0];
+    expect(patch).not.toHaveProperty('stockRemaining');
+    expect(patch).not.toHaveProperty('stockTotal');
+  });
+});
+
+/**
+ * Creating a prize. Same invariant as the update path, enforced one step earlier: an
+ * ordinary goodie with no stock number is indistinguishable from an unlimited one.
+ */
+describe('createPrize — stock is mandatory for anything but the guaranteed prize', () => {
+  const CAMPAIGN_ID = new mongoose.Types.ObjectId();
+  const req = (body) => ({ params: { id: String(CAMPAIGN_ID) }, body, user: { _id: OWNER_ID } });
+
+  beforeEach(() => {
+    mockPrizeRepo.createPrize.mockReset().mockResolvedValue({ _id: new mongoose.Types.ObjectId(), name: 'x' });
+  });
+
+  it('seeds remaining from the total so a new goodie starts full', async () => {
+    await controller.createPrize(req({ name: 'Dashcam', kind: 'goodie', sku: 'D1', stockTotal: 25 }), res());
+    expect(mockPrizeRepo.createPrize).toHaveBeenCalledWith(
+      expect.objectContaining({ stockTotal: 25, stockRemaining: 25, campaign: String(CAMPAIGN_ID) }),
+    );
+  });
+
+  it('refuses a goodie with NO stock number', async () => {
+    await expect(controller.createPrize(req({ name: 'Dashcam', kind: 'goodie', sku: 'D1' }), res()))
+      .rejects.toMatchObject({ statusCode: 422 });
+    expect(mockPrizeRepo.createPrize).not.toHaveBeenCalled();
+  });
+
+  it('ALLOWS the guaranteed prize to be created unlimited', async () => {
+    await controller.createPrize(req({ name: 'Sticker', kind: 'coupon', isFloorPrize: true }), res());
+    expect(mockPrizeRepo.createPrize).toHaveBeenCalledWith(
+      expect.objectContaining({ isFloorPrize: true }),
+    );
+    expect(mockPrizeRepo.createPrize.mock.calls[0][0].stockRemaining).toBeUndefined();
   });
 });
 
