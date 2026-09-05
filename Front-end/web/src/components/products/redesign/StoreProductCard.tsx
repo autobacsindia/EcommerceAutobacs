@@ -213,7 +213,10 @@ export default function StoreProductCard({
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 flex-col p-5">
+      {/* Padding steps down on phones. In a 2-up grid a card is ~165px wide, so
+          `p-5` spends a quarter of it on whitespace — width the price and the
+          add button then have to fight over. */}
+      <div className="flex flex-1 flex-col p-4 sm:p-5">
         {categoryName && (
           <p className="mb-2 font-display text-[9px] uppercase tracking-[0.26em] text-gold">{categoryName}</p>
         )}
@@ -232,16 +235,41 @@ export default function StoreProductCard({
         )}
 
         {/* Price + add */}
-        <div className="mt-auto flex items-end justify-between pt-2">
-          <div className="flex items-baseline gap-2">
+        {/*
+          The add button MUST NOT shrink, and the price MUST NOT be able to push it.
+
+          Both are flex items, and a flex item's default `min-width: auto` means it
+          cannot shrink below its min-content width. A price is one unbreakable token,
+          so the price block never yields — which left the button as the only thing in
+          the row that could absorb a deficit. On a ~165px phone card it duly collapsed
+          from 40px to the 16px of its icon and then spilled past the card edge, where
+          the shell's `overflow-hidden` cut it off. Measured on prod at 390px: every
+          discounted card lost its add button, and at 360px so did 15 of 20 cards,
+          discounted or not. This is the primary conversion control on the primary
+          discovery surface, so it wins the row outright:
+
+            - `shrink-0` on the button — its 40px is reserved before anything else.
+            - `min-w-0` + `flex-wrap` on the price block — the compare-at price drops
+              to a second line rather than shoving, since MRP is the secondary figure.
+            - a smaller type step below `sm` — at 18px the widest live price (₹4,95,000,
+              89.5px) did not fit the 85px a phone card can offer even with no MRP
+              beside it, so `shrink-0` alone would only have moved the clipping onto
+              the price.
+
+          Verified in a real browser against the live grid at 360/390/430px, including
+          a forced 7-figure price: button 40px and fully inside the card in every case.
+          jsdom has no layout, so the tests below can only pin the classes.
+        */}
+        <div className="mt-auto flex items-end justify-between gap-2 pt-2">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
             {showsRange && (
               <span className="font-display text-[10px] uppercase tracking-[0.14em] text-ink-muted">From</span>
             )}
-            <span className="font-display text-[18px] font-medium text-ink">
+            <span className="font-display text-[16px] font-medium text-ink sm:text-[18px]">
               {formatPrice(isVariable ? priceMin : product.price)}
             </span>
             {onSale && (
-              <span className="font-display text-[12px] text-ink-muted line-through">
+              <span className="font-display text-[11px] text-ink-muted line-through sm:text-[12px]">
                 {formatPrice(product.originalPrice!)}
               </span>
             )}
@@ -252,7 +280,7 @@ export default function StoreProductCard({
             aria-label={isVariable ? 'Select a model' : backorder ? 'Enquire about this product' : 'Add to cart'}
             title={isVariable ? 'Choose a model on the product page' : backorder ? 'On backorder — click to enquire' : undefined}
             className={cn(
-              'grid h-10 w-10 place-items-center rounded-full transition-all duration-300',
+              'grid h-10 w-10 shrink-0 place-items-center rounded-full transition-all duration-300',
               outOfStock
                 ? 'cursor-not-allowed border border-hairline text-ink-muted'
                 : 'bg-gold text-obsidian hover:scale-105'
