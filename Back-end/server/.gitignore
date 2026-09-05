@@ -105,6 +105,7 @@ reports-header-nav/
 # verified, then delete. Not source: each belongs to one run against one
 # database, and committing them would dirty the tree after every apply.
 backfill-*.json
+repair-*.json
 
 # Pre-delete backups from scripts/purge-test-account-data.js — contain customer PII
 purge-backups/

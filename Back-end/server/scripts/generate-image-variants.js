@@ -79,8 +79,30 @@ const main = async () => {
     process.exit(1);
   }
 
+  /*
+    ── Two listings, deliberately ─────────────────────────────────────────────
+
+    `--prefix` narrows the ORIGINALS only. It must never narrow the variants
+    listing, because that listing is what decides which originals are already
+    done — and `variants/<prefix>` does not start with `<prefix>`.
+
+    This was a live trap. `--prefix=autobacs/products` excluded every
+    `variants/…` key from the single listing this used to do, so `existingKeys`
+    came back empty, `originalsDone` came back empty, and the dry run reported
+    6,405 originals to render when the true figure was 380. An --apply would
+    then have re-downloaded and re-encoded all 6,405 — tens of thousands of
+    pointless writes and hours of AVIF encoding, with no error and no clue why.
+
+    The header already records an earlier version of this same bug ("a dry run
+    that overstates the work by three orders of magnitude is one nobody reads").
+    That fix landed in the skip logic; the flag still routed around it.
+  */
   console.log('Listing originals in the public bucket…');
-  const all = await r2.listKeys({ prefix: PREFIX, scope: 'public' });
+  const sourceObjects = await r2.listKeys({ prefix: PREFIX, scope: 'public' });
+  const variantObjects = PREFIX
+    ? await r2.listKeys({ prefix: `${VARIANT_PREFIX}/`, scope: 'public' })
+    : sourceObjects;
+  const all = sourceObjects;
 
   /*
     Skip anything already under `variants/` — otherwise a second run would treat
@@ -102,7 +124,7 @@ const main = async () => {
     nothing extra.
   */
   const existingKeys = new Set(
-    all.filter((o) => o.key.startsWith(`${VARIANT_PREFIX}/`)).map((o) => o.key),
+    variantObjects.filter((o) => o.key.startsWith(`${VARIANT_PREFIX}/`)).map((o) => o.key),
   );
 
   /*

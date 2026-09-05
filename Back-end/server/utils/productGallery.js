@@ -65,6 +65,60 @@ export const orderGallery = (pool, order, primaryKey) => {
 };
 
 /**
+ * Repair the "exactly one primary" invariant on a gallery.
+ *
+ * ── What is broken ──────────────────────────────────────────────────────────
+ * 815 of 930 production products have a gallery where NO image is flagged
+ * primary. The flag was dropped by a migration that rewrote every image into the
+ * `img-N.jpg` naming; the WooCommerce sync and the admin write path both set it
+ * correctly, which is why the gap tracks provenance rather than age.
+ *
+ * Nothing looks broken because every consumer independently writes
+ * `find(isPrimary) || images[0]`. But that makes the product's main photo an
+ * accident of array order rather than a recorded decision: anything that
+ * reorders the array silently changes the listing thumbnail, the search result
+ * and the ad creative, with nothing to flag it. It also disarms the adoption
+ * rule in utils/variantImage.js, which protects a model photo the admin has
+ * promoted to primary — a rule that can never fire where nothing is primary.
+ *
+ * ── Why promoting images[0] is the RIGHT repair, not a lazy one ─────────────
+ * It is deliberately a behavioural NO-OP. Every consumer already falls back to
+ * `images[0]`, so writing that choice down changes nothing anyone sees: same
+ * thumbnails, same ads, same order records. It converts an implicit convention
+ * into stored data.
+ *
+ * Choosing a "better" primary — widest, newest, most recently uploaded — would
+ * change the thumbnail on 815 product cards and every ad that references them.
+ * That is a visible, uncontrolled change smuggled into a data-hygiene fix, and
+ * it is exactly what this function must not do.
+ *
+ * @param {object[]} images
+ * @returns {{images: object[], changed: boolean, reason: string|null}}
+ *          `reason` is 'none' (no primary existed) or 'multiple' (more than one
+ *          did), and null when the gallery was already correct.
+ */
+export const planPrimaryRepair = (images) => {
+  const gallery = Array.isArray(images) ? images : [];
+  if (gallery.length === 0) return { images: gallery, changed: false, reason: null };
+
+  const flagged = gallery.filter((img) => img?.isPrimary);
+  if (flagged.length === 1) return { images: gallery, changed: false, reason: null };
+
+  /*
+    With several flagged, keep the FIRST flagged one rather than images[0]: a
+    second flag is most likely a partial write on top of a real admin choice, and
+    the earlier flag is the one that was already winning at read time
+    (`find(isPrimary)` returns the first match).
+  */
+  const keep = flagged.length > 1 ? flagged[0] : gallery[0];
+  return {
+    images: gallery.map((img) => ({ ...img, isPrimary: img === keep })),
+    changed: true,
+    reason: flagged.length > 1 ? 'multiple' : 'none',
+  };
+};
+
+/**
  * Decide what a product's gallery should become once the images whose assets no
  * longer exist are dropped.
  *
