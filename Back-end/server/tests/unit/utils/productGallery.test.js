@@ -8,7 +8,7 @@
  *      and deleting a live product's entire gallery.
  */
 
-import { imageKey, orderGallery, planGalleryCleanup } from '../../../utils/productGallery.js';
+import { imageKey, orderGallery, planGalleryCleanup, planPrimaryRepair } from '../../../utils/productGallery.js';
 
 const img = (id, extra = {}) => ({
   url: `https://res.cloudinary.com/c/${id}.jpg`,
@@ -163,5 +163,65 @@ describe('planGalleryCleanup', () => {
     planGalleryCleanup({ images }, aliveExcept('a'));
     expect(images[0].isPrimary).toBe(true);
     expect(images).toHaveLength(2);
+  });
+});
+
+describe('planPrimaryRepair', () => {
+  test('promotes the FIRST image when nothing is flagged', () => {
+    const { images, changed, reason } = planPrimaryRepair([img('a'), img('b'), img('c')]);
+    expect(changed).toBe(true);
+    expect(reason).toBe('none');
+    expect(images.map((i) => i.isPrimary)).toEqual([true, false, false]);
+  });
+
+  test('is a behavioural NO-OP — it writes down what reads already resolve to', () => {
+    // Every consumer does `find(isPrimary) || images[0]`. Before the repair that
+    // resolves to images[0]; after it, to the same object. Nothing visible moves.
+    const gallery = [img('a'), img('b')];
+    const before = gallery.find((i) => i.isPrimary) || gallery[0];
+    const after = planPrimaryRepair(gallery).images.find((i) => i.isPrimary);
+    expect(after.public_id).toBe(before.public_id);
+  });
+
+  test('leaves a correct gallery completely alone', () => {
+    const gallery = [img('a'), img('b', { isPrimary: true })];
+    const { changed, reason, images } = planPrimaryRepair(gallery);
+    expect(changed).toBe(false);
+    expect(reason).toBeNull();
+    expect(images).toBe(gallery);   // same reference — nothing rewritten
+  });
+
+  test('never MOVES an existing primary off the image the admin chose', () => {
+    const { images } = planPrimaryRepair([img('a'), img('b', { isPrimary: true })]);
+    expect(images.find((i) => i.isPrimary).public_id).toBe('b');
+  });
+
+  test('with several flagged, keeps the first — the one reads were already using', () => {
+    const { images, changed, reason } = planPrimaryRepair([
+      img('a'), img('b', { isPrimary: true }), img('c', { isPrimary: true }),
+    ]);
+    expect(changed).toBe(true);
+    expect(reason).toBe('multiple');
+    expect(images.map((i) => i.isPrimary)).toEqual([false, true, false]);
+  });
+
+  test('an empty gallery is not "repaired" into anything', () => {
+    expect(planPrimaryRepair([])).toEqual({ images: [], changed: false, reason: null });
+  });
+
+  test('tolerates junk rather than throwing', () => {
+    expect(planPrimaryRepair(null).changed).toBe(false);
+    expect(planPrimaryRepair(undefined).changed).toBe(false);
+  });
+
+  test('does not mutate the input', () => {
+    const gallery = [img('a'), img('b')];
+    planPrimaryRepair(gallery);
+    expect(gallery.some((i) => i.isPrimary)).toBe(false);
+  });
+
+  test('preserves every other field on each image', () => {
+    const { images } = planPrimaryRepair([img('a', { alt: 'hero', variantOwned: true })]);
+    expect(images[0]).toMatchObject({ public_id: 'a', alt: 'hero', variantOwned: true, isPrimary: true });
   });
 });
