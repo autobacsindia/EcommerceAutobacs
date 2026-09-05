@@ -228,3 +228,63 @@ describe('StoreProductCard add-to-cart confirmation', () => {
     expect(addToCartMock).not.toHaveBeenCalled();
   });
 });
+
+/*
+  The price row's layout contract.
+
+  jsdom has no layout engine — every width here is 0 — so these tests CANNOT prove
+  the button survives on a narrow card. That proof came from measuring the live
+  grid in a real browser at 360/390/430px (before: the add button collapsed from
+  40px to 16px and spilled outside the card on every discounted product, and on
+  15 of 20 cards at 360px; after: 40px and fully inside, even with a forced
+  7-figure price). What these tests do is pin the classes that produce it, so the
+  fix cannot be quietly undone by an unrelated restyle — the failure is invisible
+  on a desktop viewport, which is why it shipped.
+*/
+describe('StoreProductCard price row layout', () => {
+  const priceRow = () => screen.getByText('₹1,000').closest('div')!.parentElement!;
+
+  it('reserves the add button against a price that will not yield', () => {
+    // A price is one unbreakable token, so the price block can never shrink below
+    // its min-content width. Without `shrink-0` the button is the only item left
+    // in the row that can absorb the deficit — and it did, down to its icon.
+    render(<StoreProductCard product={makeProduct()} />);
+    expect(screen.getByLabelText('Add to cart')).toHaveClass('shrink-0');
+  });
+
+  it('reserves it for the sold-out and variable variants too', () => {
+    // Same row, different button — a restyle that only fixed the common case
+    // would leave these two clipped.
+    const { unmount } = render(<StoreProductCard product={makeProduct({ stock: 'out' })} />);
+    expect(screen.getByLabelText('Add to cart')).toHaveClass('shrink-0');
+    unmount();
+
+    render(<StoreProductCard product={makeProduct({ productType: 'variable' })} />);
+    expect(screen.getByLabelText('Select a model')).toHaveClass('shrink-0');
+  });
+
+  it('lets the compare-at price wrap rather than shove the button', () => {
+    // MRP is the secondary figure: when both prices cannot share the line, it
+    // drops to a second one. `min-w-0` is what allows the block to give at all.
+    render(<StoreProductCard product={makeProduct({ originalPrice: 1500 })} />);
+
+    const block = screen.getByText('₹1,000').parentElement!;
+    expect(block).toHaveClass('min-w-0', 'flex-wrap');
+    expect(screen.getByText('₹1,500')).toHaveClass('line-through');
+  });
+
+  it('steps the price type down below sm, where the card is ~165px wide', () => {
+    // At 18px the widest live price (₹4,95,000 — 89.5px) did not fit the 85px a
+    // phone card can offer even with no MRP beside it, so reserving the button
+    // alone would only have moved the clipping onto the price itself.
+    render(<StoreProductCard product={makeProduct({ originalPrice: 1500 })} />);
+
+    expect(screen.getByText('₹1,000')).toHaveClass('text-[16px]', 'sm:text-[18px]');
+    expect(screen.getByText('₹1,500')).toHaveClass('text-[11px]', 'sm:text-[12px]');
+  });
+
+  it('keeps the price and the button from touching', () => {
+    render(<StoreProductCard product={makeProduct({ originalPrice: 1500 })} />);
+    expect(priceRow()).toHaveClass('gap-2');
+  });
+});

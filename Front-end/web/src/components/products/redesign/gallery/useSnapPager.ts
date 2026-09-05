@@ -73,6 +73,12 @@ export function useSnapPager({
   const pendingTargetRef = useRef<number | null>(null);
   const pendingTimerRef = useRef<number | null>(null);
 
+  // Last index the observer pushed out, or `null` if the most recent move was
+  // programmatic. This is how the effect below tells "the customer swiped here"
+  // from "something else asked for this slide" — a distinction the scroll offset
+  // cannot make, because the observer reports mid-swipe. See that effect.
+  const reportedRef = useRef<number | null>(null);
+
   const releasePending = useCallback(() => {
     pendingTargetRef.current = null;
     if (pendingTimerRef.current != null) {
@@ -87,6 +93,16 @@ export function useSnapPager({
       const target = el?.children[index] as HTMLElement | undefined;
       if (!el || !target || typeof el.scrollTo !== 'function') return;
 
+      // Already there — nothing will move, so no slide will sweep past, so
+      // there is nothing to guard against. Arming anyway would go deaf to the
+      // customer for the full safety timeout: the mount effect below always
+      // calls this, and on the common "opens at slide 1" path it is a scroll
+      // from 0 to 0.
+      if (Math.abs(el.scrollLeft - target.offsetLeft) < 2) return;
+
+      // The strip is being sent somewhere; whatever the customer last scrolled
+      // to is now history and must not suppress a later move back to it.
+      reportedRef.current = null;
       pendingTargetRef.current = index;
       if (pendingTimerRef.current != null) clearTimeout(pendingTimerRef.current);
       pendingTimerRef.current = window.setTimeout(releasePending, PROGRAMMATIC_SCROLL_TIMEOUT_MS);
@@ -135,6 +151,9 @@ export function useSnapPager({
             continue;
           }
 
+          // Recorded even when the index is unchanged, so a swipe out to a
+          // neighbour and back leaves the strip's own position on record.
+          reportedRef.current = index;
           if (index !== activeRef.current) onChangeRef.current(index);
         }
       },
@@ -167,20 +186,30 @@ export function useSnapPager({
 
   // Drive the strip when the index changes from outside.
   //
-  // The offset check below is what keeps a user-originated change from bouncing
-  // back: when the customer scrolled there themselves the strip is already at
-  // that offset, so we leave it alone. Programmatic jumps are guarded in the
-  // observer instead — the offset check alone cannot help there, because a
-  // multi-slide animation is mid-flight and genuinely NOT at the target yet.
+  // "From outside" is the whole difficulty. The observer reports at 50%
+  // visibility — mid-swipe, finger still down — so a user-originated change
+  // arrives while the strip is nowhere near the target offset. Deciding by
+  // offset alone therefore reads every swipe as an external change and fires a
+  // smooth scroll into the customer's live native scroll: two owners of
+  // `scrollLeft` plus `snap-mandatory` re-snapping on top, which is the visible
+  // stutter. It also arms the observer's pending guard, which then swallows the
+  // rest of the fling and freezes the counter mid-gesture.
+  //
+  // So origin is tracked explicitly rather than inferred: `reportedRef` holds
+  // the index the observer last pushed out, and a match means the strip is
+  // already travelling there under its own momentum. Never command it — the
+  // compositor is doing a better job than we can.
   const isFirstRun = useRef(true);
   useEffect(() => {
     if (isFirstRun.current) {
       isFirstRun.current = false;
       return;
     }
+    if (active === reportedRef.current) return;
     const el = scrollerRef.current;
     const target = el?.children[active] as HTMLElement | undefined;
     if (!el || !target) return;
+    // Cheap second line of defence for a settled strip that is already in place.
     if (Math.abs(el.scrollLeft - target.offsetLeft) < 2) return;
     scrollToIndex(active, smooth ? 'smooth' : 'auto');
   }, [active, smooth, scrollToIndex]);
