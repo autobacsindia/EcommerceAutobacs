@@ -45,8 +45,14 @@ const BASE_FOLDER = 'autobacs/products';
 /** Return per-product Cloudinary folder for easier bulk-delete and debugging */
 const productFolder = (productId) => `${BASE_FOLDER}/${productId}`;
 
-/** Hard cap on images accepted per create/update request (matches the uploader). */
-const MAX_NEW_IMAGES = 8;
+/**
+ * Hard cap on NEW images accepted per create/update request.
+ *
+ * Raised from 8 because one save can now legitimately carry a gallery batch AND
+ * a photo for each model of a variable product — a seven-model light bar with a
+ * few marketing shots clears 8 without anyone doing anything unusual.
+ */
+const MAX_NEW_IMAGES = 24;
 
 /**
  * Read the optional `imageOrder` / `primaryImage` / `adoptImages` fields off the body.
@@ -123,10 +129,26 @@ const normalizePreUploaded = (raw) => {
     return true;
   };
 
+  /*
+    Over-cap is REFUSED, not trimmed. `.slice()` used to silently drop the excess
+    while the response still said "updated successfully" — the admin's files were
+    in the bucket, unreferenced and unreachable, and no error told anyone. That is
+    the same silent-drop shape the host check below was hardened against, so it
+    gets the same treatment: nothing is saved and the message says why.
+  */
+  const eligibleRefs = raw.filter((i) => i && typeof i.url === 'string');
+  if (eligibleRefs.length > MAX_NEW_IMAGES) {
+    throw new CentralAppError(
+      `Too many new images in one save (${eligibleRefs.length}); the limit is ${MAX_NEW_IMAGES}. ` +
+      'Nothing was saved — please save in smaller batches.',
+      400,
+      { expose: true },
+    );
+  }
+
   const accepted = raw
     .filter((i) => i && typeof i.url === 'string' && typeof i.public_id === 'string' && i.public_id)
     .filter(isOurs)
-    .slice(0, MAX_NEW_IMAGES)
     /*
       `variantOwned` marks a photo uploaded FROM a model row rather than added as
       a general product image. It decides whether the asset may be destroyed once
@@ -143,11 +165,10 @@ const normalizePreUploaded = (raw) => {
     a bucket with nothing referencing them AND the admin's intent was lost — so
     the request must not report success.
 
-    Over-cap refs are truncated rather than rejected, hence comparing against the
-    capped length rather than raw.length.
+    Over-cap is handled above, so anything missing here was refused by the host
+    check and comparing against the full eligible count is correct.
   */
-  const eligible = raw.filter((i) => i && typeof i.url === 'string').length;
-  const expected = Math.min(eligible, MAX_NEW_IMAGES);
+  const expected = eligibleRefs.length;
   if (accepted.length < expected) {
     const dropped = expected - accepted.length;
     console.error(

@@ -55,7 +55,7 @@ describe('removeVariantMessage', () => {
 });
 
 describe('VariantsEditor — removal', () => {
-  const setup = (variants: EditorVariant[]) => {
+  const setup = (variants: EditorVariant[], extra: Record<string, unknown> = {}) => {
     const onChange = jest.fn();
     render(
       <VariantsEditor
@@ -63,6 +63,7 @@ describe('VariantsEditor — removal', () => {
         onAttributeNameChange={() => {}}
         variants={variants}
         onChange={onChange}
+        {...extra}
       />
     );
     return onChange;
@@ -117,6 +118,19 @@ describe('serializeVariants — the pointer', () => {
     expect('imageKey' in out).toBe(false);
   });
 
+  test('PRESERVES wpVariationId — dropping it severs the Woo linkage', () => {
+    // Losing this silently breaks two things much later: a Woo re-sync mints new
+    // variant _ids (orphaning cart/order lines), and the model's Woo photo can
+    // no longer be found. 16 models had already lost it this way.
+    const [out] = serializeVariants('models', [variant({ wpVariationId: 19952 })]);
+    expect(out.wpVariationId).toBe(19952);
+  });
+
+  test('never invents a wpVariationId for a model created in our admin', () => {
+    const [out] = serializeVariants('models', [variant()]);
+    expect('wpVariationId' in out).toBe(false);
+  });
+
   test('leaves the rest of the payload contract intact', () => {
     const [out] = serializeVariants('models', [variant({ _id: 'v1', imageKey: 'smoked', sku: 'SKU-1' })]);
     expect(out).toMatchObject({
@@ -127,5 +141,100 @@ describe('serializeVariants — the pointer', () => {
       imageKey: 'smoked',
       attributes: [{ name: 'models', option: 'smoked lights' }],
     });
+  });
+});
+
+// ── The Photo column ────────────────────────────────────────────────────────
+
+const R2 = 'https://img.autobacsindia.com/autobacs/products';
+const gallery = [
+  { key: 'pack', url: `${R2}/pack.jpg`, alt: 'pack', isPrimary: true },
+  { key: 'smoked', url: `${R2}/smoked.jpg`, alt: 'smoked' },
+];
+
+const renderEditor = (variants: EditorVariant[], extra: Record<string, unknown> = {}) => {
+  const onChange = jest.fn();
+  render(
+    <VariantsEditor
+      attributeName="models"
+      onAttributeNameChange={() => {}}
+      variants={variants}
+      onChange={onChange}
+      gallery={gallery}
+      {...extra}
+    />
+  );
+  return onChange;
+};
+
+describe('VariantsEditor — photo column', () => {
+  beforeAll(() => {
+    Object.assign(URL, { createObjectURL: jest.fn(() => 'blob:x'), revokeObjectURL: jest.fn() });
+  });
+
+  test('a model with a pointer shows THAT gallery image', () => {
+    renderEditor([variant({ imageKey: 'smoked' })]);
+    expect(screen.getByAltText('smoked lights photo')).toHaveAttribute('src', `${R2}/smoked.jpg`);
+  });
+
+  test('a model with no pointer shows the real fallback, not the word "default"', () => {
+    // The admin must see what the SHOPPER will see; "default" is not checkable.
+    renderEditor([variant()]);
+    expect(screen.getByAltText("Using the product's main image"))
+      .toHaveAttribute('src', `${R2}/pack.jpg`);
+    expect(screen.getByText(/using main image/i)).toBeInTheDocument();
+  });
+
+  test('the fallback tracks the PRIMARY, not merely the first image', () => {
+    render(
+      <VariantsEditor
+        attributeName="models"
+        onAttributeNameChange={() => {}}
+        variants={[variant()]}
+        onChange={jest.fn()}
+        gallery={[
+          { key: 'a', url: `${R2}/a.jpg` },
+          { key: 'b', url: `${R2}/b.jpg`, isPrimary: true },
+        ]}
+      />
+    );
+    expect(screen.getByAltText("Using the product's main image"))
+      .toHaveAttribute('src', `${R2}/b.jpg`);
+  });
+
+  test('removing a photo clears the pointer WITHOUT deleting anything client-side', () => {
+    const onChange = renderEditor([variant({ imageKey: 'smoked' })]);
+    fireEvent.click(screen.getByLabelText('Remove photo from smoked lights'));
+    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ imageKey: undefined })]);
+  });
+
+  test('"Keep in gallery" is offered for a saved pointer and reports the key', () => {
+    const onKeepImage = jest.fn();
+    renderEditor([variant({ imageKey: 'smoked' })], { onKeepImage });
+    fireEvent.click(screen.getByRole('button', { name: /keep in gallery/i }));
+    expect(onKeepImage).toHaveBeenCalledWith('smoked');
+  });
+
+  test('an already-kept photo shows as Kept and cannot be re-submitted', () => {
+    renderEditor([variant({ imageKey: 'smoked' })], { onKeepImage: jest.fn(), keptKeys: ['smoked'] });
+    expect(screen.getByText('Kept').closest('button')).toBeDisabled();
+  });
+
+  test('a PENDING photo offers no "keep" — it is not in the gallery yet', () => {
+    renderEditor(
+      [variant({ pendingPreview: 'blob:x', pendingFile: new File([], 'x.jpg') })],
+      { onKeepImage: jest.fn() },
+    );
+    expect(screen.queryByRole('button', { name: /keep in gallery/i })).not.toBeInTheDocument();
+  });
+
+  test('the delete confirmation fires for a model whose photo is only pending', () => {
+    // It has no imageKey yet, but the admin still picked a file — the quiet
+    // prompt is correct here because nothing is destroyed server-side.
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    const onChange = renderEditor([variant({ pendingPreview: 'blob:x' })]);
+    fireEvent.click(screen.getByLabelText('Remove model smoked lights'));
+    expect(onChange).toHaveBeenCalledWith([]);
+    jest.restoreAllMocks();
   });
 });

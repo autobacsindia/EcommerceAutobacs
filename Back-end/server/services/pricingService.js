@@ -26,6 +26,7 @@ import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import campaignService from './campaignService.js';
 import AppError from '../utils/AppError.js';
+import { resolveVariantImage } from '../utils/variantImage.js';
 import { STOCK_STATUS, isPurchasable } from '../utils/stockStatus.js';
 import { getLoyaltyConfig } from './loyaltyConfigService.js';
 import { toPaise, fromPaise } from '../utils/money.js';
@@ -124,6 +125,7 @@ class PricingService {
       let priceSource = product;              // what effectivePrice() reads
       let variantId = null;
       let variantLabel = null;
+      let variantDoc = null;                  // for the image snapshot below
       if (product.productType === 'variable') {
         const { variant, reason } = resolveVariant(product, item.variantId);
         // `expose`: each of these names only the product the shopper is already looking
@@ -135,6 +137,7 @@ class PricingService {
         priceSource = variant;
         variantId = variant._id;
         variantLabel = variant.label;
+        variantDoc = variant;
       } else if (product.stock === STOCK_STATUS.OUT) {
         throw new AppError(`${product.name} is out of stock`, 400, { expose: true });
       }
@@ -166,7 +169,21 @@ class PricingService {
         quantity,
         price: unitPrice,                // always DB price, never client price
         name: product.name,
-        image: product.images?.[0]?.url,
+        /*
+          The image is part of the snapshot, exactly like `name` and `price`.
+
+          It used to be `images[0]` — the parent's first photo — so a shopper who
+          bought the amber filter saw the black one in their cart, their
+          confirmation email, their order history, their invoice, and on the pick
+          slip the warehouse packs from. Every one of those is a place the order
+          looks wrong to someone.
+
+          Resolved once, here, at purchase time and then frozen: an order is an
+          immutable financial record, so it must never be re-rendered from a live
+          product whose photos may since have changed. A model with no photo of
+          its own resolves to the product image, which is what its PDP shows.
+        */
+        image: resolveVariantImage(product, variantDoc)?.url,
         categories: product.categories || [],
         brandSlug: product.brandSlug || null,
         onSale,

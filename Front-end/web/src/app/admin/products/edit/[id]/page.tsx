@@ -140,6 +140,12 @@ export default function EditProductPage() {
   const [seo, setSeo] = useState<SeoFormValue>(EMPTY_SEO);
   // Variable-product authoring (hydrated from the product below).
   const [productType, setProductType] = useState<'simple' | 'variable'>('simple');
+  /**
+   * Gallery images the admin chose to KEEP even if the model using them is
+   * deleted. Sent as `adoptImages`; the server clears their `variantOwned` flag.
+   * Additive only — this list can never cause a deletion, only prevent one.
+   */
+  const [keptImageKeys, setKeptImageKeys] = useState<string[]>([]);
   const [attributeName, setAttributeName] = useState('models');
   const [variants, setVariants] = useState<EditorVariant[]>([emptyVariant()]);
 
@@ -317,12 +323,17 @@ export default function EditProductPage() {
       // Hydrate SEO overrides (blank fields fall back to computed defaults)
       setSeo(toSeoFormValue(productData.seo));
 
-      // Hydrate variable-product models (if any) so edits preserve variant _ids.
+      // Hydrate variable-product models (if any) so edits preserve variant _ids
+      // AND their WooCommerce linkage — see EditorVariant.wpVariationId. A field
+      // missing here is silently destroyed on the next save, because the form
+      // submits what it holds, not a patch.
       if (productData.productType === 'variable' && Array.isArray(productData.variants) && productData.variants.length) {
         setProductType('variable');
         setAttributeName(productData.variants[0]?.attributes?.[0]?.name || 'models');
         setVariants(productData.variants.map((v: any) => ({
           _id: v._id,
+          wpVariationId: v.wpVariationId ?? undefined,
+          imageKey: v.imageKey ?? undefined,
           label: v.label || '',
           price: v.price != null ? String(v.price) : '',
           originalPrice: v.originalPrice != null ? String(v.originalPrice) : '',
@@ -447,8 +458,10 @@ export default function EditProductPage() {
       fd.append('shortDescription', formData.shortDescription);
       fd.append('productType',      productType);
       if (productType === 'variable') {
-        // Price + stock derived from the models server-side.
-        fd.append('variants', JSON.stringify(serializedVariants));
+        // NOTE: `variants` is appended LATER, after the model-photo upload — that
+        // upload is what fills in each model's `imageKey`, and FormData copies its
+        // value at append time, so serialising here would send the pointers as
+        // they were BEFORE the upload, i.e. not at all.
       } else {
         fd.append('price',            String(price));
         if (formData.originalPrice) fd.append('originalPrice', formData.originalPrice);
@@ -518,8 +531,38 @@ export default function EditProductPage() {
       // pending images alike: once every tile has a real public_id we can send
       // one flat order covering the whole gallery, instead of new images being
       // stuck at the end until a second save.
+      /*
+        ── Model photos ────────────────────────────────────────────────────────
+        Uploaded HERE, not when the admin picked the file, so abandoning the edit
+        leaves nothing in storage. They are flagged `variantOwned` so the server
+        can reclaim them once no model points at them, and they are deliberately
+        left OUT of `imageOrder` below — the backend appends anything the order
+        omits, which puts them at the end and leaves the existing gallery
+        sequence (and the PDP hero image) exactly as it was.
+      */
+      const pendingPhotos = variants
+        .map((v, i) => ({ i, file: v.pendingFile }))
+        .filter((x): x is { i: number; file: File } => Boolean(x.file));
+
+      const variantRefs: { url: string; public_id: string; variantOwned: true }[] = [];
+      if (pendingPhotos.length) {
+        const refs = await uploadImagesToCloudinary(
+          pendingPhotos.map((x) => x.file),
+          'products',
+          productId,
+        );
+        refs.forEach((ref, k) => {
+          const target = pendingPhotos[k];
+          if (!target) return;
+          variantRefs.push({ ...ref, variantOwned: true });
+          // Point the model at what actually persisted, by the id the server knows.
+          serializedVariants[target.i] = { ...serializedVariants[target.i], imageKey: ref.public_id };
+        });
+      }
+
       const newItems = gallery.filter((i) => i.kind === 'new');
       const keyToPublicId = new Map<string, string>();
+      const galleryRefs: { url: string; public_id: string }[] = [];
       if (newItems.length) {
         // Group new assets under autobacs/products/<id> for the edited product.
         // Refs come back in the order the files were passed, which is gallery
@@ -532,7 +575,23 @@ export default function EditProductPage() {
         refs.forEach((ref, i) => {
           if (newItems[i]) keyToPublicId.set(newItems[i].key, ref.public_id);
         });
-        fd.append('uploadedImages', JSON.stringify(refs));
+        galleryRefs.push(...refs);
+      }
+
+      // One combined payload: the server caps NEW images per save and now REFUSES
+      // an over-cap batch rather than trimming it, so both sets must be counted
+      // together or the refusal would fire on the wrong number.
+      if (galleryRefs.length || variantRefs.length) {
+        fd.append('uploadedImages', JSON.stringify([...galleryRefs, ...variantRefs]));
+      }
+      if (keptImageKeys.length) {
+        fd.append('adoptImages', JSON.stringify(keptImageKeys));
+      }
+
+      // Appended now that every model photo has a real public_id (see the note
+      // where productType is set).
+      if (productType === 'variable') {
+        fd.append('variants', JSON.stringify(serializedVariants));
       }
 
       // ── Sequence + primary ────────────────────────────────────────────────
@@ -873,6 +932,14 @@ export default function EditProductPage() {
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">Models *</label>
               <VariantsEditor
+                gallery={existingImages.map((img) => ({
+                  key: existingImageKey(img),
+                  url: img.url,
+                  alt: img.alt,
+                  isPrimary: img.isPrimary,
+                }))}
+                keptKeys={keptImageKeys}
+                onKeepImage={(key) => setKeptImageKeys((prev) => (prev.includes(key) ? prev : [...prev, key]))}
                 attributeName={attributeName}
                 onAttributeNameChange={setAttributeName}
                 variants={variants}

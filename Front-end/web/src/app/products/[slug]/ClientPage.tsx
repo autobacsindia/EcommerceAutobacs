@@ -20,6 +20,7 @@ import VehicleCards from '@/components/products/VehicleCards';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import Gallery from '@/components/products/redesign/Gallery';
+import { variantImageIndex } from '@/lib/variantImage';
 import BuyBox, { type ProductVariant } from '@/components/products/redesign/BuyBox';
 import ConsultSpecialistBanner from '@/components/products/ConsultSpecialistBanner';
 
@@ -47,7 +48,7 @@ interface Product {
   metaContentId?: string;
   category?: { _id: string; name: string; slug: string } | string;
   brand?: string;
-  images?: Array<{ url: string; alt?: string; _id?: string }>;
+  images?: Array<{ url: string; alt?: string; _id?: string; public_id?: string; isPrimary?: boolean }>;
   stock: StockStatus;
   sku?: string;
   specifications?: Array<{ key: string; value: string }>;
@@ -156,9 +157,22 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
     );
   }
 
-  const displayImages = (product.images ?? [])
-    .filter((img) => img?.url)
+  const galleryImages = (product.images ?? []).filter((img) => img?.url);
+  const displayImages = galleryImages
     .map((img, i) => ({ src: img.url, alt: img.alt || `${product.name} image ${i + 1}` }));
+
+  /*
+    Which gallery slide the chosen model corresponds to, or null when it has no
+    photo of its own — in which case the gallery deliberately stays where the
+    shopper left it rather than snapping back to the hero image.
+
+    Computed from the SAME filtered array the gallery renders, so the index can
+    never drift from what is on screen. Mapping over `product.images` directly
+    would shift every index by one for any product carrying an image row with no
+    url, and point the shopper at the wrong photo.
+  */
+  const selectedVariant = product.variants?.find((v) => v._id === selectedVariantId) ?? null;
+  const variantSlide = variantImageIndex(galleryImages, selectedVariant);
 
   const onSale = !!product.originalPrice && product.originalPrice > product.price;
   const cleanDescription = stripHtml(product.description);
@@ -216,7 +230,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         {/* Gallery + Buy box */}
         <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
           <Reveal y={20}>
-            <Gallery images={displayImages} name={product.name} onSale={onSale} />
+            <Gallery images={displayImages} name={product.name} onSale={onSale} jumpTo={variantSlide} />
           </Reveal>
           <Reveal y={20} delay={0.08}>
             <BuyBox

@@ -31,6 +31,8 @@ import {
   googleItemGroupId,
 } from '../utils/googleCatalogId.js';
 
+import { resolveVariantImage } from '../utils/variantImage.js';
+
 const MAX_TITLE = 150;         // Google title hard cap
 const MAX_DESCRIPTION = 5000;  // Google description hard cap
 const MAX_ADDITIONAL_IMAGES = 10;
@@ -143,6 +145,15 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, googleCat
             ...base,
             id: googleVariantOfferId(product, variant),
             itemGroupId: googleItemGroupId(product),
+            /*
+              Each model is a separate offer and must carry its own photograph.
+              Every row previously shipped the parent's primary image — the shape
+              that draws Merchant Center "image mismatch" disapprovals, because
+              the picture does not depict the offer being sold. A model with no
+              photo of its own resolves to the parent image, which is correct:
+              that is what its PDP actually shows.
+            */
+            image: resolveVariantImage(product, variant)?.url || image,
             title: `${product.name} - ${variant.label}`.slice(0, MAX_TITLE),
             sku: variant.sku || product.sku || null,
             availability: availability(variant.stock),

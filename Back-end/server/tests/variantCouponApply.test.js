@@ -158,3 +158,69 @@ describe('coupon apply with a variable product in the cart', () => {
     expect(quote.couponDiscount).toBe(0);
   });
 });
+
+// ── The order line's image snapshot ─────────────────────────────────────────
+
+describe('order line image is the SELECTED model, snapshotted', () => {
+  const R2 = 'https://img.autobacsindia.com/autobacs/products';
+
+  /** A variable product whose two models have different photos. */
+  const seedWithPhotos = () => Product.create({
+    name: `Photo ${++seq}`, slug: `photo-${seq}`, description: 'Test',
+    price: 11900, stock: 'in', brand: 'B', isActive: true,
+    productType: 'variable',
+    images: [
+      { url: `${R2}/pack.jpg`, public_id: 'pack', isPrimary: true },
+      { url: `${R2}/smoked.jpg`, public_id: 'smoked', variantOwned: true },
+    ],
+    variants: [
+      { label: 'smoked lights', price: 12500, stock: 'in', imageKey: 'smoked' },
+      { label: 'clear lights', price: 11900, stock: 'in' },
+    ],
+  });
+
+  it('snapshots the chosen model’s own photo, not the parent’s first image', async () => {
+    const product = await seedWithPhotos();
+    const quote = await pricingService.computeQuote({
+      items: [{ product: product._id, quantity: 1, variantId: product.variants[0]._id }],
+    });
+    // Buying "smoked" must not put the packaging shot on the invoice.
+    expect(quote.orderItems[0].image).toContain('smoked.jpg');
+  });
+
+  it('falls back to the product image for a model with no photo of its own', async () => {
+    const product = await seedWithPhotos();
+    const quote = await pricingService.computeQuote({
+      items: [{ product: product._id, quantity: 1, variantId: product.variants[1]._id }],
+    });
+    expect(quote.orderItems[0].image).toContain('pack.jpg');
+  });
+
+  it('respects the admin’s chosen primary, not merely images[0]', async () => {
+    const product = await Product.create({
+      name: `Primary ${++seq}`, slug: `primary-${seq}`, description: 'Test',
+      price: 100, stock: 'in', brand: 'B', isActive: true,
+      images: [
+        { url: `${R2}/first.jpg`, public_id: 'first' },
+        { url: `${R2}/hero.jpg`, public_id: 'hero', isPrimary: true },
+      ],
+    });
+    const quote = await pricingService.computeQuote({
+      items: [{ product: product._id, quantity: 1 }],
+    });
+    expect(quote.orderItems[0].image).toContain('hero.jpg');
+  });
+
+  it('a pointer at a removed image degrades to the product image, never undefined', async () => {
+    const product = await seedWithPhotos();
+    await Product.updateOne(
+      { _id: product._id },
+      { $set: { 'variants.0.imageKey': 'deleted-yesterday' } },
+    );
+    const fresh = await Product.findById(product._id);
+    const quote = await pricingService.computeQuote({
+      items: [{ product: product._id, quantity: 1, variantId: fresh.variants[0]._id }],
+    });
+    expect(quote.orderItems[0].image).toContain('pack.jpg');
+  });
+});

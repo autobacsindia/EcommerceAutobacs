@@ -1,7 +1,9 @@
 'use client';
 
-import { Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Plus, Trash2, ImagePlus, X, Pin } from 'lucide-react';
 import type { StockStatus } from '@/lib/stock';
+import { validateImageFile, IMAGE_ACCEPT, IMAGE_MAX_FILE_MB } from '@/lib/imageUpload';
 
 /**
  * Admin editor for a variable product's models (variants). Single-attribute
@@ -14,6 +16,21 @@ import type { StockStatus } from '@/lib/stock';
  */
 export interface EditorVariant {
   _id?: string;
+  /**
+   * The WooCommerce variation this model came from. Carried through the editor
+   * round trip WITHOUT being editable, because dropping it is destructive in two
+   * ways that are both invisible until much later:
+   *
+   *   1. `reconcileVariantIds` preserves each model's `_id` across a Woo re-import
+   *      by matching on this field. Without it a re-sync mints a NEW `_id`, and
+   *      every cart and order line referencing the old one stops resolving.
+   *   2. It is the only link back to the Woo variation's own photo.
+   *
+   * It was previously absent here, so every admin save of a variable product
+   * silently severed both — measured at 16 models across 7 products before this
+   * was fixed.
+   */
+  wpVariationId?: number;
   label: string;
   price: string;
   originalPrice?: string;
@@ -26,6 +43,24 @@ export interface EditorVariant {
    * can be deleted.
    */
   imageKey?: string;
+  /**
+   * A photo picked for this model but NOT yet uploaded, plus its local preview.
+   *
+   * Uploading on pick would be simpler, but an abandoned edit would then leave
+   * the object in storage with nothing referencing it — the orphan class this
+   * project has paid for twice. Bytes go up at SUBMIT, alongside the gallery's
+   * own pending files, so closing the tab costs nothing.
+   */
+  pendingFile?: File;
+  pendingPreview?: string;
+}
+
+/** A gallery entry the editor can point a model at. */
+export interface VariantGalleryImage {
+  key: string;
+  url: string;
+  alt?: string;
+  isPrimary?: boolean;
 }
 
 const STOCK_OPTIONS: { value: StockStatus; label: string }[] = [
@@ -60,12 +95,45 @@ export default function VariantsEditor({
   onAttributeNameChange,
   variants,
   onChange,
+  gallery = [],
+  keptKeys = [],
+  onKeepImage,
 }: {
   attributeName: string;
   onAttributeNameChange: (name: string) => void;
   variants: EditorVariant[];
   onChange: (variants: EditorVariant[]) => void;
+  /** The product's current gallery, for resolving pointers and the fallback. */
+  gallery?: VariantGalleryImage[];
+  /** Image keys the admin has marked "keep in gallery" in this edit. */
+  keptKeys?: string[];
+  onKeepImage?: (key: string) => void;
 }) {
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  const byKey = new Map(gallery.map((g) => [g.key, g]));
+  // What a model with no photo of its own will actually show to a shopper. The
+  // admin sees the real fallback rather than the word "default", because those
+  // are not the same thing and only one of them is checkable.
+  const fallback = gallery.find((g) => g.isPrimary) ?? gallery[0] ?? null;
+
+  const pickPhoto = (i: number, file: File | undefined) => {
+    if (!file) return;
+    const problem = validateImageFile(file, IMAGE_MAX_FILE_MB);
+    if (problem) { setPhotoError(problem); return; }
+    setPhotoError(null);
+    const previous = variants[i]?.pendingPreview;
+    if (previous) URL.revokeObjectURL(previous);
+    update(i, { pendingFile: file, pendingPreview: URL.createObjectURL(file) });
+  };
+
+  const clearPhoto = (i: number) => {
+    const previous = variants[i]?.pendingPreview;
+    if (previous) URL.revokeObjectURL(previous);
+    // The pointer is dropped here; the SERVER decides whether the asset is
+    // reclaimed, and only if nothing else still points at it.
+    update(i, { pendingFile: undefined, pendingPreview: undefined, imageKey: undefined });
+  };
   const update = (i: number, patch: Partial<EditorVariant>) =>
     onChange(variants.map((v, idx) => (idx === i ? { ...v, ...patch } : v)));
   const remove = (i: number) => {
@@ -101,6 +169,7 @@ export default function VariantsEditor({
               <th className="py-2 pr-3 font-medium">Was (₹)</th>
               <th className="py-2 pr-3 font-medium">Stock</th>
               <th className="py-2 pr-3 font-medium">SKU</th>
+              <th className="py-2 pr-3 font-medium">Photo</th>
               <th className="py-2" />
             </tr>
           </thead>
@@ -157,6 +226,71 @@ export default function VariantsEditor({
                     className="w-28 border rounded px-2 py-1.5"
                   />
                 </td>
+                <td className="py-2 pr-3">
+                  {(() => {
+                    const own = v.pendingPreview ?? (v.imageKey ? byKey.get(v.imageKey)?.url : undefined);
+                    const isKept = Boolean(v.imageKey && keptKeys.includes(v.imageKey));
+                    if (own) {
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={own}
+                            alt={`${v.label || 'model'} photo`}
+                            className="h-12 w-12 rounded border border-indigo-200 object-cover"
+                          />
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => clearPhoto(i)}
+                              className="inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-red-500"
+                              aria-label={`Remove photo from ${v.label || 'model'}`}
+                            >
+                              <X className="h-3 w-3" /> Remove
+                            </button>
+                            {/* Only offered for a saved pointer: a pending file is not in
+                                the gallery yet, so there is nothing to keep. */}
+                            {v.imageKey && onKeepImage && (
+                              <button
+                                type="button"
+                                onClick={() => onKeepImage(v.imageKey!)}
+                                disabled={isKept}
+                                className={`inline-flex items-center gap-1 text-[11px] ${isKept ? 'text-green-600' : 'text-gray-500 hover:text-indigo-600'}`}
+                                title="Keep this photo in the gallery even if this model is deleted"
+                              >
+                                <Pin className="h-3 w-3" /> {isKept ? 'Kept' : 'Keep in gallery'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="flex items-center gap-1.5">
+                        {fallback ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={fallback.url}
+                            alt="Using the product's main image"
+                            className="h-12 w-12 rounded border border-dashed border-gray-300 object-cover opacity-40"
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded border border-dashed border-gray-300" />
+                        )}
+                        <label className="cursor-pointer text-[11px] text-indigo-700 hover:text-indigo-900">
+                          <ImagePlus className="mb-0.5 inline h-3 w-3" /> Add
+                          <input
+                            type="file"
+                            accept={IMAGE_ACCEPT}
+                            className="hidden"
+                            onChange={(e) => { pickPhoto(i, e.target.files?.[0]); e.target.value = ''; }}
+                          />
+                          <span className="block text-[10px] text-gray-400">Using main image</span>
+                        </label>
+                      </div>
+                    );
+                  })()}
+                </td>
                 <td className="py-2">
                   <button
                     type="button"
@@ -170,11 +304,13 @@ export default function VariantsEditor({
               </tr>
             ))}
             {variants.length === 0 && (
-              <tr><td colSpan={6} className="py-4 text-center text-gray-400">No models yet — add one below.</td></tr>
+              <tr><td colSpan={7} className="py-4 text-center text-gray-400">No models yet — add one below.</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {photoError && <p className="mt-2 text-xs text-red-600">{photoError}</p>}
 
       <button
         type="button"
@@ -186,7 +322,8 @@ export default function VariantsEditor({
 
       <p className="text-xs text-gray-500 mt-3">
         Price shows as a range until a shopper picks a model. Set “Was (₹)” only for a genuine discount. A model marked
-        Out of stock can’t be added to cart.
+        Out of stock can’t be added to cart. A model with no photo of its own shows the product’s main image (greyed
+        above). Deleting a model also deletes the photo uploaded for it — use “Keep in gallery” first to save it.
       </p>
     </div>
   );
@@ -208,6 +345,8 @@ export function serializeVariants(attributeName: string, variants: EditorVariant
         // would render no badge and just be misleading stored data.
         originalPrice: was != null && was > price ? was : null,
         stock: v.stock,
+        // Preserved, never minted: only echoed back when the row already had one.
+        ...(v.wpVariationId != null && { wpVariationId: v.wpVariationId }),
         ...(v.sku && v.sku.trim() && { sku: v.sku.trim() }),
         // Omitted when unset, never sent as null: absent is what makes the server
         // fall back to the product's main image.
