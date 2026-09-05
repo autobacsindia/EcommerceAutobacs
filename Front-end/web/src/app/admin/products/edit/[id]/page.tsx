@@ -1343,6 +1343,14 @@ export default function EditProductPage() {
               primaryKey={primaryKey}
               onPrimaryChange={setPrimaryKey}
               maxFiles={8}
+              /*
+                A variable product's gallery is marketing shots PLUS one photo per
+                model, so it legitimately runs past a single 8-file batch. Left at
+                the default (= maxFiles) the uploader locks out every product with
+                more than 8 images — which after the model-image backfill is 142 of
+                them. Still bounded: an unbounded gallery is a PDP payload problem.
+              */
+              maxTotal={40}
               label=""
               // Images upload straight to Cloudinary, so only per-file 3 MB
               // applies — no combined-request cap.

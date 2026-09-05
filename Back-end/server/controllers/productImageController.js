@@ -29,6 +29,7 @@ import { STOCK_VALUES, STOCK_STATUS } from '../utils/stockStatus.js';
 import { aggregateFromVariants } from '../utils/wcVariants.js';
 import { normalizeSeo } from '../utils/seo.js';
 import { imageKey, orderGallery } from '../utils/productGallery.js';
+import { pruneDanglingPointers, planVariantOwnedCleanup } from '../utils/variantImage.js';
 
 /** Lightweight HTTP error — carries a statusCode for the Express error handler */
 class AppError extends Error {
@@ -47,7 +48,20 @@ const productFolder = (productId) => `${BASE_FOLDER}/${productId}`;
 /** Hard cap on images accepted per create/update request (matches the uploader). */
 const MAX_NEW_IMAGES = 8;
 
-/** Read the optional `imageOrder` / `primaryImage` sequencing fields off the body. */
+/**
+ * Read the optional `imageOrder` / `primaryImage` / `adoptImages` fields off the body.
+ *
+ * `adoptImages` is the admin's "keep this in the gallery" action: it lists image
+ * keys that should stop being model-owned and become ordinary product photos,
+ * surviving however many models come and go. Without it the only way to save a
+ * model photo from its model was to promote it to primary, which is a different
+ * decision entirely (it changes every product card and the PDP hero).
+ *
+ * Note the direction of failure. A stale, duplicated or forged `adoptImages`
+ * can only ever make an image MORE permanent — it removes a deletion, never
+ * causes one. That is the opposite of `deletePublicIds`, which is why that field
+ * needs the derive-from-what-persisted guard below and this one does not.
+ */
 const takeSequencing = (fields) => {
   const order = Array.isArray(fields.imageOrder)
     ? fields.imageOrder.filter((k) => typeof k === 'string' && k)
@@ -55,9 +69,27 @@ const takeSequencing = (fields) => {
   const primary = typeof fields.primaryImage === 'string' && fields.primaryImage
     ? fields.primaryImage
     : null;
+  const adopt = Array.isArray(fields.adoptImages)
+    ? fields.adoptImages.filter((k) => typeof k === 'string' && k)
+    : [];
   delete fields.imageOrder;
   delete fields.primaryImage;
-  return { order, primary };
+  delete fields.adoptImages;
+  return { order, primary, adopt };
+};
+
+/**
+ * Apply the admin's "keep in gallery" choices: the named entries stop being
+ * model-owned, so `planVariantOwnedCleanup` will never reclaim them.
+ *
+ * Returns new objects; the input is untouched.
+ */
+const applyAdoptions = (gallery, adoptKeys) => {
+  if (!adoptKeys?.length) return gallery;
+  const adopt = new Set(adoptKeys);
+  return gallery.map((img) =>
+    adopt.has(imageKey(img)) && img.variantOwned ? { ...img, variantOwned: false } : img
+  );
 };
 
 /**
@@ -95,7 +127,14 @@ const normalizePreUploaded = (raw) => {
     .filter((i) => i && typeof i.url === 'string' && typeof i.public_id === 'string' && i.public_id)
     .filter(isOurs)
     .slice(0, MAX_NEW_IMAGES)
-    .map((i) => ({ url: i.url, public_id: i.public_id }));
+    /*
+      `variantOwned` marks a photo uploaded FROM a model row rather than added as
+      a general product image. It decides whether the asset may be destroyed once
+      no model points at it (see utils/variantImage.js). Coerced to a real boolean
+      so a stray "false" string from a multipart body cannot make an ordinary
+      gallery photo deletable.
+    */
+    .map((i) => ({ url: i.url, public_id: i.public_id, variantOwned: i.variantOwned === true || i.variantOwned === 'true' }));
 
   /*
     FAIL LOUDLY. This used to warn to the server log and carry on, which is how a
@@ -133,7 +172,7 @@ const parseProductFields = (body) => {
 
   ['categories', 'features', 'whyChoose', 'packageContents', 'tags',
    'specifications', 'compatibleVehicles', 'seo', 'variants', 'uploadedImages',
-   'imageOrder', 'returnPolicy'].forEach((key) => {
+   'imageOrder', 'adoptImages', 'returnPolicy'].forEach((key) => {
     if (typeof fields[key] === 'string') {
       try { fields[key] = JSON.parse(fields[key]); } catch { /* leave as string */ }
     }
@@ -156,6 +195,14 @@ const parseProductFields = (body) => {
         ...(v.salePrice != null && v.salePrice !== '' && { salePrice: Number(v.salePrice) }),
         stock: STOCK_VALUES.includes(v.stock) ? v.stock : STOCK_STATUS.IN,
         ...(v.sku && { sku: String(v.sku).trim() }),
+        /*
+          Spread conditionally: an absent pointer must stay ABSENT, because
+          "absent" is what the read-time fallback to the product image keys off.
+          Writing `imageKey: undefined` unconditionally would be equivalent here,
+          but a later refactor to `?? null` would silently disable the fallback
+          on every variant — so the intent is pinned in the shape.
+        */
+        ...(typeof v.imageKey === 'string' && v.imageKey.trim() && { imageKey: v.imageKey.trim() }),
       }))
       .filter((v) => v.label && v.price >= 0);
     Object.assign(fields, aggregateFromVariants(fields.variants));
@@ -282,7 +329,7 @@ export const createProductWithImages = async (req, res) => {
   // Images the browser already uploaded straight to Cloudinary (direct upload).
   const preUploaded = normalizePreUploaded(fields.uploadedImages);
   delete fields.uploadedImages;
-  const { order: imageOrder, primary: primaryImage } = takeSequencing(fields);
+  const { order: imageOrder, primary: primaryImage, adopt: adoptImages } = takeSequencing(fields);
   assertValidProduct(fields, { partial: false });
   const files  = req.files || (req.file ? [req.file] : []);
 
@@ -306,16 +353,34 @@ export const createProductWithImages = async (req, res) => {
 
   // Sequence + thumbnail follow the admin's arrangement in the form; with no
   // explicit intent the upload order stands and the first image is primary.
-  const images = orderGallery(
+  const composed = orderGallery(
     allRefs.map((img) => ({
-      url:       img.url,
-      public_id: img.public_id,
-      alt:       fields.name || '',
-      isPrimary: false,
+      url:          img.url,
+      public_id:    img.public_id,
+      alt:          fields.name || '',
+      isPrimary:    false,
+      variantOwned: img.variantOwned === true,
     })),
     imageOrder,
     primaryImage,
   );
+
+  const gallery = applyAdoptions(composed, adoptImages);
+
+  /*
+    Model pointers are resolved against the gallery that ACTUALLY persisted, not
+    the one the client believes it sent: a pointer at an image that never made it
+    (rejected host, dropped ref) is cleared rather than stored dangling.
+  */
+  if (Array.isArray(fields.variants) && fields.variants.length) {
+    fields.variants = pruneDanglingPointers(gallery, fields.variants);
+  }
+
+  // A photo uploaded for a model that no longer exists in the payload is dead on
+  // arrival — drop it here rather than storing an unreachable row. Assets are
+  // cleaned below on the same rollback path as any other create failure.
+  const { survivors: images, orphaned: bornOrphaned } =
+    planVariantOwnedCleanup(gallery, fields.variants);
 
   const product = new Product({ ...fields, images });
 
@@ -333,6 +398,15 @@ export const createProductWithImages = async (req, res) => {
       await deleteHostedImages(rollback);
     }
     throw dbError;
+  }
+
+  // Assets uploaded for a model the payload did not keep. Deleted AFTER the save
+  // so a failed create takes the rollback path above instead (which removes them
+  // along with everything else), and never thrown — the product is already saved
+  // and consistent, so a storage hiccup must not fail the request.
+  if (bornOrphaned.length > 0) {
+    console.log(`[ProductController] Discarding ${bornOrphaned.length} model image(s) with no model`);
+    await deleteHostedImages(bornOrphaned);
   }
 
   invalidateCache('products');
@@ -367,7 +441,7 @@ export const updateProductWithImages = async (req, res, next) => {
   // Images the browser already uploaded straight to Cloudinary (direct upload).
   const preUploaded = normalizePreUploaded(fields.uploadedImages);
   delete fields.uploadedImages;
-  const { order: imageOrder, primary: primaryImage } = takeSequencing(fields);
+  const { order: imageOrder, primary: primaryImage, adopt: adoptImages } = takeSequencing(fields);
   assertValidProduct(fields, { partial: true });
   const files  = req.files || (req.file ? [req.file] : []);
   const replaceImages = fields.replaceImages === 'true' || fields.replaceImages === true;
@@ -468,18 +542,62 @@ export const updateProductWithImages = async (req, res, next) => {
           url:       img.url,
           public_id: img.public_id,
           alt:       img.alt,
+          // Provenance MUST survive a round trip. Dropping it here would silently
+          // re-classify every model photo as an ordinary gallery image on the
+          // next save, making it immortal — the leak this flag exists to close.
+          variantOwned: img.variantOwned === true,
           isPrimary: img.isPrimary,
         }))
         .filter((img) => !deleteSet.has(imageKey(img)));
 
   const appended = newRefs.map((img) => ({
-    url:       img.url,
-    public_id: img.public_id,
-    alt:       fields.name || product.name,
-    isPrimary: false,
+    url:          img.url,
+    public_id:    img.public_id,
+    alt:          fields.name || product.name,
+    isPrimary:    false,
+    variantOwned: img.variantOwned === true,
   }));
 
-  fields.images = orderGallery([...kept, ...appended], imageOrder, primaryImage);
+  const composed = applyAdoptions(
+    orderGallery([...kept, ...appended], imageOrder, primaryImage),
+    adoptImages,
+  );
+
+  /*
+    ── Model images, resolved against the gallery that is about to persist ─────
+
+    Two passes, in this order, and the order matters:
+
+      1. pruneDanglingPointers — a model pointing at an image this request
+         removed is cleared, so we never store a pointer to nothing.
+      2. planVariantOwnedCleanup — a photo uploaded FOR a model that nothing
+         points at any more is dropped from the gallery. Because Step 4 below
+         derives its storage cleanup from "on the product before, absent from
+         the saved gallery now", dropping the row here is what actually deletes
+         the asset. No separate delete call, and therefore no second code path
+         that can be forgotten.
+
+    Running these AFTER orderGallery is deliberate: orderGallery decides which
+    image is primary, and the adoption rule (a model photo promoted to primary
+    is kept as an ordinary product photo) can only be evaluated once that is
+    settled.
+
+    `fields.variants` is only present when the request actually sent variants.
+    When it is absent — a partial update touching only price or SEO — the
+    product's CURRENT variants are what the gallery must be judged against, or a
+    price-only edit would delete every model photo on the product.
+  */
+  const effectiveVariants = Array.isArray(fields.variants)
+    ? fields.variants
+    // Plain objects, not live subdocuments: the helpers below spread their input,
+    // and spreading a Mongoose subdocument yields its internals ($__, _doc)
+    // rather than its fields.
+    : (product.variants || []).map((v) => (typeof v?.toObject === 'function' ? v.toObject() : v));
+  const prunedVariants = pruneDanglingPointers(composed, effectiveVariants);
+  if (Array.isArray(fields.variants)) fields.variants = prunedVariants;
+
+  const { survivors } = planVariantOwnedCleanup(composed, prunedVariants);
+  fields.images = survivors;
 
   if (Array.isArray(fields.categories)) {
     fields.categories = [...new Set(fields.categories)];

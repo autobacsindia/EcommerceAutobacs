@@ -55,7 +55,29 @@ const VariantSchema = new mongoose.Schema({
   saleEndsAt:    { type: Date, default: null },
   // Per-variant availability (coarse status, mirrors Product.stock).
   stock: { type: String, enum: STOCK_VALUES, default: STOCK_STATUS.IN },
-  sku:   { type: String, trim: true }
+  sku:   { type: String, trim: true },
+  /**
+   * This model's photo — a POINTER into the parent product's `images[]`, holding
+   * that entry's `imageKey()` (its public_id, or its url for migrated rows that
+   * never got one). NOT a copy of the image.
+   *
+   * ⚠ Do not denormalise `{url, public_id}` onto the variant instead. A pointer
+   * means the asset has exactly ONE owner (the gallery) and therefore exactly one
+   * place it can be deleted, so removing a model can never orphan a file in R2 —
+   * the failure mode that has twice left unreachable, still-billed objects in this
+   * project. It also means a re-host (or any URL change) is a single gallery edit
+   * that every referencing variant follows automatically.
+   *
+   * Absent/empty = "use the product's main image", resolved at READ time by
+   * utils/variantImage.js — never copied here. Copying the parent's URL would
+   * freeze it: changing the product's main photo would leave stale variants
+   * behind, and deleting it would leave them pointing at nothing.
+   *
+   * A key that matches no gallery entry degrades to the same fallback, so a
+   * gallery image removed out from under a variant is cosmetic, never a broken
+   * image on a live PDP.
+   */
+  imageKey: { type: String, trim: true }
 }, { _id: true });
 
 const ProductSchema = new mongoose.Schema({
@@ -138,7 +160,24 @@ const ProductSchema = new mongoose.Schema({
                   },
                 },
     alt:        { type: String },
-    isPrimary:  { type: Boolean, default: false }
+    isPrimary:  { type: Boolean, default: false },
+    /**
+     * True when this image entered the gallery THROUGH a model row (an upload
+     * from the variant editor, or the WooCommerce variation backfill) rather
+     * than being added as a general product photo.
+     *
+     * It exists to answer one question cleanly: may this asset be destroyed
+     * when nothing points at it any more? A photo the admin added to the
+     * gallery must survive forever regardless of what models come and go; a
+     * photo that only ever existed to depict a now-deleted model is garbage,
+     * and keeping it means paying to store an image no page can reach.
+     *
+     * See utils/variantImage.js `planVariantOwnedCleanup` for the rule. Note it
+     * is evaluated as an INVARIANT on every write, not as a handler on the
+     * "variant deleted" event — see the note there for why that distinction is
+     * what makes this safe.
+     */
+    variantOwned: { type: Boolean, default: false }
   }],
   // Availability status (coarse), not a numeric quantity. Admin-managed.
   // See utils/stockStatus.js. No per-unit deduction happens on orders.

@@ -87,3 +87,53 @@ describe('reconcileVariantIds', () => {
     expect(reconcileVariantIds(undefined, incoming)[0]._id).toBeUndefined();
   });
 });
+
+describe('mapVariationsToVariants — variation images (transient source URL)', () => {
+  test('carries the variation image through as a SOURCE url for the importer', () => {
+    const [v] = mapVariationsToVariants([{
+      id: 19952,
+      price: '12500',
+      stock_status: 'instock',
+      attributes: [{ name: 'models', option: 'smoked lights' }],
+      image: { id: 4242, src: 'https://autobacsindia.com/wp-content/uploads/2025/05/smoked.jpeg' },
+    }]);
+    expect(v.sourceImageUrl).toBe('https://autobacsindia.com/wp-content/uploads/2025/05/smoked.jpeg');
+  });
+
+  test('it is a SOURCE hint, never the stored pointer', () => {
+    const [v] = mapVariationsToVariants([{
+      id: 1, price: '10', stock_status: 'instock', attributes: [],
+      image: { src: 'https://autobacsindia.com/wp-content/a.jpg' },
+    }]);
+    // `imageKey` is the persisted pointer and can only be assigned once the image
+    // has been re-hosted into the parent gallery — never by this pure mapper.
+    expect(v.imageKey).toBeUndefined();
+  });
+
+  test('a variation with no image gets no key at all — absence drives the fallback', () => {
+    const [v] = mapVariationsToVariants([
+      { id: 1, price: '10', stock_status: 'instock', attributes: [] },
+    ]);
+    expect('sourceImageUrl' in v).toBe(false);
+  });
+
+  test('an image object with no src is ignored rather than stored empty', () => {
+    const [v] = mapVariationsToVariants([
+      { id: 1, price: '10', stock_status: 'instock', attributes: [], image: { id: 7 } },
+    ]);
+    expect('sourceImageUrl' in v).toBe(false);
+  });
+
+  test('reconcileVariantIds carries it through, so the importer still sees it', () => {
+    const incoming = mapVariationsToVariants([{
+      id: 19952, price: '12500', stock_status: 'instock', attributes: [],
+      image: { src: 'https://autobacsindia.com/wp-content/a.jpg' },
+    }]);
+    const [out] = reconcileVariantIds(
+      [{ wpVariationId: 19952, _id: 'existing-id' }],
+      incoming,
+    );
+    expect(out._id).toBe('existing-id');
+    expect(out.sourceImageUrl).toBe('https://autobacsindia.com/wp-content/a.jpg');
+  });
+});

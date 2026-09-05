@@ -19,6 +19,13 @@ export interface EditorVariant {
   originalPrice?: string;
   stock: StockStatus;
   sku?: string;
+  /**
+   * Key of the gallery image representing this model, or undefined for "use the
+   * product's main image". A pointer into the product's own gallery — never a
+   * separate upload, so a model's photo has exactly one owner and one place it
+   * can be deleted.
+   */
+  imageKey?: string;
 }
 
 const STOCK_OPTIONS: { value: StockStatus; label: string }[] = [
@@ -29,6 +36,24 @@ const STOCK_OPTIONS: { value: StockStatus; label: string }[] = [
 ];
 
 export const emptyVariant = (): EditorVariant => ({ label: '', price: '', originalPrice: '', stock: 'in', sku: '' });
+
+/**
+ * Warn before a removal that also destroys a photo.
+ *
+ * Removing a model reclaims the image uploaded FOR it — that asset is deleted
+ * from storage and is not recoverable. A model using the product's main image
+ * destroys nothing, so it gets the quieter prompt; conflating the two would
+ * train admins to click through the warning that actually matters.
+ *
+ * Exported for testing: the wording IS the safeguard.
+ */
+export const removeVariantMessage = (v: EditorVariant): string => {
+  const name = v.label?.trim() || 'this model';
+  return v.imageKey
+    ? `Remove “${name}”?\n\nThis will also permanently delete this model's photo. ` +
+      'That cannot be undone.\n\nTo keep the photo, use “Keep in gallery” on it first.'
+    : `Remove “${name}”?`;
+};
 
 export default function VariantsEditor({
   attributeName,
@@ -43,7 +68,14 @@ export default function VariantsEditor({
 }) {
   const update = (i: number, patch: Partial<EditorVariant>) =>
     onChange(variants.map((v, idx) => (idx === i ? { ...v, ...patch } : v)));
-  const remove = (i: number) => onChange(variants.filter((_, idx) => idx !== i));
+  const remove = (i: number) => {
+    const target = variants[i];
+    // Skip the prompt for a blank row the admin just added and is undoing — there
+    // is nothing to lose and a confirm on it is pure friction.
+    const isBlank = !target?.label?.trim() && !target?.price?.trim() && !target?.imageKey;
+    if (!isBlank && !window.confirm(removeVariantMessage(target))) return;
+    onChange(variants.filter((_, idx) => idx !== i));
+  };
   const add = () => onChange([...variants, emptyVariant()]);
 
   return (
@@ -130,7 +162,7 @@ export default function VariantsEditor({
                     type="button"
                     onClick={() => remove(i)}
                     className="text-gray-400 hover:text-red-500"
-                    aria-label="Remove model"
+                    aria-label={`Remove model${v.label ? ` ${v.label}` : ''}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -177,6 +209,9 @@ export function serializeVariants(attributeName: string, variants: EditorVariant
         originalPrice: was != null && was > price ? was : null,
         stock: v.stock,
         ...(v.sku && v.sku.trim() && { sku: v.sku.trim() }),
+        // Omitted when unset, never sent as null: absent is what makes the server
+        // fall back to the product's main image.
+        ...(v.imageKey && { imageKey: v.imageKey }),
       };
     })
     .filter((v) => v.label && v.price >= 0);
