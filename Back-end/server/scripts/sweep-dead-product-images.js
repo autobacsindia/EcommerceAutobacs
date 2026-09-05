@@ -68,6 +68,7 @@ import '../models/Category.js';
 import '../models/Vehicle.js';
 import elasticsearchService from '../services/elasticsearchService.js';
 import { imageKey, planGalleryCleanup } from '../utils/productGallery.js';
+import { pruneDanglingPointers } from '../utils/variantImage.js';
 
 const TAG = '[sweep-dead-product-images]';
 
@@ -262,9 +263,17 @@ async function run() {
   await assertSearchSyncWillFire();
   await connect();
 
+  /*
+    `variants` is projected because a model's photo is a POINTER into this
+    gallery (`variants[].imageKey`). Removing a dead image without clearing the
+    pointers at it would leave the document self-inconsistent — reads still fall
+    back to the product image, so nothing breaks visibly, but "is this asset
+    still referenced?" becomes unanswerable, which is the one question the
+    ownership cleanup has to get right.
+  */
   const products = await Product.find(
     { 'images.0': { $exists: true } },
-    '_id name slug images',
+    '_id name slug images variants',
   ).lean();
 
   console.log(`${TAG} ${products.length} product(s) with at least one image`);
@@ -374,7 +383,24 @@ async function run() {
   const syncedIds = [];
   for (const { product, survivors } of plans) {
     try {
-      await Product.updateOne({ _id: product._id }, { $set: { images: survivors } });
+      /*
+        Pointers are pruned against the SURVIVING gallery in the same $set, so
+        the document is never briefly inconsistent and a crash between two
+        writes cannot leave pointers at images that are already gone.
+
+        Deliberately NOT reclaiming variant-owned survivors here: this sweep's
+        one job is removing rows whose asset is confirmed missing. Deleting live
+        assets is the write path's decision, made with the admin's full intent in
+        hand. A maintenance script that also destroys present-and-correct images
+        is how a cleanup run becomes an incident.
+      */
+      const update = { images: survivors };
+      if (Array.isArray(product.variants) && product.variants.length) {
+        const pruned = pruneDanglingPointers(survivors, product.variants);
+        const changed = pruned.some((v, i) => v.imageKey !== product.variants[i]?.imageKey);
+        if (changed) update.variants = pruned;
+      }
+      await Product.updateOne({ _id: product._id }, { $set: update });
       updated++;
       syncedIds.push(product._id.toString());
     } catch (err) {

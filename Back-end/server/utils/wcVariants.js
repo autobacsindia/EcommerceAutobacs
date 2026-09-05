@@ -69,6 +69,29 @@ export function mapVariationsToVariants(wcVariations = []) {
         ...(sale > 0 && { salePrice: sale }),
         stock: variationStock(v),
         ...(v.sku && { sku: v.sku }),
+        /*
+          ── TRANSIENT — the importer must resolve and strip this ──────────────
+
+          WooCommerce hands each variation its own photo (474 of the 505 live
+          variations have one, and 389 of those appear nowhere in the parent
+          gallery). This mapper used to drop `v.image` on the floor, which is why
+          every migrated model on the new site shows its parent's photo.
+
+          It is a SOURCE URL, not a value we store. A model's photo is a POINTER
+          (`imageKey`) into the parent's gallery, so turning this into one means
+          downloading the bytes, re-hosting them on our own storage, appending a
+          gallery entry with `variantOwned: true`, and pointing the variant at
+          it — all I/O, none of which belongs in a pure mapper.
+
+          Persisting the wp-content URL directly would be worse than dropping it:
+          those addresses die with the old WordPress host, so it would look
+          correct in the database and 404 in every browser.
+
+          Not in the schema, so Mongoose strips it on save — a caller that forgets
+          to consume it loses the image (today's behaviour) rather than storing a
+          time-bomb URL. See scripts/backfill-variant-images.js.
+        */
+        ...(v.image?.src && { sourceImageUrl: v.image.src }),
       };
     });
 }
@@ -84,6 +107,9 @@ export function mapVariationsToVariants(wcVariations = []) {
  * @param {Array} existingVariants - the product's current variants (may be undefined)
  * @param {Array} newVariants      - freshly mapped variants (from mapVariationsToVariants)
  * @returns {Array} newVariants with _id back-filled from matching existing variants
+ *
+ * Transient fields (`sourceImageUrl`) ride through untouched — the importer
+ * still needs them after reconciliation to decide what to re-host.
  */
 export function reconcileVariantIds(existingVariants = [], newVariants = []) {
   const byWpId = new Map(

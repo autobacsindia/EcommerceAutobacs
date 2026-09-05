@@ -29,6 +29,13 @@ export interface ProductVariant {
   originalPrice?: number | null;
   stock: StockStatus;
   sku?: string;
+  /**
+   * Key of the gallery image representing this model, or absent for "use the
+   * product's main image". A pointer into the product's own gallery — the PDP
+   * resolves it to a slide index (lib/variantImage.ts) so picking a model moves
+   * the gallery to that photo.
+   */
+  imageKey?: string | null;
   /** Meta catalogue content_id (backend-computed, matches the feed). */
   metaContentId?: string;
 }

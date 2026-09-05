@@ -75,7 +75,15 @@ interface ImageUploaderProps {
   onPrimaryChange?: (key: string) => void;
   /** Set false to hide reorder + primary controls (e.g. replace mode) */
   reorderable?: boolean;
+  /** Max NEW files one save may add. Must not exceed the server's MAX_NEW_IMAGES. */
   maxFiles?:   number;
+  /**
+   * Max total gallery size. Defaults to `maxFiles` (the historical behaviour).
+   * Raise it wherever a gallery legitimately grows beyond one batch — e.g. a
+   * variable product, whose gallery holds marketing shots PLUS one photo per
+   * selectable model.
+   */
+  maxTotal?:   number;
   /** Per-file size ceiling (MB). Default matches backend multer limit. */
   maxFileSizeMB?: number;
   /**
@@ -104,6 +112,7 @@ export default function ImageUploader({
   onPrimaryChange,
   reorderable = true,
   maxFiles = IMAGE_MAX_FILES,
+  maxTotal,
   maxFileSizeMB = IMAGE_MAX_FILE_MB,
   maxTotalSizeMB = IMAGE_MAX_TOTAL_MB,
   label = 'Upload Images',
@@ -121,7 +130,32 @@ export default function ImageUploader({
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
 
   const totalCount = value.length + localPreviews.length;
-  const remaining  = maxFiles - totalCount;
+
+  /*
+    ── Two DIFFERENT limits, deliberately separated ──────────────────────────
+
+    `maxFiles` caps how many NEW files one save may add. It mirrors the server's
+    MAX_NEW_IMAGES, so it must not drift above it: the server silently truncates
+    over-cap refs, which would upload bytes the admin never sees attached.
+
+    `maxTotal` caps how large the gallery may grow. It defaults to `maxFiles`,
+    which reproduces the previous behaviour EXACTLY for every existing caller
+    (brands, vehicles — all `maxFiles={1}`), so this split changes nothing for
+    them.
+
+    They were one number before, and that number locked admins out. Once models
+    own photos, a variable product's gallery is legitimately marketing shots PLUS
+    one image per model — eleven is normal. With a single cap of 8, `remaining`
+    went NEGATIVE on every such product and the uploader refused every further
+    image with "You can upload at most 8 images", on exactly the products this
+    feature improves. Nothing was lost (existing images are resubmitted intact),
+    but the product became uneditable, which is the kind of breakage a manual
+    smoke test on a fresh product never sees.
+  */
+  const totalCeiling = maxTotal ?? maxFiles;
+  const batchRemaining = maxFiles - localPreviews.length;
+  const totalRemaining = totalCeiling - totalCount;
+  const remaining = Math.min(batchRemaining, totalRemaining);
 
   // A non-finite ceiling disables the combined-size cap — used where images
   // upload straight to Cloudinary and never traverse the proxy request body.
@@ -195,7 +229,13 @@ export default function ImageUploader({
     if (!files.length) return;
 
     if (remaining <= 0) {
-      setError(`You can upload at most ${maxFiles} image${maxFiles === 1 ? '' : 's'}.`);
+      // Name the limit that actually bit. "You can upload at most 8 images" on a
+      // gallery of eleven is not just unhelpful, it reads as a bug.
+      setError(
+        totalRemaining <= 0 && totalCeiling !== maxFiles
+          ? `This gallery already has ${totalCount} of ${totalCeiling} images. Remove one to add another.`
+          : `You can upload at most ${maxFiles} image${maxFiles === 1 ? '' : 's'} at a time.`
+      );
       return;
     }
 
@@ -246,7 +286,7 @@ export default function ImageUploader({
     }));
 
     setLocalPreviews((prev) => [...prev, ...previews]);
-  }, [remaining, maxFiles, enforceTotal, MAX_TOTAL_BYTES, maxFileSizeMB, maxTotalSizeMB, localPreviews]);
+  }, [remaining, maxFiles, totalRemaining, totalCeiling, totalCount, enforceTotal, MAX_TOTAL_BYTES, maxFileSizeMB, maxTotalSizeMB, localPreviews]);
 
   // ── Remove ─────────────────────────────────────────────────────────────────
   const removeLocal = (uid: string) => {

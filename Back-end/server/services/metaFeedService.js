@@ -25,6 +25,7 @@
 
 import { STOCK_STATUS } from '../utils/stockStatus.js';
 import { productContentId, variantContentId, itemGroupId } from '../utils/metaCatalogId.js';
+import { resolveVariantImage } from '../utils/variantImage.js';
 import { escapeXml, stripHtml, priceFields as sharedPriceFields } from '../utils/feedFormat.js';
 
 const MAX_TITLE = 200;        // Meta title hard cap
@@ -120,6 +121,17 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand }) {
       ...base,
       id: variantFeedId(product, variant),
       itemGroupId: group,
+      /*
+        Each model is a SEPARATE offer to Meta/Google, so it must carry its own
+        photograph. Every row used to ship the parent's primary image, which meant
+        paying for a click on an ad showing blue and landing the shopper on the
+        yellow listing — and, under Google's policy, an image that does not depict
+        the offer is what "image mismatch" disapprovals are for. Models with no
+        photo of their own still resolve to the parent image, which is correct:
+        that is genuinely what the PDP shows them.
+      */
+      image: resolveVariantImage(product, variant)?.url || image,
+
       title: `${product.name} - ${variant.label}`.slice(0, MAX_TITLE),
       customLabel0: variant.label,
       sku: variant.sku || product.sku || null,

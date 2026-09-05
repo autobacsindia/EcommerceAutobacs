@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import GalleryCarousel from './gallery/GalleryCarousel';
 import GalleryLightbox from './gallery/GalleryLightbox';
 import GalleryThumbnails from './gallery/GalleryThumbnails';
@@ -34,12 +34,33 @@ export default function Gallery({
   images,
   name,
   onSale,
+  jumpTo = null,
 }: {
   images: GalleryImage[];
   name: string;
   onSale?: boolean;
+  /**
+   * Index to move to when a shopper picks a model on a variable product.
+   * `null` means "leave the gallery alone" — the common case, and the correct
+   * behaviour for a model with no photo of its own.
+   */
+  jumpTo?: number | null;
 }) {
   const [active, setActive] = useState(0);
+
+  /*
+    Jump on SELECTION, not on every render.
+    
+    The effect depends on `jumpTo` alone, so it fires when the shopper picks a
+    different model and stays quiet while they swipe. Including `active` here —
+    or "syncing" the two in both directions — would make the gallery snap back to
+    the model image every time the shopper tried to look at anything else, which
+    is worse than not jumping at all.
+  */
+  useEffect(() => {
+    if (jumpTo == null) return;
+    setActive(jumpTo);
+  }, [jumpTo]);
   /** `null` = viewer closed. Also the index the viewer opens at. */
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 

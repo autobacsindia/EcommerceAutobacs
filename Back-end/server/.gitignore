@@ -99,6 +99,13 @@ reports/
 reports-mapping/
 reports-header-nav/
 
+# Per-run rollback journals written by scripts/backfill-variant-images.js on
+# --apply. They record the exact pre-run images/variants of every product a run
+# touched, so they are the ONLY way to reverse it — keep them until the run is
+# verified, then delete. Not source: each belongs to one run against one
+# database, and committing them would dirty the tree after every apply.
+backfill-*.json
+
 # Pre-delete backups from scripts/purge-test-account-data.js — contain customer PII
 purge-backups/
 
