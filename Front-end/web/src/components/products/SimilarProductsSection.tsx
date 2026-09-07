@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { Gift } from 'lucide-react';
 import apiClient from '@/lib/api';
 import ProductRail, { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './ProductRail';
+import { useCurrency } from '@/context/CurrencyContext';
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import {
   useCampaignProductRates,
   campaignSavingLabel,
-  formatSavingInr,
   lineSavings,
 } from '@/hooks/queries/useCampaignProductRates';
 
@@ -33,14 +33,14 @@ interface Product {
 
 interface SimilarProductsSectionProps {
   productId: string;
-  isDark?: boolean;
 }
 
-export default function SimilarProductsSection({ productId, isDark = true }: SimilarProductsSectionProps) {
+export default function SimilarProductsSection({ productId }: SimilarProductsSectionProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { formatPrice } = useCurrency();
 
   /*
     This rail was the one PDP surface the campaign never reached: the buy box, the
@@ -73,7 +73,14 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
             ? campaignData?.rates?.[product._id]?.percent ?? 0
             : 0,
       }).campaign,
-      formatPrice: formatSavingInr,
+      /* The BADGE has to speak the same currency as the PRICE beside it.
+         `formatSavingInr` hard-codes ₹, so once the price moved to
+         CurrencyContext a USD shopper read "$3,228.92" with "+₹1,840 off"
+         underneath it — a discount in a currency the price is not quoted in.
+         Same injected formatter as `StoreProductCard`; `exact` keeps the paise,
+         because a saving is a figure the shopper can check against the cart and
+         rounding ₹29.97 up to "₹30 off" is a promise the cart then breaks. */
+      formatPrice: (v) => formatPrice(v, { exact: true }),
       /* `product.price` on a variable product is its CHEAPEST variant, so the saving is a
          floor. Say so rather than state a figure that is wrong for every model but one. */
       from: product.productType === 'variable'
@@ -119,17 +126,17 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
 
   if (loading) {
     return (
-      <section className={`py-8 ${isDark ? 'bg-obsidian-deep' : 'bg-obsidian-deep'}`}>
+      <section className="py-8 bg-obsidian-deep">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className={`text-2xl font-bold mb-6 ${isDark ? 'text-ink' : 'text-ink'}`}>Similar Products</h2>
+          <h2 className="text-2xl font-bold mb-6 text-ink">Similar Products</h2>
           <div className={RAIL_CONTAINER}>
             {[...Array(RAIL_LIMIT)].map((_, i) => (
-              <div key={i} className={`${RAIL_ITEM} ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian'} rounded-lg shadow-sm overflow-hidden animate-pulse`}>
-                <div className={`h-48 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'}`} />
+              <div key={i} className={`${RAIL_ITEM} bg-obsidian-raised rounded-lg shadow-sm overflow-hidden animate-pulse`}>
+                <div className="h-48 bg-obsidian-raised" />
                 <div className="p-4">
-                  <div className={`h-4 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} rounded w-3/4 mb-2`} />
-                  <div className={`h-4 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} rounded w-1/2 mb-3`} />
-                  <div className={`h-6 ${isDark ? 'bg-obsidian-raised' : 'bg-gold/10'} rounded w-1/3`} />
+                  <div className="h-4 bg-obsidian-raised rounded w-3/4 mb-2" />
+                  <div className="h-4 bg-obsidian-raised rounded w-1/2 mb-3" />
+                  <div className="h-6 bg-obsidian-raised rounded w-1/3" />
                 </div>
               </div>
             ))}
@@ -147,13 +154,13 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
     <section 
       ref={containerRef}
       aria-labelledby="similar-products-heading"
-      className={`py-8 ${isDark ? 'bg-obsidian-deep' : 'bg-obsidian-deep'}`}
+      className="py-8 bg-obsidian-deep"
       tabIndex={-1}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <h2 
           id="similar-products-heading"
-          className={`text-2xl font-bold mb-6 ${isDark ? 'text-ink' : 'text-ink'}`}
+          className="text-2xl font-bold mb-6 text-ink"
           aria-live="polite"
         >
           Similar Products
@@ -163,7 +170,7 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
           {products.map((product) => (
             <article
               key={product._id}
-              className={`${RAIL_ITEM} ${isDark ? 'bg-obsidian-raised hover:bg-obsidian-raised' : 'bg-obsidian hover:bg-obsidian-deep'} rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
+              className={`${RAIL_ITEM} bg-obsidian-raised hover:bg-obsidian-raised rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
               tabIndex={0}
             >
               <Link 
@@ -184,8 +191,8 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
                       priority={false}
                     />
                   ) : (
-                    <div className={`w-full h-full ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} flex items-center justify-center`}>
-                      <span className={`${isDark ? 'text-ink-muted' : 'text-ink-muted'} text-sm`}>No image</span>
+                    <div className="w-full h-full bg-obsidian-raised flex items-center justify-center">
+                      <span className="text-ink-muted text-sm">No image</span>
                     </div>
                   )}
                   {campaignSavingFor(product) && (
@@ -197,17 +204,25 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
                 </div>
                 
                 <div className="p-4">
-                  <h3 className={`font-semibold line-clamp-2 mb-1 ${isDark ? 'text-ink' : 'text-ink'}`}>
+                  <h3 className="font-semibold line-clamp-2 mb-1 text-ink">
                     {product.name}
                   </h3>
                   
+                  {/* Money goes through CurrencyContext, never a local
+                      `₹` + `toLocaleString()`. Hand-rolled, this rail took the
+                      runtime's locale (en-US on Vercel and outside India) and
+                      grouped in thousands — "₹283,000" beneath a buy box reading
+                      "₹2,68,000" — and it ignored the currency switch, so a USD
+                      shopper got dollars on the listing and rupees here. Both
+                      failures are invisible on cheap stock: five digits group
+                      identically in every locale. */}
                   <div className="flex items-center mb-2">
-                    <span className={`text-lg font-bold ${isDark ? 'text-ink' : 'text-ink'}`}>
-                      ₹{product.price.toLocaleString()}
+                    <span className="text-lg font-bold text-ink">
+                      {formatPrice(product.price)}
                     </span>
                     {product.originalPrice && product.originalPrice > product.price && (
-                      <span className={`ml-2 text-sm line-through ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
-                        ₹{product.originalPrice.toLocaleString()}
+                      <span className="ml-2 text-sm line-through text-ink-muted">
+                        {formatPrice(product.originalPrice)}
                       </span>
                     )}
                   </div>
@@ -215,17 +230,17 @@ export default function SimilarProductsSection({ productId, isDark = true }: Sim
                   {product.averageRating ? (
                     <div className="flex items-center mb-2">
                       <span className="text-yellow-400 mr-1">★</span>
-                      <span className={`text-sm ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
+                      <span className="text-sm text-ink-muted">
                         {product.averageRating.toFixed(1)} ({product.totalReviews || 0})
                       </span>
                     </div>
                   ) : null}
 
                   <div className="flex items-center justify-between mt-3">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isDark ? 'bg-gold/50 text-gold' : 'bg-gold/10 text-gold'}`}>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gold/50 text-gold">
                       {product.brand || 'Autobacs'}
                     </span>
-                    <span className={`text-xs ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
+                    <span className="text-xs text-ink-muted">
                       {product.categories?.[0]?.name || 'Auto Parts'}
                     </span>
                   </div>

@@ -1,25 +1,93 @@
 'use client';
 
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import Img from './Img';
-import { hero, heroSequence } from './homeContent';
+import {
+  hero,
+  heroSequence,
+  heroSequenceMobile,
+  type HeroSequenceConfig,
+} from './homeContent';
+
+/** Must match the breakpoint that switches the pinned-hero layout in home-redesign.css. */
+export const DESKTOP_MEDIA_QUERY = '(min-width: 769px)';
 
 /**
- * Scroll-driven hero animation. Renders a <canvas> that scrubs through the
- * `heroSequence` WebP frames based on how far the user has scrolled past the
- * hero (frame 0 at the top, last frame as the hero leaves the viewport).
+ * Set on the pin wrapper once the sequence is actually running. Everything that
+ * only makes sense while scrubbing — the tall scroll track, the sticky hero, the
+ * canvas itself — hangs off this class, so a device that opts out (reduced
+ * motion, data saver, tiny RAM) keeps the plain stacked hero instead of a dead
+ * pin with a blank canvas in it.
+ */
+export const ACTIVE_CLASS = 'hero-seq-active';
+
+/**
+ * Below this the URL bar collapsing/expanding is assumed to be the cause of an
+ * `innerHeight` change, not a real viewport change. Mobile browsers resize the
+ * visual viewport by ~60-100px mid-scroll; feeding that into the scrub distance
+ * makes the animation jump under the user's thumb.
+ */
+const URL_BAR_TOLERANCE_PX = 140;
+
+/** Parallel frame fetches. Enough to saturate a connection, few enough to not stampede HTTP/1.1. */
+const CONCURRENCY = 6;
+
+export type DeviceSignals = {
+  isDesktop: boolean;
+  reducedMotion: boolean;
+  saveData: boolean;
+  /** navigator.deviceMemory in GB; undefined outside Chromium — don't penalize. */
+  deviceMemory?: number;
+};
+
+/**
+ * Which frame set to scrub, or `null` to stay on the static image.
+ *
+ * Pure so it can be unit-tested; the effect only supplies the signals. Phones
+ * get their own decimated set rather than the desktop one — see the memory note
+ * on `heroSequenceMobile`.
+ */
+export function pickSequence(signals: DeviceSignals): HeroSequenceConfig | null {
+  if (signals.reducedMotion) return null;
+  if (signals.saveData) return null;
+  const mem = signals.deviceMemory;
+  if (typeof mem === 'number' && mem > 0 && mem < 2) return null;
+  return signals.isDesktop ? heroSequence : heroSequenceMobile;
+}
+
+export function readDeviceSignals(win: Window): DeviceSignals {
+  const nav = win.navigator as Navigator & {
+    connection?: { saveData?: boolean };
+    deviceMemory?: number;
+  };
+  return {
+    isDesktop: win.matchMedia(DESKTOP_MEDIA_QUERY).matches,
+    reducedMotion: win.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    saveData: nav.connection?.saveData === true,
+    deviceMemory: nav.deviceMemory,
+  };
+}
+
+/**
+ * Scroll-driven hero animation. Renders a <canvas> that scrubs through a WebP
+ * frame sequence based on how far the user has scrolled past the hero (frame 0
+ * at the top, last frame as the pinned hero releases).
  *
  * Production guard rails:
- *   - Desktop + motion only. On mobile or `prefers-reduced-motion` we bail out
- *     of the effect entirely (no frame fetching) and CSS shows the static
- *     `hero.image` fallback instead — phones never pay for the sequence.
- *   - Frames are preloaded with bounded concurrency so we don't open 145
- *     connections at once (matters on HTTP/1.1); the first frame is drawn as
- *     soon as it arrives, and missing frames fall back to the nearest loaded
- *     one so the canvas is never blank.
- *   - Scroll is sampled inside a single rAF (coalesced), the canvas is sized to
- *     a capped devicePixelRatio, and the scroll listener is only attached while
- *     the hero is on/near screen (IntersectionObserver).
+ *   - Mobile runs a SEPARATE, decimated frame set (49 x 720x404 instead of
+ *     145 x 1440x808). Every decoded frame is held for the life of the section,
+ *     so the desktop set would sit at ~674 MB of ImageBitmap memory — past what
+ *     iOS Safari kills a tab over. The mobile set is ~57 MB and ~0.64 MB on the
+ *     wire.
+ *   - Reduced-motion, data-saver and sub-2 GB devices never fetch a frame; CSS
+ *     keeps the static `hero.image` because the ACTIVE_CLASS is never applied.
+ *   - Frames are preloaded with bounded concurrency (the first frame alone
+ *     first, so the LCP paint isn't queued behind five others), decoded off the
+ *     main thread as ImageBitmaps, and missing frames fall back to the nearest
+ *     loaded one so the canvas is never blank.
+ *   - Scroll is sampled inside a single rAF, the canvas is sized to a capped
+ *     devicePixelRatio, the viewport height is cached against URL-bar chrome,
+ *     and the scroll listener is only attached while the hero is near screen.
  */
 export default function HeroSequence({
   sectionRef,
@@ -27,6 +95,11 @@ export default function HeroSequence({
   sectionRef: RefObject<HTMLElement | null>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Starts true so SSR and the first client render always include the static
+  // image (no hydration mismatch, and it is the paint until frame 1 lands).
+  // Dropped once a real frame is on the canvas, which also cancels its download
+  // on the mobile path where it would otherwise be pure waste behind display:none.
+  const [showFallback, setShowFallback] = useState(true);
 
   useEffect(() => {
     const canvasEl = canvasRef.current;
@@ -37,20 +110,16 @@ export default function HeroSequence({
     const canvas: HTMLCanvasElement = canvasEl;
     const section: HTMLElement = sectionEl;
 
-    // Desktop + motion only — keep this in sync with the CSS breakpoint that
-    // toggles .hero-seq / .hero-seq-fallback in home-redesign.css.
-    if (
-      !window.matchMedia('(min-width: 769px)').matches ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
-      return;
-    }
+    const signals = readDeviceSignals(window);
+    const picked = pickSequence(signals);
+    if (!picked) return;
+    const config: HeroSequenceConfig = picked;
 
     const ctx2d = canvas.getContext('2d');
     if (!ctx2d) return;
     const ctx: CanvasRenderingContext2D = ctx2d;
 
-    const { dir, prefix, ext, count, pad } = heroSequence;
+    const { dir, prefix, ext, count, pad } = config;
     const frameUrl = (i: number) =>
       `${dir}/${prefix}${String(i + 1).padStart(pad, '0')}.${ext}`;
 
@@ -61,6 +130,9 @@ export default function HeroSequence({
     let currentIndex = -1;
     let targetIndex = 0;
     let cancelled = false;
+    // Cached so URL-bar chrome can't rewrite the scrub distance mid-scroll.
+    let viewportHeight = window.innerHeight;
+    const viewportTolerance = signals.isDesktop ? 0 : URL_BAR_TOLERANCE_PX;
 
     function nearestLoaded(i: number): ImageBitmap | null {
       if (images[i]) return images[i];
@@ -97,11 +169,27 @@ export default function HeroSequence({
       }
     }
 
+    // Switch the layout on only once a real frame is on the canvas. Doing it
+    // earlier (on mount, or in a media query) leaves a blank canvas over the
+    // whole first paint and, if the frames never arrive at all, forever — this
+    // way a failed fetch degrades to the static hero instead of an empty stage.
+    let activated = false;
+    function activate() {
+      if (activated) return;
+      activated = true;
+      section.classList.add(ACTIVE_CLASS);
+      setShowFallback(false);
+      // The canvas was display:none until the class landed, so it had no box to
+      // measure; size it against the real one now and repaint.
+      resize();
+      computeTarget();
+      render();
+    }
+
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const cssWidth = canvas.clientWidth || heroSequence.naturalWidth;
-      const cssHeight =
-        cssWidth * (heroSequence.naturalHeight / heroSequence.naturalWidth);
+      const cssWidth = canvas.clientWidth || config.naturalWidth;
+      const cssHeight = cssWidth * (config.naturalHeight / config.naturalWidth);
       canvas.width = Math.round(cssWidth * dpr);
       canvas.height = Math.round(cssHeight * dpr);
       const img = nearestLoaded(currentIndex < 0 ? 0 : currentIndex);
@@ -111,9 +199,11 @@ export default function HeroSequence({
     function computeTarget() {
       // `section` is the tall pin wrapper; the hero sticks for its full height.
       // The scrub distance is therefore wrapper height minus one viewport — the
-      // frames reach the last one exactly as the sticky hero releases.
+      // frames reach the last one exactly as the sticky hero releases. Uses the
+      // cached viewport height, NOT window.innerHeight, so a collapsing mobile
+      // URL bar doesn't shift the distance out from under an in-progress scrub.
       const rect = section.getBoundingClientRect();
-      const distance = Math.max(section.offsetHeight - window.innerHeight, 1);
+      const distance = Math.max(section.offsetHeight - viewportHeight, 1);
       const scrolled = Math.min(Math.max(-rect.top, 0), distance);
       const progress = scrolled / distance;
       targetIndex = Math.min(count - 1, Math.round(progress * (count - 1)));
@@ -130,17 +220,25 @@ export default function HeroSequence({
       });
     }
 
+    // Adopt a genuinely new viewport (rotation, desktop window resize) but
+    // ignore the browser-chrome-sized changes a mobile scroll produces.
+    function onViewportChange(force = false) {
+      const h = window.innerHeight;
+      if (!force && Math.abs(h - viewportHeight) <= viewportTolerance) return;
+      viewportHeight = h;
+      computeTarget();
+      render();
+    }
+    const onWindowResize = () => onViewportChange(false);
+    const onOrientationChange = () => onViewportChange(true);
+
     // --- bounded-concurrency progressive preload ---------------------------
     // fetch → blob → createImageBitmap decodes each frame OFF the main thread,
     // so by the time it lands in `images[]` it's a ready-to-blit bitmap and
     // drawCover never forces a synchronous decode during scroll.
     let nextToLoad = 0;
-    const CONCURRENCY = 6;
     const abort = new AbortController();
-    async function loadNext(): Promise<void> {
-      if (cancelled) return;
-      const i = nextToLoad++;
-      if (i >= count) return;
+    async function loadOne(i: number): Promise<void> {
       try {
         const res = await fetch(frameUrl(i), { signal: abort.signal });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -152,20 +250,38 @@ export default function HeroSequence({
         images[i] = bitmap;
         // Draw immediately if this is the frame we currently want (or the very
         // first frame to arrive), so the hero is never blank.
-        if (i === targetIndex || currentIndex < 0) render();
+        if (i === targetIndex || currentIndex < 0) {
+          render();
+          activate();
+        }
       } catch {
         // Network/decode error or aborted teardown — skip this frame; render()
         // falls back to the nearest loaded one.
       }
+    }
+    async function loadNext(): Promise<void> {
+      if (cancelled) return;
+      const i = nextToLoad++;
+      if (i >= count) return;
+      await loadOne(i);
       return loadNext();
     }
 
     resize();
     computeTarget();
-    for (let k = 0; k < CONCURRENCY; k++) loadNext();
+    // The first frame is the hero's first paint, so fetch it on its own before
+    // opening the other lanes — otherwise LCP waits behind five frames nobody
+    // can see yet.
+    nextToLoad = 1;
+    void loadOne(0).then(() => {
+      if (cancelled) return;
+      for (let k = 0; k < CONCURRENCY; k++) void loadNext();
+    });
 
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(canvas);
+    window.addEventListener('resize', onWindowResize, { passive: true });
+    window.addEventListener('orientationchange', onOrientationChange);
 
     let scrollBound = false;
     const io = new IntersectionObserver(
@@ -188,7 +304,10 @@ export default function HeroSequence({
       abort.abort();
       resizeObserver.disconnect();
       io.disconnect();
+      window.removeEventListener('resize', onWindowResize);
+      window.removeEventListener('orientationchange', onOrientationChange);
       if (scrollBound) window.removeEventListener('scroll', onScroll);
+      section.classList.remove(ACTIVE_CLASS);
       // Release decoded-bitmap memory eagerly instead of waiting for GC.
       for (const bmp of images) bmp?.close();
     };
@@ -197,9 +316,11 @@ export default function HeroSequence({
   return (
     <>
       <canvas ref={canvasRef} className="hero-seq" aria-hidden="true" />
-      {/* Mobile / reduced-motion fallback — toggled via CSS, not JS, so SSR is
-          deterministic and the canvas path never affects hydration. */}
-      <Img src={hero.image} alt={hero.imageAlt} className="hero-seq-fallback" priority />
+      {/* Static hero until a real frame is drawn — and permanently for anyone
+          the sequence opted out of, since ACTIVE_CLASS never lands there. */}
+      {showFallback && (
+        <Img src={hero.image} alt={hero.imageAlt} className="hero-seq-fallback" priority />
+      )}
     </>
   );
 }

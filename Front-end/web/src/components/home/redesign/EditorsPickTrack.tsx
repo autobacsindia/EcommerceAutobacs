@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Img from './Img';
 import { Diagonal } from './icons';
+import { useCurrency } from '@/context/CurrencyContext';
 import { products as fallbackProducts, type ProductItem } from './homeContent';
 
 /**
@@ -15,6 +16,7 @@ import { products as fallbackProducts, type ProductItem } from './homeContent';
 export default function EditorsPickTrack({ products }: { products?: ProductItem[] }) {
   // Live featured products from the DB; static placeholders if none resolved.
   const items = products?.length ? products : fallbackProducts;
+  const { formatPrice } = useCurrency();
   const trackRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const idxRef = useRef(0);
@@ -81,7 +83,12 @@ export default function EditorsPickTrack({ products }: { products?: ProductItem[
                 <div className="ce-bottom">
                   <div className="ce-brand">{p.brand}</div>
                   <div className="ce-name">{p.name}</div>
-                  <div className="ce-price">{p.price}</div>
+                  {/* Curated fallbacks carry only the formatted string; a
+                      catalogue row carries the number too, and that goes through
+                      CurrencyContext like every other price. */}
+                  <div className="ce-price">
+                    {p.priceValue != null ? formatPrice(p.priceValue) : p.price}
+                  </div>
                 </div>
               </div>
             </Link>

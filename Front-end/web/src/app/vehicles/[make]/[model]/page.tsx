@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { ArrowLeft, Package } from 'lucide-react';
 import { vehicleService, Vehicle } from '@/services/vehicleService';
 import apiClient from '@/lib/api';
+import EnhancedImage from '@/components/layout/EnhancedImage';
+import { useCurrency } from '@/context/CurrencyContext';
 
 export default function VehicleModelPage({ params }: { params: Promise<{ make: string; model: string }> }) {
   const router = useRouter();
@@ -16,6 +18,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ make: s
   const vehicleMake = decodeURIComponent(make);
   const vehicleModel = decodeURIComponent(model);
   
+  const { formatPrice } = useCurrency();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -123,11 +126,21 @@ export default function VehicleModelPage({ params }: { params: Promise<{ make: s
                 className="bg-obsidian rounded-lg shadow-sm border border-hairline overflow-hidden hover:shadow-md transition-shadow"
               >
                 {product.images?.[0] && (
-                  <div className="aspect-square bg-obsidian-raised">
-                    <img
+                  /* `relative` is load-bearing: a `fill` image positions against
+                     the nearest positioned ancestor, and without it these would
+                     escape the card and size to the page. */
+                  <div className="relative aspect-square bg-obsidian-raised">
+                    <EnhancedImage
                       src={product.images[0].url}
                       alt={product.name}
-                      className="w-full h-full object-cover"
+                      fill
+                      /* Mirrors the grid above (1 / 2 / 3 / 4 columns at
+                         sm / lg / xl). A `fill` image defaults to `sizes="100vw"`,
+                         so without this every cell in a four-up grid fetches a
+                         full-viewport-wide derivative — twenty of them per page. */
+                      sizes="(max-width: 639px) 100vw, (max-width: 1023px) 50vw, (max-width: 1279px) 33vw, 25vw"
+                      context="product"
+                      className="h-full w-full object-cover"
                     />
                   </div>
                 )}
@@ -136,8 +149,10 @@ export default function VehicleModelPage({ params }: { params: Promise<{ make: s
                     {product.name}
                   </h3>
                   <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-green-600">
-                      ₹{product.price?.toLocaleString('en-IN')}
+                    {/* Same formatter as every other price on the site, so the
+                        currency switch reaches this page too. */}
+                    <span className="text-lg font-bold text-gold">
+                      {product.price != null ? formatPrice(product.price) : '—'}
                     </span>
                     {product.stock !== 'out' ? (
                       <span className="text-xs text-green-600 font-medium">In Stock</span>

@@ -229,24 +229,31 @@
 .hr .hero .tagline { margin-top: 26px; font-size: 13px; font-weight: 300; line-height: 1.75; color: var(--muted); max-width: 190px; opacity: 0; animation: hr-fadeUp 0.7s ease 1s forwards; }
 .hr .hero .center-img { position: absolute; left: var(--car-x); top: 50%; transform: translate(-50%, -50%); z-index: 2; opacity: 0; animation: hr-fadeIn 1.3s ease 0.45s forwards; }
 .hr .hero .center-img img { width: var(--car-w); max-width: 80vw; height: auto; object-fit: contain; filter: drop-shadow(0 48px 96px rgba(0, 0, 0, 0.85)); opacity: 0.9; }
-/* Hero scroll-sequence canvas. Desktop+ shows the scrubbed <canvas>; mobile and
-   reduced-motion (block below) keep the static .hero-seq-fallback image. The
-   769px breakpoint must match the matchMedia gate in HeroSequence.tsx. */
+/* ── HERO SCROLL SEQUENCE ──
+   The pinned, frame-scrubbed hero is gated on .hero-seq-active, which
+   HeroSequence.tsx puts on .hero-pin only once it has decided to run AND the
+   first frame is on the canvas. Nothing here is a bare media query, because the
+   decision is not purely a breakpoint: reduced-motion, data-saver and sub-2GB
+   devices opt out at every width and must keep the plain stacked hero rather
+   than a dead scroll track with a blank canvas in it. Desktop and mobile scrub
+   DIFFERENT frame sets (1440x808 vs 720x404) — see heroSequenceMobile. */
 .hr .hero .center-img .hero-seq { display: none; }
+.hr .hero-pin.hero-seq-active .center-img .hero-seq { display: block; }
+.hr .hero-pin.hero-seq-active .center-img .hero-seq-fallback { display: none; }
+
 @media (min-width: 769px) {
   /* PINNED HERO — the whole screen stays fixed while the frames scrub; the page
      only scrolls on once the sequence finishes. .hero sticks for the full height
      of .hero-pin (300vh ⇒ ~200vh of scrub distance; tune the 300vh to taste). */
-  .hr .hero-pin { height: 300vh; }
-  .hr .hero { position: sticky; top: 0; height: 100vh; background: #080e16; }
+  .hr .hero-pin.hero-seq-active { height: 300vh; }
+  .hr .hero-pin.hero-seq-active .hero { position: sticky; top: 0; height: 100vh; background: #080e16; }
   /* Match the hero bg to the video's flat #080e16 background, with a faint cool
      glow behind the car, so the feathered canvas edges dissolve seamlessly. */
-  .hr .hero .bg-glow { background: radial-gradient(ellipse 95% 85% at 50% 50%, #131c26 0%, #0a1019 55%, #070b12 100%); }
+  .hr .hero-pin.hero-seq-active .hero .bg-glow { background: radial-gradient(ellipse 95% 85% at 50% 50%, #131c26 0%, #0a1019 55%, #070b12 100%); }
 
   /* Bigger car + edges feathered into the bg (no hard rectangle). */
-  .hr .hero .center-img { left: 50%; }
-  .hr .hero .center-img .hero-seq {
-    display: block;
+  .hr .hero-pin.hero-seq-active .hero .center-img { left: 50%; }
+  .hr .hero-pin.hero-seq-active .hero .center-img .hero-seq {
     width: min(1240px, 86vw);
     max-width: none;
     height: auto;
@@ -255,8 +262,94 @@
     -webkit-mask-image: radial-gradient(ellipse 90% 88% at 50% 48%, #000 56%, transparent 100%);
     mask-image: radial-gradient(ellipse 90% 88% at 50% 48%, #000 56%, transparent 100%);
   }
-  .hr .hero .center-img .hero-seq-fallback { display: none; }
 }
+
+@media (max-width: 768px) {
+  /* PINNED HERO, PHONE — the desktop composition (car filling the stage, copy
+     over it) adapted to portrait, with four differences that matter:
+     1. 180vh not 300vh. A pin eats the user's scroll, and a thumb flick covers
+        far more of the page than a wheel notch; 300vh reads as "stuck".
+     2. 100svh, not 100vh. On mobile 100vh is the LARGE viewport (URL bar
+        hidden), so a 100vh sticky hero has its bottom cut off while the bar is
+        showing — which is exactly when the user first sees it.
+     3. The canvas is deliberately WIDER than the screen and cropped by the
+        hero's overflow. The frames are 16:9 and the screen is portrait, so
+        fitting the full frame width shrinks the car to a thin strip in a mostly
+        empty stage. Overscaling to ~170% cuts away the garage either side and
+        leaves the car itself at a size comparable to desktop.
+     4. The copy is absolutely positioned OVER the frame, like desktop, instead
+        of stacked above it — the top of every frame is dark ceiling, so the
+        headline has somewhere to sit without fighting the car. */
+  .hr .hero-pin.hero-seq-active { height: 180vh; }
+  .hr .hero-pin.hero-seq-active .hero {
+    position: sticky;
+    top: 0;
+    height: 100vh; /* fallback for browsers without svh */
+    height: 100svh;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #080e16;
+  }
+  /* The promo strip stays in flow above the pin; the sticky hero positions its
+     own copy clear of the nav, so it must not also inherit the strip's offset. */
+  .hr .hr-promo-slot + .hero-pin.hero-seq-active .hero { padding-top: 0; }
+  .hr .hero-pin.hero-seq-active .hero .bg-glow { background: radial-gradient(ellipse 130% 70% at 50% 52%, #131c26 0%, #0a1019 55%, #070b12 100%); }
+
+  .hr .hero-pin.hero-seq-active .hero .hero-left {
+    position: absolute;
+    top: 96px;
+    left: 22px;
+    right: 22px;
+    width: auto;
+    transform: none;
+    text-align: center;
+    z-index: 5;
+  }
+  .hr .hero-pin.hero-seq-active .hero .headline { font-size: clamp(38px, 12.5vw, 56px); }
+  .hr .hero-pin.hero-seq-active .hero .tagline { margin-top: 16px; max-width: 300px; }
+
+  /* Sits below centre so the car clears the headline above it. */
+  .hr .hero-pin.hero-seq-active .hero .center-img {
+    position: absolute;
+    top: 58%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    z-index: 2;
+  }
+  /* Flex centring makes the overscaled canvas overflow evenly on both sides, so
+     the car stays centred while the garage is cropped away. */
+  .hr .hero-pin.hero-seq-active .hero .center-img > div { display: flex; justify-content: center; width: 100%; }
+  .hr .hero-pin.hero-seq-active .hero .center-img .hero-seq {
+    flex: 0 0 auto;
+    width: 170%;
+    max-width: 720px;
+    height: auto;
+    aspect-ratio: 720 / 404;
+    opacity: 0.97;
+    /* Vertical fade only, unlike desktop's radial. The canvas is overscaled and
+       cropped by the hero, so its left/right edges are already off-screen — a
+       radial would waste its falloff there and leave the top and bottom of the
+       frame as visible hard lines against the hero background. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 76%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 76%, transparent 100%);
+  }
+  .hr .hero-pin.hero-seq-active .hero .hero-consult-wrap {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 30px;
+    margin: 0;
+    text-align: center;
+    z-index: 6;
+  }
+  .hr .hero-pin.hero-seq-active .hero .floor-glow { bottom: 16%; }
+}
+
 .hr .hero .floor-glow { position: absolute; bottom: 10%; left: 50%; transform: translateX(-50%); width: 520px; max-width: 80vw; height: 60px; background: radial-gradient(ellipse, rgba(201, 168, 112, 0.09) 0%, transparent 70%); pointer-events: none; }
 
 /* "Consult a specialist" CTA — pinned bottom-right on md/lg; overridden to a

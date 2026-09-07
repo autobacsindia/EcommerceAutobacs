@@ -9,9 +9,9 @@ import { getStockStatus } from '@/lib/stock';
 import {
   useCampaignProductRates,
   campaignSavingLabel,
-  formatSavingInr,
   lineSavings,
 } from '@/hooks/queries/useCampaignProductRates';
+import { useCurrency } from '@/context/CurrencyContext';
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
 import ProductRail, { RAIL_CONTAINER, RAIL_ITEM, RAIL_IMAGE_SIZES, RAIL_LIMIT } from './ProductRail';
@@ -35,16 +35,16 @@ interface Product {
 
 interface ComplementaryProductsSectionProps {
   productId: string;
-  isDark?: boolean;
 }
 
-export default function ComplementaryProductsSection({ productId, isDark = true }: ComplementaryProductsSectionProps) {
+export default function ComplementaryProductsSection({ productId }: ComplementaryProductsSectionProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [addingId, setAddingId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { addToCart } = useCart();
+  const { formatPrice } = useCurrency();
   // This rail fetches its own products, so unlike the sticky bar its ids differ from
   // the PDP's — one extra batched request (identity-free, shared cache, 10min stale)
   // rather than one per card. A cross-sell rail is exactly where the campaign should
@@ -75,7 +75,14 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
         quantity: 1,
         percent: campaignRateFor(product),
       }).campaign,
-      formatPrice: formatSavingInr,
+      /* The BADGE has to speak the same currency as the PRICE beside it.
+         `formatSavingInr` hard-codes ₹, so once the price moved to
+         CurrencyContext a USD shopper read "$3,228.92" with "+₹1,840 off"
+         underneath it — a discount in a currency the price is not quoted in.
+         Same injected formatter as `StoreProductCard`; `exact` keeps the paise,
+         because a saving is a figure the shopper can check against the cart and
+         rounding ₹29.97 up to "₹30 off" is a promise the cart then breaks. */
+      formatPrice: (v) => formatPrice(v, { exact: true }),
       /* "From" only when the card itself shows a range — the same test `showsFrom`
          applies below. A variable product whose variants all cost the same prices
          flatly, and labelling its saving as a floor would be gratuitously vague. */
@@ -154,19 +161,19 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 
             id="complementary-products-heading"
-            className={`text-2xl font-bold mb-6 ${isDark ? 'text-ink' : 'text-ink'}`}
+            className="text-2xl font-bold mb-6 text-ink"
           >
             Frequently Bought Together
           </h2>
           
           <div className={RAIL_CONTAINER}>
             {[...Array(RAIL_LIMIT)].map((_, i) => (
-              <div key={i} className={`${RAIL_ITEM} ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian'} rounded-lg shadow-sm overflow-hidden animate-pulse`}>
-                <div className={`aspect-square ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'}`} />
+              <div key={i} className={`${RAIL_ITEM} bg-obsidian-raised rounded-lg shadow-sm overflow-hidden animate-pulse`}>
+                <div className="aspect-square bg-obsidian-raised" />
                 <div className="p-4 space-y-3">
-                  <div className={`h-4 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} rounded w-3/4`} />
-                  <div className={`h-3 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} rounded w-1/2`} />
-                  <div className={`h-5 ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-raised'} rounded w-1/3`} />
+                  <div className="h-4 bg-obsidian-raised rounded w-3/4" />
+                  <div className="h-3 bg-obsidian-raised rounded w-1/2" />
+                  <div className="h-5 bg-obsidian-raised rounded w-1/3" />
                 </div>
               </div>
             ))}
@@ -183,7 +190,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
   return (
     <section 
       aria-labelledby="complementary-products-heading"
-      className={`mt-16 py-12 ${isDark ? 'bg-obsidian-deep' : 'bg-linear-to-br from-gold to-gold'}`}
+      className="mt-16 py-12 bg-obsidian-deep"
       ref={containerRef}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -191,16 +198,16 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
           <div>
             <h2 
               id="complementary-products-heading"
-              className={`text-2xl font-bold ${isDark ? 'text-ink' : 'text-ink'}`}
+              className="text-2xl font-bold text-ink"
               aria-live="polite"
             >
               Frequently Bought Together
             </h2>
-            <p className={`text-sm mt-1 ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
+            <p className="text-sm mt-1 text-ink-muted">
               Complete your purchase with these complementary items
             </p>
           </div>
-          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${isDark ? 'bg-green-900/50 text-green-300' : 'bg-green-100 text-green-800'}`}>
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300">
             💡 Recommended
           </span>
         </div>
@@ -245,13 +252,15 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                 key={product._id}
                 // flex-col + mt-auto on the action row keeps the CTA bottom-aligned
                 // now that cards stretch to a common height in both layouts.
-                className={`${RAIL_ITEM} flex flex-col ${isDark ? 'bg-obsidian-raised hover:bg-obsidian-raised' : 'bg-obsidian hover:bg-obsidian-deep'} rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
+                className={`${RAIL_ITEM} flex flex-col bg-obsidian-raised hover:bg-obsidian-raised rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
                 tabIndex={0}
                 role="link"
-                aria-label={`View ${product.name} - ₹${product.price}`}
+                // Screen readers got the raw integer here — "₹268000" — while
+                // sighted users got "₹2,68,000". Same formatter, one price.
+                aria-label={`View ${product.name} - ${formatPrice(product.price)}`}
               >
                 <Link href={`/products/${product.slug}`} className="block">
-                  <div className={`relative aspect-square ${isDark ? 'bg-obsidian-raised' : 'bg-obsidian-deep'} overflow-hidden`}>
+                  <div className="relative aspect-square bg-obsidian-raised overflow-hidden">
                     <Image
                       src={getImageUrl()}
                       alt={getImageAlt()}
@@ -274,7 +283,7 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                   </div>
                   
                   <div className="p-4">
-                    <h3 className={`font-semibold text-sm line-clamp-2 mb-2 ${isDark ? 'text-ink hover:text-gold' : 'text-ink hover:text-gold'} transition-colors`}>
+                    <h3 className="font-semibold text-sm line-clamp-2 mb-2 text-ink hover:text-gold transition-colors">
                       {product.name}
                     </h3>
                     
@@ -282,12 +291,14 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                       {showsFrom && (
                         <span className="text-[10px] uppercase tracking-wider text-ink-muted">From</span>
                       )}
-                      <span className={`text-lg font-bold ${isDark ? 'text-ink' : 'text-ink'}`}>
-                        ₹{product.price.toLocaleString('en-IN')}
+                      {/* Through CurrencyContext, so this rail cannot drift from
+                          the buy box above it — in grouping or in currency. */}
+                      <span className="text-lg font-bold text-ink">
+                        {formatPrice(product.price)}
                       </span>
                       {!isVariable && product.originalPrice != null && product.originalPrice > product.price && (
-                        <span className={`text-sm ${isDark ? 'text-ink-muted' : 'text-ink-muted'} line-through`}>
-                          ₹{product.originalPrice.toLocaleString('en-IN')}
+                        <span className="text-sm text-ink-muted line-through">
+                          {formatPrice(product.originalPrice)}
                         </span>
                       )}
                     </div>
@@ -297,17 +308,17 @@ export default function ComplementaryProductsSection({ productId, isDark = true 
                         <svg className="w-4 h-4 text-yellow-400 fill-current" viewBox="0 0 20 20">
                           <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
                         </svg>
-                        <span className={`text-sm ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
+                        <span className="text-sm text-ink-muted">
                           {product.averageRating.toFixed(1)} ({product.totalReviews || 0})
                         </span>
                       </div>
                     )}
                     
                     <div className="flex items-center justify-between mt-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isDark ? 'bg-gold/50 text-gold' : 'bg-gold/10 text-gold'}`}>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gold/50 text-gold">
                         {product.brand || 'Autobacs'}
                       </span>
-                      <span className={`text-xs ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
+                      <span className="text-xs text-ink-muted">
                         {product.categories?.[0]?.name || 'Auto Parts'}
                       </span>
                     </div>
