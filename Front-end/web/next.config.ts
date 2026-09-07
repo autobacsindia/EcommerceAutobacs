@@ -82,6 +82,26 @@ const nextConfig: NextConfig = {
           { key: 'Cache-Control', value: 'public, max-age=3600, s-maxage=604800, stale-while-revalidate=86400' },
         ],
       },
+      {
+        // Hero scroll-frame sequences: 145 desktop WebPs (~4.9 MB) + 49 mobile
+        // (~0.7 MB). Anything under public/ gets Next's default
+        // `max-age=0, must-revalidate` because it is not fingerprinted, so every
+        // repeat visit revalidated all 145 files — measured as Lighthouse's
+        // "Use efficient cache lifetimes" finding on the live home page.
+        //
+        // NOT `immutable`, deliberately, unlike a hashed build asset. These
+        // filenames are stable (frame_0001.webp) and ARE regenerated in place
+        // when the animation is re-cut (see `npm run generate-mobile-frames` and
+        // the heroSequence config in homeContent.ts). `immutable` would pin a
+        // stale sequence in browsers for a year with no way to bust it short of
+        // renaming every frame. A month of no-revalidation captures effectively
+        // all of the win; stale-while-revalidate keeps repeat loads instant
+        // while a re-cut propagates.
+        source: '/:dir(scroll-frames|scroll-frames-mobile)/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=2592000, stale-while-revalidate=86400' },
+        ],
+      },
     ];
   },
 

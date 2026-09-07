@@ -211,6 +211,8 @@ export default function HeroSequence({
 
     let ticking = false;
     function onScroll() {
+      // The user is scrubbing NOW — stop waiting for idle. No-op once started.
+      startBulkPreload();
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
@@ -273,10 +275,56 @@ export default function HeroSequence({
     // opening the other lanes — otherwise LCP waits behind five frames nobody
     // can see yet.
     nextToLoad = 1;
-    void loadOne(0).then(() => {
-      if (cancelled) return;
+
+    /*
+      ── The other 144 frames wait for the page to finish its own work ─────────
+      Frame 0 stays eager: it is what activate() hangs off, so deferring it would
+      delay the pin/sticky layout switching on and widen the window where an
+      early scroll behaves like a plain stacked hero.
+
+      The REST used to open all six lanes the instant frame 0 resolved. On the
+      desktop set that is ~4.87 MB of WebP plus 144 createImageBitmap decodes
+      fired during the exact window the page is still fetching its own CSS, JS
+      and product imagery — measured on the live home page as 4.92 MB / 145
+      requests in a Lighthouse run that never scrolled a single pixel.
+
+      Nothing above the fold needs them: the canvas shows frame 0 until the user
+      starts scrolling. So they now start at whichever comes first —
+        • the browser going idle after `load`, or
+        • the first scroll, so a user who scrolls immediately is never starved.
+      `nearestLoaded()` already covers a not-yet-arrived frame by drawing the
+      closest one it has, so an in-progress preload degrades to a slightly
+      coarser scrub rather than a blank canvas.
+    */
+    let bulkStarted = false;
+    function startBulkPreload() {
+      if (bulkStarted || cancelled) return;
+      bulkStarted = true;
       for (let k = 0; k < CONCURRENCY; k++) void loadNext();
-    });
+    }
+
+    const idleWin = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    let idleHandle = 0;
+    let timeoutHandle = 0;
+    function scheduleBulkPreload() {
+      if (cancelled || bulkStarted) return;
+      // `timeout` guarantees it still runs on a page that never goes idle.
+      if (typeof idleWin.requestIdleCallback === 'function') {
+        idleHandle = idleWin.requestIdleCallback(startBulkPreload, { timeout: 3000 });
+      } else {
+        timeoutHandle = window.setTimeout(startBulkPreload, 1500);
+      }
+    }
+
+    void loadOne(0);
+    if (document.readyState === 'complete') {
+      scheduleBulkPreload();
+    } else {
+      window.addEventListener('load', scheduleBulkPreload, { once: true });
+    }
 
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(canvas);
@@ -302,6 +350,12 @@ export default function HeroSequence({
     return () => {
       cancelled = true;
       abort.abort();
+      // Drop the deferred preload if the section unmounts before it fires.
+      window.removeEventListener('load', scheduleBulkPreload);
+      if (idleHandle && typeof idleWin.cancelIdleCallback === 'function') {
+        idleWin.cancelIdleCallback(idleHandle);
+      }
+      if (timeoutHandle) window.clearTimeout(timeoutHandle);
       resizeObserver.disconnect();
       io.disconnect();
       window.removeEventListener('resize', onWindowResize);
