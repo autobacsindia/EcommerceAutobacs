@@ -237,7 +237,17 @@ export default function CategoriesCoverflow({ categories }: { categories?: Categ
               }}
               aria-hidden={t.opacity === 0}
               tabIndex={isActive ? 0 : -1}
-              aria-label={`${cat.name.replace('\n', ' ')} — ${isActive ? 'view category' : 'bring to front'}`}
+              /* No aria-label: this card is labelled by its own content.
+                 An aria-label of "<name> — view category" OVERRODE the visible
+                 text, which also contains the tag and the "Explore Range" CTA —
+                 so the accessible name no longer contained the visible label and
+                 axe flagged label-content-name-mismatch (WCAG 2.5.3 Label in
+                 Name). That is not cosmetic: a speech-input user saying
+                 "Explore Range" could not activate a control that reads those
+                 exact words on screen. Deriving the name from the content keeps
+                 the two in step by construction. The active/inactive distinction
+                 is conveyed by tabIndex + aria-hidden above, which is where
+                 state belongs — not smuggled into the name. */
               onClick={(e) => {
                 // A real swipe shouldn't also trigger navigation/selection.
                 if (dragged.current) {

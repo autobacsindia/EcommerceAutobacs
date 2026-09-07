@@ -210,9 +210,16 @@ export default function HeroSequence({
     }
 
     let ticking = false;
-    function onScroll() {
-      // The user is scrubbing NOW — stop waiting for idle. No-op once started.
-      startBulkPreload();
+
+    /*
+      Recompute which frame the current scroll position calls for, throttled to
+      one rAF. Deliberately does NOT touch the preload: the IntersectionObserver
+      below calls this once on attach to prime the first frame, and the hero is
+      on screen at load, so anything triggered from here effectively runs at
+      mount. Wiring the preload into this path is exactly what made the 5 s
+      mobile delay a no-op — all 49 frames still began inside 300 ms.
+    */
+    function syncToScroll() {
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
@@ -220,6 +227,13 @@ export default function HeroSequence({
         computeTarget();
         if (targetIndex !== currentIndex) render();
       });
+    }
+
+    /* Real scroll events only — a genuine signal that the user is scrubbing, so
+       the remaining frames are wanted NOW rather than after the idle delay. */
+    function onScroll() {
+      startBulkPreload();
+      syncToScroll();
     }
 
     // Adopt a genuinely new viewport (rotation, desktop window resize) but
@@ -309,14 +323,38 @@ export default function HeroSequence({
     };
     let idleHandle = 0;
     let timeoutHandle = 0;
+
+    /*
+      Hanging the preload straight off `load` + requestIdleCallback was not
+      enough. On a fast connection `load` fires early and the page is instantly
+      idle, so the callback ran almost immediately — measured on the mobile
+      profile, the frames still began at 229 ms and were the single largest
+      payload on the page (745 KB, more than images, scripts and fonts
+      combined). "Idle" is not the same thing as "the hero has finished".
+
+      So the speculative fetch is now held for a fixed window after `load`. The
+      user-driven path is unaffected: onScroll calls startBulkPreload() directly,
+      so anyone who actually scrubs gets the frames at once; this delay only
+      governs the fetch for someone still sitting at the top of the page.
+
+      Mobile waits considerably longer. Its link is the scarce resource, its
+      frame set is already decimated to 49, and a phone visitor who never
+      scrolls should not spend ~745 KB of their data on an animation they never
+      saw.
+    */
+    const bulkPreloadDelayMs = signals.isDesktop ? 2000 : 5000;
     function scheduleBulkPreload() {
       if (cancelled || bulkStarted) return;
-      // `timeout` guarantees it still runs on a page that never goes idle.
-      if (typeof idleWin.requestIdleCallback === 'function') {
-        idleHandle = idleWin.requestIdleCallback(startBulkPreload, { timeout: 3000 });
-      } else {
-        timeoutHandle = window.setTimeout(startBulkPreload, 1500);
-      }
+      timeoutHandle = window.setTimeout(() => {
+        if (cancelled || bulkStarted) return;
+        // Idle is a nicety on top of the delay, never a substitute for it;
+        // `timeout` guarantees it still runs on a page that never goes idle.
+        if (typeof idleWin.requestIdleCallback === 'function') {
+          idleHandle = idleWin.requestIdleCallback(startBulkPreload, { timeout: 3000 });
+        } else {
+          startBulkPreload();
+        }
+      }, bulkPreloadDelayMs);
     }
 
     void loadOne(0);
@@ -337,7 +375,8 @@ export default function HeroSequence({
         if (entry.isIntersecting && !scrollBound) {
           window.addEventListener('scroll', onScroll, { passive: true });
           scrollBound = true;
-          onScroll();
+          // Prime the canvas at the current offset WITHOUT counting as a scroll.
+          syncToScroll();
         } else if (!entry.isIntersecting && scrollBound) {
           window.removeEventListener('scroll', onScroll);
           scrollBound = false;
