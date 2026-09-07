@@ -58,10 +58,8 @@ describe('r2SrcSet', () => {
     // blanking one image. Same totality rule as imageLoader.
     const bad = [undefined, null, '', 0, {}, [], 'not-a-url', '://', NaN];
     for (const v of bad) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect(() => r2SrcSet(v as any)).not.toThrow();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      expect(r2SrcSet(v as any)).toBeUndefined();
+      expect(() => r2SrcSet(v as unknown as string)).not.toThrow();
+      expect(r2SrcSet(v as unknown as string)).toBeUndefined();
     }
   });
 
