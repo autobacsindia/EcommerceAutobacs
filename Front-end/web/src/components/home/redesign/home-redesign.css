@@ -20,7 +20,13 @@
   --bg2: #0d0e0e;
   --bg3: #181a1a;
   --text: #f0ede7;
-  --muted: rgba(240, 237, 231, 0.38);
+  /* 0.38 rendered #636360 on --bg2 = 3.2:1 contrast — below the WCAG AA 4.5:1
+     floor for normal text, and it failed on 25+ nodes (every footer link, the
+     section labels, the category counters). 0.50 is the LOWEST alpha that
+     clears AA on both --bg (#111212, 4.75:1) and --bg2 (#0d0e0e, 4.76:1), so
+     the muted tone is preserved as far as accessibility allows. Do not lower
+     it again without re-checking both backgrounds. */
+  --muted: rgba(240, 237, 231, 0.50);
   --line: rgba(255, 255, 255, 0.06);
   /* hero car placement (was a dev tweak panel; fixed sensible defaults) */
   --car-x: 58%;
@@ -580,7 +586,7 @@
 .hr .marquee-mask { overflow: hidden; }
 .hr .marquee-track { display: flex; gap: 0; width: max-content; animation: hr-marquee 28s linear infinite; }
 .hr .marquee-track:hover { animation-play-state: paused; }
-.hr .brand-item { padding: 0 48px; font-size: 18px; font-weight: 300; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(240, 237, 231, 0.22); white-space: nowrap; border-right: 1px solid var(--line); transition: color 0.3s; }
+.hr .brand-item { padding: 0 48px; font-size: 18px; font-weight: 300; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(240, 237, 231, 0.50); white-space: nowrap; border-right: 1px solid var(--line); transition: color 0.3s; }
 .hr .brand-item:hover { color: var(--text); }
 
 /* ── TRANSFORMATION ── */

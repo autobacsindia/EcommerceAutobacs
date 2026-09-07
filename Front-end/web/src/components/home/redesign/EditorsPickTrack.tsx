@@ -70,7 +70,7 @@ export default function EditorsPickTrack({ products }: { products?: ProductItem[
         <div className="prod-track reveal reveal-d1" ref={trackRef}>
           {items.map((p) => (
             <Link href={p.href} className="ce-card" key={p.name}>
-              <Img src={p.image} alt={p.name} className="ce-bg" />
+              <Img src={p.image} alt={p.name} className="ce-bg" sizes="(max-width: 768px) 100vw, 320px" />
               <div className="ce-overlay" />
               <div className="ce-circle" />
               <div className="ce-content">

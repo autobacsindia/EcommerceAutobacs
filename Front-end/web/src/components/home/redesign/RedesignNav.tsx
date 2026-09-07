@@ -63,6 +63,8 @@ export default function RedesignNav() {
             alt={brand.logoAlt}
             className="logo-img"
             sizes="(max-width: 768px) 150px, 200px"
+            width={820}
+            height={315}
             priority
           />
         ) : (
@@ -148,7 +150,7 @@ export default function RedesignNav() {
               <Link href="/profile" className="nav-mobile-account-main" onClick={() => setMenuOpen(false)}>
                 <span className="avatar nav-mobile-account-avatar">
                   {user?.avatarUrl ? (
-                    <Img src={user.avatarUrl} alt={user?.name || 'Profile'} />
+                    <Img src={user.avatarUrl} alt={user?.name || 'Profile'} sizes="34px" />
                   ) : (
                     <span className="avatar-fallback">
                       <UserIcon />

@@ -5,18 +5,18 @@
  */
 export default function CarExplorerCredit({ className = '' }: { className?: string }) {
   return (
-    <p className={`text-[10px] leading-relaxed text-ink-muted/70 ${className}`}>
+    <p className={`text-[10px] leading-relaxed text-ink-muted ${className}`}>
       3D model:{' '}
       <a
         href="https://sketchfab.com/3d-models/2022-toyota-hilux-82bd37c5065040098fb0b86e07fcb959"
         target="_blank"
         rel="noopener noreferrer"
-        className="underline hover:text-ink-muted"
+        className="underline hover:text-ink"
       >
         &ldquo;2022 Toyota Hilux&rdquo;
       </a>{' '}
       by{' '}
-      <a href="https://sketchfab.com/BHP3D" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink-muted">
+      <a href="https://sketchfab.com/BHP3D" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">
         BHP3D
       </a>{' '}
       &middot;{' '}
@@ -24,7 +24,7 @@ export default function CarExplorerCredit({ className = '' }: { className?: stri
         href="http://creativecommons.org/licenses/by/4.0/"
         target="_blank"
         rel="noopener noreferrer"
-        className="underline hover:text-ink-muted"
+        className="underline hover:text-ink"
       >
         CC-BY-4.0
       </a>

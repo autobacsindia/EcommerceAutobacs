@@ -41,6 +41,8 @@ export default function Img({
   draggable,
   priority = false,
   sizes,
+  width,
+  height,
 }: {
   src?: string;
   alt: string;
@@ -59,6 +61,17 @@ export default function Img({
    * fixed width. No-op for non-Cloudinary sources.
    */
   sizes?: string;
+  /**
+   * INTRINSIC pixel dimensions of the source file — not the rendered size.
+   *
+   * Supplying both lets the browser derive an aspect-ratio and reserve the right
+   * box before the bytes arrive, instead of collapsing to zero height and
+   * reflowing on load (Lighthouse `unsized-images`; a CLS source). CSS still
+   * decides the rendered size, so `.logo-img { height: 48px; width: auto }`
+   * keeps winning — these only supply the ratio.
+   */
+  width?: number;
+  height?: number;
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -84,6 +97,8 @@ export default function Img({
       srcSet={srcSet}
       sizes={srcSet ? sizes : undefined}
       alt={alt}
+      width={width}
+      height={height}
       className={className}
       draggable={draggable}
       loading={priority ? 'eager' : 'lazy'}

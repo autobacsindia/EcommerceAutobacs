@@ -371,7 +371,15 @@ export default function HeroSequence({
     <>
       <canvas ref={canvasRef} className="hero-seq" aria-hidden="true" />
       {/* Static hero until a real frame is drawn — and permanently for anyone
-          the sequence opted out of, since ACTIVE_CLASS never lands there. */}
+          the sequence opted out of, since ACTIVE_CLASS never lands there.
+
+          ⚠ Intentionally the ONE <Img> on this page with no `sizes` — do not
+          "fix" it for consistency. `priority` makes React 19 hoist a
+          <link rel=preload> built from `src`; adding `sizes` would emit a
+          srcSet that preload does not describe, so the browser can fetch the
+          preloaded original AND a variant, paying for the hero twice on the
+          most LCP-sensitive image we have. The source is already a 47 KB JPEG,
+          so there is little to win and a double-download to lose. */}
       {showFallback && (
         <Img src={hero.image} alt={hero.imageAlt} className="hero-seq-fallback" priority />
       )}

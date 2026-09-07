@@ -58,7 +58,7 @@ export default function EditorsPickCarousel({ products }: { products?: ProductIt
           {items.map((p) => (
             <Link href={p.href} className="bc-slide" key={p.name}>
               <div className="ce-card">
-                <Img src={p.image} alt={p.name} className="ce-bg" />
+                <Img src={p.image} alt={p.name} className="ce-bg" sizes="(max-width: 768px) 100vw, 320px" />
                 <div className="ce-overlay" />
                 <div className="ce-circle" />
                 <div className="ce-content">

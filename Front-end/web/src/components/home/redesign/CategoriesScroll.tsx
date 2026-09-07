@@ -120,7 +120,7 @@ export default function CategoriesScroll({ categories }: { categories?: Category
             <div className="cat-track" ref={trackRef}>
               {items.map((cat, i) => (
                 <Link href={cat.href} className="cat-card" key={cat.name}>
-                  <Img src={cat.image} alt={cat.name.replace('\n', ' ')} />
+                  <Img src={cat.image} alt={cat.name.replace('\n', ' ')} sizes="(max-width: 768px) 80vw, 400px" />
                   <div className="cat-num-ghost">{String(i + 1).padStart(2, '0')}</div>
                   <div className="cat-info">
                     <div className={`cat-tag${cat.featured ? ' cat-tag-featured' : ''}`}>{cat.tag}</div>

@@ -214,7 +214,7 @@ export default function Journal({ posts }: { posts?: JournalItem[] }) {
                 }}
               >
                 <div className="jf-photo">
-                  <Img src={p.image} alt={p.title} draggable={false} />
+                  <Img src={p.image} alt={p.title} draggable={false} sizes="(max-width: 768px) 90vw, 620px" />
                 </div>
                 <div className="jf-cap">
                   <span className="jf-cat">{p.category}</span>

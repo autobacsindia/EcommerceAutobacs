@@ -55,7 +55,7 @@ export default function Testimonials({ testimonials }: { testimonials?: Testimon
               <div className="testi-quote">{t.quote}</div>
               <div className="testi-author">
                 <div className="testi-avatar">
-                  <Img src={t.avatar} alt={t.name} />
+                  <Img src={t.avatar} alt={t.name} sizes="40px" />
                 </div>
                 <div>
                   <div className="testi-name">{t.name}</div>
