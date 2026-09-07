@@ -50,7 +50,21 @@ export default function RedesignNav() {
 
       <Link href="/" className="logo" aria-label={brand.logoAlt} onClick={() => setMenuOpen(false)}>
         {brand.logo ? (
-          <Img src={brand.logo} alt={brand.logoAlt} className="logo-img" />
+          /* `priority` + `sizes` are load-bearing, not decoration. This sits in
+             the fixed nav — always above the fold — but defaulted to
+             loading="lazy" with no srcSet, so it was discovered late AND
+             downloaded as the 254 KB source PNG. Lighthouse named this exact
+             <img> as the home page's LCP element at 3.8 s (630 ms of that pure
+             lazy-discovery delay). `sizes` mirrors the .logo-img CSS cap
+             (200px desktop / 150px <=768px, see home-redesign.css) so the
+             browser takes a ~10 KB ladder rung instead. */
+          <Img
+            src={brand.logo}
+            alt={brand.logoAlt}
+            className="logo-img"
+            sizes="(max-width: 768px) 150px, 200px"
+            priority
+          />
         ) : (
           <>
             {brand.name}

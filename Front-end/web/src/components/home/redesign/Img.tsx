@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 import { useState } from 'react';
 import { cloudinarySrcSet } from '@/lib/cloudinarySrcSet';
+import { r2SrcSet } from '@/lib/r2SrcSet';
 
 /**
  * Plain <img> with graceful degradation for the redesign.
@@ -16,11 +17,22 @@ import { cloudinarySrcSet } from '@/lib/cloudinarySrcSet';
  * while the real artwork is still being sourced.
  *
  * RESPONSIVE: pass `sizes` (the CSS width the image occupies, e.g. "100vw") to
- * opt a Cloudinary-hosted image into a responsive `srcSet` — the plain-<img>
- * equivalent of what next/image gives its optimized images. Without it the
- * <img> ships a single fixed width to every device. Callers that omit `sizes`
- * are unchanged. Non-Cloudinary URLs never get a srcSet (helper returns
- * undefined), so Unsplash placeholders keep their own `?w=` sizing.
+ * opt an R2- or Cloudinary-hosted image into a responsive `srcSet` — the
+ * plain-<img> equivalent of what next/image gives its optimized images. Without
+ * it the <img> ships a single fixed width to every device. Callers that omit
+ * `sizes` are unchanged. URLs on neither host never get a srcSet (both helpers
+ * return undefined), so Unsplash placeholders keep their own `?w=` sizing.
+ *
+ * ⚠ R2 is tried FIRST and is the live path — the catalog has moved there, and
+ * `cloudinarySrcSet` returns undefined for an R2 URL. That silent miss is why
+ * the nav logo shipped a 254 KB PNG into a 125x48 box (its w128 AVIF variant is
+ * 5.8 KB) and became the home page's LCP element. Cloudinary stays as the
+ * second branch for as long as any document still holds a legacy URL.
+ *
+ * ⚠ srcSet is still gated on `sizes` being passed, deliberately. React 19 hoists
+ * a <link rel=preload> for a `priority` image from its `src`; emitting a srcSet
+ * the preload does not know about risks the browser fetching one width and
+ * painting another. Opting in per call site keeps that decision explicit.
  */
 export default function Img({
   src,
@@ -64,7 +76,7 @@ export default function Img({
     );
   }
 
-  const srcSet = sizes ? cloudinarySrcSet(src) : undefined;
+  const srcSet = sizes ? (r2SrcSet(src) ?? cloudinarySrcSet(src)) : undefined;
 
   return (
     <img

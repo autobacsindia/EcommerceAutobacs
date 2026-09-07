@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { DM_Sans, Montserrat } from "next/font/google";
-import Script from "next/script";
 import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
@@ -181,9 +180,11 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Read the nonce that middleware.ts generated for this request and forwarded
-  // via the x-nonce request header. Pass it to <Script> so the Razorpay script
-  // is trusted by the nonce-based CSP, and expose it in a <meta> tag so that
-  // client-side code (useRazorpay) can read it when creating dynamic scripts.
+  // via the x-nonce request header. Every inline/injected script needs it under
+  // the strict nonce CSP (lib/csp.ts): it is applied directly to the GTM
+  // snippets below, and exposed in a <meta> tag so client-side code can read it
+  // when creating dynamic scripts — useRazorpay does exactly that, and is now
+  // the only thing loading Razorpay outside of app/checkout/layout.tsx.
   const nonce = (await headers()).get('x-nonce') ?? undefined;
 
   // Resolve the header category nav server-side (data-driven, cached) so it
@@ -235,8 +236,9 @@ export default async function RootLayout({
             and every library they pull (gtm.js, gtag.js, fbevents.js) is async.
 
             ⚠ Do NOT "modernise" these back to <Script> — that is the regression.
-            next/script stays in use further down for Razorpay, which genuinely
-            wants lazy loading and is not subject to any coverage report.
+            next/script is still the right tool for Razorpay, which genuinely
+            wants lazy loading and is not subject to any coverage report — it
+            just no longer belongs in THIS layout. See app/checkout/layout.tsx.
 
             nonce={nonce} is REQUIRED on every one — the strict nonce CSP
             (lib/csp.ts) blocks any unnonce'd script; 'strict-dynamic' then
@@ -418,12 +420,16 @@ fbq('track', 'PageView');`,
                           },
                         }}
                       />
-                      <Script
-                        id="razorpay-checkout"
-                        src="https://checkout.razorpay.com/v1/checkout.js"
-                        strategy="lazyOnload"
-                        nonce={nonce}
-                      />
+                      {/*
+                        Razorpay's checkout script used to be mounted here, on
+                        EVERY route. Measured on the live home page that was 175
+                        requests / 1.36 MB for a page where nobody can pay. It
+                        now lives in app/checkout/layout.tsx (pre-warmed on the
+                        money path), and hooks/useRazorpay.ts loads it on demand
+                        — idempotently, reading the nonce from the <meta> tag
+                        above — anywhere else that can take a payment, such as
+                        the retry-payment path on /orders/[id].
+                      */}
                   </CurrencyProvider>
                 </RateLimitProvider>
               </WishlistProvider>
