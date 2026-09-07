@@ -252,7 +252,7 @@ export default function CategoriesCoverflow({ categories }: { categories?: Categ
                 }
               }}
             >
-              <Img src={cat.image} alt={cat.name.replace('\n', ' ')} draggable={false} />
+              <Img src={cat.image} alt={cat.name.replace('\n', ' ')} draggable={false} sizes="(max-width: 768px) 70vw, 390px" />
               <div className="cat-shade" style={{ opacity: t.shade }} />
               <div className="cat-num">{String(i + 1).padStart(2, '0')}</div>
               <div className="cat-info">

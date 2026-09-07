@@ -70,7 +70,7 @@ export default function Showreel({ hotspots = [] }: { hotspots?: ResolvedCarHots
               </div>
               <span className="anim-cta-text">Play Showreel</span>
             </div>
-            {showreel.poster ? <Img src={showreel.poster} alt="Showreel preview" className="ce-bg" /> : null}
+            {showreel.poster ? <Img src={showreel.poster} alt="Showreel preview" className="ce-bg" sizes="100vw" /> : null}
           </>
         )}
       </div>
@@ -87,7 +87,7 @@ export default function Showreel({ hotspots = [] }: { hotspots?: ResolvedCarHots
                   <Link
                     key={h.id}
                     href={h.href}
-                    className="text-[13px] font-light text-ink-muted transition-colors hover:text-gold"
+                    className="inline-flex min-h-[24px] items-center text-[13px] font-light text-ink-muted transition-colors hover:text-gold"
                   >
                     {h.label}
                   </Link>
@@ -102,7 +102,7 @@ export default function Showreel({ hotspots = [] }: { hotspots?: ResolvedCarHots
                   key={h.id}
                   href={h.href}
                   onClick={() => onSelect(h.id)}
-                  className="rounded-full border border-hairline px-3 py-1 text-xs font-medium text-ink/90 transition-colors hover:border-gold hover:text-gold"
+                  className="inline-flex min-h-[24px] items-center rounded-full border border-hairline px-3 py-1 text-xs font-medium text-ink/90 transition-colors hover:border-gold hover:text-gold"
                 >
                   {h.label}
                 </Link>

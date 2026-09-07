@@ -25,7 +25,7 @@ export default function ProfileAvatar({ className = 'avatar' }: { className?: st
   return (
     <Link href={href} className={className} title={label} aria-label={label}>
       {pic ? (
-        <Img src={pic} alt={user?.name || 'Profile'} />
+        <Img src={pic} alt={user?.name || 'Profile'} sizes="34px" />
       ) : (
         <span className="avatar-fallback">
           <UserIcon />

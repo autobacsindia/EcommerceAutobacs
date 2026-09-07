@@ -68,7 +68,12 @@
   --color-obsidian-deep:   #0d0e0e;
   --color-obsidian-raised: #181a1a;
   --color-ink:             #f0ede7;
-  --color-ink-muted:       rgba(240, 237, 231, 0.38);
+  /* 0.38 = 3.2:1 on the dark surfaces — under the WCAG AA 4.5:1 floor for
+     normal text. 0.50 is the lowest alpha that clears AA on both #111212 and
+     #0d0e0e. Kept in lockstep with `--muted` in home-redesign.css: they are
+     parallel tokens for the same tone, and letting them diverge means one
+     surface silently regresses. */
+  --color-ink-muted:       rgba(240, 237, 231, 0.50);
   --color-gold:            #c9a870;
   --color-gold-soft:       rgba(201, 168, 112, 0.15);
   --color-hairline:        rgba(255, 255, 255, 0.06);

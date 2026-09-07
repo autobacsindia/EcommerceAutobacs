@@ -49,6 +49,24 @@ describe('Img — R2 responsive srcSet', () => {
   });
 });
 
+describe('Img — intrinsic dimensions', () => {
+  test('width/height are emitted so the browser can reserve the box', () => {
+    // Lighthouse `unsized-images`: without these the logo has no aspect ratio
+    // until its bytes land, so the nav reflows on load (a CLS source).
+    render(<Img src={LOGO} alt="brand" width={820} height={315} sizes="200px" />);
+    const img = screen.getByAltText('brand');
+    expect(img).toHaveAttribute('width', '820');
+    expect(img).toHaveAttribute('height', '315');
+  });
+
+  test('omitted when not supplied (callers sized purely by CSS)', () => {
+    render(<Img src={LOGO} alt="brand" />);
+    const img = screen.getByAltText('brand');
+    expect(img).not.toHaveAttribute('width');
+    expect(img).not.toHaveAttribute('height');
+  });
+});
+
 describe('Img — priority', () => {
   test('priority renders eager + high fetchPriority, NOT lazy', () => {
     render(<Img src={LOGO} alt="brand" priority sizes="200px" />);

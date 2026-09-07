@@ -348,7 +348,7 @@ export default function RedesignNavSearch({
                   aria-selected={activeIndex === i}
                 >
                   {s.imageUrl ? (
-                    <Img src={s.imageUrl} alt="" className="nsp-thumb" />
+                    <Img src={s.imageUrl} alt="" className="nsp-thumb" sizes="38px" />
                   ) : (
                     <span className="nsp-thumb nsp-thumb-empty" aria-hidden />
                   )}
