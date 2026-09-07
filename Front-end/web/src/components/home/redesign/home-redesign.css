@@ -469,9 +469,16 @@
 .hr .categories-cf .cat-explore { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 .hr .categories-cf .cat-explore span { font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text); }
 .hr .categories-cf .cat-explore svg { color: var(--gold); }
-.hr .categories-cf .cat-dots { display: flex; justify-content: center; gap: 10px; margin-top: 32px; }
-.hr .categories-cf .cat-dot { width: 8px; height: 8px; padding: 0; border: none; border-radius: 999px; background: var(--line); cursor: pointer; transition: background 0.3s, width 0.3s; }
-.hr .categories-cf .cat-dot.is-active { width: 26px; background: var(--gold); }
+/* Pagination dots: the VISIBLE dot stays 8px, but the button's box is padded
+   out to 24x24 so it meets the WCAG 2.2 minimum target size (it was failing on
+   14 nodes across the two carousels — the hardest control to hit on a phone).
+   `background-clip: content-box` paints the dot colour only in the 8px content
+   box, so the padding is an invisible hit area rather than a bigger dot, and
+   `content-box` sizing keeps 8 + 8*2 = 24 exact. Container gap drops to 0
+   because each button now carries 8px of padding per side. */
+.hr .categories-cf .cat-dots { display: flex; justify-content: center; gap: 0; margin-top: 32px; }
+.hr .categories-cf .cat-dot { box-sizing: content-box; width: 8px; height: 8px; padding: 8px; border: none; border-radius: 999px; background: var(--line); background-clip: content-box; cursor: pointer; transition: background 0.3s, width 0.3s; }
+.hr .categories-cf .cat-dot.is-active { width: 26px; background: var(--gold); background-clip: content-box; }
 .hr .categories-cf .cat-cta { display: flex; justify-content: center; margin-top: 28px; }
 
 /* Variant switch: show exactly one per breakpoint (both are rendered). */
@@ -576,9 +583,10 @@
 .hr .bc-arrow:disabled { opacity: 0.28; cursor: default; }
 .hr .bc-prev { left: 10px; }
 .hr .bc-next { right: 10px; }
-.hr .bc-dots { display: flex; justify-content: center; gap: 10px; margin-top: 26px; }
-.hr .bc-dot { width: 8px; height: 8px; padding: 0; border: none; border-radius: 50%; background: var(--line); cursor: pointer; transition: width 0.3s ease, background 0.3s ease, border-radius 0.3s ease; }
-.hr .bc-dot.is-active { width: 26px; border-radius: 4px; background: var(--gold); }
+/* Same 24x24 hit-area treatment as .cat-dot above — see that comment. */
+.hr .bc-dots { display: flex; justify-content: center; gap: 0; margin-top: 26px; }
+.hr .bc-dot { box-sizing: content-box; width: 8px; height: 8px; padding: 8px; border: none; border-radius: 50%; background: var(--line); background-clip: content-box; cursor: pointer; transition: width 0.3s ease, background 0.3s ease, border-radius 0.3s ease; }
+.hr .bc-dot.is-active { width: 26px; border-radius: 4px; background: var(--gold); background-clip: content-box; }
 
 /* ── BRANDS ── */
 .hr .brands { padding: 64px 0; background: var(--bg2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); overflow: hidden; }
