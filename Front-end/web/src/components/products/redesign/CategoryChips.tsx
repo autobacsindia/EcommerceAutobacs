@@ -60,8 +60,22 @@ export default function CategoryChips() {
     </button>
   );
 
-  if (cats.length === 0) return null;
+  /*
+    Rendered before the fetch resolves, not after.
 
+    Returning `null` while `cats` was empty collapsed this row to nothing, so the
+    sticky bar wrapping it painted at ~33px and then jumped to ~74px when
+    `/categories` came back — pushing the entire product grid down the page. That
+    was the whole of the measured CLS on `/products` (0.027, attributed to the
+    grid row below); nothing about the cards contributed to it.
+
+    "All categories" needs no data — it is the control that CLEARS the filter —
+    so rendering it immediately reserves the row's final height AND gives the
+    shopper a working control during the fetch. Extra chips only extend the row
+    horizontally (`overflow-x-auto`, `whitespace-nowrap`), so its height is
+    settled from the first paint. A failed `/categories` call now degrades to a
+    single working chip rather than an empty bar.
+  */
   return (
     <div className="sf-noscroll flex gap-2.5 overflow-x-auto">
       {chip('All categories', '', active.size === 0)}

@@ -118,7 +118,10 @@ const mapProduct = (p: ApiProduct): ProductItem => ({
   category: p.categories?.[0]?.name || 'Featured',
   brand: p.brand || '',
   name: p.name,
+  // Formatted here so the initial HTML ships a real price (SEO, no flash), and
+  // carried as a number so the card can re-format it for the chosen currency.
   price: typeof p.price === 'number' ? formatPriceINR(p.price) : '',
+  priceValue: typeof p.price === 'number' ? p.price : undefined,
   href: `/products/${p.slug || p._id}`,
   image: primaryImage(p.images),
 });

@@ -102,13 +102,37 @@ export default function EnhancedImage({
     }
   }, [finalSrc]);
 
+  /*
+    Placeholder geometry has to follow the SAME sizing mode as the image it
+    stands in for.
+
+    A `fill` caller passes no width/height — the whole point is that the image
+    sizes to its positioned parent — so `width || 200` fell through to a literal
+    200x200 INLINE style, and an inline style beats the caller's `h-full w-full`
+    classes. A broken image in a 300px square cell therefore painted a 200x200
+    grey box wedged in the corner instead of filling the frame, on every `fill`
+    caller: the PDP gallery, the vehicle grid, the cart and wishlist rows.
+
+    So: mirror `fill`'s own layout (absolutely positioned, inset to the parent)
+    when filling, and keep the nominal 200x200 box only for the fixed-size
+    callers it was written for.
+  */
+  const fillsParent = props.fill === true;
+  const placeholderClassName = [
+    'flex items-center justify-center bg-obsidian-raised',
+    fillsParent ? 'absolute inset-0 h-full w-full' : '',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const placeholderStyle = fillsParent
+    ? undefined
+    : { width: width || 200, height: height || 200 };
+
   // If we don't have a valid source even after fallback, don't render the image
   if (!finalSrc || finalSrc === '') {
     return (
-      <div 
-        className={`flex items-center justify-center bg-obsidian-raised ${className}`}
-        style={{ width: width || 200, height: height || 200 }}
-      >
+      <div className={placeholderClassName} style={placeholderStyle}>
         <span className="text-ink-muted text-sm">No image</span>
       </div>
     );
@@ -117,17 +141,14 @@ export default function EnhancedImage({
   // For invalid URLs or when image fails to load, show fallback UI
   if (imageError) {
     return (
-      <div 
-        className={`flex items-center justify-center bg-obsidian-raised ${className}`}
-        style={{ width: width || 200, height: height || 200 }}
-      >
+      <div className={placeholderClassName} style={placeholderStyle}>
         <span className="text-ink-muted text-sm">Image unavailable</span>
       </div>
     );
   }
 
   // Ensure we always have width and height for Next.js Image component unless fill is used
-  const isFill = props.fill === true;
+  const isFill = fillsParent;
   const imageWidth = !isFill ? (width || 200) : undefined;
   const imageHeight = !isFill ? (height || 200) : undefined;
 

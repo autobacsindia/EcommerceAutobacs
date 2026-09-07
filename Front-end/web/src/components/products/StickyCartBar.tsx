@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ShoppingCart, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
+import { useCurrency } from '@/context/CurrencyContext';
 import { toast } from 'react-hot-toast';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
@@ -26,7 +27,6 @@ interface StickyCartBarProps {
     originalPrice?: number;
     stock: StockStatus;
   };
-  isDark?: boolean;
   // Variable-product context (mirrors the BuyBox selection, lifted to the page).
   isVariable?: boolean;
   variant?: StickyVariant | null;
@@ -36,13 +36,13 @@ interface StickyCartBarProps {
 
 export default function StickyCartBar({
   product,
-  isDark = true,
   isVariable = false,
   variant = null,
   priceMin,
   priceMax,
 }: StickyCartBarProps) {
   const { addToCart } = useCart();
+  const { formatPrice } = useCurrency();
   const router = useRouter();
   // Same product id the BuyBox above already asked about, so react-query serves this
   // from cache — this bar and the buy box are two views of one add-to-cart and must
@@ -58,7 +58,15 @@ export default function StickyCartBar({
   const needsSelection = isVariable && !variant;
   const activePrice = variant ? variant.price : product.price;
   const activeStock: StockStatus = variant ? variant.stock : product.stock;
-  const fmt = (n: number) => `₹${n.toLocaleString('en-IN')}`;
+  /*
+    Through CurrencyContext, like every other price.
+
+    This bar carries the price a shopper reads with their thumb on Add to Cart,
+    and it was the last hand-rolled `₹` on the PDP: with the buy box above it
+    already currency-aware, a USD shopper saw "$3,228.92" and "₹2,68,000" for the
+    same item on one screen.
+  */
+  const fmt = (n: number) => formatPrice(n);
 
   const promptSelect = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -130,11 +138,11 @@ export default function StickyCartBar({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 100, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        className={`fixed bottom-0 left-0 right-0 backdrop-blur-xl border-t shadow-2xl z-50 md:hidden ${isDark ? 'bg-obsidian-deep/95 border-hairline' : 'bg-obsidian/95 border-hairline'}`}
+        className="fixed bottom-0 left-0 right-0 backdrop-blur-xl border-t shadow-2xl z-50 md:hidden bg-obsidian-deep/95 border-hairline"
       >
         <div className="flex items-center justify-between p-4 max-w-7xl mx-auto gap-4">
           <div className="flex-1 min-w-0">
-            <p className={`text-sm truncate ${isDark ? 'text-ink-muted' : 'text-ink-muted'}`}>
+            <p className="text-sm truncate text-ink-muted">
               {product.name}
               {variant ? ` · ${variant.label}` : ''}
             </p>
@@ -160,7 +168,7 @@ export default function StickyCartBar({
               whileTap={{ scale: 0.95 }}
               onClick={handleBuyNow}
               disabled={buyNowLoading}
-              className={`${isDark ? 'bg-obsidian-raised hover:bg-obsidian-raised' : 'bg-obsidian-raised hover:bg-obsidian-raised'} disabled:bg-obsidian-raised text-ink font-bold py-3 px-5 rounded-xl transition-all duration-200 flex items-center gap-2`}
+              className="bg-obsidian-raised hover:bg-obsidian-raised disabled:bg-obsidian-raised text-ink font-bold py-3 px-5 rounded-xl transition-all duration-200 flex items-center gap-2"
             >
               <Zap className="w-5 h-5" />
               <span className="hidden sm:inline">{buyNowLoading ? '...' : 'Buy'}</span>

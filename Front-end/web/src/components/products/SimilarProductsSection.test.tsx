@@ -31,6 +31,19 @@ jest.mock('lucide-react', () => ({
 const mockGet = jest.fn();
 jest.mock('@/lib/api', () => ({ __esModule: true, default: { get: (...a: unknown[]) => mockGet(...a) } }));
 
+// The REAL formatter's behaviour, not an approximation — see formatPriceMock.
+// Switchable, because the defects this file guards are only visible in USD: in
+// rupees a hand-rolled `₹` formatter and CurrencyContext emit identical bytes.
+let currency: 'INR' | 'USD' = 'INR';
+jest.mock('@/context/CurrencyContext', () => ({
+  useCurrency: () => ({
+    formatPrice: (n: number, o?: { exact?: boolean }) =>
+      currency === 'INR'
+        ? require('@/test-utils/formatPriceMock').formatPriceMock(n, o)
+        : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n / 83),
+  }),
+}));
+
 const mockVisible = jest.fn<boolean, []>();
 jest.mock('@/hooks/queries/useCampaign', () => ({
   useCampaignBadgeVisible: () => mockVisible(),
@@ -61,6 +74,7 @@ function renderRail(over: Record<string, unknown> = {}, percent = 8) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockVisible.mockReturnValue(true);
+  currency = 'INR';
 });
 
 describe('SimilarProductsSection campaign badge', () => {
@@ -94,6 +108,62 @@ describe('SimilarProductsSection campaign badge', () => {
 
   it('keeps the paise rather than rounding the promise upward', async () => {
     // 3% of ₹999 is ₹29.97 and the cart charges exactly that.
+    renderRail({ price: 999 }, 3);
+    expect(await screen.findByText('+₹29.97 off')).toBeInTheDocument();
+  });
+});
+
+/*
+  Indian grouping, pinned.
+
+  Every assertion here uses a SIX-figure price on purpose. Below ₹1,00,000 the
+  en-IN and en-US groupings are byte-identical ("₹23,000"), so a five-figure
+  fixture passes against the bug and proves nothing — which is how the original
+  defect shipped and stayed live.
+
+  One limit worth knowing: what these DETECT depends on the runner's default
+  locale. Node resolves to en-US on CI and on this machine, so the unpinned call
+  produces "₹283,000" and they fail loudly. On an en-IN runner the buggy and
+  fixed code emit the same string and they would pass either way. They are a
+  genuine guard in the environment we actually run, not a proof of the call site.
+*/
+describe('SimilarProductsSection price formatting', () => {
+  it('groups in lakhs, not thousands, whatever locale the runtime has', async () => {
+    renderRail({ price: 283000 });
+    expect(await screen.findByText('₹2,83,000')).toBeInTheDocument();
+    expect(screen.queryByText('₹283,000')).not.toBeInTheDocument();
+  });
+
+  it('groups the struck-through MRP the same way', async () => {
+    // The compare-at price took the identical un-localed call, so it broke in
+    // lockstep — and a mismatched pair reads as two different currencies.
+    renderRail({ price: 268000, originalPrice: 282000 });
+    expect(await screen.findByText('₹2,68,000')).toBeInTheDocument();
+    expect(screen.getByText('₹2,82,000')).toBeInTheDocument();
+  });
+});
+
+/*
+  Price and badge must quote the SAME currency.
+
+  Only observable in USD. The saving used `formatSavingInr`, which hard-codes ₹,
+  so in rupees it agreed with CurrencyContext byte for byte and every existing
+  test above passed while the two were, in fact, unrelated formatters.
+*/
+describe('SimilarProductsSection currency consistency', () => {
+  it('quotes the saving in the shopper’s currency, not always rupees', async () => {
+    currency = 'USD';
+    renderRail({ price: 268000 }, 8); // 8% of ₹2,68,000 = ₹21,440
+
+    expect(await screen.findByText('$3,228.92')).toBeInTheDocument();
+    expect(screen.getByText('+$258.31 off')).toBeInTheDocument();
+    // The giveaway symptom: a rupee saving sitting under a dollar price.
+    expect(screen.queryByText(/\+₹/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the exact paise on the saving, in either currency', async () => {
+    // ₹999 × 3% = ₹29.97. Rounding that up to "₹30 off" advertises a discount
+    // the cart will not honour, so `exact` has to survive the formatter swap.
     renderRail({ price: 999 }, 3);
     expect(await screen.findByText('+₹29.97 off')).toBeInTheDocument();
   });

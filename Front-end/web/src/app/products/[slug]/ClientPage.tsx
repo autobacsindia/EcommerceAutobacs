@@ -326,16 +326,15 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
 
         {/* Similar + complementary */}
         <section className={sectionCls}>
-          <SimilarProductsSection productId={product._id} isDark />
+          <SimilarProductsSection productId={product._id} />
         </section>
         <section className="py-16">
-          <ComplementaryProductsSection productId={product._id} isDark />
+          <ComplementaryProductsSection productId={product._id} />
         </section>
       </div>
 
       <StickyCartBar
         product={product}
-        isDark
         isVariable={product.productType === 'variable' && (product.variants?.length ?? 0) > 0}
         variant={product.variants?.find((v) => v._id === selectedVariantId) ?? null}
         priceMin={product.priceMin ?? product.price}

@@ -32,7 +32,22 @@ export interface ProductItem {
   category: string;
   brand: string;
   name: string;
+  /**
+   * Pre-formatted display price. Still the only price the CURATED fallbacks
+   * below carry — they are hand-written copy, not catalogue rows, so there is
+   * no number to convert.
+   */
   price: string;
+  /**
+   * The catalogue price as a number, present only on DB-backed products.
+   *
+   * `price` above is formatted on the server, which fixes it to rupees and
+   * makes the home page the one storefront surface the currency switch cannot
+   * reach. Carrying the raw figure alongside lets the card format it through
+   * CurrencyContext like every other card, while the curated fallbacks keep
+   * rendering their string unchanged.
+   */
+  priceValue?: number;
   href: string;
   image: string;
 }
@@ -112,17 +127,28 @@ export const hero = {
   imageAlt: 'Performance Vehicle',
 };
 
+export type HeroSequenceConfig = {
+  dir: string;
+  prefix: string;
+  ext: string;
+  count: number;
+  pad: number;
+  naturalWidth: number;
+  naturalHeight: number;
+};
+
 /**
- * Hero scroll-frame sequence (desktop+ only). The hero "car" image is replaced
- * by a <canvas> that scrubs through these frames as the user scrolls past the
- * hero. Mobile and `prefers-reduced-motion` users fall back to `hero.image` and
- * never download a single frame. See HeroSequence.tsx.
+ * Hero scroll-frame sequence. The hero "car" image is replaced by a <canvas>
+ * that scrubs through these frames as the user scrolls past the hero.
+ * `prefers-reduced-motion`, data-saver and low-memory devices fall back to the
+ * static `hero.image` and never download a frame. See HeroSequence.tsx.
  *
  * Frames live in `public/scroll-frames/` (committed). To regenerate from a new
  * source video: extract every frame at 1440px wide to WebP and keep the
- * `frame_0001.webp … frame_NNNN.webp` naming, then update `count` here.
+ * `frame_0001.webp … frame_NNNN.webp` naming, then update `count` here — and
+ * regenerate the mobile set below, which is derived from these files.
  */
-export const heroSequence = {
+export const heroSequence: HeroSequenceConfig = {
   dir: '/scroll-frames',
   prefix: 'frame_',
   ext: 'webp',
@@ -130,6 +156,26 @@ export const heroSequence = {
   pad: 4, // zero-padding width of the frame number
   naturalWidth: 1440,
   naturalHeight: 808,
+};
+
+/**
+ * Mobile variant — a decimated, downscaled derivative of `heroSequence`, not a
+ * second animation. Regenerate with `npm run generate-mobile-frames -- --apply`
+ * whenever the desktop set changes, and update `count` to what it prints.
+ *
+ * Phones cannot run the desktop set. It is ~4.9 MB on the wire, and because
+ * HeroSequence holds every decoded frame at once that is ~674 MB of ImageBitmap
+ * memory (1440*808*4 bytes x 145) — past the per-tab budget iOS Safari kills a
+ * page over. Every 3rd frame at 720x404 is ~0.64 MB and ~57 MB decoded.
+ */
+export const heroSequenceMobile: HeroSequenceConfig = {
+  dir: '/scroll-frames-mobile',
+  prefix: 'frame_',
+  ext: 'webp',
+  count: 49,
+  pad: 4,
+  naturalWidth: 720,
+  naturalHeight: 404,
 };
 
 export const stats: StatItem[] = [
