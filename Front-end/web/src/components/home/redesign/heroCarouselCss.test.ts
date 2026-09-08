@@ -101,6 +101,38 @@ describe('hero carousel CSS', () => {
     expect(snapBack).toBeLessThanOrEqual(250);
   });
 
+  /*
+    ── Regression: the car slide painting over the spin poster ────────────────
+    The phone canvas is overscaled (~170% of the stage) and centred, so it overhangs its
+    own slide by ~35% each side. That is invisible while the car slide is showing — the
+    hero clips it at the same edge — but once the track translates to slide 2 the right
+    overhang lands on the left third of the viewport, on top of the poster's headline.
+
+    Reported on a real phone; jsdom does no layout, so nothing rendered could have caught
+    it. The stylesheet is the only place the invariant can be stated: if the canvas is
+    wider than its slide, the slide MUST clip.
+  */
+  it('clips each slide, because the phone canvas is wider than one', () => {
+    const phoneSeq = /\.hero-pin\.hero-seq-active \.hero \.center-img \.hero-seq\s*\{([^}]*)\}/
+      .exec(stackedMobileBlocks())?.[1] ?? '';
+    const width = /width:\s*(\d+)%/.exec(phoneSeq);
+    expect(width).not.toBeNull(); // a non-% width means this guard needs rewriting
+
+    if (Number(width![1]) > 100) {
+      const slide = /\.hr \.hero \.hero-slide\s*\{([^}]*)\}/.exec(CSS)?.[1] ?? '';
+      expect(slide).toMatch(/overflow:\s*hidden/);
+      // `.center-img` carries z-index 2, so without a stacking context per slide the
+      // overhang outranks slide 2's content whatever the DOM order says.
+      expect(slide).toMatch(/isolation:\s*isolate/);
+    }
+  });
+
+  it('does not clip the track itself, which would hide the second slide entirely', () => {
+    // Slide 2 sits at `left: 100%`, outside the track's own travelling box.
+    const carousel = /\.hr \.hero \.hero-carousel\s*\{([^}]*)\}/.exec(CSS)?.[1] ?? '';
+    expect(carousel).not.toMatch(/overflow/);
+  });
+
   it('moves the track with a transform, never a scroll container', () => {
     // A horizontal scroll container inside the sticky, pinned hero would compete for
     // the vertical drag the frame scrub depends on. See the comment in the CSS.
