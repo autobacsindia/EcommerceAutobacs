@@ -18,8 +18,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * frame scrub is never covered and never interrupted.
  *
  * Everything else here is the ordinary set of reasons not to animate at someone:
- * reduced motion, a backgrounded tab, a pointer resting on the hero, or keyboard
- * focus inside it.
+ * reduced motion, a backgrounded tab, or keyboard focus inside it. Notably NOT hover —
+ * see the note beside the pause signals for why that one is actively wrong here.
  *
  * With `slideCount <= 1` the hook is completely inert — no timer, no listeners — so
  * when no spin campaign is live the hero behaves exactly as it did before this
@@ -27,29 +27,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  */
 
 /**
- * Dwell is PER SLIDE, not one interval, because the two slides have opposite needs.
+ * Dwell per slide — the same for every slide, deliberately.
  *
- * The carousel can only ever rotate while the user is at the top of the page (see the
- * scroll lock below). That is a budget of a few seconds for the whole rotation, so the
- * car slide has to hand over quickly or a visitor who scrolls at a normal pace never
- * learns the campaign exists at all.
+ * The carousel only ever rotates while the hero has the screen (see the scroll lock
+ * below), which is a budget of a few seconds for the whole rotation. At a longer dwell
+ * a visitor scrolling at a normal pace never learns the campaign exists.
  *
- * The spin slide is the opposite: HeroSpinWheel's needle takes SPIN_DURATION_MS (2.6s)
- * to land, and the "Could land on — X" line only means anything once it has. Giving it
- * the car's dwell would cut the wheel off just after it settles, every single time.
- *
- * So: reveal fast, then hold. `HeroSpinWheel.test.tsx` pins SPIN_DWELL_MS against the
- * spin duration so the two cannot drift apart.
+ * ⚠ This is a ceiling on HeroSpinWheel's SPIN_DURATION_MS, not just a number. The
+ * needle has to land AND the "Could land on — X" line has to be readable inside one
+ * dwell, or the wheel is cut off mid-rotation every single time and the slide is a
+ * blur. `HeroSpinWheel.test.tsx` holds the two together with a reading margin — if you
+ * lengthen the spin, that test is what tells you the dwell no longer fits it.
  */
-/** Car slide → spin slide. Short, because the rotation only gets one shot. */
-export const CAR_DWELL_MS = 3000;
-/** Spin slide → car slide. Must outlast the 2.6s wheel spin with reading time left. */
-export const SPIN_DWELL_MS = 6000;
-
-/** Slide 1 is the spin teaser; anything else is the car stage. */
-export function dwellMsFor(index: number): number {
-  return index === 1 ? SPIN_DWELL_MS : CAR_DWELL_MS;
-}
+export const SLIDE_DWELL_MS = 3000;
 
 /**
  * Scroll past this and the carousel locks to the car slide.
@@ -165,6 +155,22 @@ export function useHeroCarousel(
     const pause = () => setPaused(true);
     const resume = () => setPaused(false);
 
+    /*
+      ⚠ NO POINTER PAUSE HERE — and it is not an oversight.
+
+      "Pause on hover" is the right default for a carousel occupying a card in a page.
+      This one is the whole stage: `.hero` is 100vh, so at the top of the page the cursor
+      is inside it by definition. The old `pointerenter` listener fired on the first
+      mouse move, latched `paused`, and its `pointerleave` partner could only fire by
+      scrolling out of the hero — where the scroll lock has already stopped the rotation
+      anyway. Net effect: on desktop, with a mouse, the carousel never auto-advanced at
+      all. It looked like a broken timer and was really a pause that could never lift.
+
+      Keyboard focus below is a different case and stays: `focusin` means the user is on
+      a specific control inside the hero, which is a real signal, and moving a slide out
+      from under a focused element is a genuine a11y failure. Hovering a full-screen
+      stage signals nothing.
+    */
     // Reduced motion is a hard stop, not a pause: nothing should re-enable it.
     if (motion.matches) {
       setPaused(true);
@@ -173,35 +179,29 @@ export function useHeroCarousel(
 
     setPaused(document.hidden);
     document.addEventListener('visibilitychange', onVisibility);
-    el?.addEventListener('pointerenter', pause);
-    el?.addEventListener('pointerleave', resume);
-    // Keyboard users get the same courtesy as mouse users: a slide must not move out
-    // from under the element they just tabbed to.
+    // A slide must not move out from under the element the user just tabbed to.
     el?.addEventListener('focusin', pause);
     el?.addEventListener('focusout', resume);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      el?.removeEventListener('pointerenter', pause);
-      el?.removeEventListener('pointerleave', resume);
       el?.removeEventListener('focusin', pause);
       el?.removeEventListener('focusout', resume);
     };
   }, [enabled, containerRef]);
 
   // ── The timer ──────────────────────────────────────────────────────────────
-  // A self-rescheduling timeout rather than an interval: dwell depends on which slide
-  // is showing, and an interval has one fixed period by definition. `index` in the deps
-  // is what re-arms it — every advance tears down the old timer and arms the next one
-  // at the new slide's dwell.
+  // One fixed period, so an interval rather than a self-rescheduling timeout: `index`
+  // stays OUT of the deps, and the rotation keeps an even cadence instead of resetting
+  // its phase on every advance.
   useEffect(() => {
     if (!enabled || locked || paused || userPicked) return;
-    const id = window.setTimeout(
+    const id = window.setInterval(
       () => setIndex((i) => (i + 1) % slideCount),
-      dwellMsFor(index),
+      SLIDE_DWELL_MS,
     );
-    return () => window.clearTimeout(id);
-  }, [enabled, locked, paused, userPicked, slideCount, index]);
+    return () => window.clearInterval(id);
+  }, [enabled, locked, paused, userPicked, slideCount]);
 
   // A campaign ending mid-session shrinks slideCount under a non-zero index.
   useEffect(() => {

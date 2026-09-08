@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react';
 import HeroSpinWheel, { SPIN_DURATION_MS } from './HeroSpinWheel';
-import { SPIN_DWELL_MS } from './useHeroCarousel';
+import { SLIDE_DWELL_MS } from './useHeroCarousel';
 import type { SpinTeaserPrize } from './homeData';
 
 /**
@@ -73,18 +73,17 @@ describe('HeroSpinWheel', () => {
 
   it('settles inside the slide dwell, so the result is readable before the slide leaves', () => {
     /*
-      Read against SPIN_DWELL_MS, never a literal: the dwell is now per slide, and the
-      short one belongs to the car. Hard-coding the number here is how this guard would
-      keep passing after someone shortens the spin slide's dwell to match it.
+      Read against SLIDE_DWELL_MS, never a literal. Hard-coding the number here is how
+      this guard would keep passing after someone changes the dwell out from under it.
 
       Both directions matter. Lengthen the spin past the dwell and the wheel is cut off
       mid-rotation every time; shorten the dwell to the spin and the "Could land on — X"
       line — the entire point of the animation — is gone before it can be read. Hence a
       margin, not just "less than".
     */
-    expect(SPIN_DURATION_MS).toBeLessThan(SPIN_DWELL_MS);
+    expect(SPIN_DURATION_MS).toBeLessThan(SLIDE_DWELL_MS);
     // At least a second of the landed result on screen before the slide moves on.
-    expect(SPIN_DWELL_MS - SPIN_DURATION_MS).toBeGreaterThanOrEqual(1000);
+    expect(SLIDE_DWELL_MS - SPIN_DURATION_MS).toBeGreaterThanOrEqual(1000);
   });
 
   it('under reduced motion it neither animates nor claims a result', () => {

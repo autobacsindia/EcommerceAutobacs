@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import Hero from './Hero';
 import type { SpinTeaser } from './homeData';
-import { CAR_DWELL_MS, SPIN_DWELL_MS } from './useHeroCarousel';
+import { SLIDE_DWELL_MS } from './useHeroCarousel';
 
 /**
  * DRIFT GUARD for the pinned frame sequence.
@@ -99,7 +99,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     expect(canvas.closest('.hero-slide')).toBeTruthy();
     expect(sequenceMountCount).toBe(1);
 
-    act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
+    act(() => { jest.advanceTimersByTime(SLIDE_DWELL_MS); });
 
     // Same node, still mounted: the slide change is a transform, not a remount, so
     // every decoded ImageBitmap and the in-flight preload survive.
@@ -112,7 +112,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     const track = container.querySelector<HTMLElement>('.hero-carousel')!;
 
     expect(track.style.transform).toBe('translate3d(-0%, 0, 0)');
-    act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
+    act(() => { jest.advanceTimersByTime(SLIDE_DWELL_MS); });
     expect(track.style.transform).toBe('translate3d(-100%, 0, 0)');
 
     // Nothing the scrub measures was touched.
@@ -124,7 +124,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     const { container } = render(<Hero spinTeaser={teaser} />);
     const track = container.querySelector<HTMLElement>('.hero-carousel')!;
 
-    act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
+    act(() => { jest.advanceTimersByTime(SLIDE_DWELL_MS); });
     expect(track.style.transform).toBe('translate3d(-100%, 0, 0)');
 
     act(() => {
@@ -156,7 +156,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     const track = container.querySelector<HTMLElement>('.hero-carousel')!;
 
     expect(track).not.toHaveClass('is-snapping-back');
-    act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
+    act(() => { jest.advanceTimersByTime(SLIDE_DWELL_MS); });
     expect(track.style.transform).toBe('translate3d(-100%, 0, 0)');
     expect(track).not.toHaveClass('is-snapping-back');
   });
@@ -169,7 +169,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
       expect(container.querySelector('.hero-dots')).toBeNull();
 
       const track = container.querySelector<HTMLElement>('.hero-carousel')!;
-      act(() => { jest.advanceTimersByTime((CAR_DWELL_MS + SPIN_DWELL_MS) * 4); });
+      act(() => { jest.advanceTimersByTime(SLIDE_DWELL_MS * 4); });
       expect(track.style.transform).toBe('translate3d(-0%, 0, 0)');
     });
   });
@@ -192,7 +192,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     expect(slides[0]).not.toHaveAttribute('inert');
     expect(slides[1]).toHaveAttribute('inert');
 
-    act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
+    act(() => { jest.advanceTimersByTime(SLIDE_DWELL_MS); });
 
     const after = container.querySelectorAll('.hero-slide');
     expect(after[0]).toHaveAttribute('inert');

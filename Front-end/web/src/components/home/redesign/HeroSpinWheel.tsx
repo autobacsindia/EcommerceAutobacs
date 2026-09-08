@@ -35,8 +35,16 @@ const R_IN = 168;
 const R_ICON = 236;
 const R_LABEL = 376;
 
-/** Needle travel. 2.6s so the spin resolves inside the 6s slide dwell with time to read it. */
-export const SPIN_DURATION_MS = 2600;
+/**
+ * Needle travel.
+ *
+ * Bounded by SLIDE_DWELL_MS, not chosen for its own sake: the slide now hands over
+ * every 3s, and a spin that eats the whole dwell means the "Could land on — X" line is
+ * gone before it can be read — which is the only reason the wheel is on the slide. 1.5s
+ * still reads as a spin (see TURNS below) and leaves the result on screen for as long
+ * again. `HeroSpinWheel.test.tsx` pins that margin against the dwell.
+ */
+export const SPIN_DURATION_MS = 1500;
 
 /** Whole extra turns before landing — enough to read as a spin, short enough to finish. */
 const EXTRA_TURNS = 3;
