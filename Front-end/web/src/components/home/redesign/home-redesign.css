@@ -364,6 +364,182 @@
   .hr .hero-pin.hero-seq-active .hero .floor-glow { bottom: 16%; }
 }
 
+/* ── HERO CAROUSEL ──
+   A second hero slide (the Spin-to-Win teaser) sits alongside the car. Everything
+   here is deliberately INSIDE .hero, which is the sticky element: .hero-pin's height
+   and the frame-scrub maths in HeroSequence.tsx must not be able to see it.
+
+   ⚠ TRANSPORT IS A TRANSFORM, NOT SCROLL-SNAP — do not "align" this with the .bc
+   carousel below. .bc is `overflow-x: auto` + scroll-snap, which is right for a
+   section in normal flow. Here it would be wrong twice over: a horizontal scroll
+   container inside a position:sticky 100vh element competes for the exact vertical
+   drag the pinned frame scrub depends on, and a programmatic scrollTo firing on a
+   timer while the user is mid-scrub is a known source of iOS jank. A translate3d
+   track composites, owns no scroll container, and makes "lock to slide 0" a state
+   change. The dots reuse .bc-dot, which is shared styling, not shared transport.
+
+   .hero-slide is `position: absolute; inset: 0` on purpose: every offset the design
+   already sets against .hero (.hero-left, .center-img, .hero-consult-wrap) keeps
+   resolving against a box of identical size, so the car does not move by a pixel. */
+.hr .hero .hero-carousel {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  /* Not a flex container: the slides are absolutely positioned and offset by `left`,
+     so only this wrapper's transform moves them. */
+  /* Compositor-only, and slow enough to read as a deliberate change of subject. */
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+/* The scroll snap-back is NOT an advance, and must not animate like one.
+   When the user scrolls, useHeroCarousel locks to slide 0 so the pinned frame scrub is
+   never covered by the poster. Playing the leisurely 0.8s "change of subject" slide at
+   that moment puts a slow horizontal motion directly against the vertical scroll the
+   user just started — two animations fighting, which reads as the carousel jumping on
+   its own rather than getting out of the way. 200ms is short enough to be over before
+   the scrub has anything to show, and still a movement rather than a cut, so the
+   direction it went is legible. */
+.hr .hero .hero-carousel.is-snapping-back { transition: transform 0.2s ease-out; }
+.hr .hero .hero-slide { position: absolute; inset: 0; width: 100%; height: 100%; }
+.hr .hero .hero-slide:nth-child(2) { left: 100%; }
+/* The inactive slide keeps its box (so nothing reflows) but takes no clicks and no
+   focus — `inert` covers assistive tech and tabbing, this covers the pointer. */
+.hr .hero .hero-slide[inert] { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  /* Both selectors: .is-snapping-back carries an extra class and would otherwise
+     out-specify this and re-animate the one case reduced motion most wants still. */
+  .hr .hero .hero-carousel,
+  .hr .hero .hero-carousel.is-snapping-back { transition: none; }
+}
+
+.hr .hero .hero-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: flex;
+  gap: 0;
+}
+
+/* ── SPIN SLIDE ── */
+.hr .hero .hero-spin {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(24px, 4vw, 56px);
+  padding: 96px clamp(22px, 5vw, 72px) 72px;
+}
+.hr .hero .hero-spin-copy {
+  flex: 1 1 380px;
+  min-width: 260px;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.8vw, 22px);
+}
+.hr .hero .hero-spin-copy .headline { font-size: clamp(46px, 5.4vw, 78px); }
+.hr .hero .hero-spin-copy .tagline { margin-top: 0; max-width: 34ch; }
+.hr .hero .hero-spin-rule { width: 64px; height: 1px; background: var(--gold); }
+.hr .hero .hero-spin-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border: 1px solid rgba(201, 168, 112, 0.32);
+  background: rgba(201, 168, 112, 0.05);
+}
+.hr .hero .hero-spin-badge-value { font-size: clamp(20px, 2.4vw, 26px); font-weight: 300; line-height: 1; color: var(--gold); }
+.hr .hero .hero-spin-badge-label { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text); }
+/* Reuses .hero-consult, minus its entry animation — that one is timed against the
+   page load, and this slide arrives on a timer long after it. */
+.hr .hero .hero-spin-cta { position: relative; align-self: flex-start; opacity: 1; animation: none; }
+.hr .hero .hero-spin-prizes { font-size: 11px; line-height: 1.7; color: var(--muted); max-width: 40ch; }
+
+.hr .hero .hero-spin-wheel {
+  flex: 1 1 420px;
+  min-width: 260px;
+  max-width: 560px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.hr .hero .hero-spin-dial { position: relative; container-type: inline-size; width: 100%; }
+.hr .hero .hero-spin-svg { position: relative; width: 100%; height: auto; display: block; }
+.hr .hero .hero-spin-glow {
+  position: absolute;
+  left: 12%; right: 12%; top: 14%; bottom: 8%;
+  border-radius: 50% 50% 0 0;
+  background: radial-gradient(circle at 50% 100%, rgba(201, 168, 112, 0.22), transparent 68%);
+  pointer-events: none;
+}
+/* Sized in container query units so icons and labels track the dial at any width —
+   the wheel is fluid and a px size would drift off its wedge. */
+.hr .hero .hero-spin-icon {
+  position: absolute;
+  width: max(30px, 8.5cqi);
+  height: max(30px, 8.5cqi);
+  margin: calc(-0.5 * max(30px, 8.5cqi)) 0 0 calc(-0.5 * max(30px, 8.5cqi));
+  border-radius: 50%;
+  background: #131313;
+  border: 0.28cqi solid rgba(201, 168, 112, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+.hr .hero .hero-spin-icon img { width: 100%; height: 100%; object-fit: cover; }
+.hr .hero .hero-spin-icon-fallback { font-size: max(12px, 3.6cqi); color: var(--gold); }
+.hr .hero .hero-spin-label {
+  position: absolute;
+  font-size: max(10px, 3cqi);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text);
+  pointer-events: none;
+}
+/* Fixed height: the result line appears mid-spin, and a growing box would shift the
+   dial above it. */
+.hr .hero .hero-spin-status {
+  min-height: 22px;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+@media (max-width: 900px) {
+  /* Stack the wheel above the copy; row-reverse would otherwise put it below, and
+     the dial is the thing that earns the slide its attention. */
+  .hr .hero .hero-spin { flex-direction: column-reverse; justify-content: center; gap: 18px; padding: 88px 22px 56px; }
+  .hr .hero .hero-spin-copy { align-items: center; text-align: center; max-width: 420px; }
+  .hr .hero .hero-spin-copy .tagline { margin-left: auto; margin-right: auto; }
+  .hr .hero .hero-spin-rule,
+  .hr .hero .hero-spin-badge,
+  .hr .hero .hero-spin-cta { align-self: center; }
+  .hr .hero .hero-spin-wheel { max-width: 380px; }
+  /* No room for the prize list beside the dial, but it is the ACCESSIBLE equivalent
+     of that aria-hidden dial — hiding it with display:none would take the prize
+     names away from screen readers entirely. Visually hidden, still announced. */
+  .hr .hero .hero-spin-prizes {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
 .hr .hero .floor-glow { position: absolute; bottom: 10%; left: 50%; transform: translateX(-50%); width: 520px; max-width: 80vw; height: 60px; background: radial-gradient(ellipse, rgba(201, 168, 112, 0.09) 0%, transparent 70%); pointer-events: none; }
 
 /* "Consult a specialist" CTA — pinned bottom-right on md/lg; overridden to a
@@ -856,6 +1032,44 @@
   .hr .nav-mobile a:last-child { border-bottom: none; }
 
   /* HERO → stacked, content-driven height */
+  /* ── STACKED HERO × CAROUSEL ──
+     This is the phone layout used when the frame sequence opted OUT — reduced
+     motion, data saver, or a sub-2GB device — so .hero-seq-active never lands and
+     .hero is content-height with its children back in normal flow (below).
+
+     The carousel is `position: absolute` in every other mode, which is right when
+     .hero is a fixed 100vh/100svh stage. Here it would take the section's only
+     in-flow content out of flow and collapse the hero to its padding — the whole
+     hero would vanish, on exactly the devices least able to tell you why. So the
+     track goes back in flow as a flex row of full-width slides; the same
+     translate3d still moves it, and .hero's existing `overflow: hidden` clips it. */
+  .hr .hero-pin:not(.hero-seq-active) .hero .hero-carousel {
+    position: static;
+    display: flex;
+    align-items: flex-start;
+  }
+  .hr .hero-pin:not(.hero-seq-active) .hero .hero-slide {
+    position: relative;
+    inset: auto;
+    left: auto;
+    flex: 0 0 100%;
+    width: 100%;
+    height: auto;
+  }
+  .hr .hero-pin:not(.hero-seq-active) .hero .hero-spin {
+    position: relative;
+    inset: auto;
+    padding: 8px 0 0;
+  }
+  .hr .hero-pin:not(.hero-seq-active) .hero .hero-dots {
+    position: relative;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    margin: 22px auto 0;
+    justify-content: center;
+  }
+
   .hr .hero { height: auto; min-height: 0; padding: 96px 22px 28px; }
   .hr .hero .bg-glow { background: radial-gradient(ellipse 120% 60% at 50% 38%, #1d2020 0%, #0d0e0e 100%); }
   .hr .hero .hero-left { position: static; transform: none; width: 100%; text-align: center; }

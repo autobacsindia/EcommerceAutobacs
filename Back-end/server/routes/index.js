@@ -163,9 +163,11 @@ apiRouter.use('/page-seo', publicBrowsingRateLimit, pageSeoRoutes); // Public re
 // admin CRUD guarded in-route.
 apiRouter.use('/promo-banners', publicBrowsingRateLimit, promoBannerRoutes);
 
-// Spin-to-Win. Every route is authenticated and per-order or per-admin, so it gets no
-// public browsing limit and no edge caching; the spin itself carries its own limiter
-// keyed on the real client IP (see routes/spin.js).
+// Spin-to-Win. Almost every route is authenticated and per-order or per-admin, so the
+// router gets no blanket public browsing limit; the spin itself carries its own limiter
+// keyed on the real client IP. The one public route — GET /spin/public/live, the home
+// hero's campaign teaser — therefore carries publicBrowsingRateLimit in-route rather
+// than inheriting it here (see routes/spin.js).
 apiRouter.use('/spin', spinRoutes);
 apiRouter.use('/scheduled-tasks', adminRouteRateLimit, scheduledTasksRoutes);
 apiRouter.use('/uploads', adminRouteRateLimit, uploadRoutes); // Admin-only: direct-to-Cloudinary signatures

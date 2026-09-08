@@ -41,6 +41,38 @@ export interface HomeData {
   journalPosts: JournalItem[];
   brands: string[];
   carHotspots: ResolvedCarHotspot[];
+  /**
+   * The live Spin-to-Win campaign, or null when none is running. `null` is the
+   * normal, common case — the hero simply renders one slide instead of two.
+   */
+  spinTeaser: SpinTeaser | null;
+}
+
+/**
+ * The public teaser the hero's spin slide renders from
+ * (backend GET /spin/public/live).
+ *
+ * Deliberately carries no prize ids, stock or odds — the endpoint redacts them, so
+ * there is nothing here that prices the prize economy even though this ships inside
+ * the home page's HTML.
+ */
+export interface SpinTeaser {
+  slug: string;
+  name: string;
+  /** ISO. The hero hides the slide once this passes, ahead of the ISR window. */
+  endsAt: string;
+  minOrderValuePaise: number;
+  /** null = uncapped (every order earns its own spin). */
+  maxSpinsPerUserPerCampaign: number | null;
+  terms: string | null;
+  prizes: SpinTeaserPrize[];
+}
+
+export interface SpinTeaserPrize {
+  name: string;
+  shortLabel: string;
+  imageUrl: string | null;
+  kind: string;
 }
 
 // How many items to pull into each section. Categories are capped at the hub
@@ -98,6 +130,18 @@ interface ApiArticle {
 }
 interface ApiBrand {
   name: string;
+}
+interface ApiSpinTeaser {
+  live?: boolean;
+  campaign?: {
+    slug?: string;
+    name?: string;
+    endsAt?: string;
+    minOrderValuePaise?: number;
+    maxSpinsPerUserPerCampaign?: number | null;
+    terms?: string | null;
+  };
+  prizes?: SpinTeaserPrize[];
 }
 
 /* ── mappers (DB doc → redesign view-model) ──────────────────────────────── */
@@ -216,6 +260,36 @@ async function fetchBrands(): Promise<string[]> {
 }
 
 /**
+ * The live Spin-to-Win campaign, or null.
+ *
+ * Unlike every other section here there is NO static fallback, and that is the point:
+ * this slide advertises a real, running promotion, so inventing one when the backend is
+ * silent would promise a wheel the customer cannot spin. A failure, a `live: false`, or
+ * a campaign with no prizes left all resolve to `null` and the hero renders its single
+ * car slide exactly as it does today.
+ */
+async function fetchSpinTeaser(): Promise<SpinTeaser | null> {
+  const res = await serverFetch<ApiSpinTeaser>(
+    '/spin/public/live',
+    { next: { revalidate: REVALIDATE, tags: ['home:spin'] } }
+  );
+  const c = res?.campaign;
+  if (!res?.live || !c?.slug || !c?.endsAt) return null;
+  // An empty prize list would draw a blank wheel; treat it as "nothing to advertise".
+  const prizes = (res.prizes ?? []).filter((p) => p?.name);
+  if (!prizes.length) return null;
+  return {
+    slug: c.slug,
+    name: c.name || 'Spin to Win',
+    endsAt: c.endsAt,
+    minOrderValuePaise: c.minOrderValuePaise ?? 0,
+    maxSpinsPerUserPerCampaign: c.maxSpinsPerUserPerCampaign ?? null,
+    terms: c.terms ?? null,
+    prizes,
+  };
+}
+
+/**
  * Resolve a section's data, falling back to the static placeholder when the
  * fetch rejects or returns an empty list. Errors are swallowed (logged) so one
  * dead endpoint can never blank the whole home page.
@@ -239,16 +313,22 @@ async function withFallback<T>(
  * throws) — each section independently degrades to its static fallback.
  */
 export async function getHomeData(): Promise<HomeData> {
-  const [products, categories, testimonials, journalPosts, brands, carHotspots] = await Promise.all([
-    withFallback(fetchProducts, fallbackProducts, 'products'),
-    withFallback(fetchCategories, fallbackCategories, 'categories'),
-    withFallback(fetchTestimonials, fallbackTestimonials, 'testimonials'),
-    withFallback(fetchJournal, fallbackJournalPosts, 'journal'),
-    withFallback(fetchBrands, fallbackBrands, 'brands'),
-    // getCarHotspots already resolves resiliently (returns [] on failure) and the
-    // Showreel self-falls-back to its placeholder stage when the list is empty.
-    getCarHotspots().catch(() => [] as ResolvedCarHotspot[]),
-  ]);
+  const [products, categories, testimonials, journalPosts, brands, carHotspots, spinTeaser] =
+    await Promise.all([
+      withFallback(fetchProducts, fallbackProducts, 'products'),
+      withFallback(fetchCategories, fallbackCategories, 'categories'),
+      withFallback(fetchTestimonials, fallbackTestimonials, 'testimonials'),
+      withFallback(fetchJournal, fallbackJournalPosts, 'journal'),
+      withFallback(fetchBrands, fallbackBrands, 'brands'),
+      // getCarHotspots already resolves resiliently (returns [] on failure) and the
+      // Showreel self-falls-back to its placeholder stage when the list is empty.
+      getCarHotspots().catch(() => [] as ResolvedCarHotspot[]),
+      // No withFallback: this section's "empty" answer IS null (see fetchSpinTeaser).
+      fetchSpinTeaser().catch((err) => {
+        console.error('[homeData] spin teaser fetch failed, hiding the slide:', err);
+        return null;
+      }),
+    ]);
 
-  return { products, categories, testimonials, journalPosts, brands, carHotspots };
+  return { products, categories, testimonials, journalPosts, brands, carHotspots, spinTeaser };
 }
