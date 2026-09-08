@@ -112,7 +112,7 @@ export default function SpinModal({ open, onClose, labelledBy, children, reduced
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-3 top-3 z-10 rounded-full bg-black/40 px-2 py-1 text-lg leading-none text-[#9fb3cc] hover:text-white"
+          className="absolute right-3 top-3 z-10 rounded-full bg-black/40 px-2 py-1 text-lg leading-none text-[#b3aca0] hover:text-white"
         >
           ×
         </button>

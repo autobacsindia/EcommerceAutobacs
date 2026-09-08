@@ -143,7 +143,7 @@ export default function SpinPreviewClient() {
                 {' '}<Link href="/admin/spin" className="underline">Admin → Spin</Link> to preview its real prizes and artwork.</>}
           </p>
 
-          <div className="rounded-2xl bg-[#060d18] p-4">
+          <div className="rounded-2xl bg-[#0b0b0b] p-4">
             <SpinGauge
               labels={labels}
               images={images}
@@ -155,7 +155,7 @@ export default function SpinPreviewClient() {
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <button onClick={spin} disabled={spinning || labels.length === 0}
-              className="rounded-full bg-[#f5b32c] px-6 py-2 font-bold text-[#1a1205] disabled:opacity-50">
+              className="rounded-full bg-[#c9a870] px-6 py-2 font-bold text-[#1a1205] disabled:opacity-50">
               {spinning ? 'Spinning…' : 'Spin'}
             </button>
             <button onClick={() => setSeed((s) => s + 1)} className="rounded-full border px-4 py-2 text-sm">

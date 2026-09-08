@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import cloudinaryLoader from '@/lib/cloudinaryLoader';
+import {
+  BADGE_GROUND, GOLD, GOLD_BRIGHT, GOLD_FAINT, GOLD_HAIRLINE,
+  OBSIDIAN, TEXT, TEXT_ON_GOLD, TICK_MAJOR, TICK_MINOR, WEDGE_A, WEDGE_B,
+} from './spinTheme';
 
 /**
  * The speedometer.
@@ -21,6 +25,18 @@ import cloudinaryLoader from '@/lib/cloudinaryLoader';
  * Motion is pure CSS transform on an SVG group, so it runs on the compositor and stays
  * smooth on a mid-range phone — which is what most customers will be holding right after
  * checkout. `prefers-reduced-motion` skips straight to the result rather than animating.
+ *
+ * ── Visual language ─────────────────────────────────────────────────────────
+ * Obsidian + gold, matched to the home hero's poster dial (`HeroSpinWheel.tsx`) so the
+ * wheel a customer was teased with and the one they actually spin read as one object.
+ * Colours come from `./spinTheme`, NOT from `var(--gold)`: that token is scoped to `.hr`
+ * and does not resolve on the order-success page. `spinTheme.test.ts` guards both the
+ * drift and that trap.
+ *
+ * The geometry stays a 240° arc rather than the poster's 180° half-dial. The arc is not
+ * decorative here — the admin picks 4–12 segments, and twelve wedges over 180° is 15°
+ * apiece, which collapses the radial labels into each other. The poster wheel can be a
+ * half-dial because it caps itself at six.
  */
 
 /** Arc geometry. 240° reads as a speedometer; a full 360° would read as a pie chart. */
@@ -52,12 +68,14 @@ const ICON_PX = ICON_R * 2 * 3;
 const iconSrc = (url: string) => cloudinaryLoader({ src: url, width: ICON_PX });
 const ICON_CLIP = 'spin-icon-clip';
 
-/** Wedge fills — deliberately not the brand gold, so the winner's highlight can be. */
-const WEDGE_COLORS = [
-  '#1e3a5f', '#2a4a73', '#1e3a5f', '#2a4a73',
-  '#1e3a5f', '#2a4a73', '#1e3a5f', '#2a4a73',
-  '#1e3a5f', '#2a4a73', '#1e3a5f', '#2a4a73',
-];
+/**
+ * Wedge fill — alternating, deliberately NOT gold so the winner's highlight can be.
+ *
+ * Computed rather than a fixed list: the admin sets 4–12 segments, and a 12-entry array
+ * was a silent cap waiting to be exceeded. Parity also guarantees adjacent wedges always
+ * differ, which a hand-written list does not once someone edits it.
+ */
+const wedgeFill = (i: number) => (i % 2 ? WEDGE_B : WEDGE_A);
 
 const polar = (cx: number, cy: number, r: number, deg: number) => {
   const rad = (deg * Math.PI) / 180;
@@ -179,8 +197,8 @@ export default function SpinGauge({ labels, images = [], winningIndex, spinning,
         aria-label={winningIndex !== null ? `You won ${labels[winningIndex]}` : 'Prize speedometer'}>
         <defs>
           <linearGradient id="spin-face" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#0f1e33" />
-            <stop offset="100%" stopColor="#060d18" />
+            <stop offset="0%" stopColor={WEDGE_B} />
+            <stop offset="100%" stopColor={OBSIDIAN} />
           </linearGradient>
           <filter id="spin-glow" x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="4" result="b" />
@@ -195,7 +213,14 @@ export default function SpinGauge({ labels, images = [], winningIndex, spinning,
           </clipPath>
         </defs>
 
-        <circle cx={CX} cy={CY} r={R_OUTER + 14} fill="url(#spin-face)" />
+        {/* Bezel. The poster dial is defined as much by its gold hairline as by the
+            wedges — without it the face reads as a flat hole rather than an instrument. */}
+        <circle
+          cx={CX} cy={CY} r={R_OUTER + 14}
+          fill="url(#spin-face)"
+          stroke={GOLD_FAINT}
+          strokeWidth={1.5}
+        />
 
         {labels.map((label, i) => {
           const start = ARC_START + segAngle * i;
@@ -223,8 +248,8 @@ export default function SpinGauge({ labels, images = [], winningIndex, spinning,
             <g key={`${label}-${i}`}>
               <path
                 d={wedgePath(start + 0.6, end - 0.6)}
-                fill={isWinner ? '#f5b32c' : WEDGE_COLORS[i % WEDGE_COLORS.length]}
-                stroke={isWinner ? '#ffd97a' : '#0a1424'}
+                fill={isWinner ? GOLD : wedgeFill(i)}
+                stroke={isWinner ? GOLD_BRIGHT : GOLD_HAIRLINE}
                 strokeWidth={isWinner ? 2.5 : 1}
                 filter={isWinner ? 'url(#spin-glow)' : undefined}
                 style={{ transition: 'fill 350ms ease' }}
@@ -243,8 +268,8 @@ export default function SpinGauge({ labels, images = [], winningIndex, spinning,
                   <>
                     <circle
                       cx={base.x} cy={base.y + iconDy} r={ICON_R + 2}
-                      fill={isWinner ? '#fff7e0' : '#0d1a2d'}
-                      stroke={isWinner ? '#ffd97a' : '#31435c'}
+                      fill={isWinner ? '#fff7e0' : BADGE_GROUND}
+                      stroke={isWinner ? GOLD_BRIGHT : GOLD_HAIRLINE}
                       strokeWidth={1}
                     />
                     <image
@@ -262,7 +287,7 @@ export default function SpinGauge({ labels, images = [], winningIndex, spinning,
                   textAnchor="middle" dominantBaseline="middle"
                   fontSize={11}
                   fontWeight={isWinner ? 700 : 500}
-                  fill={isWinner ? '#1a1205' : '#c9d6e8'}
+                  fill={isWinner ? TEXT_ON_GOLD : TEXT}
                   style={{ pointerEvents: 'none' }}
                 >
                   {label.length > 14 ? `${label.slice(0, 13)}…` : label}
@@ -278,18 +303,29 @@ export default function SpinGauge({ labels, images = [], winningIndex, spinning,
           const a = polar(CX, CY, R_OUTER + 4, deg);
           const b = polar(CX, CY, R_OUTER + (i % 2 === 0 ? 13 : 8), deg);
           return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-            stroke={i % 2 === 0 ? '#5d7a9e' : '#3a4a63'} strokeWidth={i % 2 === 0 ? 2 : 1} />;
+            stroke={i % 2 === 0 ? TICK_MAJOR : TICK_MINOR} strokeWidth={i % 2 === 0 ? 2 : 1} />;
         })}
 
-        {/* Needle */}
+        {/*
+          Needle.
+
+          ⚠ The dark outline is load-bearing, not decoration. The poster's needle is
+          plain gold because every wedge behind it there is near-black. Here the WINNING
+          wedge is filled gold — so a bare gold needle would disappear into the one
+          wedge it exists to point at, at exactly the moment the customer looks. The
+          obsidian stroke keeps it legible on both the unlit wedges and the winner.
+        */}
         <g style={{ transform: `rotate(${needleDeg}deg)`, transformOrigin: `${CX}px ${CY}px`, transition }}>
           <polygon
             points={`${CX - 6},${CY} ${CX},${CY - 7} ${CX + R_OUTER - 18},${CY - 2} ${CX + R_OUTER - 18},${CY + 2} ${CX},${CY + 7}`}
-            fill="#e8412f"
+            fill={GOLD}
+            stroke={OBSIDIAN}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
           />
         </g>
-        <circle cx={CX} cy={CY} r={17} fill="#12203a" stroke="#f5b32c" strokeWidth={2.5} />
-        <circle cx={CX} cy={CY} r={6} fill="#f5b32c" />
+        <circle cx={CX} cy={CY} r={17} fill={OBSIDIAN} stroke={GOLD} strokeWidth={2.5} />
+        <circle cx={CX} cy={CY} r={6} fill={GOLD} />
       </svg>
     </div>
   );
