@@ -78,6 +78,29 @@ describe('hero carousel CSS', () => {
     expect(CSS).toMatch(/\.hr \.hero \.hero-slide\s*\{[^}]*position:\s*absolute;\s*inset:\s*0/);
   });
 
+  /*
+    The scroll snap-back gets its own, much shorter transition. Hero.test.tsx pins that
+    the class is applied; only the stylesheet says what it is worth, and jsdom computes
+    no transitions, so this is the one place the duration can be held to account. If the
+    two ever converge, the lock goes back to fighting the user's scroll with a 0.8s
+    slide — which looks exactly like a bug and is the reason this rule exists.
+  */
+  it('returns from the scroll lock faster than a deliberate advance', () => {
+    const seconds = (rule: RegExp) => {
+      const decl = rule.exec(CSS)?.[1] ?? '';
+      const ms = /transition:\s*transform\s+([\d.]+)(m?s)/.exec(decl);
+      expect(ms).not.toBeNull();
+      return parseFloat(ms![1]) * (ms![2] === 'ms' ? 1 : 1000);
+    };
+
+    const advance = seconds(/\.hr \.hero \.hero-carousel\s*\{([^}]*)\}/);
+    const snapBack = seconds(/\.hr \.hero \.hero-carousel\.is-snapping-back\s*\{([^}]*)\}/);
+
+    expect(snapBack).toBeLessThan(advance);
+    // Short enough to be finished before the scrub has anything to show.
+    expect(snapBack).toBeLessThanOrEqual(250);
+  });
+
   it('moves the track with a transform, never a scroll container', () => {
     // A horizontal scroll container inside the sticky, pinned hero would compete for
     // the vertical drag the frame scrub depends on. See the comment in the CSS.

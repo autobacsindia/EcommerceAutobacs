@@ -391,13 +391,25 @@
   transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
   will-change: transform;
 }
+/* The scroll snap-back is NOT an advance, and must not animate like one.
+   When the user scrolls, useHeroCarousel locks to slide 0 so the pinned frame scrub is
+   never covered by the poster. Playing the leisurely 0.8s "change of subject" slide at
+   that moment puts a slow horizontal motion directly against the vertical scroll the
+   user just started — two animations fighting, which reads as the carousel jumping on
+   its own rather than getting out of the way. 200ms is short enough to be over before
+   the scrub has anything to show, and still a movement rather than a cut, so the
+   direction it went is legible. */
+.hr .hero .hero-carousel.is-snapping-back { transition: transform 0.2s ease-out; }
 .hr .hero .hero-slide { position: absolute; inset: 0; width: 100%; height: 100%; }
 .hr .hero .hero-slide:nth-child(2) { left: 100%; }
 /* The inactive slide keeps its box (so nothing reflows) but takes no clicks and no
    focus — `inert` covers assistive tech and tabbing, this covers the pointer. */
 .hr .hero .hero-slide[inert] { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
-  .hr .hero .hero-carousel { transition: none; }
+  /* Both selectors: .is-snapping-back carries an extra class and would otherwise
+     out-specify this and re-animate the one case reduced motion most wants still. */
+  .hr .hero .hero-carousel,
+  .hr .hero .hero-carousel.is-snapping-back { transition: none; }
 }
 
 .hr .hero .hero-dots {

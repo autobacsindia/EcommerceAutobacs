@@ -1,7 +1,7 @@
 import { act, render, screen } from '@testing-library/react';
 import Hero from './Hero';
 import type { SpinTeaser } from './homeData';
-import { SLIDE_INTERVAL_MS } from './useHeroCarousel';
+import { CAR_DWELL_MS, SPIN_DWELL_MS } from './useHeroCarousel';
 
 /**
  * DRIFT GUARD for the pinned frame sequence.
@@ -99,7 +99,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     expect(canvas.closest('.hero-slide')).toBeTruthy();
     expect(sequenceMountCount).toBe(1);
 
-    act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+    act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
 
     // Same node, still mounted: the slide change is a transform, not a remount, so
     // every decoded ImageBitmap and the in-flight preload survive.
@@ -112,7 +112,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     const track = container.querySelector<HTMLElement>('.hero-carousel')!;
 
     expect(track.style.transform).toBe('translate3d(-0%, 0, 0)');
-    act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+    act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
     expect(track.style.transform).toBe('translate3d(-100%, 0, 0)');
 
     // Nothing the scrub measures was touched.
@@ -124,7 +124,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     const { container } = render(<Hero spinTeaser={teaser} />);
     const track = container.querySelector<HTMLElement>('.hero-carousel')!;
 
-    act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+    act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
     expect(track.style.transform).toBe('translate3d(-100%, 0, 0)');
 
     act(() => {
@@ -136,6 +136,29 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     expect(track.style.transform).toBe('translate3d(-0%, 0, 0)');
     // Dots over a pinned, scrubbing animation are clutter and control nothing.
     expect(container.querySelector('.hero-dots')).toBeNull();
+
+    /*
+      The snap-back must not animate like a deliberate advance. Without this class the
+      track runs the 0.8s "change of subject" slide at the exact moment the user starts
+      scrolling — a slow horizontal motion against their vertical one, which is what
+      makes a correct lock read as the carousel jumping on its own. jsdom does not
+      compute the transition, so the class is the honest thing to assert; the duration
+      behind it lives in home-redesign.css.
+    */
+    expect(track).toHaveClass('is-snapping-back');
+  });
+
+  it('animates a timed advance at full length, not the snap-back speed', () => {
+    // The mirror of the test above: an advance the viewer did not interrupt keeps the
+    // unhurried transition. One class doing both jobs would mean tuning one breaks the
+    // other, so pin that they are distinguishable.
+    const { container } = render(<Hero spinTeaser={teaser} />);
+    const track = container.querySelector<HTMLElement>('.hero-carousel')!;
+
+    expect(track).not.toHaveClass('is-snapping-back');
+    act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
+    expect(track.style.transform).toBe('translate3d(-100%, 0, 0)');
+    expect(track).not.toHaveClass('is-snapping-back');
   });
 
   describe('with no live campaign', () => {
@@ -146,7 +169,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
       expect(container.querySelector('.hero-dots')).toBeNull();
 
       const track = container.querySelector<HTMLElement>('.hero-carousel')!;
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS * 4); });
+      act(() => { jest.advanceTimersByTime((CAR_DWELL_MS + SPIN_DWELL_MS) * 4); });
       expect(track.style.transform).toBe('translate3d(-0%, 0, 0)');
     });
   });
@@ -169,7 +192,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     expect(slides[0]).not.toHaveAttribute('inert');
     expect(slides[1]).toHaveAttribute('inert');
 
-    act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+    act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
 
     const after = container.querySelectorAll('.hero-slide');
     expect(after[0]).toHaveAttribute('inert');

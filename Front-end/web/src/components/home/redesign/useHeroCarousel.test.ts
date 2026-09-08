@@ -1,5 +1,12 @@
 import { act, renderHook } from '@testing-library/react';
-import useHeroCarousel, { SLIDE_INTERVAL_MS, SCROLL_LOCK_PX } from './useHeroCarousel';
+import useHeroCarousel, {
+  CAR_DWELL_MS,
+  SPIN_DWELL_MS,
+  SCROLL_LOCK_PX,
+} from './useHeroCarousel';
+
+/** One full lap: car dwell, then spin dwell. */
+const FULL_CYCLE_MS = CAR_DWELL_MS + SPIN_DWELL_MS;
 
 /**
  * The hook that keeps the hero carousel from eating the pinned frame sequence.
@@ -61,7 +68,7 @@ describe('useHeroCarousel', () => {
       const { result } = renderHook(() => useHeroCarousel(1, noRef));
 
       expect(result.current.index).toBe(0);
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS * 5); });
+      act(() => { jest.advanceTimersByTime(FULL_CYCLE_MS * 5); });
       expect(result.current.index).toBe(0);
       // Nothing to lock: the hero renders exactly as it did before the carousel existed.
       expect(result.current.locked).toBe(false);
@@ -69,19 +76,40 @@ describe('useHeroCarousel', () => {
   });
 
   describe('with two slides', () => {
-    it('advances once per interval and wraps back round', () => {
+    it('advances once per dwell and wraps back round', () => {
       const { result } = renderHook(() => useHeroCarousel(2, noRef));
 
       expect(result.current.index).toBe(0);
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+      act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
       expect(result.current.index).toBe(1);
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+      act(() => { jest.advanceTimersByTime(SPIN_DWELL_MS); });
       expect(result.current.index).toBe(0);
     });
 
-    it('does not advance before the full interval has elapsed', () => {
+    /*
+      The dwell is per slide, and both halves of that matter for a different reason:
+      the car has to hand over fast (the rotation only runs while the user is at the
+      top, so a slow first slide means the campaign is never seen), and the spin slide
+      has to hold long enough for the 2.6s wheel to land and be read. A single shared
+      interval would silently sacrifice one of the two.
+    */
+    it('holds the spin slide longer than the car slide', () => {
       const { result } = renderHook(() => useHeroCarousel(2, noRef));
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS - 1); });
+
+      act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
+      expect(result.current.index).toBe(1);
+
+      // The car's dwell is NOT enough to move off the spin slide.
+      act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
+      expect(result.current.index).toBe(1);
+
+      act(() => { jest.advanceTimersByTime(SPIN_DWELL_MS - CAR_DWELL_MS); });
+      expect(result.current.index).toBe(0);
+    });
+
+    it('does not advance before the full dwell has elapsed', () => {
+      const { result } = renderHook(() => useHeroCarousel(2, noRef));
+      act(() => { jest.advanceTimersByTime(CAR_DWELL_MS - 1); });
       expect(result.current.index).toBe(0);
     });
 
@@ -89,7 +117,7 @@ describe('useHeroCarousel', () => {
     it('snaps back to the car slide and stops as soon as the user scrolls', () => {
       const { result } = renderHook(() => useHeroCarousel(2, noRef));
 
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+      act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
       expect(result.current.index).toBe(1);
 
       scrollTo(SCROLL_LOCK_PX + 1);
@@ -99,7 +127,7 @@ describe('useHeroCarousel', () => {
       expect(result.current.index).toBe(0);
 
       // And it stays there for the whole 300vh pin, however long the user scrubs.
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS * 10); });
+      act(() => { jest.advanceTimersByTime(FULL_CYCLE_MS * 10); });
       expect(result.current.index).toBe(0);
     });
 
@@ -107,7 +135,7 @@ describe('useHeroCarousel', () => {
       const { result } = renderHook(() => useHeroCarousel(2, noRef));
       scrollTo(SCROLL_LOCK_PX);
       expect(result.current.locked).toBe(false);
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+      act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
       expect(result.current.index).toBe(1);
     });
 
@@ -119,7 +147,7 @@ describe('useHeroCarousel', () => {
 
       scrollTo(0);
       expect(result.current.locked).toBe(false);
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+      act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
       expect(result.current.index).toBe(1);
     });
 
@@ -127,7 +155,7 @@ describe('useHeroCarousel', () => {
       mockMatchMedia(true);
       const { result } = renderHook(() => useHeroCarousel(2, noRef));
 
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS * 4); });
+      act(() => { jest.advanceTimersByTime(FULL_CYCLE_MS * 4); });
       expect(result.current.index).toBe(0);
     });
 
@@ -138,14 +166,14 @@ describe('useHeroCarousel', () => {
         Object.defineProperty(document, 'hidden', { value: true, writable: true, configurable: true });
         document.dispatchEvent(new Event('visibilitychange'));
       });
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS * 3); });
+      act(() => { jest.advanceTimersByTime(FULL_CYCLE_MS * 3); });
       expect(result.current.index).toBe(0);
 
       act(() => {
         Object.defineProperty(document, 'hidden', { value: false, writable: true, configurable: true });
         document.dispatchEvent(new Event('visibilitychange'));
       });
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+      act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
       expect(result.current.index).toBe(1);
     });
 
@@ -155,7 +183,7 @@ describe('useHeroCarousel', () => {
       act(() => { result.current.goTo(1); });
       expect(result.current.index).toBe(1);
 
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS * 3); });
+      act(() => { jest.advanceTimersByTime(FULL_CYCLE_MS * 3); });
       expect(result.current.index).toBe(1);
     });
 
@@ -214,7 +242,9 @@ describe('useHeroCarousel', () => {
     });
 
     it('clears its timer on unmount', () => {
-      const clear = jest.spyOn(window, 'clearInterval');
+      // clearTimeout, not clearInterval: per-slide dwell means the timer re-arms
+      // itself each advance rather than repeating on one fixed period.
+      const clear = jest.spyOn(window, 'clearTimeout');
       const { unmount } = renderHook(() => useHeroCarousel(2, noRef));
       unmount();
       expect(clear).toHaveBeenCalled();
@@ -225,7 +255,7 @@ describe('useHeroCarousel', () => {
         ({ count }) => useHeroCarousel(count, noRef),
         { initialProps: { count: 2 } },
       );
-      act(() => { jest.advanceTimersByTime(SLIDE_INTERVAL_MS); });
+      act(() => { jest.advanceTimersByTime(CAR_DWELL_MS); });
       expect(result.current.index).toBe(1);
 
       rerender({ count: 1 });

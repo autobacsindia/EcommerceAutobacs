@@ -26,8 +26,30 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * existed.
  */
 
-/** Dwell per slide. Long enough for the wheel's ~2.6s spin to finish and be read. */
-export const SLIDE_INTERVAL_MS = 6000;
+/**
+ * Dwell is PER SLIDE, not one interval, because the two slides have opposite needs.
+ *
+ * The carousel can only ever rotate while the user is at the top of the page (see the
+ * scroll lock below). That is a budget of a few seconds for the whole rotation, so the
+ * car slide has to hand over quickly or a visitor who scrolls at a normal pace never
+ * learns the campaign exists at all.
+ *
+ * The spin slide is the opposite: HeroSpinWheel's needle takes SPIN_DURATION_MS (2.6s)
+ * to land, and the "Could land on — X" line only means anything once it has. Giving it
+ * the car's dwell would cut the wheel off just after it settles, every single time.
+ *
+ * So: reveal fast, then hold. `HeroSpinWheel.test.tsx` pins SPIN_DWELL_MS against the
+ * spin duration so the two cannot drift apart.
+ */
+/** Car slide → spin slide. Short, because the rotation only gets one shot. */
+export const CAR_DWELL_MS = 3000;
+/** Spin slide → car slide. Must outlast the 2.6s wheel spin with reading time left. */
+export const SPIN_DWELL_MS = 6000;
+
+/** Slide 1 is the spin teaser; anything else is the car stage. */
+export function dwellMsFor(index: number): number {
+  return index === 1 ? SPIN_DWELL_MS : CAR_DWELL_MS;
+}
 
 /**
  * Scroll past this and the carousel locks to the car slide.
@@ -168,14 +190,18 @@ export function useHeroCarousel(
   }, [enabled, containerRef]);
 
   // ── The timer ──────────────────────────────────────────────────────────────
+  // A self-rescheduling timeout rather than an interval: dwell depends on which slide
+  // is showing, and an interval has one fixed period by definition. `index` in the deps
+  // is what re-arms it — every advance tears down the old timer and arms the next one
+  // at the new slide's dwell.
   useEffect(() => {
     if (!enabled || locked || paused || userPicked) return;
-    const id = window.setInterval(
+    const id = window.setTimeout(
       () => setIndex((i) => (i + 1) % slideCount),
-      SLIDE_INTERVAL_MS,
+      dwellMsFor(index),
     );
-    return () => window.clearInterval(id);
-  }, [enabled, locked, paused, userPicked, slideCount]);
+    return () => window.clearTimeout(id);
+  }, [enabled, locked, paused, userPicked, slideCount, index]);
 
   // A campaign ending mid-session shrinks slideCount under a non-zero index.
   useEffect(() => {

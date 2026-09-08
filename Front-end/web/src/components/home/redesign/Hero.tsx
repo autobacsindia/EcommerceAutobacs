@@ -86,8 +86,14 @@ export default function Hero({ spinTeaser = null }: { spinTeaser?: SpinTeaser | 
           ground, so it must not translate with them. */}
       <div className="bg-glow" />
 
+      {/*
+        `is-snapping-back` swaps the 0.8s "change of subject" slide for a 200ms one
+        while the scroll lock is what is moving the track. An advance the viewer asked
+        for (timer, dot) should feel unhurried; a correction that gets out of the way of
+        their scroll should not still be sliding once they are into the scrub.
+      */}
       <div
-        className="hero-carousel"
+        className={`hero-carousel${locked ? ' is-snapping-back' : ''}`}
         style={{ transform: `translate3d(-${index * 100}%, 0, 0)` }}
       >
         <div className="hero-slide" aria-hidden={index !== 0} inert={index !== 0}>
