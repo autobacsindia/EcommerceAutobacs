@@ -13,7 +13,8 @@ export type HomeTag =
   | 'home:products'
   | 'home:testimonials'
   | 'home:journal'
-  | 'home:brands';
+  | 'home:brands'
+  | 'home:spin';
 
 export async function revalidateHome(tag?: HomeTag): Promise<void> {
   try {

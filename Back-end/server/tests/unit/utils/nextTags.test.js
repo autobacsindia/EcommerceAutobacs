@@ -13,6 +13,7 @@ import {
   categoryTags,
   careersTags,
   articleTags,
+  spinTags,
 } from '../../../utils/nextTags.js';
 
 // Mirrors ALLOWED_PREFIXES in services/frontendRevalidator.js. Duplicated on
@@ -28,6 +29,7 @@ describe('every builder emits only allowlisted tags', () => {
     ['productTags', productTags({ slug: 'brake-pad' })],
     ['productTags (no slug)', productTags(null)],
     ['productBulkTags', productBulkTags([{ slug: 'a' }, { slug: 'b' }])],
+    ['spinTags', spinTags()],
     ['categoryTags', categoryTags({ slug: 'brakes' })],
     ['categoryTags (no slug)', categoryTags(null)],
     ['careersTags', careersTags()],
@@ -112,5 +114,21 @@ describe('articleTags', () => {
 
   it('treats an unknown type as a blog so a publish is never silently missed', () => {
     expect(articleTags({ slug: 'x' })).toEqual(['home:journal', 'blog:x']);
+  });
+});
+
+describe('spinTags', () => {
+  it('refreshes the home hero teaser', () => {
+    expect(spinTags()).toEqual(['home:spin']);
+  });
+
+  /*
+    The tag is emitted from purgeSpinCache(), which every campaign and prize write
+    already calls — so the Redis purge and the Next Data Cache purge cannot drift.
+    This asserts the shape that pairing depends on: one stable tag, no arguments.
+  */
+  it('takes no arguments, so no write path can emit a narrower tag by accident', () => {
+    expect(spinTags.length).toBe(0);
+    expect(spinTags()).toEqual(spinTags());
   });
 });

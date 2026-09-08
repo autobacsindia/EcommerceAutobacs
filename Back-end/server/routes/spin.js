@@ -7,12 +7,16 @@
  * Admin sub-routes sit under an explicit "/admin" prefix and are declared FIRST, so no
  * literal path can ever fall through to a customer handler.
  *
- * Nothing here is cached at the edge — every response is either per-order or per-admin.
+ * One exception to both rules: GET /public/live is unauthenticated and cached — it is
+ * the home hero's teaser, carries its own public limiter, and returns a redacted prize
+ * list with no ids, stock or odds in it. Everything else is per-order or per-admin and
+ * is not cached at the edge.
  */
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import { spinRateLimit } from '../middleware/rate-limit/index.js';
+import { publicBrowsingRateLimit } from '../middleware/rate-limit/ecommerceLimiters.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import {
   getSpinStatus,
@@ -31,6 +35,7 @@ import {
   deactivatePrize,
   listWinners,
   fulfilWinner,
+  getPublicLiveCampaign,
 } from '../controllers/spinController.js';
 import {
   validateOrderIdParam,
@@ -47,6 +52,13 @@ import {
 } from '../validators/spin.validator.js';
 
 const router = express.Router();
+
+// ── Public ──────────────────────────────────────────────────────────────────
+// The one unauthenticated route in this router: the home hero reads it to decide
+// whether to show the Spin-to-Win slide and which prizes to draw on the wheel.
+// Every other route here is authenticated and inherits no public limiter from
+// routes/index.js, so this one carries its own.
+router.get('/public/live', publicBrowsingRateLimit, asyncHandler(getPublicLiveCampaign));
 
 // ── Admin: campaigns ────────────────────────────────────────────────────────
 router.get('/admin/campaigns', protect, admin, asyncHandler(listCampaigns));

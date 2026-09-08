@@ -110,5 +110,13 @@ export const REVIEW_URL_ALLOWED_HOSTS = Object.freeze([
 /** Cache-aside entry for "which campaign is live right now" (services/spinService.js). */
 export const SPIN_LIVE_CAMPAIGN_CACHE_KEY = 'public:spin:live-campaign';
 
+/**
+ * Cache-aside entry for the PUBLIC teaser the home-page hero renders
+ * (controllers/spinController.js `getPublicLiveCampaign`). Separate from the
+ * live-campaign key because it is a different shape — campaign window plus the
+ * redacted prize list — assembled from two reads.
+ */
+export const SPIN_TEASER_CACHE_KEY = 'public:spin:teaser';
+
 /** Every spin cache entry. Purged after any campaign or prize write. */
 export const SPIN_CACHE_PATTERN = 'public:spin:*';

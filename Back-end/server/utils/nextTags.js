@@ -78,4 +78,18 @@ export const articleTags = (article) => {
   return ['home:journal', ...(article?.slug ? [`blog:${article.slug}`] : [])];
 };
 
-export default { productTags, productBulkTags, categoryTags, careersTags, articleTags, promoBannerTags };
+/**
+ * Tags for a Spin-to-Win campaign or prize write.
+ *
+ * One tag, because there is one teaser: the home hero server-fetches
+ * GET /spin/public/live and carries this tag (see the frontend's homeData.ts).
+ * Emitted from purgeSpinCache(), which every campaign and prize write already
+ * calls — so the Redis purge and the Next Data Cache purge can never drift apart.
+ *
+ * NOTE: a campaign EXPIRING writes nothing, so no tag can fire at `endsAt`. The
+ * teaser endpoint re-checks the window on every read and the hero hides the slide
+ * client-side once `endsAt` passes; this tag covers operator actions only.
+ */
+export const spinTags = () => ['home:spin'];
+
+export default { productTags, productBulkTags, categoryTags, careersTags, articleTags, promoBannerTags, spinTags };

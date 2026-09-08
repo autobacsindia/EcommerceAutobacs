@@ -120,7 +120,7 @@ export default function HomeRedesign({
             <PromoBanner banner={promoBanner} />
           </div>
         ) : null}
-        <Hero />
+        <Hero spinTeaser={data.spinTeaser} />
       </div>
       <Manifesto />
       <Categories categories={data.categories} />

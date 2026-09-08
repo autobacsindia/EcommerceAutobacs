@@ -16,7 +16,10 @@ import spinCampaignRepository from '../repositories/spinCampaignRepository.js';
 import spinPrizeRepository from '../repositories/spinPrizeRepository.js';
 import spinResultRepository from '../repositories/spinResultRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
-import { SPIN_STATUS, SPIN_CACHE_PATTERN } from '../config/spin.js';
+import { SPIN_STATUS, SPIN_CACHE_PATTERN, SPIN_TEASER_CACHE_KEY } from '../config/spin.js';
+import { TTL } from '../services/cache/index.js';
+import { revalidateFrontendTags } from '../services/frontendRevalidator.js';
+import { spinTags } from '../utils/nextTags.js';
 
 /**
  * Purge the cached campaign/prize view after any admin write.
@@ -34,6 +37,11 @@ const purgeSpinCache = async () => {
   } catch (err) {
     console.error('[Spin] cache purge failed:', err?.message);
   }
+  // The home hero renders the public teaser through an ISR fetch tagged `home:spin`
+  // (revalidate = 300). Purging Redis alone would leave `/` advertising the old prize
+  // list for up to five minutes after an operator changed it. Fire-and-forget: this
+  // never throws and never blocks the admin response — the ISR window is the backstop.
+  revalidateFrontendTags(spinTags());
 };
 
 /**
@@ -65,6 +73,100 @@ const publicPrize = (p) => ({
   kind: p.kind,
   isFloorPrize: Boolean(p.isFloorPrize),
 });
+
+/**
+ * The teaser's redacted prize view.
+ *
+ * Deliberately NARROWER than `publicPrize`: this is served to anyone on the internet
+ * with no order and no login, so it drops `id` (enumerable) and `isFloorPrize` (names
+ * the guaranteed-win slice, which is the shape of the odds). Everything the wheel needs
+ * to be drawn, nothing that prices the economy.
+ */
+const teaserPrize = (p) => ({
+  name: p.name,
+  shortLabel: p.shortLabel || p.name,
+  imageUrl: p.imageUrl || null,
+  kind: p.kind,
+});
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Public
+// ───────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /spin/public/live — is a campaign running, and what does it offer?
+ *
+ * The ONLY unauthenticated route in this file. It exists so the home-page hero can
+ * advertise the wheel without inventing prize names: the slide renders from this
+ * answer, and stops rendering by itself when there is no live campaign. It carries
+ * `publicBrowsingRateLimit` at the route (see routes/spin.js) — every other spin route
+ * is authenticated and needs none.
+ *
+ * Three things this must not do, each of which would be a real leak:
+ *
+ *  1. Reveal or precompute an outcome. It touches no SpinResult and no RNG.
+ *  2. Leak the odds. Stock counts, weights, win rates and coupon values never appear
+ *     in the response — see teaserPrize. Someone who could read stockRemaining could
+ *     time their order against a nearly-exhausted goodie.
+ *  3. Advertise a prize the visitor cannot reach. The pool is queried at the campaign's
+ *     OWN minimum order value, not an unbounded one, so every prize shown is winnable
+ *     by anyone who qualifies for the campaign at all. Passing Number.MAX_SAFE_INTEGER
+ *     here would surface prizes gated behind a much larger basket.
+ *
+ * `findEligiblePool` already excludes inactive and stock-exhausted prizes, so a retired
+ * goodie leaves the hero on the next purge rather than lingering as a broken promise.
+ *
+ * Cached whole (both reads) under `public:spin:teaser`, which sits beneath
+ * SPIN_CACHE_PATTERN — so the existing purgeSpinCache() sweep already covers it and
+ * there is no second key for a future write path to forget.
+ */
+export const getPublicLiveCampaign = async (req, res) => {
+  try {
+    const cached = await cacheService.get(SPIN_TEASER_CACHE_KEY);
+    // Envelope, not a bare value: "no campaign is live" is the common answer and it is
+    // falsy, so an unwrapped null is indistinguishable from a cache miss and would
+    // never actually cache. Same trap getLiveCampaignCached documents.
+    if (cached && typeof cached === 'object' && 'payload' in cached) {
+      return res.json({ success: true, ...cached.payload });
+    }
+  } catch (err) {
+    console.warn('[Spin] teaser cache read failed, falling back:', err?.message);
+  }
+
+  // Re-checks `status === live && startsAt <= now < endsAt` on every read, so an
+  // expired campaign cannot be served from cache.
+  const campaign = await spinService.getLiveCampaignCached();
+
+  let payload;
+  if (!campaign) {
+    payload = { live: false };
+  } else {
+    const pool = await spinPrizeRepository.findEligiblePool(campaign._id, campaign.minOrderValuePaise);
+    payload = {
+      live: true,
+      campaign: {
+        slug: campaign.slug,
+        name: campaign.name,
+        // The hero hides the slide the moment this passes, closing the window where a
+        // just-expired campaign is still advertised by a cached page.
+        endsAt: campaign.endsAt,
+        minOrderValuePaise: campaign.minOrderValuePaise,
+        maxSpinsPerUserPerCampaign: campaign.maxSpinsPerUserPerCampaign,
+        terms: campaign.terms || null,
+      },
+      prizes: pool.map(teaserPrize),
+    };
+  }
+
+  try {
+    await cacheService.set(SPIN_TEASER_CACHE_KEY, { payload }, TTL.SPIN_CAMPAIGN);
+  } catch (err) {
+    // A write we could not cache is a slow path, not a wrong one.
+    console.warn('[Spin] teaser cache write failed:', err?.message);
+  }
+
+  return res.json({ success: true, ...payload });
+};
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Customer

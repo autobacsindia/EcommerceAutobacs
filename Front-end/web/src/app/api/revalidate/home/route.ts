@@ -22,6 +22,11 @@ const HOME_TAGS = [
   'home:testimonials',
   'home:journal',
   'home:brands',
+  // Emitted by the backend's purgeSpinCache() on any Spin-to-Win campaign or prize
+  // write, so publishing a campaign puts the hero slide up in seconds rather than
+  // after the 300s ISR window. Nothing fires on a campaign EXPIRING — the hero hides
+  // the slide itself once `endsAt` passes.
+  'home:spin',
 ] as const;
 
 // The admin UI triggers this from the site's own pages (revalidateHome.ts) with no
