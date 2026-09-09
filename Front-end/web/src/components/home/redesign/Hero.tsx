@@ -51,7 +51,9 @@ export default function Hero({ spinTeaser = null }: { spinTeaser?: SpinTeaser | 
   }, [spinTeaser]);
 
   const slideCount = teaser ? 2 : 1;
-  const { index, goTo, locked } = useHeroCarousel(slideCount, heroRef);
+  // `pinRef` — not `heroRef` — drives the scroll lock: `.hero` is sticky, so its top
+  // stays at 0 for the whole pin and cannot report scrub progress. The pin can.
+  const { index, goTo, locked } = useHeroCarousel(slideCount, heroRef, pinRef);
 
   function onMouseMove(e: React.MouseEvent) {
     const el = heroRef.current;

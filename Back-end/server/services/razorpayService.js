@@ -14,6 +14,7 @@ import leadSyncService from './leadSyncService.js';
 import { reverseReturnLtvOnce } from './returnRefundLtvService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import metaCapiService from './metaCapiService.js';
+import affiliateCommissionService from './affiliateCommissionService.js';
 import { resolvePaymentMethod, buildMethodDetails } from '../utils/paymentMethodDetails.js';
 import * as Sentry from '@sentry/node';
 
@@ -333,6 +334,29 @@ class RazorpayService {
           .add('send-admin-order-placed-alert', { orderId })
           .catch((err) =>
             console.error(`[Queue] Failed to enqueue send-admin-order-placed-alert for ${orderId}:`, err.message)
+          );
+      }
+
+      /*
+        ── Affiliate commission accrual (best-effort, once) ──────────────────────
+        Same `createdHere` gate as the emails above, so a duplicate webhook cannot
+        double-credit an affiliate — and the partial-unique {order, type:'accrual'}
+        index is the second line of defence for two concurrent deliveries that each
+        believe they created the payment.
+
+        Fire-and-forget on purpose: this is OUR cost ledger, not the customer's money.
+        A failure here must never fail a payment that has already been captured. It is
+        recoverable — the row can be written by hand — whereas a thrown capture is not.
+
+        Deliberately NOT moved inside the transaction above. It writes only
+        AffiliateCommission rows, never the Order, which is exactly what keeps it clear
+        of the WiredTiger self-deadlock that once made every capture fail after ~180s.
+      */
+      if (createdHere) {
+        affiliateCommissionService
+          .accrueForOrder(orderId)
+          .catch((err) =>
+            console.error(`[Affiliate] Commission accrual failed for ${orderId}:`, err.message)
           );
       }
 

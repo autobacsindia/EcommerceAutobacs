@@ -13,9 +13,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * seconds into someone's scroll, the poster slides in over a half-played car
  * animation and the pinned sequence plays to an audience of nobody.
  *
- * Hence SCROLL_LOCK_PX: past a few pixels of scroll the carousel snaps back to slide
- * 0 and stops, and it only resumes once the user is genuinely back at the top. The
- * frame scrub is never covered and never interrupted.
+ * Hence SCROLL_LOCK_PX: once the PIN has travelled a few pixels above the viewport top
+ * the carousel snaps back to slide 0 and stops, resuming only when the scrub is back at
+ * its start. The frame scrub is never covered and never interrupted. Note it is the
+ * pin's position, not the window's — see the constant for why that distinction is the
+ * difference between working and not working on a phone.
  *
  * Everything else here is the ordinary set of reasons not to animate at someone:
  * reduced motion, a backgrounded tab, or keyboard focus inside it. Notably NOT hover —
@@ -42,10 +44,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export const SLIDE_DWELL_MS = 3000;
 
 /**
- * Scroll past this and the carousel locks to the car slide.
+ * Pixels of the PIN scrolled past the viewport top before the carousel locks.
  *
  * Small but non-zero: iOS reports a few pixels of scroll from rubber-banding at rest,
  * and 0 would latch the lock on a page nobody has actually scrolled.
+ *
+ * ⚠ Measured from the pin's own bounding box, NOT from `window.scrollY`. Those are the
+ * same number only when the hero is the first thing on the page — true on desktop,
+ * FALSE on phones, where `.hr-promo-slot` is in normal flow above the hero rather than
+ * an absolute overlay (see the `@media (max-width: 768px)` block in home-redesign.css).
+ * With a promo strip live, a phone user must scroll ~64px+ just to bring the hero to
+ * the top, which pushed `scrollY` past this threshold and locked the carousel before
+ * they had looked at it: no rotation, and no dots either. The scrub had not started —
+ * only the page above it had moved.
  */
 export const SCROLL_LOCK_PX = 8;
 
@@ -61,6 +72,11 @@ export interface HeroCarouselApi {
 export function useHeroCarousel(
   slideCount: number,
   containerRef: React.RefObject<HTMLElement | null>,
+  /**
+   * The `.hero-pin` scroll track. Its distance above the viewport top IS the scrub
+   * progress, which is the only thing the lock actually cares about.
+   */
+  trackRef?: React.RefObject<HTMLElement | null>,
 ): HeroCarouselApi {
   const [index, setIndex] = useState(0);
   const [locked, setLocked] = useState(false);
@@ -126,7 +142,18 @@ export function useHeroCarousel(
     let ticking = false;
     const read = () => {
       ticking = false;
-      const isLocked = window.scrollY > SCROLL_LOCK_PX;
+      /*
+        How far the track has travelled above the viewport top — positive once it has.
+
+        `window.scrollY` is that same quantity expressed against the document rather than
+        the element, used only when there is no track to measure. The signs differ
+        because a rect top goes NEGATIVE as an element rises past the viewport top while
+        scrollY goes positive: for a track sitting at the very top of the page,
+        `track.top === -scrollY`. Same measurement, not a second strategy.
+      */
+      const track = trackRef?.current;
+      const travelled = track ? -track.getBoundingClientRect().top : window.scrollY;
+      const isLocked = travelled > SCROLL_LOCK_PX;
       setLocked(isLocked);
       // Snap back so the scrub always plays over the car, never the poster.
       if (isLocked) setIndex(0);
@@ -142,8 +169,13 @@ export function useHeroCarousel(
     // scroll position may have changed entirely while we were not listening.
     read();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [enabled, nearViewport]);
+    // A rotate or a URL-bar collapse moves the track without a scroll event.
+    window.addEventListener('resize', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [enabled, nearViewport, trackRef]);
 
   // ── Pause signals ──────────────────────────────────────────────────────────
   useEffect(() => {

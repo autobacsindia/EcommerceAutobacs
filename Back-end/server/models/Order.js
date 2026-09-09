@@ -42,6 +42,32 @@ const OrderSchema = new mongoose.Schema({
     eventSourceUrl: { type: String, maxlength: 1024 },// the checkout page URL (validated http/https)
   },
 
+  /**
+   * Who referred this sale, resolved SERVER-SIDE at order creation and snapshotted here.
+   *
+   * Absent on the overwhelming majority of orders — the field is only written when
+   * services/affiliateAttributionService.js resolved an ACTIVE affiliate, either from
+   * the coupon that actually priced the cart or from the `ab_ref` cookie. An unknown,
+   * suspended or self-referred code resolves to nothing and this stays undefined.
+   *
+   * ⚠️ `commissionPercent` IS A SNAPSHOT AND THE LEDGER READS IT, NOT THE AFFILIATE.
+   * Raising someone's rate in March must not retroactively repay January's orders —
+   * the same reason this order snapshots its own prices, titles and tax. Never
+   * dereference Affiliate.commissionPercent when computing what an old order earned.
+   *
+   * This block is attribution only. It moves no money: the buyer's discount rode the
+   * managed Coupon (and so is already inside `discount`/`couponDiscount`), and the
+   * commission we owe lives in its own ledger (models/AffiliateCommission.js) because
+   * it is our cost, not part of what the customer paid.
+   */
+  affiliate: {
+    affiliate: { type: mongoose.Schema.Types.ObjectId, ref: "Affiliate" },
+    code: { type: String, maxlength: 24 },           // snapshot: survives a code rename
+    source: { type: String, enum: ["coupon", "link"] },
+    commissionPercent: { type: Number, min: 0, max: 100 },
+    attributedAt: { type: Date },
+  },
+
   items: [
     {
       product: {
@@ -760,6 +786,25 @@ OrderSchema.index({ 'refundDetails.transactionId': 1 }, { sparse: true });
 // A plain index is always planner-usable and is what production actually has.
 // Do not "fix the drift" by making this partial again.
 OrderSchema.index({ sessionId: 1 });
+
+/*
+  Affiliate attribution reporting ("which orders did this affiliate bring, newest first")
+  is indexed in config/db.js as `affiliate_attribution`, and deliberately NOT here.
+
+  ⚠️ It was `{ sparse: true }`, which was wrong. A COMPOUND sparse index omits a document
+  only when it is missing EVERY indexed key — and `createdAt` is on every order — so it
+  indexed the entire collection while the comment claimed it indexed a small minority.
+  Measured on 3,000 orders with 5% referred: sparse 49,152 bytes vs partial 20,480.
+
+  The correct form is `partialFilterExpression: { 'affiliate.affiliate': { $exists: true } }`,
+  and `$exists` is safe here where `$type` would not be: the planner CAN prove an equality
+  on a non-null value is contained by an `$exists` filter, so the query still uses the
+  index (verified by explain, 1 key examined). That is the same construction the
+  spin_reward_fulfilment index uses a few lines above it.
+
+  Declared only in db.js because it carries an explicit name — see models/SpinResult.js
+  for why a named index declared in both places aborts the whole verification pass.
+*/
 
 // Pre-save middleware to add initial status to history
 OrderSchema.pre('save', function(next) {

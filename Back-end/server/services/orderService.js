@@ -9,6 +9,7 @@ import campaignMemberRepository from '../repositories/campaignMemberRepository.j
 import karmaLedgerRepository from '../repositories/karmaLedgerRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import pricingService from './pricingService.js';
+import { resolveAttribution } from './affiliateAttributionService.js';
 import AppError from '../utils/AppError.js';
 import { getOrderQueue } from '../queue/queues.js';
 
@@ -131,7 +132,10 @@ class OrderService {
 
     // Authoritative price breakdown — client-sent amounts are ignored entirely.
     const quote = await pricingService.computeQuote({
-      items, couponCode, redeemKarmaPoints, userId, shippingCost
+      items, couponCode, redeemKarmaPoints, userId, shippingCost,
+      // Self-referral keys for an affiliate coupon. A guest has no userId, so the
+      // email/phone on the order are the only things that identify them.
+      buyer: { email: orderData.guestEmail || orderData.email, phone: orderData.phone },
     });
     // An explicitly-supplied coupon that turned out invalid is a hard failure here.
     pricingService.assertCouponApplied(quote, couponCode);
@@ -139,6 +143,26 @@ class OrderService {
     if (quote.totalAmount <= 0) throw new AppError('Order total must be greater than zero', 400);
 
     const appliedCode = quote.appliedCoupon?.code || null;
+
+    /*
+      ── Affiliate attribution ───────────────────────────────────────────────────
+      Resolved AFTER assertCouponApplied, so `appliedCode` is the code that genuinely
+      priced this cart. Passing the raw request body instead would let a buyer credit
+      an affiliate by typing a code the server rejected.
+
+      Resolved BEFORE the transaction opens: it only reads Affiliate/Coupon, never the
+      order, so it has no business holding the money transaction open — and a slow read
+      inside `withTransaction` is how a write set stays locked longer than it needs to.
+    */
+    const affiliateAttribution = await resolveAttribution({
+      cookieCode: orderData.affiliateRefCookie || null,
+      appliedCouponCode: appliedCode,
+      buyer: {
+        userId,
+        email: orderData.guestEmail || orderData.email,
+        phone: orderData.phone,
+      },
+    });
 
     // ── Atomic transaction ───────────────────────────────────────────────────
     const session = await mongoose.startSession();
@@ -167,6 +191,13 @@ class OrderService {
             ...(paymentMethod && { paymentMethod }),
             ...(orderData.sessionId && { sessionId: orderData.sessionId }),
             ...(orderData.tracking && { tracking: orderData.tracking }),
+            /*
+              Spread conditionally, like `buyer` below: an unreferred order carries no
+              empty subdoc and every pre-existing order stays shape-identical. The
+              snapshot includes the commission RATE, which the ledger reads instead of
+              the live affiliate — so changing someone's rate never reprices old orders.
+            */
+            ...(affiliateAttribution && { affiliate: affiliateAttribution }),
             // Buyer identity + legal acceptance are resolved by the CALLER via
             // services/buyerService.js and passed in already validated. They are
             // spread conditionally so an individual order carries no empty

@@ -21,11 +21,17 @@
  *
  * Best-effort throughout: a failure here must never fail a refund that has already left
  * the gateway. Failures are logged loudly (and to Sentry) for manual repair.
+ *
+ * ⚠️ ANY FURTHER EXACTLY-ONCE SIDE EFFECT OF THIS REFUND GOES *BEHIND* THIS CLAIM, NOT
+ * BESIDE IT — see the note above about a repair job skipping rows that were flagged but
+ * never adjusted. The affiliate commission clawback is the third effect, added here for
+ * exactly that reason rather than being called alongside this function.
  */
 
 import orderRepository from '../repositories/orderRepository.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import userRepository from '../repositories/userRepository.js';
+import affiliateCommissionService from './affiliateCommissionService.js';
 import { fromPaise } from '../utils/money.js';
 import * as Sentry from '@sentry/node';
 
@@ -54,6 +60,25 @@ export const applyCancellationRefundSideEffectsOnce = async (
       console.error(message, err.message);
       Sentry.captureMessage(message, 'error');
     }
+  }
+
+  /*
+    The affiliate's share of the cancelled lines.
+
+    Proportional to the refunded amount rather than to named lines: a cancellation
+    records a rupee figure and the line detail is not carried through to here, so
+    `clawbackForAmount` prorates against the order's goods pot — the best that can
+    honestly be derived from an amount. Clamped to what is outstanding, so even a
+    double-fire can only ever reduce this order to zero.
+  */
+  try {
+    await affiliateCommissionService.clawbackForAmount(orderId, amountPaise, 'order_line_cancelled');
+  } catch (err) {
+    const message = `[Affiliate] Commission clawback FAILED for cancellation ${cancellationId} `
+      + `on order ${orderId} (₹${fromPaise(amountPaise)}). The refund is committed; the `
+      + 'affiliate ledger overstates what is owed and needs manual repair.';
+    console.error(message, err.message);
+    Sentry.captureMessage(message, 'error');
   }
 
   try {

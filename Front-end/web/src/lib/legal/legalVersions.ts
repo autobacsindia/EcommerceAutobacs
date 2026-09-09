@@ -29,6 +29,12 @@ export const LEGAL_DOCUMENTS = {
     label: 'Privacy Policy',
     version: '2025-12-09',
   },
+  affiliateTerms: {
+    key: 'affiliateTerms',
+    path: '/affiliates/terms',
+    label: 'Affiliate Programme Terms',
+    version: '2026-09-09',
+  },
 } as const;
 
 export const CURRENT_TERMS_VERSION = LEGAL_DOCUMENTS.terms.version;

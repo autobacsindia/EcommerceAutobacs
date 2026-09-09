@@ -137,6 +137,26 @@ export const API_ENDPOINTS = {
   COUPONS: '/coupons',                                   // admin list + create
   COUPON_DETAIL: (id: string) => `/coupons/${id}`,       // admin get/update/delete
 
+  // Affiliate program. /apply is public; /me* is the affiliate's own portal;
+  // /admin/* requires an admin session.
+  AFFILIATE_APPLY: '/affiliates/apply',                                 // public sign-up
+  AFFILIATE_ME: '/affiliates/me',                                       // own profile + balance
+  AFFILIATE_ME_COMMISSIONS: '/affiliates/me/commissions',               // own ledger
+  AFFILIATES_ADMIN: '/affiliates/admin',                                // admin list
+  AFFILIATE_ADMIN_STALE: '/affiliates/admin/stale-pending',             // never-maturing rows
+  AFFILIATE_ADMIN_DETAIL: (id: string) => `/affiliates/admin/${id}`,
+  AFFILIATE_ADMIN_COMMISSIONS: (id: string) => `/affiliates/admin/${id}/commissions`,
+  AFFILIATE_ADMIN_APPROVE: (id: string) => `/affiliates/admin/${id}/approve`,
+  AFFILIATE_ADMIN_REJECT: (id: string) => `/affiliates/admin/${id}/reject`,
+  AFFILIATE_ADMIN_SUSPEND: (id: string) => `/affiliates/admin/${id}/suspend`,
+  AFFILIATE_ADMIN_REINSTATE: (id: string) => `/affiliates/admin/${id}/reinstate`,
+  AFFILIATE_ADMIN_TERMS: (id: string) => `/affiliates/admin/${id}/terms`,
+  AFFILIATE_ADMIN_PAYOUT_DETAILS: (id: string) => `/affiliates/admin/${id}/payout-details`,
+  AFFILIATE_PAYOUTS_ADMIN: '/affiliates/admin/payouts',                 // batch list + build
+  AFFILIATE_PAYOUT_DETAIL: (id: string) => `/affiliates/admin/payouts/${id}`,
+  AFFILIATE_PAYOUT_MARK_PAID: (id: string) => `/affiliates/admin/payouts/${id}/paid`,
+  AFFILIATE_PAYOUT_MARK_FAILED: (id: string) => `/affiliates/admin/payouts/${id}/failed`,
+
   // Promotional campaigns (festival cards, sitewide sales)
   CAMPAIGNS: '/campaigns',                                              // admin list + create
   MAGIC_LINK_REQUEST: '/auth/magic-link/request',                       // emails a set-password link

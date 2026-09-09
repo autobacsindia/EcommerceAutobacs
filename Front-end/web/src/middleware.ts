@@ -124,6 +124,74 @@ async function silentRefresh(
   }
 }
 
+// ── Affiliate referral capture ───────────────────────────────────────────────
+
+/** Must match Back-end/server/config/affiliate.js REF_COOKIE_NAME + CODE_REGEX. */
+const REF_COOKIE = 'ab_ref';
+const REF_CODE_RE = /^[A-Z0-9][A-Z0-9_-]{2,23}$/;
+/*
+  The last-click window, and the ONLY place it is configured.
+
+  The cookie's lifetime IS the window: once the browser drops it there is no claim for
+  the server to reject, and the cookie carries no click timestamp to check age against.
+  Backend `config/affiliate.js` mirrors this value to DESCRIBE the window in admin and
+  dashboard copy — keep the two in step.
+
+  Read from a NEXT_PUBLIC_ var because this runs in the Edge runtime, which cannot import
+  the backend config. Baked at build time like every other NEXT_PUBLIC_ value.
+*/
+const REF_WINDOW_DAYS =
+  Number(process.env.NEXT_PUBLIC_AFFILIATE_ATTRIBUTION_WINDOW_DAYS) || 30;
+
+/**
+ * Capture `?ref=CODE` into a first-party cookie, then redirect to the clean URL.
+ *
+ * WHY MIDDLEWARE, not a client beacon: the matcher already covers every page route, so
+ * this costs nothing extra, works on first paint with JavaScript disabled, and no
+ * ad-blocker can drop it. A `POST /track` beacon is an extra round-trip that blockers
+ * DO drop, which would silently cost affiliates their attribution.
+ *
+ * WHY A REDIRECT, not a rewrite: it makes the clean URL canonical, so `?ref=` never
+ * ends up in shares, analytics or the edge cache key — and it keeps `Set-Cookie` off
+ * the cacheable page response, attaching it to a throwaway redirect instead. That
+ * matters here specifically: a Set-Cookie on a cacheable GET is what made the Redis and
+ * Cloudflare layers 100% inert once already (see the CSRF cookie incident).
+ *
+ * WHY `SameSite=Lax`: the click is a top-level GET navigation from an external site,
+ * which Lax permits. Browser API calls are same-origin (`/api/v1/*`, rewritten to the
+ * backend), so Lax is sufficient and `None` would be a needless widening.
+ *
+ * WHY NO SIGNATURE: the code is public by construction — it is in the URL of every link
+ * the affiliate publishes — so forging this cookie is exactly equivalent to clicking
+ * their link. An HMAC would protect nothing and would add a shared secret spanning
+ * Vercel and Railway. The cookie is a CLAIM; the server resolves it at order time.
+ *
+ * Last click wins: an existing cookie is overwritten unconditionally.
+ */
+function captureReferral(req: NextRequest): NextResponse | null {
+  const raw = req.nextUrl.searchParams.get('ref');
+  if (raw === null) return null;
+
+  const url = req.nextUrl.clone();
+  url.searchParams.delete('ref'); // every other param is preserved
+
+  const res = NextResponse.redirect(url, 307);
+
+  const code = raw.trim().toUpperCase().slice(0, 24);
+  // A malformed code still gets the clean-URL redirect but sets no cookie — there is
+  // nothing to attribute, and storing junk would only be read back and thrown away.
+  if (REF_CODE_RE.test(code)) {
+    res.cookies.set(REF_COOKIE, code, {
+      httpOnly: true, // the server tells the UI who referred them, via the quote
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: REF_WINDOW_DAYS * 24 * 60 * 60,
+    });
+  }
+  return res;
+}
+
 // ── CSP construction ──────────────────────────────────────────────────────────
 
 export async function middleware(req: NextRequest) {
@@ -152,6 +220,14 @@ export async function middleware(req: NextRequest) {
       },
     });
   }
+
+  // ── Affiliate referral link ─────────────────────────────────────────────────
+  // Placed after the API and 410 short-circuits (neither can carry a ?ref) and before
+  // the nonce/CSP work, so the ~100% of requests with no `ref` pay only one
+  // searchParams lookup, and the one that does have it never builds a CSP for a
+  // response that is about to be thrown away as a redirect.
+  const referralRedirect = captureReferral(req);
+  if (referralRedirect) return referralRedirect;
 
   // Per-request nonce + CSP, attached to whichever response proceeds.
   // crypto.randomUUID() is available in the Edge runtime (Web Crypto API).

@@ -16,6 +16,7 @@ import leadSyncService from '../services/leadSyncService.js';
 import { remainingRefundable } from '../services/refundMathService.js';
 import { resolveRep } from '../utils/salesRepResolver.js';
 import { extractMetaTracking } from '../utils/metaTracking.js';
+import { extractAffiliateRef } from '../utils/affiliateAttribution.js';
 import { resolveBuyerAndAcceptance } from '../services/buyerService.js';
 import { BUYER_TYPES } from '../config/buyer.js';
 import { ACCEPTANCE_CHANNELS } from '../config/legalDocuments.js';
@@ -380,6 +381,10 @@ export const createOrder = async (req, res) => {
         legalAcceptance,
         sessionId: req.headers['x-session-id'],
         tracking: extractMetaTracking(req),
+        // The `ab_ref` cookie, read the same way and for the same reason as the Meta
+        // cookies above. A CLAIM only — orderService resolves it server-side, where an
+        // unknown, suspended or self-referred code resolves to nothing.
+        affiliateRefCookie: extractAffiliateRef(req),
       }
     );
 
@@ -463,7 +468,20 @@ export const createGuestOrder = async (req, res) => {
       user._id,
       items,
       shippingAddress,
-      { ...req.body, buyer, legalAcceptance, sessionId: req.headers['x-session-id'] },
+      {
+        ...req.body,
+        buyer,
+        legalAcceptance,
+        sessionId: req.headers['x-session-id'],
+        /*
+          `tracking` was MISSING here until now — a pre-existing gap that silently cost
+          every guest order its Meta CAPI attribution, since only the authenticated
+          createOrder above passed it. Fixed alongside the affiliate ref because both
+          read the same cookies on the same request and the omission is the same bug.
+        */
+        tracking: extractMetaTracking(req),
+        affiliateRefCookie: extractAffiliateRef(req),
+      },
       paymentMethod
     );
 

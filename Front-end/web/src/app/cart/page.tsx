@@ -162,8 +162,8 @@ function CartPageContent() {
     });
   }, [cart?.couponCode, quotedCouponCode, quote?.couponErrorCode, removeCoupon]);
 
-  const handleApplyCoupon = async () => {
-    const code = couponInput.trim().toUpperCase();
+  const applyCode = async (raw: string) => {
+    const code = raw.trim().toUpperCase();
     if (!code || couponBusy) return;
     setCouponBusy(true);
     setCouponError(null);
@@ -177,6 +177,8 @@ function CartPageContent() {
       setCouponBusy(false);
     }
   };
+
+  const handleApplyCoupon = () => applyCode(couponInput);
 
   const handleRemoveCoupon = async () => {
     if (couponBusy) return;
@@ -600,6 +602,32 @@ function CartPageContent() {
                       </button>
                     ))}
                   </div>
+                )}
+
+                {/*
+                  The referral discount this buyer arrived with but has not applied.
+
+                  Server-computed (`pricingService.computeQuote` prices it with the same
+                  function that would apply it, so the figure shown is the figure they
+                  get) and OFFERED, never imposed: there is one coupon slot and spending
+                  it on a code they did not ask for could displace a better one they were
+                  about to type. Absent whenever a coupon is already applied.
+                */}
+                {quote?.suggestedCoupon && !cart.couponCode && (
+                  <button
+                    type="button"
+                    onClick={() => applyCode(quote.suggestedCoupon!.code)}
+                    disabled={couponBusy}
+                    className="mt-2 w-full text-left rounded-lg border border-gold/40 bg-gold/5 px-3 py-2 hover:bg-gold/10 disabled:opacity-50"
+                  >
+                    <span className="text-xs font-display text-ink-muted">
+                      You were referred — apply{' '}
+                      <strong className="font-mono text-gold">{quote.suggestedCoupon.code}</strong>
+                      {quote.suggestedCoupon.estimatedDiscount > 0
+                        ? <> to save {formatPrice(quote.suggestedCoupon.estimatedDiscount)}</>
+                        : <> for free shipping</>}
+                    </span>
+                  </button>
                 )}
 
                 {couponError && (

@@ -72,6 +72,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/leads', label: 'Leads', icon: '💼' },
       { href: '/admin/sales-reps', label: 'Sales Reps', icon: '🧑‍💼' },
+      { href: '/admin/affiliates', label: 'Affiliates', icon: '🤝' },
+      { href: '/admin/affiliates/payouts', label: 'Affiliate Payouts', icon: '🏦' },
       { href: '/admin/users', label: 'Users', icon: '👥' },
       { href: '/admin/reviews', label: 'Reviews', icon: '⭐' },
       { href: '/admin/consultation', label: 'Consultancy', icon: '🎯' },

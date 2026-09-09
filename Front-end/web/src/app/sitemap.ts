@@ -143,6 +143,11 @@ const MANAGED_PAGES: Array<[string, ChangeFreq, number]> = [
   ['/offers',       'daily',   0.6],
   ['/super-cars',   'monthly', 0.5],
   ['/consultation', 'monthly', 0.5],
+  // The affiliate SIGN-UP page only. /account/affiliate (the portal) is private and
+  // is disallowed in robots.ts — recruiting is public, earnings are not.
+  ['/affiliates',   'monthly', 0.5],
+  // The contract someone is asked to accept — public and indexed, like /terms.
+  ['/affiliates/terms', 'yearly', 0.3],
   ['/media',        'monthly', 0.4],
   ['/blog/gallery', 'weekly',  0.4],
   ['/blog/videos',  'weekly',  0.4],

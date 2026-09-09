@@ -59,6 +59,18 @@ export interface CheckoutQuote {
    * instead of parking a permanent red error under the promo box.
    */
   couponErrorCode: string | null;
+  /**
+   * An affiliate discount available to this buyer but NOT applied.
+   *
+   * Present only when they arrived on a referral link (`?ref=`), have typed no code, and
+   * that affiliate's coupon would actually discount this cart. Server-computed — the
+   * figure is produced by the same function that would price it for real, so what is
+   * offered is what they would get.
+   *
+   * NEVER auto-applied. There is one coupon slot, and silently spending it on a code the
+   * buyer did not ask for could displace a better one they were about to type.
+   */
+  suggestedCoupon: { code: string; estimatedDiscount: number; freeShipping: boolean } | null;
   karmaPointsUsed: number;
   karmaPointValue: number;
   maxRedeemablePoints: number;

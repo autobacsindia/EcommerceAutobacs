@@ -25,6 +25,7 @@ import campaignProductTierRepository from '../repositories/campaignProductTierRe
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import campaignService from './campaignService.js';
+import { affiliateCouponGate } from './affiliateAttributionService.js';
 import AppError from '../utils/AppError.js';
 import { resolveVariantImage } from '../utils/variantImage.js';
 import { STOCK_STATUS, isPurchasable } from '../utils/stockStatus.js';
@@ -281,7 +282,12 @@ class PricingService {
    * discount (percentage/fixed) and whether free shipping is granted. Throws
    * CouponRejected with a buyer-facing reason on any eligibility failure.
    */
-  async _evaluateCoupon(code, orderItems, userId, session, now = new Date()) {
+  /**
+   * @param {object} [buyer] - { email, phone } for the self-referral check on an
+   *   affiliate coupon. Guests have no userId, so email/phone are the only keys that
+   *   work for them; passing them here is what makes the guest path safe too.
+   */
+  async _evaluateCoupon(code, orderItems, userId, session, now = new Date(), buyer = null) {
     const coupon = await couponRepository.findByCode(String(code).trim().toUpperCase(), session);
     if (!coupon) throw new CouponRejected(REASON.INVALID);
     if (!coupon.isActive) throw new CouponRejected(REASON.INACTIVE);
@@ -348,6 +354,30 @@ class PricingService {
       }
     }
 
+    /*
+      ── Affiliate gate (only for affiliate-managed coupons) ────────────────────
+      An affiliate coupon carries two extra tests: the owning affiliate must still be
+      ACTIVE, and the buyer must not be the affiliate themselves.
+
+      ⚠️ Self-referral is blocked HERE, on the pricing path, not only when commission is
+      computed. Blocking just the commission would still leave the affiliate a permanent
+      private discount on their own account — the larger loss, and the one nobody
+      notices. Rejecting the coupon closes both at once.
+
+      Raised as an ordinary CouponRejected so it flows through the single money pipeline:
+      computeQuote reports it inline on the cart and assertCouponApplied turns it into a
+      hard 400 at checkout. Ordinary coupons skip this entirely — `coupon.affiliate` is
+      null and nothing below changes.
+    */
+    if (coupon.affiliate) {
+      const veto = await affiliateCouponGate(
+        coupon,
+        { userId, email: buyer?.email, phone: buyer?.phone },
+        session,
+      );
+      if (veto) throw new CouponRejected(veto);
+    }
+
     // First-order-only and per-user limits require an identified user.
     if (coupon.firstOrderOnly || coupon.usageLimitPerUser != null) {
       if (!userId) throw new CouponRejected(REASON.LOGIN);
@@ -400,9 +430,17 @@ class PricingService {
    * @param {string}  [args.userId]
    * @param {number}  [args.shippingCost]       rupees
    * @param {Object}  [args.session]            mongoose session (checkout path)
+   * @param {Object}  [args.buyer]              { email, phone } — the self-referral keys
+   *   for an affiliate coupon. Guests have no userId, so these are the only keys that
+   *   identify them; passing them is what makes the guest path safe.
+   * @param {string}  [args.referralCode]       the `ab_ref` cookie value, if any. Used
+   *   ONLY to compute an advisory `suggestedCoupon`; it never prices anything by itself.
    * @returns full breakdown incl. priced `orderItems` for persistence.
    */
-  async computeQuote({ items, couponCode, redeemKarmaPoints = 0, userId = null, shippingCost = 0, session = null }) {
+  async computeQuote({
+    items, couponCode, redeemKarmaPoints = 0, userId = null, shippingCost = 0,
+    session = null, buyer = null, referralCode = null,
+  }) {
     const { orderItems, subtotalPaise, catalogSavingsPaise } = await this.priceItems(items, session);
     const shippingPaise = Math.max(0, toPaise(shippingCost));
 
@@ -418,7 +456,7 @@ class PricingService {
     if (couponCode && String(couponCode).trim()) {
       try {
         const { coupon, goodsDiscountPaise, freeShipping, campaign, campaignTier, productTierPricing } =
-          await this._evaluateCoupon(couponCode, orderItems, userId, session);
+          await this._evaluateCoupon(couponCode, orderItems, userId, session, new Date(), buyer);
         goodsCouponPaise = goodsDiscountPaise;
         shippingWaivePaise = freeShipping ? shippingPaise : 0;
         appliedCoupon = { code: coupon.code, type: coupon.type, value: coupon.value };
@@ -477,6 +515,43 @@ class PricingService {
       } catch (err) {
         if (err instanceof CouponRejected) { couponError = err.reason; couponErrorCode = err.code; }
         else throw err;
+      }
+    }
+
+    /*
+      ── Advisory referral suggestion ──────────────────────────────────────────
+      When the buyer arrived on an affiliate's link but has typed no code, offer theirs.
+
+      Three deliberate constraints:
+
+        1. It NEVER auto-applies. A discount the customer did not ask for is still a
+           coupon slot spent, and this cart may hold a better code they were about to
+           type. The UI offers one tap; the buyer decides.
+        2. The estimate is produced by _evaluateCoupon — the SAME function that would
+           price it for real — so the number offered is the number they would get. A
+           separate "roughly 8% of the subtotal" calculation would be a second money
+           path, and would drift the first time a cap or a scope rule was added.
+        3. Any rejection is swallowed. This is a suggestion: if their code would not
+           apply to this cart, we simply do not suggest it. Surfacing an error for a
+           code the buyer never entered would be noise they cannot act on.
+
+      Skipped entirely when a coupon is already applied — there is only one slot, and
+      nagging someone to swap the code they chose is not help.
+    */
+    let suggestedCoupon = null;
+    if (!appliedCoupon && referralCode) {
+      try {
+        const { coupon, goodsDiscountPaise, freeShipping } =
+          await this._evaluateCoupon(referralCode, orderItems, userId, session, new Date(), buyer);
+        if (coupon.affiliate && (goodsDiscountPaise > 0 || freeShipping)) {
+          suggestedCoupon = {
+            code: coupon.code,
+            estimatedDiscount: fromPaise(goodsDiscountPaise),
+            freeShipping,
+          };
+        }
+      } catch {
+        // Not applicable to this cart. Say nothing.
       }
     }
 
@@ -568,6 +643,14 @@ class PricingService {
         about. Null for every ordinary coupon rejection.
       */
       couponErrorCode,
+      /*
+        The affiliate discount available to this buyer but NOT applied — server-computed,
+        offered, never imposed. Null unless they arrived on a referral link, typed no
+        code, and that affiliate's coupon would actually discount this cart. The browser
+        renders it and posts the code back through the ordinary apply path; it never
+        derives the figure and never applies it silently.
+      */
+      suggestedCoupon,
       karmaPointsUsed,
       karmaPointValue: cfg.pointValueInRupees,
       maxRedeemablePoints,
