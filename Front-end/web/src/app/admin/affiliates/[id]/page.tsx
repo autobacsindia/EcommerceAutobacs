@@ -35,7 +35,7 @@ interface Affiliate {
   notes?: string;
   status: 'pending' | 'active' | 'suspended' | 'rejected';
   commissionPercent: number;
-  discountPercent: number;
+  discountPercent: number | null;
   firstOrderOnly: boolean;
   tdsPercent: number;
   payoutDetails?: PayoutDetails;
@@ -80,7 +80,11 @@ export default function AdminAffiliateDetailPage() {
       setData(res);
       setTerms({
         commissionPercent: String(res.affiliate.commissionPercent ?? ''),
-        discountPercent: String(res.affiliate.discountPercent ?? ''),
+        // Empty until approval decides it — the schema has no default, so "unset" and
+        // "deliberately 0" stay distinguishable. Pre-fill a sensible starting point.
+        discountPercent: res.affiliate.discountPercent == null
+          ? '5'
+          : String(res.affiliate.discountPercent),
         tdsPercent: String(res.affiliate.tdsPercent ?? 0),
         firstOrderOnly: res.affiliate.firstOrderOnly,
       });
@@ -153,34 +157,16 @@ export default function AdminAffiliateDetailPage() {
 
           <div className="flex flex-wrap gap-2">
             {a.status === 'pending' && (
-              <>
-                <input
-                  value={approveCode}
-                  onChange={(e) => setApproveCode(e.target.value.toUpperCase())}
-                  placeholder="Code (optional)"
-                  className="border border-gray-300 rounded-lg px-3 py-2 font-mono w-44"
-                  aria-label="Affiliate code"
-                />
-                <button
-                  disabled={busy}
-                  onClick={() => run(() => apiClient.post(API_ENDPOINTS.AFFILIATE_ADMIN_APPROVE(id), {
-                    ...(approveCode.trim() ? { code: approveCode.trim() } : {}),
-                  }))}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4" aria-hidden /> Approve
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={() => {
-                    if (!confirm('Decline this application? This is terminal — they would have to be re-added manually.')) return;
-                    run(() => apiClient.post(API_ENDPOINTS.AFFILIATE_ADMIN_REJECT(id), {}));
-                  }}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  <X className="w-4 h-4" aria-hidden /> Decline
-                </button>
-              </>
+              <button
+                disabled={busy}
+                onClick={() => {
+                  if (!confirm('Decline this application? Their PAN and bank details are deleted, and this is terminal.')) return;
+                  run(() => apiClient.post(API_ENDPOINTS.AFFILIATE_ADMIN_REJECT(id), {}));
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <X className="w-4 h-4" aria-hidden /> Decline
+              </button>
             )}
 
             {a.status === 'active' && (
@@ -215,6 +201,72 @@ export default function AdminAffiliateDetailPage() {
           </p>
         )}
       </div>
+
+      {/*
+        ── Approve ──────────────────────────────────────────────────────────
+        Commission and buyer discount are set HERE, at the moment of approval, because
+        that is when they are actually decided — and because approval is what mints the
+        managed coupon. Approving first and setting the discount afterwards leaves a live
+        coupon worth 0% in between, which reads to a customer as a code that does nothing.
+      */}
+      {a.status === 'pending' && (
+        <div className={card}>
+          <h2 className="font-semibold text-gray-900">Approve this application</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Approving mints their coupon and emails them the code. Set the terms first.
+          </p>
+
+          <div className="grid gap-4 sm:grid-cols-3 mt-4">
+            <div>
+              <label className={label} htmlFor="approveCommission">Commission % *</label>
+              <input id="approveCommission" className={input} type="number" min={0} max={100} step="0.1"
+                value={terms.commissionPercent}
+                onChange={(e) => setTerms((t) => ({ ...t, commissionPercent: e.target.value }))} />
+              <p className="mt-1 text-xs text-gray-500">What we pay them.</p>
+            </div>
+            <div>
+              <label className={label} htmlFor="approveDiscount">Buyer discount % *</label>
+              <input id="approveDiscount" className={input} type="number" min={0} max={100} step="0.1"
+                value={terms.discountPercent}
+                onChange={(e) => setTerms((t) => ({ ...t, discountPercent: e.target.value }))} />
+              <p className="mt-1 text-xs text-gray-500">
+                What their audience saves. 0 means their code discounts nothing and stays
+                inactive — link-only promotion.
+              </p>
+            </div>
+            <div>
+              <label className={label} htmlFor="approveCode">Code</label>
+              <input id="approveCode" className={`${input} font-mono`}
+                value={approveCode}
+                onChange={(e) => setApproveCode(e.target.value.toUpperCase())}
+                placeholder="Auto from name" />
+              <p className="mt-1 text-xs text-gray-500">
+                Leave blank to derive one. A code you type is used exactly or the approval
+                fails — it is never silently altered.
+              </p>
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 mt-4 text-sm">
+            <input type="checkbox" checked={terms.firstOrderOnly}
+              onChange={(e) => setTerms((t) => ({ ...t, firstOrderOnly: e.target.checked }))} />
+            Only pay on a customer&apos;s first order
+          </label>
+
+          <button
+            disabled={busy || terms.commissionPercent === '' || terms.discountPercent === ''}
+            onClick={() => run(() => apiClient.post(API_ENDPOINTS.AFFILIATE_ADMIN_APPROVE(id), {
+              commissionPercent: Number(terms.commissionPercent),
+              discountPercent: Number(terms.discountPercent),
+              firstOrderOnly: terms.firstOrderOnly,
+              ...(approveCode.trim() ? { code: approveCode.trim() } : {}),
+            }))}
+            className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            <Check className="w-4 h-4" aria-hidden /> Approve and issue code
+          </button>
+        </div>
+      )}
 
       {/* ── Earnings ───────────────────────────────────────────────────────── */}
       <div className={card}>
@@ -262,7 +314,8 @@ export default function AdminAffiliateDetailPage() {
         </p>
       </div>
 
-      {/* ── Terms ──────────────────────────────────────────────────────────── */}
+      {/* ── Terms (post-approval retuning) ─────────────────────────────────── */}
+      {a.status !== 'pending' && (
       <div className={card}>
         <h2 className="font-semibold mb-4">Commercial terms</h2>
         <div className="grid gap-4 sm:grid-cols-3">
@@ -323,6 +376,7 @@ export default function AdminAffiliateDetailPage() {
           it was placed under, so past orders are never repriced.
         </p>
       </div>
+      )}
 
       {/* ── Bank details ───────────────────────────────────────────────────── */}
       <div className={card}>

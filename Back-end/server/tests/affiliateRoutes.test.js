@@ -474,6 +474,35 @@ describe('Affiliate API', () => {
       const affiliate = await createActiveAffiliate({}, { discountPercent: 0 });
       expect((await Coupon.findById(affiliate.coupon)).isActive).toBe(false);
     });
+
+    /*
+      ⚠️ REGRESSION. `discountPercent` used to carry `default: 0` on the schema, and
+      approve fills in the configured default only when the value `== null` — so that an
+      admin's DELIBERATE 0% survives. With a schema default it was never null, the
+      fallback could never fire, and every approval produced a 0% discount with a coupon
+      created INACTIVE. The discount half of the programme was dead on arrival, and
+      nothing failed: the affiliate went live with a code that silently saved nobody
+      anything.
+    */
+    it('applies the configured default discount when approval does not name one', async () => {
+      await (await anonymous()).apply(APPLICATION);
+      const created = await Affiliate.findOne({ email: 'rahul@example.com' });
+      // A pending application has no discount decided yet — not a zero.
+      expect(created.discountPercent).toBeUndefined();
+
+      const res = await post(`/affiliates/admin/${created._id}/approve`, {});
+      expect(res.status).toBe(200);
+
+      const approved = await Affiliate.findById(created._id);
+      expect(approved.discountPercent).toBeGreaterThan(0);
+      expect((await Coupon.findById(approved.coupon)).isActive).toBe(true);
+      expect((await Coupon.findById(approved.coupon)).value).toBe(approved.discountPercent);
+    });
+
+    it('still honours a deliberate 0% passed at approval', async () => {
+      const affiliate = await createActiveAffiliate({}, { discountPercent: 0 });
+      expect(affiliate.discountPercent).toBe(0);
+    });
   });
 
   // ── Suspension ──────────────────────────────────────────────────────────────

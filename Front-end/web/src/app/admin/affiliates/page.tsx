@@ -22,7 +22,7 @@ interface Affiliate {
   email: string;
   status: 'pending' | 'active' | 'suspended' | 'rejected';
   commissionPercent: number;
-  discountPercent: number;
+  discountPercent: number | null;
   createdAt: string;
 }
 
@@ -163,13 +163,21 @@ export default function AdminAffiliatesPage() {
               <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No affiliates yet.</td></tr>
             )}
             {!loading && rows.map((a) => (
+              /*
+                The NAME is the link, not the code.
+
+                It used to be the code — which a pending application does not have yet, so
+                the only way into an application was a two-pixel em-dash that reads as
+                empty data. The rows you most need to open (the ones awaiting review) were
+                effectively unclickable.
+              */
               <tr key={a._id} className="border-t hover:bg-gray-50">
-                <td className="px-4 py-3 font-mono">
-                  <Link href={`/admin/affiliates/${a._id}`} className="text-blue-600 hover:underline">
-                    {a.code || '—'}
+                <td className="px-4 py-3 font-mono text-gray-600">{a.code || '—'}</td>
+                <td className="px-4 py-3">
+                  <Link href={`/admin/affiliates/${a._id}`} className="text-blue-600 hover:underline font-medium">
+                    {a.name}
                   </Link>
                 </td>
-                <td className="px-4 py-3">{a.name}</td>
                 <td className="px-4 py-3 text-gray-600">{a.email}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[a.status]}`}>
@@ -177,7 +185,7 @@ export default function AdminAffiliatesPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">{a.commissionPercent}%</td>
-                <td className="px-4 py-3 text-right">{a.discountPercent}%</td>
+                <td className="px-4 py-3 text-right">{a.discountPercent == null ? '—' : `${a.discountPercent}%`}</td>
                 <td className="px-4 py-3 text-gray-600">{formatDateIST(a.createdAt)}</td>
               </tr>
             ))}

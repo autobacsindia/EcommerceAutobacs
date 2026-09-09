@@ -20,10 +20,21 @@
  *   • READ-ONLY by default. `--status` prints and exits. Writes need `--mature`.
  *   • Any write requires `--confirm-cluster=<substring>` which MUST appear in the
  *     resolved database host. You cannot write to a cluster you did not name out loud.
- *   • Refuses outright when NODE_ENV=production.
  *   • `{ autoIndex: false }` on connect — connecting with models imported and autoIndex
  *     on builds every declared index against whatever cluster this points at.
  *   • Redis disabled, so it never dials a cache host.
+ *
+ * ⚠️ THERE IS DELIBERATELY NO `NODE_ENV === 'production'` REFUSAL.
+ *
+ * There was one, and it was wrong in both directions. Railway's TEST environment runs
+ * with NODE_ENV=production on purpose — that is how you get production-like behaviour —
+ * so the check blocked the exact environment this script exists for. And it would not
+ * have caught the case that matters: nothing stops NODE_ENV being 'development' while
+ * MONGO_URI points at the production cluster, which is precisely the shape of this
+ * repo's committed .env.
+ *
+ * NODE_ENV describes the RUNTIME MODE. `--confirm-cluster` describes the DATABASE. Only
+ * the second one answers "am I about to write to production", so it is the only guard.
  *
  * ── USAGE ────────────────────────────────────────────────────────────────────
  *   # Where am I pointed, and what does the ledger look like?
@@ -59,10 +70,6 @@ const line = (s = '') => console.log(s);
 const money = (paise) => `₹${(paise / 100).toFixed(2)}`;
 
 async function main() {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('Refusing to run with NODE_ENV=production. This script backdates delivery dates.');
-  }
-
   const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGO_URI is not set.');
 

@@ -196,8 +196,21 @@ const AffiliateSchema = new mongoose.Schema(
     /**
      * What the BUYER gets, as a percentage off. Mirrored onto the managed coupon's
      * `value` — this field is the affiliate-admin's view of it, the coupon is the money.
+     *
+     * ⚠️ NO DEFAULT, and NOT required. "Not yet decided" has to be representable.
+     *
+     * It was `default: 0`, which silently broke approval: affiliateService.approve fills
+     * in the configured default only when the value `== null`, precisely so that an
+     * admin's deliberate 0% is preserved. With a schema default of 0 it is never null,
+     * so the fallback could never fire — every approved affiliate got a 0% buyer
+     * discount and a managed coupon created INACTIVE, and the whole discount half of the
+     * programme was dead on arrival.
+     *
+     * Left undefined on a pending application, set at approval. Do not reintroduce a
+     * default here: the distinction between "unset" and "deliberately zero" is what the
+     * approval logic reads.
      */
-    discountPercent: { type: Number, required: true, min: 0, max: 100, default: 0 },
+    discountPercent: { type: Number, min: 0, max: 100 },
 
     /**
      * Restrict the managed coupon to a buyer's first paid order.
