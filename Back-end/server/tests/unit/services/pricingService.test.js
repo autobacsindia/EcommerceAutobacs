@@ -10,7 +10,7 @@ import { jest } from '@jest/globals';
 const mockProductRepo = { findActiveById: jest.fn() };
 const mockCouponRepo = { findByCode: jest.fn() };
 const mockCouponUserUsageRepo = { findByCouponUser: jest.fn() };
-const mockOrderRepo = { countActiveByUser: jest.fn() };
+const mockOrderRepo = { hasActiveOrder: jest.fn() };
 const mockUserRepo = { getKarma: jest.fn() };
 const mockGetLoyaltyConfig = jest.fn();
 
@@ -40,7 +40,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockGetLoyaltyConfig.mockResolvedValue({ ...CONFIG });
   mockCouponUserUsageRepo.findByCouponUser.mockResolvedValue(null);
-  mockOrderRepo.countActiveByUser.mockResolvedValue(0);
+  mockOrderRepo.hasActiveOrder.mockResolvedValue(false);
   mockUserRepo.getKarma.mockResolvedValue({ karmaPoints: 0 });
 });
 
@@ -112,7 +112,7 @@ describe('pricingService.computeQuote', () => {
 
   test('firstOrderOnly rejected when the user has prior orders', async () => {
     mockProductRepo.findActiveById.mockResolvedValue(product('a', 1000));
-    mockOrderRepo.countActiveByUser.mockResolvedValue(3);
+    mockOrderRepo.hasActiveOrder.mockResolvedValue(true);
     mockCouponRepo.findByCode.mockResolvedValue({
       _id: 'c5', code: 'WELCOME', type: 'percentage', value: 10,
       isActive: true, minCartValue: 0, firstOrderOnly: true, appliesTo: {}, usedCount: 0, usageLimit: null

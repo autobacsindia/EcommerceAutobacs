@@ -376,7 +376,14 @@ export async function ensureCriticalIndexes() {
       console.log('✓ Dropped legacy pre-kind StockNotificationRequest unique index');
     } catch (e) {
       // IndexNotFound (27) is expected on fresh envs / after the first run.
-      if (e.codeName !== 'IndexNotFound' && e.code !== 27) throw e;
+      // NamespaceNotFound (26) is expected on a database where this collection has
+      // never been written to at all. Both MUST be swallowed: this try/catch sits
+      // inside the ONE try/catch wrapping the whole pass, so a rethrow here does not
+      // just skip a drop — it aborts every remaining createIndex call, silently. That
+      // is how the Spin-to-Win indexes went missing, and the money-critical affiliate
+      // guards are declared below this line.
+      if (!['IndexNotFound', 'NamespaceNotFound'].includes(e.codeName)
+        && ![26, 27].includes(e.code)) throw e;
     }
     await db.collection('stocknotificationrequests').createIndex(
       { product: 1, variantId: 1, user: 1, kind: 1 },
@@ -393,7 +400,10 @@ export async function ensureCriticalIndexes() {
       await db.collection('stocknotificationrequests').dropIndex('product_1_variantId_1_status_1');
       console.log('✓ Dropped legacy pre-kind StockNotificationRequest read index');
     } catch (e) {
-      if (e.codeName !== 'IndexNotFound' && e.code !== 27) throw e;
+      // See the note on the drop above: 26/27 are both expected, and rethrowing
+      // either one would abort every index declared after this point.
+      if (!['IndexNotFound', 'NamespaceNotFound'].includes(e.codeName)
+        && ![26, 27].includes(e.code)) throw e;
     }
     console.log('✓ StockNotificationRequest indexes confirmed');
 
@@ -451,9 +461,14 @@ export async function ensureCriticalIndexes() {
     await db.collection('returnrequests')
       .dropIndex('unique_active_return_per_order_product')
       .then(() => console.log('✓ Dropped superseded unique_active_return_per_order_product'))
-      // IndexNotFound (27) — already gone, or a fresh database. Nothing to do.
+      // IndexNotFound (27) — already gone. NamespaceNotFound (26) — a fresh database
+      // where returnrequests has never been written. Both are nothing to do, and both
+      // MUST be swallowed: a rethrow escapes to the pass-wide try/catch and silently
+      // skips every index declared after this point.
       .catch((err) => {
-        if (err?.code !== 27 && !/index not found/i.test(err?.message || '')) throw err;
+        const benign = [26, 27].includes(err?.code)
+          || /index not found|ns not found/i.test(err?.message || '');
+        if (!benign) throw err;
       });
 
     await db.collection('returnrequests').createIndex(
@@ -521,6 +536,164 @@ export async function ensureCriticalIndexes() {
       }
     );
     console.log('✓ Spin-to-Win indexes confirmed');
+
+    // ── Affiliate program ──────────────────────────────────────────────────────
+    // MONEY-CRITICAL: one commission accrual per order, forever.
+    //
+    // Razorpay retries webhooks and buyers double-click "Pay".
+    // razorpayService.processPaymentSuccess gates the accrual on `createdHere`, but
+    // under snapshot isolation two concurrent deliveries cannot see each other's
+    // uncommitted insert — THIS INDEX is the actual serialization point, exactly as
+    // payments.gatewayPaymentId is for the capture itself. Without it a replayed
+    // webhook pays an affiliate twice for one sale, and nothing complains.
+    //
+    // Partial on type:'accrual' so the clawback/adjust rows an order may legitimately
+    // accumulate are excluded. `order: { $type: 'objectId' }` mirrors the KarmaLedger
+    // earn-once guard. Declared ONLY here (never on the schema): autoIndex is on
+    // outside prod, so a schema declaration would build this key under its generated
+    // name and the named creation below would then be rejected — aborting the whole
+    // pass, exactly as happened to Spin-to-Win.
+    await db.collection('affiliatecommissions').createIndex(
+      { order: 1, type: 1 },
+      {
+        name: 'unique_accrual_per_order',
+        unique: true,
+        partialFilterExpression: { type: 'accrual', order: { $type: 'objectId' } },
+        background: true
+      }
+    );
+    // ⚠️ NOT redundant with the guard above, and must not be "cleaned up".
+    // The planner will not use a partial index unless it can PROVE the query is
+    // contained by the filter, and it does not infer that from an equality predicate
+    // against a `$type` clause. So find({ order, type:'accrual' }) — the clawback
+    // lookup, run on every refund — would COLLSCAN without this plain index. Same
+    // trap that cost 59,638 scanned docs per cart read and an Atlas alert.
+    await db.collection('affiliatecommissions').createIndex(
+      { order: 1 },
+      { background: true }
+    );
+    // The payout batch's claim predicate and the payable-balance aggregate.
+    await db.collection('affiliatecommissions').createIndex(
+      { affiliate: 1, status: 1, createdAt: -1 },
+      { background: true }
+    );
+    // The affiliate's own ledger page, which has NO status filter. Measured, not
+    // assumed: with only the index above, `status` sits between the equality and the
+    // sort key, so the sort cannot be served and Mongo walks every key for that
+    // affiliate before sorting — 100 keys examined to return 26, growing linearly and
+    // worst for the busiest affiliates.
+    await db.collection('affiliatecommissions').createIndex(
+      { affiliate: 1, createdAt: -1 },
+      { background: true }
+    );
+    // The nightly maturation sweep: pending rows whose return window has closed.
+    // NOT a TTL, and it must never become one — an expired commission has to stop
+    // being PAYABLE, not be deleted; deleting it would erase the record of a
+    // clawback and unbalance the ledger.
+    await db.collection('affiliatecommissions').createIndex(
+      { status: 1, maturesAt: 1 },
+      { background: true }
+    );
+    // Payout detail: which rows did this batch pay?
+    await db.collection('affiliatecommissions').createIndex(
+      { payout: 1 },
+      { background: true }
+    );
+    console.log('✓ AffiliateCommission indexes confirmed');
+
+    // MONEY-CRITICAL: one bank reference, one payout. Catches an admin recording the
+    // same UTR against two batches — i.e. booking one transfer as two payments.
+    // Partial on $type:'string' so the many drafts with no reference yet do not all
+    // collide on null (same construction as payments.gatewayPaymentId). Declared only
+    // here, for the same naming reason as the accrual guard above.
+    await db.collection('affiliatepayouts').createIndex(
+      { reference: 1 },
+      {
+        name: 'unique_payout_reference',
+        unique: true,
+        partialFilterExpression: { reference: { $type: 'string' } },
+        background: true
+      }
+    );
+    await db.collection('affiliatepayouts').createIndex(
+      { affiliate: 1, createdAt: -1 },
+      { background: true }
+    );
+    await db.collection('affiliatepayouts').createIndex(
+      { status: 1, createdAt: -1 },
+      { background: true }
+    );
+    console.log('✓ AffiliatePayout indexes confirmed');
+
+    // Affiliate: the code is the lookup key for BOTH the coupon path and the `?ref=`
+    // link, so it is on the order-creation hot path. Unique because two affiliates
+    // sharing a code would make "who gets paid" ambiguous — and the service's
+    // findByCode pre-check is a TOCTOU that concurrent approvals can slip past.
+    //
+    // SPARSE, and that is load-bearing: a code is minted at APPROVAL, so every pending
+    // application has no `code` path at all. A non-sparse unique index would index each
+    // of those as null and reject the second applicant with a duplicate-key error.
+    await db.collection('affiliates').createIndex(
+      { code: 1 },
+      { unique: true, sparse: true, background: true }
+    );
+    // One affiliate profile per customer account. Sparse: an application from someone
+    // without an account has `user: null`, and many such rows must coexist.
+    await db.collection('affiliates').createIndex(
+      { user: 1 },
+      { unique: true, sparse: true, background: true }
+    );
+    await db.collection('affiliates').createIndex(
+      { status: 1, createdAt: -1 },
+      { background: true }
+    );
+    // The dedup key behind affiliateService.apply's "have you already applied?" lookup,
+    // which is a TOCTOU on its own — two simultaneous submissions both read "no row".
+    // Unique is what actually stops a duplicate applicant. Always present (required on
+    // the schema), so a plain unique index is correct here.
+    await db.collection('affiliates').createIndex(
+      { email: 1 },
+      { unique: true, background: true }
+    );
+    // Pricing-path lookup: which affiliate owns the coupon that just priced this cart?
+    // Sparse — only the small minority of coupons owned by an affiliate carry it.
+    await db.collection('coupons').createIndex(
+      { affiliate: 1 },
+      { sparse: true, background: true }
+    );
+    /*
+      Attribution reporting on the ORDERS collection: this affiliate's orders, newest first.
+
+      ⚠️ PARTIAL, not sparse. A compound SPARSE index omits a document only if it is
+      missing EVERY indexed key, and `createdAt` is on every order — so the sparse form
+      indexed the whole collection while claiming to index only referred orders. Measured
+      on 3,000 orders at 5% referred: 49,152 bytes sparse vs 20,480 partial.
+
+      `$exists` is safe in this partial filter where `$type` would not be: the planner can
+      prove an equality on a non-null value is contained by it, so the query still uses
+      the index (verified with explain: 1 key examined). Same construction as
+      spin_reward_fulfilment above; the trap documented on Order.sessionId is `$type`.
+
+      The earlier sparse index is dropped first — MongoDB refuses to recreate an existing
+      index NAME with different options, and that failure would abort this whole pass.
+    */
+    await db.collection('orders')
+      .dropIndex('affiliate.affiliate_1_createdAt_-1')
+      .then(() => console.log('✓ Dropped superseded sparse affiliate attribution index'))
+      .catch((err) => {
+        const benign = [26, 27].includes(err?.code)
+          || /index not found|ns not found/i.test(err?.message || '');
+        if (!benign) throw err;
+      });
+    await db.collection('orders').createIndex(
+      { 'affiliate.affiliate': 1, createdAt: -1 },
+      {
+        name: 'affiliate_attribution',
+        partialFilterExpression: { 'affiliate.affiliate': { $exists: true } },
+        background: true
+      }
+    );
+    console.log('✓ Affiliate indexes confirmed');
 
     return { ok: true, error: null };
   } catch (err) {

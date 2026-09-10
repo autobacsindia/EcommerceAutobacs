@@ -57,6 +57,7 @@ class CronService {
     this.scheduleSalesScoreRefresh();
     this.scheduleSupportHealth();
     this.scheduleCareersMediaRetention();
+    this.scheduleAffiliateMaturation();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -81,6 +82,61 @@ class CronService {
    * retries, and any application whose retention clock cannot be determined is
    * skipped rather than purged.
    */
+  /**
+   * Move matured affiliate commissions pending → approved.
+   *
+   * A CRON rather than an event, because the trigger is the passage of time: nothing
+   * happens on day 4 of the return window for something to hook onto. The work is cheap
+   * because `post-order-delivered` stamps `maturesAt`, so this is an indexed range scan
+   * rather than a walk of every pending row.
+   *
+   * OFF by default (AFFILIATE_COMMISSION_ENABLED), matching the house convention for
+   * anything that moves money — the same reason the careers retention sweep above is
+   * opt-in. The distributed lock means several Railway instances cannot each approve the
+   * same batch; the compare-and-set inside the sweep means even that could not
+   * double-approve a row.
+   */
+  scheduleAffiliateMaturation() {
+    if (String(process.env.AFFILIATE_COMMISSION_ENABLED).toLowerCase() !== 'true') {
+      if (process.env.NODE_ENV !== 'test') {
+        console.log('[CronService] Affiliate commission maturation DISABLED (set AFFILIATE_COMMISSION_ENABLED=true to enable)');
+      }
+      return;
+    }
+    const schedule = process.env.AFFILIATE_MATURATION_CRON || '0 4 * * *'; // 04:00 IST daily
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid AFFILIATE_MATURATION_CRON "${schedule}" — maturation sweep NOT scheduled`);
+      return;
+    }
+    try {
+      const task = cron.schedule(schedule, () =>
+        this.withDistributedLock('cron:lock:affiliateMaturation', 30 * 60, async () => {
+          const { default: affiliateCommissionService } = await import('./affiliateCommissionService.js');
+          return affiliateCommissionService.sweepMaturity()
+            .then((result) => {
+              console.log(`[CronService] Affiliate maturation: approved ${result.approved}, skipped ${result.skipped} of ${result.examined}`);
+              return result;
+            })
+            .catch(err =>
+              console.error('[CronService] Affiliate maturation sweep failed:', err.message)
+            );
+        }),
+        { scheduled: true, timezone: process.env.WP_SYNC_TZ || 'Asia/Kolkata' }
+      );
+      this.scheduledTasks.push({
+        name: 'affiliateMaturation',
+        task,
+        schedule,
+        description: 'Approve affiliate commissions whose delivery + return window has closed',
+      });
+      if (process.env.NODE_ENV !== 'test') {
+        console.log(`[CronService] Affiliate commission maturation scheduled: "${schedule}"`);
+      }
+    } catch (error) {
+      console.error('[CronService] Failed to schedule affiliate maturation:', error.message);
+    }
+  }
+
   scheduleCareersMediaRetention() {
     if (String(process.env.CAREERS_MEDIA_RETENTION_ENABLED).toLowerCase() !== 'true') {
       if (process.env.NODE_ENV !== 'test') {

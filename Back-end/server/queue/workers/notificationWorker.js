@@ -34,6 +34,7 @@ import { createConnection } from '../connection.js';
 import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
+import { emailAffiliateApproved, emailAffiliatePayoutSent } from '../../services/affiliateEmailService.js';
 import { emailReviewRequest } from '../../services/reviewRequestService.js';
 import { fanOutRestock, emailBackInStock } from '../../services/restockNotificationService.js';
 import { emailCareersAcknowledgement, emailCareersRejection } from '../../services/careersApplicantEmailService.js';
@@ -187,6 +188,21 @@ const handlers = {
       if (ticket) await supportEmailService.sendAcknowledgement(ticket);
     }
     return result;
+  },
+
+  // Affiliate approved → send them their code, link and terms. Until this lands they
+  // have no way to learn their own code, which is what /affiliates promises.
+  'send-affiliate-approved': async (job) => {
+    const { affiliateId } = job.data;
+    const res = await emailAffiliateApproved(affiliateId);
+    console.log(`[Notifications] send-affiliate-approved ${affiliateId}: ${res.status}`);
+  },
+
+  // Payout recorded as paid → tell the affiliate, with gross/TDS/net broken out.
+  'send-affiliate-payout': async (job) => {
+    const { payoutId } = job.data;
+    const res = await emailAffiliatePayoutSent(payoutId);
+    console.log(`[Notifications] send-affiliate-payout ${payoutId}: ${res.status}`);
   },
 
   'send-support-acknowledgement': async (job) => {

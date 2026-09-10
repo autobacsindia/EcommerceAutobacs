@@ -53,6 +53,7 @@ import checkoutRoutes from './checkout.js';
 import couponRoutes from './coupons.js';
 import loyaltyRoutes from './loyalty.js';
 import campaignRoutes from './campaigns.js';
+import affiliateRoutes from './affiliates.js';
 
 import dashboardRoutes from './dashboard.js';
 import analyticsRoutes from './analytics.js';
@@ -141,6 +142,11 @@ apiRouter.use('/loyalty', authenticatedUserRateLimit, loyaltyRoutes);
 // personalised for a signed-in customer while a logged-out visitor still gets told
 // which email to sign in with.
 apiRouter.use('/campaigns', publicBrowsingRateLimit, optionalAuth, campaignRoutes);
+// Affiliate program: /apply is public (the sign-up form on /affiliates), /me* is the
+// affiliate's own self-serve portal, and /admin/* is guarded in-route. optionalAuth so
+// a signed-in applicant is linked to their account automatically — which is what makes
+// the self-referral check possible later — while a logged-out visitor can still apply.
+apiRouter.use('/affiliates', publicBrowsingRateLimit, optionalAuth, affiliateRoutes);
 
 // ============================================================================
 // ADMIN DOMAIN

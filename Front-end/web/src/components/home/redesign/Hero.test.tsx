@@ -120,6 +120,46 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     expect(container.querySelector('.hero')!.getAttribute('style')).toBeNull();
   });
 
+  /*
+    Move the pin, not the window.
+
+    The lock is measured from `.hero-pin`'s own bounding box, so a test that only sets
+    `window.scrollY` is testing nothing — and that is exactly the coupling that let the
+    phone bug through. `top` is negative once the track has risen above the viewport top.
+  */
+  function scrollPinTo(container: HTMLElement, top: number) {
+    const pin = container.querySelector<HTMLElement>('.hero-pin')!;
+    jest.spyOn(pin, 'getBoundingClientRect').mockReturnValue({ top } as DOMRect);
+    act(() => {
+      window.dispatchEvent(new Event('scroll'));
+      jest.advanceTimersByTime(50);
+    });
+  }
+
+  /*
+    ── Regression: the carousel was dead on phones ──────────────────────────
+    The lock used to read `window.scrollY`. That equals the hero's scrub progress only
+    when the hero is the first thing on the page — true on desktop, false on a phone,
+    where `.hr-promo-slot` sits in normal flow ABOVE the hero instead of being an
+    absolute overlay. With a promo strip live, a phone user scrolls ~64px+ just to bring
+    the hero to the top; that tripped the 8px threshold and locked the carousel before
+    they had looked at it, killing both the rotation and the dots.
+
+    The page has scrolled here and the pin has NOT — which is the whole distinction.
+  */
+  it('keeps rotating when the page has scrolled but the pin has not reached the top', () => {
+    const { container } = render(<Hero spinTeaser={teaser} />);
+    const track = container.querySelector<HTMLElement>('.hero-carousel')!;
+
+    // 240px of promo strip scrolled away; the pin's top is still below the viewport top.
+    Object.defineProperty(window, 'scrollY', { value: 240, writable: true, configurable: true });
+    scrollPinTo(container, 40);
+
+    expect(container.querySelector('.hero-dots')).not.toBeNull();
+    act(() => { jest.advanceTimersByTime(SLIDE_DWELL_MS); });
+    expect(track.style.transform).toBe('translate3d(-100%, 0, 0)');
+  });
+
   it('locks back to the car slide as soon as the user scrolls into the scrub', () => {
     const { container } = render(<Hero spinTeaser={teaser} />);
     const track = container.querySelector<HTMLElement>('.hero-carousel')!;
@@ -127,11 +167,7 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     act(() => { jest.advanceTimersByTime(SLIDE_DWELL_MS); });
     expect(track.style.transform).toBe('translate3d(-100%, 0, 0)');
 
-    act(() => {
-      Object.defineProperty(window, 'scrollY', { value: 500, writable: true, configurable: true });
-      window.dispatchEvent(new Event('scroll'));
-      jest.advanceTimersByTime(50);
-    });
+    scrollPinTo(container, -500);
 
     expect(track.style.transform).toBe('translate3d(-0%, 0, 0)');
     // Dots over a pinned, scrubbing animation are clutter and control nothing.

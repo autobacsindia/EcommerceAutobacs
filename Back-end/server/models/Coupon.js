@@ -70,6 +70,27 @@ const CouponSchema = new mongoose.Schema({
    */
   campaign: { type: mongoose.Schema.Types.ObjectId, ref: "Campaign", default: null },
 
+  /**
+   * Set when this coupon is MANAGED BY AN AFFILIATE (models/Affiliate.js).
+   *
+   * Same division of labour as `campaign` above: the affiliate owns the decisions
+   * (rate, first-order-only, active/suspended), this coupon remains the money path.
+   * Two effects, both in pricingService._evaluateCoupon:
+   *   1. a self-referral gate — an affiliate may not use their own code, which has to
+   *      be enforced HERE rather than only at commission time, or they keep a permanent
+   *      private discount on their own account;
+   *   2. the coupon is rejected outright unless the owning affiliate is `active`, so
+   *      suspending someone stops their discount immediately and visibly.
+   *
+   * Unlike `campaign`, the discount percentage still comes from this document's `value`
+   * — an affiliate has one flat buyer discount, not a cart-value tier ladder. Suspension
+   * also flips `isActive`, so the rejection happens on the cheap path first.
+   *
+   * Do NOT hand-edit an affiliate-managed coupon in the coupon admin — change the
+   * affiliate instead, or the two will disagree about what a buyer is owed.
+   */
+  affiliate: { type: mongoose.Schema.Types.ObjectId, ref: "Affiliate", default: null },
+
   // ── Usage limits ────────────────────────────────────────────────────────────
   usageLimit: { type: Number, min: 0, default: null },        // global cap, null = unlimited
   usageLimitPerUser: { type: Number, min: 0, default: null }, // per-user cap, null = unlimited
@@ -80,6 +101,10 @@ const CouponSchema = new mongoose.Schema({
 
 // Listing eligible public coupons + admin filtering.
 CouponSchema.index({ isActive: 1, visibility: 1, expiresAt: 1 });
+// Resolving "which affiliate owns the coupon that just priced this cart?" — read on
+// the order-creation path for every affiliate-coded order. Sparse: only the small
+// minority of coupons that belong to an affiliate carry the field.
+CouponSchema.index({ affiliate: 1 }, { sparse: true });
 
 /** True when the coupon's own active/date/limit gates pass (cart-independent checks). */
 CouponSchema.methods.isCurrentlyValid = function (now = new Date()) {

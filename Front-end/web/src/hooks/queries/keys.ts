@@ -98,6 +98,23 @@ export const campaignKeys = {
     [...campaignKeys.all, 'productRates', slug, [...ids].sort().join(',')] as const,
 };
 
+/**
+ * The signed-in user's own affiliate data.
+ *
+ * Every entry is per-user by construction — the API scopes these to `req.user` and the
+ * affiliate id is never accepted from the client — so the keys carry no id. Two people
+ * sharing a browser profile cannot collide because the auth cookie changes and the
+ * queries are invalidated on sign-out with the rest of the session.
+ */
+export const affiliateKeys = {
+  all: ['affiliate'] as const,
+  /** Profile + balance. Null for the overwhelming majority of customers. */
+  me: () => [...affiliateKeys.all, 'me'] as const,
+  /** One page of the caller's own commission ledger, keyed on the cursor. */
+  commissions: (cursor?: string | null) =>
+    [...affiliateKeys.all, 'commissions', cursor ?? ''] as const,
+};
+
 export const adminKeys = {
   all: ['admin'] as const,
   /** Prefix for every list of a resource — use to invalidate all pages/filters at once. */

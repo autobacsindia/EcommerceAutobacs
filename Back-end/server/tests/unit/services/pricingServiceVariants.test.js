@@ -10,7 +10,7 @@ import { jest } from '@jest/globals';
 const mockProductRepo = { findActiveById: jest.fn() };
 const mockCouponRepo = { findByCode: jest.fn() };
 const mockCouponUserUsageRepo = { findByCouponUser: jest.fn() };
-const mockOrderRepo = { countActiveByUser: jest.fn() };
+const mockOrderRepo = { hasActiveOrder: jest.fn() };
 const mockUserRepo = { getKarma: jest.fn() };
 const mockGetLoyaltyConfig = jest.fn();
 
@@ -54,7 +54,7 @@ beforeEach(() => {
     pointValueInRupees: 1, redeemMaxPercent: 20, minRedeemPoints: 100,
   });
   mockCouponUserUsageRepo.findByCouponUser.mockResolvedValue(null);
-  mockOrderRepo.countActiveByUser.mockResolvedValue(0);
+  mockOrderRepo.hasActiveOrder.mockResolvedValue(false);
   mockUserRepo.getKarma.mockResolvedValue({ karmaPoints: 0 });
 });
 

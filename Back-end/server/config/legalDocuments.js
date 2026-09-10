@@ -48,11 +48,27 @@ export const LEGAL_DOCUMENTS = Object.freeze({
     label: 'Privacy Policy',
     version: '2025-12-09',
   }),
+  /*
+    Affiliate programme terms. Versioned for the same reason as the others: an affiliate
+    accepts a commission rate, a payout cycle, a TDS disclosure and a termination clause,
+    and if any of those is ever disputed we have to be able to show WHICH text they
+    agreed to. The acceptance is recorded on the Affiliate document at application time
+    (Affiliate.termsAcceptance), stamped by the server — a client that could name its own
+    version could choose which contract to be bound by.
+  */
+  affiliateTerms: Object.freeze({
+    key: 'affiliateTerms',
+    path: '/affiliates/terms',
+    label: 'Affiliate Programme Terms',
+    version: '2026-09-09',
+  }),
 });
 
 /** Version strings the server stamps onto an order at creation. */
 export const CURRENT_TERMS_VERSION = LEGAL_DOCUMENTS.terms.version;
 export const CURRENT_PRIVACY_VERSION = LEGAL_DOCUMENTS.privacy.version;
+/** Stamped onto an Affiliate when they submit an application. */
+export const CURRENT_AFFILIATE_TERMS_VERSION = LEGAL_DOCUMENTS.affiliateTerms.version;
 
 /** How an acceptance came to be recorded. */
 export const ACCEPTANCE_CHANNELS = Object.freeze({

@@ -17,6 +17,10 @@ const DISALLOW = [
   '/cart',
   '/checkout',
   '/profile',
+  // Signed-in customer area. Listed in middleware.ts PROTECTED_ROUTES but, unlike
+  // /profile and /orders, it was never disallowed here — a pre-existing gap, closed
+  // now that /account/affiliate puts an affiliate's earnings behind it.
+  '/account',
   '/order',
   '/orders',
   // The customer's own ticket list — private, and never in the sitemap.

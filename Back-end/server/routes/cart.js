@@ -2,7 +2,7 @@ import express from "express";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import pricingService, { effectivePrice, resolveVariant } from "../services/pricingService.js";
+import pricingService, { effectivePrice, resolveVariant, REJECTED_AFFILIATE_NO_DISCOUNT } from "../services/pricingService.js";
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
 import { STOCK_STATUS, isPurchasable } from "../utils/stockStatus.js";
 import { serializeCart } from "../utils/cartSerializer.js";
@@ -598,7 +598,8 @@ router.put("/coupon", asyncHandler(async (req, res) => {
 
   // Guests have no identity, so coupons gated on firstOrderOnly / usageLimitPerUser
   // are rejected here with REASON.LOGIN rather than appearing to apply and then
-  // failing at order creation.
+  // failing at order creation. (An affiliate code a signed-in buyer has already used is
+  // handled further down — remembered, not rejected.)
   /*
     `variantId` is REQUIRED for a variable product — priceItems resolves the SELECTED
     variant and throws outright for a line without one, because the parent's price must
@@ -619,14 +620,35 @@ router.put("/coupon", asyncHandler(async (req, res) => {
     userId: req.user?.id || null
   });
 
-  if (quote.couponError) {
+  /*
+    ⚠️ ONE refusal is not a failure to apply: `affiliate_no_discount`.
+
+    The buyer typed a real affiliate code and had already spent their one discount from
+    it. Rejecting here would strip the code from the cart, and the affiliate would then
+    lose the credit they earned for sending this buyer — the code is their identity tag,
+    not only a discount. So the code is REMEMBERED, checkout will let the order through
+    at full price (pricingService.assertCouponApplied), and attribution still runs.
+
+    The response carries `discountApplied: false` so the cart can say plainly that no
+    money came off, rather than showing a green "applied" beside an unchanged total.
+  */
+  const noDiscountForAffiliate = quote.couponErrorCode === REJECTED_AFFILIATE_NO_DISCOUNT;
+
+  if (quote.couponError && !noDiscountForAffiliate) {
     return res.status(400).json({ success: false, message: quote.couponError });
   }
 
   cart.couponCode = code;
   await cart.save();
 
-  res.json({ success: true, message: `${code} applied`, cart: serializeCart(cart), quote });
+  res.json({
+    success: true,
+    message: noDiscountForAffiliate ? quote.couponError : `${code} applied`,
+    discountApplied: !noDiscountForAffiliate,
+    couponErrorCode: quote.couponErrorCode ?? null,
+    cart: serializeCart(cart),
+    quote,
+  });
 }));
 
 // @route   DELETE /cart/coupon

@@ -1401,3 +1401,127 @@ export const spinPrizeEmail = ({ name, orderId, prize, company }) => {
 
   return { subject, text, html };
 };
+
+/**
+ * "Your affiliate application is approved."
+ *
+ * Carries the CODE and the LINK, because until this email lands an approved affiliate
+ * has no way to discover either — the sign-up page promises exactly this.
+ */
+export const affiliateApprovedEmail = ({
+  name, code, link, dashboardUrl, commissionPercent, repeatCommissionPercent, discountPercent,
+}) => {
+  const subject = 'You’re approved — here’s your affiliate code';
+
+  /*
+    State the repeat rate plainly whenever it differs from the headline one. An affiliate
+    who discovers a lower rate from a payout statement rather than this email concludes
+    they were short-changed, and they are right to — the terms were never given to them.
+  */
+  const hasSeparateRepeatRate =
+    repeatCommissionPercent != null && repeatCommissionPercent !== commissionPercent;
+
+  /*
+    ⚠️ Only SCOPE the headline rate to new customers when a different repeat rate
+    actually exists. Saying "…on orders from customers who are new to Autobacs India"
+    and then never mentioning repeat customers reads as "repeat orders earn you nothing"
+    — the opposite of the truth when both rates are the same, and a reason for a good
+    affiliate to stop promoting you.
+  */
+  const terms = [
+    hasSeparateRepeatRate
+      ? `You earn ${commissionPercent}% of the goods value on orders from customers who are new to Autobacs India.`
+      : `You earn ${commissionPercent}% of the goods value on every order you bring in, new or returning customer.`,
+    hasSeparateRepeatRate
+      ? (repeatCommissionPercent > 0
+        ? `On orders from customers who have bought from us before, you earn ${repeatCommissionPercent}%.`
+        : 'Orders from customers who have bought from us before do not earn commission.')
+      : null,
+    discountPercent > 0
+      ? `Your code gives your audience ${discountPercent}% off their first order with it — one discount per customer.`
+      : null,
+    'Commission is confirmed once an order has been delivered and its return window has closed, then paid by bank transfer.',
+  ].filter(Boolean);
+
+  const text = [
+    `Hi ${name},`,
+    '',
+    'Your Autobacs India affiliate application has been approved.',
+    '',
+    `Your code: ${code}`,
+    `Your link:  ${link}`,
+    '',
+    ...terms,
+    '',
+    `Track your earnings: ${dashboardUrl}`,
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">
+      <h1 style="font-size:22px;margin:0 0 16px">You're approved</h1>
+      <p style="margin:0 0 16px">Hi ${escapeHtml(name)}, your Autobacs India affiliate application has been approved.</p>
+      <div style="background:#f6f6f6;border-radius:10px;padding:16px;margin:0 0 16px">
+        <p style="margin:0 0 8px;font-size:13px;color:#555">Your code</p>
+        <p style="margin:0 0 16px;font-family:ui-monospace,monospace;font-size:20px;font-weight:600">${escapeHtml(code)}</p>
+        <p style="margin:0 0 8px;font-size:13px;color:#555">Your link</p>
+        <p style="margin:0;font-family:ui-monospace,monospace;font-size:13px;word-break:break-all">${escapeHtml(link)}</p>
+      </div>
+      <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;line-height:1.6">
+        ${terms.map((t) => `<li>${escapeHtml(t)}</li>`).join('')}
+      </ul>
+      <a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">
+        Track your earnings
+      </a>
+    </div>`;
+
+  return { subject, text, html };
+};
+
+/**
+ * "We've sent your payout."
+ *
+ * Shows gross, TDS and net separately: an affiliate who sees only the net figure and a
+ * smaller number in their bank has no way to tell a deduction from an error.
+ */
+export const affiliatePayoutSentEmail = ({
+  name, grossRupees, tdsRupees, tdsPercent, netRupees, reference, accountLast4, commissionCount,
+}) => {
+  const money = (v) => `₹${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const subject = `Payout sent — ${money(netRupees)}`;
+
+  const rows = [
+    ['Commission earned', money(grossRupees)],
+    ...(tdsRupees > 0 ? [[`TDS (${tdsPercent}%)`, `− ${money(tdsRupees)}`]] : []),
+    ['Transferred', money(netRupees)],
+  ];
+
+  const text = [
+    `Hi ${name},`,
+    '',
+    `We've transferred your affiliate payout${commissionCount ? ` for ${commissionCount} order(s)` : ''}.`,
+    '',
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+    reference ? `Reference: ${reference}` : null,
+    accountLast4 ? `To account ending ${accountLast4}` : null,
+    '',
+    'Bank transfers usually settle within 1–2 working days.',
+  ].filter(Boolean).join('\n');
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">
+      <h1 style="font-size:22px;margin:0 0 16px">Payout sent</h1>
+      <p style="margin:0 0 16px">Hi ${escapeHtml(name)}, we've transferred your affiliate payout${commissionCount ? ` for ${commissionCount} order(s)` : ''}.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 16px">
+        ${rows.map(([k, v], i) => `
+          <tr style="${i === rows.length - 1 ? 'font-weight:600;border-top:1px solid #ddd' : ''}">
+            <td style="padding:8px 0">${escapeHtml(k)}</td>
+            <td style="padding:8px 0;text-align:right">${escapeHtml(v)}</td>
+          </tr>`).join('')}
+      </table>
+      ${reference ? `<p style="margin:0 0 4px;font-size:13px;color:#555">Reference: <span style="font-family:ui-monospace,monospace">${escapeHtml(reference)}</span></p>` : ''}
+      ${accountLast4 ? `<p style="margin:0 0 16px;font-size:13px;color:#555">To account ending ${escapeHtml(accountLast4)}</p>` : ''}
+      <p style="margin:0;font-size:13px;color:#555">Bank transfers usually settle within 1–2 working days.</p>
+    </div>`;
+
+  return { subject, text, html };
+};
