@@ -16,8 +16,9 @@ import {
 } from '../services/affiliateAttributionService.js';
 import Affiliate from '../models/Affiliate.js';
 import Coupon from '../models/Coupon.js';
+import Order from '../models/Order.js';
 import User from '../models/User.js';
-import { AFFILIATE_STATUS, ATTRIBUTION_SOURCE } from '../config/affiliate.js';
+import { AFFILIATE_STATUS, ATTRIBUTION_SOURCE, ATTRIBUTION_SOURCES } from '../config/affiliate.js';
 
 const oid = () => new mongoose.Types.ObjectId();
 
@@ -44,6 +45,31 @@ const seedAffiliate = async (overrides = {}) => {
   await affiliate.save();
   return { affiliate, coupon };
 };
+
+/**
+ * An order for this user, in whatever payment state the caller asks for.
+ *
+ * `hasActiveOrder` keys on `paymentStatus`, NOT `status` — a row alone is not a purchase.
+ */
+const seedOrder = (userId, overrides = {}) => Order.create({
+  user: userId,
+  items: [{ product: oid(), quantity: 1, price: 1000, name: 'Seat cover' }],
+  shippingAddress: {
+    fullName: 'A', addressLine1: 'x', city: 'Kochi', state: 'KL',
+    postalCode: '682001', country: 'India', phone: '9000000000',
+  },
+  subtotal: 1000,
+  shippingCost: 0,
+  tax: 0,
+  discount: 0,
+  totalAmount: 1000,
+  status: 'delivered',
+  paymentStatus: 'paid',
+  ...overrides,
+});
+
+/** A buyer who genuinely bought before. */
+const seedPriorOrder = (userId) => seedOrder(userId);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pure: cookie parsing. No DB.
@@ -378,5 +404,236 @@ describe('resolveAttribution — precedence', () => {
     await affiliate.save();
 
     expect(result.code).toBe('RAHUL10');
+  });
+});
+
+/*
+  ── TIER 2: a typed code that bought no discount ────────────────────────────────
+
+  The discount is capped at one per person, so a returning buyer who types the code
+  correctly saves nothing. Before this tier existed the two arrival routes disagreed
+  about that buyer: the tracking link paid the affiliate FULL commission, while typing
+  the code hard-400'd the checkout so no order existed at all. These tests pin the
+  agreement, and — just as importantly — pin that tier 2 did NOT become a way to credit
+  an affiliate by simply naming them in the request body.
+*/
+describe('resolveAttribution — a typed code that gave no discount', () => {
+  it('credits the affiliate, tagged `code` rather than `coupon`', async () => {
+    const { affiliate } = await seedAffiliate();
+
+    const result = await resolveAttribution({
+      appliedCouponCode: null,          // the coupon was refused: no discount was given
+      requestedCouponCode: 'RAHUL10',   // but the buyer deliberately named Rahul
+      buyer: { userId: oid() },
+    });
+
+    expect(String(result.affiliate)).toBe(String(affiliate._id));
+    expect(result.source).toBe(ATTRIBUTION_SOURCE.CODE);
+  });
+
+  /*
+    The misdirection this ordering prevents: the buyer named Rahul, so a stale cookie
+    naming Priya must not collect. Same rule as tier 1, and it has to hold on the limb
+    where the code earned nothing — otherwise "your code failed" silently becomes
+    "someone else got paid".
+  */
+  it('beats a different affiliate\'s cookie', async () => {
+    const { affiliate: rahul } = await seedAffiliate();
+    await seedAffiliate({ code: 'PRIYA10', name: 'Priya', email: 'priya@example.com', phone: '9000000001' });
+
+    const result = await resolveAttribution({
+      requestedCouponCode: 'RAHUL10',
+      cookieCode: 'PRIYA10',
+      buyer: { userId: oid() },
+    });
+
+    expect(String(result.affiliate)).toBe(String(rahul._id));
+    expect(result.source).toBe(ATTRIBUTION_SOURCE.CODE);
+  });
+
+  it('credits NOBODY for a suspended affiliate, and does not fall through to the cookie', async () => {
+    await seedAffiliate({ code: 'RAHUL10', status: AFFILIATE_STATUS.SUSPENDED });
+    await seedAffiliate({ code: 'PRIYA10', name: 'Priya', email: 'priya@example.com', phone: '9000000001' });
+
+    const result = await resolveAttribution({
+      requestedCouponCode: 'RAHUL10',
+      cookieCode: 'PRIYA10',
+      buyer: { userId: oid() },
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it('credits nobody when the affiliate types their own code', async () => {
+    const { affiliate } = await seedAffiliate();
+
+    const result = await resolveAttribution({
+      requestedCouponCode: 'RAHUL10',
+      buyer: { userId: oid(), email: affiliate.email },
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it('ignores a code that belongs to no affiliate, leaving the cookie its turn', async () => {
+    const { affiliate } = await seedAffiliate({ code: 'PRIYA10', name: 'Priya', email: 'priya@example.com', phone: '9000000001' });
+    await Coupon.create({ code: 'SALE20', type: 'percentage', value: 20 });
+
+    const result = await resolveAttribution({
+      requestedCouponCode: 'SALE20',
+      cookieCode: 'PRIYA10',
+      buyer: { userId: oid() },
+    });
+
+    expect(String(result.affiliate)).toBe(String(affiliate._id));
+    expect(result.source).toBe(ATTRIBUTION_SOURCE.LINK);
+  });
+
+  /*
+    The ordinary success case still reports `coupon`, not `code`. If the applied and
+    requested codes are the same string, tier 1 has already given the whole answer and
+    tier 2 must not re-run — the two tiers earn the same commission but mean very
+    different things on the payout report.
+  */
+  it('still reports `coupon` when the typed code DID price the cart', async () => {
+    await seedAffiliate();
+
+    const result = await resolveAttribution({
+      appliedCouponCode: 'RAHUL10',
+      requestedCouponCode: 'RAHUL10',
+      buyer: { userId: oid() },
+    });
+
+    expect(result.source).toBe(ATTRIBUTION_SOURCE.COUPON);
+  });
+});
+
+/*
+  ── THE RATE SPLIT ──────────────────────────────────────────────────────────────
+
+  A returning buyer was already ours; the affiliate reactivated them rather than
+  acquiring them. The rate is chosen at attribution time and SNAPSHOTTED, because
+  deriving it later would count the buyer's orders as they stand then — a number that
+  changes every time they buy again.
+*/
+describe('resolveAttribution — new-customer vs repeat rate', () => {
+  it('pays the full rate to a buyer who has never ordered', async () => {
+    await seedAffiliate({ commissionPercent: 10, repeatCommissionPercent: 2 });
+
+    const result = await resolveAttribution({ cookieCode: 'RAHUL10', buyer: { userId: oid() } });
+
+    expect(result.commissionPercent).toBe(10);
+    expect(result.newCustomer).toBe(true);
+  });
+
+  it('pays the repeat rate to a buyer who has ordered before', async () => {
+    await seedAffiliate({ commissionPercent: 10, repeatCommissionPercent: 2 });
+    const userId = oid();
+    await seedPriorOrder(userId);
+
+    const result = await resolveAttribution({ cookieCode: 'RAHUL10', buyer: { userId } });
+
+    expect(result.commissionPercent).toBe(2);
+    expect(result.newCustomer).toBe(false);
+  });
+
+  it('honours a deliberate 0% repeat rate rather than treating it as unset', async () => {
+    await seedAffiliate({ commissionPercent: 10, repeatCommissionPercent: 0 });
+    const userId = oid();
+    await seedPriorOrder(userId);
+
+    const result = await resolveAttribution({ cookieCode: 'RAHUL10', buyer: { userId } });
+
+    expect(result.commissionPercent).toBe(0);
+  });
+
+  /*
+    ⚠️ An affiliate approved before repeat rates existed agreed to ONE number. Paying
+    them less because a new field happens to be empty is a terms change they never
+    consented to, so the fallback is the full rate — NOT the configured default, which
+    belongs at approval time where an admin can see it.
+  */
+  it('falls back to the FULL rate when no repeat rate was ever agreed', async () => {
+    await seedAffiliate({ commissionPercent: 10 });   // repeatCommissionPercent unset
+    const userId = oid();
+    await seedPriorOrder(userId);
+
+    const result = await resolveAttribution({ cookieCode: 'RAHUL10', buyer: { userId } });
+
+    expect(result.commissionPercent).toBe(10);
+    expect(result.newCustomer).toBe(false);
+  });
+
+  it('applies the split on the typed-code limb too, not only the link', async () => {
+    await seedAffiliate({ commissionPercent: 10, repeatCommissionPercent: 2 });
+    const userId = oid();
+    await seedPriorOrder(userId);
+
+    const result = await resolveAttribution({
+      requestedCouponCode: 'RAHUL10',
+      buyer: { userId },
+    });
+
+    expect(result.source).toBe(ATTRIBUTION_SOURCE.CODE);
+    expect(result.commissionPercent).toBe(2);
+  });
+
+  /*
+    ⚠️ AN ORDER ROW IS NOT A PURCHASE, and getting this wrong underpays affiliates
+    systematically and invisibly.
+
+    This keyed on `status: { $nin: ['cancelled', 'failed'] }`, which was wrong twice:
+    `'failed'` is not a status value at all (migrated out of the enum, so the clause
+    excluded nothing), and `awaiting_payment` — the default state of a just-created
+    order — was NOT excluded. One dismissed Razorpay popup therefore left a permanent
+    row that made a genuinely new customer read as returning FOREVER: no first-order
+    discount for them, and the reactivation rate for the affiliate who actually won
+    them. Every one of these cases looked completely normal in the ledger.
+  */
+  it.each([
+    ['abandoned at the payment popup', { status: 'awaiting_payment', paymentStatus: 'pending' }],
+    ['payment attempt failed',          { status: 'awaiting_payment', paymentStatus: 'failed' }],
+    ['checkout expired',                { status: 'awaiting_payment', paymentStatus: 'expired' }],
+    ['cancelled before paying',         { status: 'cancelled', paymentStatus: 'cancelled' }],
+  ])('is still a NEW customer when their only prior order was %s', async (_label, state) => {
+    await seedAffiliate({ commissionPercent: 10, repeatCommissionPercent: 2 });
+    const userId = oid();
+    await seedOrder(userId, state);
+
+    const result = await resolveAttribution({ cookieCode: 'RAHUL10', buyer: { userId } });
+
+    expect(result.newCustomer).toBe(true);
+    expect(result.commissionPercent).toBe(10);
+  });
+
+  /*
+    The mirror image. A refund does not turn a customer back into a stranger — we took
+    their money and they know us, so the next sale is reactivation, not acquisition.
+  */
+  it.each([
+    ['paid',     'paid'],
+    ['refunded', 'refunded'],
+  ])('is a REPEAT customer when a prior order reached paymentStatus %s', async (_label, paymentStatus) => {
+    await seedAffiliate({ commissionPercent: 10, repeatCommissionPercent: 2 });
+    const userId = oid();
+    await seedOrder(userId, { paymentStatus });
+
+    const result = await resolveAttribution({ cookieCode: 'RAHUL10', buyer: { userId } });
+
+    expect(result.newCustomer).toBe(false);
+    expect(result.commissionPercent).toBe(2);
+  });
+});
+
+/*
+  Drift guard. Order.affiliate.source is a literal enum, matching every other enum in
+  that file, so adding a source to config/affiliate.js without adding it to the schema
+  would make Mongoose reject the very orders the new source exists to record — and only
+  at write time, in production.
+*/
+describe('attribution sources stay in step with the Order schema', () => {
+  it('every configured source is writable to Order.affiliate.source', () => {
+    const schemaEnum = Order.schema.path('affiliate.source').enumValues;
+    expect([...schemaEnum].sort()).toEqual([...ATTRIBUTION_SOURCES].sort());
   });
 });

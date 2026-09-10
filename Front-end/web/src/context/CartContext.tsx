@@ -108,7 +108,16 @@ interface CartContextType {
   updateQuantity: (productId: string, quantity: number, variantId?: string | null) => Promise<void>;
   clearCart: () => Promise<void>;
   refreshCart: () => Promise<void>;
-  applyCoupon: (code: string) => Promise<void>;
+  /**
+   * Applies a coupon and reports what the SERVER decided.
+   *
+   * `discountApplied: false` is a real 200: the buyer typed a valid affiliate code but
+   * had already spent their one discount from it. The code is remembered, the order will
+   * go through at full price, and the affiliate is still credited — so callers must not
+   * assume a resolved promise means money came off. Returning the outcome rather than
+   * `void` is what lets the cart say so instead of flashing a green "applied".
+   */
+  applyCoupon: (code: string) => Promise<{ discountApplied: boolean; message?: string }>;
   removeCoupon: () => Promise<void>;
 }
 
@@ -408,6 +417,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setError(null);
     const response: any = await apiClient.put(API_ENDPOINTS.CART_COUPON, { code });
     if (response.success) await refreshCart();
+    // Default TRUE: an older server that does not send the flag only ever returned 200
+    // when a discount really did apply, so absence means "applied" for it.
+    return {
+      discountApplied: response?.discountApplied !== false,
+      message: response?.message,
+    };
   };
 
   const removeCoupon = async () => {

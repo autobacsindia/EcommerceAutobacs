@@ -147,16 +147,31 @@ class OrderService {
     /*
       ── Affiliate attribution ───────────────────────────────────────────────────
       Resolved AFTER assertCouponApplied, so `appliedCode` is the code that genuinely
-      priced this cart. Passing the raw request body instead would let a buyer credit
-      an affiliate by typing a code the server rejected.
+      priced this cart and is distinguishable from the code the buyer merely typed.
+      Both are passed: they mean different things and earn different rates.
 
-      Resolved BEFORE the transaction opens: it only reads Affiliate/Coupon, never the
-      order, so it has no business holding the money transaction open — and a slow read
-      inside `withTransaction` is how a write set stays locked longer than it needs to.
+      The raw typed code is NOT trusted on its own — resolveAttribution re-reads the
+      coupon server-side and re-runs the active-affiliate and self-referral guards, so
+      naming an affiliate in the request body can never by itself credit one.
+
+      Resolved BEFORE the transaction opens: it reads Affiliate/Coupon and COUNTS this
+      buyer's prior orders, but writes nothing, so it has no business holding the money
+      transaction open — a slow read inside `withTransaction` is how a write set stays
+      locked longer than it needs to. Counting here also means the order being created
+      is not yet counted, so a genuine first order correctly reads as a new customer.
     */
     const affiliateAttribution = await resolveAttribution({
       cookieCode: orderData.affiliateRefCookie || null,
       appliedCouponCode: appliedCode,
+      /*
+        The code the buyer TYPED, whether or not it priced the cart. Needed because a
+        returning buyer has already spent their one discount from an affiliate's code,
+        so it refuses softly (see pricingService.assertCouponApplied) and `appliedCode`
+        is null — but they still deliberately named that affiliate, who is still paid.
+        Safe to pass raw: resolveAttribution re-reads the coupon and re-runs the active
+        and self-referral guards, so the body can name an affiliate but never credit one.
+      */
+      requestedCouponCode: couponCode,
       buyer: {
         userId,
         email: orderData.guestEmail || orderData.email,

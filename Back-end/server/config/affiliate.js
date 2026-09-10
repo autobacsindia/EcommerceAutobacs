@@ -49,13 +49,22 @@ export const ATTRIBUTING_STATUSES = Object.freeze([AFFILIATE_STATUS.ACTIVE]);
  * How a sale was attributed.
  *
  *   coupon — the buyer typed the affiliate's code, and it actually applied.
+ *   code   — the buyer typed the affiliate's code, and it gave them NO discount
+ *            (they had already used it). The affiliate is still credited: the code
+ *            is their identity tag, not only a discount mechanism.
  *   link   — the buyer arrived via `?ref=` and the cookie survived to checkout.
+ *
+ * ⚠️ `code` is deliberately NOT folded into `coupon`. They earn the same commission,
+ * but one gave the customer money off and the other did not — so they cost us very
+ * different amounts. Merging them would make the payout report unable to answer
+ * "what did this affiliate actually cost us", which is the question it exists for.
  *
  * Recorded on the order rather than derived later, because the cookie is gone by the
  * time anyone asks and the coupon can be edited.
  */
 export const ATTRIBUTION_SOURCE = Object.freeze({
   COUPON: 'coupon',
+  CODE: 'code',
   LINK: 'link',
 });
 
@@ -191,8 +200,38 @@ export const ATTRIBUTION_WINDOW_DAYS =
  */
 export const MIN_PAYOUT_RUPEES = intFromEnv('AFFILIATE_MIN_PAYOUT_RUPEES', 1000);
 
+/**
+ * Read a 0–100 percentage from the environment.
+ *
+ * ⚠️ NOT `intFromEnv`, and NOT `Number(x) || fallback`. Both treat 0 as absent —
+ * `intFromEnv` requires `parsed > 0`, and `||` swallows it — which is fine for a rate
+ * where zero is meaningless but WRONG for `DEFAULT_REPEAT_COMMISSION_PERCENT`, where
+ * `0` is the deliberate, supported way to say "pay nothing on repeat orders".
+ *
+ * Same class of bug as the `default: 0` trap documented on Affiliate.discountPercent:
+ * a legitimate zero being read as "unset" and silently replaced.
+ *
+ * Decimals are allowed — 2.5% is a plausible rate.
+ */
+const percentFromEnv = (name, fallback) => {
+  const raw = process.env[name];
+  if (raw === undefined || String(raw).trim() === '') return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100 ? parsed : fallback;
+};
+
 /** Default commission rate (%) applied to a newly approved affiliate. */
 export const DEFAULT_COMMISSION_PERCENT = Number(process.env.AFFILIATE_DEFAULT_COMMISSION_PERCENT) || 5;
+
+/**
+ * Default commission rate (%) on an order from a buyer who has ordered before.
+ *
+ * A returning buyer was already ours — the affiliate reactivated them rather than
+ * acquiring them, which is worth less. Lower by default, and `0` is a fully supported
+ * value meaning "no commission on repeat orders at all".
+ */
+export const DEFAULT_REPEAT_COMMISSION_PERCENT =
+  percentFromEnv('AFFILIATE_DEFAULT_REPEAT_COMMISSION_PERCENT', 2);
 
 /** Default buyer-facing discount (%) on the affiliate's managed coupon. */
 export const DEFAULT_DISCOUNT_PERCENT = Number(process.env.AFFILIATE_DEFAULT_DISCOUNT_PERCENT) || 5;
@@ -240,6 +279,7 @@ export default {
   ATTRIBUTION_WINDOW_DAYS,
   MIN_PAYOUT_RUPEES,
   DEFAULT_COMMISSION_PERCENT,
+  DEFAULT_REPEAT_COMMISSION_PERCENT,
   DEFAULT_DISCOUNT_PERCENT,
   STALE_PENDING_DAYS,
   MATURATION_BATCH_SIZE,

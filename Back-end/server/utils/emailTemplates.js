@@ -1409,14 +1409,36 @@ export const spinPrizeEmail = ({ name, orderId, prize, company }) => {
  * has no way to discover either — the sign-up page promises exactly this.
  */
 export const affiliateApprovedEmail = ({
-  name, code, link, dashboardUrl, commissionPercent, discountPercent, firstOrderOnly,
+  name, code, link, dashboardUrl, commissionPercent, repeatCommissionPercent, discountPercent,
 }) => {
   const subject = 'You’re approved — here’s your affiliate code';
 
+  /*
+    State the repeat rate plainly whenever it differs from the headline one. An affiliate
+    who discovers a lower rate from a payout statement rather than this email concludes
+    they were short-changed, and they are right to — the terms were never given to them.
+  */
+  const hasSeparateRepeatRate =
+    repeatCommissionPercent != null && repeatCommissionPercent !== commissionPercent;
+
+  /*
+    ⚠️ Only SCOPE the headline rate to new customers when a different repeat rate
+    actually exists. Saying "…on orders from customers who are new to Autobacs India"
+    and then never mentioning repeat customers reads as "repeat orders earn you nothing"
+    — the opposite of the truth when both rates are the same, and a reason for a good
+    affiliate to stop promoting you.
+  */
   const terms = [
-    `You earn ${commissionPercent}% of the goods value on orders you bring in.`,
+    hasSeparateRepeatRate
+      ? `You earn ${commissionPercent}% of the goods value on orders from customers who are new to Autobacs India.`
+      : `You earn ${commissionPercent}% of the goods value on every order you bring in, new or returning customer.`,
+    hasSeparateRepeatRate
+      ? (repeatCommissionPercent > 0
+        ? `On orders from customers who have bought from us before, you earn ${repeatCommissionPercent}%.`
+        : 'Orders from customers who have bought from us before do not earn commission.')
+      : null,
     discountPercent > 0
-      ? `Your code gives your audience ${discountPercent}% off${firstOrderOnly ? ' on their first order' : ''}.`
+      ? `Your code gives your audience ${discountPercent}% off their first order with it — one discount per customer.`
       : null,
     'Commission is confirmed once an order has been delivered and its return window has closed, then paid by bank transfer.',
   ].filter(Boolean);

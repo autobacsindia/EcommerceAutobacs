@@ -119,12 +119,24 @@ export default function AffiliateDashboardPage() {
 
   const summary = data?.summary ?? {};
 
+  /*
+    Do the two rates actually differ? Used in BOTH directions, because each phrasing is
+    misleading under the other condition:
+      - equal rates + "on orders from new customers"  → implies repeats earn nothing
+      - split rates + "on orders you bring in"        → overstates what repeats pay
+    An affiliate who learns their real rate from a payout statement instead of here
+    concludes they were short-changed. Mirrors utils/emailTemplates.js.
+  */
+  const hasSeparateRepeatRate = affiliate.repeatCommissionPercent != null
+    && affiliate.repeatCommissionPercent !== affiliate.commissionPercent;
+
   return (
     <main className="max-w-4xl mx-auto px-4 py-12 space-y-6">
       <header>
         <h1 className="text-3xl font-semibold text-gray-900">Affiliate dashboard</h1>
         <p className="mt-2 text-gray-600">
-          You earn {affiliate.commissionPercent}% of the goods value on orders you bring in.
+          You earn {affiliate.commissionPercent}% of the goods value on orders you bring in
+          {hasSeparateRepeatRate ? ' from customers who are new to us' : ''}.
           {affiliate.discountPercent > 0 && ` Your code gives them ${affiliate.discountPercent}% off.`}
         </p>
       </header>
@@ -152,8 +164,23 @@ export default function AffiliateDashboardPage() {
           A click on this link is remembered for {ATTRIBUTION_WINDOW_DAYS} days. Your code{' '}
           <strong className="font-mono">{affiliate.code}</strong> also works on its own —
           anyone can type it at checkout.
-          {affiliate.firstOrderOnly && ' It applies to a customer’s first order.'}
+          {affiliate.discountPercent > 0
+            && ' Each customer gets the discount once; after that your code still credits you, it just stops discounting.'}
         </p>
+        {/*
+          State the repeat rate here, not only in the approval email. An affiliate who
+          first learns of a lower rate from a payout statement concludes they were
+          short-changed — and they are right to, because nobody showed them the terms.
+        */}
+        {hasSeparateRepeatRate && (
+          <p className="mt-2 text-sm text-gray-600">
+            You earn <strong>{affiliate.commissionPercent}%</strong> on orders from customers
+            who are new to Autobacs India, and{' '}
+            {affiliate.repeatCommissionPercent! > 0
+              ? <><strong>{affiliate.repeatCommissionPercent}%</strong> when they have bought from us before.</>
+              : <>nothing when they have bought from us before.</>}
+          </p>
+        )}
       </section>
 
       {/* ── Earnings ───────────────────────────────────────────────────────── */}

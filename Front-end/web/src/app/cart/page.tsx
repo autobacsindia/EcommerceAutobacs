@@ -168,9 +168,23 @@ function CartPageContent() {
     setCouponBusy(true);
     setCouponError(null);
     try {
-      await applyCoupon(code);
+      const { discountApplied, message } = await applyCoupon(code);
       setCouponInput('');
-      toast.success(`${code} applied`);
+      /*
+        ⚠️ A resolved promise does NOT mean money came off.
+
+        A returning buyer who has already used their one discount from this affiliate
+        code gets a 200 with `discountApplied: false` — the code is kept and still
+        credits the affiliate, but the total is unchanged. A green "RAHUL10 applied"
+        there is a straightforward lie: the customer looks at an unmoved total and
+        either retries a code that is working exactly as intended, or assumes checkout
+        is broken. Say what actually happened instead.
+      */
+      if (discountApplied) {
+        toast.success(`${code} applied`);
+      } else {
+        toast(message || `${code} saved — no discount on this order`);
+      }
     } catch (err: any) {
       setCouponError(err?.message || 'Could not apply this coupon');
     } finally {
@@ -636,7 +650,26 @@ function CartPageContent() {
                 {/* A coupon valid at apply time can lapse (expiry, stock, cart edits). The
                     checkout re-quotes and order creation hard-fails on a now-invalid code. */}
                 {cart.couponCode && quote?.couponError && (
-                  <p className="text-red-400 text-xs font-display mt-1.5">{quote.couponError}</p>
+                  /*
+                    ⚠️ NOT red for 'affiliate_no_discount', and it must not be.
+
+                    That one means the customer typed a real referral code and had already
+                    used their one discount from it. Nothing is broken and there is nothing
+                    for them to fix — the order goes through at full price and the affiliate
+                    is still credited. A red error would push them to keep retrying a code
+                    that is working exactly as intended, or to abandon the cart believing
+                    checkout is failing. Every other refusal stays red: those are things the
+                    customer either can fix or must know about.
+                  */
+                  quote.couponErrorCode === 'affiliate_no_discount' ? (
+                    <p className="text-white/50 text-xs font-display mt-1.5">
+                      {quote.couponError} — no discount on this order, but{' '}
+                      <strong className="font-mono">{cart.couponCode}</strong> still credits
+                      whoever referred you.
+                    </p>
+                  ) : (
+                    <p className="text-red-400 text-xs font-display mt-1.5">{quote.couponError}</p>
+                  )
                 )}
               </div>
             </div>

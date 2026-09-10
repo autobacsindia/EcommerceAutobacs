@@ -194,6 +194,26 @@ const AffiliateSchema = new mongoose.Schema(
     },
 
     /**
+     * What we pay when the BUYER HAS ORDERED FROM US BEFORE.
+     *
+     * "Before" means before Autobacs, not before this affiliate. A returning buyer was
+     * already ours: the affiliate reactivated them rather than acquiring them, and
+     * reactivation is worth less than acquisition. This is the "new customer" rate split
+     * every major affiliate network supports, and it is what makes paying on repeat
+     * orders affordable instead of a silent leak.
+     *
+     * ⚠️ NO SCHEMA DEFAULT, for exactly the reason spelled out on `discountPercent`
+     * below: approval fills the configured default only when the value `== null`, so a
+     * schema default would make an admin's deliberate 0% unreachable — and 0 is the
+     * supported way to say "pay nothing on repeat orders".
+     *
+     * ⚠️ Like `commissionPercent`, this is SNAPSHOTTED onto the order at creation and
+     * the ledger reads the snapshot. Which of the two rates applied is recorded in
+     * `Order.affiliate.newCustomer`.
+     */
+    repeatCommissionPercent: { type: Number, min: 0, max: 100 },
+
+    /**
      * What the BUYER gets, as a percentage off. Mirrored onto the managed coupon's
      * `value` — this field is the affiliate-admin's view of it, the coupon is the money.
      *
@@ -212,16 +232,28 @@ const AffiliateSchema = new mongoose.Schema(
      */
     discountPercent: { type: Number, min: 0, max: 100 },
 
-    /**
-     * Restrict the managed coupon to a buyer's first paid order.
+    /*
+     * ⚠️ `firstOrderOnly` USED TO LIVE HERE. Deliberately removed — do not reintroduce it.
      *
-     * Defaults ON. Repeat-customer harvesting — earning commission on people who were
-     * going to buy anyway — is the largest silent leak in a referral program, and it is
-     * invisible in the numbers because those orders look exactly like real referrals.
-     * Mirrored onto Coupon.firstOrderOnly, which already exists and is already enforced
-     * by pricingService; nothing new evaluates it.
+     * It restricted the managed coupon to buyers who had never ordered from Autobacs at
+     * all, and it was the wrong tool twice over:
+     *
+     *   1. Its admin label said "only PAY on a customer's first order", but it only ever
+     *      gated the COUPON. Commission accrual reads Order.affiliate and never looked at
+     *      it, so a returning buyer arriving by tracking link earned the affiliate full
+     *      commission while the customer got no discount — and typing the code instead
+     *      hard-400'd the checkout outright. The two paths disagreed.
+     *   2. It blocked affiliates from winning back a lapsed customer with a discount,
+     *      which is real revenue.
+     *
+     * Both halves now live where they belong:
+     *   - DISCOUNT: once per person, per code — the managed coupon's `usageLimitPerUser: 1`,
+     *     enforced by the existing unique {coupon, user} index.
+     *   - COMMISSION: `commissionPercent` vs `repeatCommissionPercent` above.
+     *
+     * `Coupon.firstOrderOnly` still exists and is still honoured for ORDINARY coupons.
+     * It is only affiliate-managed coupons that stopped using it.
      */
-    firstOrderOnly: { type: Boolean, default: true },
 
     /**
      * The Coupon this affiliate manages. Created when the application is approved, in

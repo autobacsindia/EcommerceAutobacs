@@ -14,7 +14,12 @@ import affiliatePayoutService from '../services/affiliatePayoutService.js';
 import affiliatePayoutRepository from '../repositories/affiliatePayoutRepository.js';
 import AppError from '../utils/AppError.js';
 import crypto from 'crypto';
-import { STALE_PENDING_DAYS } from '../config/affiliate.js';
+import {
+  STALE_PENDING_DAYS,
+  DEFAULT_COMMISSION_PERCENT,
+  DEFAULT_REPEAT_COMMISSION_PERCENT,
+  DEFAULT_DISCOUNT_PERCENT,
+} from '../config/affiliate.js';
 
 const cursorFrom = (value) => (value ? new Date(value) : null);
 
@@ -85,7 +90,23 @@ export const getAffiliate = asyncHandler(async (req, res) => {
     affiliateCommissionRepository.payableBalancePaise(affiliate._id),
   ]);
 
-  res.json({ success: true, affiliate, summary, payableBalancePaise });
+  /*
+    The configured defaults, so the approval screen can SHOW the admin the rates they
+    are about to agree to instead of hardcoding its own guesses. These are money terms:
+    an admin approving someone must see the number, and a UI-side constant silently
+    drifting from the server's config is how they would stop matching.
+  */
+  res.json({
+    success: true,
+    affiliate,
+    summary,
+    payableBalancePaise,
+    defaults: {
+      commissionPercent: DEFAULT_COMMISSION_PERCENT,
+      repeatCommissionPercent: DEFAULT_REPEAT_COMMISSION_PERCENT,
+      discountPercent: DEFAULT_DISCOUNT_PERCENT,
+    },
+  });
 });
 
 /**
@@ -97,8 +118,8 @@ export const approveAffiliate = asyncHandler(async (req, res) => {
   const affiliate = await affiliateService.approve(req.params.id, {
     code: req.body.code,
     commissionPercent: req.body.commissionPercent,
+    repeatCommissionPercent: req.body.repeatCommissionPercent,
     discountPercent: req.body.discountPercent,
-    firstOrderOnly: req.body.firstOrderOnly,
     adminId: req.user._id,
   });
 

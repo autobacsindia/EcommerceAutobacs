@@ -48,6 +48,63 @@ describe('emailAffiliateApproved', () => {
     expect(text).toContain('10%');
   });
 
+  /*
+    ── THE TERMS HAVE TO BE STATED, AND STATED ACCURATELY ────────────────────────
+
+    This email is where an affiliate learns what they will be paid. Getting the wording
+    wrong is not cosmetic: an affiliate who discovers a rate from a payout statement
+    that this email never mentioned concludes they were short-changed, and they are
+    right to. Both branches are pinned because each is misleading under the other's
+    condition.
+  */
+  describe('the commission terms it states', () => {
+    it('names BOTH rates when they differ', async () => {
+      const affiliate = await makeAffiliate({ commissionPercent: 10, repeatCommissionPercent: 2 });
+
+      await emailAffiliateApproved(affiliate._id);
+
+      const [{ text }] = sendSpy.mock.calls[0];
+      expect(text).toMatch(/10%.*new to Autobacs India/s);
+      expect(text).toMatch(/2%/);
+      expect(text).toMatch(/bought from us before/i);
+    });
+
+    it('says repeats earn NOTHING only when the repeat rate really is 0', async () => {
+      const affiliate = await makeAffiliate({ commissionPercent: 10, repeatCommissionPercent: 0 });
+
+      await emailAffiliateApproved(affiliate._id);
+
+      const [{ text }] = sendSpy.mock.calls[0];
+      expect(text).toMatch(/do not earn commission/i);
+    });
+
+    /*
+      ⚠️ THE REGRESSION. When both rates are the same there is no split to explain — but
+      scoping the headline rate to "customers who are new to Autobacs India" and then
+      never mentioning repeat customers reads as "repeat orders earn you nothing", which
+      is the exact opposite of the truth here.
+    */
+    it('does NOT scope the rate to new customers when both rates are equal', async () => {
+      const affiliate = await makeAffiliate({ commissionPercent: 10, repeatCommissionPercent: 10 });
+
+      await emailAffiliateApproved(affiliate._id);
+
+      const [{ text }] = sendSpy.mock.calls[0];
+      expect(text).toMatch(/every order you bring in, new or returning/i);
+      expect(text).not.toMatch(/new to Autobacs India/);
+    });
+
+    it('does not scope it when no repeat rate was ever agreed either', async () => {
+      const affiliate = await makeAffiliate({ commissionPercent: 10 });
+
+      await emailAffiliateApproved(affiliate._id);
+
+      const [{ text }] = sendSpy.mock.calls[0];
+      expect(text).toMatch(/every order you bring in, new or returning/i);
+      expect(text).not.toMatch(/new to Autobacs India/);
+    });
+  });
+
   it('sends exactly once across a retry', async () => {
     const affiliate = await makeAffiliate();
 

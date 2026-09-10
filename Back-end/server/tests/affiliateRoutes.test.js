@@ -399,7 +399,7 @@ describe('Affiliate API', () => {
   // ── Approval ────────────────────────────────────────────────────────────────
 
   describe('approval mints the managed coupon', () => {
-    it('creates a hidden, first-order-only percentage coupon matching the affiliate', async () => {
+    it('creates a hidden, once-per-person percentage coupon matching the affiliate', async () => {
       const affiliate = await createActiveAffiliate();
 
       expect(affiliate.status).toBe(AFFILIATE_STATUS.ACTIVE);
@@ -412,8 +412,19 @@ describe('Affiliate API', () => {
       // Hidden: a listed code is harvested by coupon sites within days, and every one
       // of those redemptions would pay commission on a sale nobody referred.
       expect(coupon.visibility).toBe('hidden');
-      // Defaults ON — repeat-customer harvesting is the biggest silent leak.
-      expect(coupon.firstOrderOnly).toBe(true);
+      /*
+        THE DISCOUNT RULE: one per person, per code. Rides the existing unique
+        {coupon, user} index, which is what makes it hold under two concurrent
+        checkouts rather than merely usually holding.
+      */
+      expect(coupon.usageLimitPerUser).toBe(1);
+      /*
+        ⚠️ NOT firstOrderOnly, and this assertion is the guard against reintroducing it.
+        It blocked anyone who had ever bought from Autobacs — so an affiliate could not
+        win back a lapsed customer — while gating only the coupon, leaving commission to
+        be paid anyway through the tracking link. See models/Affiliate.js.
+      */
+      expect(coupon.firstOrderOnly).toBe(false);
       expect(coupon.isActive).toBe(true);
       expect(String(coupon.affiliate)).toBe(String(affiliate._id));
     });

@@ -79,6 +79,24 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
                 {quote.appliedCoupon.code} applied
               </span>
             </div>
+          ) : quote?.couponErrorCode === 'affiliate_no_discount' ? (
+            /*
+              ⚠️ NOT an error, and it must not look like one here of all places.
+
+              The buyer typed a real referral code and had already spent their one
+              discount from it. Order creation ALLOWS this (see
+              pricingService.assertCouponApplied) — the sale goes through at full price
+              and the affiliate is still credited. Showing red at the final step, beside
+              a "go back and edit" link, tells the customer their payment is about to
+              fail when it is not. That is how you lose a completed checkout to a
+              cosmetic warning.
+            */
+            <div className="bg-white/5 border border-hairline rounded-sm px-3 py-2">
+              <p className="text-ink-muted text-xs font-display">
+                <span className="font-bold uppercase tracking-wide">{appliedCode}</span>
+                {' '}— no discount on this order, but it still credits whoever referred you.
+              </p>
+            </div>
           ) : quote?.couponError ? (
             // Valid when applied on the cart, no longer valid now. Order creation would
             // hard-fail, so say so here and send them back rather than fail at payment.

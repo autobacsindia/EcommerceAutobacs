@@ -21,8 +21,8 @@ export interface MyAffiliate {
   name: string;
   status: 'pending' | 'active' | 'suspended' | 'rejected';
   commissionPercent: number;
+  repeatCommissionPercent: number | null;
   discountPercent: number;
-  firstOrderOnly: boolean;
   payoutDetails?: { accountLast4?: string; ifsc?: string; upiId?: string };
 }
 

@@ -67,6 +67,21 @@ class CouponRejected extends Error {
 /** Refusals a campaign coupon can raise; see CouponRejected's `code`. */
 const REJECTED_CAMPAIGN = 'campaign';
 
+/**
+ * The buyer typed a valid AFFILIATE code, but they have already had their one discount
+ * from it. The discount is refused; the affiliate is still credited.
+ *
+ * ⚠️ This code is what makes the refusal SOFT. `assertCouponApplied` lets the order
+ * through on it, and affiliateAttributionService still credits the affiliate at their
+ * repeat rate. Every other refusal stays a hard 400 — a typo must never be silently
+ * swallowed, or the buyer completes checkout believing they got money off.
+ *
+ * Emitted for the per-user cap (the live rule) and for `firstOrderOnly` (the rule
+ * affiliate coupons used before the one-per-person migration; a coupon still carrying
+ * it between deploy and migration must behave the same way).
+ */
+export const REJECTED_AFFILIATE_NO_DISCOUNT = 'affiliate_no_discount';
+
 /*
   effectivePrice now lives in utils/productPrice.js and is re-exported here.
 
@@ -383,17 +398,35 @@ class PricingService {
       if (!userId) throw new CouponRejected(REASON.LOGIN);
     }
     if (coupon.firstOrderOnly) {
-      const priorOrders = await orderRepository.countActiveByUser(userId, session);
-      if (priorOrders > 0) throw new CouponRejected(REASON.FIRST_ORDER);
+      const hasPriorOrder = await orderRepository.hasActiveOrder(userId, session);
+      if (hasPriorOrder) {
+        // An affiliate coupon still carrying the legacy flag refuses SOFTLY — see
+        // REJECTED_AFFILIATE_NO_DISCOUNT. Ordinary coupons keep the hard refusal.
+        throw new CouponRejected(
+          REASON.FIRST_ORDER,
+          coupon.affiliate ? REJECTED_AFFILIATE_NO_DISCOUNT : null,
+        );
+      }
     }
     if (coupon.usageLimitPerUser != null) {
       const usage = await couponUserUsageRepository.findByCouponUser(coupon._id, userId, session);
       if (usage && usage.count >= coupon.usageLimitPerUser) {
-        // Campaign wording for a campaign coupon — "offer", not "coupon", since the
-        // buyer never typed a code; it was applied for them.
+        /*
+          Three different refusals share this branch, and the machine code is what tells
+          them apart downstream:
+            - a campaign coupon  → 'campaign', so the cart quietly drops it
+            - an affiliate coupon → 'affiliate_no_discount', SOFT: the order proceeds
+              without the discount and the affiliate is still credited
+            - anything else      → no code, hard 400 as before
+          Campaign wording says "offer", not "coupon", since the buyer never typed a
+          code; it was applied for them.
+        */
+        if (coupon.campaign) {
+          throw new CouponRejected(CAMPAIGN_REASON.ALREADY_USED, REJECTED_CAMPAIGN);
+        }
         throw new CouponRejected(
-          coupon.campaign ? CAMPAIGN_REASON.ALREADY_USED : REASON.PER_USER,
-          coupon.campaign ? REJECTED_CAMPAIGN : null,
+          REASON.PER_USER,
+          coupon.affiliate ? REJECTED_AFFILIATE_NO_DISCOUNT : null,
         );
       }
     }
@@ -658,11 +691,26 @@ class PricingService {
     };
   }
 
-  /** Checkout guard: turn a reported coupon rejection into a hard 400. */
+  /**
+   * Checkout guard: turn a reported coupon rejection into a hard 400.
+   *
+   * ⚠️ ONE EXEMPTION, and it must stay exactly one.
+   *
+   * `affiliate_no_discount` means the buyer typed a real affiliate code and had already
+   * spent their one discount from it. Blocking the sale there helps nobody: the customer
+   * cannot fix it by editing their cart, and before this exemption existed they got an
+   * error, had to delete the code, and retry — while the very same buyer arriving on the
+   * affiliate's LINK sailed through and earned that affiliate full commission. The order
+   * proceeds at full price and affiliateAttributionService still credits the affiliate.
+   *
+   * Everything else — invalid, expired, out of scope, below minimum — stays a hard 400.
+   * A mistyped code that silently did nothing would let someone complete checkout
+   * believing they had a discount they never got.
+   */
   assertCouponApplied(quote, couponCode) {
-    if (couponCode && String(couponCode).trim() && quote.couponError) {
-      throw new AppError(quote.couponError, 400);
-    }
+    if (!couponCode || !String(couponCode).trim() || !quote.couponError) return;
+    if (quote.couponErrorCode === REJECTED_AFFILIATE_NO_DISCOUNT) return;
+    throw new AppError(quote.couponError, 400);
   }
 }
 

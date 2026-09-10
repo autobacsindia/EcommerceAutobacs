@@ -29,6 +29,7 @@ import {
   AFFILIATE_STATUS,
   CODE_REGEX,
   DEFAULT_COMMISSION_PERCENT,
+  DEFAULT_REPEAT_COMMISSION_PERCENT,
   DEFAULT_DISCOUNT_PERCENT,
 } from '../config/affiliate.js';
 
@@ -220,7 +221,9 @@ class AffiliateService {
    * duplicate code the whole thing aborts and the affiliate stays pending — which is
    * recoverable — rather than going live with a code that discounts nothing.
    */
-  async approve(affiliateId, { code, commissionPercent, discountPercent, firstOrderOnly, adminId } = {}) {
+  async approve(affiliateId, {
+    code, commissionPercent, repeatCommissionPercent, discountPercent, adminId,
+  } = {}) {
     const session = await mongoose.startSession();
     try {
       let result;
@@ -235,8 +238,10 @@ class AffiliateService {
         }
 
         if (commissionPercent !== undefined) affiliate.commissionPercent = commissionPercent;
+        if (repeatCommissionPercent !== undefined) {
+          affiliate.repeatCommissionPercent = repeatCommissionPercent;
+        }
         if (discountPercent !== undefined) affiliate.discountPercent = discountPercent;
-        if (firstOrderOnly !== undefined) affiliate.firstOrderOnly = firstOrderOnly;
 
         /*
           `== null`, NOT a falsy check. `0` is a legitimate, deliberate value for both
@@ -247,6 +252,16 @@ class AffiliateService {
         */
         if (affiliate.commissionPercent == null) {
           affiliate.commissionPercent = DEFAULT_COMMISSION_PERCENT;
+        }
+        /*
+          Same `== null` rule, and it matters more here: `0` is the SUPPORTED way to say
+          "pay nothing on repeat orders". Filling the configured default happens only at
+          approval, where an admin is looking at the number — never as a runtime fallback
+          in attribution, which honours the full rate instead so an affiliate approved
+          before repeat rates existed is not quietly paid less than they agreed to.
+        */
+        if (affiliate.repeatCommissionPercent == null) {
+          affiliate.repeatCommissionPercent = DEFAULT_REPEAT_COMMISSION_PERCENT;
         }
         if (affiliate.discountPercent == null) {
           affiliate.discountPercent = DEFAULT_DISCOUNT_PERCENT;
@@ -262,8 +277,15 @@ class AffiliateService {
             listed publicly is a code harvested by coupon-extension sites within days,
             and every one of those redemptions would pay commission on a sale the
             affiliate did nothing to bring.
-          - `firstOrderOnly` mirrors the affiliate's setting (default on) — the existing
-            Coupon field, already enforced by pricingService. Nothing new evaluates it.
+          - `usageLimitPerUser: 1` is the discount rule: ONE per person, per code, ever.
+            It rides the existing unique {coupon, user} index, which is what makes it
+            hold under two concurrent checkouts rather than merely usually holding.
+          - `firstOrderOnly: false`, deliberately. It used to be the rule here and was
+            the wrong tool: it blocked anyone who had ever bought from Autobacs, so an
+            affiliate could not win back a lapsed customer, and it gated only the coupon
+            while commission was paid anyway via the tracking link. The per-person cap
+            replaces it; the rate split (commissionPercent vs repeatCommissionPercent)
+            handles what it was mislabelled as doing. See models/Affiliate.js.
           - `type: 'percentage'`. An affiliate has one flat buyer discount; a cart-value
             tier ladder is what the Campaign engine is for, and building a second one
             here would give us two things to keep in step.
@@ -275,7 +297,8 @@ class AffiliateService {
             type: 'percentage',
             value: affiliate.discountPercent,
             visibility: 'hidden',
-            firstOrderOnly: affiliate.firstOrderOnly,
+            firstOrderOnly: false,
+            usageLimitPerUser: 1,
             affiliate: affiliate._id,
             isActive: affiliate.discountPercent > 0,
           },
@@ -416,12 +439,17 @@ class AffiliateService {
    * Change commercial terms.
    *
    * The buyer discount is mirrored onto the coupon in the same transaction — that is
-   * the whole point of the coupon being "managed". The commission rate is NOT mirrored
-   * anywhere: it is snapshotted per order at creation, so changing it here affects
+   * the whole point of the coupon being "managed". NEITHER commission rate is mirrored
+   * anywhere: both are snapshotted per order at creation, so changing them here affects
    * future orders only. Retroactively repricing settled orders is precisely what the
    * snapshot exists to prevent.
+   *
+   * The discount RULE is not editable — it is one per person, per code, for every
+   * affiliate. Only the discount's size is a term. See approve().
    */
-  async updateTerms(affiliateId, { commissionPercent, discountPercent, firstOrderOnly, notes, tdsPercent } = {}) {
+  async updateTerms(affiliateId, {
+    commissionPercent, repeatCommissionPercent, discountPercent, notes, tdsPercent,
+  } = {}) {
     const session = await mongoose.startSession();
     try {
       let result;
@@ -430,18 +458,19 @@ class AffiliateService {
         if (!affiliate) throw new AppError('Affiliate not found', 404);
 
         if (commissionPercent !== undefined) affiliate.commissionPercent = commissionPercent;
+        if (repeatCommissionPercent !== undefined) {
+          affiliate.repeatCommissionPercent = repeatCommissionPercent;
+        }
         if (discountPercent !== undefined) affiliate.discountPercent = discountPercent;
-        if (firstOrderOnly !== undefined) affiliate.firstOrderOnly = firstOrderOnly;
         if (notes !== undefined) affiliate.notes = notes;
         if (tdsPercent !== undefined) affiliate.tdsPercent = tdsPercent;
         await affiliate.save({ session });
 
-        if (affiliate.coupon && (discountPercent !== undefined || firstOrderOnly !== undefined)) {
+        if (affiliate.coupon && discountPercent !== undefined) {
           await affiliateRepository.syncCouponTerms(
             affiliate.coupon,
             {
               value: affiliate.discountPercent,
-              firstOrderOnly: affiliate.firstOrderOnly,
               // A 0% discount would otherwise leave an active coupon that applies
               // nothing — the buyer types the code, sees "applied", and saves ₹0.
               isActive:

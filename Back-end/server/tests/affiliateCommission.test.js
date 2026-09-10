@@ -208,6 +208,95 @@ describe('accrueForOrder', () => {
   });
 });
 
+/*
+  ── THE REPEAT-RATE ORDER ────────────────────────────────────────────────────────
+
+  A returning buyer who typed the code gets NO discount, so the order carries
+  `source: 'code'`, `discount: 0`, and the affiliate's lower reactivation rate. The
+  ledger reads all three off the ORDER's snapshot and never the live affiliate, which is
+  what keeps this arithmetic stable when the affiliate's terms change later.
+
+  Note the direction that surprises people: a zero discount makes the base LARGER, so a
+  repeat order at 2% can out-earn a discounted first order at 10% on the same cart. That
+  is correct — commission is a share of revenue — but it is worth pinning so nobody
+  "fixes" it later.
+*/
+describe('accrueForOrder — an order that got no discount', () => {
+  /** ₹3,000 of goods, no discount, credited to the typed code at the repeat rate. */
+  const makeRepeatOrder = (overrides = {}) => makeOrder({
+    discount: 0,
+    totalAmount: 3100,
+    affiliate: {
+      affiliate: affiliate._id,
+      code: 'RAHUL10',
+      source: 'code',
+      commissionPercent: 2,
+      newCustomer: false,
+      attributedAt: new Date(),
+    },
+    ...overrides,
+  });
+
+  it('commissions the full goods value at the snapshotted repeat rate', async () => {
+    const order = await makeRepeatOrder();
+
+    await affiliateCommissionService.accrueForOrder(order._id);
+
+    const row = await affiliateCommissionRepository.findAccrual(order._id);
+    // No discount, so the base is the whole ₹3,000 — 2% = ₹60 = 6,000 paise.
+    expect(row.basePaise).toBe(300000);
+    expect(row.percent).toBe(2);
+    expect(row.amountPaise).toBe(6000);
+    expect(row.source).toBe('code');
+  });
+
+  /*
+    ⚠️ The rate must come off the order, not the affiliate. Raising Rahul's headline rate
+    tomorrow must not silently reprice a repeat order settled today — the same reason an
+    order snapshots its own prices and titles.
+  */
+  it('ignores a later change to the affiliate\'s live rates', async () => {
+    const order = await makeRepeatOrder();
+
+    affiliate.commissionPercent = 40;
+    affiliate.repeatCommissionPercent = 30;
+    await affiliate.save();
+
+    await affiliateCommissionService.accrueForOrder(order._id);
+
+    const row = await affiliateCommissionRepository.findAccrual(order._id);
+    expect(row.percent).toBe(2);
+    expect(row.amountPaise).toBe(6000);
+  });
+
+  it('still creates exactly ONE row when the webhook is replayed', async () => {
+    const order = await makeRepeatOrder();
+
+    await affiliateCommissionService.accrueForOrder(order._id);
+    await affiliateCommissionService.accrueForOrder(order._id);
+
+    expect(await AffiliateCommission.countDocuments({
+      order: order._id, type: COMMISSION_TYPE.ACCRUAL,
+    })).toBe(1);
+  });
+
+  /*
+    Clawback measures against the same pot the accrual did, so a refunded repeat order
+    recovers to the paise. A zero discount is the case most likely to break a proration
+    that assumes one — hence pinning it here rather than only on the discounted fixture.
+  */
+  it('claws back exactly, leaving nothing outstanding', async () => {
+    const order = await makeRepeatOrder();
+    await affiliateCommissionService.accrueForOrder(order._id);
+
+    await affiliateCommissionService.clawbackForOrder(order._id, 'order_refunded');
+
+    const rows = await AffiliateCommission.find({ order: order._id });
+    const net = rows.reduce((sum, r) => sum + r.amountPaise, 0);
+    expect(net).toBe(0);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 describe('maturityDateFor — the payable date', () => {
   it('is delivery + the return window', async () => {

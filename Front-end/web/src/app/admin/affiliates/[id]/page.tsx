@@ -35,8 +35,8 @@ interface Affiliate {
   notes?: string;
   status: 'pending' | 'active' | 'suspended' | 'rejected';
   commissionPercent: number;
+  repeatCommissionPercent: number | null;
   discountPercent: number | null;
-  firstOrderOnly: boolean;
   tdsPercent: number;
   payoutDetails?: PayoutDetails;
   coupon?: { code: string; value: number; isActive: boolean; usedCount: number } | null;
@@ -51,7 +51,30 @@ interface DetailResponse {
   affiliate: Affiliate;
   summary: Record<string, { netPaise: number; count: number }>;
   payableBalancePaise: number;
+  /** Server-configured starting rates. Never hardcode these here — they are money. */
+  defaults?: {
+    commissionPercent: number;
+    repeatCommissionPercent: number;
+    discountPercent: number;
+  };
 }
+
+/*
+  ⚠️ A BLANK RATE FIELD MEANS "DON'T TOUCH IT", NOT ZERO.
+
+  `Number('')` is 0, so sending a cleared field straight through would silently agree
+  to "no commission on repeat orders" — and for an affiliate approved before repeat
+  rates existed, whose stored value is deliberately unset, it would replace the backend's
+  full-rate fallback with a number nobody chose. Both are terms changes made by accident.
+
+  So: omit the key entirely when the field is blank. `undefined` values are dropped from
+  the JSON body, and the backend's `!== undefined` guards then leave the stored value
+  exactly as it was.
+*/
+const optionalPercent = (v: string): number | undefined => {
+  const trimmed = v.trim();
+  return trimmed === '' ? undefined : Number(trimmed);
+};
 
 const rupees = (paise: number) =>
   `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -69,7 +92,9 @@ export default function AdminAffiliateDetailPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [terms, setTerms] = useState({ commissionPercent: '', discountPercent: '', tdsPercent: '', firstOrderOnly: true });
+  const [terms, setTerms] = useState({
+    commissionPercent: '', repeatCommissionPercent: '', discountPercent: '', tdsPercent: '',
+  });
   const [approveCode, setApproveCode] = useState('');
   const [bank, setBank] = useState({ accountHolderName: '', accountNumber: '', ifsc: '', upiId: '', panNumber: '' });
 
@@ -80,13 +105,31 @@ export default function AdminAffiliateDetailPage() {
       setData(res);
       setTerms({
         commissionPercent: String(res.affiliate.commissionPercent ?? ''),
-        // Empty until approval decides it — the schema has no default, so "unset" and
-        // "deliberately 0" stay distinguishable. Pre-fill a sensible starting point.
+        /*
+          `== null` checks, NOT `||`. The schema has no default for either, so "unset"
+          and "deliberately 0" stay distinguishable — and 0 is a real answer for both (a
+          link-only affiliate gives no discount; a repeat rate of 0 means no commission
+          on returning customers). A falsy test would overwrite that considered zero
+          with the placeholder every time the page loaded.
+
+          ⚠️ An UNSET repeat rate stays BLANK for an already-approved affiliate — it is
+          not pre-filled. Blank is the honest rendering of the backend's deliberate
+          fallback ("no reduction was ever agreed, so pay the full rate"), and filling
+          the box would turn that into a stored 2% the moment the admin saved any other
+          field. A pending application gets the configured default instead, because
+          approval is exactly where these terms are decided.
+
+          Defaults come from the SERVER (see getAffiliate), never a constant here.
+        */
+        repeatCommissionPercent: res.affiliate.repeatCommissionPercent == null
+          ? (res.affiliate.status === 'pending'
+            ? String(res.defaults?.repeatCommissionPercent ?? '')
+            : '')
+          : String(res.affiliate.repeatCommissionPercent),
         discountPercent: res.affiliate.discountPercent == null
-          ? '5'
+          ? String(res.defaults?.discountPercent ?? '')
           : String(res.affiliate.discountPercent),
         tdsPercent: String(res.affiliate.tdsPercent ?? 0),
-        firstOrderOnly: res.affiliate.firstOrderOnly,
       });
       setError(null);
     } catch (err) {
@@ -222,7 +265,20 @@ export default function AdminAffiliateDetailPage() {
               <input id="approveCommission" className={input} type="number" min={0} max={100} step="0.1"
                 value={terms.commissionPercent}
                 onChange={(e) => setTerms((t) => ({ ...t, commissionPercent: e.target.value }))} />
-              <p className="mt-1 text-xs text-gray-500">What we pay them.</p>
+              <p className="mt-1 text-xs text-gray-500">
+                What we pay on an order from someone new to Autobacs.
+              </p>
+            </div>
+            <div>
+              <label className={label} htmlFor="approveRepeat">Repeat commission %</label>
+              <input id="approveRepeat" className={input} type="number" min={0} max={100} step="0.1"
+                value={terms.repeatCommissionPercent}
+                onChange={(e) => setTerms((t) => ({ ...t, repeatCommissionPercent: e.target.value }))} />
+              <p className="mt-1 text-xs text-gray-500">
+                What we pay when the buyer has ordered before. They were already ours, so
+                this is reactivation, not acquisition. <strong>0</strong> means no
+                commission on repeats.
+              </p>
             </div>
             <div>
               <label className={label} htmlFor="approveDiscount">Buyer discount % *</label>
@@ -247,18 +303,18 @@ export default function AdminAffiliateDetailPage() {
             </div>
           </div>
 
-          <label className="flex items-center gap-2 mt-4 text-sm">
-            <input type="checkbox" checked={terms.firstOrderOnly}
-              onChange={(e) => setTerms((t) => ({ ...t, firstOrderOnly: e.target.checked }))} />
-            Only pay on a customer&apos;s first order
-          </label>
+          <p className="mt-4 text-xs text-gray-500">
+            Their code gives each customer one discount, once — never twice, whether or
+            not that customer has bought from us before.
+          </p>
 
           <button
             disabled={busy || terms.commissionPercent === '' || terms.discountPercent === ''}
             onClick={() => run(() => apiClient.post(API_ENDPOINTS.AFFILIATE_ADMIN_APPROVE(id), {
               commissionPercent: Number(terms.commissionPercent),
+              // Blank → omitted → approve() fills the server's configured default.
+              repeatCommissionPercent: optionalPercent(terms.repeatCommissionPercent),
               discountPercent: Number(terms.discountPercent),
-              firstOrderOnly: terms.firstOrderOnly,
               ...(approveCode.trim() ? { code: approveCode.trim() } : {}),
             }))}
             className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
@@ -318,14 +374,27 @@ export default function AdminAffiliateDetailPage() {
       {a.status !== 'pending' && (
       <div className={card}>
         <h2 className="font-semibold mb-4">Commercial terms</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label className={label} htmlFor="commissionPercent">Commission %</label>
+            <label className={label} htmlFor="commissionPercent">Commission % (new customer)</label>
             <input
               id="commissionPercent" className={input} type="number" min={0} max={100} step="0.1"
               value={terms.commissionPercent}
               onChange={(e) => setTerms((t) => ({ ...t, commissionPercent: e.target.value }))}
             />
+            <p className="mt-1 text-xs text-gray-500">Buyer has never ordered from us.</p>
+          </div>
+          <div>
+            <label className={label} htmlFor="repeatCommissionPercent">Commission % (repeat)</label>
+            <input
+              id="repeatCommissionPercent" className={input} type="number" min={0} max={100} step="0.1"
+              value={terms.repeatCommissionPercent}
+              onChange={(e) => setTerms((t) => ({ ...t, repeatCommissionPercent: e.target.value }))}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Buyer has ordered before. <strong>0</strong> = nothing on repeats.
+              Leave <strong>blank</strong> to keep paying the full rate on repeat orders.
+            </p>
           </div>
           <div>
             <label className={label} htmlFor="discountPercent">Buyer discount %</label>
@@ -346,26 +415,21 @@ export default function AdminAffiliateDetailPage() {
           </div>
         </div>
 
-        <label className="flex items-center gap-2 mt-4 text-sm">
-          <input
-            type="checkbox"
-            checked={terms.firstOrderOnly}
-            onChange={(e) => setTerms((t) => ({ ...t, firstOrderOnly: e.target.checked }))}
-          />
-          Only pay on a customer&apos;s first order
-        </label>
-        <p className="mt-1 text-xs text-gray-500">
-          Recommended. Without it you pay commission on repeat customers who would have
-          bought anyway — the biggest and least visible leak in a referral programme.
+        <p className="mt-4 text-xs text-gray-500">
+          Their code gives each customer one discount, once. A returning customer who
+          uses it again pays full price, and this affiliate still earns the repeat rate —
+          the code credits them whether or not it saved the customer anything.
         </p>
 
         <button
           disabled={busy}
           onClick={() => run(() => apiClient.patch(API_ENDPOINTS.AFFILIATE_ADMIN_TERMS(id), {
             commissionPercent: Number(terms.commissionPercent),
+            // Blank → omitted → the stored value is left exactly as it was, so saving
+            // an unrelated term (a TDS change, say) cannot write a rate by accident.
+            repeatCommissionPercent: optionalPercent(terms.repeatCommissionPercent),
             discountPercent: Number(terms.discountPercent),
             tdsPercent: Number(terms.tdsPercent),
-            firstOrderOnly: terms.firstOrderOnly,
           }))}
           className="mt-5 px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50"
         >

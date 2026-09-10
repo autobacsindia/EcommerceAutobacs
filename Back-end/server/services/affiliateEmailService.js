@@ -70,8 +70,8 @@ export const emailAffiliateApproved = (affiliateId, { appUrl } = {}) =>
         link: `${base}/?ref=${affiliate.code}`,
         dashboardUrl: `${base}/account/affiliate`,
         commissionPercent: affiliate.commissionPercent,
+        repeatCommissionPercent: affiliate.repeatCommissionPercent,
         discountPercent: affiliate.discountPercent,
-        firstOrderOnly: affiliate.firstOrderOnly,
       }),
     };
   });

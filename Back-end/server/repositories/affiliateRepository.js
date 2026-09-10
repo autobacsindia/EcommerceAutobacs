@@ -105,11 +105,17 @@ class AffiliateRepository extends BaseRepository {
     return res.modifiedCount === 1;
   }
 
-  /** Mirror the affiliate's buyer-facing terms onto its managed coupon. */
-  async syncCouponTerms(couponId, { value, firstOrderOnly, isActive }, session = null) {
+  /**
+   * Mirror the affiliate's buyer-facing terms onto its managed coupon.
+   *
+   * Only the discount's SIZE and active flag are terms. The discount RULE — one per
+   * person, per code — is fixed for every affiliate and set at creation, so this
+   * deliberately does not touch `usageLimitPerUser` or `firstOrderOnly`.
+   */
+  async syncCouponTerms(couponId, { value, isActive }, session = null) {
     const res = await Coupon.updateOne(
       { _id: couponId },
-      { $set: { value, firstOrderOnly, isActive } },
+      { $set: { value, isActive } },
       session ? { session } : {},
     );
     return res.modifiedCount === 1;

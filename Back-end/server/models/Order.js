@@ -63,8 +63,21 @@ const OrderSchema = new mongoose.Schema({
   affiliate: {
     affiliate: { type: mongoose.Schema.Types.ObjectId, ref: "Affiliate" },
     code: { type: String, maxlength: 24 },           // snapshot: survives a code rename
-    source: { type: String, enum: ["coupon", "link"] },
+    // Keep in step with ATTRIBUTION_SOURCES in config/affiliate.js — a literal here to
+    // match every other enum in this file. tests/affiliateAttribution.test.js asserts
+    // the two agree, so adding a source there without adding it here fails CI.
+    source: { type: String, enum: ["coupon", "code", "link"] },
     commissionPercent: { type: Number, min: 0, max: 100 },
+    /**
+     * TRUE when this buyer had never ordered from Autobacs before this order — i.e.
+     * `commissionPercent` above is the affiliate's acquisition rate rather than their
+     * (lower) reactivation rate.
+     *
+     * Snapshotted rather than derived, for the same reason as the rate itself: deriving
+     * it later means counting the buyer's orders as they are TODAY, which changes every
+     * time they buy again. The payout report needs what was true when we priced it.
+     */
+    newCustomer: { type: Boolean },
     attributedAt: { type: Date },
   },
 

@@ -143,17 +143,20 @@ export const validateAffiliateApprove = [
     .withMessage('Code must be 3–24 characters: A–Z, 0–9, - or _, starting alphanumeric'),
   body('commissionPercent').optional().isFloat({ min: 0, max: 100 })
     .withMessage('commissionPercent must be 0–100'),
+  body('repeatCommissionPercent').optional().isFloat({ min: 0, max: 100 })
+    .withMessage('repeatCommissionPercent must be 0–100'),
   body('discountPercent').optional().isFloat({ min: 0, max: 100 })
     .withMessage('discountPercent must be 0–100'),
-  body('firstOrderOnly').optional().isBoolean(),
 ];
 
 export const validateAffiliateTerms = [
   body('commissionPercent').optional().isFloat({ min: 0, max: 100 })
     .withMessage('commissionPercent must be 0–100'),
+  // 0 is meaningful here: "pay nothing on repeat orders". isFloat({min:0}) keeps it.
+  body('repeatCommissionPercent').optional().isFloat({ min: 0, max: 100 })
+    .withMessage('repeatCommissionPercent must be 0–100'),
   body('discountPercent').optional().isFloat({ min: 0, max: 100 })
     .withMessage('discountPercent must be 0–100'),
-  body('firstOrderOnly').optional().isBoolean(),
   // Recorded, never derived — see the note on Affiliate.tdsPercent.
   body('tdsPercent').optional().isFloat({ min: 0, max: 100 })
     .withMessage('tdsPercent must be 0–100'),
