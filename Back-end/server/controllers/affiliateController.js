@@ -7,7 +7,7 @@
  */
 
 import { asyncHandler } from '../middleware/errorMiddleware.js';
-import affiliateService from '../services/affiliateService.js';
+import affiliateService, { toSelfView } from '../services/affiliateService.js';
 import affiliateCommissionRepository from '../repositories/affiliateCommissionRepository.js';
 import affiliateRepository from '../repositories/affiliateRepository.js';
 import affiliatePayoutService from '../services/affiliatePayoutService.js';
@@ -240,7 +240,10 @@ export const getMyAffiliate = asyncHandler(async (req, res) => {
     affiliateCommissionRepository.payableBalancePaise(affiliate._id),
   ]);
 
-  res.json({ success: true, affiliate, summary, payableBalancePaise });
+  // Whitelisted projection, NOT the raw document: the schema's toJSON strips only the
+  // encrypted bank/PAN fields, so returning `affiliate` here leaked the admin-only
+  // `notes` and `termsAcceptance.ipHash`. See toSelfView.
+  res.json({ success: true, affiliate: toSelfView(affiliate), summary, payableBalancePaise });
 });
 
 /**

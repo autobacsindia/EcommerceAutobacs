@@ -727,6 +727,87 @@ describe('Affiliate API', () => {
       const res = await shopperAgent.get(`${BASE}/affiliates/me/commissions`);
       expect(res.status).toBe(403);
     });
+
+    /*
+      The response is a WHITELIST (affiliateService.toSelfView), not the raw document.
+
+      Returning the document leaked `notes` — the field the schema itself marks
+      "Internal admin notes. Never surfaced to the affiliate" — plus the terms
+      acceptance `ipHash`, because the schema's toJSON transform strips only the
+      encrypted bank/PAN fields. The frontend interface never declared them, so the
+      leak was invisible everywhere except the Network tab.
+    */
+    it('never surfaces admin-only fields to the affiliate themselves', async () => {
+      await shopperAgent.post(`${BASE}/affiliates/apply`)
+        .set('X-XSRF-TOKEN', shopperCsrf)
+        .send({ ...APPLICATION, email: shopper.email });
+      const created = await Affiliate.findOne({ email: shopper.email });
+
+      await Affiliate.updateOne(
+        { _id: created._id },
+        { $set: { notes: 'Haggled on rate. Watch for self-referral.', suspendedReason: 'internal' } },
+      );
+      await post(`/affiliates/admin/${created._id}/approve`, { commissionPercent: 10, discountPercent: 5 });
+
+      const res = await shopperAgent.get(`${BASE}/affiliates/me`);
+      expect(res.status).toBe(200);
+
+      const { affiliate } = res.body;
+      expect(affiliate).not.toHaveProperty('notes');
+      expect(affiliate).not.toHaveProperty('pitch');
+      expect(affiliate.termsAcceptance).not.toHaveProperty('ipHash');
+
+      // Assert on the serialised body too: a nested field can survive `toHaveProperty`
+      // checks on the parent and still be sitting in the JSON the browser receives.
+      expect(JSON.stringify(res.body)).not.toContain('Haggled on rate');
+
+      // Financial PII stays out whatever else changes.
+      expect(affiliate.payoutDetails).not.toHaveProperty('accountNumber');
+      expect(affiliate.payoutDetails).not.toHaveProperty('panNumber');
+
+      // ...and the fields the portal actually renders are still there.
+      expect(affiliate.code).toBeTruthy();
+      expect(affiliate.status).toBe('active');
+      expect(affiliate.commissionPercent).toBe(10);
+      expect(affiliate.discountPercent).toBe(5);
+      expect(affiliate.payoutDetails.accountLast4).toBeTruthy();
+      expect(affiliate.termsAcceptance.version).toBeTruthy();
+
+      /*
+        `suspendedReason` has to be asserted on a SUSPENDED affiliate.
+
+        Asserting it above was vacuous: affiliateService.approve() clears the field, so
+        the expectation passed even with the leak restored — it was guarding nothing.
+        Suspension is the only state in which the field holds anything, and the reason is
+        written for the admin audit trail, not as copy for the affiliate.
+      */
+      await post(`/affiliates/admin/${created._id}/suspend`, { reason: 'Suspected self-referral ring' });
+
+      const suspendedRes = await shopperAgent.get(`${BASE}/affiliates/me`);
+      expect(suspendedRes.body.affiliate.status).toBe('suspended');
+      expect(suspendedRes.body.affiliate).not.toHaveProperty('suspendedReason');
+      expect(JSON.stringify(suspendedRes.body)).not.toContain('self-referral ring');
+    });
+
+    /*
+      0 is a REACHABLE value for the repeat rate — it means "repeats earn nothing" —
+      so the projection must use `?? null`, never `|| null`. With `||` the dashboard
+      would silently fall back to the full-rate copy and promise a rate we do not pay.
+    */
+    it('preserves a deliberate repeat rate of 0', async () => {
+      await shopperAgent.post(`${BASE}/affiliates/apply`)
+        .set('X-XSRF-TOKEN', shopperCsrf)
+        .send({ ...APPLICATION, email: shopper.email });
+      const created = await Affiliate.findOne({ email: shopper.email });
+      await post(`/affiliates/admin/${created._id}/approve`, {
+        commissionPercent: 10,
+        repeatCommissionPercent: 0,
+        discountPercent: 5,
+      });
+
+      const res = await shopperAgent.get(`${BASE}/affiliates/me`);
+      expect(res.body.affiliate.repeatCommissionPercent).toBe(0);
+    });
   });
 
   // ── Listing ─────────────────────────────────────────────────────────────────

@@ -488,6 +488,10 @@ export const footer = {
         { label: 'About Us', href: '/about-us' },
         { label: 'Workshop Network', href: '/consultation' },
         { label: 'Become a Partner', href: '/contact' },
+        // The public half of the affiliate programme. The private dashboard
+        // (/account/affiliate) is reached from /profile, never from here — it is
+        // noindex and signed-in only.
+        { label: 'Affiliate Programme', href: '/affiliates' },
         { label: 'Careers', href: '/careers' },
         { label: 'Press', href: '/media' },
       ],

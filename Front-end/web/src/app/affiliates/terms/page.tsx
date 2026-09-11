@@ -24,10 +24,12 @@ export const generateMetadata = (): Promise<Metadata> =>
       'The terms of the Autobacs India affiliate programme — how commission is earned and paid, the payout cycle, tax deducted at source, and how the arrangement can be ended.',
   });
 
-const h2 = 'text-xl font-semibold text-gray-900 mt-10 mb-3';
-const h3 = 'text-base font-semibold text-gray-900 mt-6 mb-2';
-const p = 'text-gray-700 leading-relaxed mb-4';
-const ul = 'list-disc pl-6 space-y-2 text-gray-700 mb-4';
+// Storefront tokens, not the admin light palette — this prose sat in `text-gray-700`
+// over a body hard-set to #080808. See the note in app/account/affiliate/page.tsx.
+const h2 = 'text-xl font-display font-light text-ink tracking-[-0.01em] mt-10 mb-3';
+const h3 = 'text-base font-display font-bold text-gold uppercase tracking-widest mt-6 mb-2';
+const p = 'text-ink-muted font-display leading-relaxed mb-4';
+const ul = 'list-disc pl-6 space-y-2 text-ink-muted font-display mb-4';
 
 export default function AffiliateTermsPage() {
   const version = LEGAL_DOCUMENTS.affiliateTerms.version;
@@ -37,10 +39,14 @@ export default function AffiliateTermsPage() {
   const lastUpdated = formatLongDateIST(`${version}T00:00:00+05:30`);
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-12 md:py-16">
-      <header className="mb-8 pb-6 border-b border-gray-200">
-        <h1 className="text-3xl font-semibold text-gray-900">Affiliate Programme Terms</h1>
-        <p className="mt-2 text-sm text-gray-500">
+    <main className="min-h-screen bg-obsidian-deep">
+      <div className="max-w-3xl mx-auto px-4 py-12 md:py-16">
+      <header className="mb-8 pb-6 border-b border-hairline">
+        <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Legal</p>
+        <h1 className="mt-4 text-3xl font-display font-light text-ink tracking-[-0.01em]">
+          Affiliate Programme Terms
+        </h1>
+        <p className="mt-2 text-sm text-ink-muted font-display">
           Version {version} · Last updated {lastUpdated}
         </p>
       </header>
@@ -145,7 +151,7 @@ export default function AffiliateTermsPage() {
         to join. Where PAN is not available, a higher rate of deduction applies by law. We
         will provide the certificate of deduction you need to claim credit.
       </p>
-      <p className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-4">
+      <p className="text-sm text-ink-muted font-display bg-obsidian-raised border border-hairline rounded-sm px-4 py-3 mb-4">
         <strong>Note.</strong> The section, rate and threshold above reflect our present
         understanding and are being confirmed with our chartered accountant. They may be
         corrected. We will apply the rate our accountant advises, and will tell you the
@@ -172,7 +178,7 @@ export default function AffiliateTermsPage() {
         the last four digits of your account are shown. We use this information solely to
         pay you and to meet our tax obligations, and we do not share it with anyone other
         than our bank, our payment providers and the tax authorities. Our{' '}
-        <Link href="/privacy" className="underline">Privacy Policy</Link> applies. If your
+        <Link href="/privacy" className="text-gold hover:text-gold/80 underline">Privacy Policy</Link> applies. If your
         application is declined, we delete your PAN and bank details.
       </p>
 
@@ -213,19 +219,20 @@ export default function AffiliateTermsPage() {
       <h2 className={h2}>11. Governing law</h2>
       <p className={p}>
         These terms are governed by the laws of India. The dispute-resolution provisions in
-        our <Link href="/terms" className="underline">Terms and Conditions</Link> apply to
+        our <Link href="/terms" className="text-gold hover:text-gold/80 underline">Terms and Conditions</Link> apply to
         disputes under this agreement.
       </p>
 
       <h2 className={h2}>12. Contact</h2>
       <p className={p}>
         Questions about the programme:{' '}
-        <a href="mailto:info@autobacsindia.com" className="underline">info@autobacsindia.com</a>
+        <a href="mailto:info@autobacsindia.com" className="text-gold hover:text-gold/80 underline">info@autobacsindia.com</a>
       </p>
 
-      <div className="mt-12 pt-6 border-t border-gray-200">
-        <Link href="/affiliates" className="text-blue-600 hover:underline">← Back to the affiliate programme</Link>
+      <div className="mt-12 pt-6 border-t border-hairline">
+        <Link href="/affiliates" className="text-gold hover:text-gold/80 underline">← Back to the affiliate programme</Link>
       </div>
+    </div>
     </main>
   );
 }
