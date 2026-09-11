@@ -15,15 +15,29 @@ import { affiliateKeys } from './keys';
 
 export interface AffiliateSummaryEntry { netPaise: number; count: number }
 
+/**
+ * Mirrors `toSelfView` in Back-end/server/services/affiliateService.js EXACTLY.
+ *
+ * That function is a whitelist, so this type is the whole response — not a convenient
+ * subset of a larger document. Keep the two in step: an earlier version of this
+ * interface omitted fields the endpoint was in fact sending (the admin-only `notes`
+ * among them), and because TypeScript describes nothing about the wire, the leak was
+ * invisible here. A field absent from this type is now a field absent from the JSON.
+ */
 export interface MyAffiliate {
   _id: string;
-  code?: string;
+  /** Absent until approval — a pending application has no code yet. */
+  code: string | null;
   name: string;
   status: 'pending' | 'active' | 'suspended' | 'rejected';
   commissionPercent: number;
+  /** `null` means "no separate repeat rate"; `0` means repeats earn nothing. */
   repeatCommissionPercent: number | null;
   discountPercent: number;
-  payoutDetails?: { accountLast4?: string; ifsc?: string; upiId?: string };
+  approvedAt: string | null;
+  createdAt: string;
+  payoutDetails: { accountLast4: string | null; ifsc: string | null; upiId: string | null };
+  termsAcceptance: { version: string | null; acceptedAt: string | null };
 }
 
 export interface MyAffiliateResponse {

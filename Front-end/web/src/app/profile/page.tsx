@@ -13,6 +13,7 @@ import { profileKeys } from '@/hooks/queries/keys';
 import { Address } from '@/lib/types';
 import KarmaBadge from '@/components/profile/KarmaBadge';
 import RecentOrdersCard from '@/components/profile/RecentOrdersCard';
+import AffiliateCard from '@/components/profile/AffiliateCard';
 
 const inputClass = 'mt-1 block w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm p-2 focus:outline-none focus:border-gold font-display text-sm';
 const labelClass = 'block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1';
@@ -260,6 +261,9 @@ export default function ProfilePage() {
 
         {/* Recent orders — directly under the identity header */}
         <RecentOrdersCard />
+
+        {/* The ONLY in-app route to /account/affiliate. See the component header. */}
+        <AffiliateCard />
 
         {/* Addresses + account actions */}
         <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">

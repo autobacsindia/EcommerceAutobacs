@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, BadgeCheck, CheckCircle, Link2, Wallet } from 'lucide-react';
 import apiClient from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
+import { useMyAffiliate } from '@/hooks/queries/useAffiliate';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { GST_STATE_BY_CODE } from '@/lib/legal/buyerTypes';
 import { LEGAL_DOCUMENTS } from '@/lib/legal/legalVersions';
@@ -49,7 +51,17 @@ const EMPTY: FormState = {
   line1: '', line2: '', city: '', state: '', postalCode: '',
 };
 
-const STATES = Object.values(GST_STATE_BY_CODE).sort();
+/*
+  ⚠️ DEDUPE — the map is code→name, and two GST codes legitimately share a name:
+  28/37 are both "Andhra Pradesh" (28 is the pre-bifurcation code) and 26/DD are both
+  "Dadra and Nagar Haveli and Daman and Diu" (post-merger). Taking Object.values()
+  straight listed each of those TWICE in the dropdown and made React warn about
+  duplicate keys.
+
+  Fixed here rather than in buyerTypes.ts: the map itself is right, and its test asserts
+  the exact key set against the server's list. This is a display list derived from it.
+*/
+const STATES = [...new Set(Object.values(GST_STATE_BY_CODE))].sort();
 
 const STEPS = [
   {
@@ -69,14 +81,32 @@ const STEPS = [
   },
 ];
 
-const label = 'block text-sm font-medium text-gray-700 mb-1';
+/*
+  Storefront tokens (globals.css @theme), not the admin light palette.
+
+  This page shipped in `text-gray-700` on `border-gray-300` — over a body hard-set to
+  #080808. The inputs were partly rescued by the global `input {}` rules; the LABELS
+  and hints were not, so the form asked strangers for a PAN and a bank account in text
+  they could barely read. Mirrors the pairing in app/profile/page.tsx.
+*/
+const label = 'block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1';
 const input =
-  'w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900/10 focus:border-gray-400';
-const hint = 'mt-1 text-xs text-gray-500';
+  'w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-3 py-2 focus:outline-none focus:border-gold font-display text-sm';
+const hint = 'mt-1 text-xs text-ink-muted font-display';
 const section = 'mt-10';
-const sectionTitle = 'text-lg font-semibold text-gray-900';
+const sectionTitle = 'text-sm font-display font-bold text-gold uppercase tracking-widest';
+const primaryBtn =
+  'inline-flex items-center justify-center gap-2 px-5 py-3 rounded-sm bg-gold text-obsidian font-display font-bold uppercase tracking-widest text-sm hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed';
 
 export default function AffiliatesPage() {
+  /*
+    Gated on `isAuthenticated`: this page is public, and GET /affiliates/me is `protect`ed,
+    so firing it for anonymous visitors would 401 on every single view of the marketing
+    page. Signed-in visitors get the answer from cache if they have been to /profile.
+  */
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { data: existing, isPending: affiliatePending } = useMyAffiliate(isAuthenticated);
+
   const [form, setForm] = useState<FormState>(EMPTY);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -132,29 +162,114 @@ export default function AffiliatesPage() {
 
   if (submitted) {
     return (
-      <main className="max-w-2xl mx-auto px-4 py-20 text-center">
-        <CheckCircle className="w-14 h-14 mx-auto text-green-600" aria-hidden />
-        <h1 className="mt-6 text-3xl font-semibold text-gray-900">Application received</h1>
-        <p className="mt-3 text-gray-600">
-          We review every application by hand. If you are approved we will email you your
-          affiliate code and a link to your dashboard.
-        </p>
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 mt-8 px-5 py-3 rounded-lg bg-gray-900 text-white font-medium hover:bg-gray-800"
-        >
-          Back to the store <ArrowRight className="w-4 h-4" aria-hidden />
-        </Link>
+      <main className="min-h-screen bg-obsidian-deep px-4 py-20">
+        <div className="max-w-2xl mx-auto text-center">
+          <CheckCircle className="w-14 h-14 mx-auto text-gold" aria-hidden />
+          <h1 className="mt-6 text-3xl font-display font-light text-ink tracking-[-0.01em]">
+            Application received
+          </h1>
+          <p className="mt-3 text-ink-muted font-display">
+            We review every application by hand. If you are approved we will email you your
+            affiliate code and a link to your dashboard.
+          </p>
+          <Link href="/" className={`mt-8 ${primaryBtn}`}>
+            Back to the store <ArrowRight className="w-4 h-4" aria-hidden />
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  /*
+    Already in the programme — do not show them the application form again.
+
+    An approved affiliate landing here (from the footer, or a bookmark) previously saw a
+    blank form asking for the PAN and bank details they had already given us, with no
+    indication they were accepted. Re-submitting would have been refused as a duplicate
+    on `email`, with no explanation of why.
+
+    `pending` and `rejected` get a sentence and no link: the dashboard would only repeat
+    the same sentence behind a click. `suspended` DOES get the link — their ledger is
+    still there.
+  */
+  /*
+    ⚠️ Hold the render until we know, but ONLY for signed-in visitors.
+
+    `isPending` stays true forever on a DISABLED query, so gating on it alone would mean
+    an anonymous visitor — the overwhelming majority here — never sees the form at all.
+
+    Without the gate an approved affiliate arriving from the footer link gets a full flash
+    of the apply form (PAN, account number, IFSC) before it swaps away, discarding
+    anything they had begun typing. That is precisely the state this branch exists to
+    prevent, so rendering it first would be self-defeating.
+  */
+  if (authLoading || (isAuthenticated && affiliatePending)) {
+    return (
+      <main className="min-h-screen bg-obsidian-deep px-4 py-20">
+        <div className="max-w-2xl mx-auto text-center">
+          <div className="animate-spin rounded-full h-12 w-12 mx-auto border-b-2 border-gold" />
+          <span className="sr-only">Loading</span>
+        </div>
+      </main>
+    );
+  }
+
+  const affiliate = existing?.affiliate;
+  if (affiliate) {
+    const live = affiliate.status === 'active' || affiliate.status === 'suspended';
+    return (
+      <main className="min-h-screen bg-obsidian-deep px-4 py-20">
+        <div className="max-w-2xl mx-auto text-center">
+          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">
+            Affiliate Programme
+          </p>
+          <h1 className="mt-4 text-3xl font-display font-light text-ink tracking-[-0.01em]">
+            {affiliate.status === 'active' && 'You are already an affiliate'}
+            {affiliate.status === 'suspended' && 'Your affiliate account is paused'}
+            {affiliate.status === 'pending' && 'Your application is under review'}
+            {affiliate.status === 'rejected' && 'Your application was not accepted'}
+          </h1>
+          <p className="mt-3 text-ink-muted font-display">
+            {affiliate.status === 'active' && (
+              <>
+                Your code{' '}
+                <strong className="font-mono text-ink">{affiliate.code}</strong> is live.
+                Your link, earnings and referred orders are on your dashboard.
+              </>
+            )}
+            {affiliate.status === 'suspended'
+              && 'New referrals are not being credited. Your earnings so far are still listed on your dashboard.'}
+            {affiliate.status === 'pending'
+              && 'We review every application by hand. You will get an email once a decision is made.'}
+            {affiliate.status === 'rejected'
+              && 'Get in touch if you think circumstances have changed.'}
+          </p>
+          {live ? (
+            <Link href="/account/affiliate" className={`mt-8 ${primaryBtn}`}>
+              Open your dashboard <ArrowRight className="w-4 h-4" aria-hidden />
+            </Link>
+          ) : (
+            <Link
+              href="/support"
+              className="inline-block mt-8 font-display text-sm text-gold hover:text-gold/80"
+            >
+              Contact support
+            </Link>
+          )}
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="max-w-5xl mx-auto px-4 py-12 md:py-16">
+    <main className="min-h-screen bg-obsidian-deep">
+      <div className="max-w-5xl mx-auto px-4 py-12 md:py-16">
       <header className="max-w-2xl">
-        <p className="text-sm font-medium uppercase tracking-wide text-gray-500">Affiliate Program</p>
-        <h1 className="mt-2 text-4xl font-semibold text-gray-900">Get paid for what you already recommend</h1>
-        <p className="mt-4 text-lg text-gray-600">
+        <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Affiliate Programme</p>
+        <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-display font-light leading-[0.95] tracking-[-0.01em] text-ink">
+          Get paid for what you already recommend
+        </h1>
+        <p className="mt-6 text-lg text-ink-muted font-display">
           If you make car content, build them, or people ask you what to fit — share
           Autobacs India and earn a percentage of every order you bring in.
         </p>
@@ -162,17 +277,17 @@ export default function AffiliatesPage() {
 
       <section className="grid gap-6 md:grid-cols-3 mt-12" aria-label="How the programme works">
         {STEPS.map(({ icon: Icon, title, body }) => (
-          <div key={title} className="rounded-xl border border-gray-200 p-6">
-            <Icon className="w-6 h-6 text-gray-900" aria-hidden />
-            <h2 className="mt-4 font-semibold text-gray-900">{title}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-gray-600">{body}</p>
+          <div key={title} className="bg-obsidian border border-hairline rounded-lg p-6">
+            <Icon className="w-6 h-6 text-gold" aria-hidden />
+            <h2 className="mt-4 font-display font-light text-ink tracking-[-0.01em]">{title}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink-muted font-display">{body}</p>
           </div>
         ))}
       </section>
 
       <section className="mt-14 max-w-xl" aria-label="Application form">
-        <h2 className="text-2xl font-semibold text-gray-900">Apply</h2>
-        <p className="mt-2 text-sm text-gray-600">
+        <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">Apply</h2>
+        <p className="mt-2 text-sm text-ink-muted font-display">
           Applications are reviewed by a person. Commission and discount rates are agreed
           individually when you are approved.
         </p>
@@ -227,12 +342,12 @@ export default function AffiliatesPage() {
               from someone who has not been accepted yet reads like phishing unless the
               reason and the handling are stated plainly, right next to the fields.
             */}
-            <p className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
+            <p className="rounded-sm bg-obsidian-raised border border-hairline px-4 py-3 text-sm text-ink-muted font-display">
               We ask for these now so we can pay you without chasing paperwork later.
               Your PAN and account number are <strong>encrypted</strong> the moment they
-              reach us, are never shown back in full, and are <strong>deleted if your
+              reach us, are never shown back in full, and are <strong className="text-ink">deleted if your
               application is not approved</strong>. See our{' '}
-              <Link href="/privacy" className="underline">Privacy Policy</Link>.
+              <Link href="/privacy" className="text-gold hover:text-gold/80 underline">Privacy Policy</Link>.
             </p>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -276,7 +391,7 @@ export default function AffiliatesPage() {
           {/* ── Address ───────────────────────────────────────────────────── */}
           <fieldset className={`${section} space-y-4`}>
             <legend className={sectionTitle}>Address</legend>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-ink-muted font-display">
               Needed for GST place-of-supply if you ever cross the registration threshold.
             </p>
 
@@ -317,7 +432,7 @@ export default function AffiliatesPage() {
 
           {/* ── Terms ─────────────────────────────────────────────────────── */}
           <div className={section}>
-            <label className="flex items-start gap-3 text-sm text-gray-700">
+            <label className="flex items-start gap-3 text-sm text-ink-muted font-display">
               <input
                 type="checkbox"
                 className="mt-1 shrink-0"
@@ -327,7 +442,7 @@ export default function AffiliatesPage() {
               />
               <span>
                 I agree to the{' '}
-                <Link href="/affiliates/terms" target="_blank" className="underline font-medium">
+                <Link href="/affiliates/terms" target="_blank" className="text-gold hover:text-gold/80 underline">
                   Affiliate Programme Terms
                 </Link>{' '}
                 — including how commission is earned and paid, the monthly payout cycle,
@@ -339,21 +454,18 @@ export default function AffiliatesPage() {
           </div>
 
           {error && (
-            <p role="alert" className="mt-6 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <p role="alert" className="mt-6 text-sm font-display text-red-300 bg-red-500/10 border border-red-500/30 rounded-sm px-3 py-2">
               {error}
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={busy || !acceptTerms}
-            className="mt-6 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-gray-900 text-white font-medium hover:bg-gray-800 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
+          <button type="submit" disabled={busy || !acceptTerms} className={`mt-6 w-full ${primaryBtn}`}>
             {busy ? 'Sending…' : 'Apply to join'}
             {!busy && <ArrowRight className="w-4 h-4" aria-hidden />}
           </button>
         </form>
       </section>
+      </div>
     </main>
   );
 }

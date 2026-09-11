@@ -111,6 +111,7 @@
     "backfill-campaign-member-addresses": "node --import=dotenv/config scripts/backfill-campaign-member-addresses.js",
     "seed-spin-campaign": "node --import=dotenv/config scripts/seed-spin-campaign.js",
     "affiliate-test-drive": "node --import=dotenv/config scripts/affiliate-test-drive.js",
+    "affiliate-smoke-test": "node --import=dotenv/config scripts/affiliate-smoke-test.js",
     "rewrite-asset-urls": "node --import=dotenv/config scripts/rewrite-asset-urls.js"
   },
   "engines": {

@@ -7,10 +7,11 @@ import RedesignVehicleMenu from './RedesignVehicleMenu';
 import RedesignNavSearch from './RedesignNavSearch';
 import ProfileAvatar from './ProfileAvatar';
 import KarmaBadge from '@/components/profile/KarmaBadge';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Handshake } from 'lucide-react';
 import { Search, Heart, Cart, Menu, Close, UserIcon } from './icons';
 import { brand, navLinks } from './homeContent';
 import { useAuth } from '@/context/AuthContext';
+import { useMyAffiliate } from '@/hooks/queries/useAffiliate';
 import { loginHref } from '@/lib/utils';
 import { useCart } from '@/context/CartContext';
 
@@ -21,6 +22,19 @@ export default function RedesignNav() {
   const { itemCount } = useCart();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  /*
+    Affiliate-ness is DATA, not a role (there is no `affiliate` in User.role), so
+    deciding whether to show the row costs a request.
+
+    Gated on `menuOpen` so it costs NOTHING until someone actually opens the menu —
+    this nav mounts on every route, and the overwhelming majority of signed-in users
+    will never be affiliates. By the time it does fire, the answer is usually already
+    cached under `affiliateKeys.me()` from /profile or the dashboard itself.
+  */
+  const { data: affiliateData } = useMyAffiliate(menuOpen && isAuthenticated);
+  const affiliateStatus = affiliateData?.affiliate?.status;
+  const showAffiliateLink = affiliateStatus === 'active' || affiliateStatus === 'suspended';
 
   // Lock body scroll while the mobile menu is open.
   useEffect(() => {
@@ -190,6 +204,13 @@ export default function RedesignNav() {
             <Heart width={16} height={16} />
             Wishlist
           </Link>
+          {/* Suspended affiliates get the link too — their past earnings are still there. */}
+          {showAffiliateLink && (
+            <Link href="/account/affiliate" className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
+              <Handshake width={16} height={16} />
+              Affiliate Dashboard
+            </Link>
+          )}
         </div>
       )}
     </nav>

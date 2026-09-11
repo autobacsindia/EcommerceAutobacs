@@ -40,6 +40,58 @@ const APPLICATION_FIELDS = ['name', 'email', 'phone', 'website', 'pitch', 'gstin
 const PAYOUT_FIELDS = ['accountHolderName', 'accountNumber', 'ifsc'];
 
 /**
+ * Project an Affiliate for the affiliate's OWN eyes (`GET /affiliates/me`).
+ *
+ * ⚠️ A WHITELIST, DELIBERATELY — never a delete-list.
+ *
+ * The schema's `toJSON` transform strips only `payoutDetails.accountNumber` and
+ * `.panNumber`, so returning the document as-is shipped `notes` (explicitly marked
+ * "Internal admin notes. Never surfaced to the affiliate"), `suspendedReason` and
+ * `termsAcceptance.ipHash` straight to the browser. The frontend interface never
+ * declared them, which is exactly why nobody saw it — an undeclared field is still
+ * in the JSON, and DevTools shows it.
+ *
+ * A delete-list would have the same bug again the next time a field is added to the
+ * model. Under a whitelist a new admin-only field is invisible here until someone
+ * deliberately names it.
+ *
+ * `suspendedReason` is withheld on purpose: the reason is written for the admin
+ * audit trail, not as customer-facing copy, and "your account is paused, contact
+ * support" is what the portal says. Surface it only if it is ever rewritten to be
+ * read by the affiliate.
+ */
+const toSelfView = (affiliate) => {
+  if (!affiliate) return null;
+  const a = typeof affiliate.toObject === 'function' ? affiliate.toObject() : affiliate;
+  return {
+    _id: a._id,
+    code: a.code ?? null,
+    name: a.name,
+    status: a.status,
+    commissionPercent: a.commissionPercent,
+    // `?? null` on both, never `|| null`: 0 is a deliberate, reachable value for each
+    // (a repeat rate of 0 means repeats earn nothing) and `||` would erase it.
+    repeatCommissionPercent: a.repeatCommissionPercent ?? null,
+    discountPercent: a.discountPercent ?? 0,
+    approvedAt: a.approvedAt ?? null,
+    createdAt: a.createdAt,
+    // accountLast4/ifsc/upiId only. The full account number and the PAN are
+    // `select: false` on the schema and must never be named here.
+    payoutDetails: {
+      accountLast4: a.payoutDetails?.accountLast4 ?? null,
+      ifsc: a.payoutDetails?.ifsc ?? null,
+      upiId: a.payoutDetails?.upiId ?? null,
+    },
+    // Which contract they are bound by — theirs to see. `ipHash` is evidence held
+    // against a dispute, not information for them, so it stays out.
+    termsAcceptance: {
+      version: a.termsAcceptance?.version ?? null,
+      acceptedAt: a.termsAcceptance?.acceptedAt ?? null,
+    },
+  };
+};
+
+/**
  * Derive a candidate code from a name: "Rahul Nair" → "RAHULNAIR".
  *
  * Only a starting point — `mintUniqueCode` resolves collisions. Falls back to a random
@@ -546,4 +598,4 @@ class AffiliateService {
 }
 
 export default new AffiliateService();
-export { codeFromName, resolveCode };
+export { codeFromName, resolveCode, toSelfView };
