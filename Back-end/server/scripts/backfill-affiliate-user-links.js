@@ -23,13 +23,24 @@
  * person verifies. `/affiliates/me` tells them so.
  *
  * ── USAGE ────────────────────────────────────────────────────────────────────────
- *   node --import=dotenv/config scripts/backfill-affiliate-user-links.js          # dry run
- *   node --import=dotenv/config scripts/backfill-affiliate-user-links.js --apply \
- *     --confirm-cluster=autobacstest
+ * ⚠️ RUN LOCALLY, THIS TARGETS **PRODUCTION**. The committed .env's MONGODB_URI is the
+ * prod cluster, so `npm run backfill-affiliate-user-links` on your laptop reads prod.
+ * That is harmless in the default dry run — it writes nothing — but it is NOT the test
+ * cluster, and the host banner it prints is the only thing that tells you so. Read it.
+ *
+ *   # Dry run against PROD (read-only, safe):
+ *   npm run backfill-affiliate-user-links
+ *
+ *   # Dry run / apply against TEST — `railway run` injects that environment's URI:
+ *   railway run --environment test npm run backfill-affiliate-user-links
+ *   railway run --environment test npm run backfill-affiliate-user-links -- \
+ *     --apply --confirm-cluster=autobacstest
+ *
+ *   # Apply against PROD, deliberately:
+ *   npm run backfill-affiliate-user-links -- --apply --confirm-cluster=autobacs-prod
  *
  * Dry run by default. Writing requires --confirm-cluster=<substring of the host printed
- * above>, because this repo's committed .env points at PRODUCTION Mongo and "I ran it
- * locally" is not a safeguard.
+ * in the banner>, because "I ran it locally" is not a safeguard when local IS prod.
  *
  * ── ROLLBACK ─────────────────────────────────────────────────────────────────────
  * The script prints an unset command for exactly the ids it touched. Unlinking is safe:

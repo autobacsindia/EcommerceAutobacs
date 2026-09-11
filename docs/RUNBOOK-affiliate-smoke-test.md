@@ -192,10 +192,18 @@ db.affiliates.findOne({ email: '…' }).hasOwnProperty('user')   // must be FALS
       the same address *(only possible if A never registered — emails are unique)*.
       ✅ `Affiliate.user` still points at **A**. Re-assignment is an admin decision only.
 - [ ] **1.34 Backfill for pre-existing rows.**
+
+> ⚠️ **`npm run …` on your laptop reads PRODUCTION Mongo** — the committed `.env` points
+> there. Harmless in the default dry run, but it is *not* the test cluster. **Read the
+> host banner the script prints before doing anything else.** Use `railway run` to target
+> test.
+
 ```bash
 cd Back-end/server
-npm run backfill-affiliate-user-links                      # dry run, safe anywhere
-npm run backfill-affiliate-user-links -- --apply --confirm-cluster=autobacstest
+npm run backfill-affiliate-user-links                        # DRY RUN — against PROD
+railway run --environment test npm run backfill-affiliate-user-links
+railway run --environment test npm run backfill-affiliate-user-links -- \
+  --apply --confirm-cluster=autobacstest
 ```
       ✅ Dry run lists **LINKABLE** (verified) and **BLOCKED** (no account / unverified).
       ✅ BLOCKED rows are left alone — that is correct, not a failure.
