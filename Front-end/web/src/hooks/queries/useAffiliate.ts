@@ -45,6 +45,16 @@ export interface MyAffiliateResponse {
   affiliate: MyAffiliate | null;
   summary?: Record<string, AffiliateSummaryEntry>;
   payableBalancePaise?: number;
+  /**
+   * `affiliate: null` BUT an application exists under this account's email, unlinked,
+   * because the address is not verified yet.
+   *
+   * Deliberately just a boolean — the server will not send a code, a rate or an earnings
+   * figure to someone who has not proven they own the inbox. It exists so the UI can say
+   * "verify your email to unlock this" instead of the flatly false "you're not an
+   * affiliate yet", which sends them to re-apply into a duplicate-guard dead end.
+   */
+  needsEmailVerification?: boolean;
 }
 
 export interface Commission {

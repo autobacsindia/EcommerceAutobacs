@@ -695,6 +695,28 @@ router.get("/verify-email", verifyEmailRateLimit, validateTokenQuery, asyncHandl
 
   console.log(`[Auth] Email verified for user: ${user.email}`);
 
+  /*
+    Now that the address is PROVEN, adopt any affiliate application waiting under it.
+
+    An affiliate is often a creator who has never shopped with us, so the usual order is
+    apply-first, register-later — and `Affiliate.user` was written only at application
+    time with nothing to backfill it, which orphaned every signed-out applicant from
+    their own dashboard, ledger and payout history, permanently.
+
+    Verification is the ONLY event in this system that evidences control of an inbox
+    (login does not gate on isVerified), so it is the right and only place to do this.
+
+    Best-effort: a failure here must never fail the verification the user is waiting on.
+    The same link is retried at approval, and `scripts/backfill-affiliate-user-links.js`
+    sweeps up anything both paths missed.
+  */
+  try {
+    const { linkVerifiedUserToAffiliate } = await import('../services/affiliateService.js');
+    await linkVerifiedUserToAffiliate(user);
+  } catch (linkErr) {
+    console.error(`[Auth] Affiliate link after verification failed for ${user.email}:`, linkErr.message);
+  }
+
   // Now that the address is confirmed, send the one-time welcome email (non-blocking).
   void sendWelcomeOnce(user);
 

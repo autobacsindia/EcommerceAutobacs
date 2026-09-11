@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Handshake, ChevronRight } from 'lucide-react';
+import { Handshake, ChevronRight, MailWarning } from 'lucide-react';
 import { useMyAffiliate } from '@/hooks/queries/useAffiliate';
 
 /**
@@ -34,6 +34,41 @@ export default function AffiliateCard() {
 
   const shell = 'bg-obsidian border border-hairline rounded-lg p-6 mb-6';
   const heading = 'text-xs font-display font-bold text-ink-muted uppercase tracking-widest';
+
+  /*
+    ── Applied, but we cannot prove this inbox is theirs ────────────────────────
+    They applied from the public form while signed out, so the application was never
+    linked to an account. It may already be APPROVED and earning. We will not open the
+    ledger on an unverified address — that would hand an affiliate's earnings to whoever
+    registered the email first, since signing in proves nothing here.
+
+    This must come BEFORE the "not an affiliate" branch, which would otherwise tell them
+    something flatly untrue and send them to re-apply, where the duplicate guard refuses
+    them with no explanation. Verifying links it automatically.
+
+    No code, no rates, no earnings — the server sends a boolean and nothing else.
+  */
+  if (!affiliate && data.needsEmailVerification) {
+    return (
+      <div className={shell}>
+        <div className="flex items-start gap-3">
+          <MailWarning className="h-4 w-4 text-gold mt-0.5 shrink-0" aria-hidden />
+          <div className="min-w-0">
+            <h2 className={heading}>Affiliate Dashboard</h2>
+            <p className="mt-2 text-sm text-ink-muted font-display">
+              We found an affiliate application under this email.{' '}
+              <strong className="text-ink">Verify your email address</strong> and your
+              dashboard, earnings and referred orders will unlock automatically.
+            </p>
+            <p className="mt-2 text-xs text-ink-muted font-display">
+              Use the <strong className="text-ink">Resend Verification Email</strong>{' '}
+              button above if you no longer have the link.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── Not an affiliate: the ordinary case for almost everyone ──────────────────
   if (!affiliate) {

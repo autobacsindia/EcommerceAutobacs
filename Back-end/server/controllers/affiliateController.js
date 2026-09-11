@@ -230,9 +230,27 @@ export const listStalePendingCommissions = asyncHandler(async (req, res) => {
 export const getMyAffiliate = asyncHandler(async (req, res) => {
   const affiliate = await affiliateRepository.findByUser(req.user._id);
   if (!affiliate) {
-    // Not an error: "you are not an affiliate" is a perfectly normal answer, and a 404
-    // would make the portal page render an error state for every ordinary customer.
-    return res.json({ success: true, affiliate: null });
+    /*
+      Not an error: "you are not an affiliate" is a perfectly normal answer, and a 404
+      would make the portal page render an error state for every ordinary customer.
+
+      But it is the WRONG answer for one person: an applicant who applied while signed
+      out, from this same address, and has not verified it yet. Their application exists
+      and may already be approved; we simply cannot prove they own the inbox, so we will
+      not hand them the ledger. Telling them "you're not an affiliate yet" would be flatly
+      false and send them to re-apply, which the duplicate guard then refuses — a dead end
+      with no explanation.
+
+      `needsEmailVerification` is a BOOLEAN and nothing else. No code, no rates, no
+      earnings: this caller has not proven the address is theirs, so they get the one bit
+      that tells them what to do next and not a byte more. Scoped to `!isVerified` so a
+      verified user never triggers it — by then the link exists (routes/auth.js) or the
+      backfill script has repaired it.
+    */
+    const needsEmailVerification = !req.user.isVerified
+      && await affiliateRepository.hasUnlinkedApplicationForEmail(req.user.email);
+
+    return res.json({ success: true, affiliate: null, needsEmailVerification });
   }
 
   const [summary, payableBalancePaise] = await Promise.all([

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowRight, BadgeCheck, CheckCircle, Link2, Wallet } from 'lucide-react';
 import apiClient from '@/lib/api';
@@ -104,7 +104,7 @@ export default function AffiliatesPage() {
     so firing it for anonymous visitors would 401 on every single view of the marketing
     page. Signed-in visitors get the answer from cache if they have been to /profile.
   */
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const { data: existing, isPending: affiliatePending } = useMyAffiliate(isAuthenticated);
 
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -112,6 +112,30 @@ export default function AffiliatesPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+
+  /*
+    ⚠️ THE LINK BETWEEN AN APPLICATION AND AN ACCOUNT IS THE EMAIL. GET IT RIGHT HERE.
+
+    `Affiliate.user` is what the dashboard resolves by. A signed-in applicant who typed a
+    different address than the one they log in with produces an application that can never
+    be linked to them — no dashboard, no ledger, no payout history — and nothing downstream
+    can repair it, because no automatic path can know the two addresses are the same person.
+
+    So when we KNOW who they are, we take the decision away: prefill from the session and
+    make the field read-only. Mismatching stops being a mistake someone can make.
+
+    Signed-out applicants keep a free-text field — the form is public on purpose and
+    requiring an account loses applicants at the door — and are told, right on the field,
+    to use their sign-in email. The server then links them the moment that address is
+    verified.
+  */
+  useEffect(() => {
+    if (isAuthenticated && user?.email) {
+      setForm((prev) => (prev.email === user.email ? prev : { ...prev, email: user.email }));
+    }
+  }, [isAuthenticated, user?.email]);
+
+  const emailLockedToAccount = Boolean(isAuthenticated && user?.email);
 
   const set = (key: keyof FormState) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -287,7 +311,25 @@ export default function AffiliatesPage() {
 
       <section className="mt-14 max-w-xl" aria-label="Application form">
         <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">Apply</h2>
-        <p className="mt-2 text-sm text-ink-muted font-display">
+
+        {/*
+          Encourage, never require. Signing in first is the only route that CANNOT go
+          wrong, but gating the form on it would lose the applicants this programme is
+          for — creators who have never shopped with us and have no account yet.
+        */}
+        {!isAuthenticated && (
+          <p className="mt-4 rounded-sm border border-gold/30 bg-gold/5 px-4 py-3 text-sm text-ink-muted font-display">
+            <strong className="text-ink">Already have an account?</strong>{' '}
+            <Link href={`/login?redirect=${encodeURIComponent('/affiliates')}`} className="text-gold hover:text-gold/80 underline">
+              Sign in first
+            </Link>{' '}
+            and we will link this application to it automatically — that is what puts your
+            earnings on your dashboard. Otherwise, apply with the email you will sign in
+            with.
+          </p>
+        )}
+
+        <p className="mt-4 text-sm text-ink-muted font-display">
           Applications are reviewed by a person. Commission and discount rates are agreed
           individually when you are approved.
         </p>
@@ -307,8 +349,18 @@ export default function AffiliatesPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className={label} htmlFor="aff-email">Email *</label>
-                <input id="aff-email" type="email" className={input} value={form.email}
-                  onChange={set('email')} required maxLength={200} autoComplete="email" />
+                <input
+                  id="aff-email" type="email" value={form.email}
+                  onChange={set('email')} required maxLength={200} autoComplete="email"
+                  readOnly={emailLockedToAccount}
+                  aria-describedby="aff-email-hint"
+                  className={`${input}${emailLockedToAccount ? ' opacity-70 cursor-not-allowed' : ''}`}
+                />
+                <p id="aff-email-hint" className={hint}>
+                  {emailLockedToAccount
+                    ? 'Your account email — we will link this application to it, so your earnings show up on your dashboard.'
+                    : 'Use the email you sign in with. Your dashboard unlocks once that address is verified.'}
+                </p>
               </div>
               <div>
                 <label className={label} htmlFor="aff-phone">Phone *</label>

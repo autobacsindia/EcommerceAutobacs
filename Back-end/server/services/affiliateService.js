@@ -22,6 +22,7 @@
 
 import mongoose from 'mongoose';
 import affiliateRepository from '../repositories/affiliateRepository.js';
+import userRepository from '../repositories/userRepository.js';
 import { enqueueNotification } from '../queue/queues.js';
 import { CURRENT_AFFILIATE_TERMS_VERSION } from '../config/legalDocuments.js';
 import AppError from '../utils/AppError.js';
@@ -38,6 +39,54 @@ const APPLICATION_FIELDS = ['name', 'email', 'phone', 'website', 'pitch', 'gstin
 
 /** Payout fields collected on the application. Encrypted by the schema setter on write. */
 const PAYOUT_FIELDS = ['accountHolderName', 'accountNumber', 'ifsc'];
+
+/**
+ * Find the account that provably owns this email address, or null.
+ *
+ * ── WHY `isVerified` AND NOT "an account exists" ─────────────────────────────────
+ * `Affiliate.user` is the key the self-serve portal reads, so setting it grants sight
+ * of that affiliate's earnings — and, once payout details become self-editable, control
+ * of where their money goes. That makes it an authorisation boundary, not a convenience.
+ *
+ * Logging in does NOT prove you own an address: nothing in the auth path gates on
+ * `isVerified` (see routes/auth.js), so anyone can register any email and sign in
+ * immediately. Matching on a bare email would therefore hand an affiliate's dashboard
+ * to whoever registered their address first. The verification token is the only thing
+ * in this system that actually evidences control of an inbox, so it is the only thing
+ * allowed to make this link.
+ *
+ * Callers must treat "no match" as a NON-EVENT — never surface it, never branch the
+ * response on it. /affiliates/apply is public and unauthenticated, and an endpoint whose
+ * answer differs for a registered address is an account-enumeration oracle.
+ */
+const findVerifiedOwner = async (email, session = null) => {
+  if (!email) return null;
+  const user = await userRepository.findByEmail(String(email).trim().toLowerCase(), session);
+  return user?.isVerified ? user : null;
+};
+
+/**
+ * Link any unlinked affiliate application holding this now-verified address.
+ *
+ * ⚠️ THE LOAD-BEARING HOOK. Called from the verify-email handler, because the common
+ * order of events is the opposite of the convenient one: an affiliate is often a creator
+ * who has never shopped with us, so they apply FIRST and make an account LATER. Without
+ * this, `Affiliate.user` is written only at application time and nothing ever backfills
+ * it — an applicant who was signed out is orphaned permanently, with no route to their
+ * dashboard, their ledger, or their payout history.
+ *
+ * Guarded on `user: { $exists: false }` so it can never steal an affiliate that is
+ * already linked to somebody else, and returns quietly when there is nothing to do —
+ * this runs inside email verification, which must not fail because of it.
+ */
+const linkVerifiedUserToAffiliate = async (user, session = null) => {
+  if (!user?.isVerified || !user.email) return null;
+  const res = await affiliateRepository.linkUnlinkedByEmail(user.email, user._id, session);
+  if (res?.matchedCount) {
+    console.log(`[Affiliate] Linked application ${user.email} → user ${user._id} on email verification`);
+  }
+  return res;
+};
 
 /**
  * Project an Affiliate for the affiliate's OWN eyes (`GET /affiliates/me`).
@@ -216,7 +265,17 @@ class AffiliateService {
       application. See the field note on models/Affiliate.js.
     */
     const doc = { ...data, email, status: AFFILIATE_STATUS.PENDING };
-    if (userId) doc.user = userId;
+
+    /*
+      Prefer the proven session. Falling back to a verified-email lookup covers the
+      applicant who is signed out — the form is deliberately public, so this is the
+      common case, and without it they can never reach their own dashboard.
+
+      The lookup is invisible from outside: the response is byte-identical whether or
+      not a match was found, so this cannot be used to probe which emails are registered.
+    */
+    const owner = userId || (await findVerifiedOwner(email))?._id || null;
+    if (owner) doc.user = owner;
 
     // Bank details + PAN. Assigned through the schema, whose setter encrypts them —
     // they are never written anywhere in plaintext, including this object's lifetime
@@ -287,6 +346,18 @@ class AffiliateService {
           // rather than minting a second coupon.
           result = affiliate;
           return;
+        }
+
+        /*
+          Backstop link, in case the applicant registered and verified between applying
+          and being approved. Cheap (one indexed lookup on a path a human is already
+          waiting on) and it means an affiliate is linked by the time they are told their
+          code exists — which is the moment the approval email points them at a dashboard.
+          Never overwrites an existing link.
+        */
+        if (!affiliate.user) {
+          const owner = await findVerifiedOwner(affiliate.email, session);
+          if (owner) affiliate.user = owner._id;
         }
 
         if (commissionPercent !== undefined) affiliate.commissionPercent = commissionPercent;
@@ -598,4 +669,10 @@ class AffiliateService {
 }
 
 export default new AffiliateService();
-export { codeFromName, resolveCode, toSelfView };
+export {
+  codeFromName,
+  resolveCode,
+  toSelfView,
+  findVerifiedOwner,
+  linkVerifiedUserToAffiliate,
+};

@@ -142,6 +142,65 @@ db.affiliates.findOne({ email: 'aff-main@…' },
       is a hash — never a raw IP.
 - [ ] **1.21** ✅ A **pending** affiliate has **no `code`** and **no `coupon`**.
 
+### 1d. Account linking — can they ever reach their dashboard?
+
+`Affiliate.user` is what `/affiliates/me` resolves by. An application that never gets
+linked is an affiliate who can never see their earnings, ledger or payout history — and
+nothing downstream repairs it. Linking requires a **verified** email, because signing in
+does not prove you own an address (nothing in the auth path gates on `isVerified`).
+
+- [ ] **1.22 Signed in → the email is locked.** Sign in, open `/affiliates`.
+      ✅ The Email field is **prefilled with your account email** and **read-only**,
+      with "Your account email — we will link this application to it".
+      ✅ You cannot type a different address. *(A mismatch here is unrepairable.)*
+- [ ] **1.23** Apply → ✅ `db.affiliates.findOne({email}).user` is set immediately.
+- [ ] **1.24 Signed out → nudged, not blocked.** Sign out, open `/affiliates`.
+      ✅ A gold panel: "Already have an account? **Sign in first**…" linking to
+      `/login?redirect=%2Faffiliates`.
+      ✅ The form is **still usable** — applying is never gated on having an account.
+      ✅ The email hint reads "Use the email you sign in with."
+- [ ] **1.25 Signed-out + VERIFIED account exists** → apply with that email.
+      ✅ `user` is linked **immediately**, with no visible difference in the response.
+- [ ] **1.26 Signed-out + UNVERIFIED account exists** → apply with that email.
+      ✅ `user` is **absent**. *(Correct: a bare email match would hand this affiliate's
+      earnings — and later their bank details — to whoever registered the address.)*
+- [ ] **1.27 Signed-out + NO account** → ✅ `user` is **absent**, and specifically
+      **not `null`**:
+```js
+db.affiliates.findOne({ email: '…' }).hasOwnProperty('user')   // must be FALSE
+```
+      *A stored `null` is indexed by the sparse unique index and would block the next
+      account-less application entirely.*
+- [ ] **1.28 No enumeration oracle.** Apply twice with identical payloads — one email
+      registered, one not. ✅ **Identical** status code, body and timing. The public form
+      must never reveal which addresses have accounts.
+- [ ] **1.29 Verifying adopts the application.** Take the 1.26 row. Click the verification
+      link in that user's email.
+      ✅ `Affiliate.user` is now set — automatically, with no admin action.
+- [ ] **1.30 The profile prompt.** As that user *before* verifying, open `/profile`.
+      ✅ The affiliate card reads "We found an affiliate application under this email —
+      **verify your email address** and your dashboard will unlock automatically."
+      ❌ It must **not** say "You're not an affiliate yet" — that is false and sends them
+      to re-apply, where the duplicate guard refuses them with no explanation.
+      ✅ It shows **no code, no rates, no earnings** — they have not proven the address
+      is theirs yet.
+- [ ] **1.31** After verifying, reload `/profile` → ✅ the card becomes the normal
+      "Affiliate Dashboard" link.
+- [ ] **1.32 Approval backstop.** Apply signed-out with an unverified account, verify the
+      email, *then* approve. ✅ `user` is linked by approval even if the hook missed.
+- [ ] **1.33 No hijacking.** An affiliate already linked to user A; register user B with
+      the same address *(only possible if A never registered — emails are unique)*.
+      ✅ `Affiliate.user` still points at **A**. Re-assignment is an admin decision only.
+- [ ] **1.34 Backfill for pre-existing rows.**
+```bash
+cd Back-end/server
+npm run backfill-affiliate-user-links                      # dry run, safe anywhere
+npm run backfill-affiliate-user-links -- --apply --confirm-cluster=autobacstest
+```
+      ✅ Dry run lists **LINKABLE** (verified) and **BLOCKED** (no account / unverified).
+      ✅ BLOCKED rows are left alone — that is correct, not a failure.
+      ✅ Re-running after `--apply` is a no-op, and a rollback command is printed.
+
 ---
 
 ## Phase 2 — CRITICAL: the case that used to break
