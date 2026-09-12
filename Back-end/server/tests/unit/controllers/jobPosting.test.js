@@ -176,3 +176,114 @@ describe('deletePosting', () => {
     expect(second.statusCode).toBe(404);
   });
 });
+
+/**
+ * Regression: an over-long field must come back as a 400 that NAMES the field.
+ *
+ * 2026-09-12 — an admin pasted the whole "What you'll own" block as one
+ * paragraph. It arrived as a single 653-char `responsibilities[0]`, breached the
+ * schema's 500 cap, and Mongoose's ValidationError was whitelisted by
+ * errorMiddleware down to the bare string "Validation Error": four failed saves
+ * with no indication of which box was wrong. The controller now rejects it
+ * first, with the field, the length, and the fix in the message.
+ */
+describe('field length caps are enforced with a readable message', () => {
+  const paragraph = 'x'.repeat(653);
+
+  test('create: 400 naming the bullet, its line and its length', async () => {
+    const res = mockRes();
+    await controller.createPosting(
+      { body: baseBody({ responsibilities: ['short one', paragraph] }), user: admin },
+      res,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toContain("What you'll own");
+    expect(res.body.message).toContain('line 2');   // blanks are dropped BEFORE numbering
+    expect(res.body.message).toContain('653');
+    expect(res.body.message).toContain('500');
+    // Nothing was written — a rejected save must not half-create the role.
+    expect(await JobPosting.countDocuments()).toBe(0);
+  });
+
+  test('create: 400 on requirements too, labelled as the admin sees it', async () => {
+    const res = mockRes();
+    await controller.createPosting(
+      { body: baseBody({ requirements: [paragraph] }), user: admin },
+      res,
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toContain('What we need');
+  });
+
+  test('create: 400 on a plain text field (intro) names it', async () => {
+    const res = mockRes();
+    await controller.createPosting(
+      { body: baseBody({ intro: 'y'.repeat(1001) }), user: admin },
+      res,
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toContain('Intro');
+    expect(res.body.message).toContain('1001');
+  });
+
+  test('update: 400 naming the bullet, and the stored role is unchanged', async () => {
+    const created = mockRes();
+    await controller.createPosting({ body: baseBody(), user: admin }, created);
+    const id = created.body.posting._id.toString();
+
+    const res = mockRes();
+    await controller.updatePosting(
+      { params: { id }, body: { responsibilities: [paragraph], tagline: 'Should not stick' } },
+      res,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toContain("What you'll own");
+
+    const stored = await JobPosting.findById(id).lean();
+    expect(stored.tagline).toBe('Own the story.');
+    expect(stored.responsibilities).toEqual(['The engine']);
+  });
+
+  test('a bullet exactly at the cap is accepted', async () => {
+    const res = mockRes();
+    await controller.createPosting(
+      { body: baseBody({ responsibilities: ['z'.repeat(500)] }), user: admin },
+      res,
+    );
+    expect(res.statusCode).toBe(201);
+  });
+
+  test('the same paragraph split one-per-line saves fine', async () => {
+    const res = mockRes();
+    await controller.createPosting(
+      { body: baseBody({ responsibilities: ['a'.repeat(400), 'b'.repeat(253)] }), user: admin },
+      res,
+    );
+    expect(res.statusCode).toBe(201);
+    expect(res.body.posting.responsibilities).toHaveLength(2);
+  });
+
+  test('a title with no alphanumerics is rejected before the slug validator', async () => {
+    const res = mockRes();
+    await controller.createPosting({ body: baseBody({ title: '—— !! ——' }), user: admin }, res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toMatch(/slug/i);
+  });
+});
+
+describe('listAllPostings ships the schema caps to the editor', () => {
+  test('fieldCaps mirror the model, so the form cannot drift from it', async () => {
+    const res = mockRes();
+    await controller.listAllPostings({ query: {} }, res);
+
+    expect(res.body.fieldCaps.responsibilities)
+      .toBe(JobPosting.schema.path('responsibilities').caster.options.maxlength);
+    expect(res.body.fieldCaps.intro)
+      .toBe(JobPosting.schema.path('intro').options.maxlength);
+    expect(res.body.fieldCaps.title)
+      .toBe(JobPosting.schema.path('title').options.maxlength);
+  });
+});

@@ -67,8 +67,83 @@ const STATUS_STYLE: Record<Status, string> = {
 const linesToArray = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean);
 const arrayToLines = (a?: string[]) => (a || []).join('\n');
 
+/**
+ * Per-field length caps. The list endpoint returns the real ones straight off
+ * the Mongoose schema (`fieldCaps`); these are only the pre-fetch fallback, so a
+ * schema change moves the editor with it and cannot drift into a hidden
+ * rejection. The server stays the authority either way.
+ */
+type FieldCaps = {
+  title: number; department: number; category: number; tagline: number;
+  experience: number; intro: number; closer: number; location: number;
+  responsibilities: number; requirements: number;
+};
+
+const DEFAULT_CAPS: FieldCaps = {
+  title: 140, department: 80, category: 80, tagline: 200,
+  experience: 60, intro: 1000, closer: 600, location: 120,
+  responsibilities: 500, requirements: 500,
+};
+
+/** Longest line in a bullet textarea, for the live counter. */
+const longestLine = (s: string) =>
+  linesToArray(s).reduce((max, l) => Math.max(max, l.length), 0);
+
+/**
+ * The first over-long bullet, or null. Pasting a whole paragraph into a
+ * one-bullet-per-line box is the normal mistake — it lands as ONE entry that
+ * blows the 500-char cap, and before this the save just bounced with a bare
+ * "Validation Error". Caught here so it never leaves the browser.
+ */
+const overLongBullet = (text: string, cap: number, label: string): string | null => {
+  const lines = linesToArray(text);
+  const i = lines.findIndex((l) => l.length > cap);
+  if (i === -1) return null;
+  return (
+    `${label}: line ${i + 1} is ${lines[i].length} characters — the maximum is ${cap} per ` +
+    'bullet. Put each bullet on its own line rather than one paragraph.'
+  );
+};
+
+/**
+ * Character counter for a long-form textarea.
+ *
+ * Deliberately NOT `maxLength`: a paste that runs past the cap would be silently
+ * clipped and the admin would publish the truncated half without noticing. Show
+ * the overflow and refuse the save instead — losing someone's text quietly is
+ * worse than making them shorten it.
+ */
+function CharHint({ text, cap }: { text: string; cap: number }) {
+  const n = text.trim().length;
+  if (n === 0) return null;
+  const over = n > cap;
+  return (
+    <p className={`text-xs mt-1 ${over ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+      {n}/{cap} chars{over && ' — too long to save. Trim it.'}
+    </p>
+  );
+}
+
+/**
+ * Bullet-count + longest-line readout under a bullets textarea. Turns the cap
+ * from something you discover on submit into something you watch while typing.
+ */
+function BulletHint({ text, cap }: { text: string; cap: number }) {
+  const lines = linesToArray(text);
+  if (lines.length === 0) return null;
+  const longest = longestLine(text);
+  const over = longest > cap;
+  return (
+    <p className={`text-xs mt-1 ${over ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+      {lines.length} bullet{lines.length === 1 ? '' : 's'} · longest {longest}/{cap} chars
+      {over && ' — too long. Split it across separate lines.'}
+    </p>
+  );
+}
+
 export default function AdminCareersPage() {
   const [postings, setPostings] = useState<Posting[]>([]);
+  const [caps, setCaps] = useState<FieldCaps>(DEFAULT_CAPS);
   const [categories, setCategories] = useState<CareerCategory[]>([]);
   const [categoriesError, setCategoriesError] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -86,11 +161,17 @@ export default function AdminCareersPage() {
     try {
       const params: Record<string, string> = {};
       if (statusFilter) params.status = statusFilter;
-      const res = await apiClient.get<{ success: boolean; postings: Posting[] }>(
-        API_ENDPOINTS.ADMIN_CAREERS_POSTINGS,
-        { params },
-      );
-      if (res.success) setPostings(res.postings);
+      const res = await apiClient.get<{
+        success: boolean;
+        postings: Posting[];
+        fieldCaps?: Partial<FieldCaps>;
+      }>(API_ENDPOINTS.ADMIN_CAREERS_POSTINGS, { params });
+      if (res.success) {
+        setPostings(res.postings);
+        // Merge, don't replace: an older backend that doesn't send fieldCaps
+        // leaves the editor on the fallback rather than on `undefined`.
+        if (res.fieldCaps) setCaps((c) => ({ ...c, ...res.fieldCaps }));
+      }
     } catch (_) {}
     finally { setLoading(false); }
   }, [statusFilter]);
@@ -146,6 +227,25 @@ export default function AdminCareersPage() {
     e.preventDefault();
     if (!form.title.trim()) { setError('Title is required.'); return; }
     if (!form.department.trim()) { setError('Department is required.'); return; }
+
+    // Bullets are the one field maxLength cannot guard (the cap is per LINE, not
+    // per textarea), so check them explicitly before spending a round trip.
+    const bulletError =
+      overLongBullet(form.responsibilities, caps.responsibilities, "What you'll own") ||
+      overLongBullet(form.requirements, caps.requirements, 'What we need');
+    if (bulletError) { setError(bulletError); return; }
+
+    // Intro/Closer carry no maxLength on purpose (see CharHint) — so they need an
+    // explicit check here, otherwise an over-long paste reaches the server.
+    const longError = ([['Intro', form.intro, caps.intro], ['Closer', form.closer, caps.closer]] as const)
+      .map(([label, value, cap]) =>
+        value.trim().length > cap
+          ? `${label} is ${value.trim().length} characters — the maximum is ${cap}.`
+          : null,
+      )
+      .find(Boolean);
+    if (longError) { setError(longError); return; }
+
     setSaving(true);
     setError(null);
     try {
@@ -321,6 +421,7 @@ export default function AdminCareersPage() {
                   <label className="text-sm font-medium text-gray-700 block mb-1">Title *</label>
                   <input
                     required
+                    maxLength={caps.title}
                     value={form.title}
                     onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                     placeholder="Marketing Manager"
@@ -331,6 +432,7 @@ export default function AdminCareersPage() {
                   <label className="text-sm font-medium text-gray-700 block mb-1">Department *</label>
                   <input
                     required
+                    maxLength={caps.department}
                     value={form.department}
                     onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
                     placeholder="Marketing"
@@ -362,6 +464,7 @@ export default function AdminCareersPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Tagline</label>
                   <input
+                    maxLength={caps.tagline}
                     value={form.tagline}
                     onChange={(e) => setForm((f) => ({ ...f, tagline: e.target.value }))}
                     placeholder="Own the story. Own the growth."
@@ -371,6 +474,7 @@ export default function AdminCareersPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Experience</label>
                   <input
+                    maxLength={caps.experience}
                     value={form.experience}
                     onChange={(e) => setForm((f) => ({ ...f, experience: e.target.value }))}
                     placeholder="3-5 years exp"
@@ -407,6 +511,7 @@ export default function AdminCareersPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-1">Location (optional)</label>
                   <input
+                    maxLength={caps.location}
                     value={form.location}
                     onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
                     placeholder="Bengaluru, India"
@@ -442,6 +547,7 @@ export default function AdminCareersPage() {
                     placeholder="The paragraph shown when the role card is expanded."
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none resize-none"
                   />
+                  <CharHint text={form.intro} cap={caps.intro} />
                 </div>
                 <div className="col-span-2">
                   <label className="text-sm font-medium text-gray-700 block mb-1">
@@ -454,6 +560,7 @@ export default function AdminCareersPage() {
                     placeholder={'The entire marketing engine…\nEvery campaign from Meta to ground activations…'}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none resize-y"
                   />
+                  <BulletHint text={form.responsibilities} cap={caps.responsibilities} />
                 </div>
                 <div className="col-span-2">
                   <label className="text-sm font-medium text-gray-700 block mb-1">
@@ -466,6 +573,7 @@ export default function AdminCareersPage() {
                     placeholder={'3-5 years running marketing that moved a P&L…'}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none resize-y"
                   />
+                  <BulletHint text={form.requirements} cap={caps.requirements} />
                 </div>
                 <div className="col-span-2">
                   <label className="text-sm font-medium text-gray-700 block mb-1">Closer</label>
@@ -476,6 +584,7 @@ export default function AdminCareersPage() {
                     placeholder="The highlighted 'why this matters' line at the bottom of the card."
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none resize-none"
                   />
+                  <CharHint text={form.closer} cap={caps.closer} />
                 </div>
               </div>
 

@@ -8,7 +8,7 @@
  *          derived + de-duplicated, and every write busts the public cache tag.
  */
 
-import jobPostingRepository from '../repositories/jobPostingRepository.js';
+import jobPostingRepository, { FIELD_CAPS } from '../repositories/jobPostingRepository.js';
 import careerCategoryRepository from '../repositories/careerCategoryRepository.js';
 import { slugify } from '../utils/slug.js';
 import { normalizeSeo } from '../utils/seo.js';
@@ -20,6 +20,57 @@ const CACHE_TAG = 'careers';
 
 const STATUSES = ['draft', 'open', 'closed', 'filled'];
 const EMPLOYMENT_TYPES = ['FULL_TIME', 'PART_TIME', 'CONTRACTOR', 'INTERN', 'TEMPORARY'];
+
+// Field name -> the label the admin actually sees on the form, so a rejection
+// points at the box to fix rather than at a schema path.
+const FIELD_LABELS = {
+  title: 'Title',
+  department: 'Department',
+  category: 'Category',
+  tagline: 'Tagline',
+  experience: 'Experience',
+  intro: 'Intro',
+  closer: 'Closer',
+  location: 'Location',
+  responsibilities: "What you'll own",
+  requirements: 'What we need',
+};
+
+/**
+ * First field that breaches its schema cap, as an operator-readable sentence —
+ * or null when everything fits.
+ *
+ * Without this the save reaches Mongoose, whose ValidationError is whitelisted
+ * by errorMiddleware down to the bare string "Validation Error": the admin sees
+ * a red box naming no field and has nothing to act on. Caps come from
+ * FIELD_CAPS (read off the schema), so this can never disagree with the model.
+ *
+ * Bullets get a per-line message because that is the real failure mode: a whole
+ * paragraph pasted into the one-bullet-per-line box arrives as a single
+ * over-long entry, and "line 1 is 653 characters" is the only feedback that
+ * makes the fix obvious.
+ */
+const capBreach = (doc) => {
+  for (const [field, cap] of Object.entries(FIELD_CAPS)) {
+    const value = doc[field];
+    const label = FIELD_LABELS[field] || field;
+
+    if (typeof value === 'string') {
+      if (value.length > cap) {
+        return `${label} is ${value.length} characters — the maximum is ${cap}.`;
+      }
+    } else if (Array.isArray(value)) {
+      const i = value.findIndex((v) => typeof v === 'string' && v.length > cap);
+      if (i !== -1) {
+        return (
+          `${label}: line ${i + 1} is ${value[i].length} characters — the maximum is ${cap} ` +
+          'per bullet. Put each bullet on its own line rather than one paragraph.'
+        );
+      }
+    }
+  }
+  return null;
+};
 
 /** Coerce an incoming array-of-strings field: trim, drop blanks, cap length. */
 const cleanBullets = (value, cap = 30) => {
@@ -89,7 +140,10 @@ export const listAllPostings = async (req, res) => {
     filter.status = req.query.status;
   }
   const postings = await jobPostingRepository.findAll(filter);
-  res.json({ success: true, postings });
+  // Ship the caps with the list so the editor's maxLength/counters come from the
+  // schema instead of a second hand-copied literal that can drift out of sync
+  // (the failure mode that made these errors unreadable in the first place).
+  res.json({ success: true, postings, fieldCaps: FIELD_CAPS });
 };
 
 // @desc    Single role by id (admin editor hydrate)
@@ -113,6 +167,15 @@ export const createPosting = async (req, res) => {
 
   // Slug: honour an explicit one, else derive from title; de-dupe either way.
   const base = slugify(b.slug || title);
+  if (!base) {
+    // slugify strips everything non-alphanumeric, so a title of only symbols or
+    // non-Latin script yields ''. `slug` is required, so letting that through
+    // costs another opaque ValidationError.
+    return res.status(400).json({
+      success: false,
+      message: 'Could not build a URL slug from that title — enter a slug manually.',
+    });
+  }
   const slug = await jobPostingRepository.uniqueSlug(base);
 
   const doc = {
@@ -133,6 +196,9 @@ export const createPosting = async (req, res) => {
   };
   if (STATUSES.includes(b.status)) doc.status = b.status;
   if (EMPLOYMENT_TYPES.includes(b.employmentType)) doc.employmentType = b.employmentType;
+
+  const breach = capBreach(doc);
+  if (breach) return res.status(400).json({ success: false, message: breach });
 
   try {
     const posting = await jobPostingRepository.create(doc);
@@ -184,6 +250,11 @@ export const updatePosting = async (req, res) => {
   if (Number.isFinite(b.sortOrder)) posting.sortOrder = b.sortOrder;
   if (STATUSES.includes(b.status)) posting.status = b.status;
   if (EMPLOYMENT_TYPES.includes(b.employmentType)) posting.employmentType = b.employmentType;
+
+  // Checked after every assignment but before save(), so an untouched field that
+  // is already over cap is reported too — it would block the save either way.
+  const breach = capBreach(posting);
+  if (breach) return res.status(400).json({ success: false, message: breach });
 
   try {
     await posting.save();

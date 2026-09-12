@@ -331,7 +331,11 @@ const ROLES = [
 async function connect() {
   const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
   if (!uri) throw new Error('MONGODB_URI / MONGO_URI not set');
-  await mongoose.connect(uri);
+  // autoIndex MUST be false. It defaults to true, and merely connecting with a
+  // model imported would build every index JobPosting declares against whatever
+  // cluster this points at — which is PROD, because the local .env holds the prod
+  // URI. Prod runs autoIndex:false by design; index changes are migrations.
+  await mongoose.connect(uri, { autoIndex: false });
   console.log('[seed-job-postings] connected');
 }
 
