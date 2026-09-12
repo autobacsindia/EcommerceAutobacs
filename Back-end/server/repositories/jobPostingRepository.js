@@ -12,6 +12,45 @@ import { generateUniqueSlug } from '../utils/slug.js';
 const PUBLIC_FIELDS =
   'department category title slug tagline experience intro responsibilities requirements closer location employmentType seo publishedAt';
 
+/**
+ * Field length caps, READ OFF THE SCHEMA rather than restated here.
+ *
+ * The controller validates against these before saving so an over-long field
+ * comes back as a 400 naming the field, instead of a Mongoose ValidationError
+ * that `errorMiddleware` whitelists down to the opaque string "Validation
+ * Error". (That is exactly how a pasted 653-char paragraph in a single
+ * `responsibilities` bullet blocked an admin save with no visible reason on
+ * 2026-09-12 — same class as the `seo.canonical` cap drift, so the same fix:
+ * derive, never restate. Editing a maxlength in the model moves this with it.)
+ *
+ * Exported from the repository, not the model, because controllers may not
+ * import models directly (repo-pattern eslint rule).
+ */
+const capOf = (field) => {
+  const path = JobPosting.schema.path(field);
+  // Array-of-String paths carry maxlength on the caster, not the path itself.
+  const cap = path?.options?.maxlength ?? path?.caster?.options?.maxlength;
+  if (typeof cap !== 'number') {
+    // A renamed/removed path would otherwise silently disable the guard and
+    // hand the over-long value straight to the validator.
+    throw new Error(`[jobPostingRepository] JobPosting has no maxlength for "${field}"`);
+  }
+  return cap;
+};
+
+export const FIELD_CAPS = Object.freeze({
+  department: capOf('department'),
+  category: capOf('category'),
+  title: capOf('title'),
+  tagline: capOf('tagline'),
+  experience: capOf('experience'),
+  intro: capOf('intro'),
+  closer: capOf('closer'),
+  location: capOf('location'),
+  responsibilities: capOf('responsibilities'),
+  requirements: capOf('requirements'),
+});
+
 class JobPostingRepository {
   findById(...args) { return JobPosting.findById(...args); }
   findByIdAndDelete(...args) { return JobPosting.findByIdAndDelete(...args); }

@@ -17,6 +17,56 @@ export function categorizeError(status: number, error: any): ErrorCategory {
   return ErrorCategory.NETWORK;
 }
 
+/** How many per-field messages to surface before summarising the rest. A schema
+ *  breach on a big admin form can name a dozen paths; the operator needs the
+ *  first few, not a paragraph. */
+const MAX_FIELD_ERRORS = 5;
+
+/**
+ * Flatten the backend's per-field validation detail into one readable clause.
+ *
+ * The API emits `errors` in TWO shapes and both must be handled:
+ *   - ARRAY  (express-validator):  [{ param, msg }] | [{ message }] | ['...']
+ *   - OBJECT (mongoose ValidationError, via errorMiddleware's `safeErrors`):
+ *       { 'responsibilities.0': 'Path `responsibilities.0` (…, length 653) is
+ *          longer than the maximum allowed length (500).' }
+ *
+ * Only the array shape used to be read. Since `message` is whitelisted down to
+ * the bare string "Validation Error", dropping the object shape meant a schema
+ * breach reached the admin naming NO field — the admin could not save and had
+ * no way to know why (careers `responsibilities.0`, 2026-09-12; the same class
+ * of blind failure as the earlier `seo.canonical` cap drift). The field detail
+ * was in the response the whole time.
+ */
+function describeValidationErrors(errors: unknown): string {
+  let parts: string[];
+
+  if (Array.isArray(errors)) {
+    parts = errors.map((err: any) => {
+      if (typeof err === 'string') return err;
+      if (err?.param && err?.msg) return `${err.param}: ${err.msg}`;
+      if (err?.msg) return err.msg;
+      if (err?.message) return err.message;
+      return 'Validation error';
+    });
+  } else if (errors && typeof errors === 'object') {
+    parts = Object.entries(errors as Record<string, unknown>).map(([field, msg]) => {
+      const text = typeof msg === 'string' ? msg : (msg as any)?.message || 'Validation error';
+      // Mongoose messages already embed the path; don't say it twice.
+      return text.includes(field) ? text : `${field}: ${text}`;
+    });
+  } else {
+    return '';
+  }
+
+  parts = parts.filter(Boolean);
+  if (parts.length === 0) return '';
+
+  const shown = parts.slice(0, MAX_FIELD_ERRORS);
+  const hidden = parts.length - shown.length;
+  return hidden > 0 ? `${shown.join(', ')} (+${hidden} more)` : shown.join(', ');
+}
+
 export async function normaliseResponse(response: Response): Promise<any> {
   let data: any;
   const contentType = response.headers.get('content-type');
@@ -75,31 +125,25 @@ export async function normaliseResponse(response: Response): Promise<any> {
         category = categorizeError(response.status, new Error(errorMessage));
       }
 
-      if (typeof data === 'object' && Array.isArray(data.errors)) {
-        const validationErrors = data.errors
-          .map((err: any) => {
-            if (typeof err === 'string') return err;
-            if (err.msg) return err.msg;
-            if (err.message) return err.message;
-            if (err.param && err.msg) return `${err.param}: ${err.msg}`;
-            return 'Validation error';
-          })
-          .join(', ');
+      const validationErrors = describeValidationErrors(
+        typeof data === 'object' && data !== null ? data.errors : undefined,
+      );
 
-        if (validationErrors) {
-          const allGeneric = validationErrors
-            .split(',')
-            .map((m: string) => m.trim().toLowerCase())
-            .every((m: string) => m === 'validation error');
+      if (validationErrors) {
+        // Detail that is itself generic ("Validation error", "Validation error")
+        // adds nothing — fall back to a plain instruction rather than echoing noise.
+        const allGeneric = validationErrors
+          .split(',')
+          .map((m: string) => m.trim().toLowerCase())
+          .every((m: string) => m === 'validation error');
 
-          if (!allGeneric) {
-            errorMessage = `${errorMessage}: ${validationErrors}`;
-          } else {
-            errorMessage =
-              data.message && data.message !== 'Validation failed'
-                ? data.message
-                : 'Validation failed. Please check your input and try again.';
-          }
+        if (!allGeneric) {
+          errorMessage = `${errorMessage}: ${validationErrors}`;
+        } else {
+          errorMessage =
+            data.message && data.message !== 'Validation failed'
+              ? data.message
+              : 'Validation failed. Please check your input and try again.';
         }
       }
 
