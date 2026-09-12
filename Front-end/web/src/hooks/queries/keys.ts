@@ -113,6 +113,13 @@ export const affiliateKeys = {
   /** One page of the caller's own commission ledger, keyed on the cursor. */
   commissions: (cursor?: string | null) =>
     [...affiliateKeys.all, 'commissions', cursor ?? ''] as const,
+  /**
+   * ADMIN: everyone currently owed at least the minimum payout.
+   *
+   * Under `affiliate` rather than `adminKeys` so building a batch — which changes who is
+   * owed what — can invalidate this and the affiliate's own view with one prefix.
+   */
+  payoutQueue: () => [...affiliateKeys.all, 'payout-queue'] as const,
 };
 
 export const adminKeys = {

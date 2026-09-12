@@ -15,6 +15,9 @@ import { formatDateIST } from '@/lib/datetime';
  * stack of cursors we have seen, because a keyset cursor only walks forwards.
  */
 
+const rupees = (paise: number) =>
+  `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 interface Affiliate {
   _id: string;
   code?: string;
@@ -23,6 +26,8 @@ interface Affiliate {
   status: 'pending' | 'active' | 'suspended' | 'rejected';
   commissionPercent: number;
   discountPercent: number | null;
+  /** Confirmed commission not yet claimed by a payout. Server-computed, in paise. */
+  payableBalancePaise: number;
   createdAt: string;
 }
 
@@ -152,15 +157,18 @@ export default function AdminAffiliatesPage() {
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium text-right">Commission</th>
               <th className="px-4 py-3 font-medium text-right">Buyer discount</th>
+              {/* The API already computes this for every row — rendering it is what
+                  stops "who needs paying?" being a walk through every detail page. */}
+              <th className="px-4 py-3 font-medium text-right">Owed</th>
               <th className="px-4 py-3 font-medium">Applied</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading…</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">Loading…</td></tr>
             )}
             {!loading && rows.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No affiliates yet.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No affiliates yet.</td></tr>
             )}
             {!loading && rows.map((a) => (
               /*
@@ -186,6 +194,15 @@ export default function AdminAffiliatesPage() {
                 </td>
                 <td className="px-4 py-3 text-right">{a.commissionPercent}%</td>
                 <td className="px-4 py-3 text-right">{a.discountPercent == null ? '—' : `${a.discountPercent}%`}</td>
+                <td className="px-4 py-3 text-right">
+                  {a.payableBalancePaise > 0 ? (
+                    <span className="font-medium">{rupees(a.payableBalancePaise)}</span>
+                  ) : (
+                    // A dash, not ₹0.00: zero is the normal state for almost every row,
+                    // and a column of ₹0.00 buries the handful that actually owe money.
+                    <span className="text-gray-400">—</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-gray-600">{formatDateIST(a.createdAt)}</td>
               </tr>
             ))}

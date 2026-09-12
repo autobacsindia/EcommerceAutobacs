@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import BaseRepository from './baseRepository.js';
 import AffiliateCommission from '../models/AffiliateCommission.js';
 import {
+  AFFILIATE_STATUS,
   COMMISSION_STATUS,
   COMMISSION_TYPE,
   MATURATION_BATCH_SIZE,
@@ -78,6 +79,145 @@ class AffiliateCommissionRepository extends BaseRepository {
     if (session) agg.session(session);
     const [row] = await agg;
     return row?.net ?? 0;
+  }
+
+  /**
+   * Payable balance for MANY affiliates at once — one aggregation, not one per row.
+   *
+   * The admin list is cursor-paginated and bounded, so this takes the page's ids and
+   * returns a Map. Looping `payableBalancePaise` per row instead would be a textbook
+   * N+1: 50 aggregations to render one screen, growing with page size.
+   *
+   * Affiliates with no payable rows are simply absent from the result — callers default
+   * to 0 rather than this inventing zero-rows for everyone on the page.
+   */
+  async payableBalancesFor(affiliateIds = [], session = null) {
+    const ids = affiliateIds.filter(Boolean).map((id) => new mongoose.Types.ObjectId(String(id)));
+    if (!ids.length) return new Map();
+
+    const agg = AffiliateCommission.aggregate([
+      {
+        $match: {
+          affiliate: { $in: ids },
+          status: COMMISSION_STATUS.APPROVED,
+          payout: null,
+        },
+      },
+      { $group: { _id: '$affiliate', net: { $sum: '$amountPaise' }, count: { $sum: 1 } } },
+    ]);
+    if (session) agg.session(session);
+    const rows = await agg;
+    return new Map(rows.map((r) => [String(r._id), { netPaise: r.net, count: r.count }]));
+  }
+
+  /**
+   * The admin payout queue: who is owed at least `minPaise`, worked in priority order.
+   *
+   * ⚠️ ONE PIPELINE, AND IT HAS TO BE. An earlier version grouped the ledger, took the
+   * top N by balance, then applied the "who asked first" priority in JavaScript — which
+   * sorted a page that had already been truncated. An affiliate who had actively chased
+   * their money but sat just above the floor was cut before the priority sort ever saw
+   * them, and nothing told the admin rows had been dropped. Ordering and limiting must
+   * happen in the same place or the limit silently defeats the ordering.
+   *
+   * ── DRIVEN FROM THE LEDGER ──────────────────────────────────────────────────────
+   * "Who is due?" is a question about commission rows, and the balance lives in a
+   * different collection from the affiliate. Paginating affiliates and discarding those
+   * below the threshold would produce mostly-empty pages while people further down are
+   * owed money. So we group the ledger first and let the affiliates follow.
+   *
+   * ── `$gte` AFTER `$group`, NEVER BEFORE ─────────────────────────────────────────
+   * A clawback is a NEGATIVE row in this same {approved, payout:null} set, so the
+   * threshold must be applied to the SUM. Filtering rows first would queue someone whose
+   * refunds outweigh their earnings for a payout of their gross.
+   *
+   * ── NON-ACTIVE AFFILIATES ARE EXCLUDED, NOT HIDDEN ──────────────────────────────
+   * Suspension does not void commission already earned — that is a separate, deliberate
+   * admin action — so a suspended affiliate can legitimately still be owed money. But
+   * this is a WORKLIST, and an admin paying down a worklist must not pay someone who was
+   * suspended for fraud. They are therefore kept off the list and reported separately in
+   * `suspendedHeld`, so the liability stays visible without being actionable by reflex.
+   *
+   * Returns `{ rows, totalPayablePaise, dueCount, suspendedHeld }` — the totals come from
+   * a `$facet` branch with NO `$limit`, because a total computed over one page of results
+   * understates what we owe the moment there are more affiliates than fit on it.
+   */
+  async payableQueue({ minPaise = 0, limit = 50 } = {}) {
+    const capped = Math.min(Math.max(1, limit), 200);
+
+    const [out] = await AffiliateCommission.aggregate([
+      { $match: { status: COMMISSION_STATUS.APPROVED, payout: null } },
+      {
+        $group: {
+          _id: '$affiliate',
+          netPaise: { $sum: '$amountPaise' },
+          count: { $sum: 1 },
+          oldest: { $min: '$approvedAt' },
+        },
+      },
+      // Threshold on the SUM — see the note above.
+      { $match: { netPaise: { $gte: minPaise } } },
+
+      /*
+        Join the affiliate so status and the payout request can take part in the SORT and
+        the FILTER. Projected down inside the sub-pipeline: `payoutDetails.accountNumber`
+        and `.panNumber` are `select:false` on the schema, but `$lookup` bypasses Mongoose
+        entirely and would happily carry both into a list response.
+      */
+      {
+        $lookup: {
+          from: 'affiliates',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'affiliate',
+          pipeline: [{
+            $project: {
+              code: 1, name: 1, status: 1, tdsPercent: 1, payoutRequestedAt: 1,
+              'payoutDetails.accountLast4': 1, 'payoutDetails.upiId': 1,
+            },
+          }],
+        },
+      },
+      { $unwind: '$affiliate' }, // drops orphaned rows whose affiliate was deleted
+      {
+        $facet: {
+          // The worklist: active only, priority-ordered, then limited.
+          rows: [
+            { $match: { 'affiliate.status': AFFILIATE_STATUS.ACTIVE } },
+            {
+              $addFields: {
+                // Sorts before balance. Someone who has actively chased their money is
+                // the one most likely to lose trust if they are buried under larger
+                // balances nobody is waiting on.
+                requested: { $cond: [{ $ifNull: ['$affiliate.payoutRequestedAt', false] }, 1, 0] },
+              },
+            },
+            { $sort: { requested: -1, netPaise: -1 } },
+            { $limit: capped },
+          ],
+          // The true outstanding total across EVERY due active affiliate, unlimited.
+          totals: [
+            { $match: { 'affiliate.status': AFFILIATE_STATUS.ACTIVE } },
+            { $group: { _id: null, totalPayablePaise: { $sum: '$netPaise' }, dueCount: { $sum: 1 } } },
+          ],
+          // Money owed to people who are not active — visible, deliberately not payable.
+          suspendedHeld: [
+            { $match: { 'affiliate.status': { $ne: AFFILIATE_STATUS.ACTIVE } } },
+            { $group: { _id: null, heldPaise: { $sum: '$netPaise' }, count: { $sum: 1 } } },
+          ],
+        },
+      },
+    ]);
+
+    return {
+      rows: out?.rows ?? [],
+      totalPayablePaise: out?.totals?.[0]?.totalPayablePaise ?? 0,
+      dueCount: out?.totals?.[0]?.dueCount ?? 0,
+      suspendedHeld: {
+        heldPaise: out?.suspendedHeld?.[0]?.heldPaise ?? 0,
+        count: out?.suspendedHeld?.[0]?.count ?? 0,
+      },
+    };
   }
 
   /** Per-status totals for one affiliate — the dashboard's summary tiles. */

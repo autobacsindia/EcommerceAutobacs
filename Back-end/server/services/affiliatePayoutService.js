@@ -28,6 +28,7 @@ import AppError from '../utils/AppError.js';
 import { enqueueNotification } from '../queue/queues.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import {
+  AFFILIATE_STATUS,
   MIN_PAYOUT_RUPEES,
   PAYOUT_STATUS,
   isAffiliateEnabled,
@@ -47,6 +48,30 @@ class AffiliatePayoutService {
 
     const affiliate = await affiliateRepository.findForPayout(affiliateId);
     if (!affiliate) throw new AppError('Affiliate not found', 404);
+
+    /*
+      ⚠️ A SUSPENDED AFFILIATE IS NOT PAID BY REFLEX.
+
+      Suspension does not void commission already earned — the work was done, and voiding
+      it is a separate, deliberate admin action. So a suspended affiliate can legitimately
+      still be owed money, and this is NOT a claim that they are not.
+
+      But `requestPayout` already refuses them, and the payout queue excludes them; if
+      this path did not, the two halves of the same feature would disagree and the
+      difference would be a real bank transfer to someone suspended for fraud. Filtering
+      the queue is not enough on its own — this endpoint is directly callable.
+
+      Paying them out anyway is a decision, not an accident: reinstate, pay, suspend
+      again. That leaves an audit trail of someone choosing it.
+    */
+    if (affiliate.status !== AFFILIATE_STATUS.ACTIVE) {
+      throw new AppError(
+        `This affiliate is ${affiliate.status}, so a payout cannot be built. `
+        + 'Reinstate them to pay what they earned, or void the commissions deliberately.',
+        400,
+        { expose: true },
+      );
+    }
 
     /*
       A read BEFORE the claim, used only to fail fast with a helpful message. It is NOT
@@ -147,6 +172,17 @@ class AffiliatePayoutService {
         payout.periodTo = totals.to;
         payout.paidBy = adminId;
         await affiliatePayoutRepository.saveInSession(payout, session);
+
+        /*
+          The affiliate's "please pay me" signal is answered — clear it in the SAME
+          transaction that claims the rows.
+
+          Leaving it set would keep them at the top of the admin queue after the money
+          had already been batched, which is how the same person gets paid twice by a
+          second admin who trusts the queue. Clearing it outside the transaction would
+          open the same window on any failure between the two writes.
+        */
+        await affiliateRepository.clearPayoutRequest(affiliate._id, session);
 
         payoutId = payout._id;
       });

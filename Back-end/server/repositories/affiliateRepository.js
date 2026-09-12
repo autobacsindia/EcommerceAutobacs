@@ -49,6 +49,48 @@ class AffiliateRepository extends BaseRepository {
     return q;
   }
 
+  /**
+   * Attach a user to any application holding this email that has NO account yet.
+   *
+   * ⚠️ `user: { $exists: false }` is the whole safety of this write — NOT `user: null`.
+   * The field is deliberately ABSENT rather than null on an account-less application
+   * (the sparse unique index on `user` indexes stored nulls, which would block the
+   * second such application), so a `$eq: null` predicate would silently match nothing
+   * and this would appear to work while linking no one.
+   *
+   * It also guarantees an already-linked affiliate can never be re-pointed: whoever the
+   * row belongs to, it keeps belonging to them. Re-assignment is an admin decision.
+   *
+   * Scoped to one email, so at most one row matches (email is uniquely indexed).
+   */
+  async linkUnlinkedByEmail(email, userId, session = null) {
+    if (!email || !userId) return { matchedCount: 0, modifiedCount: 0 };
+    let q = Affiliate.updateOne(
+      { email: String(email).trim().toLowerCase(), user: { $exists: false } },
+      { $set: { user: userId } },
+    );
+    if (session) q = q.session(session);
+    return q;
+  }
+
+  /**
+   * Is there an application under this email that is NOT linked to any account?
+   *
+   * Answers one question for one authenticated caller about their OWN address, so the
+   * portal can say "verify your email to unlock this" instead of the flatly wrong
+   * "you're not an affiliate yet". Returns a boolean, never the document — the caller
+   * has not proven they own the address yet, so they get no affiliate data.
+   */
+  async hasUnlinkedApplicationForEmail(email, session = null) {
+    if (!email) return false;
+    let q = Affiliate.exists({
+      email: String(email).trim().toLowerCase(),
+      user: { $exists: false },
+    });
+    if (session) q = q.session(session);
+    return Boolean(await q);
+  }
+
   /** Applicant lookup — also the dedup check on a new application. */
   async findByEmail(email, session = null) {
     if (!email) return null;
@@ -191,6 +233,23 @@ class AffiliateRepository extends BaseRepository {
    * its result off any response body — models/Affiliate.js's toJSON strips them, but
    * a `.lean()` document has no toJSON, so this deliberately returns a hydrated doc.
    */
+  /**
+   * Clear the "please pay me" signal. Called inside the batch-claim transaction.
+   *
+   * A targeted `updateOne`, NOT `doc.save()` — the only affiliate document in scope at
+   * that point is the one loaded by `findForPayout`, which carries the encrypted account
+   * number and PAN. Saving it whole to flip two unrelated flags round-trips financial
+   * PII through the setter path for no reason. Touch the two fields and nothing else.
+   */
+  async clearPayoutRequest(affiliateId, session = null) {
+    let q = Affiliate.updateOne(
+      { _id: affiliateId },
+      { $set: { payoutRequestedAt: null, payoutRequestedBalancePaise: null } },
+    );
+    if (session) q = q.session(session);
+    return q;
+  }
+
   async findForPayout(affiliateId, session = null) {
     let q = Affiliate.findById(affiliateId)
       .select('+payoutDetails.accountNumber +payoutDetails.panNumber');

@@ -22,6 +22,8 @@
 
 import mongoose from 'mongoose';
 import affiliateRepository from '../repositories/affiliateRepository.js';
+import affiliateCommissionRepository from '../repositories/affiliateCommissionRepository.js';
+import userRepository from '../repositories/userRepository.js';
 import { enqueueNotification } from '../queue/queues.js';
 import { CURRENT_AFFILIATE_TERMS_VERSION } from '../config/legalDocuments.js';
 import AppError from '../utils/AppError.js';
@@ -31,6 +33,7 @@ import {
   DEFAULT_COMMISSION_PERCENT,
   DEFAULT_REPEAT_COMMISSION_PERCENT,
   DEFAULT_DISCOUNT_PERCENT,
+  MIN_PAYOUT_RUPEES,
 } from '../config/affiliate.js';
 
 /** Fields an applicant may set on themselves. Everything else is admin-only. */
@@ -38,6 +41,54 @@ const APPLICATION_FIELDS = ['name', 'email', 'phone', 'website', 'pitch', 'gstin
 
 /** Payout fields collected on the application. Encrypted by the schema setter on write. */
 const PAYOUT_FIELDS = ['accountHolderName', 'accountNumber', 'ifsc'];
+
+/**
+ * Find the account that provably owns this email address, or null.
+ *
+ * ── WHY `isVerified` AND NOT "an account exists" ─────────────────────────────────
+ * `Affiliate.user` is the key the self-serve portal reads, so setting it grants sight
+ * of that affiliate's earnings — and, once payout details become self-editable, control
+ * of where their money goes. That makes it an authorisation boundary, not a convenience.
+ *
+ * Logging in does NOT prove you own an address: nothing in the auth path gates on
+ * `isVerified` (see routes/auth.js), so anyone can register any email and sign in
+ * immediately. Matching on a bare email would therefore hand an affiliate's dashboard
+ * to whoever registered their address first. The verification token is the only thing
+ * in this system that actually evidences control of an inbox, so it is the only thing
+ * allowed to make this link.
+ *
+ * Callers must treat "no match" as a NON-EVENT — never surface it, never branch the
+ * response on it. /affiliates/apply is public and unauthenticated, and an endpoint whose
+ * answer differs for a registered address is an account-enumeration oracle.
+ */
+const findVerifiedOwner = async (email, session = null) => {
+  if (!email) return null;
+  const user = await userRepository.findByEmail(String(email).trim().toLowerCase(), session);
+  return user?.isVerified ? user : null;
+};
+
+/**
+ * Link any unlinked affiliate application holding this now-verified address.
+ *
+ * ⚠️ THE LOAD-BEARING HOOK. Called from the verify-email handler, because the common
+ * order of events is the opposite of the convenient one: an affiliate is often a creator
+ * who has never shopped with us, so they apply FIRST and make an account LATER. Without
+ * this, `Affiliate.user` is written only at application time and nothing ever backfills
+ * it — an applicant who was signed out is orphaned permanently, with no route to their
+ * dashboard, their ledger, or their payout history.
+ *
+ * Guarded on `user: { $exists: false }` so it can never steal an affiliate that is
+ * already linked to somebody else, and returns quietly when there is nothing to do —
+ * this runs inside email verification, which must not fail because of it.
+ */
+const linkVerifiedUserToAffiliate = async (user, session = null) => {
+  if (!user?.isVerified || !user.email) return null;
+  const res = await affiliateRepository.linkUnlinkedByEmail(user.email, user._id, session);
+  if (res?.matchedCount) {
+    console.log(`[Affiliate] Linked application ${user.email} → user ${user._id} on email verification`);
+  }
+  return res;
+};
 
 /**
  * Project an Affiliate for the affiliate's OWN eyes (`GET /affiliates/me`).
@@ -216,7 +267,17 @@ class AffiliateService {
       application. See the field note on models/Affiliate.js.
     */
     const doc = { ...data, email, status: AFFILIATE_STATUS.PENDING };
-    if (userId) doc.user = userId;
+
+    /*
+      Prefer the proven session. Falling back to a verified-email lookup covers the
+      applicant who is signed out — the form is deliberately public, so this is the
+      common case, and without it they can never reach their own dashboard.
+
+      The lookup is invisible from outside: the response is byte-identical whether or
+      not a match was found, so this cannot be used to probe which emails are registered.
+    */
+    const owner = userId || (await findVerifiedOwner(email))?._id || null;
+    if (owner) doc.user = owner;
 
     // Bank details + PAN. Assigned through the schema, whose setter encrypts them —
     // they are never written anywhere in plaintext, including this object's lifetime
@@ -287,6 +348,18 @@ class AffiliateService {
           // rather than minting a second coupon.
           result = affiliate;
           return;
+        }
+
+        /*
+          Backstop link, in case the applicant registered and verified between applying
+          and being approved. Cheap (one indexed lookup on a path a human is already
+          waiting on) and it means an affiliate is linked by the time they are told their
+          code exists — which is the moment the approval email points them at a dashboard.
+          Never overwrites an existing link.
+        */
+        if (!affiliate.user) {
+          const owner = await findVerifiedOwner(affiliate.email, session);
+          if (owner) affiliate.user = owner._id;
         }
 
         if (commissionPercent !== undefined) affiliate.commissionPercent = commissionPercent;
@@ -444,6 +517,19 @@ class AffiliateService {
         affiliate.status = AFFILIATE_STATUS.SUSPENDED;
         affiliate.suspendedAt = new Date();
         if (reason !== undefined) affiliate.suspendedReason = reason;
+
+        /*
+          Drop any outstanding "please pay me" signal in the same write.
+
+          A request raised before suspension would otherwise survive it, and the queue
+          sorts requesters FIRST — so the one affiliate an admin has just decided not to
+          trust would sit at the top of the payment worklist. They are excluded from the
+          queue now, but leaving the flag set means it springs back the moment they are
+          reinstated, asking to be paid for a request made under different circumstances.
+        */
+        affiliate.payoutRequestedAt = null;
+        affiliate.payoutRequestedBalancePaise = null;
+
         await affiliate.save({ session });
 
         if (affiliate.coupon) {
@@ -588,6 +674,57 @@ class AffiliateService {
     };
   }
 
+  /**
+   * Record that an affiliate has asked to be paid.
+   *
+   * ⚠️ THIS MOVES NO MONEY AND AUTHORISES NONE. It sets a flag an admin can see. The
+   * payout is still built by `affiliatePayoutService.buildBatch` and settled by a human
+   * making a bank transfer — nothing here shortens that path, and nothing here should
+   * ever be made to.
+   *
+   * Refusals are deliberate and specific:
+   *   • not active   — a suspended affiliate is not owed a transfer while suspended
+   *   • below the floor — asking for money we will not send creates an expectation we
+   *     then have to disappoint; the balance and the threshold are both on their screen,
+   *     so this is a state the UI should never let them reach
+   *   • already asked — idempotent, so a double-tap does not look like two people waiting
+   *
+   * The balance is re-read from the ledger here and NEVER taken from the request. The
+   * client's figure is display only, like every other money number in this codebase.
+   */
+  async requestPayout(userId) {
+    const affiliate = await affiliateRepository.findByUser(userId);
+    if (!affiliate) throw new AppError('You are not an affiliate.', 403, { expose: true });
+
+    if (affiliate.status !== AFFILIATE_STATUS.ACTIVE) {
+      throw new AppError('Your affiliate account is not active.', 400, { expose: true });
+    }
+
+    // Idempotent: return the existing request rather than restarting the clock, so a
+    // double-submit cannot make someone look like they have been waiting less time.
+    if (affiliate.payoutRequestedAt) {
+      return { affiliate, alreadyRequested: true };
+    }
+
+    const balancePaise = await affiliateCommissionRepository.payableBalancePaise(affiliate._id);
+    const minPaise = MIN_PAYOUT_RUPEES * 100;
+    if (balancePaise < minPaise) {
+      throw new AppError(
+        `You need at least ₹${MIN_PAYOUT_RUPEES} in confirmed commission to request a payout. `
+        + `Your confirmed balance is ₹${(balancePaise / 100).toFixed(2)}.`,
+        400,
+        { expose: true },
+      );
+    }
+
+    affiliate.payoutRequestedAt = new Date();
+    affiliate.payoutRequestedBalancePaise = balancePaise;
+    await affiliate.save();
+
+    console.log(`[Affiliate] ${affiliate.code} requested a payout of ₹${(balancePaise / 100).toFixed(2)}`);
+    return { affiliate, alreadyRequested: false };
+  }
+
   async getById(affiliateId) {
     const affiliate = await affiliateRepository.findById(affiliateId, [
       { path: 'coupon', select: 'code value isActive usedCount' },
@@ -598,4 +735,10 @@ class AffiliateService {
 }
 
 export default new AffiliateService();
-export { codeFromName, resolveCode, toSelfView };
+export {
+  codeFromName,
+  resolveCode,
+  toSelfView,
+  findVerifiedOwner,
+  linkVerifiedUserToAffiliate,
+};

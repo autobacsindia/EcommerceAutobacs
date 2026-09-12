@@ -16,6 +16,7 @@ import AppError from '../utils/AppError.js';
 import crypto from 'crypto';
 import {
   STALE_PENDING_DAYS,
+  MIN_PAYOUT_RUPEES,
   DEFAULT_COMMISSION_PERCENT,
   DEFAULT_REPEAT_COMMISSION_PERCENT,
   DEFAULT_DISCOUNT_PERCENT,
@@ -75,7 +76,27 @@ export const listAffiliates = asyncHandler(async (req, res) => {
     search: req.query.search || null,
   });
 
-  res.json({ success: true, affiliates, nextCursor });
+  /*
+    Attach what each affiliate is owed, so the list answers "who needs paying" at a
+    glance instead of requiring an admin to open every detail page in turn.
+
+    ONE aggregation for the whole page (payableBalancesFor), never one per row — the
+    page is bounded at 100, and a per-row call would be 100 aggregations to paint a table.
+  */
+  const balances = await affiliateCommissionRepository.payableBalancesFor(
+    affiliates.map((a) => a._id),
+  );
+
+  res.json({
+    success: true,
+    affiliates: affiliates.map((a) => ({
+      // `a` is a lean object from the repository; spreading keeps the existing shape.
+      ...a,
+      payableBalancePaise: balances.get(String(a._id))?.netPaise ?? 0,
+    })),
+    nextCursor,
+    minPayoutPaise: MIN_PAYOUT_RUPEES * 100,
+  });
 });
 
 /**
@@ -230,9 +251,27 @@ export const listStalePendingCommissions = asyncHandler(async (req, res) => {
 export const getMyAffiliate = asyncHandler(async (req, res) => {
   const affiliate = await affiliateRepository.findByUser(req.user._id);
   if (!affiliate) {
-    // Not an error: "you are not an affiliate" is a perfectly normal answer, and a 404
-    // would make the portal page render an error state for every ordinary customer.
-    return res.json({ success: true, affiliate: null });
+    /*
+      Not an error: "you are not an affiliate" is a perfectly normal answer, and a 404
+      would make the portal page render an error state for every ordinary customer.
+
+      But it is the WRONG answer for one person: an applicant who applied while signed
+      out, from this same address, and has not verified it yet. Their application exists
+      and may already be approved; we simply cannot prove they own the inbox, so we will
+      not hand them the ledger. Telling them "you're not an affiliate yet" would be flatly
+      false and send them to re-apply, which the duplicate guard then refuses — a dead end
+      with no explanation.
+
+      `needsEmailVerification` is a BOOLEAN and nothing else. No code, no rates, no
+      earnings: this caller has not proven the address is theirs, so they get the one bit
+      that tells them what to do next and not a byte more. Scoped to `!isVerified` so a
+      verified user never triggers it — by then the link exists (routes/auth.js) or the
+      backfill script has repaired it.
+    */
+    const needsEmailVerification = !req.user.isVerified
+      && await affiliateRepository.hasUnlinkedApplicationForEmail(req.user.email);
+
+    return res.json({ success: true, affiliate: null, needsEmailVerification });
   }
 
   const [summary, payableBalancePaise] = await Promise.all([
@@ -240,10 +279,50 @@ export const getMyAffiliate = asyncHandler(async (req, res) => {
     affiliateCommissionRepository.payableBalancePaise(affiliate._id),
   ]);
 
-  // Whitelisted projection, NOT the raw document: the schema's toJSON strips only the
-  // encrypted bank/PAN fields, so returning `affiliate` here leaked the admin-only
-  // `notes` and `termsAcceptance.ipHash`. See toSelfView.
-  res.json({ success: true, affiliate: toSelfView(affiliate), summary, payableBalancePaise });
+  /*
+    `minPayoutPaise` is sent so the dashboard can state the threshold instead of leaving
+    someone at ₹400 wondering why nothing has arrived. It is a config constant, not a
+    secret, and the alternative — hardcoding ₹1,000 in the frontend — is a number that
+    silently stops matching the server the first time the env var changes.
+  */
+  res.json({
+    success: true,
+    affiliate: toSelfView(affiliate),
+    summary,
+    payableBalancePaise,
+    minPayoutPaise: MIN_PAYOUT_RUPEES * 100,
+    payoutRequestedAt: affiliate.payoutRequestedAt ?? null,
+    /*
+      What they were shown when they asked.
+
+      Without it a request becomes a dead end: a clawback landing afterwards can drag the
+      balance below the floor, at which point the admin queue correctly drops them — while
+      their dashboard still reads "Payout requested, you don't need to do anything else",
+      forever, and re-requesting short-circuits as already-requested. The UI compares this
+      against the live balance to say what actually happened instead of nothing.
+    */
+    payoutRequestedBalancePaise: affiliate.payoutRequestedBalancePaise ?? null,
+  });
+});
+
+/**
+ * @desc    Tell us you would like to be paid
+ * @route   POST /api/v1/affiliates/me/payout-request
+ * @access  Private
+ *
+ * ⚠️ A SIGNAL, NOT A MONEY ACTION. It sets a flag. An admin still builds the batch and
+ * still makes the bank transfer by hand. Nothing here shortens that path.
+ */
+export const requestMyPayout = asyncHandler(async (req, res) => {
+  const { affiliate, alreadyRequested } = await affiliateService.requestPayout(req.user._id);
+  res.json({
+    success: true,
+    alreadyRequested,
+    payoutRequestedAt: affiliate.payoutRequestedAt,
+    message: alreadyRequested
+      ? 'You have already requested a payout — it is in our queue.'
+      : 'Payout requested. We will transfer it to your registered account.',
+  });
 });
 
 /**
@@ -274,6 +353,62 @@ export const listMyCommissions = asyncHandler(async (req, res) => {
 });
 
 // ── Payouts ───────────────────────────────────────────────────────────────────
+
+/**
+ * @desc    Everyone currently owed at least the minimum payout
+ * @route   GET /api/v1/affiliates/admin/payout-queue
+ * @access  Admin
+ *
+ * The answer to "who do I pay this month". Without it an admin has to open every
+ * affiliate's detail page one at a time to discover who is owed money, which is how
+ * commission quietly goes unpaid — the fastest way to lose an affiliate's trust.
+ *
+ * Driven from the LEDGER (see payableQueue): the balance lives in the commission rows,
+ * so filtering the affiliate list by it is not expressible and paginating affiliates
+ * would produce mostly-empty pages.
+ */
+export const listPayoutQueue = asyncHandler(async (req, res) => {
+  const minPaise = MIN_PAYOUT_RUPEES * 100;
+  const limit = boundedLimit(req.query.limit, 50, 200);
+
+  const { rows, totalPayablePaise, dueCount, suspendedHeld } =
+    await affiliateCommissionRepository.payableQueue({ minPaise, limit });
+
+  const queue = rows.map((r) => ({
+    _id: r.affiliate._id,
+    code: r.affiliate.code ?? null,
+    name: r.affiliate.name,
+    status: r.affiliate.status,
+    tdsPercent: r.affiliate.tdsPercent ?? 0,
+    hasBankDetails: Boolean(r.affiliate.payoutDetails?.accountLast4 || r.affiliate.payoutDetails?.upiId),
+    payableBalancePaise: r.netPaise,
+    commissionCount: r.count,
+    oldestApprovedAt: r.oldest ?? null,
+    payoutRequestedAt: r.affiliate.payoutRequestedAt ?? null,
+  }));
+
+  res.json({
+    success: true,
+    queue,
+    minPayoutPaise: minPaise,
+    /*
+      Counted and summed across EVERY due affiliate, not just this page. A total derived
+      from the page understates what we owe the moment more people are due than fit on
+      it — and "₹X total" is exactly the number someone reads as the liability.
+    */
+    totalPayablePaise,
+    dueCount,
+    // True when the worklist is truncated, so the screen can say so instead of implying
+    // it is showing everyone.
+    hasMore: dueCount > queue.length,
+    /*
+      Money owed to non-active affiliates. Deliberately NOT in the worklist — suspension
+      does not void earned commission, but an admin working down a list must not pay
+      someone suspended for fraud by reflex. Reported so the liability is not invisible.
+    */
+    suspendedHeld,
+  });
+});
 
 /**
  * @desc    Build a payout batch, claiming everything payable for one affiliate

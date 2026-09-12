@@ -142,6 +142,9 @@ export const API_ENDPOINTS = {
   AFFILIATE_APPLY: '/affiliates/apply',                                 // public sign-up
   AFFILIATE_ME: '/affiliates/me',                                       // own profile + balance
   AFFILIATE_ME_COMMISSIONS: '/affiliates/me/commissions',               // own ledger
+  // A SIGNAL, not a money action — sets a flag an admin sees. The payout is still
+  // built by an admin and settled by a human bank transfer.
+  AFFILIATE_ME_PAYOUT_REQUEST: '/affiliates/me/payout-request',
   AFFILIATES_ADMIN: '/affiliates/admin',                                // admin list
   AFFILIATE_ADMIN_STALE: '/affiliates/admin/stale-pending',             // never-maturing rows
   AFFILIATE_ADMIN_DETAIL: (id: string) => `/affiliates/admin/${id}`,
@@ -153,6 +156,7 @@ export const API_ENDPOINTS = {
   AFFILIATE_ADMIN_TERMS: (id: string) => `/affiliates/admin/${id}/terms`,
   AFFILIATE_ADMIN_PAYOUT_DETAILS: (id: string) => `/affiliates/admin/${id}/payout-details`,
   AFFILIATE_PAYOUTS_ADMIN: '/affiliates/admin/payouts',                 // batch list + build
+  AFFILIATE_PAYOUT_QUEUE: '/affiliates/admin/payout-queue',             // who is owed money now
   AFFILIATE_PAYOUT_DETAIL: (id: string) => `/affiliates/admin/payouts/${id}`,
   AFFILIATE_PAYOUT_MARK_PAID: (id: string) => `/affiliates/admin/payouts/${id}/paid`,
   AFFILIATE_PAYOUT_MARK_FAILED: (id: string) => `/affiliates/admin/payouts/${id}/failed`,

@@ -810,6 +810,238 @@ describe('Affiliate API', () => {
     });
   });
 
+  /*
+    ── Linking an application to an account ────────────────────────────────────────
+    `Affiliate.user` is what GET /me resolves by, and it used to be written ONLY at
+    application time and only for a signed-in applicant — so anyone who applied from the
+    public form while logged out was orphaned permanently from their own earnings.
+
+    It is also an authorisation boundary: setting it grants sight of a ledger and, once
+    payout details are self-editable, control of where money goes. Signing in does NOT
+    prove ownership of an address (nothing in the auth path gates on isVerified), so a
+    VERIFIED email is the only thing allowed to make the link. Both halves are tested.
+  */
+  describe('account linking', () => {
+    const applyAnonymously = async (overrides = {}) => {
+      const anon = await anonymous();
+      await anon.apply({ ...APPLICATION, ...overrides });
+      return Affiliate.findOne({ email: (overrides.email || APPLICATION.email).toLowerCase() });
+    };
+
+    it('links an anonymous application to a VERIFIED account with that email', async () => {
+      await User.updateOne({ email: shopper.email }, { $set: { isVerified: true } });
+      const user = await User.findOne({ email: shopper.email });
+
+      const created = await applyAnonymously({ email: shopper.email });
+      expect(String(created.user)).toBe(String(user._id));
+    });
+
+    it('does NOT link when the account exists but is UNVERIFIED', async () => {
+      // The load-bearing negative. A bare email match would hand this affiliate's
+      // earnings to whoever registered the address without ever proving they own it.
+      await User.updateOne({ email: shopper.email }, { $set: { isVerified: false } });
+
+      const created = await applyAnonymously({ email: shopper.email });
+      expect(created.user).toBeUndefined();
+    });
+
+    it('leaves `user` ABSENT, not null, when there is no account', async () => {
+      // `null` would be indexed by the sparse unique index on `user` and block the
+      // SECOND account-less application. Absent is the only correct shape.
+      const created = await applyAnonymously({ email: 'nobody@example.com' });
+      expect(created.user).toBeUndefined();
+      expect(Object.prototype.hasOwnProperty.call(created.toObject(), 'user')).toBe(false);
+
+      // Prove the consequence, not just the shape.
+      const second = await applyAnonymously({ email: 'alsonobody@example.com' });
+      expect(second).toBeTruthy();
+    });
+
+    it('verifying the email adopts a waiting application', async () => {
+      // The path that matters most: affiliates are often creators who have never shopped
+      // with us, so they apply FIRST and register LATER.
+      await User.updateOne({ email: shopper.email }, { $set: { isVerified: false } });
+      const created = await applyAnonymously({ email: shopper.email });
+      expect(created.user).toBeUndefined();
+
+      const user = await User.findOne({ email: shopper.email });
+      const { linkVerifiedUserToAffiliate } = await import('../services/affiliateService.js');
+      user.isVerified = true;
+      await linkVerifiedUserToAffiliate(user);
+
+      const linked = await Affiliate.findById(created._id);
+      expect(String(linked.user)).toBe(String(user._id));
+    });
+
+    it('never re-points an application that is ALREADY linked to someone else', async () => {
+      const owner = await User.findOne({ email: shopper.email });
+      const created = await applyAnonymously({ email: 'someoneelse@example.com' });
+      await Affiliate.updateOne({ _id: created._id }, { $set: { user: owner._id } });
+
+      const intruder = await User.create({
+        name: 'Intruder', email: 'someoneelse@example.com'.replace('someoneelse', 'intruder'),
+        passwordHash: 'x', isVerified: true,
+      });
+      // Same address on the affiliate row, but it already belongs to `owner`.
+      const { linkVerifiedUserToAffiliate } = await import('../services/affiliateService.js');
+      await linkVerifiedUserToAffiliate({
+        _id: intruder._id, email: 'someoneelse@example.com', isVerified: true,
+      });
+
+      const after = await Affiliate.findById(created._id);
+      expect(String(after.user)).toBe(String(owner._id));
+    });
+
+    it('approval links a verified applicant as a backstop', async () => {
+      await User.updateOne({ email: shopper.email }, { $set: { isVerified: false } });
+      const created = await applyAnonymously({ email: shopper.email });
+      expect(created.user).toBeUndefined();
+
+      // They verify between applying and being approved.
+      await User.updateOne({ email: shopper.email }, { $set: { isVerified: true } });
+      await post(`/affiliates/admin/${created._id}/approve`, { commissionPercent: 10 });
+
+      const approved = await Affiliate.findById(created._id);
+      const user = await User.findOne({ email: shopper.email });
+      expect(String(approved.user)).toBe(String(user._id));
+    });
+
+    it('tells an unverified applicant to verify, instead of "you are not an affiliate"', async () => {
+      await User.updateOne({ email: shopper.email }, { $set: { isVerified: false } });
+      await applyAnonymously({ email: shopper.email });
+
+      const res = await shopperAgent.get(`${BASE}/affiliates/me`);
+      expect(res.status).toBe(200);
+      expect(res.body.affiliate).toBeNull();
+      expect(res.body.needsEmailVerification).toBe(true);
+
+      // ...and it leaks NOTHING about the application beyond that one bit.
+      expect(JSON.stringify(res.body)).not.toContain(APPLICATION.pitch);
+      expect(res.body).not.toHaveProperty('summary');
+      expect(res.body).not.toHaveProperty('payableBalancePaise');
+    });
+
+    it('does not set the hint for an ordinary customer with no application', async () => {
+      await User.updateOne({ email: shopper.email }, { $set: { isVerified: false } });
+      const res = await shopperAgent.get(`${BASE}/affiliates/me`);
+      expect(res.body.affiliate).toBeNull();
+      expect(res.body.needsEmailVerification).toBe(false);
+    });
+  });
+
+  /*
+    ── The payout queue and the payout request, over HTTP ──────────────────────────
+    The service logic is covered in affiliatePayout.test.js. These assert the WIRING:
+    that the routes exist, that the admin queue is closed to customers, and — the one
+    that would be a real leak — that the queue never carries bank details.
+  */
+  describe('payout queue + request (routes)', () => {
+    it('closes the payout queue to a customer', async () => {
+      const res = await shopperAgent.get(`${BASE}/affiliates/admin/payout-queue`);
+      expect([401, 403]).toContain(res.status);
+    });
+
+    it('is not swallowed by the /admin/:id ObjectId route', async () => {
+      // `payout-queue` is a literal segment declared before '/admin/:id'. If that
+      // ordering ever regresses this 400s on the ObjectId validator instead of 200ing.
+      const res = await get('/affiliates/admin/payout-queue');
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.queue)).toBe(true);
+      expect(res.body.minPayoutPaise).toBeGreaterThan(0);
+    });
+
+    it('never carries bank details or PAN in the queue', async () => {
+      const created = await createActiveAffiliate();
+      await put(`/affiliates/admin/${created._id}/payout-details`, {
+        accountHolderName: 'Rahul Nair',
+        accountNumber: '123456789012',
+        ifsc: 'HDFC0001234',
+        panNumber: 'ABCDE1234F',
+      });
+
+      const res = await get('/affiliates/admin/payout-queue');
+      expect(res.status).toBe(200);
+      // A list endpoint that leaks bank details leaks them for everyone at once.
+      expect(JSON.stringify(res.body)).not.toContain('123456789012');
+      expect(JSON.stringify(res.body)).not.toContain('ABCDE1234F');
+      expect(JSON.stringify(res.body)).not.toContain('accountNumber');
+    });
+
+    it('reports what each affiliate is owed on the admin list', async () => {
+      await createActiveAffiliate();
+      const res = await get('/affiliates/admin');
+      expect(res.status).toBe(200);
+      // Zero, not undefined — the UI renders this as money and must never print "₹NaN".
+      expect(res.body.affiliates[0].payableBalancePaise).toBe(0);
+      expect(res.body.minPayoutPaise).toBeGreaterThan(0);
+    });
+
+    it('reports the liability across every due affiliate, not just the page', async () => {
+      const res = await get('/affiliates/admin/payout-queue');
+      expect(res.status).toBe(200);
+      // Present and numeric even when nobody is due — the screen renders these as money.
+      expect(res.body.totalPayablePaise).toBe(0);
+      expect(res.body.dueCount).toBe(0);
+      expect(res.body.hasMore).toBe(false);
+      expect(res.body.suspendedHeld).toEqual({ heldPaise: 0, count: 0 });
+    });
+
+    it('refuses to build a batch for a suspended affiliate over HTTP', async () => {
+      // The guard has to hold on the directly-callable endpoint, not only in the queue.
+      // The kill switch is checked first, so enable the programme or the assertion reads
+      // "not enabled" and proves nothing about status.
+      const previous = process.env.AFFILIATE_COMMISSION_ENABLED;
+      process.env.AFFILIATE_COMMISSION_ENABLED = 'true';
+      try {
+        const created = await createActiveAffiliate();
+        await post(`/affiliates/admin/${created._id}/suspend`, { reason: 'fraud review' });
+
+        const res = await post(`/affiliates/admin/${created._id}/payouts`, {});
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/suspended/i);
+      } finally {
+        if (previous === undefined) delete process.env.AFFILIATE_COMMISSION_ENABLED;
+        else process.env.AFFILIATE_COMMISSION_ENABLED = previous;
+      }
+    });
+
+    it('refuses a payout request from a non-affiliate', async () => {
+      const res = await shopperAgent.post(`${BASE}/affiliates/me/payout-request`)
+        .set('X-XSRF-TOKEN', shopperCsrf).send({});
+      expect(res.status).toBe(403);
+    });
+
+    it('requires authentication to request a payout', async () => {
+      // A fresh jar with a valid CSRF token but no session: proves the 401 comes from
+      // `protect`, not from CSRF incidentally rejecting a token-less request.
+      const jar = request.agent(app);
+      const seed = await jar.get(`${BASE}/csrf-token`);
+      const token = extractCsrfFromSetCookie(seed.headers['set-cookie']) || seed.body?.csrfToken || '';
+
+      const res = await jar.post(`${BASE}/affiliates/me/payout-request`)
+        .set('X-XSRF-TOKEN', token).send({});
+      expect(res.status).toBe(401);
+    });
+
+    it('exposes the threshold on GET /me so the dashboard can state it', async () => {
+      await shopperAgent.post(`${BASE}/affiliates/apply`)
+        .set('X-XSRF-TOKEN', shopperCsrf)
+        .send({ ...APPLICATION, email: shopper.email });
+      const created = await Affiliate.findOne({ email: shopper.email });
+      await post(`/affiliates/admin/${created._id}/approve`, { commissionPercent: 10 });
+
+      const res = await shopperAgent.get(`${BASE}/affiliates/me`);
+      expect(res.body.minPayoutPaise).toBeGreaterThan(0);
+      expect(res.body.payoutRequestedAt).toBeNull();
+      /*
+        Sent so the dashboard can explain a request that went stale — a clawback dropping
+        someone back under the floor after they asked. Without it the page says
+        "requested, nothing to do" indefinitely while nothing is going to happen.
+      */
+      expect(res.body).toHaveProperty('payoutRequestedBalancePaise');
+    });
+  });
+
   // ── Listing ─────────────────────────────────────────────────────────────────
 
   describe('GET /affiliates/admin', () => {
