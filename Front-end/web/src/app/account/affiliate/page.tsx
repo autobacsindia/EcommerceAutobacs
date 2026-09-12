@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Check, Copy, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useRequireAuth } from '@/lib/hooks/useRequireAuth';
-import { useMyAffiliate, useMyCommissions } from '@/hooks/queries/useAffiliate';
+import { useMyAffiliate, useMyCommissions, useRequestPayout } from '@/hooks/queries/useAffiliate';
 import { formatDateIST } from '@/lib/datetime';
 
 /**
@@ -92,6 +92,7 @@ export default function AffiliateDashboardPage() {
 
   const enabled = isAuthenticated && !!user;
   const { data, isPending, isError } = useMyAffiliate(enabled);
+  const requestPayout = useRequestPayout();
   const { data: ledger, isLoading: ledgerLoading } = useMyCommissions(cursor, enabled);
 
   const affiliate = data?.affiliate ?? null;
@@ -209,6 +210,23 @@ export default function AffiliateDashboardPage() {
   const hasSeparateRepeatRate = affiliate.repeatCommissionPercent != null
     && affiliate.repeatCommissionPercent !== affiliate.commissionPercent;
 
+  const payable = data?.payableBalancePaise ?? 0;
+  const minPayoutPaise = data?.minPayoutPaise ?? 0;
+  const alreadyRequested = Boolean(data?.payoutRequestedAt);
+  /*
+    Only offer the button when it can actually succeed. The server refuses below the
+    floor — showing a button that returns an error teaches people the product is broken,
+    when in fact it is working exactly as described one line above.
+  */
+  const canRequest = !alreadyRequested && minPayoutPaise > 0 && payable >= minPayoutPaise;
+  /*
+    They asked, then the balance fell back under the floor — almost always a refund
+    clawing commission back after the request. The admin queue correctly drops them, so
+    nothing is going to happen until it recovers. Saying "requested, nothing to do" here
+    would be a promise we are not keeping.
+  */
+  const requestWentStale = alreadyRequested && minPayoutPaise > 0 && payable < minPayoutPaise;
+
   return (
     <main className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-4xl mx-auto px-4 space-y-6">
@@ -287,7 +305,73 @@ export default function AffiliateDashboardPage() {
             ))}
           </div>
 
-          {(data?.payableBalancePaise ?? 0) < 0 && (
+          {/*
+          ── The threshold, stated ─────────────────────────────────────────────
+          Without this, someone sitting at ₹400 "Ready to pay" has no idea why nothing
+          has arrived and the only way to find out is to email support. The figure comes
+          from the server so it cannot drift from the rule actually enforced.
+
+          The request button is a SIGNAL — it flags the account for an admin, who still
+          builds the batch and makes the bank transfer by hand. It is deliberately NOT
+          optimistic: payout state is money state, so the UI waits for the server.
+        */}
+        {minPayoutPaise > 0 && (
+          <div className="mt-4 rounded-sm border border-hairline bg-obsidian-raised px-4 py-3">
+            {!canRequest && !alreadyRequested && (
+              <p className="text-sm text-ink-muted font-display">
+                We transfer once your confirmed balance reaches{' '}
+                <strong className="text-ink">{rupees(minPayoutPaise)}</strong>.
+                {payable > 0 && <> You&apos;re {rupees(minPayoutPaise - payable)} away.</>}
+              </p>
+            )}
+
+            {canRequest && (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-ink-muted font-display">
+                  You&apos;ve reached the {rupees(minPayoutPaise)} minimum — you can ask us
+                  to transfer it.
+                </p>
+                <button
+                  onClick={() => requestPayout.mutate()}
+                  disabled={requestPayout.isPending}
+                  className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-sm bg-gold text-obsidian font-display font-bold uppercase tracking-widest text-xs hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {requestPayout.isPending ? 'Requesting…' : 'Request payout'}
+                </button>
+              </div>
+            )}
+
+            {alreadyRequested && !requestWentStale && (
+              <p className="text-sm text-ink-muted font-display">
+                <strong className="text-ink">Payout requested</strong> on{' '}
+                {formatDateIST(data!.payoutRequestedAt!)}. We&apos;ll transfer it to your
+                registered account — you don&apos;t need to do anything else.
+              </p>
+            )}
+
+            {requestWentStale && (
+              <p className="text-sm text-amber-200 font-display">
+                You requested a payout on {formatDateIST(data!.payoutRequestedAt!)}
+                {data?.payoutRequestedBalancePaise != null
+                  && <> for {rupees(data.payoutRequestedBalancePaise)}</>}
+                , but your confirmed balance has since fallen to{' '}
+                <strong className="text-ink">{rupees(payable)}</strong> — an order you
+                referred was refunded. Your request still stands: we&apos;ll transfer it
+                once the balance is back above {rupees(minPayoutPaise)}.
+              </p>
+            )}
+
+            {requestPayout.isError && (
+              <p role="alert" className="mt-2 text-sm font-display text-red-300">
+                {requestPayout.error instanceof Error
+                  ? requestPayout.error.message
+                  : 'Could not request a payout. Please try again.'}
+              </p>
+            )}
+          </div>
+        )}
+
+        {(data?.payableBalancePaise ?? 0) < 0 && (
             <p className="mt-4 rounded-sm border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 font-display">
               An order you referred was refunded after it had been paid out, so this amount
               is carried against your next earnings. Nothing is owed by you directly.

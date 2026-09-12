@@ -22,6 +22,7 @@
 
 import mongoose from 'mongoose';
 import affiliateRepository from '../repositories/affiliateRepository.js';
+import affiliateCommissionRepository from '../repositories/affiliateCommissionRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { enqueueNotification } from '../queue/queues.js';
 import { CURRENT_AFFILIATE_TERMS_VERSION } from '../config/legalDocuments.js';
@@ -32,6 +33,7 @@ import {
   DEFAULT_COMMISSION_PERCENT,
   DEFAULT_REPEAT_COMMISSION_PERCENT,
   DEFAULT_DISCOUNT_PERCENT,
+  MIN_PAYOUT_RUPEES,
 } from '../config/affiliate.js';
 
 /** Fields an applicant may set on themselves. Everything else is admin-only. */
@@ -515,6 +517,19 @@ class AffiliateService {
         affiliate.status = AFFILIATE_STATUS.SUSPENDED;
         affiliate.suspendedAt = new Date();
         if (reason !== undefined) affiliate.suspendedReason = reason;
+
+        /*
+          Drop any outstanding "please pay me" signal in the same write.
+
+          A request raised before suspension would otherwise survive it, and the queue
+          sorts requesters FIRST — so the one affiliate an admin has just decided not to
+          trust would sit at the top of the payment worklist. They are excluded from the
+          queue now, but leaving the flag set means it springs back the moment they are
+          reinstated, asking to be paid for a request made under different circumstances.
+        */
+        affiliate.payoutRequestedAt = null;
+        affiliate.payoutRequestedBalancePaise = null;
+
         await affiliate.save({ session });
 
         if (affiliate.coupon) {
@@ -657,6 +672,57 @@ class AffiliateService {
       affiliates,
       nextCursor: hasMore ? affiliates.at(-1).createdAt : null,
     };
+  }
+
+  /**
+   * Record that an affiliate has asked to be paid.
+   *
+   * ⚠️ THIS MOVES NO MONEY AND AUTHORISES NONE. It sets a flag an admin can see. The
+   * payout is still built by `affiliatePayoutService.buildBatch` and settled by a human
+   * making a bank transfer — nothing here shortens that path, and nothing here should
+   * ever be made to.
+   *
+   * Refusals are deliberate and specific:
+   *   • not active   — a suspended affiliate is not owed a transfer while suspended
+   *   • below the floor — asking for money we will not send creates an expectation we
+   *     then have to disappoint; the balance and the threshold are both on their screen,
+   *     so this is a state the UI should never let them reach
+   *   • already asked — idempotent, so a double-tap does not look like two people waiting
+   *
+   * The balance is re-read from the ledger here and NEVER taken from the request. The
+   * client's figure is display only, like every other money number in this codebase.
+   */
+  async requestPayout(userId) {
+    const affiliate = await affiliateRepository.findByUser(userId);
+    if (!affiliate) throw new AppError('You are not an affiliate.', 403, { expose: true });
+
+    if (affiliate.status !== AFFILIATE_STATUS.ACTIVE) {
+      throw new AppError('Your affiliate account is not active.', 400, { expose: true });
+    }
+
+    // Idempotent: return the existing request rather than restarting the clock, so a
+    // double-submit cannot make someone look like they have been waiting less time.
+    if (affiliate.payoutRequestedAt) {
+      return { affiliate, alreadyRequested: true };
+    }
+
+    const balancePaise = await affiliateCommissionRepository.payableBalancePaise(affiliate._id);
+    const minPaise = MIN_PAYOUT_RUPEES * 100;
+    if (balancePaise < minPaise) {
+      throw new AppError(
+        `You need at least ₹${MIN_PAYOUT_RUPEES} in confirmed commission to request a payout. `
+        + `Your confirmed balance is ₹${(balancePaise / 100).toFixed(2)}.`,
+        400,
+        { expose: true },
+      );
+    }
+
+    affiliate.payoutRequestedAt = new Date();
+    affiliate.payoutRequestedBalancePaise = balancePaise;
+    await affiliate.save();
+
+    console.log(`[Affiliate] ${affiliate.code} requested a payout of ₹${(balancePaise / 100).toFixed(2)}`);
+    return { affiliate, alreadyRequested: false };
   }
 
   async getById(affiliateId) {

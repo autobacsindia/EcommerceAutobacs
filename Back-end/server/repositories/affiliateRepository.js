@@ -233,6 +233,23 @@ class AffiliateRepository extends BaseRepository {
    * its result off any response body — models/Affiliate.js's toJSON strips them, but
    * a `.lean()` document has no toJSON, so this deliberately returns a hydrated doc.
    */
+  /**
+   * Clear the "please pay me" signal. Called inside the batch-claim transaction.
+   *
+   * A targeted `updateOne`, NOT `doc.save()` — the only affiliate document in scope at
+   * that point is the one loaded by `findForPayout`, which carries the encrypted account
+   * number and PAN. Saving it whole to flip two unrelated flags round-trips financial
+   * PII through the setter path for no reason. Touch the two fields and nothing else.
+   */
+  async clearPayoutRequest(affiliateId, session = null) {
+    let q = Affiliate.updateOne(
+      { _id: affiliateId },
+      { $set: { payoutRequestedAt: null, payoutRequestedBalancePaise: null } },
+    );
+    if (session) q = q.session(session);
+    return q;
+  }
+
   async findForPayout(affiliateId, session = null) {
     let q = Affiliate.findById(affiliateId)
       .select('+payoutDetails.accountNumber +payoutDetails.panNumber');

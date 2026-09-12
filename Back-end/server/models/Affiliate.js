@@ -327,6 +327,26 @@ const AffiliateSchema = new mongoose.Schema(
      */
     notifiedEvents: { type: [String], default: [] },
 
+    /**
+     * The affiliate asked to be paid. A SIGNAL, NOT A MONEY ACTION.
+     *
+     * ⚠️ Nothing about this field moves, reserves, or authorises a rupee. It exists so a
+     * person who can see a payable balance has a way to say "please send it" instead of
+     * emailing support, and so the admin queue can show who is actually waiting rather
+     * than treating every balance as equally urgent.
+     *
+     * The payout itself is still built by an admin (`POST /admin/:id/payouts`) and
+     * settled by a human making a bank transfer. Cleared when a batch claims the rows,
+     * so a stale request cannot make an already-paid affiliate look like they are still
+     * waiting.
+     *
+     * `payoutRequestedBalancePaise` snapshots what they SAW when they asked. Kept purely
+     * so the admin can spot a request that no longer matches reality — a clawback landing
+     * between the request and the transfer is exactly when the two diverge.
+     */
+    payoutRequestedAt: { type: Date, default: null },
+    payoutRequestedBalancePaise: { type: Number, default: null },
+
     approvedAt: { type: Date, default: null },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     suspendedAt: { type: Date, default: null },

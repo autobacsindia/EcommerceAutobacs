@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { affiliateKeys } from './keys';
@@ -55,6 +55,24 @@ export interface MyAffiliateResponse {
    * affiliate yet", which sends them to re-apply into a duplicate-guard dead end.
    */
   needsEmailVerification?: boolean;
+  /**
+   * The payout floor, in paise, from the server's own config.
+   *
+   * Sent rather than hardcoded in the UI: the alternative is a number that silently
+   * stops matching the server the first time AFFILIATE_MIN_PAYOUT_RUPEES changes, and
+   * a dashboard promising a threshold we no longer use is worse than one that is silent.
+   */
+  minPayoutPaise?: number;
+  /** Set when this affiliate has already asked to be paid. Null once a batch is built. */
+  payoutRequestedAt?: string | null;
+  /**
+   * The balance they were shown when they asked.
+   *
+   * Compared against the live balance so a request that has gone stale — a clawback
+   * dropped them back under the floor after they asked — is explained rather than
+   * leaving "requested, nothing to do" on screen while nothing will in fact happen.
+   */
+  payoutRequestedBalancePaise?: number | null;
 }
 
 export interface Commission {
@@ -79,6 +97,68 @@ export function useMyAffiliate(enabled = true) {
     queryKey: affiliateKeys.me(),
     queryFn: () => apiClient.get<MyAffiliateResponse>(API_ENDPOINTS.AFFILIATE_ME),
     enabled,
+  });
+}
+
+/**
+ * Ask to be paid.
+ *
+ * ⚠️ A SIGNAL, NOT A MONEY ACTION — it sets a flag an admin can see. No amount is sent:
+ * the server re-reads the balance from the ledger, because a client-supplied figure is
+ * exactly the kind of number this codebase never trusts.
+ *
+ * NOT optimistic. Payout state is money state, so the button reflects what the server
+ * confirmed and nothing sooner — the same rule that keeps price and stock honest.
+ */
+export function useRequestPayout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiClient.post<{
+      success: boolean; alreadyRequested: boolean; payoutRequestedAt: string; message: string;
+    }>(API_ENDPOINTS.AFFILIATE_ME_PAYOUT_REQUEST, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: affiliateKeys.me() }),
+  });
+}
+
+export interface PayoutQueueRow {
+  _id: string;
+  code: string | null;
+  name: string;
+  status: string;
+  tdsPercent: number;
+  hasBankDetails: boolean;
+  payableBalancePaise: number;
+  commissionCount: number;
+  oldestApprovedAt: string | null;
+  payoutRequestedAt: string | null;
+}
+
+export interface PayoutQueueResponse {
+  success: boolean;
+  queue: PayoutQueueRow[];
+  minPayoutPaise: number;
+  /** Across EVERY due affiliate, not just this page. */
+  totalPayablePaise: number;
+  dueCount: number;
+  hasMore: boolean;
+  /** Owed to non-active affiliates: visible, deliberately not in the worklist. */
+  suspendedHeld: { heldPaise: number; count: number };
+}
+
+/**
+ * ADMIN: who is owed at least the minimum payout, in priority order.
+ *
+ * Goes through TanStack Query rather than a hand-rolled `useEffect` so the key in
+ * `affiliateKeys` has a real producer — a key nobody reads under is a key whose
+ * invalidation silently does nothing, which is how a screen ends up showing an affiliate
+ * who was paid five minutes ago.
+ */
+export function usePayoutQueue() {
+  return useQuery({
+    queryKey: affiliateKeys.payoutQueue(),
+    queryFn: () => apiClient.get<PayoutQueueResponse>(API_ENDPOINTS.AFFILIATE_PAYOUT_QUEUE),
+    // Money state: never serve a stale worklist from cache on revisit.
+    staleTime: 0,
   });
 }
 

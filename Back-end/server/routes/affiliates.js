@@ -20,6 +20,8 @@ import {
   listStalePendingCommissions,
   getMyAffiliate,
   listMyCommissions,
+  requestMyPayout,
+  listPayoutQueue,
   buildAffiliatePayout,
   listAffiliatePayouts,
   getAffiliatePayout,
@@ -91,6 +93,22 @@ router.get(
   listMyCommissions,
 );
 
+/*
+  "Please pay me." A SIGNAL, NOT A MONEY ACTION — it sets a flag an admin can see. The
+  payout is still built by an admin and settled by a human bank transfer.
+
+  No body: the balance is re-read from the ledger server-side. A client-sent amount would
+  be a number we do not trust anyway, so there is nothing for it to send.
+
+  `contactFormRateLimit` rather than the looser authenticated limiter: this is a write
+  that pages a human, and a stuck retry loop should not be able to fill the queue.
+*/
+router.post(
+  '/me/payout-request',
+  protect, contactFormRateLimit,
+  requestMyPayout,
+);
+
 // ── Admin ─────────────────────────────────────────────────────────────────────
 //
 // Declared BEFORE any '/:id'-shaped route would be, so a literal path segment can
@@ -107,6 +125,14 @@ router.get(
   '/admin/stale-pending',
   protect, admin, adminRouteRateLimit,
   listStalePendingCommissions,
+);
+
+// Who is owed money right now. Declared before '/admin/:id' so the literal segment is
+// not swallowed as an ObjectId — the ordering rule this file documents above.
+router.get(
+  '/admin/payout-queue',
+  protect, admin, adminRouteRateLimit,
+  listPayoutQueue,
 );
 
 /*

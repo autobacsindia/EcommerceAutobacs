@@ -536,6 +536,72 @@ npm run affiliate-test-drive -- --mature=<orderId> --confirm-cluster=autobacstes
 > ⚠️ Re-read **precondition 0.6** first. With the ₹1,000 fixture you have ~₹120 of
 > commission and the batch builder will refuse below ₹1,000.
 
+### 9a. Does anyone KNOW a payout is due?
+
+Nothing used to say so: the affiliate could not ask, and the admin had no list — you had
+to open every affiliate's detail page in turn. That is how commission quietly goes unpaid.
+
+- [ ] **9.0a Below the floor, the affiliate is told why.** With less than the minimum
+      confirmed, open `/account/affiliate`.
+      ✅ "We transfer once your confirmed balance reaches ₹1,000. You're ₹X away."
+      ✅ **No** Request payout button — offering one that the server would refuse teaches
+      people the product is broken when it is working as described one line above.
+- [ ] **9.0b At/above the floor, they can ask.** ✅ A **Request payout** button appears.
+      Click it → ✅ "Payout requested on `<date>`", button gone.
+- [ ] **9.0c It moves NO money.** After requesting:
+```js
+db.affiliatepayouts.countDocuments({ affiliate: <id> })   // still 0
+db.affiliates.findOne({ _id: <id> }, { payoutRequestedAt:1, payoutRequestedBalancePaise:1 })
+```
+      ✅ No payout document exists; commission rows are untouched (`approved`, `payout: null`).
+      ✅ `payoutRequestedBalancePaise` snapshots what they saw when they asked.
+- [ ] **9.0d Idempotent.** Request again (via the API — the button is gone).
+      ✅ `payoutRequestedAt` is **unchanged** — a double tap must not restart the clock.
+- [ ] **9.0e Suspended cannot request.** Suspend, then request → ✅ refused, "not active".
+- [ ] **9.0f The admin queue.** Admin → **Payout Queue** (`/admin/affiliates/payout-queue`).
+      ✅ Lists only **active** affiliates at/above the minimum, with owed amount, row
+      count, days waiting, TDS % and whether bank details are on file.
+      ✅ The affiliate who **requested** is sorted **first**, with a "Requested" badge.
+      ✅ Header shows "N affiliates due · ₹X total".
+- [ ] **9.0f-i Priority survives truncation.** Give affiliate A a huge balance and no
+      request; give affiliate B the smallest qualifying balance **and** a request.
+      ✅ B appears **above** A. *(Priority must be applied before the list is cut, or the
+      person who actually chased their money is the one dropped.)*
+- [ ] **9.0f-ii The total is the LIABILITY, not the page.** With more due affiliates than
+      fit on one page, ✅ "N due · ₹X total" counts **everyone**, and the header adds
+      "(showing the top N)". *A total summed from the visible rows understates what we owe.*
+- [ ] **9.0f-iii Suspended money is visible but not payable.** Suspend an affiliate who
+      is owed money.
+      ✅ They **disappear from the worklist**.
+      ✅ An amber banner appears: "₹X is held against N suspended or pending affiliates".
+      ✅ Their outstanding request is **cleared** — check `payoutRequestedAt` is `null`.
+      ✅ `POST /affiliates/admin/<id>/payouts` directly → **400**, "suspended".
+      ✅ Reinstate → they return to the queue and **can** be paid. *(Suspension does not
+      void earned commission; paying it is a decision, not an accident.)*
+- [ ] **9.0g Clawbacks net BEFORE the threshold.** Give an affiliate ₹1,200 approved, then
+      a −₹1,000 clawback. ✅ They **drop out** of the queue — we must never queue a payout
+      to someone whose refunds outweigh their earnings.
+- [ ] **9.0h Missing bank details are flagged.** An affiliate with no account on file
+      ✅ shows a red **Missing** — surfaced here, not discovered when you go to transfer.
+- [ ] **9.0i No PII in the queue.** DevTools → `GET /affiliates/admin/payout-queue`.
+      ✅ **No** `accountNumber`, **no** `panNumber` anywhere in the response.
+      *A list endpoint that leaks bank details leaks them for everyone at once.*
+- [ ] **9.0j The queue is admin-only.** As a customer, `GET /affiliates/admin/payout-queue`
+      → ✅ 401/403, never 200.
+- [ ] **9.0k Building clears the request.** Build the batch from the queue.
+      ✅ `payoutRequestedAt` is `null`, and the affiliate **leaves** the queue.
+      *Otherwise they stay pinned at the top after the money is batched — which is how a
+      second admin, trusting the queue, pays the same person twice.*
+- [ ] **9.0l The admin list shows balances too.** `/admin/affiliates` →
+      ✅ there is an **Owed** column, showing an amount for anyone due and a grey dash
+      otherwise (never `₹0.00` on every row, never blank, never `₹NaN`).
+- [ ] **9.0m A request that goes stale is explained.** Request a payout, then refund the
+      referred order so the clawback drops the balance below the minimum.
+      ✅ They leave the admin queue (correct — nothing should be paid).
+      ✅ The dashboard does **NOT** still say "requested, you don't need to do anything
+      else". It says the balance fell to ₹X after a refund and the request still stands.
+      *A request that silently becomes a no-op is a dead end the affiliate cannot see.*
+
 - [ ] **9.1** Admin → `/admin/affiliates/<id>` → ✅ Earnings shows **Ready to pay** matching
       the affiliate's own dashboard figure, to the paisa.
 - [ ] **9.2 Below the minimum.** With less than `MIN_PAYOUT_RUPEES` approved →
