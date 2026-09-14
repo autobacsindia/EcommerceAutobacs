@@ -312,15 +312,6 @@ When work is complete: say so, summarise what changed, and **stop**. Let the use
 
 This applies with more force to `push` and `merge`, which are outward-facing and, on `main`, deploy to production.
 
-### Commit authorship
-
-- **Commits are authored by the human collaborator, not by a bot account.** This repo's identity is set in `.git/config` (repo-local, deliberately *not* global): `Sudhanshu2024 <88976610+Sudhanshu2024@users.noreply.github.com>`. The numeric prefix is that account's GitHub user id — it is what links a commit to the profile and the contribution graph. Don't override `user.name`/`user.email` per-commit, and don't set them globally.
-
-- **Do NOT append a `Co-Authored-By: Claude ...` trailer to commit messages.** This overrides the default harness convention, by the repo owner's explicit call (2026-09-14). The 239 existing commits that carry it stay as they are — history is not rewritten.
-
-- **Push and PR identity is the collaborator account too.** `origin` is pinned to `https://Sudhanshu2024@github.com/...` so macOS keychain resolves that account's credential, separate from the `autobacsindia` entry. This is load-bearing for safety, not cosmetics: `autobacsindia` is a repo **admin**, and an admin push to `main` silently bypasses branch protection and both CI checks. `Sudhanshu2024` has `push` but not `admin`, so the gate is actually enforced. **Do not "fix" a push failure by switching back to the admin account.**
-
-
 ### Merging to `main` (⚠️ this IS the production deploy)
 
 There is no separate "deploy" step. **A push to `main` deploys to the live store within minutes** — real customers, real Razorpay. Treat the merge itself as the deploy.
@@ -380,8 +371,6 @@ Because prod runs with `autoIndex: false`, the live index set can silently diver
 - **Never hand-roll `generateMetadata`** — wire into the config-driven SEO system.
 
 - **Never commit, push, merge, or merge a PR without being asked for that action in that message** — completing work is not permission to record it.
-
-- **Never add a `Co-Authored-By: Claude` trailer**, and never commit or push as the `autobacsindia` admin account — commits and pushes are authored by `Sudhanshu2024`, whose non-admin `push` permission is what actually enforces branch protection.
 
 - **Never push straight to `main`** — that IS the production deploy, and an admin push silently *bypasses* the PR + CI gate. Use a PR.
 
