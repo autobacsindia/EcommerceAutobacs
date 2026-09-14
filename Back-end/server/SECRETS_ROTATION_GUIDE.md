@@ -5,15 +5,15 @@
 The following secrets were found in `.env` files and MUST be rotated immediately:
 
 ### 1. MongoDB Credentials
-- **Current**: `mongodb+srv://Autobacs_info_db:AutobacsInfodb2026@...`
+- **Current value**: not recorded here — read it from Railway → Variables.
 - **Action**: 
   1. Go to MongoDB Atlas: https://cloud.mongodb.com/
   2. Navigate to Database Access
-  3. Change password for user `Autobacs_info_db`
+  3. Change password for the application DB user (the username embedded in `MONGODB_URI`)
   4. Update `MONGO_URI` in Railway environment variables
 
 ### 2. MongoDB Atlas API Keys
-- **Current**: `hibwcoaw` / `c7480c6f-08cd-40ac-a75f-5feda19b7450`
+- **Current value**: not recorded here — read it from Railway → Variables.
 - **Action**:
   1. Go to MongoDB Atlas > Organization Settings > Access Manager > API Keys
   2. Delete existing API keys
@@ -21,7 +21,7 @@ The following secrets were found in `.env` files and MUST be rotated immediately
   4. Update `MONGODB_ATLAS_PUBLIC_API_KEY` and `MONGODB_ATLAS_PRIVATE_API_KEY` in Railway
 
 ### 3. SendGrid API Key
-- **Current**: `SG.sedo_hTUTLexJB0dhskL1g...`
+- **Current value**: not recorded here — read it from Railway → Variables.
 - **Action**:
   1. Go to SendGrid: https://app.sendgrid.com/settings/api_keys
   2. Delete existing API key
@@ -29,14 +29,14 @@ The following secrets were found in `.env` files and MUST be rotated immediately
   4. Update `SENDGRID_API_KEY` in Railway
 
 ### 4. Google OAuth Client Secret
-- **Current**: `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`
+- **Current value**: not recorded here — read it from Railway → Variables.
 - **Action**:
   1. Go to Google Cloud Console > APIs & Services > Credentials
   2. Reset OAuth client secret
   3. Update `GOOGLE_CLIENT_SECRET` in Railway
 
 ### 5. Facebook App Secret
-- **Current**: `0cc97796ff395712e1263bc3c2ea1fb5`
+- **Current value**: not recorded here — read it from Railway → Variables.
 - **Action**:
   1. Go to Facebook Developers: https://developers.facebook.com/apps/
   2. Navigate to your app > Settings > Basic
@@ -44,7 +44,7 @@ The following secrets were found in `.env` files and MUST be rotated immediately
   4. Update `FACEBOOK_CLIENT_SECRET` in Railway
 
 ### 6. Cloudinary API Secret
-- **Current**: `Yf-19DBPQx15YDmRdkPq3lnCGBc`
+- **Current value**: not recorded here — read it from Railway → Variables.
 - **Action**:
   1. Go to Cloudinary: https://cloudinary.com/console
   2. Navigate to Settings > Security
@@ -52,14 +52,14 @@ The following secrets were found in `.env` files and MUST be rotated immediately
   4. Update `CLOUDINARY_API_SECRET` in Railway
 
 ### 7. JWT Secret
-- **Current**: `ac165bfe5778e5f61ab6bab5ff3c5912...`
+- **Current value**: not recorded here — read it from Railway → Variables.
 - **Action**:
   1. Generate new JWT secret: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`
   2. Update `JWT_SECRET` in Railway
   3. **WARNING**: This will invalidate all existing user sessions. Users will need to log in again.
 
 ### 8. Razorpay Keys (CRITICAL FOR PRODUCTION)
-- **Current**: Using TEST keys (`rzp_test_*`)
+- **Current value**: not recorded here — read it from Railway → Variables.
 - **Action**:
   1. Go to Razorpay Dashboard: https://dashboard.razorpay.com/app/keys
   2. Switch to LIVE mode
@@ -69,13 +69,14 @@ The following secrets were found in `.env` files and MUST be rotated immediately
 
 ## Post-Rotation Steps
 
-1. **Delete all `.env` files from git history** (if committed):
-   ```bash
-   git filter-branch --force --index-filter \
-     'git rm --cached --ignore-unmatch Autobacs/Back-end/server/.env' \
-     --prune-empty --tag-name-filter cat -- --all
-   git push origin --force --all
-   ```
+1. **Rotate first — history rewriting does NOT contain a leak.**
+   GitHub serves unreachable blobs by SHA indefinitely, so a secret committed
+   once stays fetchable even after it is removed from every branch. Revoking
+   the credential at the provider is the only fix that works.
+   Do **not** `git push --force` to `main`: that is the production deploy, it
+   bypasses the PR + CI gate, and it will not remove the dangling objects.
+   To purge dangling blobs you must ask GitHub Support to run a GC.
+
 
 2. **Verify Railway environment variables**:
    - Go to Railway Dashboard

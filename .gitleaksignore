@@ -1,0 +1,12 @@
+# gitleaks false positives — verified by inspection, not secrets.
+# Format: <commit>:<path>:<rule>:<startline>
+# Everything else this repo has ever leaked is handled by ROTATION at the
+# provider, never by suppression. Do not add a real secret here.
+
+# Test fixture: a table of storage-key strings ('variants/a/b/full.avif'),
+# matched by the generic-api-key entropy rule.
+09f63cf2d73adc39ee09d5d6c7c913edfa293614:Back-end/server/tests/unit/services/imageWorker.test.js:generic-api-key:191
+
+# Documentation: the line is literally prefixed "Example format:" and shows
+# the shape of a Google API key, not a real one.
+8779377a5c0a6261f3e7f1225303299d8942ea31:Back-end/server/GOOGLE_MAPS_SETUP_GUIDE.md:gcp-api-key:157

@@ -89,13 +89,26 @@ const requiredEnvVars = {
     }
   },
   
-  // Email Service
-  SENDGRID_API_KEY: {
-    description: 'SendGrid API key for email notifications',
+  // Email Service (Postmark — SendGrid was retired; see .env.example)
+  POSTMARK_SERVER_TOKEN: {
+    description: 'Postmark server token for transactional email',
     validate: (value) => {
-      if (!value) return 'Required for email notifications';
-      if (!value.startsWith('SG.')) {
-        return 'Invalid format - should start with SG.';
+      if (!value) return 'Required for transactional email';
+      if (/^your_|^changeme/i.test(value)) {
+        return 'Still set to the .env.example placeholder';
+      }
+      return null;
+    }
+  },
+  POSTMARK_FROM_EMAIL: {
+    description: 'Verified Postmark sender address',
+    validate: (value) => {
+      if (!value) return 'Required for transactional email';
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) {
+        return 'Invalid format - should be an email address';
+      }
+      if (/yourdomain\./i.test(value)) {
+        return 'Still set to the .env.example placeholder domain';
       }
       return null;
     }
