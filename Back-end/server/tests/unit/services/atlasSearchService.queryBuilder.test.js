@@ -525,9 +525,38 @@ describe('buildFilters — visibility and narrowing', () => {
     expect(filter).toContainEqual({ equals: { path: 'isActive', value: true } });
   });
 
-  it('lifts the active filter only for an explicit admin listing', () => {
-    const { filter } = buildFilters({ includeInactive: true });
-    expect(filter).not.toContainEqual({ equals: { path: 'isActive', value: true } });
+  it('CANNOT have the active filter lifted by a query parameter', () => {
+    // This test asserted the opposite until 2026-09-16 — it pinned the behaviour
+    // that `includeInactive: true` lifts the filter, which read as reasonable until
+    // you notice `params` IS `req.query` on the public path. So
+    // `/products?includeInactive=true` published every draft: verified on
+    // production, 929 active → 950 with the parameter, exposing 21 unpublished
+    // products to anyone who guessed the name.
+    //
+    // The Atlas path is public-only by construction (SearchService routes admin
+    // listings to MongoDB, which takes the flag as a server-supplied argument), so
+    // there is no legitimate caller to serve here — only an attacker to refuse.
+    for (const attempt of [
+      { includeInactive: true },
+      { includeInactive: 'true' },
+      { includeInactive: 1 },
+      { status: 'inactive' },
+    ]) {
+      const { filter } = buildFilters(attempt);
+      expect(filter).toContainEqual({ equals: { path: 'isActive', value: true } });
+    }
+  });
+
+  it('keeps the active filter on every per-dimension facet exclusion', () => {
+    // The exclusion mechanism drops one filter per pass. isActive must never be
+    // the one dropped, whichever dimension is being counted.
+    for (const exclude of [
+      { excludeBrand: true }, { excludeCategory: true }, { excludePrice: true },
+      { excludeRating: true }, { excludeVehicle: true }, { excludeAvailability: true },
+    ]) {
+      const { filter } = buildFilters({ includeInactive: true }, {}, exclude);
+      expect(filter).toContainEqual({ equals: { path: 'isActive', value: true } });
+    }
   });
 
   it('lowercases brand values to match the index normalizer', () => {

@@ -7,6 +7,7 @@ import atlasSearchService from "./atlasSearchService.js";
 import categoryMappingService from "./categoryMappingService.js";
 import { expand as expandSynonyms, contentTokens } from "../config/searchSynonyms.js";
 import { NON_PURCHASABLE_STOCK } from "../utils/stockStatus.js";
+import { resolveSearchTerm } from "../utils/searchHelpers.js";
 
 /**
  * Last observed Elasticsearch availability, so an outage is reported on the
@@ -178,10 +179,16 @@ class SearchService {
    */
   static async buildBaseQuery(params, { excludeBrand = false, excludeCategory = false, includeInactive = false } = {}) {
     const {
-      category, brand, minPrice, maxPrice, search,
+      category, brand, minPrice, maxPrice,
       vehicle, vehicleMake, vehicleModel,
       isFeatured, isFastMoving, inStock, rating, status, productType,
     } = params;
+    // NOT destructured from params. This read `search` directly until 2026-09-16,
+    // so `?q=winch` — the form the storefront actually sends — produced a filter of
+    // `{ isActive: true }` and matched the whole catalogue. It is the shared filter
+    // builder for BOTH the MongoDB grid fallback and the MongoDB facet fallback, so
+    // that one omission made two different surfaces answer "everything".
+    const search = resolveSearchTerm(params);
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     // Cast id strings to ObjectId. find() auto-casts via the schema, but aggregate()
     // (used by getFacets) does NOT — so without this, facet counts with a category
@@ -356,7 +363,16 @@ class SearchService {
       ? (await SearchService.resolveCategorySubtree(params.category)).ids
       : [];
 
-    const raw = await engine.getFacets(params, { categoryIds, vehicleFilterIds: null });
+    // Only the category SUBTREE is resolved here — it is this layer's concern, and
+    // the results grid hands it over the same way. Everything else (query tokens,
+    // vehicle fitment, the ?vehicle= filter) is now resolved by the engine itself.
+    //
+    // This used to pass `{ categoryIds, vehicleFilterIds: null }` as the whole
+    // resolved context: no tokens, no cleanedQuery. buildSearchStage read an empty
+    // token list as "nothing to match on", built no recall lanes, and the sidebar
+    // counted every active product on every search — 930 beside a 7-result grid.
+    // The `null` did the same to the ?vehicle= filter.
+    const raw = await engine.getFacets(params, { categoryIds });
 
     // Category id sets → rolled-up subtree counts. Reused verbatim: a plain sum
     // double-counts a product tagged with several categories in one subtree.
@@ -546,10 +562,12 @@ class SearchService {
 
     if (esAvailable) {
       try {
+        // The ONE place that used to reconcile `q` vs `search`. It is now one
+        // caller of the shared helper rather than the sole holder of the rule —
+        // which is why the facet path and the Mongo fallbacks could each miss it.
         const esParams = { ...params };
-        if (!esParams.q && esParams.search) {
-          esParams.q = esParams.search;
-        }
+        const term = resolveSearchTerm(params);
+        if (term) esParams.q = term;
         // Expand the category filter to its subtree SLUGS before handing it to ES.
         // ES documents carry `categories.slug`, never the ObjectId, and they carry
         // only the categories a product is directly tagged with — so the hierarchy
@@ -621,10 +639,15 @@ class SearchService {
     const {
       page = 1,
       limit = 12,
-      search,
       sortBy = 'createdAt',
       order = 'desc'
     } = params;
+    // Was `search` destructured from params, which meant the fallback ignored the
+    // `?q=` the storefront sends: an Atlas outage would have quietly turned every
+    // search into "the whole catalogue, paginated" instead of a search. The same
+    // variable also drives the ES/Mongo divergence log and `searchMethod`, so both
+    // mis-reported a `?q=` search as "filters only".
+    const search = resolveSearchTerm(params);
 
     // Build the Mongo filter (shared with getFacets).
     const query = await SearchService.buildBaseQuery(params, { includeInactive });
