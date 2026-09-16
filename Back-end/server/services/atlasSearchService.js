@@ -1443,7 +1443,7 @@ class AtlasSearchService {
       // called /products/facets, which now serves real disjunctive counts. The key
       // is retained so the response shape does not change under any consumer we
       // have not found — see buildFacetPipeline for the measurement.
-      facets: this.shapeFacets(facetResult, total, params),
+      facets: this.shapeFacets(facetResult, total),
     };
   }
 
@@ -1752,8 +1752,17 @@ class AtlasSearchService {
     ];
   }
 
-  /** Map raw facet buckets into the exact response shape the storefront sidebar already consumes. */
-  shapeFacets(facetResult, total, params) {
+  /**
+   * Map raw facet buckets into the exact response shape the storefront sidebar
+   * already consumes.
+   *
+   * No longer takes `params`: its only use was `availability: [{ name:
+   * !params.includeInactive }]`, and that flag is no longer read from user input
+   * on this path (see buildFilters — it was publicly settable and lifted the
+   * isActive filter). The dropped argument is left out of the signature rather
+   * than renamed `_params`, since no caller has anything meaningful to pass.
+   */
+  shapeFacets(facetResult, total) {
     const countByKey = (rows) => new Map((rows || []).map((r) => [r._id, r.count]));
     const priceCounts = countByKey(facetResult.priceRanges);
     const ratingCounts = countByKey(facetResult.ratingRanges);
