@@ -29,6 +29,7 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import atlasSearchService from '../services/atlasSearchService.js';
+import SearchService from '../services/searchService.js';
 
 dotenv.config();
 
@@ -152,6 +153,22 @@ if (!ready) {
   process.exit(1);
 }
 
+// ⚠ SearchService dispatches on SEARCH_ENGINE, not on whether Atlas is reachable.
+// With it unset, getFacets returns getMongoFacets — whose contract has no `total`
+// at all — and every parity line below would print "sidebar counts a different set
+// than the grid (null vs 42)". That reads exactly like the bug this script exists
+// to detect, on a deploy gate, for a reason that is purely local configuration.
+// Refusing up front is the difference between a useful failure and a misleading one.
+if (process.env.SEARCH_ENGINE !== 'atlas') {
+  console.error(
+    `❌ SEARCH_ENGINE is "${process.env.SEARCH_ENGINE ?? '(unset)'}", so SearchService.getFacets\n` +
+    '   would answer from the MongoDB fallback and the grid-vs-sidebar comparison would be\n' +
+    '   meaningless. Re-run with SEARCH_ENGINE=atlas (the value production uses).'
+  );
+  await mongoose.disconnect();
+  process.exit(1);
+}
+
 console.log('── Golden queries ' + '─'.repeat(52));
 
 /** Every query measured in this run, reused by the monotonicity section below. */
@@ -217,6 +234,52 @@ for (const [shorter, longer] of MONOTONIC) {
   const ok = b.total <= a.total;
   console.log(`   ${ok ? '✅' : '❌'} "${shorter}" (${a.total})  ≥  "${longer}" (${b.total})  [rung ${a.relaxLevel}]`);
   if (!ok) fail(`adding a word GREW the result set at the same rung: ${a.total} → ${b.total}. This is the over-recall bug.`);
+}
+
+// ── Grid vs sidebar ────────────────────────────────────────────────────────
+//
+// Relevance is not only "are the right products returned" — it is also "does the
+// panel beside them describe the same set". These are two endpoints built from two
+// call sites, and until 2026-09-16 only the grid was told what the customer typed:
+// `winch` returned 42 products beside a sidebar reading "930", offering Auxbeam
+// (44) — a lighting brand with zero winches — whose filter chip led to an empty
+// grid. Every count was real; all of them were counted over the wrong set.
+console.log('\n── Grid vs sidebar: the filter panel must describe the RESULTS ' + '─'.repeat(6));
+
+const PARITY = [
+  { q: 'winch' },
+  { q: 'bmw steering wheel' },
+  { q: 'spoiler', inStock: 'true' },
+  { vehicleMake: 'Toyota' },
+  {},
+];
+
+for (const params of PARITY) {
+  const label = (params.q || '(filters only)') +
+    (params.inStock ? ' +inStock' : '') + (params.vehicleMake ? ` +${params.vehicleMake}` : '');
+  try {
+    const grid = await atlasSearchService.searchProducts({ ...params, limit: 1 });
+    const sidebar = await SearchService.getFacets(params);
+    if (typeof sidebar.total !== 'number') {
+      fail(`${label} sidebar returned no numeric total (${sidebar.total}) — that is the ` +
+        'MongoDB facet contract, so the engine is not Atlas despite the guard above');
+      continue;
+    }
+    const ok = grid.pagination.total === sidebar.total;
+    console.log(`   ${ok ? '✅' : '❌'} ${label.padEnd(28)} grid=${String(grid.pagination.total).padStart(4)}  sidebar=${String(sidebar.total).padStart(4)}`);
+    if (!ok) {
+      fail(`sidebar counts a different set than the grid (${sidebar.total} vs ${grid.pagination.total})`);
+    } else if (params.q && sidebar.brands.length > 0) {
+      // Cheap sanity on the dimension most likely to mislead: a brand offered in
+      // the panel must not exceed the number of results it can possibly filter to.
+      const oversized = sidebar.brands.filter((b) => b.count > sidebar.total);
+      if (oversized.length) {
+        fail(`brand counts exceed the result total: ${oversized.slice(0, 3).map((b) => `${b.name}(${b.count})`).join(', ')}`);
+      }
+    }
+  } catch (error) {
+    fail(`${label} threw: ${error.message}`);
+  }
 }
 
 console.log('\n' + '─'.repeat(70));

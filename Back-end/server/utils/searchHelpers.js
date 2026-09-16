@@ -45,6 +45,45 @@ export function sanitizeQuery(input, maxLength = 200) {
 }
 
 /**
+ * The free-text search term, from whichever parameter carried it.
+ *
+ * The storefront sends `?q=`; large parts of the backend were written against
+ * `search`. Until 2026-09-16 exactly ONE place reconciled the two — the engine
+ * branch of SearchService.searchProducts — and every other consumer silently
+ * ignored whichever name it was not looking for. That single omission produced
+ * three separate bugs wearing the same face, "returns the entire catalogue":
+ *
+ *  1. the filter sidebar counted all 930 products on every search (`winch` → 42
+ *     results beside a panel describing the whole shop, offering brands with zero
+ *     matches);
+ *  2. the MongoDB facet fallback did the same, for the other reason;
+ *  3. the MongoDB grid fallback ignored `?q=` entirely — latent, because it only
+ *     fires when Atlas is unavailable, i.e. it would turn a search outage into
+ *     "every search returns everything" at the worst possible moment.
+ *
+ * So the precedence lives here, once, and nothing reads `params.search` directly
+ * any more. A new consumer that forgets this helper fails loudly on `?q=` (the
+ * form every real request uses) rather than quietly on the rarer one.
+ *
+ * @param {object} params  a request query object
+ * @returns {string} the raw term, or '' when absent — never null/undefined, so
+ *                   callers can test truthiness without a guard.
+ */
+export function resolveSearchTerm(params = {}) {
+  // Falsy fallthrough, not `??`: `?q=&search=winch` must resolve to "winch". An
+  // empty `q` is an absent term, not an instruction to search for nothing — and
+  // that is the behaviour the original engine-branch check (`!esParams.q &&
+  // esParams.search`) had, so preserving it keeps this a pure refactor there.
+  //
+  // Both sides are string-guarded because `?q=a&q=b` arrives as an ARRAY, and an
+  // array reaching the regex builder in buildBaseQuery is not a failure anyone
+  // would enjoy debugging.
+  const q = typeof params?.q === 'string' ? params.q : '';
+  const search = typeof params?.search === 'string' ? params.search : '';
+  return q || search;
+}
+
+/**
  * Damerau-Levenshtein edit distance (optimal string alignment), bounded.
  *
  * Damerau, not plain Levenshtein, and that distinction is load-bearing: a

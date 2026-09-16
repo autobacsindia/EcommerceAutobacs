@@ -296,9 +296,21 @@ router.get("/:id/admin-fetch", protect, admin, validateProductIdParam, asyncHand
 // @desc    301 redirect to slug-based canonical URL; preserves backlinks and prevents duplicate indexing
 // @access  Public
 router.get("/:id", validateProductIdParam, httpCache('PRODUCT_DETAIL'), asyncHandler(async (req, res) => {
-  const product = await Product.findById(req.params.id).select('slug').lean();
+  // `isActive` is selected and checked, not just `slug`. Without it this public
+  // route treated a DRAFT exactly like a published product:
+  //   • with a slug → 301 to /slug/<slug>, disclosing the draft's slug (and so its
+  //     name) to anyone holding the id, even though that slug lookup then 404s;
+  //   • WITHOUT a slug → fell through to productAdminController.getProduct, which
+  //     does an unfiltered findById and returns the FULL document — an unpublished
+  //     product served in its entirety from an unauthenticated route.
+  //
+  // The second path is empty today (verified 2026-09-16: 0 of 950 products lack a
+  // slug) which is why it went unnoticed, but it is one bad import away from being
+  // live. Admins are unaffected: they have the dedicated protect+admin route
+  // `/:id/admin-fetch`, which is what the admin UI already calls.
+  const product = await Product.findById(req.params.id).select('slug isActive').lean();
 
-  if (!product) {
+  if (!product || product.isActive !== true) {
     return res.status(404).json({ success: false, message: 'Product not found' });
   }
 

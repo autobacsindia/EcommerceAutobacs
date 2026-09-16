@@ -41,7 +41,7 @@ import Product from '../models/Product.js';
 import Vehicle from '../models/Vehicle.js';
 import categoryMappingService from './categoryMappingService.js';
 import { expand as expandSynonyms, contentTokens } from '../config/searchSynonyms.js';
-import { normalizeImages, sanitizeQuery, pickCorrection } from '../utils/searchHelpers.js';
+import { normalizeImages, sanitizeQuery, pickCorrection, resolveSearchTerm } from '../utils/searchHelpers.js';
 import { NON_PURCHASABLE_STOCK, PURCHASABLE_STOCK } from '../utils/stockStatus.js';
 import { ATLAS_SEARCH_INDEX_NAME, ATLAS_SYNONYM_MAPPING_NAME } from '../config/atlasSearchIndex.js';
 import { getRedisClient } from './cacheService.js';
@@ -567,7 +567,7 @@ export function buildRankingShould({ cleanedQuery, vehicleIds = [], capabilities
  */
 export function buildFilters(params, resolved = {}, exclude = {}) {
   const {
-    minPrice, maxPrice, inStock, rating, includeInactive = false,
+    minPrice, maxPrice, inStock, rating,
     isFeatured, productType,
   } = params;
   const { categoryIds = [], vehicleFilterIds = null } = resolved;
@@ -586,12 +586,28 @@ export function buildFilters(params, resolved = {}, exclude = {}) {
   const filter = [];
   const mustNot = [];
 
-  // Load-bearing. Elasticsearch only ever held active products, so this rule was
-  // implicit in the index's contents. Atlas indexes the whole collection, so
-  // dropping this line would publish every unpublished draft to the storefront.
-  if (!includeInactive) {
-    filter.push({ equals: { path: 'isActive', value: true } });
-  }
+  // UNCONDITIONAL, and that is a security property rather than a style choice.
+  //
+  // Elasticsearch only ever held active products, so this rule was implicit in the
+  // index's contents. Atlas indexes the WHOLE collection, so this line is the only
+  // thing standing between unpublished drafts and the storefront.
+  //
+  // ⚠ It used to read `includeInactive` out of `params` — and `params` is
+  // `req.query` on the public path. So `?includeInactive=true` lifted it: verified
+  // against production on 2026-09-16, `/products?limit=1` returned 929 while
+  // `/products?limit=1&includeInactive=true` returned 950, publishing 21 draft
+  // products to anyone who guessed the parameter name. There was no auth check to
+  // fail because the flag was simply believed.
+  //
+  // Nothing legitimate is lost. The Atlas path is public-ONLY by construction:
+  // SearchService gates it with `includeInactive ? null : isConnected()` and routes
+  // every admin listing to MongoDB, whose buildBaseQuery takes the flag as a
+  // server-supplied OPTION (second argument) rather than reading it from user
+  // input. So an admin request never reaches this function, and a public one must
+  // never be able to lift the filter. If an admin-facing Atlas path is ever wanted,
+  // it is a deliberate decision that passes the flag as an argument — not a query
+  // parameter the caller is trusted about.
+  filter.push({ equals: { path: 'isActive', value: true } });
 
   // Both of these were SILENTLY DROPPED before: buildFilters never destructured
   // them, so `?isFeatured=true` produced only the isActive clause and the storefront
@@ -934,7 +950,16 @@ function uniqueIds(ids) {
  * one was requested but names nothing known; buildFilters turns that into a
  * match-nothing clause rather than treating it as "no filter".
  */
-async function resolveVehicleFilter({ vehicleMake, vehicleType, vehicleModel }) {
+async function resolveVehicleFilter({ vehicle, vehicleMake, vehicleType, vehicleModel }) {
+  // Explicit ids win over make/model, mirroring buildBaseQuery's `if (vehicle) …
+  // else if (vehicleMake || vehicleModel)`. Atlas ignored `?vehicle=` entirely
+  // until 2026-09-16 — this function never looked at it — so the two engines
+  // answered that URL differently: MongoDB filtered by fitment, Atlas returned the
+  // whole catalogue. Nothing in the storefront sends it today, which is exactly why
+  // it went unnoticed and why it was worth closing before something does.
+  const explicit = normalizeList(vehicle);
+  if (explicit.length > 0) return uniqueIds(explicit.map(toObjectId).filter(Boolean));
+
   const makes = normalizeList(vehicleMake || vehicleType);
   const models = normalizeList(vehicleModel);
   if (makes.length === 0 && models.length === 0) return null;
@@ -1236,12 +1261,32 @@ class AtlasSearchService {
     return sanitizeQuery(input, maxLength);
   }
 
-  async searchProducts(params) {
-    const { page = 1, limit = 20 } = params;
-    const pageNum = Math.max(1, Number(page) || 1);
-    const limitNum = Math.max(1, Number(limit) || 20);
-
-    const rawQuery = params.q || params.search || null;
+  /**
+   * Everything a $search stage needs, resolved from the raw request params.
+   *
+   * ⚠ THE RESULTS GRID AND THE FILTER SIDEBAR MUST BOTH CALL THIS. That is the
+   * whole reason it exists as a method rather than four lines inlined in
+   * searchProducts, which is what it was until 2026-09-16.
+   *
+   * getFacets used to be handed a hand-built `resolved` by its caller —
+   * `{ categoryIds, vehicleFilterIds: null }`, with no `tokens` and no
+   * `cleanedQuery`. buildSearchStage treats an empty token list as "no text to
+   * match on" and builds no recall lanes at all, so the sidebar counted every
+   * active product on every search: `winch` returned 42 results beside a panel
+   * reading "930 products", offering Auxbeam (44) — a lighting brand with zero
+   * winches, whose filter chip led to an empty grid. `vehicleFilterIds: null`
+   * did the same to the ?vehicle= filter.
+   *
+   * Nothing about that was a typo; it was a caller assembling a structure by hand
+   * and omitting two fields. One resolver removes the opportunity: a caller can no
+   * longer forget a field it never had to supply.
+   *
+   * @param {object} params  request query, incl. `categoryIds` pre-resolved by
+   *                         SearchService.resolveCategorySubtree
+   * @returns {{tokens: string[], cleanedQuery: string|null, resolved: object}}
+   */
+  async resolveSearchContext(params) {
+    const rawQuery = resolveSearchTerm(params) || null;
     const safeQ = rawQuery ? this.sanitizeQuery(rawQuery) : null;
     const tokens = safeQ ? contentTokens(safeQ) : [];
     const cleanedQuery = safeQ ? (tokens.length ? tokens.join(' ') : safeQ) : null;
@@ -1255,7 +1300,19 @@ class AtlasSearchService {
     // MongoDB filter structurally incapable of disagreeing.
     const categoryIds = (params.categoryIds || []).map(toObjectId).filter(Boolean);
 
-    const resolved = { ...entities, tokens, cleanedQuery, categoryIds, vehicleFilterIds };
+    return {
+      tokens,
+      cleanedQuery,
+      resolved: { ...entities, tokens, cleanedQuery, categoryIds, vehicleFilterIds },
+    };
+  }
+
+  async searchProducts(params) {
+    const { page = 1, limit = 20 } = params;
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 20);
+
+    const { tokens, cleanedQuery, resolved } = await this.resolveSearchContext(params);
 
     // Two aggregations rather than one $facet over everything. The facet branches
     // need every matching document, but only `limit` of them are ever rendered —
@@ -1386,7 +1443,7 @@ class AtlasSearchService {
       // called /products/facets, which now serves real disjunctive counts. The key
       // is retained so the response shape does not change under any consumer we
       // have not found — see buildFacetPipeline for the measurement.
-      facets: this.shapeFacets(facetResult, total, params),
+      facets: this.shapeFacets(facetResult, total),
     };
   }
 
@@ -1442,11 +1499,22 @@ class AtlasSearchService {
    * first page view — one $search answers everything. Measured on prod: ~180 ms at
    * 0, 1 and 3 active filters alike, because the passes run in parallel.
    */
-  async getFacets(params, resolved) {
+  async getFacets(params, overrides = {}) {
     const capabilities = await this.getIndexCapabilities();
 
-    const stageFor = (exclude) =>
-      buildSearchStage(params, resolved, { capabilities, exclude });
+    // Resolved HERE, by the same method the results grid uses, rather than accepted
+    // from the caller. The caller used to hand-build this object and omitted the
+    // query text, which is what made the sidebar count the whole catalogue. See
+    // resolveSearchContext.
+    //
+    // `overrides` exists only for SearchService, which resolves the category
+    // SUBTREE (its own concern, via resolveCategorySubtree) and passes the ids in.
+    // It cannot be used to supply tokens: those come from params, always.
+    const { tokens, cleanedQuery, resolved } =
+      await this.resolveSearchContext({ ...params, ...overrides });
+
+    const stageFor = (exclude, relaxLevel = 0) =>
+      buildSearchStage(params, resolved, { capabilities, exclude, relaxLevel });
 
     // Which dimensions are actually filtered. Anything not listed is unaffected by
     // its own filter, so the base pass already counts it correctly.
@@ -1459,9 +1527,9 @@ class AtlasSearchService {
       availability: params.inStock === 'true' || params.inStock === true,
     };
 
-    const run = (exclude, branches) =>
+    const run = (exclude, branches, relaxLevel = 0) =>
       Product.collection.aggregate([
-        { $search: stageFor(exclude) },
+        { $search: stageFor(exclude, relaxLevel) },
         // Project BEFORE $facet. Descriptions are long and SEO-stuffed; carrying
         // them into an in-memory $facet over the whole matched set is the one way
         // this pipeline becomes expensive.
@@ -1502,7 +1570,43 @@ class AtlasSearchService {
       availability: [{ $group: { _id: '$stock', count: { $sum: 1 } } }],
     };
 
-    const base = await run({}, BRANCHES);
+    // ── Rung parity with the results grid ────────────────────────────────────
+    //
+    // searchProducts climbs a relaxation ladder when a pass finds nothing (every
+    // token → 70% → any one token). If the sidebar always counted the STRICT set, a
+    // relaxed search would show 40 products beside a panel reading "0" — the same
+    // grid/sidebar disagreement as the 930 bug, just inverted.
+    //
+    // ⚠ EVERY PASS LADDERS ON ITS OWN COUNT. Inheriting the base pass's rung looks
+    // equivalent and is not, because the base pass is evaluated with the excluded
+    // dimension's filter STILL APPLIED. A zero there can be caused by the filter
+    // rather than by recall — and then the widening is attributed to the wrong
+    // thing. `?q=bmw steering wheel&brand=Auxbeam` has 7 matching products and no
+    // Auxbeam among them, so the base counts 0 and ladders to rung 2; a brand pass
+    // inheriting that rung would count brands over the any-one-token set and offer
+    // "Bushranger (300)", while clicking it lands on a rung-0 grid of 12.
+    //
+    // Laddering each pass separately is also FREE in the common case: an exclusion
+    // pass drops a filter, so its match set is a superset of the base's. Whenever
+    // the base is non-empty every exclusion pass is non-empty at the same rung, and
+    // no extra round trip happens. Widening only ever fires for a pass that would
+    // otherwise have nothing to report.
+    const ladder = relaxationLadder(cleanedQuery ? tokens.length : 0);
+    const totalOf = (result) => result.total?.[0]?.value ?? 0;
+
+    const runLaddered = async (exclude, branches) => {
+      // `total` is requested on every pass, including the single-dimension ones:
+      // it is the emptiness signal the ladder needs, and without it `totalOf`
+      // would read undefined as zero and widen every exclusion pass unconditionally.
+      const withTotal = { total: BRANCHES.total, ...branches };
+      let result = await run(exclude, withTotal, ladder[0]);
+      for (let i = 1; i < ladder.length && totalOf(result) === 0; i += 1) {
+        result = await run(exclude, withTotal, ladder[i]);
+      }
+      return result;
+    };
+
+    const base = await runLaddered({}, BRANCHES);
 
     const extraKeys = Object.keys(selected).filter((k) => selected[k]);
     const extras = Object.fromEntries(
@@ -1516,7 +1620,7 @@ class AtlasSearchService {
             : key === 'rating' ? { ratings: BRANCHES.ratings }
             : key === 'vehicle' ? { vehicles: BRANCHES.vehicles }
             : { availability: BRANCHES.availability };
-          return [key, await run(exclude, branch)];
+          return [key, await runLaddered(exclude, branch)];
         })
       )
     );
@@ -1648,8 +1752,17 @@ class AtlasSearchService {
     ];
   }
 
-  /** Map raw facet buckets into the exact response shape the storefront sidebar already consumes. */
-  shapeFacets(facetResult, total, params) {
+  /**
+   * Map raw facet buckets into the exact response shape the storefront sidebar
+   * already consumes.
+   *
+   * No longer takes `params`: its only use was `availability: [{ name:
+   * !params.includeInactive }]`, and that flag is no longer read from user input
+   * on this path (see buildFilters — it was publicly settable and lifted the
+   * isActive filter). The dropped argument is left out of the signature rather
+   * than renamed `_params`, since no caller has anything meaningful to pass.
+   */
+  shapeFacets(facetResult, total) {
     const countByKey = (rows) => new Map((rows || []).map((r) => [r._id, r.count]));
     const priceCounts = countByKey(facetResult.priceRanges);
     const ratingCounts = countByKey(facetResult.ratingRanges);
@@ -1666,7 +1779,10 @@ class AtlasSearchService {
       // ES aggregated `isActive` here. Public search filters to active products,
       // so this was always a single bucket; it is reproduced rather than dropped
       // because the sidebar reads the shape.
-      availability: [{ name: !params.includeInactive, count: total }],
+      // Always `true`: this path is public-only, so every counted product is active.
+      // Read `!params.includeInactive` until 2026-09-16, which let a query parameter
+      // flip a label the same way it used to flip the actual filter.
+      availability: [{ name: true, count: total }],
     };
   }
 

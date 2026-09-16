@@ -119,8 +119,15 @@ export const getProducts = async (req, res) => {
 //   • honours an optional `status=active|inactive` filter;
 //   • NEVER cached — an admin who just edited a product must see the change now, not
 //     up to 5 minutes later off the shared public list cache.
-// `includeInactive` is passed by the server here, never read from the query, so a
-// public caller of /products can't use it to surface hidden products.
+// `includeInactive` is passed by the server here, as an ARGUMENT, never read from
+// the query.
+//
+// ⚠ That was necessary but not sufficient, and this comment used to claim the
+// guarantee outright. Until 2026-09-16 `buildFilters` on the Atlas path
+// destructured `includeInactive` out of `params` — which IS `req.query` for the
+// public /products — so `?includeInactive=true` lifted the visibility filter and
+// published 21 drafts (929 → 950, verified on production). The flag is now never
+// read from params anywhere; isActive is unconditional on the public path.
 export const getAdminProducts = async (req, res) => {
   try {
     const searchResults = await SearchService.searchProducts(req.query, { includeInactive: true });

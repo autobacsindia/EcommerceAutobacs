@@ -76,10 +76,35 @@ const CASES = [
   { label: 'explicit relevance sort', params: { q: 'winch', sortBy: 'relevance' } },
   { label: 'facets: data-derived price', facets: {} },
   { label: 'facets: disjunctive brand', facets: { brand: 'Auxbeam' } },
+  // ⚠ The facet cases above assert only that the pipeline PARSED and produced a
+  // non-degenerate price scale. Both passed happily while the sidebar counted the
+  // entire catalogue on every search — 930 beside a 7-result grid — because a
+  // facet query with no recall lanes parses perfectly. `matchesGrid` is what makes
+  // these cases able to fail: it compares the sidebar total against the results
+  // grid for the SAME params, which is the only assertion the 930 bug could not
+  // have survived.
+  { label: 'facets: honour the search term', facets: { q: 'winch' }, matchesGrid: true },
+  { label: 'facets: multi-token search term', facets: { q: 'bmw steering wheel' }, matchesGrid: true },
+  { label: 'facets: search + filter', facets: { q: 'spoiler', inStock: 'true' }, matchesGrid: true },
+  { label: 'facets: vehicle filter reaches counts', facets: { vehicleMake: 'Toyota' }, matchesGrid: true },
   { label: 'suggestions (autocomplete)', suggest: 'brak' },
 ];
 
 let failures = 0;
+
+// ⚠ The facet cases call SearchService.getFacets, which dispatches on SEARCH_ENGINE
+// rather than on whether Atlas is reachable. Unset, it answers from getMongoFacets —
+// a different contract with no `total` — so the matchesGrid comparisons below would
+// report "sidebar says null, grid says 42" and look exactly like the bug they exist
+// to catch. Warn loudly rather than fail: the non-facet cases above still carry
+// their full value, and this script's primary job is proving the query PARSES.
+if (process.env.SEARCH_ENGINE !== 'atlas') {
+  console.warn(
+    `⚠  SEARCH_ENGINE is "${process.env.SEARCH_ENGINE ?? '(unset)'}" — the facet cases below go\n` +
+    '   through the MongoDB fallback and their counts mean nothing. Re-run with\n' +
+    '   SEARCH_ENGINE=atlas (the value production uses) to exercise them properly.\n'
+  );
+}
 
 const ready = await atlasSearchService.isConnected();
 console.log(`Atlas Search index reachable: ${ready ? '✅ yes' : '❌ NO'}`);
@@ -97,7 +122,32 @@ for (const testCase of CASES) {
       // The price facet was calibrated in USD against an INR catalogue, putting
       // ALL 931 products in one bucket. A degenerate range or a single bucket means
       // it has regressed to carrying no information again.
-      const degenerate = !(f.price.max > f.price.min) || f.price.histogram.length < 2;
+      // Sidebar total vs results grid for identical params. They are two endpoints
+      // built from two call sites, and this is the only check that notices when one
+      // of them stops listening to the query.
+      if (testCase.matchesGrid && process.env.SEARCH_ENGINE === 'atlas') {
+        const grid = await atlasSearchService.searchProducts({ ...testCase.facets, limit: 1 });
+        const gridTotal = grid.pagination.total;
+        if (f.total !== gridTotal) {
+          failures += 1;
+          console.error(
+            `❌ ${label} sidebar says ${f.total}, grid says ${gridTotal} — the facet query is ` +
+            'ignoring part of the request (this is the "930 products" bug)'
+          );
+          continue;
+        }
+      }
+
+      // A degenerate price scale means the facet carries no information — but only
+      // when the facet is supposed to span the catalogue. Any narrowing parameter
+      // can legitimately reduce the set to a single price point, and the check must
+      // not go red on a deploy gate for that.
+      //
+      // Keyed off `q` alone until 2026-09-16, which was fine only because the
+      // vehicle filter was being silently ignored; now that `?vehicle=`/`vehicleMake`
+      // actually filter, a narrow vehicle case could produce one bucket and fail.
+      const narrow = Object.keys(testCase.facets).length > 0;
+      const degenerate = !narrow && (!(f.price.max > f.price.min) || f.price.histogram.length < 2);
       if (degenerate) {
         failures += 1;
         console.error(`❌ ${label} price facet is degenerate: ${f.price.min}-${f.price.max}, ${f.price.histogram.length} buckets`);
