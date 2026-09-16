@@ -1,6 +1,8 @@
 import {
   fuzzyFor,
   minimumTokensRequired,
+  requiredTokensForLevel,
+  relaxationLadder,
   buildTokenClause,
   buildRecall,
   buildFilters,
@@ -79,6 +81,201 @@ describe('minimumTokensRequired — Elasticsearch "2<70%" parity', () => {
   });
 });
 
+describe('requiredTokensForLevel — the relaxation ladder', () => {
+  it('rung 0 requires EVERY token — the fix for "bmw steering wheel"', () => {
+    // The bug: at 3 tokens the old default required only 2, so steering+wheel
+    // alone admitted every steering wheel in the catalogue and the brand the
+    // shopper typed became optional. Measured on prod before the fix:
+    //   "bmw steering"       (2 tokens, all required) → 10 results
+    //   "bmw steering wheel" (3 tokens, 2 required)   → 38 results
+    // A MORE specific query returning a 4x LARGER set is the signature.
+    expect(requiredTokensForLevel(3, 0)).toBe(3);
+    expect(requiredTokensForLevel(5, 0)).toBe(5);
+    expect(requiredTokensForLevel(10, 0)).toBe(10);
+  });
+
+  it('rung 1 is the old Elasticsearch 2<70% rule, demoted to a fallback', () => {
+    expect(requiredTokensForLevel(3, 1)).toBe(minimumTokensRequired(3));
+    expect(requiredTokensForLevel(5, 1)).toBe(minimumTokensRequired(5));
+    expect(requiredTokensForLevel(10, 1)).toBe(minimumTokensRequired(10));
+  });
+
+  it('rung 2 accepts any single token — the last resort', () => {
+    expect(requiredTokensForLevel(3, 2)).toBe(1);
+    expect(requiredTokensForLevel(10, 2)).toBe(1);
+  });
+
+  it('defaults to the STRICT rung when no level is supplied', () => {
+    // Anything that forgets to pass a level must get the safe, narrow query —
+    // never the widened one.
+    expect(requiredTokensForLevel(4)).toBe(4);
+  });
+
+  it('asks for nothing when there are no tokens', () => {
+    expect(requiredTokensForLevel(0, 0)).toBe(0);
+    expect(requiredTokensForLevel(0, 2)).toBe(0);
+  });
+
+  it('widens MONOTONICALLY, which is what guarantees no new empty pages', () => {
+    // The safety property: rung 1 IS the pre-2026-09-16 default and rung 2 is
+    // wider still, so every query that returned results before still returns
+    // them at some rung. Tightening rung 0 can only reorder WHEN they appear,
+    // never remove them.
+    for (let n = 1; n <= 20; n += 1) {
+      expect(requiredTokensForLevel(n, 1)).toBeLessThanOrEqual(requiredTokensForLevel(n, 0));
+      expect(requiredTokensForLevel(n, 2)).toBeLessThanOrEqual(requiredTokensForLevel(n, 1));
+      expect(requiredTokensForLevel(n, 2)).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('treats an unknown high level as the widest rung rather than widening further', () => {
+    expect(requiredTokensForLevel(6, 99)).toBe(1);
+  });
+});
+
+describe('relaxationLadder — which rungs are worth a round trip', () => {
+  it('never ladders a query with no text', () => {
+    // A filters-only browse that returns nothing is a genuine empty set, not a
+    // recall failure. Widening cannot conjure a product that passes the filters,
+    // so the extra ~110ms round trips would buy exactly nothing.
+    expect(relaxationLadder(0)).toEqual([0]);
+  });
+
+  it('does not ladder a ONE-token query at all — every rung is identical', () => {
+    // requiredTokensForLevel(1, ·) is 1 at every rung, and tokenVehicleIds is
+    // always empty for a single token (the whole query IS the token, so the
+    // phrase match claims the ids and the per-token set dedupes to nothing).
+    // There is nothing left to relax. Returning [0, 2] here spent a wasted Atlas
+    // round trip on every single-word miss — 44.2% of measured prod traffic.
+    expect(relaxationLadder(1)).toEqual([0]);
+  });
+
+  it('SKIPS the 70% rung for a 2-token query, where it is a duplicate', () => {
+    // minimumTokensRequired(2) === 2 === requiredTokensForLevel(2, 0), so rung 1
+    // would rebuild a byte-identical query and pay a full Atlas round trip for a
+    // result set already known to be empty.
+    expect(relaxationLadder(2)).toEqual([0, 2]);
+  });
+
+  it('proves the skipped rungs really are duplicates, rather than assuming it', () => {
+    // The skip is only safe while the skipped rung builds an identical stage. Pin
+    // that directly, so moving any rung threshold (the token count OR the vehicle
+    // demotion) fails here instead of silently dropping a real rung.
+    const stage = (tokens, relaxLevel, extra = {}) =>
+      buildSearchStage({}, { tokens, cleanedQuery: tokens.join(' '), ...extra }, { relaxLevel });
+
+    // One token: rungs 0, 1 and 2 are all the same query.
+    expect(stage(['bmw'], 1)).toEqual(stage(['bmw'], 0));
+    expect(stage(['bmw'], 2)).toEqual(stage(['bmw'], 0));
+
+    // Two tokens: rung 1 duplicates rung 0, but rung 2 genuinely differs.
+    expect(stage(['bmw', 'steering'], 1)).toEqual(stage(['bmw', 'steering'], 0));
+    expect(stage(['bmw', 'steering'], 2)).not.toEqual(stage(['bmw', 'steering'], 0));
+  });
+
+  it('uses all three rungs from 3 tokens up, where 70% actually differs', () => {
+    expect(relaxationLadder(3)).toEqual([0, 1, 2]);
+    expect(relaxationLadder(7)).toEqual([0, 1, 2]);
+  });
+
+  it('caps at three passes for any query length', () => {
+    for (let n = 0; n <= 30; n += 1) {
+      expect(relaxationLadder(n).length).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('only ever lists rungs that requiredTokensForLevel understands', () => {
+    for (let n = 0; n <= 30; n += 1) {
+      for (const level of relaxationLadder(n)) {
+        expect([0, 1, 2]).toContain(level);
+      }
+    }
+  });
+});
+
+describe('short queries are BYTE-IDENTICAL to the pre-ladder behaviour', () => {
+  // The blast radius claim, enforced rather than asserted in prose: 1- and
+  // 2-token searches already required every token before this change, so they
+  // must be untouched by it. Only 3+ tokens — the searches that were actually
+  // wrong — may differ.
+  const stageFor = (tokens, relaxLevel) =>
+    buildSearchStage({}, { tokens, cleanedQuery: tokens.join(' ') }, { relaxLevel });
+
+  it('a one-token query builds the same stage at rung 0 as at the old 70% rung', () => {
+    expect(stageFor(['bmw'], 0)).toEqual(stageFor(['bmw'], 1));
+  });
+
+  it('a two-token query builds the same stage at rung 0 as at the old 70% rung', () => {
+    expect(stageFor(['bmw', 'steering'], 0)).toEqual(stageFor(['bmw', 'steering'], 1));
+  });
+
+  it('stays identical at rung 0 and 1 even with a vehicle token, which is what justifies the skip', () => {
+    // relaxationLadder skips rung 1 for 1-2 token queries on the grounds that it
+    // rebuilds an identical query. Phase 2 added a second thing that varies by
+    // rung — whether a buried vehicle token counts as recall — so the skip is only
+    // still safe if BOTH stay the same between rung 0 and rung 1. They do: the
+    // vehicle demotion flips at rung 2, not rung 1. If someone later moves that
+    // threshold, this test fails and tells them to revisit relaxationLadder.
+    const resolved = {
+      tokens: ['bmw', 'steering'],
+      cleanedQuery: 'bmw steering',
+      queryVehicleIds: [],
+      tokenVehicleIds: ['bmw-id'],
+    };
+    expect(buildSearchStage({}, resolved, { relaxLevel: 0 }))
+      .toEqual(buildSearchStage({}, resolved, { relaxLevel: 1 }));
+  });
+
+  it('a THREE-token query is where the stages diverge — 3 required, not 2', () => {
+    const strict = stageFor(['bmw', 'steering', 'wheel'], 0);
+    const relaxed = stageFor(['bmw', 'steering', 'wheel'], 1);
+    expect(strict).not.toEqual(relaxed);
+    expect(strict.compound.must[0].compound.should[0].compound.minimumShouldMatch).toBe(3);
+    expect(relaxed.compound.must[0].compound.should[0].compound.minimumShouldMatch).toBe(2);
+  });
+});
+
+describe('buildRecall — the token lane honours the rung', () => {
+  const tokens = ['bmw', 'steering', 'wheel'];
+
+  it('demands all three tokens on the first pass', () => {
+    const [fuzzyLane] = buildRecall({ tokens, relaxLevel: 0 });
+    expect(fuzzyLane.compound.minimumShouldMatch).toBe(3);
+  });
+
+  it('drops to the 70% rule on the first retry', () => {
+    const [fuzzyLane] = buildRecall({ tokens, relaxLevel: 1 });
+    expect(fuzzyLane.compound.minimumShouldMatch).toBe(2);
+  });
+
+  it('drops to any-one-token on the last retry', () => {
+    const [fuzzyLane] = buildRecall({ tokens, relaxLevel: 2 });
+    expect(fuzzyLane.compound.minimumShouldMatch).toBe(1);
+  });
+
+  it('keeps the exact-complete lane strict at EVERY rung', () => {
+    // Lane 2 exists to score a complete exact match above a partial fuzzy one.
+    // Relaxing it would delete that signal precisely when ranking matters most —
+    // on the widened passes, where the result set is at its loosest.
+    for (const relaxLevel of [0, 1, 2]) {
+      const [, exactLane] = buildRecall({ tokens, relaxLevel });
+      expect(exactLane.compound.minimumShouldMatch).toBe(tokens.length);
+    }
+  });
+
+  it('still counts one token as exactly one clause at every rung', () => {
+    // The OR-explosion guard: a flat (token x field) list would let one token
+    // matching name+brand+tags satisfy a requirement of three tokens.
+    for (const relaxLevel of [0, 1, 2]) {
+      const [fuzzyLane] = buildRecall({ tokens, relaxLevel });
+      expect(fuzzyLane.compound.should).toHaveLength(tokens.length);
+      for (const clause of fuzzyLane.compound.should) {
+        expect(clause.compound.minimumShouldMatch).toBe(1);
+      }
+    }
+  });
+});
+
 describe('buildTokenClause — one token counts as exactly one clause', () => {
   it('nests per-field alternatives so a single token cannot satisfy a multi-token minimum', () => {
     // The OR-explosion guard. A FLAT list of (token × field) clauses would let
@@ -124,7 +321,11 @@ describe('buildRecall — lane structure', () => {
     const lanes = buildRecall({ tokens: ['tailgate', 'spoiler', 'hilux'] });
     const compoundLanes = lanes.filter((l) => l.compound);
     expect(compoundLanes).toHaveLength(2);
-    expect(compoundLanes[0].compound.minimumShouldMatch).toBe(2); // 70% of 3, floored
+    // Both lanes require ALL tokens on the default (strict) rung. This asserted 2
+    // — the 70% rule — until 2026-09-16, when 70% stopped being the first pass and
+    // became rung 1 of the relaxation ladder. The lanes still differ: lane 1 is
+    // fuzzy (tolerates typos), lane 2 is exact and scores a literal match higher.
+    expect(compoundLanes[0].compound.minimumShouldMatch).toBe(3); // all tokens, fuzzy
     expect(compoundLanes[1].compound.minimumShouldMatch).toBe(3); // all tokens, exact
   });
 
@@ -156,6 +357,162 @@ describe('buildRecall — lane structure', () => {
 
   it('produces no lanes at all for an empty query, leaving filters to define the set', () => {
     expect(buildRecall({ tokens: [] })).toEqual([]);
+  });
+});
+
+describe('a vehicle word inside a longer query narrows instead of widening', () => {
+  const BMW = 'bmw-x5-id';
+  const tokens = ['bmw', 'steering', 'wheel'];
+  const vehicleLaneOf = (lanes) => lanes.find((l) => l.in?.path === 'compatibleVehicles');
+
+  it('never lets fitment ALONE admit a product on the strict rung', () => {
+    // The exact prod bug this closes. "BMW X5 M Sport Conversion Kit", a roof
+    // spoiler and a crystal gear knob all carry the BMW X5 fitment id and none
+    // contains "steering" or "wheel" in name, brand, sku or tags. They arrived on
+    // an UNCONSTRAINED vehicle lane, which has no token requirement at all — so
+    // they were immune to tightening minimumShouldMatch and had to be dealt with
+    // here. The lane survives, but only ANDed with the remaining words.
+    const lanes = buildRecall({ tokens, tokenVehicleIds: [BMW], vehicleTokens: ['bmw'], relaxLevel: 0 });
+    expect(vehicleLaneOf(lanes)).toBeUndefined();
+  });
+
+  it('keeps it constrained on the 70% rung too', () => {
+    const lanes = buildRecall({ tokens, tokenVehicleIds: [BMW], vehicleTokens: ['bmw'], relaxLevel: 1 });
+    expect(vehicleLaneOf(lanes)).toBeUndefined();
+    expect(lanes.find((l) => l.compound?.must)).toBeDefined();
+  });
+
+  it('drops the constraint on the last rung, where widening is the point', () => {
+    const lanes = buildRecall({ tokens, tokenVehicleIds: [BMW], vehicleTokens: ['bmw'], relaxLevel: 2 });
+    expect(vehicleLaneOf(lanes).in.value).toEqual([BMW]);
+  });
+
+  it('NEVER demotes a whole-query vehicle match — "bmw" alone still finds BMW parts', () => {
+    // The valuable half of vehicle recall: a universal part that fits a BMW but
+    // never says "BMW" in its name is findable only through fitment. Searching
+    // the vehicle and nothing else must keep returning it, at every rung.
+    for (const relaxLevel of [0, 1, 2]) {
+      const lanes = buildRecall({ tokens: ['bmw'], vehicleIds: [BMW], relaxLevel });
+      expect(vehicleLaneOf(lanes).in.value).toEqual([BMW]);
+    }
+  });
+
+  it('covers both id sets on the last rung', () => {
+    // Expressed as two OR'd lanes (whole-query fitment, token fitment) rather
+    // than one merged clause. Same matched set — the outer compound is a
+    // minimumShouldMatch: 1 should — while keeping the two signals separable if
+    // they ever need different boosts.
+    const lanes = buildRecall({
+      tokens,
+      vehicleIds: [BMW],
+      tokenVehicleIds: ['other-id'],
+      vehicleTokens: ['bmw'],
+      relaxLevel: 2,
+    });
+    const covered = lanes.filter((l) => l.in?.path === 'compatibleVehicles').flatMap((l) => l.in.value);
+    expect(covered).toEqual(expect.arrayContaining([BMW, 'other-id']));
+  });
+
+  it('ADMITS a fitment-only match: fits the vehicle AND carries the other words', () => {
+    // The case a ranking-only boost silently drops, and the reason the lane is
+    // constrained rather than deleted. Ranking reorders the recalled set; it
+    // cannot add to it. A steering wheel catalogued as fitting the BMW X5 whose
+    // name never says "BMW" is exactly what the shopper wants, and it is
+    // reachable ONLY through fitment.
+    const lanes = buildRecall({ tokens, tokenVehicleIds: [BMW], vehicleTokens: ['bmw'], relaxLevel: 0 });
+    const fitmentLane = lanes.find((l) => l.compound?.must);
+
+    expect(fitmentLane).toBeDefined();
+    const [fitment, residualClause] = fitmentLane.compound.must;
+
+    // Fitment is REQUIRED, not merely scored.
+    expect(fitment.in.path).toBe('compatibleVehicles');
+    expect(fitment.in.value).toEqual([BMW]);
+
+    // …AND the words the vehicle token did not account for are required too.
+    // "bmw" is consumed by the fitment clause; "steering" and "wheel" remain.
+    expect(residualClause.compound.should).toHaveLength(2);
+    expect(residualClause.compound.minimumShouldMatch).toBe(2);
+  });
+
+  it('EXCLUDES the BMW gear knob — fitment alone is never enough', () => {
+    // The original bug, from the other direction. The gear knob, roof spoiler and
+    // X5 body kit all carry the BMW fitment id and none carries "steering" or
+    // "wheel". Requiring the residual tokens alongside fitment keeps them out
+    // while the fitment-only steering wheel above gets in.
+    const lanes = buildRecall({ tokens, tokenVehicleIds: [BMW], vehicleTokens: ['bmw'], relaxLevel: 0 });
+    const bareFitmentLane = lanes.find((l) => l.in?.path === 'compatibleVehicles');
+    expect(bareFitmentLane).toBeUndefined();
+  });
+
+  it('relaxes the residual requirement with the rung, not independently of it', () => {
+    const fourTokens = ['bmw', 'carbon', 'steering', 'wheel'];
+    const residualFor = (relaxLevel) => buildRecall({
+      tokens: fourTokens, tokenVehicleIds: [BMW], vehicleTokens: ['bmw'], relaxLevel,
+    }).find((l) => l.compound?.must).compound.must[1].compound.minimumShouldMatch;
+
+    expect(residualFor(0)).toBe(3);                        // all 3 residual tokens
+    expect(residualFor(1)).toBe(minimumTokensRequired(3)); // 70% of the residual
+  });
+
+  it('falls back to bare fitment when the query is ONLY vehicle words', () => {
+    // "bmw toyota" leaves no residual to AND against, so fitment alone is the
+    // entire intent. ANDing against an empty clause list would match nothing.
+    const lanes = buildRecall({
+      tokens: ['bmw', 'toyota'], tokenVehicleIds: [BMW], vehicleTokens: ['bmw', 'toyota'], relaxLevel: 0,
+    });
+    const bare = lanes.find((l) => l.in?.path === 'compatibleVehicles');
+    expect(bare.in.value).toEqual([BMW]);
+    expect(lanes.find((l) => l.compound?.must)).toBeUndefined();
+  });
+
+  it('keeps score INSIDE the operator on the constrained lane', () => {
+    // The shape that silently disables Atlas entirely: a sibling `score` is
+    // rejected with `unrecognized field "score"`, searchService catches it, and
+    // every search becomes a full Mongo scan behind a normal-looking storefront.
+    const lanes = buildRecall({ tokens, tokenVehicleIds: [BMW], vehicleTokens: ['bmw'], relaxLevel: 0 });
+    const fitment = lanes.find((l) => l.compound?.must).compound.must[0];
+    expect(fitment.score).toBeUndefined();
+    expect(fitment.in.score).toEqual({ boost: { value: 2 } });
+  });
+
+  it('also SCORES fitment at every rung, on top of the constrained recall lane', () => {
+    // Recall decides who is in; ranking decides the order. buildSearchStage hands
+    // both id sets to ranking, so among the steering wheels that qualify, the
+    // BMW-fitted ones come first — the ordering a shopper wants, which the old
+    // unconstrained lane only achieved by admitting junk alongside it.
+    const stage = buildSearchStage(
+      {},
+      { tokens, cleanedQuery: tokens.join(' '), queryVehicleIds: [], tokenVehicleIds: [BMW] },
+      { relaxLevel: 0 },
+    );
+    const boost = stage.compound.should.find((c) => c.in?.path === 'compatibleVehicles');
+    expect(boost).toBeDefined();
+    expect(boost.in.value).toEqual([BMW]);
+    // …and the score stays INSIDE the operator. Beside it, Atlas rejects the whole
+    // query with `unrecognized field "score"` and searchService silently serves a
+    // full-collection Mongo scan instead.
+    expect(boost.score).toBeUndefined();
+    expect(boost.in.score).toEqual({ boost: { value: 2 } });
+  });
+
+  it('end to end: no unconstrained fitment lane survives on the strict rung', () => {
+    const stage = buildSearchStage(
+      {},
+      {
+        tokens,
+        cleanedQuery: tokens.join(' '),
+        queryVehicleIds: [],
+        tokenVehicleIds: [BMW],
+        vehicleTokens: ['bmw'],
+      },
+      { relaxLevel: 0 },
+    );
+    const recallLanes = stage.compound.must[0].compound.should;
+    expect(recallLanes.every((lane) => lane.in?.path !== 'compatibleVehicles')).toBe(true);
+    expect(recallLanes[0].compound.minimumShouldMatch).toBe(3);
+    // The constrained lane IS present — this is not lane removal.
+    expect(recallLanes.some((lane) => lane.compound?.must)).toBe(true);
   });
 });
 

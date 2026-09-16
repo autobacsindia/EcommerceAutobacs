@@ -286,7 +286,13 @@ describe('zero-result relaxation', () => {
     const result = await atlasSearchService.searchProducts({ q: 'spoiler ferrari' });
 
     expect(result.relaxed).toBe(true);
-    expect(result.relaxLevel).toBe(1);
+    // Rung 2, not 1. "spoiler ferrari" is two tokens, and at two tokens the 70%
+    // rule returns 2 — byte-identical to the strict rung — so relaxationLadder
+    // skips it rather than spending an Atlas round trip re-asking a question
+    // already answered. The BEHAVIOUR is unchanged from when this asserted 1:
+    // still exactly two passes, still widening to any-one-token. Only the label
+    // of the rung it lands on moved. See relaxationLadder.
+    expect(result.relaxLevel).toBe(2);
     expect(result.pagination.total).toBe(7);
     // Two passes, two aggregates each.
     expect(aggregateSpy).toHaveBeenCalledTimes(4);
@@ -316,17 +322,30 @@ describe('zero-result relaxation', () => {
     expect(aggregateSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('reports relaxed even when the retry also finds nothing', async () => {
+  it('reports relaxed when a MULTI-token search was widened and still found nothing', async () => {
     // An honest signal: the search was widened and there is still nothing, which is
     // what lets the UI show "no results" rather than "showing related results".
-    stubResults([0, 0]);
-    const result = await atlasSearchService.searchProducts({ q: 'zzzznonexistent' });
+    stubResults([0, 0, 0]);
+    const result = await atlasSearchService.searchProducts({ q: 'zzzznonexistent aaaabogus qqqqfake' });
 
     expect(result.relaxed).toBe(true);
     expect(result.pagination.total).toBe(0);
-    // 2 passes × 2 aggregates, PLUS the did-you-mean probe — which runs only after
-    // relaxation has also failed, so it costs nothing on a search that worked.
-    expect(aggregateSpy).toHaveBeenCalledTimes(5);
+    // 3 passes × 2 aggregates, PLUS the did-you-mean probe — which runs only after
+    // every rung has failed, so it costs nothing on a search that worked.
+    expect(aggregateSpy).toHaveBeenCalledTimes(7);
+  });
+
+  it('does NOT claim it relaxed a single-token search, because there is nothing to relax', async () => {
+    // Every rung builds an identical query for one token, so relaxationLadder runs
+    // exactly one pass. Reporting `relaxed: true` here would be a lie that puts a
+    // "showing related results" note on results that were never widened.
+    stubResults([0]);
+    const result = await atlasSearchService.searchProducts({ q: 'zzzznonexistent' });
+
+    expect(result.relaxed).toBe(false);
+    expect(result.relaxLevel).toBe(0);
+    expect(result.pagination.total).toBe(0);
+    expect(aggregateSpy).toHaveBeenCalledTimes(2 + 1); // one pass + did-you-mean
   });
 
   it('runs the correction probe ONLY after relaxation has also failed', async () => {
@@ -340,7 +359,10 @@ describe('zero-result relaxation', () => {
     aggregateSpy.mockRestore();
     stubResults([0, 0]);
     await atlasSearchService.searchProducts({ q: 'wnich' });
-    expect(aggregateSpy).toHaveBeenCalledTimes(5);
+    // "wnich" is ONE token, so the ladder runs a single pass (2 aggregates) and
+    // the probe follows it: 3, not 5. The point being pinned is unchanged — the
+    // probe fires only after the search has genuinely exhausted its options.
+    expect(aggregateSpy).toHaveBeenCalledTimes(3);
   });
 });
 

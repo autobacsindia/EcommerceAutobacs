@@ -47,6 +47,13 @@ const CASES = [
   { label: 'single token', params: { q: 'spoiler' } },
   { label: 'multi token precision', params: { q: 'tailgate spoiler hilux' } },
   { label: 'vehicle recall (ObjectId lane)', params: { q: 'hilux' } },
+  // The CONSTRAINED fitment lane: a vehicle word buried in a longer query builds a
+  // nested compound (`must: [in, compound]`) inside the recall `should`. That shape
+  // is new as of 2026-09-16 and is not exercised by the plain vehicle case above —
+  // and Atlas rejecting it would be invisible, since searchService would quietly
+  // serve the MongoDB fallback.
+  { label: 'vehicle + part (constrained lane)', params: { q: 'hilux roof rails' } },
+  { label: 'vehicle words only (bare fitment)', params: { q: 'hilux fortuner' } },
   { label: 'brand filter (token normalizer)', params: { brand: 'Auxbeam' } },
   { label: 'price range + sort asc', params: { minPrice: 1000, maxPrice: 5000, sortBy: 'price', order: 'asc' } },
   { label: 'sort by price asc, no query', params: { sortBy: 'price', order: 'asc' } },
