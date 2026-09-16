@@ -83,13 +83,20 @@ export function fuzzyFor(token) {
 }
 
 /**
- * How many of the query's tokens a document must contain.
+ * Elasticsearch's `minimum_should_match: '2<70%'`, resolved to an integer.
  *
- * Elasticsearch expressed this as `minimum_should_match: '2<70%'` — at most 2
- * tokens, all are required; more than 2, 70% are required (tolerating one
- * missing or typo'd word on longer queries). Atlas's `minimumShouldMatch` is an
- * integer, so the percentage is resolved here. Making it explicit is a small win:
- * the rounding is now visible and testable instead of living inside ES.
+ * ⚠ This is no longer the FIRST-PASS rule — it is rung 1 of the relaxation
+ * ladder (see requiredTokensForLevel). It was the default until 2026-09-16, and
+ * as a default it was wrong for a storefront: at 3 tokens it requires only 2, so
+ * "bmw steering wheel" admitted every steering wheel in the catalogue on
+ * steering+wheel alone and the brand the shopper actually typed became optional.
+ * Measured on prod: `bmw steering` (2 tokens, all required) → 10 results,
+ * `bmw steering wheel` (3 tokens, 2 required) → 38. Adding a more specific word
+ * made the result set nearly 4x LARGER, which is the signature of the bug.
+ *
+ * It remains exactly right as a FALLBACK, which is what it is now: once a strict
+ * pass has returned nothing, "tolerate one missing or typo'd word" is precisely
+ * the recovery you want before widening any further.
  */
 export function minimumTokensRequired(tokenCount) {
   if (tokenCount <= 2) return tokenCount;
@@ -99,6 +106,71 @@ export function minimumTokensRequired(tokenCount) {
   // this rule exists for — "tolerates one missing/typo'd word on longer queries".
   // Floored at 1 so a percentage can never demand zero clauses.
   return Math.max(1, Math.floor(tokenCount * 0.7));
+}
+
+/**
+ * The relaxation ladder: how many tokens a document must carry at each rung.
+ *
+ * Every extra word a shopper types is an attempt to NARROW. A storefront that
+ * answers a longer query with a larger result set has inverted the one thing the
+ * shopper was trying to say, and they read that as "this shop doesn't stock what
+ * I asked for" rather than "this search is loose". So recall starts strict and
+ * widens only when strict found nothing:
+ *
+ *   rung 0 — every token. Where the overwhelming majority of searches resolve.
+ *   rung 1 — the ES 2<70% rule. Tolerates one missing/typo'd word.
+ *   rung 2 — any single token, and entity lanes return to recall (buildRecall).
+ *            Last resort; the storefront labels it "showing related results".
+ *
+ * This is also engine PARITY, not a new policy. The MongoDB fallback in
+ * searchService.buildBaseQuery has always required every token on a multi-word
+ * query ("$and of per-token $or … what stops 'spoiler' from dragging in every
+ * bumper"). Atlas drifted from that during the ES→Atlas migration by adopting
+ * 70% as its default. Rung 0 restores the model both engines documented.
+ *
+ * Widening is strictly monotonic, which buys a guarantee worth stating: no query
+ * that returns results today can return an empty page after this change, because
+ * rung 1 IS today's rule and rung 2 is wider still.
+ */
+export function requiredTokensForLevel(tokenCount, relaxLevel = 0) {
+  if (tokenCount <= 0) return 0;
+  if (relaxLevel <= 0) return tokenCount;
+  if (relaxLevel === 1) return minimumTokensRequired(tokenCount);
+  return 1;
+}
+
+/**
+ * Which rungs are worth EXECUTING for a query of this length.
+ *
+ * Each rung is a real round trip to Atlas (~110 ms measured), so a rung that
+ * builds a query identical to the one before it is pure latency for no new
+ * result. Two such duplicates are skipped:
+ *
+ *  • ONE token — every rung is identical, so the ladder is just [0]. The 70% rule
+ *    returns 1 for a single token, rung 2 requires 1, and `tokenVehicleIds` is
+ *    always empty (the whole query IS the token, so the phrase match claims the
+ *    ids and the per-token set dedupes to nothing). There is literally nothing
+ *    left to relax: a one-word search either matches or genuinely has no answer,
+ *    and re-asking cannot change that. Returning [0, 2] here — as this did until
+ *    2026-09-16 — spent a second Atlas round trip on 44.2% of all traffic's
+ *    misses to re-ask a question already answered.
+ *
+ *  • TWO tokens — rung 1 only. minimumTokensRequired(2) === 2 === rung 0, and the
+ *    vehicle demotion flips at rung 2 rather than rung 1, so rung 1 rebuilds rung
+ *    0 exactly. These go straight from strict to last-resort.
+ *
+ * Only 3+ tokens, where 70% actually differs, pay for the middle rung.
+ *
+ * A query with no text never ladders at all: a filters-only browse returning
+ * nothing is a genuine empty set, not a recall failure, and widening recall
+ * cannot conjure a product that passes the filters.
+ *
+ * @returns {number[]} relax levels to try in order, stopping at the first hit.
+ */
+export function relaxationLadder(tokenCount) {
+  if (tokenCount <= 1) return [0];
+  if (tokenCount === 2) return [0, 2];
+  return [0, 1, 2];
 }
 
 /**
@@ -177,6 +249,8 @@ export function buildRecall({
   tokens,
   categoryIds = [],
   vehicleIds = [],
+  tokenVehicleIds = [],
+  vehicleTokens = [],
   synonymCategoryIds = [],
   relaxLevel = 0,
   synonymsAvailable = false,
@@ -187,15 +261,18 @@ export function buildRecall({
     lanes.push({
       compound: {
         should: tokens.map((t) => buildTokenClause(t, { fuzzy: true })),
-        // relaxLevel 1 drops the required-token count to ONE — "any token matches"
-        // instead of "70% of them". This is the standard zero-result recovery every
-        // large storefront runs (Algolia calls it removeWordsIfNoResults): a query
-        // like "tailgate spoiler hilux" that names a real intent but no single
-        // product should degrade to related results, not to an empty grid.
+        // The rung decides how many of these tokens a product must carry: all of
+        // them (0) → 70% (1) → any one (2). See requiredTokensForLevel.
+        //
+        // Widening is the standard zero-result recovery every large storefront
+        // runs (Algolia calls it removeWordsIfNoResults): a query like "tailgate
+        // spoiler hilux" that names a real intent but no single product should
+        // degrade to related results, not to an empty grid.
         //
         // It is applied ONLY on retry, never on the first pass, because widening
-        // recall by default is precisely what produced "151 results for spoiler".
-        minimumShouldMatch: relaxLevel >= 1 ? 1 : minimumTokensRequired(tokens.length),
+        // recall by default is precisely what produced "151 results for spoiler"
+        // — and, later, 38 results for "bmw steering wheel".
+        minimumShouldMatch: requiredTokensForLevel(tokens.length, relaxLevel),
       },
     });
 
@@ -263,10 +340,65 @@ export function buildRecall({
   // for the lane below, which does something the engine cannot: map a term to a
   // taxonomy subtree.
 
+  // ── Vehicle recall ───────────────────────────────────────────────────────
+  //
+  // `vehicleIds` is the WHOLE-QUERY match: the shopper named the vehicle and
+  // nothing else, so every part that fits it is the answer. Unconditional lane.
   if (vehicleIds.length > 0) {
     lanes.push({
       in: { path: 'compatibleVehicles', value: vehicleIds, score: { boost: { value: 2 } } },
     });
+  }
+
+  // `tokenVehicleIds` is a vehicle word buried inside a longer query
+  // ("bmw steering wheel"). There the vehicle is a NARROWING term, not the
+  // request, and the old unconditional lane is what admitted a gear knob, a roof
+  // spoiler and an X5 body kit as steering wheels: all three carry the BMW X5
+  // fitment id, none carries "steering" or "wheel" anywhere, and the lane has no
+  // token requirement at all.
+  //
+  // The fix is to CONSTRAIN the lane, not delete it. Deleting it (which is what
+  // demoting it to a ranking-only boost amounts to — ranking reorders the
+  // recalled set, it cannot add to it) silently drops the opposite case: a
+  // steering wheel catalogued as fitting the BMW X5 whose name never says "BMW"
+  // would become unfindable by "bmw steering wheel", which is precisely the
+  // product the shopper wants most.
+  //
+  // So: fitment AND the tokens the vehicle word did not account for.
+  //   "bmw steering wheel" → fits BMW  AND  matches steering + wheel
+  // The fitment-only steering wheel is admitted; the BMW gear knob still is not.
+  //
+  // MEASURED 2026-09-16 on prod: this changes nothing today — for "hilux roof
+  // rails" all 9 products excluded by adding "hilux" genuinely do not fit a
+  // Hilux (Defender, Ertiga, Innova, Isuzu, universal bars), because fitment data
+  // is sparse. It is correctness insurance that pays off as `compatibleVehicles`
+  // is populated, and it costs one clause.
+  if (tokenVehicleIds.length > 0) {
+    const fitment = {
+      in: { path: 'compatibleVehicles', value: tokenVehicleIds, score: { boost: { value: 2 } } },
+    };
+    const vehicleWords = new Set(vehicleTokens.map((t) => String(t).toLowerCase()));
+    const residual = tokens.filter((t) => !vehicleWords.has(String(t).toLowerCase()));
+
+    if (relaxLevel >= 2 || residual.length === 0) {
+      // Last rung, or the query is nothing but vehicle words ("bmw toyota") — so
+      // there is no residual to AND against and fitment alone is the whole intent.
+      lanes.push(fitment);
+    } else {
+      lanes.push({
+        compound: {
+          must: [
+            fitment,
+            {
+              compound: {
+                should: residual.map((t) => buildTokenClause(t, { fuzzy: true })),
+                minimumShouldMatch: requiredTokensForLevel(residual.length, relaxLevel),
+              },
+            },
+          ],
+        },
+      });
+    }
   }
 
   return lanes;
@@ -554,6 +686,8 @@ export function buildSearchStage(params, resolved = {}, { relaxLevel = 0, capabi
     tokens,
     categoryIds: resolved.queryCategoryIds || [],
     vehicleIds: resolved.queryVehicleIds || [],
+    tokenVehicleIds: resolved.tokenVehicleIds || [],
+    vehicleTokens: resolved.vehicleTokens || [],
     synonymCategoryIds: resolved.synonymCategoryIds || [],
     relaxLevel,
     synonymsAvailable: capabilities.synonyms,
@@ -564,7 +698,14 @@ export function buildSearchStage(params, resolved = {}, { relaxLevel = 0, capabi
   if (recall.length > 0) {
     compound.must = [{ compound: { should: recall, minimumShouldMatch: 1 } }];
   }
-  const rankingShould = buildRankingShould({ cleanedQuery, vehicleIds: resolved.queryVehicleIds || [], capabilities });
+  // Ranking sees BOTH vehicle sets at every rung. That is what makes the recall
+  // demotion above safe rather than lossy: a vehicle word inside a longer query
+  // stops widening the result set but still lifts the products that actually fit.
+  const rankingShould = buildRankingShould({
+    cleanedQuery,
+    vehicleIds: uniqueIds([...(resolved.queryVehicleIds || []), ...(resolved.tokenVehicleIds || [])]),
+    capabilities,
+  });
   if (rankingShould.length > 0) compound.should = rankingShould;
   if (mustNot.length > 0) compound.mustNot = mustNot;
 
@@ -823,7 +964,14 @@ async function resolveVehicleFilter({ vehicleMake, vehicleType, vehicleModel }) 
  * lanes can match on references instead of on denormalized name strings.
  */
 async function resolveQueryEntities(cleanedQuery, tokens) {
-  const result = { queryCategoryIds: [], queryVehicleIds: [], synonymCategoryIds: [], synonymTerms: [] };
+  const result = {
+    queryCategoryIds: [],
+    queryVehicleIds: [],
+    tokenVehicleIds: [],
+    vehicleTokens: [],
+    synonymCategoryIds: [],
+    synonymTerms: [],
+  };
   if (!cleanedQuery) return result;
 
   if (!categoryMappingService.initialized) await categoryMappingService.initialize();
@@ -839,14 +987,47 @@ async function resolveQueryEntities(cleanedQuery, tokens) {
     result.queryCategoryIds = ids.map(toObjectId).filter(Boolean);
   }
 
-  // Vehicle recall. Try the whole query first so two-word models ("land cruiser")
-  // resolve as one vehicle, then fall back to individual tokens.
+  // Vehicle resolution, split by HOW the vehicle was named — because the two
+  // cases mean different things and must not be treated alike.
+  //
+  //  • Whole-query match ("bmw", "land cruiser"): the shopper asked for the
+  //    vehicle itself. Finding parts that fit it — including universal parts that
+  //    never say "BMW" in their name — is exactly right. Stays a recall lane.
+  //
+  //  • Per-token match inside a longer query ("bmw steering wheel"): the vehicle
+  //    word is a NARROWING term, not the request. Treating it as recall is what
+  //    put a gear knob, a roof spoiler and a body kit in the results for "bmw
+  //    steering wheel" — all three carry the BMW X5 fitment id and none carries
+  //    the word "steering" or "wheel" anywhere. They entered on the vehicle lane
+  //    alone, bypassing the token requirement entirely, so no amount of
+  //    tightening minimumShouldMatch could have excluded them.
+  //
+  //    These become a ranking BOOST (buildRankingShould) at the narrow rungs:
+  //    BMW-fitted steering wheels rank above other steering wheels, but a BMW
+  //    gear knob can no longer arrive as a steering wheel. They are restored to
+  //    recall at the last rung, where widening is the whole point.
+  //
+  // Single-token queries are unaffected by the split: the whole query IS the
+  // token, so the phrase match already covers it and the token set dedupes away.
   const { byAny } = await getVehicleIndex();
-  const vehicleIds = [...(byAny.get(cleanedQuery.toLowerCase()) || [])];
+  const phraseVehicleIds = [...(byAny.get(cleanedQuery.toLowerCase()) || [])];
+  const perTokenVehicleIds = [];
+  const vehicleTokens = [];
   for (const token of tokens) {
-    vehicleIds.push(...(byAny.get(token.toLowerCase()) || []));
+    const ids = byAny.get(token.toLowerCase());
+    if (!ids || ids.length === 0) continue;
+    perTokenVehicleIds.push(...ids);
+    // Recorded so buildRecall knows which tokens the FITMENT clause already
+    // accounts for, and can require the remaining ones as text. Without this the
+    // vehicle word would have to match as text too, and "bmw steering wheel"
+    // would exclude a BMW-fitted steering wheel whose name omits "BMW" — the
+    // exact product the constrained lane exists to keep.
+    vehicleTokens.push(token);
   }
-  result.queryVehicleIds = uniqueIds(vehicleIds);
+  result.queryVehicleIds = uniqueIds(phraseVehicleIds);
+  const alreadyRecalled = new Set(result.queryVehicleIds.map(String));
+  result.tokenVehicleIds = uniqueIds(perTokenVehicleIds).filter((id) => !alreadyRecalled.has(String(id)));
+  result.vehicleTokens = vehicleTokens;
 
   // Synonyms broaden ONLY single-token, category-style queries. For a specific
   // multi-word query they are the bug: expanding "spoiler" pulled in every bumper
@@ -1116,25 +1297,55 @@ class AtlasSearchService {
 
     // ── Zero-result recovery ─────────────────────────────────────────────────
     //
-    // A strict first pass, then ONE relaxed retry if it found nothing. Two things
-    // make this worth the extra round trip:
+    // Climb the relaxation ladder, stopping at the FIRST rung that returns
+    // anything: every token → 70% → any one token. Two things make the extra
+    // round trips worth it:
     //
     //  1. It is what shoppers expect. A multi-word query that names a real intent
-    //     but matches no single product currently returns an empty grid; every
-    //     large storefront degrades to related results with a "no exact matches"
-    //     note instead.
+    //     but matches no single product would otherwise return an empty grid;
+    //     every large storefront degrades to related results with a "no exact
+    //     matches" note instead.
     //  2. It REDUCES load. searchService treats a zero-hit answer as a possible
     //     index outage and re-asks MongoDB — a full-collection regex scan plus an
-    //     unbounded countDocuments. Recovering here means that ladder never fires
+    //     unbounded countDocuments. Recovering here means that path never fires
     //     for a query that simply needed widening.
     //
-    // The retry runs only when there is query text (a filters-only browse returning
-    // nothing is a genuine empty set, not a recall failure) and only once, so a
-    // search can never cost more than two passes.
-    let relaxLevel = 0;
+    // Cost is bounded and paid only by queries that would otherwise be empty: a
+    // rung runs solely because the one before it returned zero, relaxationLadder
+    // skips rungs that would rebuild an identical query, and a search can never
+    // exceed three passes. A 2-token query costs at most two; a 1-token query
+    // always costs exactly one. MEASURED on 90 days of prod analytics: 2.9% of
+    // searches return zero, and only 7 searches in that whole window were both
+    // 3+ tokens AND empty — i.e. the 3-pass worst case is ~0.3% of traffic.
+    //
+    // ⚠ The trigger is `total === 0`, deliberately, NOT a "too few results"
+    // threshold. Advancing on thin-but-nonempty results was considered and
+    // REJECTED — don't re-litigate without new evidence:
+    //
+    //  • It re-creates the bug this work exists to fix. If rung 0 returns 2 exact
+    //    matches and rung 1 would return 40 loose ones, replacing 2 with 40 is
+    //    precisely the "38 results for bmw steering wheel" complaint, just with
+    //    an extra query paid for the privilege.
+    //  • The failure it guards against is real but has a different root cause.
+    //    Every field analyses with `lucene.standard` (no stemming) and fuzzyFor
+    //    returns null under 5 characters, so "mat" cannot match "mats" — a thin
+    //    rung-0 result can be an ARTIFACT rather than the truth. That is the
+    //    ANALYZER's problem; papering over it in the ladder would widen every
+    //    thin query, including the correctly thin ones.
+    //  • Measured 2026-09-16, prod: it does not currently bite. Every top real
+    //    3-token query resolves at rung 0 with a healthy, correctly-narrowed set
+    //    ("hilux roll bar" 20, "hilux gr kit" 9, "hilux roof rails" 4), and
+    //    singular/plural pairs return near-identical totals ("thar roxx
+    //    grill(s)" 3/3, "hilux fender flare(s)" 7/7, "upper control arm(s)"
+    //    7/8) because the SEO tag data carries both forms.
+    //
+    // If plural drift ever does bite, fix it in the index definition (a stemming
+    // analyzer or a plural synonym mapping), not here.
+    const ladder = relaxationLadder(cleanedQuery ? tokens.length : 0);
+    let relaxLevel = ladder[0];
     let { productDocs, facetResult, total } = await execute(relaxLevel);
-    if (total === 0 && cleanedQuery) {
-      relaxLevel = 1;
+    for (let i = 1; i < ladder.length && total === 0; i += 1) {
+      relaxLevel = ladder[i];
       ({ productDocs, facetResult, total } = await execute(relaxLevel));
     }
 
