@@ -296,7 +296,15 @@ class SearchService {
         const orConditions = [];
         if (literal) {
           const lit = anchor(literal);
-          orConditions.push({ name: lit }, { brand: lit }, { tags: lit }, { sku: lit });
+          // `variants.label` mirrors HIGH_SIGNAL_FIELDS in atlasSearchService. Both
+          // engines answer the same URL, so a field that exists in one recall model
+          // and not the other means an Atlas outage silently changes what a search
+          // FINDS, not just how fast it answers. Added alongside the Atlas mapping
+          // on 2026-09-17 for that reason.
+          orConditions.push(
+            { name: lit }, { brand: lit }, { tags: lit }, { sku: lit },
+            { 'variants.label': lit },
+          );
         }
         for (const s of synonyms) orConditions.push({ name: anchor(s) });
         if (categoryBranch) orConditions.push(categoryBranch);
@@ -308,7 +316,7 @@ class SearchService {
         // query resolves to a category whose subtree we return.
         const perToken = tokens.map((t) => {
           const a = anchor(t);
-          return { $or: [{ name: a }, { brand: a }, { tags: a }, { sku: a }] };
+          return { $or: [{ name: a }, { brand: a }, { tags: a }, { sku: a }, { 'variants.label': a }] };
         });
         query.$or = categoryBranch
           ? [{ $and: perToken }, categoryBranch]

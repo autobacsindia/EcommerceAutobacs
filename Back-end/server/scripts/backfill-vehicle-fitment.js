@@ -30,27 +30,20 @@ import fs from 'fs';
 import path from 'path';
 import Product from '../models/Product.js';
 import Vehicle from '../models/Vehicle.js';
+// Shared with scripts/audit-vehicle-candidates.js. These lived here as local
+// consts until 2026-09-17; the audit needs the SAME spelling rules, and two
+// copies would mean the audit recommends a row this script then fails to match.
+import {
+  MODEL_ALIASES,
+  MAKE_ALIASES,
+  phraseVariants,
+  tokenMatch,
+  stylingMatch,
+  isVehicleAxis,
+  needsMakeConfirmation,
+} from '../utils/vehicleMatch.js';
 
 dotenv.config();
-
-// Extra text spellings, keyed by the normalized model name from the DB.
-// These are matched IN ADDITION to the literal make/model strings.
-const MODEL_ALIASES = {
-  'd-max': ['dmax', 'v-cross', 'vcross'], // V-Cross is a D-Max trim sold in India
-  'thar': ['thar roxx'],
-  'g-class': ['g-wagon', 'gwagon', 'g-wagen'],
-  'scorpio n': ['scorpio'],   // catalog also says bare "Scorpio" (mostly the N)
-  'xuv700': ['xuv 700'],      // branded "XUV700" but written "XUV 700" in products
-  'xuv300': ['xuv 300'],
-};
-
-// Extra spellings for makes (used only to confirm short/ambiguous model tokens).
-const MAKE_ALIASES = {
-  'maruti': ['suzuki', 'maruti suzuki'],
-  'mercedes-benz': ['mercedes', 'benz'],
-  'volkswagen': ['vw'],
-  'land rover': ['landrover'],
-};
 
 // Vehicles people commonly reference that are NOT in the Vehicle collection yet.
 // Used only to surface "you should add a Vehicle row for this" in the report.
@@ -62,42 +55,6 @@ const WATCH_MISSING_MODELS = [
   'compass', 'meridian', 'gurkha', 'isuzu mu-x', 'mu-x',
 ];
 
-/** Build bounded match variants for a phrase: handles hyphen/space/joined forms. */
-function phraseVariants(phrase) {
-  const base = String(phrase).toLowerCase().trim();
-  if (!base) return [];
-  const set = new Set([base]);
-  set.add(base.replace(/-/g, ' '));
-  set.add(base.replace(/-/g, ''));
-  set.add(base.replace(/\s+/g, ''));
-  set.add(base.replace(/\s+/g, '-'));
-  return [...set].filter(Boolean);
-}
-
-function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** True if `variant` appears in `text` as a whole token (alphanumeric-bounded). */
-function tokenMatch(text, variant) {
-  const re = new RegExp('(^|[^a-z0-9])' + escapeRegex(variant) + '([^a-z0-9]|$)', 'i');
-  return re.test(text);
-}
-
-// A model name used as a STYLING reference rather than fitment, e.g.
-// "Defender Style Taillight for Thar", "Defender V1 style spoiler". Matches the
-// model token followed (within ~2 words) by a styling word.
-const STYLING_WORDS = '(?:style|styled|styling|look|inspired)';
-function stylingMatch(text, variant) {
-  // Allow only an optional version token (v1, v.2, v3) between the model and the
-  // styling word. A broader gap would wrongly span adjacent models — e.g.
-  // "Thar Roxx Defender style" must NOT flag "Thar" as a styling reference.
-  const re = new RegExp(
-    '(^|[^a-z0-9])' + escapeRegex(variant) + '[\\s-]+(?:v\\.?\\d+[\\s-]+)?' + STYLING_WORDS + '\\b',
-    'i'
-  );
-  return re.test(text);
-}
 
 class VehicleFitmentBackfill {
   constructor({ apply }) {
@@ -125,7 +82,13 @@ class VehicleFitmentBackfill {
   async connect() {
     const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
     if (!uri) throw new Error('MongoDB URI not found in environment variables');
-    await mongoose.connect(uri);
+    // ⚠ autoIndex defaults to TRUE. This file imports Product and Vehicle, so a
+    // bare connect() would build every index those schemas declare against
+    // whatever cluster the URI names — which, with the local .env, is production.
+    // Prod deliberately runs autoIndex:false so index changes arrive by migration,
+    // and a script quietly rebuilding them defeats that. Matches the guard already
+    // in backfill-stock-rank.js and verify-search-relevance.js.
+    await mongoose.connect(uri, { autoIndex: false });
     console.log('✓ Connected to MongoDB');
   }
 
@@ -158,9 +121,11 @@ class VehicleFitmentBackfill {
         (MAKE_ALIASES[makeKey] || []).forEach((a) =>
           phraseVariants(a).forEach((p) => makePhrases.add(p)));
 
-        // Ambiguous = very short model token (e.g. "X5", "Q7"); require the make
-        // to also appear in the text before accepting the match.
-        const stripped = modelKey.replace(/[^a-z0-9]/g, '');
+        // Ambiguous = a model token that cannot stand alone: a very short one
+        // ("X5", "Q7") or an ordinary English word ("City", "Accent"). Either way
+        // the make must also appear before the match is accepted. See
+        // needsMakeConfirmation — the word list was added after a dry run proposed
+        // 49 Honda City links, nearly all from "ideal for city driving".
         entry = {
           make: v.make,
           model: v.model,
@@ -168,7 +133,7 @@ class VehicleFitmentBackfill {
           ids: [],
           modelPhrases: [...modelPhrases],
           makePhrases: [...makePhrases],
-          ambiguous: stripped.length <= 3,
+          ambiguous: needsMakeConfirmation(modelKey),
         };
         index.set(key, entry);
       }
@@ -185,9 +150,25 @@ class VehicleFitmentBackfill {
     // (e.g. a Honda City kit tagged "Fortuner Body Kit", "Thar body kit"; a Hilux
     // part tagged "hilux vs fortuner"), which produces large-scale false fitment.
     // The product name (and, secondarily, the description) is the reliable signal.
+    // Vehicle-axis variant labels ARE included, added 2026-09-17. For a grouped
+    // product the model rows are the most explicit fitment statement in the whole
+    // record — "BMC Air Filter for BMW" names only the make, while its 13 labels
+    // name every car it fits. Without them those products could never be linked to
+    // anything more specific than the make, which is the gap that started this work.
+    //
+    // ⚠ Only variants whose ATTRIBUTE AXIS names a vehicle. Across the 111 live
+    // variable products the axis is `package` on 42 and `color` on 12 — feeding a
+    // colour list in would let a vehicle named like a colour or a size match, and
+    // fitment invented from a dropdown of paint options is worse than no fitment.
+    const variantText = (product.variants || [])
+      .filter((v) => isVehicleAxis(v.attributes))
+      .map((v) => v.label || '')
+      .join('  ');
+
     const text = [
       product.name || '',
       product.description || '',
+      variantText,
     ].join('  ').toLowerCase();
 
     const raw = [];
@@ -240,7 +221,7 @@ class VehicleFitmentBackfill {
     );
 
     const products = await Product.find({ isActive: true })
-      .select('_id name sku tags description compatibleVehicles')
+      .select('_id name sku tags description compatibleVehicles variants.label variants.attributes')
       .lean();
     this.report.counts.activeProducts = products.length;
     console.log(`Products: ${products.length} active\n`);

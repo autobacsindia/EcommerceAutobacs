@@ -86,3 +86,52 @@ describe('buildBaseQuery — the storefront\'s `q` is honoured, not just `search
     }
   });
 });
+
+/**
+ * The two engines must recall on the SAME fields.
+ *
+ * SearchService falls back to MongoDB whenever Atlas errors or is switched off, and
+ * that fallback is invisible to the shopper. If a field exists in one recall model
+ * and not the other, an outage silently changes what a search FINDS rather than
+ * just how fast it answers — and the storefront looks entirely normal while it
+ * happens. `variants.label` was added to both on 2026-09-17; this guards the pair.
+ */
+describe('MongoDB fallback recalls on the same fields as Atlas', () => {
+  const pathsIn = (node, found = new Set()) => {
+    if (!node || typeof node !== 'object') return found;
+    if (Array.isArray(node)) {
+      node.forEach((n) => pathsIn(n, found));
+      return found;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (key === '$or' || key === '$and') pathsIn(value, found);
+      else if (value instanceof RegExp) found.add(key);
+    }
+    return found;
+  };
+
+  it('covers every HIGH_SIGNAL_FIELDS path on a single-token query', async () => {
+    const { HIGH_SIGNAL_FIELDS } = await import('../../../services/atlasSearchService.js');
+    const query = await SearchService.buildBaseQuery({ q: 'x5' });
+    const paths = pathsIn(query.$or);
+    for (const { path } of HIGH_SIGNAL_FIELDS) expect([...paths]).toContain(path);
+  });
+
+  it('covers every HIGH_SIGNAL_FIELDS path on a multi-token query', async () => {
+    // The multi-token branch is a SEPARATE `$or` construction (an $and of per-token
+    // alternatives), so it can drift from the single-token one independently — and
+    // did not share a field list until both were updated together.
+    const { HIGH_SIGNAL_FIELDS } = await import('../../../services/atlasSearchService.js');
+    const query = await SearchService.buildBaseQuery({ q: 'bmw x5' });
+    const paths = pathsIn(query.$or);
+    for (const { path } of HIGH_SIGNAL_FIELDS) expect([...paths]).toContain(path);
+  });
+
+  it('still requires EVERY token on a multi-word query', async () => {
+    // Mongo-side parity with Atlas rung 0. The new field must let a token be
+    // satisfied by a model label — never let a token be skipped.
+    const query = await SearchService.buildBaseQuery({ q: 'bmw x5' });
+    const andBranch = query.$or.find((b) => b.$and);
+    expect(andBranch.$and).toHaveLength(2);
+  });
+});

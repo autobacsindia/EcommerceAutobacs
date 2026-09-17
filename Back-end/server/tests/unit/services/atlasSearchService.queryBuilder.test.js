@@ -290,7 +290,18 @@ describe('buildTokenClause — one token counts as exactly one clause', () => {
     const boosts = Object.fromEntries(
       buildTokenClause('brake').compound.should.map((c) => [c.text.path, c.text.score.boost.value])
     );
-    expect(boosts).toEqual({ name: 3, brand: 2, sku: 2, tags: 1.5 });
+    expect(boosts).toEqual({ name: 3, brand: 2, sku: 2, tags: 1.5, 'variants.label': 1.5 });
+  });
+
+  it('ranks a variant-label match BELOW a name match', () => {
+    // Load-bearing ordering, not a preference. A product CALLED "BMW X5 Body Kit"
+    // and a 13-model air filter that merely lists the X5 must not tie: the shopper
+    // who searched "x5" wants the X5 product first. Boosting variants.label to 3
+    // would have made them indistinguishable.
+    const boosts = Object.fromEntries(
+      buildTokenClause('x5').compound.should.map((c) => [c.text.path, c.text.score.boost.value])
+    );
+    expect(boosts['variants.label']).toBeLessThan(boosts.name);
   });
 
   it('omits the fuzzy key entirely for short tokens rather than sending null', () => {
@@ -799,6 +810,87 @@ describe('synonym lane', () => {
     const without = buildRecall({ tokens: ['lights'] }).length;
     const with_ = buildRecall({ tokens: ['lights'], synonymsAvailable: true }).length;
     expect(with_).toBe(without + 1);
+  });
+});
+
+/**
+ * A variable product's model names ("X5 M 4.4L (2019 →) – G05/F95", "CIVIC 06>10")
+ * live in `variants[].label` and were invisible to search until 2026-09-17.
+ *
+ * Measured on prod BEFORE the change: "bmw x5" → 3 results, none of them the BMC
+ * Air Filter for BMW that lists the X5 among its 13 models. It failed at rung 0
+ * and never recovered, because rung 0 returned a NON-EMPTY set of other BMW-tagged
+ * products, so the ladder stopped and never widened.
+ */
+describe('variant labels are searchable', () => {
+  it('puts variants.label in the token lane', () => {
+    const paths = buildTokenClause('x5').compound.should.map((c) => c.text.path);
+    expect(paths).toContain('variants.label');
+  });
+
+  it('lets a variant label satisfy a token the name cannot, WITHOUT relaxing rung 0', () => {
+    // The specific regression. "bmw x5" is two tokens, so rung 0 demands BOTH.
+    // Before the field existed "x5" had nowhere to match and the product was
+    // rejected; now it matches on the label while "bmw" still has to match too.
+    // The AND is what keeps this a fix rather than a widening.
+    const [tokenLane] = buildRecall({ tokens: ['bmw', 'x5'], relaxLevel: 0 });
+    expect(tokenLane.compound.minimumShouldMatch).toBe(2);
+    for (const clause of tokenLane.compound.should) {
+      expect(clause.compound.should.map((c) => c.text.path)).toContain('variants.label');
+    }
+  });
+
+  it('keeps model codes OUT of the synonym lane', () => {
+    // buildSynonymClause filters to name/tags. Model codes are identifiers, not
+    // vocabulary — expanding "x5" through the synonym mapping would be noise, and
+    // the filter is what prevents a new HIGH_SIGNAL_FIELDS entry leaking in.
+    const paths = buildSynonymClause('x5').compound.should.map((c) => c.text.path);
+    expect(paths).not.toContain('variants.label');
+    expect(paths.every((p) => p === 'name' || p === 'tags')).toBe(true);
+  });
+
+  it('matches short model codes EXACTLY so "x5" cannot fuzz into "x3"', () => {
+    // fuzzyFor returns null under 5 characters. Model codes are short by nature
+    // (x5, f10, g05, u11), so this is the rule that stops the new field turning
+    // one BMW model into a different one.
+    for (const code of ['x5', 'f10', 'g05', 'u11']) {
+      const clause = buildTokenClause(code);
+      for (const c of clause.compound.should) expect(c.text).not.toHaveProperty('fuzzy');
+    }
+  });
+
+  it('gives the residual tokens of a vehicle query the field too', () => {
+    // "bmw steering wheel": "bmw" is claimed by the fitment lane, leaving
+    // steering+wheel as residual text. Those residuals go through buildTokenClause,
+    // so a steering wheel whose MODEL row names the fitment is reachable the same
+    // way its name would be.
+    const lanes = buildRecall({
+      tokens: ['bmw', 'steering', 'wheel'],
+      tokenVehicleIds: ['64b000000000000000000001'],
+      vehicleTokens: ['bmw'],
+      relaxLevel: 0,
+    });
+    const constrained = lanes.find((l) => l.compound?.must);
+    const residual = constrained.compound.must.find((m) => m.compound?.should);
+    for (const clause of residual.compound.should) {
+      expect(clause.compound.should.map((c) => c.text.path)).toContain('variants.label');
+    }
+  });
+
+  it('adds NO new lane — it widens a field list, not the lane count', () => {
+    // The over-recall guard at the structural level. "151 results for spoiler" and
+    // "38 for bmw steering wheel" were both caused by an extra RECALL LANE, because
+    // lanes are OR'd and each one is another way into the result set. This change
+    // adds a path inside the EXISTING token clause instead, so the number of ways a
+    // product can qualify is unchanged: still the documented fuzzy + exact pair.
+    expect(buildRecall({ tokens: ['spoiler'] })).toHaveLength(2);
+    expect(buildRecall({ tokens: ['bmw', 'x5'] })).toHaveLength(2);
+
+    // And specifically: no lane exists whose own operator targets variants.
+    for (const lane of buildRecall({ tokens: ['bmw', 'x5'] })) {
+      expect(lane.in?.path).not.toBe('variants.label');
+      expect(lane.text?.path).not.toBe('variants.label');
+    }
   });
 });
 

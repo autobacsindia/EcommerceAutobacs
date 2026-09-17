@@ -119,6 +119,31 @@ export const ATLAS_SEARCH_INDEX_DEFINITION = {
       tags: [{ type: 'string', analyzer: 'lucene.standard' }, lowercaseToken],
       slug: { type: 'token' },
 
+      // A variable product's selectable models ("X5 M 4.4L (2019 →) – G05/F95",
+      // "CIVIC 06>10", "CIAZ/ERTIGA/BREZZA/S-CROSS/VITARA/WAGON-R III/XL6").
+      //
+      // These live in MongoDB but were invisible to search until 2026-09-17, so a
+      // shopper searching "bmw x5" did not find the BMC air filter that lists the
+      // X5 as one of its 13 models — the product name says only "for BMW", and
+      // `name`/`brand`/`sku`/`tags` were the entire recall surface. The vehicle
+      // lane could not cover it either: that matches `compatibleVehicles` ObjectIds,
+      // and 373 of 930 active products carry none. Measured before the change:
+      // "bmw x5" → 3 results, none of them the air filter.
+      //
+      // ⚠ `document`, NOT `embeddedDocuments`. The flattened form answers "does this
+      // product have a model called X5", which is the whole question recall asks —
+      // the parent product is what gets returned either way. `embeddedDocuments`
+      // exists to correlate fields WITHIN one array element ("a model that is both
+      // an X5 and in stock"), costs more to index and query, and would need a
+      // different operator in the builders. Nothing here needs it.
+      variants: {
+        type: 'document',
+        fields: {
+          label: { type: 'string', analyzer: 'lucene.standard' },
+          sku: [{ type: 'string', analyzer: 'lucene.standard' }, lowercaseToken],
+        },
+      },
+
       // The two ref arrays. See the header: filters resolve to these ObjectIds
       // rather than to denormalized names, which is what makes ES/Mongo drift
       // impossible rather than merely fixed.
