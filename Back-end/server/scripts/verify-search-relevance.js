@@ -46,6 +46,11 @@ await mongoose.connect(uri, { autoIndex: false });
 /**
  * topMatches   — the FIRST result must match this. Ranking, not just recall.
  * allMatch     — every result on page 1 must match. Catches a leaky result set.
+ * mustInclude  — SOME result on page 1 must match. The inverse of allMatch: it
+ *                pins a product that belongs in the set and was absent, which
+ *                `minResults` cannot express (a query can return the right COUNT
+ *                of the wrong things). Added for the variant-label work, where the
+ *                whole complaint was "3 results, none of them the right one".
  * maxResults   — ceiling on the total. Catches over-recall.
  * minResults   — floor. Catches over-tightening, the risk this change carries.
  * expectRelaxLevel — which rung the search had to settle on.
@@ -104,6 +109,46 @@ const GOLDEN = [
     allMatch: /steering|carbon/i,
     maxResults: 40,
     minResults: 1,
+  },
+  // ── Variant labels (2026-09-17) ────────────────────────────────────────────
+  // A variable product's model rows live in `variants[].label` and were not
+  // indexed, so the models a grouped product explicitly lists were unsearchable.
+  // Measured BEFORE: "bmw x5" → 3, none of them the BMC air filter that lists the
+  // X5 among its 13 models; "civic" → 3; "red" → 11.
+  {
+    q: 'bmw x5',
+    mustInclude: /bmc air filter for bmw/i,
+    allMatch: /bmw|x5/i,
+    maxResults: 20,
+    minResults: 3,
+    expectRelaxLevel: 0,
+    note: 'THE variant-label case: was 3 results, the air filter listing X5 missing from all',
+  },
+  // These two returned ZERO before the change and are the cleanest proof of it:
+  // the term appears in NO name, tag, brand or SKU anywhere in the catalogue — only
+  // inside a model row. "civic" was tried first and rejected as a golden case
+  // because it already passed via tags, so it would have proved nothing.
+  {
+    q: 'vitara',
+    mustInclude: /bmc air filter for maruti/i,
+    maxResults: 15,
+    minResults: 1,
+    expectRelaxLevel: 0,
+    note: 'was 0 results — named only in the label "CIAZ/ERTIGA/BREZZA/S-CROSS/VITARA/WAGON-R III/XL6"',
+  },
+  {
+    q: 'v220',
+    mustInclude: /mercedez|mercedes/i,
+    maxResults: 15,
+    minResults: 1,
+    expectRelaxLevel: 0,
+    note: 'was 0 results — named only in the label "V-Class V220 D, 2.2L."; a second make, so not a one-product fluke',
+  },
+  {
+    q: 'red',
+    maxResults: 40,
+    minResults: 5,
+    note: 'single-token colour — rung 0 is one token here, so this is where the new field can over-recall',
   },
   {
     q: 'zzzznonexistentproduct',
@@ -201,6 +246,11 @@ for (const c of GOLDEN) {
   if (c.allMatch) {
     const bad = names.filter((n) => !c.allMatch.test(n));
     if (bad.length) fail(`${bad.length} of ${names.length} on page 1 fail ${c.allMatch}: ${bad.slice(0, 3).join(' | ').slice(0, 160)}`);
+  }
+  if (c.mustInclude && !names.some((n) => c.mustInclude.test(n))) {
+    // A count check cannot catch this: the query can return the right NUMBER of
+    // the wrong products, which is exactly what "bmw x5 → 3 results" did.
+    fail(`missing an expected result for "${c.q}": nothing on page 1 matches ${c.mustInclude}`);
   }
   // A total miss must exhaust the ladder rather than give up early — otherwise a
   // shopper gets an empty grid for a query that had related products available.

@@ -62,6 +62,26 @@ export const HIGH_SIGNAL_FIELDS = [
   { path: 'brand', boost: 2 },
   { path: 'sku', boost: 2 },
   { path: 'tags', boost: 1.5 },
+  // A variable product's selectable model names. Added 2026-09-17; see the
+  // `variants` mapping in config/atlasSearchIndex.js for why they were invisible.
+  //
+  // Boosted BELOW `name` deliberately. A product actually CALLED "BMW X5 Body Kit"
+  // must outrank one that merely lists the X5 among 13 options — at 3 it would
+  // have tied a 13-model air filter with a dedicated X5 product, which is worse
+  // than the miss this fixes.
+  //
+  // Three existing behaviours make this safe, each pinned by a test rather than
+  // trusted:
+  //  • buildSynonymClause filters to name/tags, so model codes never expand
+  //    through the synonym mapping ("x5" must never become a category term).
+  //  • fuzzyFor returns null under 5 chars, so "x5"/"f10"/"g05" match EXACTLY and
+  //    cannot fuzz into "x3"/"x6" — the codes are short by nature.
+  //  • relaxation rung 0 requires EVERY token (requiredTokensForLevel), so this
+  //    field can only help a product satisfy a token it would otherwise fail; it
+  //    cannot loosen the AND. Over-recall risk is therefore concentrated in
+  //    single-token queries, which is where the golden ceilings in
+  //    scripts/verify-search-relevance.js do the guarding.
+  { path: 'variants.label', boost: 1.5 },
 ];
 
 /**
