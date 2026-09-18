@@ -82,7 +82,10 @@ describe('EditProductPage', () => {
       if (url === '/categories/admin/all?counts=false') {
         return Promise.resolve({ data: mockCategories });
       }
-      if (url === '/vehicles') {
+      // The fitment picker reads the UNCACHED admin list, not the public
+      // '/vehicles' — a public, browser-cacheable response hid newly created
+      // vehicles from the editor for up to 30 minutes.
+      if (url === '/vehicles/admin/list') {
         return Promise.resolve({ vehicles: mockVehicles });
       }
       if (url === `/products/${mockProductId}`) {

@@ -81,16 +81,43 @@ export default function AdminVehiclesPage() {
     }
   };
 
+  /**
+   * Permanent delete, two-phase.
+   *
+   * The first call goes WITHOUT `force`. If the vehicle still has products
+   * mapped to it, the API refuses with 409 and the exact product count, which we
+   * put in front of the admin before committing. That number comes from the
+   * server rather than the `productCount` already in this row because the row's
+   * count only includes ACTIVE products, while the delete strips the fitment ref
+   * from every product regardless of publish state — confirming one number and
+   * writing a different one is how an admin ends up surprised.
+   *
+   * Deactivating is the separate toggle button; this really removes the vehicle.
+   */
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"? This will deactivate the vehicle but keep associated products.`)) return;
-    
+    if (!confirm(`Permanently delete "${name}"? This cannot be undone. To hide it from the storefront instead, use the deactivate toggle.`)) return;
+
     try {
       await apiClient.delete(API_ENDPOINTS.VEHICLE_DELETE(id));
-      fetchVehicles(currentPage);
-      alert('Vehicle deleted successfully');
     } catch (err: any) {
-      alert(err.message || 'Failed to delete vehicle');
+      const detail = err?.rawData;
+      if (err?.status === 409 && detail?.requiresConfirmation) {
+        const count = detail.productCount ?? 0;
+        if (!confirm(`"${name}" is mapped to ${count} product(s). Deleting removes this vehicle from their fitment. Continue?`)) return;
+        try {
+          await apiClient.delete(`${API_ENDPOINTS.VEHICLE_DELETE(id)}?force=true`);
+        } catch (forceErr: any) {
+          alert(forceErr?.message || 'Failed to delete vehicle');
+          return;
+        }
+      } else {
+        alert(err?.message || 'Failed to delete vehicle');
+        return;
+      }
     }
+
+    fetchVehicles(currentPage);
+    alert(`${name} deleted`);
   };
 
   const handleToggleStatus = async (id: string) => {
@@ -206,7 +233,7 @@ export default function AdminVehiclesPage() {
                     <button
                       onClick={() => handleDelete(vehicle._id, `${vehicle.make} ${vehicle.model}`)}
                       className="text-red-600 hover:text-red-900"
-                      title="Delete"
+                      title="Delete permanently"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

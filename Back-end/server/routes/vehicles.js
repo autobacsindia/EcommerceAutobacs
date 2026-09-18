@@ -13,7 +13,9 @@ import {
   validateVehicleQuery,
 } from "../middleware/validationMiddleware.js";
 import { invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
+import auditLogger from "../services/auditLogger.js";
 import { httpCache } from "../middleware/httpCache.js";
+import { PRIVATE_NO_STORE } from "../config/cacheProfiles.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
 
@@ -328,9 +330,26 @@ router.put(
 );
 
 // @route   DELETE /vehicles/:id
-// @desc    Delete vehicle (soft delete)
+// @desc    Permanently delete a vehicle and strip it from every product's fitment
 // @access  Private/Admin
-router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
+//
+// This used to be a soft delete (isActive = false), which made it a duplicate of
+// PATCH /:id/toggle-status — there was no way to actually remove a vehicle, and
+// the admin's "Delete" button silently just deactivated. Deactivation still
+// lives on the toggle route; this one really deletes.
+//
+// Two-phase confirm: a delete for a vehicle that still has products mapped is
+// rejected with 409 + the exact count, so the admin UI can name the number of
+// products about to lose this fitment. Re-sending with `?force=true` commits.
+//
+// Ordering is the safety mechanism, deliberately instead of a transaction:
+// products are cleaned FIRST, the vehicle row is dropped SECOND. A failure
+// between the two leaves a vehicle with no products — harmless, and the delete
+// can simply be retried ($pull is idempotent). The reverse order is the one
+// that cannot be repaired from the UI: it would leave every product pointing at
+// an id that no longer resolves, which is exactly the orphaned-ref state that
+// broke vehicle fitment before.
+router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
   const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {
@@ -340,14 +359,119 @@ router.delete("/:id", protect, admin, asyncHandler(async (req, res) => {
     });
   }
 
-  vehicle.isActive = false;
-  await vehicle.save();
+  const force = req.query.force === 'true' || req.body?.force === true;
 
-  invalidatePublicCache('vehicles');
+  // The count exists ONLY to populate the 409, so it is not run on a forced
+  // delete: updateMany's own modifiedCount already answers the same question.
+  // (Measured on prod-shaped data — 79 vehicles / 950 products — the count was
+  // 63% of the forced path's query time and told us nothing new.)
+  //
+  // It deliberately counts inactive products too: the $pull writes to every
+  // product regardless of publish state, so the number the admin confirms has
+  // to be the number of documents actually touched.
+  if (!force) {
+    const productCount = await productRepository.countByCompatibleVehicle(vehicle._id);
+    if (productCount > 0) {
+      return res.status(409).json({
+        success: false,
+        requiresConfirmation: true,
+        productCount,
+        message: `${vehicle.make} ${vehicle.model} is mapped to ${productCount} product(s). Deleting removes this vehicle from their fitment.`
+      });
+    }
+  }
+
+  // Runs on BOTH paths — including the one where the count just said 0. That
+  // count is a read taken before the delete, so a product can be mapped to this
+  // vehicle in the window between the two; skipping the $pull there would
+  // strand a ref to a row that no longer exists, and no admin screen can clear
+  // a fitment whose vehicle is gone. $pull is idempotent, and the no-op case is
+  // a single indexed updateMany.
+  const { modifiedCount = 0 } = await productRepository.pullCompatibleVehicle(vehicle._id);
+
+  await vehicleRepository.deleteById(vehicle._id);
+
+  // Best effort from here on: the vehicle is gone, and neither a stranded
+  // Cloudinary asset nor a missed purge justifies failing a completed delete.
+  if (vehicle.image?.public_id) {
+    try {
+      await deleteFromCloudinary(vehicle.image.public_id);
+    } catch (err) {
+      console.warn(`[vehicles] Cloudinary cleanup failed for ${vehicle.image.public_id}:`, err.message);
+    }
+  }
+
+  // 'products' as well as 'vehicles': the $pull changed product documents, so
+  // any cached product payload carrying this fitment is now stale.
+  invalidatePublicCache('vehicles', 'products');
+
+  await auditLogger.logAction(req, 'VEHICLE_DELETE', 'Vehicle', vehicle._id, {
+    make: vehicle.make,
+    model: vehicle.model,
+    slug: vehicle.slug,
+    productsUnmapped: modifiedCount,
+  });
 
   res.json({
     success: true,
-    message: 'Vehicle deleted successfully'
+    message: `${vehicle.make} ${vehicle.model} deleted permanently`,
+    productsUnmapped: modifiedCount
+  });
+}));
+
+// @route   GET /vehicles/admin/list
+// @desc    Lean vehicle list for admin pickers (product create/edit fitment)
+// @access  Private/Admin
+//
+// Why this exists instead of reusing the public GET /vehicles: that route runs
+// through httpCache('VEHICLE_LIST'), which emits `public, max-age=1800`. Cookies
+// are NOT part of the browser HTTP cache key, so an admin's authenticated fetch
+// of /vehicles is served straight from their own disk cache — for up to 30
+// minutes — using the copy the public storefront put there. The server-side
+// "authenticated requests bypass the cache" guard never gets a chance to run,
+// so a vehicle added a minute ago simply isn't in the picker.
+//
+// This route is not wrapped in httpCache at all, so it stores nothing in Redis —
+// but "no Cache-Control header" is not the same as "not cached": a bare 200 is
+// heuristically cacheable, which is precisely the ambiguity that produced the
+// bug above. The no-store directive is therefore set EXPLICITLY below rather
+// than left to the absence of a header.
+//
+// Also unlike /admin/all, this does NOT compute a per-vehicle product count —
+// that route fires one countDocuments per row (N+1), which is pure waste when
+// all the picker renders is a checkbox label.
+router.get("/admin/list", protect, admin, asyncHandler(async (_req, res) => {
+  const ADMIN_LIST_CAP = 500;
+
+  const vehicles = await vehicleRepository
+    .find({})
+    .select('make model slug isActive')
+    // Active first, THEN alphabetical. The cap below is a hard cut, and the
+    // picker's whole job is choosing among active vehicles — ordering active
+    // rows ahead of deactivated ones means an overflow can only ever cost the
+    // rows the picker hides anyway, never a selectable vehicle.
+    .sort({ isActive: -1, make: 1, model: 1 })
+    .limit(ADMIN_LIST_CAP)
+    .lean();
+
+  const truncated = vehicles.length === ADMIN_LIST_CAP;
+  if (truncated) {
+    // Loud, because the client-side banner depends on an admin reading it and
+    // the failure it precedes — a product silently missing a fitment option —
+    // is invisible from the storefront.
+    console.warn(`[vehicles] /admin/list hit the ${ADMIN_LIST_CAP}-row cap; the fitment picker is incomplete.`);
+  }
+
+  // Never cacheable. Set explicitly, not by omission.
+  res.setHeader('Cache-Control', PRIVATE_NO_STORE);
+
+  res.json({
+    success: true,
+    count: vehicles.length,
+    // Read by the admin fitment pickers, which render a warning rather than
+    // letting a truncated list look like the complete one.
+    truncated,
+    vehicles
   });
 }));
 

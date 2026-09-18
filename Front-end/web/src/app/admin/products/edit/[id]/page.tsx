@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { adminKeys } from '@/hooks/queries/keys';
 import apiClient from '@/lib/api';
+import { API_ENDPOINTS } from '@/lib/constants';
 import { revalidateHome } from '@/lib/revalidateHome';
 import { parseApiResponse, errorMessage } from '@/lib/multipartResponse';
 import { uploadImagesToCloudinary } from '@/lib/cloudinaryUpload';
@@ -26,6 +27,10 @@ interface Vehicle {
   _id: string;
   make: string;
   model: string;
+  // Deactivated vehicles are still returned so a product that already carries
+  // one keeps showing it (flagged) instead of silently holding a fitment the
+  // editor cannot see.
+  isActive?: boolean;
 }
 
 interface Brand {
@@ -79,6 +84,9 @@ export default function EditProductPage() {
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  // Set when the API hit its row cap — the list on screen is NOT the full set,
+  // and a missing vehicle would otherwise look like one that was never created.
+  const [vehiclesTruncated, setVehiclesTruncated] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [vehicleSearch, setVehicleSearch] = useState('');
   const [product, setProduct] = useState<Product | null>(null);
@@ -184,8 +192,16 @@ export default function EditProductPage() {
 
   const fetchVehicles = async () => {
     try {
-      const response = await apiClient.get<{ vehicles: Vehicle[] }>('/vehicles');
+      // Admin-scoped, uncached. NOT the public '/vehicles' — that one is served
+      // with `public, max-age=...`, and browsers key their HTTP cache on the URL
+      // alone (cookies are not part of it), so an authenticated admin fetch gets
+      // handed the storefront's stale copy straight from disk and a
+      // just-created vehicle is missing from this list.
+      const response = await apiClient.get<{ vehicles: Vehicle[]; truncated?: boolean }>(
+        API_ENDPOINTS.VEHICLES_ADMIN_LIST,
+      );
       setVehicles(response.vehicles || []);
+      setVehiclesTruncated(Boolean(response.truncated));
     } catch (err) {
       console.error('Failed to fetch vehicles:', err);
     }
@@ -1176,6 +1192,11 @@ export default function EditProductPage() {
               <p className="text-gray-500">No vehicles available. Create vehicles first.</p>
             ) : (
               <>
+                {vehiclesTruncated && (
+                  <p className="mb-2 text-sm text-amber-700">
+                    Showing a partial vehicle list — some vehicles are not selectable here.
+                  </p>
+                )}
                 <input
                   type="text"
                   placeholder="Search make or model…"
@@ -1186,6 +1207,11 @@ export default function EditProductPage() {
                 <div className="border border-gray-300 rounded-md p-4 max-h-60 overflow-y-auto">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {vehicles
+                    // Hide deactivated vehicles UNLESS this product already
+                    // carries one: dropping them outright would leave the
+                    // product holding a fitment with no visible checkbox — the
+                    // ref survives every save with nobody able to see or remove it.
+                    .filter(v => v.isActive !== false || selectedVehicles.includes(v._id))
                     .filter(v => {
                       const q = vehicleSearch.trim().toLowerCase();
                       if (!q) return true;

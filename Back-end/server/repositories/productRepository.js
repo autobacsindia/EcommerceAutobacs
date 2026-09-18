@@ -497,6 +497,38 @@ class ProductRepository {
       { $set: { salesScore: 0 } }
     );
   }
+
+  /**
+   * How many products carry this vehicle in `compatibleVehicles`.
+   *
+   * Counts INACTIVE products too (unlike distinctCompatibleVehicles, which
+   * drives the sitemap): a permanent vehicle delete strips the ref from every
+   * product regardless of publish state, so the number the admin is asked to
+   * confirm has to match the number of documents actually written.
+   */
+  async countByCompatibleVehicle(vehicleId) {
+    return Product.countDocuments({ compatibleVehicles: vehicleId })
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
+  /**
+   * Strip a vehicle ref from every product that carries it. Used by the
+   * permanent vehicle delete so no product is left pointing at a row that no
+   * longer exists (orphaned refs are what broke vehicle fitment before).
+   *
+   * `$pull` is idempotent — re-running after a partial failure is a no-op on
+   * the products already cleaned, which is what lets the delete be retried
+   * safely without a transaction.
+   *
+   * Atlas Search picks these writes up via change streams, so there is no
+   * reindex to enqueue.
+   */
+  async pullCompatibleVehicle(vehicleId) {
+    return Product.updateMany(
+      { compatibleVehicles: vehicleId },
+      { $pull: { compatibleVehicles: vehicleId } }
+    );
+  }
 }
 
 // Singleton instance

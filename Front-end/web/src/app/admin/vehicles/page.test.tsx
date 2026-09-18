@@ -112,7 +112,7 @@ describe('AdminVehiclesPage', () => {
       expect(screen.getByText('Toyota')).toBeInTheDocument();
     });
 
-    const deleteButtons = screen.getAllByTitle('Delete');
+    const deleteButtons = screen.getAllByTitle('Delete permanently');
     fireEvent.click(deleteButtons[0]);
 
     expect(window.confirm).toHaveBeenCalled();
@@ -120,6 +120,86 @@ describe('AdminVehiclesPage', () => {
     await waitFor(() => {
       expect(apiClient.delete).toHaveBeenCalled();
       expect(apiClient.get).toHaveBeenCalledTimes(2); // Refetch
+    });
+  });
+
+  // The route is a REAL delete now; it used to just set isActive:false, which
+  // made the trash button a duplicate of the deactivate toggle and left admins
+  // with no way to remove a vehicle at all.
+  describe('permanent delete confirmation', () => {
+    const conflict = (productCount: number) =>
+      Object.assign(new Error('mapped to products'), {
+        status: 409,
+        rawData: { requiresConfirmation: true, productCount },
+      });
+
+    it('does not call the API when the first confirm is declined', async () => {
+      window.confirm = jest.fn().mockReturnValue(false);
+
+      render(<AdminVehiclesPage />);
+      await waitFor(() => expect(screen.getByText('Toyota')).toBeInTheDocument());
+
+      fireEvent.click(screen.getAllByTitle('Delete permanently')[0]);
+
+      expect(apiClient.delete).not.toHaveBeenCalled();
+    });
+
+    it('re-confirms with the server-reported product count, then forces', async () => {
+      (apiClient.delete as jest.Mock)
+        .mockRejectedValueOnce(conflict(12))
+        .mockResolvedValueOnce({ success: true, productsUnmapped: 12 });
+
+      render(<AdminVehiclesPage />);
+      await waitFor(() => expect(screen.getByText('Toyota')).toBeInTheDocument());
+
+      fireEvent.click(screen.getAllByTitle('Delete permanently')[0]);
+
+      await waitFor(() => {
+        expect(apiClient.delete).toHaveBeenCalledTimes(2);
+      });
+
+      // The count shown must be the server's (12), not the row's own
+      // productCount (15) — the row counts only ACTIVE products while the
+      // delete writes to every product, and confirming one number while
+      // writing another is how an admin gets surprised.
+      const prompts = (window.confirm as jest.Mock).mock.calls.map((c) => String(c[0]));
+      expect(prompts.some((p) => p.includes('12 product'))).toBe(true);
+      expect(prompts.some((p) => p.includes('15 product'))).toBe(false);
+
+      expect(apiClient.delete).toHaveBeenLastCalledWith(
+        `${API_ENDPOINTS.VEHICLE_DELETE('v1')}?force=true`,
+      );
+    });
+
+    it('aborts without forcing when the product-count confirm is declined', async () => {
+      (apiClient.delete as jest.Mock).mockRejectedValueOnce(conflict(12));
+      window.confirm = jest
+        .fn()
+        .mockReturnValueOnce(true)   // yes, delete permanently
+        .mockReturnValueOnce(false); // no, not once I see 12 products
+
+      render(<AdminVehiclesPage />);
+      await waitFor(() => expect(screen.getByText('Toyota')).toBeInTheDocument());
+
+      fireEvent.click(screen.getAllByTitle('Delete permanently')[0]);
+
+      await waitFor(() => expect(window.confirm).toHaveBeenCalledTimes(2));
+      // Exactly one call: the probing one. No force call may follow a decline.
+      expect(apiClient.delete).toHaveBeenCalledTimes(1);
+    });
+
+    it('never retries with force on a non-409 failure', async () => {
+      (apiClient.delete as jest.Mock).mockRejectedValue(
+        Object.assign(new Error('Vehicle not found'), { status: 404, rawData: {} }),
+      );
+
+      render(<AdminVehiclesPage />);
+      await waitFor(() => expect(screen.getByText('Toyota')).toBeInTheDocument());
+
+      fireEvent.click(screen.getAllByTitle('Delete permanently')[0]);
+
+      await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Vehicle not found'));
+      expect(apiClient.delete).toHaveBeenCalledTimes(1);
     });
   });
 
