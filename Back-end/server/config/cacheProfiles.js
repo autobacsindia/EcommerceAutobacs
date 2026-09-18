@@ -39,7 +39,23 @@ export const HTTP_CACHE_HEADERS = {
   'product-listing': 'public, max-age=300, s-maxage=600',
   'product-detail':  'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
   'static-data':     'public, max-age=60, s-maxage=300, stale-while-revalidate=3600, stale-if-error=86400',
-  'vehicle-data':    'public, max-age=1800, s-maxage=3600',
+  // `max-age` (the BROWSER copy) is deliberately short on every profile here.
+  // A browser copy cannot be purged by anything we control, so its lifetime is a
+  // hard floor on how long a stale answer can survive a write. `vehicle-data`
+  // used to carry max-age=1800: an admin who added a vehicle then opened the
+  // product editor was served the 30-minute-old list out of their own disk cache
+  // and concluded the write had not taken.
+  //
+  // `s-maxage` is cut from 3600 to 300, and carries NO stale-while-revalidate,
+  // for a reason specific to this data: no write path in this codebase purges
+  // Cloudflare (invalidatePublicCache clears Redis only), so the edge TTL is not
+  // a "worst case before a purge" — it is simply how long a deleted vehicle
+  // keeps being served. Deleting a vehicle is now permanent, so a storefront
+  // grid served from a stale edge copy links to a hard 404. An swr window would
+  // stack on top of the TTL and extend exactly that. 300s matches the Redis TTL
+  // for VEHICLE_LIST below, so the two layers expire together instead of the
+  // edge outliving the origin cache by an hour.
+  'vehicle-data':    'public, max-age=60, s-maxage=300',
   'search-results':  'public, max-age=120, s-maxage=300',
 };
 

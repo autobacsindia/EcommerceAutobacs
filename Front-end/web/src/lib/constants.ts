@@ -37,6 +37,12 @@ export const API_ENDPOINTS = {
   VEHICLE_MAKES: '/vehicles/makes',
   VEHICLE_MODELS: (make: string) => `/vehicles/models/${make}`,
   VEHICLES_ADMIN: '/vehicles/admin/all',
+  // Lean, UNCACHED vehicle list for admin pickers. Must not be swapped for the
+  // public '/vehicles': that response carries `public, max-age=...`, and since
+  // cookies are not part of the browser HTTP cache key an admin's authenticated
+  // fetch is served the storefront's stale copy from disk — a vehicle added
+  // moments ago simply would not appear in the fitment picker.
+  VEHICLES_ADMIN_LIST: '/vehicles/admin/list',
   VEHICLE_CREATE: '/vehicles',
   VEHICLE_UPDATE: (id: string) => `/vehicles/${id}`,
   VEHICLE_DELETE: (id: string) => `/vehicles/${id}`,

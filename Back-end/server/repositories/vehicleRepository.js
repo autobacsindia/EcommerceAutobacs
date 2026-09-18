@@ -13,6 +13,7 @@ class VehicleRepository {
   countDocuments(...args) { return Vehicle.countDocuments(...args); }
   distinct(...args) { return Vehicle.distinct(...args); }
   create(...args) { return Vehicle.create(...args); }
+  deleteById(id) { return Vehicle.deleteOne({ _id: id }); }
 }
 
 export default new VehicleRepository();
