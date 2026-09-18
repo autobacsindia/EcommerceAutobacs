@@ -100,6 +100,50 @@ describe('Categories API', () => {
       expect(res.body.categories).toHaveLength(1);
       expect(res.body.categories[0].name).toBe(testCategory.name);
     });
+
+  });
+
+  /**
+   * The default response must be the WHOLE taxonomy, not its first page.
+   *
+   * The cap was 200 while prod carried 296 active categories, so every caller
+   * that omitted page/limit silently got page 1 of 2 — and a truncated taxonomy
+   * does not look like an error, it looks like those categories do not exist. It
+   * cost the storefront a whole top-level hub (`Winch`), and left the
+   * category-page scope check unable to see 95 of 283 children, so ticking one of
+   * them moved the checkbox and left the product grid unchanged.
+   *
+   * The response cache is off for these: `httpCache` would otherwise replay the
+   * single-category body an earlier test in this file already stored.
+   */
+  describe('GET /categories pagination cap', () => {
+    beforeEach(() => { process.env.CACHE_DISABLED = '1'; });
+    afterEach(async () => {
+      delete process.env.CACHE_DISABLED;
+      await Category.deleteMany({ slug: /^bulk-category-/ });
+    });
+
+    it('returns the whole taxonomy by default, past the old 200 cap', async () => {
+      await Category.insertMany(
+        Array.from({ length: 240 }, (_, i) => ({
+          name: `Bulk Category ${i}`,
+          slug: `bulk-category-${i}`,
+          isActive: true,
+        }))
+      );
+
+      const res = await request(app).get(`${BASE}/categories`).expect(200);
+
+      expect(res.body.pagination.total).toBeGreaterThan(200);
+      expect(res.body.categories).toHaveLength(res.body.pagination.total);
+      expect(res.body.pagination.pages).toBe(1);
+    });
+
+    it('still caps a caller asking for more than the guard allows', async () => {
+      const res = await request(app).get(`${BASE}/categories?limit=99999`).expect(200);
+
+      expect(res.body.pagination.limit).toBe(500);
+    });
   });
 
   describe('GET /categories/:id', () => {

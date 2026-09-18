@@ -6,6 +6,7 @@
  */
 import React from 'react';
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import '@testing-library/jest-dom';
 
 // ── fake router: one URL, shared by every control under test ──
@@ -96,7 +97,7 @@ import CategoryChips from './CategoryChips';
 import ActiveFilters from './ActiveFilters';
 
 /** Mounts the three controls together and re-renders them on every URL write. */
-function Listing() {
+function Controls() {
   const [, force] = React.useReducer((n: number) => n + 1, 0);
   React.useEffect(() => {
     subscribers.add(force);
@@ -111,13 +112,29 @@ function Listing() {
   );
 }
 
+/**
+ * The chip strip reads the shared taxonomy query, so the tree needs a client.
+ * A fresh one per mount keeps each test's cache isolated.
+ */
+function Listing() {
+  const [client] = React.useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  );
+  return (
+    <QueryClientProvider client={client}>
+      <Controls />
+    </QueryClientProvider>
+  );
+}
+
 const params = () => searchParamsOf(currentUrl);
 const lastUrl = () => replace.mock.calls[replace.mock.calls.length - 1][0];
 const inChips = () => within(screen.getByTestId('chips'));
 const inSidebar = () => within(screen.getByTestId('sidebar'));
 const inActive = () => within(screen.getByTestId('active'));
 
-const chip = (name: RegExp) => inChips().getByRole('button', { name });
+// The strip renders anchors, not buttons — it navigates, it no longer filters.
+const chip = (name: RegExp) => inChips().getByRole('link', { name });
 const checkbox = (name: RegExp) => inSidebar().getByRole('checkbox', { name });
 
 /** Renders and waits out the reference-data fetches so the lists are populated. */
@@ -126,20 +143,24 @@ async function mount(url = '/products') {
   replace.mockClear();
   const view = render(<Listing />);
   await act(async () => { await Promise.resolve(); });
+  // The chip strip's taxonomy arrives through a shared React Query entry, which
+  // commits a render AFTER the promise settles — so wait for a real chip rather
+  // than a counted flush.
+  await inChips().findByRole('link', { name: /^Audio$/i });
   return view;
 }
 
 beforeEach(() => { jest.useRealTimers(); });
 
 describe('chip strip ↔ sidebar sync', () => {
-  it('ticks the sidebar box when a chip selects that category', async () => {
+  it('leaves the filter state alone — the strip is navigation, not a filter', async () => {
     await mount();
+
+    // It used to write `?category=<id>` in place. Now it points at the hub's own
+    // page, so the sidebar below it is untouched until the shopper gets there.
+    expect(chip(/^Audio$/i)).toHaveAttribute('href', '/categories/audio');
+    expect(params().get('category')).toBeNull();
     expect(checkbox(/Audio/)).not.toBeChecked();
-
-    fireEvent.click(chip(/^Audio$/i));
-
-    expect(params().get('category')).toBe('cat-audio');
-    expect(checkbox(/Audio/)).toBeChecked();
   });
 
   it('unticks the sidebar box when the active-filter chip is dismissed', async () => {
@@ -186,8 +207,8 @@ describe('chip strip ↔ sidebar sync', () => {
 describe('a sidebar change never clobbers another control’s param', () => {
   it('keeps the chip-selected category when an unrelated filter is toggled', async () => {
     await mount();
-    fireEvent.click(chip(/^Audio$/i));          // chip strip sets the category
-    fireEvent.click(checkbox(/In stock only/)); // sidebar touches something else
+    fireEvent.click(checkbox(/Audio/));         // one control sets the category
+    fireEvent.click(checkbox(/In stock only/)); // another touches something else
 
     expect(params().get('inStock')).toBe('true');
     expect(params().get('category')).toBe('cat-audio'); // survived
@@ -195,7 +216,7 @@ describe('a sidebar change never clobbers another control’s param', () => {
 
   it('keeps the category when a brand is picked', async () => {
     await mount();
-    fireEvent.click(chip(/^Audio$/i));
+    fireEvent.click(checkbox(/Audio/));
     fireEvent.click(checkbox(/Bosch/));
 
     expect(params().get('brand')).toBe('Bosch');
@@ -205,7 +226,7 @@ describe('a sidebar change never clobbers another control’s param', () => {
   it('keeps the category when the price slider commits', async () => {
     jest.useFakeTimers();
     await mount();
-    fireEvent.click(chip(/^Audio$/i));
+    fireEvent.click(checkbox(/Audio/));
     fireEvent.click(inSidebar().getByRole('button', { name: 'drag-price' }));
     act(() => { jest.advanceTimersByTime(400); });
 
@@ -217,7 +238,7 @@ describe('a sidebar change never clobbers another control’s param', () => {
     jest.useFakeTimers();
     await mount();
     fireEvent.click(inSidebar().getByRole('button', { name: 'drag-price' })); // drag starts
-    fireEvent.click(chip(/^Brakes$/i));                                  // URL moves on
+    fireEvent.click(checkbox(/Brakes/));                                 // URL moves on
     act(() => { jest.advanceTimersByTime(400); });                       // debounce fires
 
     expect(params().get('minPrice')).toBe('500');
@@ -233,26 +254,32 @@ describe('a sidebar change never clobbers another control’s param', () => {
   });
 });
 
-describe('chip strip semantics', () => {
-  it('narrows a multi-select to the clicked hub', async () => {
-    await mount('/products?category=cat-lighting,cat-brakes');
-    fireEvent.click(chip(/^Brakes$/i));
+describe('the strip navigates instead of filtering', () => {
+  it('points at the canonical category page, not an ?category= filter URL', async () => {
+    await mount();
 
-    expect(params().get('category')).toBe('cat-brakes');
+    expect(chip(/^Brakes$/i)).toHaveAttribute('href', '/categories/brakes');
+    expect(chip(/All categories/i)).toHaveAttribute('href', '/products');
   });
 
-  it('clears when the sole active chip is clicked again', async () => {
-    await mount('/products?category=cat-brakes');
-    fireEvent.click(chip(/^Brakes$/i));
+  it('hands the other active filters to that page, minus category and page', async () => {
+    await mount('/products?brand=Bosch&category=cat-lighting&page=3');
 
-    expect(params().get('category')).toBeNull();
+    const href = chip(/^Brakes$/i).getAttribute('href')!;
+    const [path, qs] = href.split('?');
+    const q = new URLSearchParams(qs);
+
+    expect(path).toBe('/categories/brakes');
+    expect(q.get('brand')).toBe('Bosch');   // a narrowed listing stays narrowed
+    expect(q.get('category')).toBeNull();   // the destination IS the category
+    expect(q.get('page')).toBeNull();       // different result set
   });
 
-  it('resets pagination on selection', async () => {
-    await mount('/products?page=4');
-    fireEvent.click(chip(/^Audio$/i));
+  it('lights the hub whose page the shopper is standing on', async () => {
+    await mount('/categories/brakes');
 
-    expect(params().get('page')).toBeNull();
+    expect(chip(/^Brakes$/i)).toHaveClass('bg-gold');
+    expect(chip(/All categories/i)).not.toHaveClass('bg-gold');
   });
 });
 

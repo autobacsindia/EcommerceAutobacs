@@ -143,9 +143,27 @@ interface FiltersProps {
   basePath?: string;
   /** Hide the Category group — e.g. on a category page you're already inside one. */
   hideCategories?: boolean;
+  /**
+   * Scope the Category group to ONE hub, rendering its children as a drill-down
+   * instead of the whole taxonomy. This is what a category page wants: offering
+   * every hub there would let a shopper tick "Brakes" while standing on
+   * `/categories/audio`, which reads as a contradiction.
+   *
+   * Setting this also seeds the facet request with the hub (the path carries it,
+   * the query string does not), so every OTHER group — brands, price, vehicle,
+   * ratings — is counted inside this category rather than across the catalogue.
+   * The category dimension itself is resolved with the category filter EXCLUDED,
+   * which is what keeps the whole tree available to find children in.
+   */
+  scopeCategoryId?: string;
 }
 
-export default function Filters({ onApplied, basePath = '/products', hideCategories = false }: FiltersProps) {
+export default function Filters({
+  onApplied,
+  basePath = '/products',
+  hideCategories = false,
+  scopeCategoryId,
+}: FiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { formatPrice } = useCurrency();
@@ -193,7 +211,21 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
     const ac = new AbortController();
     (async () => {
       try {
-        const qs = searchParams.toString();
+        /*
+          On a category page the hub lives in the PATH, not the query string, so
+          this request carried no category at all: brands, price bounds, vehicle,
+          ratings and `total` were all counted over the whole catalogue, and then
+          flipped to a narrow scope the moment a child was ticked. Seeding the
+          scope fixes both the wrong counts and that discontinuity.
+
+          The category dimension is unaffected — `getFacets` resolves it with the
+          category filter EXCLUDED, so the tree still arrives whole and
+          `scopedChildren` can still find this hub's children.
+        */
+        const qp = new URLSearchParams(searchParams.toString());
+        if (scopeCategoryId && !qp.get('category')) qp.set('category', scopeCategoryId);
+        const qs = qp.toString();
+
         const res = await apiClient.get<{ facets?: Facets }>(
           `/products/facets${qs ? `?${qs}` : ''}`,
           { signal: ac.signal }
@@ -202,7 +234,7 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
       } catch { /* non-fatal: the panel keeps its previous values */ }
     })();
     return () => ac.abort();
-  }, [searchParams]);
+  }, [searchParams, scopeCategoryId]);
 
   const makes = facets?.vehicleMakes ?? [];
   // Models are already scoped to the selected make by the facet query's own
@@ -214,6 +246,10 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
   // though the taxonomy is two levels deep. parentId lets the children nest.
   const topCategories = (facets?.categories ?? []).filter((c) => !c.parentId);
   const childrenOf = (id: string) => (facets?.categories ?? []).filter((c) => c.parentId === id);
+  // Scoped mode renders ONE hub's children as a flat drill-down. Empty when the
+  // hub has no children, in which case the group hides entirely rather than
+  // showing a heading over nothing.
+  const scopedChildren = scopeCategoryId ? childrenOf(scopeCategoryId) : [];
 
   const visibleBrandList = (facets?.brands ?? []).filter((b) =>
     brandQuery ? b.label.toLowerCase().includes(brandQuery.toLowerCase()) : true
@@ -377,35 +413,47 @@ export default function Filters({ onApplied, basePath = '/products', hideCategor
         </Group>
       )}
 
-      {/* Categories — two levels, per the real taxonomy */}
-      {!hideCategories && topCategories.length > 0 && (
-        <Group title="Category">
+      {/* Categories — two levels, per the real taxonomy. On a category page the
+          same group narrows to that hub's children (see `scopeCategoryId`). */}
+      {!hideCategories && (scopeCategoryId ? scopedChildren.length > 0 : topCategories.length > 0) && (
+        <Group title={scopeCategoryId ? 'Refine' : 'Category'}>
           <div className="max-h-72 overflow-y-auto sf-noscroll">
-            {topCategories.map((c) => (
-              <div key={c.categoryId}>
-                <CheckRow
-                  label={c.label}
-                  count={c.count}
-                  checked={selCats.includes(c.categoryId)}
-                  disabled={c.count === 0 && !selCats.includes(c.categoryId)}
-                  onChange={() => commit({ cats: toggle(selCats, c.categoryId) })}
-                />
-                {childrenOf(c.categoryId).length > 0 && (
-                  <div className="ml-4 border-l border-hairline pl-3">
-                    {childrenOf(c.categoryId).map((child) => (
-                      <CheckRow
-                        key={child.categoryId}
-                        label={child.label}
-                        count={child.count}
-                        checked={selCats.includes(child.categoryId)}
-                        disabled={child.count === 0 && !selCats.includes(child.categoryId)}
-                        onChange={() => commit({ cats: toggle(selCats, child.categoryId) })}
-                      />
-                    ))}
+            {scopeCategoryId
+              ? scopedChildren.map((child) => (
+                  <CheckRow
+                    key={child.categoryId}
+                    label={child.label}
+                    count={child.count}
+                    checked={selCats.includes(child.categoryId)}
+                    disabled={child.count === 0 && !selCats.includes(child.categoryId)}
+                    onChange={() => commit({ cats: toggle(selCats, child.categoryId) })}
+                  />
+                ))
+              : topCategories.map((c) => (
+                  <div key={c.categoryId}>
+                    <CheckRow
+                      label={c.label}
+                      count={c.count}
+                      checked={selCats.includes(c.categoryId)}
+                      disabled={c.count === 0 && !selCats.includes(c.categoryId)}
+                      onChange={() => commit({ cats: toggle(selCats, c.categoryId) })}
+                    />
+                    {childrenOf(c.categoryId).length > 0 && (
+                      <div className="ml-4 border-l border-hairline pl-3">
+                        {childrenOf(c.categoryId).map((child) => (
+                          <CheckRow
+                            key={child.categoryId}
+                            label={child.label}
+                            count={child.count}
+                            checked={selCats.includes(child.categoryId)}
+                            disabled={child.count === 0 && !selCats.includes(child.categoryId)}
+                            onChange={() => commit({ cats: toggle(selCats, child.categoryId) })}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                ))}
           </div>
         </Group>
       )}
