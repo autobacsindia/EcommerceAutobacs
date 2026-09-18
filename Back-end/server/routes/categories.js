@@ -22,10 +22,18 @@ const router = express.Router();
 // @desc    Get all active categories with optional pagination
 // @access  Public
 router.get("/", httpCache('CATEGORY_LIST'), asyncHandler(async (req, res) => {
-  // Categories are a small, bounded collection (rarely > 100).
-  // Still cap at 200 as a safety guard; clients that need all categories
-  // for nav menus can omit page/limit and get the full list up to the cap.
-  const MAX_LIMIT = 200;
+  // Categories are a small, bounded collection — but "rarely > 100" went stale:
+  // prod carries 296 active ones, so the old cap of 200 silently truncated the
+  // DEFAULT response (page 1 of 2) for every caller that just wants the taxonomy.
+  // That is not a visible failure anywhere — it reads as "those categories do not
+  // exist": the storefront chip strip dropped the `Winch` hub entirely, and the
+  // category-page scope check could not see 95 of the 283 children, so ticking
+  // one of them moved the checkbox and left the grid unchanged.
+  //
+  // Clients that want the whole taxonomy omit page/limit. The cap stays as an
+  // abuse guard, now with real headroom over the actual collection size; callers
+  // must still follow `pagination.pages` rather than assume one page.
+  const MAX_LIMIT = 500;
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(MAX_LIMIT, Math.max(1, parseInt(req.query.limit) || MAX_LIMIT));
   const skip = (page - 1) * limit;

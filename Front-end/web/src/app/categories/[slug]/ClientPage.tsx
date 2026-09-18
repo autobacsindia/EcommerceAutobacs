@@ -8,11 +8,14 @@ import { SlidersHorizontal, X } from 'lucide-react';
 import apiClient from '@/lib/api';
 import ProductGrid from '@/components/products/ProductGrid';
 import Filters from '@/components/products/redesign/Filters';
+import CategoryChips from '@/components/products/redesign/CategoryChips';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Pagination from '@/components/layout/Pagination';
 import Breadcrumb from '@/components/layout/Breadcrumb';
 import { trackViewItemList } from '@/lib/analytics';
 import { getMainCategory } from '@/lib/categoryMapping';
+import { resolveCategoryScope } from '@/lib/categoryScope';
+import { useCategoriesFetcher } from '@/hooks/queries/useCategories';
 
 // Define types for our data
 interface ProductImage {
@@ -90,9 +93,12 @@ async function getProducts(searchParams: any, categoryId: string): Promise<Produ
     // Build query string from search params
     const queryParams = new URLSearchParams();
     
-    // Add category filter
+    // Add category filter. `categoryId` is the resolved SCOPE: the hub itself,
+    // or — when the sidebar has drilled into this hub's children — those
+    // children. It was previously always the hub, so any category the sidebar
+    // wrote to the URL changed the checkbox and nothing else.
     queryParams.append('category', categoryId);
-    
+
     if (searchParams.search) queryParams.append('search', searchParams.search);
     if (searchParams.page) queryParams.append('page', searchParams.page);
     if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
@@ -190,6 +196,8 @@ async function getCategoryBySlug(slug: string): Promise<Category | null> {
 
 export default function ClientPage({ slug, initialCategory }: { slug: string; initialCategory?: Category | null }) {
   const searchParams = useSearchParams();
+  // Reads the same cached taxonomy the chip strip above renders from.
+  const fetchCategories = useCategoriesFetcher();
   const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
   // Seed from the category the server component already fetched for metadata, so
   // the header renders immediately and we skip a redundant category network call.
@@ -218,6 +226,12 @@ export default function ClientPage({ slug, initialCategory }: { slug: string; in
 
   // Fetch category and products when slug or search params change
   useEffect(() => {
+    /*
+      Guards BOTH unmount and supersession. React runs this effect's cleanup
+      before starting the next run, so a superseded run's `isMounted` is already
+      false by the time its (slower) response lands — a stale answer arriving
+      last cannot paint over a newer one. See ClientPage.race.test.tsx.
+    */
     let isMounted = true;
     
     const fetchData = async () => {
@@ -255,7 +269,12 @@ export default function ClientPage({ slug, initialCategory }: { slug: string; in
         
         // Fetch products for this category
         const resolvedSearchParams = Object.fromEntries(searchParams.entries());
-        const result = await getProducts(resolvedSearchParams, categoryData._id);
+        const scope = await resolveCategoryScope(
+          categoryData._id,
+          (searchParams.get('category') ?? '').split(',').filter(Boolean),
+          fetchCategories
+        );
+        const result = await getProducts(resolvedSearchParams, scope);
         if (isMounted) {
           setData(result);
           // Analytics: view_item_list (ADR-005)
@@ -281,7 +300,9 @@ export default function ClientPage({ slug, initialCategory }: { slug: string; in
     return () => {
       isMounted = false;
     };
-  }, [slug, searchParams]);
+    // `fetchCategories` is stable (memoised on the query client), so listing it
+    // satisfies the lint rule without re-running the effect.
+  }, [slug, searchParams, fetchCategories]);
 
   // Handle sort change
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -363,13 +384,22 @@ export default function ClientPage({ slug, initialCategory }: { slug: string; in
         </div>
       </div>
 
+      {/* Category strip — the same control as /products. Without it, arriving here
+          from a chip was a one-way door: no way to reach a sibling hub but Back. */}
+      <div className="sticky top-16 z-30 border-b border-hairline bg-obsidian/90 backdrop-blur md:top-[76px]">
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+          <CategoryChips />
+        </div>
+      </div>
+
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="lg:grid lg:grid-cols-4 lg:gap-8">
           {/* Filters Sidebar */}
           <aside className="hidden lg:block">
-            <div className="sticky top-24">
-              <Filters basePath={`/categories/${slug}`} hideCategories />
+            {/* Clears the sticky category strip above, same offset /products uses. */}
+            <div className="sticky top-[150px]">
+              <Filters basePath={`/categories/${slug}`} scopeCategoryId={category?._id} />
             </div>
           </aside>
 
@@ -476,7 +506,7 @@ export default function ClientPage({ slug, initialCategory }: { slug: string; in
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-5">
-              <Filters basePath={`/categories/${slug}`} hideCategories onApplied={() => setDrawerOpen(false)} />
+              <Filters basePath={`/categories/${slug}`} scopeCategoryId={category?._id} onApplied={() => setDrawerOpen(false)} />
             </div>
           </div>
         </div>

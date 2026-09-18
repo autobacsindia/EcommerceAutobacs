@@ -33,6 +33,8 @@ export const productKeys = {
 
 export const categoryKeys = {
   all: ['categories'] as const,
+  /** The full taxonomy list — shared by the chip strip and category-page scoping. */
+  list: () => [...categoryKeys.all, 'list'] as const,
   detail: (slug: string) => [...categoryKeys.all, 'detail', slug] as const,
   products: (slug: string, params: Record<string, string | undefined>) =>
     [...categoryKeys.all, 'products', slug, normalizeParams(params)] as const,
