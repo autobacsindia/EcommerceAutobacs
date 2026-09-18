@@ -41,6 +41,7 @@ import {
   stylingMatch,
   isVehicleAxis,
   needsMakeConfirmation,
+  matchConfidence,
 } from '../utils/vehicleMatch.js';
 
 dotenv.config();
@@ -121,11 +122,10 @@ class VehicleFitmentBackfill {
         (MAKE_ALIASES[makeKey] || []).forEach((a) =>
           phraseVariants(a).forEach((p) => makePhrases.add(p)));
 
-        // Ambiguous = a model token that cannot stand alone: a very short one
-        // ("X5", "Q7") or an ordinary English word ("City", "Accent"). Either way
-        // the make must also appear before the match is accepted. See
-        // needsMakeConfirmation — the word list was added after a dry run proposed
-        // 49 Honda City links, nearly all from "ideal for city driving".
+        // NOTE: there is deliberately no entry-level `ambiguous` flag. Whether a
+        // match needs the make alongside it depends on WHICH phrase matched, and a
+        // row's phrases vary in strength — "5 series" stands alone, its `f10`
+        // alias does not. matchProduct decides per hit; see the note there.
         entry = {
           make: v.make,
           model: v.model,
@@ -133,7 +133,6 @@ class VehicleFitmentBackfill {
           ids: [],
           modelPhrases: [...modelPhrases],
           makePhrases: [...makePhrases],
-          ambiguous: needsMakeConfirmation(modelKey),
         };
         index.set(key, entry);
       }
@@ -176,13 +175,26 @@ class VehicleFitmentBackfill {
       const hitVariants = entry.modelPhrases.filter((v) => tokenMatch(text, v));
       if (hitVariants.length === 0) continue;
       const makeHit = entry.makePhrases.some((v) => tokenMatch(text, v));
-      if (entry.ambiguous && !makeHit) continue; // too risky without the make
+
+      // Ambiguity is judged on the phrases that ACTUALLY MATCHED, not on the row's
+      // model name. Those differ once a row carries aliases, and the gap was a real
+      // regression: renaming "BMW F10" to "BMW 5 Series" moved f10/f11/g30/f90 into
+      // MODEL_ALIASES, and "5 series" is not ambiguous — so the 3-character chassis
+      // tokens that previously required "BMW" nearby stopped requiring anything.
+      // A stray "g30" anywhere in a description would have claimed a 5 Series
+      // fitment. Entry-level ambiguity would also over-tighten in the other
+      // direction: a product that says "5 Series" plainly should not be rejected
+      // just because a sibling alias is short.
+      const ambiguousHit = hitVariants.every((v) => needsMakeConfirmation(v));
+      if (ambiguousHit && !makeHit) continue; // too risky without the make
 
       // Styling reference (e.g. "Defender-style ... for Thar") rather than fitment.
       const styling = hitVariants.every((v) => stylingMatch(text, v));
-      const confidence = makeHit || entry.model.replace(/[^a-z0-9]/gi, '').length > 4
-        ? 'high'
-        : 'medium';
+
+      // See utils/vehicleMatch.js matchConfidence for why `medium` has to stay
+      // reachable, and what it means now. `styling` is folded in below, once we know
+      // whether this match is the SOLE signal.
+      const confidence = matchConfidence({ ambiguous: ambiguousHit });
       raw.push({ entry, label: entry.label, confidence, styling });
     }
 
@@ -193,7 +205,17 @@ class VehicleFitmentBackfill {
     const idSet = new Set();
     for (const m of raw) {
       if (m.styling && hasSolid) continue;
-      matches.push({ label: m.label, confidence: m.confidence });
+      /*
+        Reaching here with `styling` true means it is the SOLE signal — a best-effort
+        fallback, not a statement of fitment ("Defender-style bumper" naming a vehicle
+        the part may not fit). Downgraded so it lands in the review report rather than
+        being written as a confident link.
+      */
+      const confidence = matchConfidence({
+        ambiguous: m.confidence === 'medium',
+        styling: m.styling,
+      });
+      matches.push({ label: m.label, confidence });
       m.entry.ids.forEach((id) => idSet.add(id.toString()));
     }
 

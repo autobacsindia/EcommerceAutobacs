@@ -40,19 +40,34 @@ import * as Sentry from '@sentry/node';
  * @param {string} cancellationId
  * @param {string|object} paymentId - Payment document id
  * @param {number} amountPaise - what actually went back
- * @returns {Promise<{status: 'applied'|'skipped'|'noop'}>}
+ * @returns {Promise<{status, affiliateClawbackPaise, paymentRecordedPaise, ltvDecrementedPaise}>}
+ *   Each figure is what that effect ACTUALLY applied, post-clamp, and 0 when the effect
+ *   was skipped or threw.
+ *
+ *   ⚠️ THE CALLER CANNOT INFER THIS FROM THE CLAIM FLAGS. `paymentIncremented` /
+ *   `ltvAdjusted` are set BEFORE the work (they are exactly-once guards, not success
+ *   records), so they stay `true` when a step throws — and every step here is
+ *   best-effort by design, because a failure must never fail a refund that has already
+ *   left the gateway. The offline-refund path persists these amounts so a later REVERT
+ *   subtracts exactly what was added: reversing a payment `$inc` that never landed would
+ *   wipe a sibling refund's contribution off `Payment.refundAmount`, which is the
+ *   `Math.max(...)` floor remainingRefundable trusts.
  */
 export const applyCancellationRefundSideEffectsOnce = async (
   orderId, cancellationId, paymentId, amountPaise,
 ) => {
+  const NOTHING = { affiliateClawbackPaise: 0, paymentRecordedPaise: 0, ltvDecrementedPaise: 0 };
+
   const claimed = await orderRepository.claimCancellationRefundSideEffects(orderId, cancellationId);
-  if (!claimed) return { status: 'skipped' }; // the other path won the race
+  if (!claimed) return { status: 'skipped', ...NOTHING }; // the other path won the race
 
-  if (!(amountPaise > 0)) return { status: 'noop' };
+  if (!(amountPaise > 0)) return { status: 'noop', ...NOTHING };
 
+  let paymentRecordedPaise = 0;
   if (paymentId) {
     try {
       await paymentRepository.recordRefund(paymentId, fromPaise(amountPaise), 'order_line_cancelled');
+      paymentRecordedPaise = amountPaise;
     } catch (err) {
       const message = `[Cancellation] Failed to record ₹${fromPaise(amountPaise)} on payment `
         + `${paymentId} for cancellation ${cancellationId}. The refund is committed; the payment `
@@ -71,8 +86,12 @@ export const applyCancellationRefundSideEffectsOnce = async (
     honestly be derived from an amount. Clamped to what is outstanding, so even a
     double-fire can only ever reduce this order to zero.
   */
+  let affiliateClawbackPaise = 0;
   try {
-    await affiliateCommissionService.clawbackForAmount(orderId, amountPaise, 'order_line_cancelled');
+    const clawback = await affiliateCommissionService.clawbackForAmount(
+      orderId, amountPaise, 'order_line_cancelled',
+    );
+    affiliateClawbackPaise = Math.max(0, Number(clawback?.amountPaise) || 0);
   } catch (err) {
     const message = `[Affiliate] Commission clawback FAILED for cancellation ${cancellationId} `
       + `on order ${orderId} (₹${fromPaise(amountPaise)}). The refund is committed; the `
@@ -81,9 +100,13 @@ export const applyCancellationRefundSideEffectsOnce = async (
     Sentry.captureMessage(message, 'error');
   }
 
+  let ltvDecrementedPaise = 0;
   try {
     const order = await orderRepository.findById(orderId);
-    if (order?.user) await userRepository.decrementSpend(order.user, { amountPaise });
+    if (order?.user) {
+      await userRepository.decrementSpend(order.user, { amountPaise });
+      ltvDecrementedPaise = amountPaise;
+    }
   } catch (err) {
     const message = `[Cancellation] LTV reversal FAILED for cancellation ${cancellationId} on `
       + `order ${orderId} (₹${fromPaise(amountPaise)}). The refund is committed; the customer's `
@@ -92,7 +115,7 @@ export const applyCancellationRefundSideEffectsOnce = async (
     Sentry.captureMessage(message, 'error');
   }
 
-  return { status: 'applied' };
+  return { status: 'applied', affiliateClawbackPaise, paymentRecordedPaise, ltvDecrementedPaise };
 };
 
 export default { applyCancellationRefundSideEffectsOnce };

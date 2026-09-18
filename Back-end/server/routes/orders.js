@@ -4,7 +4,6 @@ import {
   validateOrder, 
   validateIdParam, 
   validateShipmentParams,
-  validateCancellationParams,
   validateOrderStatusUpdate, 
   validateOrderCancellation, 
   validateBulkStatusUpdate, 
@@ -17,7 +16,11 @@ import {
   validateOrderReturn,
   validateReturnStatusUpdate,
   validateRefundsQuery,
-  validateAdminOrderQuery
+  validateAdminOrderQuery,
+  validateOrderRefundBody,
+  validateCancellationRefundBody,
+  validateRefundRevert,
+  validateCancellationRefundRevert
 } from "../middleware/validationMiddleware.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
 import { uploadPdfSingle, validatePdfUpload, handleMulterError } from "../middleware/uploadMiddleware.js";
@@ -34,6 +37,8 @@ import {
   createOfflineOrder,
   cancelOrder,
   processRefund,
+  revertOfflineRefund,
+  revertCancellationOfflineRefund,
   cancelPayment,
   markPaymentFailed,
   deleteOrder,
@@ -112,9 +117,23 @@ router.post("/admin/offline", protect, admin, asyncHandler(createOfflineOrder));
 router.put("/:id/cancel", protect, validateOrderCancellation, validateCancellation, asyncHandler(cancelOrder));
 
 // @route   POST /orders/:id/refund
-// @desc    Process the Razorpay refund for a cancelled, paid order (admin-triggered)
+// @desc    Refund a cancelled, paid order (admin-triggered). `method: 'offline'` records
+//          a payout already settled outside Razorpay instead of calling the gateway.
 // @access  Private/Admin
-router.post("/:id/refund", protect, admin, validateIdParam, asyncHandler(processRefund));
+router.post("/:id/refund", protect, admin, validateOrderRefundBody, asyncHandler(processRefund));
+
+// @route   POST /orders/:id/refund/revert
+// @desc    Withdraw an OFFLINE refund record that was a mistake, putting the order back
+//          to "refund due". Refuses for a refund that actually went through Razorpay —
+//          gateway money cannot be un-refunded by a field write.
+// @access  Private/Admin
+router.post(
+  "/:id/refund/revert",
+  protect,
+  admin,
+  validateRefundRevert,
+  asyncHandler(revertOfflineRefund)
+);
 
 // @route   PUT /orders/:id/payment-failed
 // @desc    Mark order as failed due to payment failure
@@ -211,8 +230,19 @@ router.post(
   "/:id/cancellations/:cancellationId/refund",
   protect,
   admin,
-  validateCancellationParams,
+  validateCancellationRefundBody,
   asyncHandler(refundCancellation)
+);
+
+// @route   POST /orders/:id/cancellations/:cancellationId/refund/revert
+// @desc    Withdraw ONE cancellation's offline refund record (Admin only).
+// @access  Private/Admin
+router.post(
+  "/:id/cancellations/:cancellationId/refund/revert",
+  protect,
+  admin,
+  validateCancellationRefundRevert,
+  asyncHandler(revertCancellationOfflineRefund)
 );
 
 // @route   PATCH /orders/:id/shipments/:shipmentId/lost

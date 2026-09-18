@@ -1,5 +1,7 @@
+import mongoose from 'mongoose';
 import BaseRepository from './baseRepository.js';
 import Order from '../models/Order.js';
+import userRepository from './userRepository.js';
 
 /**
  * "This array is still exactly N long" — as a compare-and-set condition that also works
@@ -296,7 +298,320 @@ class OrderRepository extends BaseRepository {
     return res.modifiedCount === 1;
   }
 
-  async findWithRefunds(statusFilter, session = null) {
+  /**
+   * Record a whole-order refund that was settled OUTSIDE the gateway — cash at the
+   * counter, NEFT, UPI, cheque, or a refund an admin issued by hand in the Razorpay
+   * dashboard (which writes nothing here, because its webhook resolves to no order).
+   *
+   * ⚠️ CLAIM AND RESULT IN ONE WRITE, unlike the gateway path's
+   * markRefundProcessing → recordRefundResult pair. The gateway path needs two because
+   * something fallible happens between them; here the money moved BEFORE the request
+   * arrived, so there is nothing to fail in the middle and a `processing` state would
+   * only be a window in which a crash strands the record. One compare-and-set is still
+   * the serialization point: two admins submitting together, only one matches.
+   *
+   * Accepts the same claimable states as markRefundProcessing — including an order with
+   * no refundDetails at all, which is the legacy/imported case offline recording exists
+   * for — and never an order already `processing` or `completed`.
+   *
+   * @param {string} orderId
+   * @param {Object} opts
+   * @param {number} opts.amount          - rupees, already capped against headroom by the caller
+   * @param {string} opts.refundType      - 'full' | 'partial'
+   * @param {string} opts.offlineMethod   - cash | bank_transfer | upi | cheque | other
+   * @param {string} opts.offlineReference
+   * @param {Date}   opts.paidAt
+   * @param {string} opts.userId
+   * @param {boolean} opts.markRefunded - flip paymentStatus in this SAME write when the
+   *   payout covers the order. Set here rather than as a follow-up step for the reason
+   *   recordRefundResult does it: the payment axis and the refund record must never be
+   *   observable in disagreement, and no webhook is coming to reconcile them.
+   * @returns {Promise<boolean>} true only for the caller that won the claim
+   */
+  async markRefundOfflineCompleted(orderId, opts, session = null) {
+    const {
+      amount, refundType, offlineMethod, offlineReference, paidAt, userId, markRefunded,
+    } = opts;
+    const now = new Date();
+    const res = await Order.updateOne(
+      {
+        _id: orderId,
+        status: 'cancelled',
+        paymentStatus: 'paid',
+        $or: [
+          { 'refundDetails.status': { $in: ['pending', 'failed'] } },
+          { refundDetails: { $exists: false } },
+          { 'refundDetails.status': { $exists: false } }
+        ]
+      },
+      {
+        $set: {
+          'refundDetails.amount': amount,
+          'refundDetails.refundType': refundType,
+          'refundDetails.refundMethod': 'offline',
+          'refundDetails.requestedAt': now,
+          'refundDetails.status': 'completed',
+          'refundDetails.processedBy': userId,
+          'refundDetails.processedAt': now,
+          'refundDetails.offlineMethod': offlineMethod,
+          'refundDetails.offlineReference': offlineReference,
+          'refundDetails.paidAt': paidAt,
+          'refundDetails.offlineRecordedAt': now,
+          'refundDetails.offlineRecordedBy': userId,
+          'refundDetails.failureReason': null,
+          // Re-arm the once-only Payment.refundAmount claim, exactly as the gateway
+          // claim does: this is a fresh payout to account for.
+          'refundDetails.paymentRecorded': false,
+          // Same reason markRefundProcessing clears these — see there.
+          'refundDetails.notes': null,
+          'refundDetails.transactionId': null,
+          ...(markRefunded ? { paymentStatus: 'refunded' } : {})
+        },
+        /*
+          Wipe the previous cycle's reversal stamp. Without this, an order that was
+          marked → reverted → marked again would still carry `revertedAt` from cycle
+          one and read, to anyone looking at the document, as though the refund standing
+          against it had been withdrawn.
+        */
+        $unset: {
+          'refundDetails.revertedAt': '',
+          'refundDetails.revertedBy': '',
+          'refundDetails.revertReason': '',
+          'refundDetails.affiliateClawbackPaise': '',
+          'refundDetails.paymentRecordedPaise': '',
+          'refundDetails.ltvDecrementedPaise': ''
+        }
+      },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
+   * Withdraw an offline refund record an admin says was a mistake, putting the order
+   * back to "refund due".
+   *
+   * ⚠️ `refundMethod: 'offline'` IS THE WHOLE SAFETY GATE. Money that genuinely left
+   * through Razorpay cannot be un-refunded by writing fields, so a gateway refund must
+   * never match here — if it did, the order would read "not refunded" with the money
+   * actually gone, and the next admin to look at it would refund it a second time.
+   * `transactionId` being absent is asserted alongside as belt and braces: the offline
+   * path never sets it and the gateway path always does.
+   *
+   * Matching on `completed` + `offline` (rather than on a `revertedAt` sentinel) is what
+   * makes repeated mark → revert → mark cycles work: after this write the status is
+   * `pending`, so a second revert finds nothing to claim.
+   *
+   * The record's own offline fields are cleared because markRefundProcessing CARRIES
+   * FORWARD `refundDetails.refundMethod` when it claims — leave it as `offline` and the
+   * next genuine Razorpay refund on this order would be filed as an offline payout.
+   *
+   * @returns {Promise<Object|null>} the pre-update order (so the caller can read the
+   *   amount and affiliateClawbackPaise it must now reverse), or null if not claimable.
+   */
+  async claimRefundRevert(orderId, { userId, reason }, session = null) {
+    return Order.findOneAndUpdate(
+      {
+        _id: orderId,
+        'refundDetails.status': 'completed',
+        'refundDetails.refundMethod': 'offline',
+        $or: [
+          { 'refundDetails.transactionId': { $exists: false } },
+          { 'refundDetails.transactionId': null }
+        ],
+        /*
+          NOT a return's mirror. A return refund also writes `refundMethod: 'offline'`
+          onto this same subdoc, tagged with a `Return <id>` note — the marker
+          refundMathService.remainingRefundable keys off. Without this clause the
+          whole-order revert would silently withdraw a RETURN's refund record, leaving
+          the ReturnRequest (which is the authoritative record) saying `completed` while
+          the order said `pending`. Returns are reverted through their own endpoint.
+        */
+        $nor: [{ 'refundDetails.notes': { $regex: '^Return ' } }]
+      },
+      /*
+        An aggregation pipeline, not a plain update, so the payment axis moves back in
+        the SAME atomic write.
+
+        It used to be a best-effort follow-up step, and that was a trap: a full offline
+        refund sets `paymentStatus: 'refunded'`, and BOTH refund entry points
+        (markRefundProcessing and markRefundOfflineCompleted) require `paid`. So if the
+        follow-up failed, the order was left advertising a refund button that every path
+        behind it would refuse — unreachable without a manual database edit. Caught by
+        the mark → revert → mark test, which could not pass until this moved in here.
+
+        Conditional on refundType so a PARTIAL record, which never moved the axis, does
+        not resurrect an order something else legitimately marked refunded.
+      */
+      [
+        {
+          $set: {
+            'refundDetails.status': 'pending',
+            'refundDetails.refundMethod': 'original_payment',
+            'refundDetails.revertedAt': new Date(),
+            'refundDetails.revertedBy': userId,
+            'refundDetails.revertReason': reason,
+            'refundDetails.processedAt': null,
+            // Re-arm so a subsequent genuine refund can record against the payment row.
+            'refundDetails.paymentRecorded': false,
+            paymentStatus: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$paymentStatus', 'refunded'] },
+                    { $eq: ['$refundDetails.refundType', 'full'] }
+                  ]
+                },
+                'paid',
+                '$paymentStatus'
+              ]
+            }
+          }
+        },
+        {
+          $unset: [
+            'refundDetails.offlineMethod',
+            'refundDetails.offlineReference',
+            'refundDetails.paidAt',
+            'refundDetails.offlineRecordedAt',
+            'refundDetails.offlineRecordedBy',
+            /*
+              The applied-amount record goes too. It describes what THIS cycle's effects
+              moved; leaving it behind would let a later mark whose effects FAIL inherit
+              these figures, and the revert after that would reverse money the second
+              mark never applied.
+            */
+            'refundDetails.affiliateClawbackPaise',
+            'refundDetails.paymentRecordedPaise',
+            'refundDetails.ltvDecrementedPaise'
+          ]
+        }
+      ],
+      // `before` so the caller gets the amount and clawback figure this refund recorded —
+      // they are cleared/needed for the inverse side effects it is about to run.
+      { new: false, ...(session && { session }) }
+    );
+  }
+
+  /**
+   * Remove the order's refund SUMMARY when the refund it described has been withdrawn.
+   *
+   * Guarded on the `Return <id>` note so it can only ever clear the mirror of the return
+   * being reverted — an order can carry several returns and this single subdoc holds only
+   * the most recent, so an unguarded clear would erase a different return's summary.
+   *
+   * ⚠️ UNSET, NOT `status: 'pending'`. `pending` plus a surviving `requestedAt` is exactly
+   * what findWithRefunds treats as an actionable refund, so a reverted return left a
+   * DELIVERED order sitting in /admin/refunds as a refund owed — where every action
+   * (Process Refund, Mark offline) 400s on `status !== 'cancelled'`. Permanently stuck,
+   * un-actionable and un-dismissable. Clearing the subdoc also drops the offline fields,
+   * so the whole-order Revert control cannot appear against a withdrawn return mirror.
+   */
+  async clearRefundMirror(orderId, notesMarker, session = null) {
+    const res = await Order.updateOne(
+      { _id: orderId, 'refundDetails.notes': notesMarker },
+      { $unset: { refundDetails: '' } },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
+   * Persist what an offline refund's side effects ACTUALLY applied, in paise.
+   *
+   * Written only on the success path, so a revert reverses exactly what was added. The
+   * claim flags cannot serve this purpose — see models/shared/offlineRefundFields.js.
+   *
+   * @param {object} applied - any of affiliateClawbackPaise / paymentRecordedPaise /
+   *   ltvDecrementedPaise. Keys omitted are left untouched.
+   */
+  async setRefundAppliedAmounts(orderId, applied = {}, session = null) {
+    const set = {};
+    for (const key of ['affiliateClawbackPaise', 'paymentRecordedPaise', 'ltvDecrementedPaise']) {
+      if (applied[key] !== undefined) set[`refundDetails.${key}`] = applied[key];
+    }
+    if (!Object.keys(set).length) return false;
+
+    const res = await Order.updateOne(
+      { _id: orderId },
+      { $set: set },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
+   * Drop a status-email idempotency stamp so the event can be notified again.
+   *
+   * Used when reverting a refund: `notifiedStatuses` carries `'refunded'` once the
+   * customer has been told, and that stamp is what stops a duplicate. Leave it and the
+   * customer would never be emailed about the REAL refund when it later goes out.
+   */
+  async clearNotifiedStatus(orderId, key, session = null) {
+    const res = await Order.updateOne(
+      { _id: orderId },
+      { $pull: { notifiedStatuses: key } },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
+   * Move the payment axis back to `paid` after an offline refund record is withdrawn.
+   * Conditional on it currently being `refunded` so this can never resurrect an order
+   * that was moved on by something else.
+   */
+  async restorePaidAfterRevert(orderId, session = null) {
+    const res = await Order.updateOne(
+      { _id: orderId, paymentStatus: 'refunded' },
+      { $set: { paymentStatus: 'paid' } },
+      session ? { session } : {}
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /**
+   * The admin refunds queue: orders with a refund recorded, due, or in flight.
+   *
+   * ⚠️ BOUNDED AND CURSOR-PAGINATED (2026-09 optimisation pass). It previously returned
+   * EVERY matching order as a full hydrated document with the user populated, and the
+   * screen filtered them in the browser. Measured on 2,000 queued orders: 322 ms and
+   * 5.2 MB of JSON for 2,000 documents, against 6.1 ms and 17 KB for one bounded,
+   * projected page — ~53x faster, ~300x smaller.
+   *
+   * The unbounded form was also a latent outage, not just slow. `explain` shows a
+   * collection scan feeding an in-memory SORT (docsExamined 2,000, keysExamined 0), and
+   * MongoDB aborts a blocking sort above 32 MB — so at roughly 12,000 queued orders the
+   * screen would stop loading entirely rather than merely getting slower.
+   *
+   * ── WHY THE CURSOR IS (createdAt, _id) ────────────────────────────────────────────
+   * Not `refundDetails.requestedAt`, the field this used to sort by, for two reasons:
+   *   1. Legacy/imported orders have no `requestedAt` at all, and `$lt: <Date>` does not
+   *      match a missing field (MongoDB brackets comparisons by type). Paginating on it
+   *      would make exactly those rows — the ones offline recording exists for —
+   *      unreachable past page one.
+   *   2. `createdAt` is IMMUTABLE, so a row cannot move between pages while an admin
+   *      pages through. A mutable sort key lets a row being edited jump backwards and be
+   *      served twice, or jump forwards and be skipped.
+   * `_id` breaks ties, so the ordering is total and the keyset needs no offset.
+   *
+   * NO INDEX IS ADDED HERE. The measured win is entirely from bounding and projecting;
+   * there is no evidence yet that the scan itself is the bottleneck at the collection's
+   * real size, and `autoIndex` is off in production so an index would need its own
+   * migration. If this queue ever grows past a few thousand rows, re-measure with
+   * `explain` first — that is the measurement that would justify one.
+   *
+   * @param {string} statusFilter - 'all' | pending | processing | completed | failed
+   * @param {object} [opts]
+   * @param {string} [opts.search]  - order-id fragment or buyer name/email/phone
+   * @param {number} [opts.limit]   - page size, clamped to 1..100
+   * @param {object} [opts.cursor]  - { createdAt, id } from the previous page
+   * @returns {Promise<{orders: object[], nextCursor: object|null}>}
+   */
+  async findWithRefunds(statusFilter, opts = {}) {
+    const { search = '', limit: rawLimit = 50, cursor = null, session = null } = opts;
+    const limit = Math.min(Math.max(Number(rawLimit) || 50, 1), 100);
+
     // Legacy / WooCommerce-imported orders cancelled while paid never got a refundDetails
     // subdoc but are still refundable — surface them as effectively 'pending' so they're
     // actionable from the refunds screen, not just the order detail page.
@@ -312,21 +627,108 @@ class OrderRepository extends BaseRepository {
     // correct even before the cleanup migration has run.
     const realRefund = { 'refundDetails.requestedAt': { $exists: true } };
 
-    let query;
+    let base;
     if (statusFilter && statusFilter !== 'all') {
-      query = statusFilter === 'pending'
+      base = statusFilter === 'pending'
         ? { $or: [{ ...realRefund, 'refundDetails.status': 'pending' }, legacyDue] }
         : { ...realRefund, 'refundDetails.status': statusFilter };
     } else {
-      query = { $or: [realRefund, legacyDue] };
+      base = { $or: [realRefund, legacyDue] };
     }
 
+    // Every additional predicate is $and-ed on, never merged into `base` — the status
+    // branches above already own a top-level `$or`, and a second one would silently
+    // replace it and widen the queue to rows the admin filtered out.
+    const clauses = [base];
+
+    if (search) {
+      clauses.push({ $or: await this._refundSearchLanes(search) });
+    }
+
+    /*
+      Keyset page predicate for a DESCENDING (createdAt, _id) sort: strictly older, or
+      the same instant with a smaller id. No `skip`, so cost does not grow with depth.
+    */
+    if (cursor?.createdAt && cursor?.id) {
+      const at = new Date(cursor.createdAt);
+      const id = new mongoose.Types.ObjectId(String(cursor.id));
+      clauses.push({
+        $or: [
+          { createdAt: { $lt: at } },
+          { createdAt: at, _id: { $lt: id } },
+        ],
+      });
+    }
+
+    const query = clauses.length === 1 ? clauses[0] : { $and: clauses };
+
     let q = Order.find(query)
+      /*
+        Exactly the fields getRefunds maps into a row. A projection this tight can only
+        stay correct while it carries everything the mapper reads — the contract is
+        pinned by tests/unit/repositories/refundsQueue.test.js against a real database,
+        because a mocked repository returns whatever the test hands it and would never
+        notice a field going missing.
+      */
+      .select('totalAmount createdAt updatedAt refundDetails user')
       .populate('user', 'name email')
-      .sort({ 'refundDetails.requestedAt': -1, createdAt: -1 });
+      .sort({ createdAt: -1, _id: -1 })
+      // One extra row is the "is there another page?" probe — cheaper and race-free
+      // compared with a separate countDocuments.
+      .limit(limit + 1)
+      .lean();
     if (session) q = q.session(session);
-    return q;
+
+    const rows = await q;
+    const hasMore = rows.length > limit;
+    const orders = hasMore ? rows.slice(0, limit) : rows;
+    const last = orders[orders.length - 1];
+
+    return {
+      orders,
+      nextCursor: hasMore && last
+        ? { createdAt: last.createdAt, id: String(last._id) }
+        : null,
+    };
   }
+
+  /**
+   * Search lanes for the refunds queue.
+   *
+   * Deliberately the SAME two lanes the admin orders list uses (order-id fragment, and
+   * buyer resolved through userRepository.findIdsByNameOrEmail) rather than a second
+   * search implementation — an admin who searches "Priya" in two admin screens must not
+   * get two different answers.
+   *
+   * This moved off the client in the same change that bounded the query. It had to:
+   * the screen filtered the full result set in the browser, which only worked because
+   * every row was loaded, so bounding alone would have quietly reduced search to
+   * "search within the first page".
+   */
+  async _refundSearchLanes(term) {
+    const or = [];
+
+    /*
+      Orders have no separate order number — the admin table renders the last 8 hex
+      chars of `_id` behind a '#'. So the value an admin copies off the screen arrives
+      as "#7f3a91b2"; strip the display prefix or the id lane silently never matches.
+      Same normalisation as getAllOrdersAdmin's `orderIdTerm`.
+    */
+    const idTerm = String(term).replace(/^#+/, '').replace(/\s+/g, '');
+    if (mongoose.Types.ObjectId.isValid(idTerm) && idTerm.length === 24) {
+      or.push({ _id: new mongoose.Types.ObjectId(idTerm) });
+    } else if (/^[a-fA-F0-9]+$/.test(idTerm)) {
+      or.push({ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: `${idTerm}$`, options: 'i' } } });
+    }
+
+    const userIds = await userRepository.findIdsByNameOrEmail(term);
+    if (userIds.length > 0) or.push({ user: { $in: userIds } });
+
+    // Never return an empty $or — MongoDB rejects it. An unmatchable clause makes a
+    // search that matches nothing return nothing, rather than everything.
+    return or.length ? or : [{ _id: null }];
+  }
+
 
   async findAllAdmin(query, options = {}) {
     // Same opt-in rule as findByUser: null = the whole document.
@@ -690,6 +1092,130 @@ class OrderRepository extends BaseRepository {
       },
       { new: true },
     );
+  }
+
+  /**
+   * Per-line twin of markRefundOfflineCompleted: record that ONE cancellation's refund
+   * was settled outside the gateway. Claim and result in a single compare-and-set, for
+   * the same reason given there.
+   *
+   * The claimable set is copied from claimCancellationRefund — `failed` is claimable
+   * (a failed gateway attempt is exactly what an admin settles by hand afterwards),
+   * and `processing`/`completed`/`not_applicable` are excluded by name so a status
+   * added later fails closed.
+   */
+  async markCancellationRefundOffline(orderId, cancellationId, opts) {
+    const { amountPaise, offlineMethod, offlineReference, paidAt, userId } = opts;
+    const now = new Date();
+    return Order.findOneAndUpdate(
+      {
+        _id: orderId,
+        cancellations: {
+          $elemMatch: {
+            _id: cancellationId,
+            'refund.status': { $nin: ['processing', 'completed', 'not_applicable'] }
+          }
+        }
+      },
+      {
+        $set: {
+          'cancellations.$.refund.status': 'completed',
+          'cancellations.$.refund.amountPaise': amountPaise,
+          'cancellations.$.refund.initiatedAt': now,
+          'cancellations.$.refund.completedAt': now,
+          'cancellations.$.refund.offlineMethod': offlineMethod,
+          'cancellations.$.refund.offlineReference': offlineReference,
+          'cancellations.$.refund.paidAt': paidAt,
+          'cancellations.$.refund.offlineRecordedAt': now,
+          'cancellations.$.refund.offlineRecordedBy': userId,
+          'cancellations.$.refund.failureReason': null,
+          // Re-arm the once-only side-effect claim for this fresh payout.
+          'cancellations.$.refund.paymentIncremented': false,
+          'cancellations.$.refund.ltvAdjusted': false
+        },
+        $unset: {
+          'cancellations.$.refund.revertedAt': '',
+          'cancellations.$.refund.revertedBy': '',
+          'cancellations.$.refund.revertReason': '',
+          'cancellations.$.refund.affiliateClawbackPaise': '',
+          'cancellations.$.refund.paymentRecordedPaise': '',
+          'cancellations.$.refund.ltvDecrementedPaise': ''
+        }
+      },
+      { new: false }
+    );
+  }
+
+  /**
+   * Withdraw ONE cancellation's offline refund record, putting it back to `pending`.
+   *
+   * ⚠️ Same safety gate as claimRefundRevert, expressed with the fields this subdoc
+   * actually has: `cancellations[].refund` carries no `refundMethod`, so the marker for
+   * "this was settled by hand" is the presence of `offlineMethod`, and the marker for
+   * "this went through Razorpay" is `razorpayRefundId`. BOTH are asserted — a gateway
+   * refund must never be revertible, and requiring the positive marker as well as the
+   * absence of the negative one means a half-written legacy record fails closed.
+   *
+   * @returns {Promise<Object|null>} the pre-update order, so the caller can read the
+   *   amountPaise and affiliateClawbackPaise it must now reverse.
+   */
+  async claimCancellationRefundRevert(orderId, cancellationId, { userId, reason }) {
+    return Order.findOneAndUpdate(
+      {
+        _id: orderId,
+        cancellations: {
+          $elemMatch: {
+            _id: cancellationId,
+            'refund.status': 'completed',
+            'refund.offlineMethod': { $exists: true },
+            $or: [
+              { 'refund.razorpayRefundId': { $exists: false } },
+              { 'refund.razorpayRefundId': null }
+            ]
+          }
+        }
+      },
+      {
+        $set: {
+          'cancellations.$.refund.status': 'pending',
+          'cancellations.$.refund.revertedAt': new Date(),
+          'cancellations.$.refund.revertedBy': userId,
+          'cancellations.$.refund.revertReason': reason,
+          'cancellations.$.refund.completedAt': null,
+          // Re-arm so a later genuine refund of these lines can run its side effects.
+          'cancellations.$.refund.paymentIncremented': false,
+          'cancellations.$.refund.ltvAdjusted': false
+        },
+        $unset: {
+          'cancellations.$.refund.offlineMethod': '',
+          'cancellations.$.refund.offlineReference': '',
+          'cancellations.$.refund.paidAt': '',
+          'cancellations.$.refund.offlineRecordedAt': '',
+          'cancellations.$.refund.offlineRecordedBy': '',
+          // See the twin in claimRefundRevert: stale applied amounts would make a later
+          // revert reverse effects the intervening mark never applied.
+          'cancellations.$.refund.affiliateClawbackPaise': '',
+          'cancellations.$.refund.paymentRecordedPaise': '',
+          'cancellations.$.refund.ltvDecrementedPaise': ''
+        }
+      },
+      { new: false }
+    );
+  }
+
+  /** Per-line twin of setRefundAppliedAmounts — what this cancellation's effects applied. */
+  async setCancellationAppliedAmounts(orderId, cancellationId, applied = {}) {
+    const set = {};
+    for (const key of ['affiliateClawbackPaise', 'paymentRecordedPaise', 'ltvDecrementedPaise']) {
+      if (applied[key] !== undefined) set[`cancellations.$.refund.${key}`] = applied[key];
+    }
+    if (!Object.keys(set).length) return false;
+
+    const res = await Order.updateOne(
+      { _id: orderId, 'cancellations._id': cancellationId },
+      { $set: set }
+    );
+    return res.modifiedCount === 1;
   }
 
   async save(order, session = null) {

@@ -36,6 +36,7 @@ import orderRepository from '../repositories/orderRepository.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import razorpayService from '../services/razorpayService.js';
 import { reverseReturnLtvOnce } from '../services/returnRefundLtvService.js';
+import { reverseRefundSideEffects } from '../services/refundReversalService.js';
 import auditLogger from '../services/auditLogger.js';
 import { refundableForLines, remainingRefundable, matchOrderLine } from '../services/refundMathService.js';
 import { supportsPartialRefund, describeEmiPlan } from '../utils/paymentMethodDetails.js';
@@ -43,6 +44,7 @@ import { toPaise } from '../utils/money.js';
 import { deliveredAtForItem } from '../utils/orderFulfilment.js';
 import { coversEveryDeliveredLine } from '../utils/orderReturns.js';
 import { enqueueNotification } from '../queue/queues.js';
+import { OFFLINE_METHODS, offlineMethodLabel } from '../config/offlineRefund.js';
 import {
   RETURN_WINDOW_DAYS,
   RETURN_REASONS,
@@ -1278,14 +1280,6 @@ export const refundPreview = asyncHandler(async (req, res) => {
 });
 
 /** Human label for an offline payout method, for timeline + email copy. */
-const OFFLINE_METHOD_LABELS = Object.freeze({
-  cash: 'cash',
-  bank_transfer: 'bank transfer',
-  upi: 'UPI',
-  cheque: 'cheque',
-  other: 'an offline payout',
-});
-
 /**
  * Settle a refund that was ALREADY paid outside the gateway.
  *
@@ -1311,7 +1305,7 @@ const OFFLINE_METHOD_LABELS = Object.freeze({
  * `received` so claimForRefund can re-claim on a retry.
  */
 const recordOfflineRefund = async (req, res, { rr, order, payment, finalAmount, offlineMethod, reference, paidAt }) => {
-  const label = OFFLINE_METHOD_LABELS[offlineMethod] || 'an offline payout';
+  const label = offlineMethodLabel(offlineMethod);
   const settledAt = paidAt || new Date();
   const warnings = [];
 
@@ -1428,6 +1422,135 @@ const recordOfflineRefund = async (req, res, { rr, order, payment, finalAmount, 
   });
 };
 
+// @desc    Withdraw an OFFLINE return refund record that was a mistake (Admin)
+// @route   POST /returns/admin/:id/refund/revert
+// @access  Private/Admin
+//
+// The return goes back to `received` with a `pending` refund — exactly the state
+// claimForRefund needs to be able to re-claim it — so the refund can then be issued
+// properly, by either method.
+//
+// ⚠️ OFFLINE RECORDS ONLY. A Razorpay refund has genuinely left the account and no
+// field write can pull it back; claimRefundRevert enforces that atomically and this
+// handler only explains the refusal.
+export const revertReturnRefund = asyncHandler(async (req, res) => {
+  const reason = String(req.body.reason || '').trim();
+
+  const before = await returnRequestRepository.claimRefundRevert(req.params.id, {
+    revertedBy: req.user._id,
+    reason,
+  });
+
+  if (!before) {
+    // Re-read to say WHY, rather than leaving the admin with a bare 409: the claim is
+    // deliberately narrow and its failure alone does not distinguish the cases.
+    const existing = await returnRequestRepository.findById(req.params.id);
+    if (!existing) throw new AppError('Return request not found', 404);
+
+    if (existing.refund?.status === 'completed' && existing.refund?.method !== 'offline') {
+      throw new AppError(
+        'This refund went through Razorpay, so it cannot be reverted here — the money has '
+        + 'genuinely left the account. Only a refund recorded as settled offline can be '
+        + 'withdrawn.',
+        409,
+      );
+    }
+    throw new AppError(
+      'There is no offline refund recorded on this return to revert '
+      + `(refund is ${existing.refund?.status || 'not recorded'}).`,
+      409,
+    );
+  }
+
+  const finalAmount = Number(before.refund?.finalAmount) || 0;
+  const amountPaise = toPaise(finalAmount);
+  const order = before.order ? await orderRepository.findById(before.order) : null;
+
+  /*
+    Each effect is reversed by the figure it ACTUALLY applied, recorded on the mark's
+    success path — never by the refund's face value, and never inferred from the
+    `paymentRecorded` / `ltvReversed` claim flags. Those are set BEFORE the work, and
+    reverseReturnLtvOnce swallows a failed decrementSpend entirely, so a flag can read
+    `true` while nothing moved. Reversing on that basis would take money off
+    `Payment.refundAmount` that was never added — wiping a sibling refund's contribution
+    off the headroom floor — and credit back spend that was never taken.
+  */
+  const paymentRecordedPaise = Math.max(0, Math.floor(Number(before.refund?.paymentRecordedPaise) || 0));
+  const ltvDecrementedPaise = Math.max(0, Math.floor(Number(before.refund?.ltvDecrementedPaise) || 0));
+
+  const { warnings } = await reverseRefundSideEffects({
+    orderId: before.order,
+    userId: ltvDecrementedPaise > 0 ? (before.user || null) : null,
+    affiliateClawbackPaise: Math.max(0, Math.floor(Number(before.refund?.affiliateClawbackPaise) || 0)),
+    paymentId: order?.payment || null,
+    amountPaise: paymentRecordedPaise,
+    ltvPaise: ltvDecrementedPaise,
+    /*
+      recordOfflineRefund flips the order to `refunded` only when the payout covered the
+      whole order value. Recomputing the same comparison here — rather than trusting the
+      current paymentStatus — keeps a partial return refund from resurrecting an order
+      that something else legitimately marked refunded.
+    */
+    restorePaidStatus: Boolean(
+      order && order.paymentStatus === 'refunded' && amountPaise >= toPaise(order.totalAmount || 0),
+    ),
+    label: `return ${before._id} refund`,
+    reason: 'return_refund_reverted',
+  });
+
+  /*
+    The order's refundDetails mirror. Best-effort and deliberately narrow: it holds only
+    the LATEST refund across every return on the order, so it is cleared ONLY if it is
+    still describing THIS return. Blindly clearing it would erase a different return's
+    summary. The `Return <id>` note prefix is the same marker remainingRefundable uses.
+  */
+  if (order && order.refundDetails?.notes === `Return ${before._id}`) {
+    try {
+      /*
+        CLEARED, not set to `pending`.
+
+        `pending` + a surviving `requestedAt` is precisely `findWithRefunds`' actionable
+        bucket, so the order appeared in /admin/refunds as a refund owed — except the
+        order is `delivered`, and every action there (Process Refund, Mark offline) gates
+        on `status === 'cancelled'` and 400s. It would have sat in the queue permanently,
+        un-actionable and un-dismissable.
+
+        The mirror is only ever a summary of the latest refund on the order. That refund
+        has been withdrawn, so there is nothing left for it to summarise; the authoritative
+        record is the ReturnRequest, which the claim above already rewound. Unsetting the
+        whole subdoc also clears the offline fields, so the whole-order Revert control
+        cannot appear against a return's withdrawn mirror.
+      */
+      await orderRepository.clearRefundMirror(order._id, `Return ${before._id}`);
+    } catch (err) {
+      warnings.push('order refund summary');
+      console.error(`[ReturnRefundRevert] order mirror for ${before._id} failed — ${err.message}`);
+    }
+  }
+
+  try {
+    await auditLogger.logAction(req, 'RETURN_REFUND_REVERTED', 'ReturnRequest', before._id, {
+      orderId: String(before.order),
+      amount: finalAmount,
+      offlineMethod: before.refund?.offlineMethod,
+      reference: before.refund?.reference,
+      reason,
+    });
+  } catch (err) {
+    warnings.push('audit log');
+    console.error(`[ReturnRefundRevert] audit log for ${before._id} failed — ${err.message}`);
+  }
+
+  return res.json({
+    success: true,
+    message: `Withdrew the ₹${finalAmount} offline refund record. The return is back to `
+      + '"awaiting refund".'
+      + (warnings.length ? ` Some follow-up steps need checking: ${warnings.join(', ')}.` : ''),
+    amount: finalAmount,
+    ...(warnings.length ? { warnings } : {}),
+  });
+});
+
 // @desc    Refund a return — through Razorpay, or record one already paid offline (Admin)
 // @route   POST /returns/admin/:id/refund
 // @access  Private/Admin
@@ -1445,7 +1568,6 @@ const recordOfflineRefund = async (req, res, { rr, order, payment, finalAmount, 
 export const initiateReturnRefund = asyncHandler(async (req, res) => {
   const method = req.body.method === 'offline' ? 'offline' : 'original_payment';
   const isOffline = method === 'offline';
-  const OFFLINE_METHODS = ['cash', 'bank_transfer', 'upi', 'cheque', 'other'];
   const offlineMethod = isOffline ? String(req.body.offlineMethod || '').trim() : null;
   const reference = isOffline ? String(req.body.reference || '').trim() : null;
   if (isOffline) {

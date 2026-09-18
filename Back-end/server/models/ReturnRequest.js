@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { RETURN_REASONS, IN_FLIGHT_RETURN_STATUSES } from "../config/returnPolicy.js";
+import { revertFields } from "./shared/offlineRefundFields.js";
 
 /**
  * A private (authenticated) Cloudinary asset attached to a return — the unboxing
@@ -182,7 +183,27 @@ const ReturnRequestSchema = new mongoose.Schema({
     // refund.processed webhook lands before this controller has persisted its status
     // would otherwise be counted twice on the payment row. Reset to false by
     // claimForRefund so a retry after a failed attempt can record again.
-    paymentRecorded:      { type: Boolean, default: false }
+    paymentRecorded:      { type: Boolean, default: false },
+
+    /*
+      What the affiliate commission clawback actually took, in paise, when this refund
+      completed. Persisted so a revert reinstates EXACTLY that figure rather than
+      re-deriving it from an order that may have changed since — see
+      models/shared/offlineRefundFields.js.
+    */
+    affiliateClawbackPaise: Number,
+
+    /*
+      What actually landed, in paise — see models/shared/offlineRefundFields.js for why
+      the `paymentRecorded` / `ltvReversed` claim flags cannot stand in for these (they
+      are set before the work, so they stay `true` when it fails).
+    */
+    paymentRecordedPaise: Number,
+    ltvDecrementedPaise: Number,
+
+    // Admin reversal of an OFFLINE refund record. Never available for a refund that
+    // went through Razorpay: gateway money cannot be un-refunded by a field write.
+    ...revertFields()
   },
 
   adminNotes:      String,

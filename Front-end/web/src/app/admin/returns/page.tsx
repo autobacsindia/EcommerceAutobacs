@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { Search, Eye, Package, Video, FileText, ExternalLink, X, Truck, ClipboardCheck, Store, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { ReturnRequest, PaginatedReturnRequests, ReturnRefundPreview, Order, OrderItem, OfflineRefundMethod } from '@/lib/types';
+import { OFFLINE_REFUND_METHODS, offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -30,13 +31,8 @@ const RETURN_REASONS: { value: string; label: string }[] = [
   { value: 'manufacturing_defect', label: 'Manufacturing defect' },
 ];
 
-const OFFLINE_METHODS: { value: OfflineRefundMethod; label: string }[] = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'bank_transfer', label: 'Bank transfer / NEFT' },
-  { value: 'upi', label: 'UPI' },
-  { value: 'cheque', label: 'Cheque' },
-  { value: 'other', label: 'Other' },
-];
+// Shared with the order and cancellation refund screens — see src/lib/offlineRefund.ts.
+const OFFLINE_METHODS = OFFLINE_REFUND_METHODS;
 
 export default function AdminReturnsPage() {
   const [returns, setReturns] = useState<ReturnRequest[]>([]);
@@ -582,9 +578,29 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                     <Line k="Status" v={request.refund.status || ''} />
                     {request.refund.method === 'offline' && (
                       <>
-                        <Line k="Paid by" v={OFFLINE_METHODS.find((m) => m.value === request.refund?.offlineMethod)?.label || 'Offline'} />
+                        <Line k="Paid by" v={offlineMethodLabel(request.refund?.offlineMethod)} />
                         <Line k="Reference" v={request.refund.reference || '—'} />
                       </>
+                    )}
+                    {/*
+                      Revert is offered ONLY for a record settled offline and never sent
+                      to the gateway. Razorpay money has genuinely left the account and no
+                      field write can pull it back — the backend refuses it too.
+                    */}
+                    {request.refund.status === 'completed'
+                      && request.refund.method === 'offline'
+                      && !request.refund.razorpayRefundId && (
+                      <button
+                        disabled={busy}
+                        onClick={() => {
+                          const reason = promptRevertReason(`return ${request._id.slice(-8).toUpperCase()}`);
+                          if (!reason) return;
+                          call(() => apiClient.post(API_ENDPOINTS.RETURN_REFUND_REVERT(request._id), { reason }));
+                        }}
+                        className="mt-2 w-full rounded border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Revert — this was recorded by mistake
+                      </button>
                     )}
                   </div>
                 )}

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import OfflineRefundDialog, { type OfflineRefundSubmission } from './OfflineRefundDialog';
+import { offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
 import { AlertTriangle, IndianRupee, PackageX, RotateCcw } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
@@ -44,6 +46,12 @@ export interface Cancellation {
     razorpayRefundId?: string;
     completedAt?: string;
     failureReason?: string;
+    /** Present = settled outside Razorpay, and therefore the only kind that can be reverted. */
+    offlineMethod?: string;
+    offlineReference?: string;
+    paidAt?: string;
+    revertedAt?: string;
+    revertReason?: string;
   };
 }
 
@@ -98,6 +106,9 @@ export default function OrderCancellations({ orderId, itemNames, onChanged }: Pr
   const [summary, setSummary] = useState<CancellationSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Which cancellation's offline-refund dialog is open. Rendered conditionally so the
+  // dialog remounts per cancellation and seeds its amount from the right one.
+  const [offlineFor, setOfflineFor] = useState<string | null>(null);
 
   const [open, setOpen] = useState(false);
   const [qty, setQty] = useState<Record<string, number>>({});
@@ -161,6 +172,43 @@ export default function OrderCancellations({ orderId, itemNames, onChanged }: Pr
       toast.error(err?.message || 'Could not cancel those lines.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * Record that THIS cancellation's refund was settled outside Razorpay.
+   *
+   * No `notifyCustomer` option: the gateway per-line path sends the customer nothing
+   * either, and an email that fired only for cash payouts would be worse than none.
+   *
+   * Errors are rethrown so the dialog keeps the form and shows them inline.
+   */
+  const handleMarkOffline = async (cancellation: Cancellation, values: OfflineRefundSubmission) => {
+    const res = await apiClient.post<{ message: string; warnings?: string[] }>(
+      API_ENDPOINTS.ORDER_CANCELLATION_REFUND(orderId, cancellation._id),
+      { method: 'offline', ...values },
+    );
+    toast.success(res.message || 'Refund recorded.', { duration: res.warnings?.length ? 10000 : 4000 });
+    await load();
+    onChanged?.();
+  };
+
+  /** Withdraw an offline record on one cancellation, putting it back to "refund due". */
+  const handleRevert = async (cancellation: Cancellation) => {
+    const reason = promptRevertReason(`cancellation ${cancellation.sequence}`);
+    if (!reason) return;
+
+    setBusyId(cancellation._id);
+    try {
+      const res = await apiClient.post<{ message: string }>(
+        API_ENDPOINTS.ORDER_CANCELLATION_REFUND_REVERT(orderId, cancellation._id), { reason });
+      toast.success(res.message || 'Refund record withdrawn.');
+      await load();
+      onChanged?.();
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not withdraw the refund record.', { duration: 8000 });
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -345,15 +393,38 @@ export default function OrderCancellations({ orderId, itemNames, onChanged }: Pr
                   </span>
                 )}
                 {(status === 'pending' || status === 'failed') && (
+                  <div className="ml-auto flex items-center gap-2">
+                    <button
+                      onClick={() => handleRefund(cancellation)}
+                      disabled={busyId === cancellation._id}
+                      className="flex items-center gap-1 rounded-lg border border-green-300 px-3 py-1.5 text-xs font-medium text-green-800 hover:bg-green-50 disabled:opacity-50"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      {busyId === cancellation._id
+                        ? 'Sending…'
+                        : status === 'failed' ? 'Retry refund' : 'Send refund'}
+                    </button>
+                    <button
+                      onClick={() => setOfflineFor(cancellation._id)}
+                      disabled={busyId === cancellation._id}
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Mark paid offline
+                    </button>
+                  </div>
+                )}
+                {/*
+                  Revert is offered ONLY for a record settled offline — `offlineMethod`
+                  present and no gateway refund id. Razorpay money has genuinely left and
+                  cannot be pulled back by a field write; the backend refuses it too.
+                */}
+                {status === 'completed' && refund?.offlineMethod && !refund?.razorpayRefundId && (
                   <button
-                    onClick={() => handleRefund(cancellation)}
+                    onClick={() => handleRevert(cancellation)}
                     disabled={busyId === cancellation._id}
-                    className="ml-auto flex items-center gap-1 rounded-lg border border-green-300 px-3 py-1.5 text-xs font-medium text-green-800 hover:bg-green-50 disabled:opacity-50"
+                    className="ml-auto rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
                   >
-                    <RotateCcw className="h-4 w-4" />
-                    {busyId === cancellation._id
-                      ? 'Sending…'
-                      : status === 'failed' ? 'Retry refund' : 'Send refund'}
+                    {busyId === cancellation._id ? 'Working…' : 'Revert'}
                   </button>
                 )}
               </div>
@@ -379,7 +450,35 @@ export default function OrderCancellations({ orderId, itemNames, onChanged }: Pr
                 {refund?.completedAt && (
                   <span className="text-green-700">Refunded {formatLongDateIST(refund.completedAt)}</span>
                 )}
+                {refund?.offlineMethod && (
+                  <span className="text-amber-800">
+                    Paid by {offlineMethodLabel(refund.offlineMethod)} · ref {refund.offlineReference || '—'}
+                  </span>
+                )}
               </div>
+
+              {/*
+                A withdrawn record from a previous cycle. Visible before anyone presses
+                "Send refund", so a second payout is a considered decision rather than a
+                surprise.
+              */}
+              {refund?.revertedAt && status !== 'completed' && (
+                <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                  An offline refund record was withdrawn on {formatLongDateIST(refund.revertedAt)}
+                  {refund.revertReason ? ` — ${refund.revertReason}` : ''}
+                </p>
+              )}
+
+              {offlineFor === cancellation._id && (
+                <OfflineRefundDialog
+                  open
+                  onClose={() => setOfflineFor(null)}
+                  onSubmit={(values) => handleMarkOffline(cancellation, values)}
+                  maxAmount={(refund?.productValuePaise || 0) / 100}
+                  subject={`cancellation ${cancellation.sequence}`}
+                  allowNotify={false}
+                />
+              )}
 
               {status === 'failed' && refund?.failureReason && (
                 <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">

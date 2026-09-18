@@ -28,14 +28,20 @@ import affiliateCommissionService from './affiliateCommissionService.js';
 
 /**
  * Reverse the net LTV for a completed return refund, exactly once.
+ *
  * @param {string} returnId
- * @returns {Promise<{status: 'reversed'|'skipped'|'noop'|'error'}>}
+ * @returns {Promise<{status, affiliateClawbackPaise, ltvDecrementedPaise}>} the amounts
+ *   that ACTUALLY applied. The claim flag `refund.ltvReversed` cannot stand in for them:
+ *   it is set before the work (exactly-once guard, not a success record) and this
+ *   function swallows its own failures by design, so it stays `true` when nothing moved.
+ *   A revert that trusted it would credit back spend that was never taken.
  */
 export const reverseReturnLtvOnce = async (returnId) => {
   try {
     // Atomic claim: only the first caller flips refund.ltvReversed and proceeds.
     const rr = await returnRequestRepository.claimLtvReversal(returnId);
-    if (!rr) return { status: 'skipped' }; // already reversed (or return not found)
+    // already reversed (or return not found)
+    if (!rr) return { status: 'skipped', affiliateClawbackPaise: 0, ltvDecrementedPaise: 0 };
 
     const amountPaise = Math.round((rr.refund?.finalAmount || 0) * 100);
 
@@ -59,9 +65,30 @@ export const reverseReturnLtvOnce = async (returnId) => {
       Best-effort within the claim: a ledger failure must not fail a refund that has
       already left the gateway. It is logged loudly for repair.
     */
+    let takenPaise = 0;
     if (rr.order) {
       try {
-        await affiliateCommissionService.clawbackForLines(rr.order, rr.items, 'return_refunded');
+        const clawback = await affiliateCommissionService.clawbackForLines(
+          rr.order, rr.items, 'return_refunded',
+        );
+        /*
+          Persist what the clawback ACTUALLY took, post-clamp. A revert of an offline
+          refund reinstates exactly this figure rather than re-deriving it from an order
+          that may have changed since — any drift between the two would land in an
+          affiliate's ledger as money that was never owed or never returned.
+
+          Best-effort inside the best-effort: failing to record the figure must not fail
+          the clawback that already happened. A missing figure makes a later revert skip
+          the reinstate, which leaves the affiliate under-paid and visible, rather than
+          over-paid and silent.
+        */
+        takenPaise = Math.max(0, Number(clawback?.amountPaise) || 0);
+        if (takenPaise > 0) {
+          await returnRequestRepository.setAppliedAmounts(returnId, { affiliateClawbackPaise: takenPaise })
+            .catch((err) => console.error(
+              `[ReturnLTV] could not record clawback figure for return ${returnId}: ${err.message}`,
+            ));
+        }
       } catch (err) {
         const message = `[Affiliate] Commission clawback FAILED for return ${returnId} on order `
           + `${rr.order}. The refund is committed; the affiliate ledger overstates what is `
@@ -70,15 +97,27 @@ export const reverseReturnLtvOnce = async (returnId) => {
       }
     }
 
-    if (!rr.user || amountPaise <= 0) return { status: 'noop' };
+    if (!rr.user || amountPaise <= 0) {
+      return { status: 'noop', affiliateClawbackPaise: takenPaise, ltvDecrementedPaise: 0 };
+    }
 
     await userRepository.decrementSpend(rr.user, { amountPaise });
+    // Only after the decrement succeeded — this is the figure a revert credits back.
+    await returnRequestRepository.setAppliedAmounts(returnId, { ltvDecrementedPaise: amountPaise })
+      .catch((err) => console.error(
+        `[ReturnLTV] could not record LTV figure for return ${returnId}: ${err.message}`,
+      ));
 
     console.log(`[ReturnLTV] reversed ₹${rr.refund.finalAmount} for return ${returnId} (user ${rr.user})`);
-    return { status: 'reversed' };
+    return { status: 'reversed', affiliateClawbackPaise: takenPaise, ltvDecrementedPaise: amountPaise };
   } catch (err) {
+    /*
+      Swallowed on purpose — a failed LTV adjustment must not fail a refund that has
+      already left the gateway. But it is reported as ZERO applied, so a later revert
+      reverses nothing rather than crediting back spend that was never taken.
+    */
     console.error(`[ReturnLTV] reversal failed for return ${returnId}:`, err.message);
-    return { status: 'error' };
+    return { status: 'error', affiliateClawbackPaise: 0, ltvDecrementedPaise: 0 };
   }
 };
 

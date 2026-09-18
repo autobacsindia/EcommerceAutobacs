@@ -12,6 +12,7 @@ export * from './brand.js';
 export * from './vehicle.js';
 export * from './review.js';
 export * from './returnRefund.js';
+export * from './offlineRefund.js';
 export * from './delivery.js';
 export * from './contact.js';
 export * from './payment.js';

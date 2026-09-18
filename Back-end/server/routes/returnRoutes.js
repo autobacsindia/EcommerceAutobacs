@@ -12,6 +12,7 @@ import {
   recordInspection,
   refundPreview,
   initiateReturnRefund,
+  revertReturnRefund,
   createOfflineReturn,
   markReturnedOffline,
 } from "../controllers/returnController.js";
@@ -24,6 +25,7 @@ import {
   validateOfflineReturnCreate,
   validateOfflineReceived,
   validateReturnRefundBody,
+  validateReturnRefundRevert,
 } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
@@ -49,5 +51,8 @@ router.patch("/admin/:id/offline-received", protect, admin, validateOfflineRecei
 router.patch("/admin/:id/inspection", protect, admin, validateIdParam, recordInspection);
 router.get("/admin/:id/refund-preview", protect, admin, validateIdParam, refundPreview);
 router.post("/admin/:id/refund", protect, admin, validateReturnRefundBody, initiateReturnRefund);
+// Withdraw an OFFLINE refund record that was a mistake. Refuses for a gateway refund —
+// that money has genuinely left and cannot be un-refunded by a field write.
+router.post("/admin/:id/refund/revert", protect, admin, validateReturnRefundRevert, revertReturnRefund);
 
 export default router;

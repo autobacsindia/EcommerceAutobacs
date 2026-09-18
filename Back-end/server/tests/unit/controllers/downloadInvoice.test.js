@@ -25,7 +25,14 @@ jest.unstable_mockModule('../../../services/orderTrackingService.js', () => ({
   OTHER_CARRIER_CODE: 'OTHER',
   MAX_CUSTOM_CARRIER_NAME: 60,
 }));
-jest.unstable_mockModule('../../../queue/queues.js', () => ({ getNotificationsQueue: jest.fn() }));
+// The module mock must cover EVERY named export the controller graph imports, not just
+// the one this test cares about: orderController now also pulls `enqueueNotification`
+// (via offlineRefundService), and a missing name is a hard module-resolution error.
+jest.unstable_mockModule('../../../queue/queues.js', () => ({
+  getNotificationsQueue: jest.fn(),
+  getOrderQueue: jest.fn(),
+  enqueueNotification: jest.fn(),
+}));
 
 const { downloadInvoice } = await import('../../../controllers/orderController.js');
 

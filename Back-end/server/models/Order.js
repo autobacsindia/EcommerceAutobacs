@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { offlineRefundFields } from "./shared/offlineRefundFields.js";
 
 const OrderSchema = new mongoose.Schema({
   user: {
@@ -611,7 +612,12 @@ const OrderSchema = new mongoose.Schema({
        * Same shape as ReturnRequest.refund, for the same reason.
        */
       ltvAdjusted: { type: Boolean, default: false },
-      paymentIncremented: { type: Boolean, default: false }
+      paymentIncremented: { type: Boolean, default: false },
+
+      // Money settled outside the gateway + the admin reversal of that record.
+      // Same field set as refundDetails above, from the one shared definition so
+      // the two refund surfaces cannot drift.
+      ...offlineRefundFields()
     }
   }],
 
@@ -752,7 +758,11 @@ const OrderSchema = new mongoose.Schema({
     // Once-only guard for the cumulative Payment.refundAmount write ($inc, hence not
     // idempotent). Mirrors ReturnRequest.refund.paymentRecorded; reset by
     // markRefundProcessing so a retry after a failed attempt can record again.
-    paymentRecorded: { type: Boolean, default: false }
+    paymentRecorded: { type: Boolean, default: false },
+
+    // Money settled outside the gateway + the admin reversal of that record.
+    // See models/shared/offlineRefundFields.js for why these are all scalars.
+    ...offlineRefundFields()
   },
   notes: String
 }, { 

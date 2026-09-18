@@ -115,6 +115,67 @@ class PaymentRepository extends BaseRepository {
     }
     return updated;
   }
+
+  /**
+   * MONEY-CRITICAL: take a refund back OFF a payment row.
+   *
+   * The exact inverse of recordRefund, for an admin withdrawing an offline refund
+   * record that was a mistake. ONLY ever valid for money that never actually left —
+   * a gateway refund is real and its row must stand.
+   *
+   * ⚠️ `refundAmount` is the FLOOR that refundMathService.remainingRefundable uses
+   * (`Math.max(our records, payment.refundAmount)`), so a revert that skips this leaves
+   * the headroom permanently consumed and the order unrefundable. That is the SAFE
+   * direction to fail in — it blocks a payout rather than allowing a second one — which
+   * is why the caller runs this best-effort AFTER the refund record itself is withdrawn,
+   * and reports a warning instead of rolling back.
+   *
+   * Clamped at 0 by an aggregation-pipeline update, in one atomic write, so concurrent
+   * reverts can never drive the row negative and start reading as though we owe money.
+   *
+   * ROUNDING: the comparison that un-flips `status` is done in integer PAISE for the
+   * same reason recordRefund's is — `refundAmount` is a rupee float accumulated by
+   * `$inc`, and comparing the floats loses roughly one split in nine.
+   *
+   * @param {string|ObjectId} paymentId
+   * @param {number} amountRupees - what THIS reversal takes back off
+   * @returns {Promise<Object|null>} the updated payment, or null if nothing to do
+   */
+  async reverseRefund(paymentId, amountRupees) {
+    const amount = fromPaise(toPaise(amountRupees));
+    if (amount <= 0) return null;
+
+    const updated = await Payment.findByIdAndUpdate(
+      paymentId,
+      [
+        {
+          $set: {
+            refundAmount: {
+              $max: [0, { $subtract: [{ $ifNull: ['$refundAmount', 0] }, amount] }],
+            },
+          },
+        },
+      ],
+      { new: true }
+    );
+    if (!updated) return null;
+
+    /*
+      Un-flip the terminal status. recordRefund sets `refunded` once the cumulative
+      total covers the capture; with money taken back off, that is no longer true and
+      the payment is a completed capture again. Conditional on it still being
+      `refunded` so a racing write is not undone.
+    */
+    const refundedPaise = toPaise(updated.refundAmount);
+    if (updated.status === 'refunded' && refundedPaise < toPaise(updated.amount)) {
+      return Payment.findOneAndUpdate(
+        { _id: paymentId, status: 'refunded' },
+        { $set: { status: 'completed' } },
+        { new: true }
+      );
+    }
+    return updated;
+  }
 }
 
 export default new PaymentRepository();
