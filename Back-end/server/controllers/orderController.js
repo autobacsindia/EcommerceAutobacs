@@ -9,6 +9,8 @@ import orderStatusService from '../services/orderStatusService.js';
 import shipmentService from '../services/shipmentService.js';
 import { remainingToShip, fulfilmentSummary } from '../utils/orderFulfilment.js';
 import cancellationService from '../services/cancellationService.js';
+import offlineRefundService from '../services/offlineRefundService.js';
+import { isAlreadyRefundedAtGateway, alreadyRefundedGuidance } from '../utils/gatewayRefundErrors.js';
 import { remainingCancellable } from '../utils/orderCancellation.js';
 import AppError from '../utils/AppError.js';
 import orderTrackingService, { OTHER_CARRIER_CODE } from '../services/orderTrackingService.js';
@@ -149,7 +151,22 @@ export const getOrders = async (req, res) => {
 // @route   GET /orders/refunds
 // @access  Private/Admin
 export const getRefunds = async (req, res) => {
-  const orders = await orderRepository.findWithRefunds(req.query.status);
+  /*
+    Bounded and cursor-paginated. This used to return EVERY matching order as a full
+    hydrated document and let the browser filter them — 322 ms / 5.2 MB for 2,000 queued
+    orders, against 6.1 ms / 17 KB for one page. Search moved to the server in the SAME
+    change and not by coincidence: the screen's filter only worked because every row was
+    loaded, so bounding alone would have quietly degraded search to "search within the
+    first page".
+  */
+  const { orders, nextCursor } = await orderRepository.findWithRefunds(req.query.status, {
+    search: String(req.query.search || '').trim(),
+    limit: req.query.limit,
+    // The cursor is opaque to the client, which only ever echoes back what it was given.
+    cursor: req.query.cursorCreatedAt && req.query.cursorId
+      ? { createdAt: req.query.cursorCreatedAt, id: req.query.cursorId }
+      : null,
+  });
 
   const refunds = orders.map(order => {
     // Legacy cancelled+paid orders surface here with no refundDetails subdoc — present
@@ -159,7 +176,14 @@ export const getRefunds = async (req, res) => {
       _id: order._id,
       order: {
         _id: order._id,
-        orderNumber: order.orderNumber || order._id
+        /*
+          Orders carry NO `orderNumber` field — this was `order.orderNumber || order._id`,
+          whose left side is permanently undefined, so it has always sent the `_id`. Kept
+          under the same key, and sent unchanged, because the refunds screen renders it
+          verbatim as "#<full id>". (The admin ORDERS table shortens to the last 8 hex
+          chars; this one does not, and the search lane accepts either.)
+        */
+        orderNumber: order._id
       },
       user: {
         name: order.user ? order.user.name : 'Unknown'
@@ -167,6 +191,11 @@ export const getRefunds = async (req, res) => {
       amount: rd.amount ?? order.totalAmount ?? 0,
       refundType: rd.refundType || 'full',
       refundMethod: rd.refundMethod || 'original_payment',
+      // Offline detail, so the queue can tell a payout settled by hand from a gateway
+      // one at a glance — and so a reverted record is visible without opening the order.
+      offlineMethod: rd.offlineMethod || null,
+      offlineReference: rd.offlineReference || null,
+      revertedAt: rd.revertedAt || null,
       status: rd.status || 'pending',
       requestedAt: rd.requestedAt || order.updatedAt
     };
@@ -175,7 +204,10 @@ export const getRefunds = async (req, res) => {
   res.json({
     success: true,
     count: refunds.length,
-    refunds
+    refunds,
+    // Absent when this is the last page, so the client can hide "Load more" without
+    // needing a total — which would cost a second full scan of the same predicate.
+    nextCursor
   });
 };
 
@@ -961,14 +993,55 @@ export const cancelOrder = async (req, res) => {
   });
 };
 
-// @desc    Process the refund for a cancelled, paid order via Razorpay (admin-triggered)
+// @desc    Refund a cancelled, paid order — through Razorpay, or record one already
+//          settled outside it (admin-triggered)
 // @route   POST /orders/:id/refund
 // @access  Private/Admin
+//
+// `method` (default 'original_payment') picks the path, mirroring the return refund
+// endpoint so the two behave the same way:
+//   original_payment → unchanged: cap against headroom, claim, send a real Razorpay
+//                      refund, let the refund.* webhook settle it.
+//   offline          → the money ALREADY went back — by hand (cash/NEFT/UPI/cheque) or
+//                      through the Razorpay DASHBOARD, which writes nothing here. This
+//                      records it; nothing is sent to the gateway. A `reference` is
+//                      mandatory because that string is the only evidence.
 export const processRefund = async (req, res) => {
   const order = await orderRepository.findById(req.params.id);
 
   if (!order) {
     return res.status(404).json({ success: false, message: 'Order not found' });
+  }
+
+  /*
+    The offline branch owns its own guards (they differ from the gateway's: no Razorpay
+    payment id is needed, and an amount may be partial), so it forks BEFORE the
+    gateway-specific preconditions below rather than threading a flag through them.
+  */
+  if (req.body.method === 'offline') {
+    const payment = order.payment ? await paymentRepository.findById(order.payment) : null;
+    const result = await offlineRefundService.markOrderRefundOffline(req, {
+      order,
+      payment,
+      amount: req.body.amount ?? null,
+      offlineMethod: req.body.offlineMethod,
+      reference: String(req.body.reference || '').trim(),
+      paidAt: req.body.paidAt ? new Date(req.body.paidAt) : null,
+      notifyCustomer: req.body.notifyCustomer !== false,
+    });
+
+    return res.json({
+      success: true,
+      message: result.message,
+      refund: {
+        status: 'completed',
+        amount: result.amountRupees,
+        method: 'offline',
+        reference: String(req.body.reference || '').trim(),
+      },
+      notified: result.notified,
+      ...(result.warnings.length ? { warnings: result.warnings } : {}),
+    });
   }
 
   // Full-refund-on-cancel only. The return/partial-refund flow is a separate workstream.
@@ -1124,6 +1197,23 @@ export const processRefund = async (req, res) => {
         scope.setTag('payment_action', 'process_refund');
         scope.setTag('severity', 'high');
         Sentry.captureException(err);
+      });
+    }
+
+    /*
+      The one failure that is not a failure: the payment was already refunded by hand in
+      the Razorpay dashboard, which writes nothing here. Nothing can be sent to the
+      gateway, so retrying is pointless — but recording it offline reconciles the order.
+      `offlineSettlementSuggested` lets the admin UI offer that directly instead of
+      leaving a permanent "Retry Refund" button. Advisory only; see
+      utils/gatewayRefundErrors.js.
+    */
+    if (isAlreadyRefundedAtGateway(err)) {
+      return res.status(409).json({
+        success: false,
+        message: alreadyRefundedGuidance(err.message),
+        offlineSettlementSuggested: true,
+        gatewayError: err.message
       });
     }
 
@@ -1544,6 +1634,40 @@ export const createCancellation = async (req, res) => {
  * @access Private/Admin
  */
 export const refundCancellation = async (req, res) => {
+  // `method: 'offline'` records a payout that already happened outside Razorpay —
+  // same fork, same contract, as the whole-order route above.
+  if (req.body.method === 'offline') {
+    const order = await orderRepository.findById(req.params.id);
+    if (!order) throw new AppError('Order not found', 404);
+
+    const record = (order.cancellations || [])
+      .find((c) => String(c._id) === String(req.params.cancellationId));
+    if (!record) throw new AppError('Cancellation not found on this order', 404);
+
+    const payment = order.payment ? await paymentRepository.findById(order.payment) : null;
+    const result = await offlineRefundService.markCancellationRefundOffline(req, {
+      order,
+      record,
+      payment,
+      amount: req.body.amount ?? null,
+      offlineMethod: req.body.offlineMethod,
+      reference: String(req.body.reference || '').trim(),
+      paidAt: req.body.paidAt ? new Date(req.body.paidAt) : null,
+    });
+
+    return res.json({
+      success: true,
+      message: result.message,
+      refund: {
+        status: 'completed',
+        amountRupees: result.amountRupees,
+        method: 'offline',
+        reference: String(req.body.reference || '').trim(),
+      },
+      ...(result.warnings.length ? { warnings: result.warnings } : {}),
+    });
+  }
+
   const result = await cancellationService.refundCancellation(
     req.params.id,
     req.params.cancellationId,
@@ -1557,6 +1681,51 @@ export const refundCancellation = async (req, res) => {
     message: result.message,
     refund: result.refund,
     alreadyRefunded: Boolean(result.alreadyRefunded),
+  });
+};
+
+/**
+ * Withdraw a whole-order refund record that was marked as settled offline.
+ *
+ * Puts the order back to "refund due" so it re-enters the refunds queue and can be
+ * refunded properly. Refuses outright for a refund that went through Razorpay — see
+ * offlineRefundService.revertOrderRefund.
+ *
+ * @route POST /orders/:id/refund/revert
+ * @access Private/Admin
+ */
+export const revertOfflineRefund = async (req, res) => {
+  const result = await offlineRefundService.revertOrderRefund(req, {
+    orderId: req.params.id,
+    reason: String(req.body.reason || '').trim(),
+  });
+
+  res.json({
+    success: true,
+    message: result.message,
+    amount: result.amountRupees,
+    ...(result.warnings.length ? { warnings: result.warnings } : {}),
+  });
+};
+
+/**
+ * Withdraw ONE cancellation's offline refund record.
+ *
+ * @route POST /orders/:id/cancellations/:cancellationId/refund/revert
+ * @access Private/Admin
+ */
+export const revertCancellationOfflineRefund = async (req, res) => {
+  const result = await offlineRefundService.revertCancellationRefund(req, {
+    orderId: req.params.id,
+    cancellationId: req.params.cancellationId,
+    reason: String(req.body.reason || '').trim(),
+  });
+
+  res.json({
+    success: true,
+    message: result.message,
+    amount: result.amountRupees,
+    ...(result.warnings.length ? { warnings: result.warnings } : {}),
   });
 };
 

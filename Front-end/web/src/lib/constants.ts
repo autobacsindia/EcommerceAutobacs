@@ -89,6 +89,8 @@ export const API_ENDPOINTS = {
   ORDER_CANCELLATIONS: (id: string) => `/orders/${id}/cancellations`,
   ORDER_CANCELLATION_REFUND: (id: string, cancellationId: string) =>
     `/orders/${id}/cancellations/${cancellationId}/refund`,
+  ORDER_CANCELLATION_REFUND_REVERT: (id: string, cancellationId: string) =>
+    `/orders/${id}/cancellations/${cancellationId}/refund/revert`,
   
   // Returns — customer
   RETURN_CREATE: '/returns',
@@ -108,10 +110,15 @@ export const API_ENDPOINTS = {
   RETURN_INSPECTION: (id: string) => `/returns/admin/${id}/inspection`,
   RETURN_REFUND_PREVIEW: (id: string) => `/returns/admin/${id}/refund-preview`,
   RETURN_REFUND: (id: string) => `/returns/admin/${id}/refund`,
+  // Withdraw an OFFLINE refund record. Refuses for one that went through Razorpay.
+  RETURN_REFUND_REVERT: (id: string) => `/returns/admin/${id}/refund/revert`,
 
   // Refunds
   REFUNDS_LIST: '/orders/refunds',
   REFUND_PROCESS: (orderId: string) => `/orders/${orderId}/refund`,
+  // Withdraw an OFFLINE refund record that was a mistake. Refuses for a refund that
+  // actually went through Razorpay — that money cannot be un-refunded by a field write.
+  REFUND_REVERT: (orderId: string) => `/orders/${orderId}/refund/revert`,
   
   // Reviews
   REVIEWS: '/reviews',

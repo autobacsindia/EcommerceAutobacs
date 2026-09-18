@@ -283,17 +283,34 @@ export function vehicleSlug(make, model) {
  * @returns {string|null} canonical make, or null when the text names none
  */
 export function detectMake(text, makes = KNOWN_MAKES) {
+  return detectMakes(text, makes)[0] ?? null;
+}
+
+/**
+ * EVERY known make named in the text, not just the first.
+ *
+ * `detectMake` returns the longest match, which is the right answer when the text
+ * names one marque and a wrong guess when it names two. Real catalogue example:
+ * "Land Rover Defender Style Taillight for Thar" is a MAHINDRA part borrowing a
+ * Land Rover look, and the longest-match rule confidently returns `land rover`.
+ * A caller about to attribute a model to a make needs to know the text was
+ * ambiguous rather than receive a plausible-looking wrong answer.
+ *
+ * @returns {string[]} canonical makes, longest spelling first
+ */
+export function detectMakes(text, makes = KNOWN_MAKES) {
   const haystack = String(text || '').toLowerCase();
   // Longest first, so "land rover" wins over a bare "rover"-like substring and
   // "maruti suzuki" is not split across two makes.
   const ordered = [...makes].sort((a, b) => b.length - a.length);
+  const found = [];
   for (const make of ordered) {
     const spellings = [make, ...(MAKE_ALIASES[make] || [])];
-    for (const spelling of spellings) {
-      if (phraseVariants(spelling).some((v) => tokenMatch(haystack, v))) return make;
+    if (spellings.some((sp) => phraseVariants(sp).some((v) => tokenMatch(haystack, v)))) {
+      found.push(make);
     }
   }
-  return null;
+  return found;
 }
 
 /**
@@ -382,4 +399,32 @@ export function needsMakeConfirmation(model) {
   // extends the same protection to ordinary-English model names.
   if (key.replace(/[^a-z0-9]/g, '').length <= 3) return true;
   return AMBIGUOUS_MODEL_WORDS.has(key);
+}
+
+/**
+ * How much to trust a model match, for the fitment backfill's review report.
+ *
+ * ⚠️ `medium` MUST STAY REACHABLE — it is the ONLY review signal the backfill has, and
+ * that script writes PUBLIC fitment links.
+ *
+ * It was once computed inline as `makeHit || !ambiguousHit ? 'high' : 'medium'`, which
+ * went dead the moment the caller started dropping `ambiguousHit && !makeHit` outright:
+ * that was the only combination the ternary could ever score as medium. Every surviving
+ * match then scored `high`, `report.lowConfidence` was permanently empty, and the
+ * "⚠ N low-confidence match(es)" warning could never print — the gate vanished while
+ * looking exactly like a clean run. Living here, beside the predicates it reasons about
+ * and under test, is what stops that happening again silently.
+ *
+ * The two things that remain genuinely uncertain after that filter:
+ *   - `ambiguous`: the match only stands because the MAKE turned up somewhere in the
+ *     text. "g30" plus "BMW" in a long description is far weaker than a plain
+ *     "5 Series", and is exactly what a human should eyeball.
+ *   - `styling`: a styling reference kept as the SOLE signal ("Defender-style bumper")
+ *     names a vehicle the part may well not fit — a best-effort fallback, not a claim.
+ *
+ * @param {{ambiguous?: boolean, styling?: boolean}} signals
+ * @returns {'high'|'medium'}
+ */
+export function matchConfidence({ ambiguous = false, styling = false } = {}) {
+  return ambiguous || styling ? 'medium' : 'high';
 }

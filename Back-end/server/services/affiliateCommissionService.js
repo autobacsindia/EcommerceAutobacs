@@ -491,6 +491,96 @@ class AffiliateCommissionService {
 
     return { status: 'clawed_back', amountPaise: clawPaise, rupees: fromPaise(clawPaise) };
   }
+
+  /**
+   * Put back a clawback that should never have happened — the inverse of
+   * `clawbackForAmount`, for an admin reverting a refund that was recorded as settled
+   * offline but in fact never was.
+   *
+   * ⚠️ ONLY EVER CALLED WITH THE EXACT PAISE THE ORIGINAL CLAWBACK TOOK, read from
+   * `refund.affiliateClawbackPaise` where the mark path persisted `_writeClawback`'s
+   * return value. It is deliberately not re-derived from the order: `_clawbackTarget`
+   * is a function of the order's goods pot and the accrual, and any drift between mark
+   * time and revert time would land in an affiliate's ledger as money that was never
+   * owed or never returned.
+   *
+   * ── WHY A POSITIVE ROW AND NOT AN EDIT ───────────────────────────────────────
+   * The clawback row records that a debt was incurred, and it may already have been
+   * netted off a payout batch. Deleting or rewriting it would make a past payout stop
+   * reconciling against the bank statement — the same reason `_writeClawback` never
+   * rewrites a `paid` row. An append-only compensating row is how this ledger already
+   * expresses "that reversed"; this just uses it in the other direction.
+   *
+   * ── THE CLAMP, AND EXACTLY WHAT IT PROTECTS ──────────────────────────────────
+   * Bounded by what is MISSING from the accrual, so a SEQUENTIAL repeat — the
+   * best-effort caller running again after a failure — finds nothing missing and
+   * no-ops. Mirror image of `_writeClawback`'s clamp to `outstanding`.
+   *
+   * ⚠️ IT IS NOT CONCURRENCY-SAFE, and neither is the clawback clamp it mirrors: both
+   * read the aggregate balance and then write a row, so N simultaneous calls all read
+   * the same figure and all write. Measured, not assumed — four concurrent reinstates
+   * of a ₹1,000 clawback produced ₹3,000 of surplus commission before this note existed.
+   *
+   * That is acceptable ONLY because every caller is already serialized upstream by an
+   * atomic one-winner claim (orderRepository.claimRefundRevert /
+   * claimCancellationRefundRevert, returnRequestRepository.claimRefundRevert), so two
+   * reverts of the same refund record cannot both reach here. If this is ever called
+   * from a path WITHOUT such a claim, it needs a real guard first — do not assume the
+   * clamp is one.
+   *
+   * @param {string} orderId
+   * @param {number} reinstatePaise - what the original clawback took
+   * @param {string} [reason]
+   * @returns {Promise<{status: string, amountPaise?: number, reason?: string}>}
+   */
+  async reinstateForAmount(orderId, reinstatePaise, reason = 'refund_reverted') {
+    const wantPaise = Math.max(0, Math.round(Number(reinstatePaise) || 0));
+    if (wantPaise <= 0) return { status: 'noop', reason: 'nothing_to_reinstate' };
+
+    const accrual = await affiliateCommissionRepository.findAccrual(orderId);
+    if (!accrual) return { status: 'noop', reason: 'no_commission' };
+
+    // What the order is short of its original accrual. Everything not void counts,
+    // exactly as netPaiseForOrder is used on the clawback side.
+    const outstanding = await affiliateCommissionRepository.netPaiseForOrder(orderId);
+    const missingPaise = Math.max(0, accrual.amountPaise - outstanding);
+    const givePaise = Math.min(wantPaise, missingPaise);
+
+    if (givePaise <= 0) return { status: 'noop', reason: 'nothing_missing' };
+
+    await affiliateCommissionRepository.createRow({
+      affiliate: accrual.affiliate,
+      order: accrual.order,
+      user: accrual.user || null,
+      type: COMMISSION_TYPE.ADJUST,
+      amountPaise: givePaise,
+      basePaise: accrual.basePaise,
+      percent: accrual.percent,
+      code: accrual.code,
+      source: accrual.source,
+      // `approved` for the same reason the clawback row is: it must be claimable by
+      // the next payout batch immediately. A maturity date has already passed for an
+      // order old enough to have been refunded and un-refunded.
+      status: COMMISSION_STATUS.APPROVED,
+      approvedAt: new Date(),
+      reversalOf: accrual._id,
+      note: reason,
+    });
+
+    /*
+      A fully clawed-back accrual was marked `reversed` by _writeClawback. Money is
+      standing against the order again, so that is no longer true. Guarded on
+      `reversed` alone: a `paid` accrual keeps its status (the rows beside it are the
+      record), and a `pending`/`approved` one was never flipped in the first place.
+    */
+    await affiliateCommissionRepository.transitionOnce(
+      accrual._id,
+      [COMMISSION_STATUS.REVERSED],
+      { status: COMMISSION_STATUS.APPROVED },
+    );
+
+    return { status: 'reinstated', amountPaise: givePaise, rupees: fromPaise(givePaise) };
+  }
 }
 
 export default new AffiliateCommissionService();

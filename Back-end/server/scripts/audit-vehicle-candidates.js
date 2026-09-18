@@ -33,6 +33,16 @@
  * /vehicles/{make}/{model} and a sitemap entry, so `--apply` is gated behind a
  * product-count threshold and chassis codes need a second, explicit flag.
  *
+ * ⚠ WHAT `productCount` MEASURES — AND WHAT IT DOES NOT.
+ * It counts distinct products naming the model in a VEHICLE-AXIS VARIANT LABEL.
+ * It does NOT count products that will link to the row via name/description
+ * matching in backfill-vehicle-fitment.js, which is the larger source of fitment.
+ * The two can diverge wildly: "Volkswagen Polo" is named in ONE product's labels
+ * and carries 22 linked products. So `--min-products` is a floor on LABEL
+ * evidence, not on how populated the resulting page will be — do not read it as
+ * "this page will be thin". Check the real figure before pruning anything:
+ *   Product.countDocuments({ isActive: true, compatibleVehicles: <id> })
+ *
  * Usage:
  *   node scripts/audit-vehicle-candidates.js                       # dry run
  *   node scripts/audit-vehicle-candidates.js --min-products=2      # raise the bar
@@ -48,18 +58,15 @@ import Product from '../models/Product.js';
 import Vehicle from '../models/Vehicle.js';
 import {
   KNOWN_MAKES,
+  MAKE_ALIASES,
   MODEL_ALIASES,
-  isVehicleAxis,
-  splitCompoundLabel,
-  cleanModelLabel,
-  looksLikeChassisCode,
   detectMake,
   vehicleSlug,
   makeDisplayName,
-  titleCaseModel,
   phraseVariants,
   tokenMatch,
 } from '../utils/vehicleMatch.js';
+import { extractCandidates, aggregateCandidates } from '../utils/vehicleCandidates.js';
 
 dotenv.config();
 
@@ -114,9 +121,17 @@ const ALWAYS_INCLUDE = [
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
 const includeChassis = args.includes('--include-chassis-codes');
-const minProducts = Number(
-  (args.find((a) => a.startsWith('--min-products=')) || '--min-products=1').split('=')[1]
-) || 1;
+// ⚠ Defaults to 2, not 1. A threshold of 1 gates NOTHING — every candidate is
+// seen at least once by definition — so the flag silently did nothing unless a
+// value was passed, and `--apply` with no flags would have created 183 rows
+// including junk like "Honda City - Vith Gen" beside the curated "Honda City".
+// The safe value is the default; raising recall is the deliberate act.
+const DEFAULT_MIN_PRODUCTS = 2;
+const minProductsArg = args.find((a) => a.startsWith('--min-products='));
+const parsedMinProducts = minProductsArg ? Number(minProductsArg.split('=')[1]) : NaN;
+const minProducts = Number.isFinite(parsedMinProducts) && parsedMinProducts > 0
+  ? parsedMinProducts
+  : DEFAULT_MIN_PRODUCTS;
 
 class VehicleCandidateAudit {
   constructor(options) {
@@ -209,67 +224,6 @@ class VehicleCandidateAudit {
   }
 
   /**
-   * Pull model references out of one product's vehicle-axis variants.
-   *
-   * The make almost never appears in the label itself ("X5 M 4.4L (2019 →) – G05")
-   * — it lives in the product NAME ("BMC Air Filter for BMW"). So the make is
-   * resolved from the name first, and only falls back to the label for the case
-   * where the label carries it ("Ford Fiesta,Classic,...").
-   */
-  collectFromVariants(product) {
-    const found = [];
-    const nameMake = detectMake(product.name);
-
-    for (const variant of product.variants || []) {
-      if (!isVehicleAxis(variant.attributes)) continue;
-      const { models, chassis } = splitCompoundLabel(variant.label);
-
-      for (const segment of models) {
-        const cleaned = cleanModelLabel(segment);
-        if (!cleaned) continue;
-
-        // The label may lead with its own make ("Ford Fiesta"); strip it so the
-        // model is stored bare and "Ford Ford Fiesta" cannot be produced.
-        const segMake = detectMake(cleaned);
-        let model = cleaned;
-        if (segMake) {
-          for (const spelling of phraseVariants(segMake)) {
-            model = model.replace(new RegExp(`^${spelling}\\s+`, 'i'), '').trim();
-          }
-        }
-        if (!model) continue;
-
-        // Curation, applied before the model is recorded so the dedupe key, the
-        // already-exists check and the created row all see ONE spelling.
-        const lookup = model.toLowerCase();
-        if (MODEL_DENYLIST.has(lookup)) continue;
-        model = MODEL_CORRECTIONS[lookup] || titleCaseModel(model);
-
-        found.push({
-          make: nameMake || segMake,
-          model,
-          kind: looksLikeChassisCode(model) ? 'chassis-code' : 'consumer-model',
-          evidence: variant.label,
-        });
-      }
-
-      // Chassis segments sit AFTER the en-dash — the position manufacturers use.
-      // Recorded so a human can see them, never promoted to a consumer model.
-      for (const segment of chassis) {
-        const cleaned = cleanModelLabel(segment);
-        if (!cleaned) continue;
-        found.push({
-          make: nameMake,
-          model: cleaned,
-          kind: 'chassis-code',
-          evidence: variant.label,
-        });
-      }
-    }
-    return found;
-  }
-
-  /**
    * Makes the catalogue clearly sells for, counted against how many rows they have.
    *
    * Deliberately NOT an attempt to parse model names out of free product text.
@@ -283,7 +237,11 @@ class VehicleCandidateAudit {
     for (const p of products) {
       const haystack = String(p.name || '').toLowerCase();
       for (const make of KNOWN_MAKES) {
-        if (!phraseVariants(make).some((v) => tokenMatch(haystack, v))) continue;
+        // Alias spellings count. Matching only the canonical string missed the
+        // live "Mercedez Benz" typo and every "VW …" product, so the gap report
+        // understated exactly the makes most likely to need attention.
+        const spellings = [make, ...(MAKE_ALIASES[make] || [])];
+        if (!spellings.some((sp) => phraseVariants(sp).some((v) => tokenMatch(haystack, v)))) continue;
         if (!byMake.has(make)) byMake.set(make, { products: 0, samples: [] });
         const entry = byMake.get(make);
         entry.products += 1;
@@ -313,57 +271,45 @@ class VehicleCandidateAudit {
     this.report.counts.activeProducts = products.length;
     console.log(`Products: ${products.length} active\n`);
 
-    // key -> aggregate
-    const candidates = new Map();
+    // Extraction and aggregation are pure (utils/vehicleCandidates.js) so the
+    // rules that decide what becomes a PUBLIC PAGE are unit-testable without a
+    // database. This loop only does I/O and reporting.
+    const perProduct = [];
     for (const product of products) {
       try {
-        const found = this.collectFromVariants(product);
+        const { candidates: found, skipped } = extractCandidates(product, {
+          corrections: MODEL_CORRECTIONS,
+          denylist: MODEL_DENYLIST,
+        });
         if (found.length) this.report.counts.vehicleAxisProducts += 1;
+        perProduct.push({ productId: product._id, productName: product.name, candidates: found });
 
-        for (const f of found) {
-          if (!f.make) {
-            this.report.skipped.noMake.push({ model: f.model, product: product.name, evidence: f.evidence });
-            continue;
-          }
-          // Dedupe on a PUNCTUATION-FREE key. The raw lowercase model treats
-          // "BRV"/"BR-V" and "MU 7"/"MU-7" as different cars, so one run proposed
-          // both spellings as separate rows — the same duplicate the alias check
-          // prevents against EXISTING rows, but within this run's own candidates.
-          // The first spelling seen supplies the display form.
-          const key = `${f.make}|${f.model.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-          if (!candidates.has(key)) {
-            candidates.set(key, {
-              make: displayByMake.get(f.make) || makeDisplayName(f.make),
-              canonicalMake: f.make,
-              model: f.model,
-              kind: f.kind,
-              productCount: 0,
-              products: [],
-              evidence: new Set(),
-            });
-          }
-          const c = candidates.get(key);
-          c.productCount += 1;
-          if (c.products.length < 5) c.products.push(product.name);
-          c.evidence.add(f.evidence);
-          // Any consumer-model sighting outranks a chassis-code one: the same
-          // string can appear in both positions across different labels.
-          if (f.kind === 'consumer-model') c.kind = 'consumer-model';
+        for (const sk of skipped) {
+          // Every reason is surfaced, not just "no make". A segment the audit
+          // could not interpret is something an operator may want to fix at source.
+          this.report.skipped.noMake.push({
+            model: sk.segment, product: product.name, evidence: sk.evidence, reason: sk.reason,
+          });
         }
       } catch (err) {
         this.report.errors.push({ id: product._id?.toString(), name: product.name, error: err.message });
       }
     }
 
+    const candidates = aggregateCandidates(perProduct);
+
     // Partition into create / skip.
     const eligible = [];
     for (const [key, c] of candidates) {
+      const make = displayByMake.get(c.canonicalMake) || makeDisplayName(c.canonicalMake);
+      const productCount = c.productIds.size;   // DISTINCT products, not sightings
       const row = {
-        make: c.make,
+        make,
+        canonicalMake: c.canonicalMake,
         model: c.model,
-        slug: vehicleSlug(c.make, c.model),
+        slug: vehicleSlug(make, c.model),
         kind: c.kind,
-        productCount: c.productCount,
+        productCount,
         products: c.products,
         evidence: [...c.evidence].slice(0, 3),
       };
@@ -373,7 +319,7 @@ class VehicleCandidateAudit {
         this.report.skipped.alreadyExists.push(row);
       } else if (c.kind === 'chassis-code' && !this.includeChassis) {
         this.report.skipped.chassisCode.push(row);
-      } else if (c.productCount < this.minProducts) {
+      } else if (productCount < this.minProducts) {
         this.report.skipped.belowThreshold.push(row);
       } else {
         eligible.push(row);
@@ -384,10 +330,16 @@ class VehicleCandidateAudit {
     // exists, so re-running cannot duplicate them.
     for (const [canonicalMake, model] of ALWAYS_INCLUDE) {
       if (this.existsAlready(keys, canonicalMake, model)) continue;
-      if (eligible.some((r) => r.make.toLowerCase() === canonicalMake && r.model === model)) continue;
+      // Compare CANONICAL make to canonical make. `r.make` is the DISPLAY spelling,
+      // so a stored "Maruti Suzuki" or "Mercedes-Benz" never equalled the canonical
+      // key and the curated entry was appended a second time — inflating the very
+      // list an operator approves before rows are created.
+      if (eligible.some((r) => r.canonicalMake === canonicalMake
+        && r.model.toLowerCase() === model.toLowerCase())) continue;
       const make = displayByMake.get(canonicalMake) || makeDisplayName(canonicalMake);
       eligible.push({
         make,
+        canonicalMake,
         model,
         slug: vehicleSlug(make, model),
         kind: 'consumer-model',

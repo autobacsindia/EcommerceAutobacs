@@ -10,6 +10,7 @@ import {
   titleCaseModel,
   MODEL_ALIASES,
   needsMakeConfirmation,
+  matchConfidence,
 } from '../../../utils/vehicleMatch.js';
 
 /**
@@ -300,5 +301,49 @@ describe('needsMakeConfirmation — the false-fitment guard', () => {
   it('is case- and whitespace-insensitive', () => {
     expect(needsMakeConfirmation('  City  ')).toBe(true);
     expect(needsMakeConfirmation('ACCENT')).toBe(true);
+  });
+});
+
+/**
+ * The fitment backfill's review signal.
+ *
+ * ⚠️ These tests exist because `medium` SILENTLY BECAME UNREACHABLE once. The inline
+ * expression was `makeHit || !ambiguousHit ? 'high' : 'medium'`, and when the caller
+ * started dropping `ambiguousHit && !makeHit` outright, that removed the only
+ * combination which could score medium. Every match scored `high`,
+ * `report.lowConfidence` stayed empty, and the "⚠ N low-confidence match(es)" warning
+ * could never fire — so a script that writes PUBLIC vehicle-fitment links lost its only
+ * human review gate while every run still looked clean.
+ */
+describe('matchConfidence', () => {
+  it('is high for an unambiguous, non-styling match', () => {
+    expect(matchConfidence({ ambiguous: false, styling: false })).toBe('high');
+    expect(matchConfidence({})).toBe('high');
+    expect(matchConfidence()).toBe('high');
+  });
+
+  it('is MEDIUM for a match that only stands because the make appeared', () => {
+    // "g30" plus "BMW" somewhere in a long description is far weaker than "5 Series".
+    expect(matchConfidence({ ambiguous: true })).toBe('medium');
+  });
+
+  it('is MEDIUM for a styling-only match kept as the sole signal', () => {
+    // "Defender-style bumper" names a vehicle the part may well not fit.
+    expect(matchConfidence({ styling: true })).toBe('medium');
+  });
+
+  it('is medium when both signals are present', () => {
+    expect(matchConfidence({ ambiguous: true, styling: true })).toBe('medium');
+  });
+
+  it('CAN return medium at all — the regression this guards', () => {
+    // A tautology only if the implementation is right; the previous one could not
+    // produce 'medium' for any input its caller was able to supply.
+    const outcomes = new Set([
+      matchConfidence({ ambiguous: false, styling: false }),
+      matchConfidence({ ambiguous: true, styling: false }),
+      matchConfidence({ ambiguous: false, styling: true }),
+    ]);
+    expect(outcomes).toEqual(new Set(['high', 'medium']));
   });
 });

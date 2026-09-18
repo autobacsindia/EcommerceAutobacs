@@ -246,5 +246,27 @@ export const validateRefundsQuery = [
   query('status')
     .optional()
     .trim(),
+  query('search')
+    .optional()
+    .trim()
+    .isLength({ max: 120 }).withMessage('Search term is too long'),
+  // Clamped again in the repository; asserted here so an out-of-range value is a clear
+  // 400 rather than being silently rounded into something the caller did not ask for.
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+  // The keyset cursor, echoed back from the previous page. Both halves or neither — a
+  // half-supplied cursor is a client bug, and ignoring it would silently restart
+  // pagination at page one and re-serve rows the admin has already worked through.
+  query('cursorCreatedAt')
+    .optional()
+    .isISO8601().withMessage('Invalid pagination cursor'),
+  query('cursorId')
+    .optional()
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid pagination cursor'),
+  query('cursorId')
+    .custom((value, { req }) => Boolean(value) === Boolean(req.query.cursorCreatedAt))
+    .withMessage('Both cursor parts are required'),
   validateRequest
 ];

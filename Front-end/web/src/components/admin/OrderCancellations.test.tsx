@@ -22,7 +22,7 @@ jest.mock('react-hot-toast', () => ({
 }));
 jest.mock('lucide-react', () => {
   const Icon = () => <span />;
-  return { AlertTriangle: Icon, IndianRupee: Icon, PackageX: Icon, RotateCcw: Icon };
+  return { AlertTriangle: Icon, IndianRupee: Icon, PackageX: Icon, RotateCcw: Icon, X: Icon };
 });
 
 const ITEM_NAMES = { i1: 'Wax', i2: 'Polish' };
@@ -203,5 +203,138 @@ describe('self-hiding', () => {
     }));
     renderPanel();
     expect(await screen.findByText('Cancellation 1')).toBeInTheDocument();
+  });
+});
+
+/**
+ * Recording a per-line refund that was settled outside Razorpay, and withdrawing such a
+ * record.
+ *
+ * The rule that matters most: REVERT IS OFFERED ONLY FOR AN OFFLINE RECORD. A Razorpay
+ * refund is money that has genuinely left the account, and no field write can pull it
+ * back — offering the button would invite someone to make the books lie.
+ */
+describe('OrderCancellations — offline refunds', () => {
+  const cancellation = (refund: Record<string, unknown>) => ({
+    _id: 'c1',
+    sequence: 1,
+    lines: [{ itemId: 'i1', quantity: 1 }],
+    cancelledAt: '2026-09-10T10:00:00.000Z',
+    refund,
+  });
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('offers "Mark paid offline" beside the gateway button while a refund is due', async () => {
+    serve(view({
+      cancellations: [cancellation({ productValuePaise: 40000, amountPaise: 0, status: 'pending' })],
+      summary: { orderedUnits: 3, cancelledUnits: 1, liveUnits: 2, cancellationCount: 1, fullyCancelled: false, partial: true, label: 'Partly cancelled' },
+    }));
+    renderPanel();
+
+    expect(await screen.findByRole('button', { name: /Send refund/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Mark paid offline/ })).toBeInTheDocument();
+  });
+
+  it('posts method:"offline" with the reference and never hits the gateway path', async () => {
+    serve(view({
+      cancellations: [cancellation({ productValuePaise: 40000, amountPaise: 0, status: 'pending' })],
+      summary: { orderedUnits: 3, cancelledUnits: 1, liveUnits: 2, cancellationCount: 1, fullyCancelled: false, partial: true, label: null },
+    }));
+    (apiClient.post as jest.Mock).mockResolvedValue({ message: 'Recorded ₹400 refunded by cash.' });
+    renderPanel();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Mark paid offline/ }));
+    fireEvent.change(screen.getByLabelText(/Reference/), { target: { value: 'CASH-9911' } });
+    fireEvent.click(screen.getByRole('button', { name: /Record refund/ }));
+
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith(
+      '/orders/o1/cancellations/c1/refund',
+      expect.objectContaining({ method: 'offline', reference: 'CASH-9911', amount: 400 }),
+    ));
+    // No email option on this surface — the gateway per-line path sends none either.
+    expect((apiClient.post as jest.Mock).mock.calls[0][1]).not.toHaveProperty('notifyCustomer');
+  });
+
+  it('caps the dialog at THIS cancellation\'s priced value, not the order total', async () => {
+    serve(view({
+      cancellations: [cancellation({ productValuePaise: 40000, amountPaise: 0, status: 'pending' })],
+      summary: { orderedUnits: 3, cancelledUnits: 1, liveUnits: 2, cancellationCount: 1, fullyCancelled: false, partial: true, label: null },
+    }));
+    renderPanel();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Mark paid offline/ }));
+    expect(screen.getByLabelText(/Amount/)).toHaveValue(400);
+  });
+
+  it('offers Revert for an OFFLINE record', async () => {
+    serve(view({
+      cancellations: [cancellation({
+        productValuePaise: 40000, amountPaise: 40000, status: 'completed',
+        offlineMethod: 'upi', offlineReference: 'UPI-77',
+      })],
+      summary: { orderedUnits: 3, cancelledUnits: 1, liveUnits: 2, cancellationCount: 1, fullyCancelled: false, partial: true, label: null },
+    }));
+    renderPanel();
+
+    expect(await screen.findByRole('button', { name: /Revert/ })).toBeInTheDocument();
+    expect(screen.getByText(/ref UPI-77/)).toBeInTheDocument();
+  });
+
+  it('does NOT offer Revert for a refund that went through Razorpay', async () => {
+    serve(view({
+      cancellations: [cancellation({
+        productValuePaise: 40000, amountPaise: 40000, status: 'completed',
+        razorpayRefundId: 'rfnd_Line1',
+      })],
+      summary: { orderedUnits: 3, cancelledUnits: 1, liveUnits: 2, cancellationCount: 1, fullyCancelled: false, partial: true, label: null },
+    }));
+    renderPanel();
+
+    await screen.findByText(/Refunded/);
+    expect(screen.queryByRole('button', { name: /Revert/ })).not.toBeInTheDocument();
+  });
+
+  it('will not revert without a reason, and posts it when given', async () => {
+    serve(view({
+      cancellations: [cancellation({
+        productValuePaise: 40000, amountPaise: 40000, status: 'completed', offlineMethod: 'cash',
+      })],
+      summary: { orderedUnits: 3, cancelledUnits: 1, liveUnits: 2, cancellationCount: 1, fullyCancelled: false, partial: true, label: null },
+    }));
+    (apiClient.post as jest.Mock).mockResolvedValue({ message: 'Withdrawn.' });
+    renderPanel();
+
+    const promptSpy = jest.spyOn(window, 'prompt').mockReturnValue('  ');
+    jest.spyOn(window, 'alert').mockImplementation(() => {});
+
+    fireEvent.click(await screen.findByRole('button', { name: /Revert/ }));
+    // A blank reason is refused client-side; the backend rejects it too.
+    await waitFor(() => expect(promptSpy).toHaveBeenCalled());
+    expect(apiClient.post).not.toHaveBeenCalled();
+
+    promptSpy.mockReturnValue('Recorded against the wrong cancellation');
+    fireEvent.click(screen.getByRole('button', { name: /Revert/ }));
+
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith(
+      '/orders/o1/cancellations/c1/refund/revert',
+      { reason: 'Recorded against the wrong cancellation' },
+    ));
+  });
+
+  it('shows that a previous offline record was withdrawn', async () => {
+    // Visible BEFORE anyone presses "Send refund", so a second payout is a considered
+    // decision rather than a surprise.
+    serve(view({
+      cancellations: [cancellation({
+        productValuePaise: 40000, amountPaise: 0, status: 'pending',
+        revertedAt: '2026-09-12T10:00:00.000Z', revertReason: 'never actually paid',
+      })],
+      summary: { orderedUnits: 3, cancelledUnits: 1, liveUnits: 2, cancellationCount: 1, fullyCancelled: false, partial: true, label: null },
+    }));
+    renderPanel();
+
+    expect(await screen.findByText(/offline refund record was withdrawn/)).toBeInTheDocument();
+    expect(screen.getByText(/never actually paid/)).toBeInTheDocument();
   });
 });

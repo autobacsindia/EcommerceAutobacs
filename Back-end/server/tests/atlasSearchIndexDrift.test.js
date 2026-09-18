@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import {
   ATLAS_SEARCH_INDEX_DEFINITION,
   flattenDefinition,
@@ -273,5 +274,45 @@ describe('Atlas clause grammar', () => {
     expect(json).toContain('"constant":{"value":5}');
     expect(json).toContain('"log1p"');
     expect(json.match(/"boost":\{"value":2\}/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+/**
+ * A DEPLOY forcing function, not a correctness check.
+ *
+ * Everything above compares the query builders against the DECLARED definition, and
+ * the header is explicit that code-only tests cannot see the live cluster. That
+ * leaves the gap this project has now been bitten by twice: `createSearchIndex`
+ * no-ops on an existing index, so editing the declaration changes nothing in
+ * production and nothing reports it. An Elasticsearch mapping fix sat unshipped for
+ * weeks that way; the `variants.label` mapping added on 2026-09-17 would have done
+ * the same — every search silently matching nothing on the new field while the
+ * storefront looked perfectly healthy.
+ *
+ * Pinning a fingerprint converts "someone has to remember" into a failing test. It
+ * is deliberately annoying: the only way to make it pass is to acknowledge the
+ * change, which is exactly the moment to run the apply command.
+ */
+describe('index definition fingerprint — did you deploy it?', () => {
+  it('matches the definition that was last pushed to Atlas', () => {
+    const flat = [...declared.entries()].sort();
+    const fingerprint = createHash('sha256').update(JSON.stringify(flat)).digest('hex').slice(0, 16);
+
+    expect(fingerprint).toBe(
+      // Last pushed 2026-09-17 (added the `variants` document mapping).
+      // ⚠ If this fails you changed ATLAS_SEARCH_INDEX_DEFINITION. The live index
+      // does NOT update itself. Before changing this constant:
+      //   1. npm run audit-atlas-search-index        → confirm it reports the drift
+      //   2. npm run create-atlas-search-index -- --apply
+      //   3. npm run audit-atlas-search-index        → confirm zero drift
+      //   4. npm run verify-atlas-search             → the query still parses live
+      //   5. SEARCH_ENGINE=atlas node scripts/verify-search-relevance.js
+      // Only then update the value below to the one this test reports.
+      '854f76ef61f5144a'
+    );
+  });
+
+  it('pins the field COUNT too, so an added field cannot slip through a hash edit', () => {
+    expect(declared.size).toBe(26);
   });
 });

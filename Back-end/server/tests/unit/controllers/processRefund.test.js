@@ -22,13 +22,22 @@ const mockRazorpayService = {
 // Cancellation refunds now consult the order's returns to work out how much of the
 // capture is still refundable (a return refund may already have drawn against it).
 const mockReturnRequestRepository = { find: jest.fn() };
+// The `method: 'offline'` fork delegates wholesale to this service; the service's own
+// behaviour is covered in tests/unit/services/offlineRefundService.test.js.
+const mockOfflineRefundService = {
+  markOrderRefundOffline: jest.fn(),
+  revertOrderRefund: jest.fn(),
+  markCancellationRefundOffline: jest.fn(),
+  revertCancellationRefund: jest.fn(),
+};
 
 jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({ default: mockOrderRepository }));
 jest.unstable_mockModule('../../../repositories/paymentRepository.js', () => ({ default: mockPaymentRepository }));
 jest.unstable_mockModule('../../../repositories/returnRequestRepository.js', () => ({ default: mockReturnRequestRepository }));
 jest.unstable_mockModule('../../../services/razorpayService.js', () => ({ default: mockRazorpayService }));
+jest.unstable_mockModule('../../../services/offlineRefundService.js', () => ({ default: mockOfflineRefundService }));
 
-const { processRefund } = await import('../../../controllers/orderController.js');
+const { processRefund, revertOfflineRefund } = await import('../../../controllers/orderController.js');
 
 // Build a cancelled+paid order in a refundable state, overridable per-test.
 function makeOrder(overrides = {}) {
@@ -43,12 +52,121 @@ function makeOrder(overrides = {}) {
   };
 }
 
+describe('processRefund — the offline fork and the dashboard-refund dead end', () => {
+  let req, res;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    req = { params: { id: 'order-1' }, body: {}, user: { id: 'admin-1', _id: 'admin-1', role: 'admin' } };
+    res = { json: jest.fn(), status: jest.fn().mockReturnThis() };
+    mockOrderRepository.findById.mockResolvedValue(makeOrder());
+    mockPaymentRepository.findById.mockResolvedValue({ _id: 'payment-1', gatewayPaymentId: 'pay_abc' });
+    mockOrderRepository.markRefundProcessing.mockResolvedValue(true);
+    mockOrderRepository.markRefundFailed.mockResolvedValue(true);
+    mockReturnRequestRepository.find.mockReturnValue({ select: () => ({ lean: () => Promise.resolve([]) }) });
+    mockOfflineRefundService.markOrderRefundOffline.mockResolvedValue({
+      amountRupees: 1500, isFull: true, notified: true, warnings: [], message: 'Recorded ₹1500 refunded by bank transfer.',
+    });
+  });
+
+  it('routes method:"offline" to the service and never touches the gateway', async () => {
+    req.body = {
+      method: 'offline', offlineMethod: 'bank_transfer', reference: 'UTR-991',
+      paidAt: '2026-09-10T10:00:00.000Z',
+    };
+
+    await processRefund(req, res);
+
+    expect(mockRazorpayService.refundPayment).not.toHaveBeenCalled();
+    expect(mockOfflineRefundService.markOrderRefundOffline).toHaveBeenCalledWith(
+      req,
+      expect.objectContaining({
+        offlineMethod: 'bank_transfer', reference: 'UTR-991', notifyCustomer: true,
+      }),
+    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      refund: expect.objectContaining({ status: 'completed', method: 'offline', amount: 1500 }),
+    }));
+  });
+
+  it('passes notifyCustomer:false through', async () => {
+    req.body = { method: 'offline', offlineMethod: 'cash', reference: 'R-1', notifyCustomer: false };
+    await processRefund(req, res);
+    expect(mockOfflineRefundService.markOrderRefundOffline)
+      .toHaveBeenCalledWith(req, expect.objectContaining({ notifyCustomer: false }));
+  });
+
+  it('forks BEFORE the gateway preconditions, so a legacy order with no Razorpay id works', async () => {
+    // The whole point: an imported/legacy order has no gatewayPaymentId, which the
+    // gateway path refuses with a 422. Offline recording must not inherit that.
+    mockOrderRepository.findById.mockResolvedValue(makeOrder({ payment: null }));
+    mockPaymentRepository.findById.mockResolvedValue(null);
+    req.body = { method: 'offline', offlineMethod: 'cash', reference: 'R-1' };
+
+    await processRefund(req, res);
+
+    expect(res.status).not.toHaveBeenCalledWith(422);
+    expect(mockOfflineRefundService.markOrderRefundOffline).toHaveBeenCalled();
+  });
+
+  it('turns the "already fully refunded" gateway rejection into an actionable 409', async () => {
+    /*
+      THE BUG THIS FEATURE EXISTS FOR. An admin refunds in the Razorpay dashboard, which
+      writes nothing here; the button then claims the order, calls the gateway, is
+      rejected, and lands on `failed` — showing "Retry Refund" for ever.
+
+      It still lands on `failed` (the money genuinely cannot be sent), but the response
+      now names the way out instead of echoing an opaque gateway error.
+    */
+    mockRazorpayService.refundPayment.mockRejectedValue(
+      new Error('The payment has been fully refunded already'),
+    );
+
+    await processRefund(req, res);
+
+    expect(mockOrderRepository.markRefundFailed).toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      offlineSettlementSuggested: true,
+      gatewayError: 'The payment has been fully refunded already',
+    }));
+  });
+
+  it('still returns a plain 502 for an unrelated gateway failure', async () => {
+    mockRazorpayService.refundPayment.mockRejectedValue(new Error('Network timeout'));
+
+    await processRefund(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.json).toHaveBeenCalledWith(expect.not.objectContaining({ offlineSettlementSuggested: true }));
+  });
+});
+
+describe('revertOfflineRefund controller', () => {
+  it('delegates to the service and returns its message', async () => {
+    jest.clearAllMocks();
+    mockOfflineRefundService.revertOrderRefund.mockResolvedValue({
+      amountRupees: 1500, warnings: [], message: 'Withdrew the ₹1500 offline refund record.',
+    });
+    const req = { params: { id: 'order-1' }, body: { reason: 'wrong order' }, user: { _id: 'admin-1' } };
+    const res = { json: jest.fn(), status: jest.fn().mockReturnThis() };
+
+    await revertOfflineRefund(req, res);
+
+    expect(mockOfflineRefundService.revertOrderRefund)
+      .toHaveBeenCalledWith(req, { orderId: 'order-1', reason: 'wrong order' });
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true, amount: 1500 }));
+  });
+});
+
 describe('processRefund controller', () => {
   let req, res;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    req = { params: { id: 'order-1' }, user: { id: 'admin-1', role: 'admin' } };
+    req = { params: { id: 'order-1' }, body: {}, user: { id: 'admin-1', role: 'admin' } };
     res = { json: jest.fn(), status: jest.fn().mockReturnThis() };
 
     // Sensible defaults (resetMocks wipes impls each test).

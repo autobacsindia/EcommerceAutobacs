@@ -5,6 +5,8 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
+import OfflineRefundDialog, { type OfflineRefundSubmission } from '@/components/admin/OfflineRefundDialog';
+import { offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
 import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download, Building2, FileText } from 'lucide-react';
 import { CUSTOMER_NOTIFIED_STATUSES, API_ENDPOINTS } from '@/lib/constants';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
@@ -150,6 +152,13 @@ interface Order {
     transactionId?: string;
     processedAt?: string;
     failureReason?: string;
+    /** `offline` = recorded as settled outside Razorpay; the only kind that can be reverted. */
+    refundMethod?: string;
+    offlineMethod?: string;
+    offlineReference?: string;
+    paidAt?: string;
+    revertedAt?: string;
+    revertReason?: string;
   };
   user: {
     _id: string;
@@ -168,6 +177,10 @@ function AdminOrderDetailPageInner() {
   const [updating, setUpdating] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [refunding, setRefunding] = useState(false);
+  const [offlineDialogOpen, setOfflineDialogOpen] = useState(false);
+  // Prefilled from a failed gateway attempt when the error carried a Razorpay refund id,
+  // so reconciling a dashboard refund does not mean copying the id across by hand.
+  const [offlineReference, setOfflineReference] = useState('');
   const [packingReward, setPackingReward] = useState(false);
   // Set when the admin picks "Shipped": scrolls to the Parcels panel and opens its
   // create-parcel form, so they choose what goes in the box.
@@ -253,7 +266,61 @@ function AdminOrderDetailPageInner() {
       toast.success(res.message || 'Refund initiated.');
       await fetchOrder();
     } catch (err: any) {
+      /*
+        The dead end this feature exists for: the payment was already refunded by hand in
+        the Razorpay dashboard, which writes nothing back here. The gateway refuses, the
+        order lands on `failed`, and the button becomes "Retry Refund" for ever. The
+        backend flags that specific rejection, so open the offline dialog instead of
+        leaving the admin with an error and no way forward.
+      */
+      if (err?.rawData?.offlineSettlementSuggested) {
+        toast.error(err.message, { duration: 8000 });
+        setOfflineReference(err.rawData.gatewayError?.match(/rfnd_[A-Za-z0-9]+/)?.[0] || '');
+        setOfflineDialogOpen(true);
+        await fetchOrder();
+        return;
+      }
       toast.error(err?.message || 'Failed to process refund.');
+    } finally {
+      setRefunding(false);
+    }
+  };
+
+  /**
+   * Record a refund that was settled outside Razorpay — cash/NEFT/UPI/cheque, or a
+   * refund issued by hand in the dashboard. Nothing is sent to the gateway.
+   *
+   * Errors are rethrown so the dialog can show them inline and keep the form: the usual
+   * failure is an amount or a reference that needs correcting, and losing the entry to
+   * a toast would mean retyping it.
+   */
+  const handleMarkOffline = async (values: OfflineRefundSubmission) => {
+    const res = await apiClient.post<{ message?: string; warnings?: string[] }>(
+      API_ENDPOINTS.REFUND_PROCESS(orderId),
+      { method: 'offline', ...values },
+    );
+    toast.success(res.message || 'Refund recorded.', { duration: res.warnings?.length ? 10000 : 4000 });
+    await fetchOrder();
+  };
+
+  /**
+   * Withdraw an offline refund record that was a mistake, putting the order back to
+   * "refund due". The backend refuses outright for a refund that went through Razorpay.
+   */
+  const handleRevertRefund = async () => {
+    if (!order) return;
+    const reason = promptRevertReason(`order #${order.orderNumber || order._id}`);
+    if (!reason) return;
+
+    setRefunding(true);
+    try {
+      const res = await apiClient.post<{ message?: string }>(
+        API_ENDPOINTS.REFUND_REVERT(orderId), { reason },
+      );
+      toast.success(res.message || 'Refund record withdrawn.');
+      await fetchOrder();
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not withdraw the refund record.', { duration: 8000 });
     } finally {
       setRefunding(false);
     }
@@ -853,17 +920,94 @@ function AdminOrderDetailPageInner() {
                   {order.refundDetails?.status === 'failed' && order.refundDetails.failureReason && (
                     <p className="text-xs text-red-600 mb-2">Last attempt: {order.refundDetails.failureReason}</p>
                   )}
+                  {/*
+                    An offline record shows what was paid and how. The reference is the
+                    only evidence the money moved, so it is always on screen.
+                  */}
+                  {order.refundDetails?.offlineMethod && order.refundDetails?.status === 'completed' && (
+                    <div className="mb-3 rounded-md bg-amber-50 p-3 text-xs text-amber-900">
+                      <p className="font-medium">
+                        Settled outside Razorpay — {offlineMethodLabel(order.refundDetails.offlineMethod)}
+                      </p>
+                      <p className="mt-0.5">Reference: {order.refundDetails.offlineReference || '—'}</p>
+                      {order.refundDetails.paidAt && (
+                        <p>Paid on {formatLongDateIST(order.refundDetails.paidAt)}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/*
+                    A previous cycle's withdrawal. Shown so anyone opening this order sees
+                    that a refund was recorded and taken back BEFORE they press anything —
+                    the cheap protection against a second payout that hiding the button
+                    would only pretend to give.
+                  */}
+                  {order.refundDetails?.revertedAt && order.refundDetails?.status !== 'completed' && (
+                    <div className="mb-3 rounded-md bg-gray-50 p-3 text-xs text-gray-700">
+                      <p className="font-medium">
+                        An offline refund record was withdrawn on {formatLongDateIST(order.refundDetails.revertedAt)}
+                      </p>
+                      {order.refundDetails.revertReason && (
+                        <p className="mt-0.5">Reason: {order.refundDetails.revertReason}</p>
+                      )}
+                    </div>
+                  )}
+
                   {['pending', 'failed'].includes(order.refundDetails?.status || 'pending') && order.paymentStatus !== 'refunded' ? (
-                    <button
-                      onClick={handleProcessRefund}
-                      disabled={refunding}
-                      className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-60"
-                    >
-                      {refunding ? 'Processing…' : order.refundDetails?.status === 'failed' ? 'Retry Refund' : 'Process Refund'}
-                    </button>
+                    <div className="space-y-2">
+                      <button
+                        onClick={handleProcessRefund}
+                        disabled={refunding}
+                        className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-60"
+                      >
+                        {refunding ? 'Processing…' : order.refundDetails?.status === 'failed' ? 'Retry Refund' : 'Process Refund'}
+                      </button>
+                      <button
+                        onClick={() => { setOfflineReference(''); setOfflineDialogOpen(true); }}
+                        disabled={refunding}
+                        className="w-full px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-50 disabled:opacity-60"
+                      >
+                        Mark refunded offline
+                      </button>
+                      <p className="text-xs text-gray-500">
+                        Use &ldquo;offline&rdquo; if you already refunded in the Razorpay dashboard or paid by
+                        cash/NEFT — that never reaches this system on its own.
+                      </p>
+                    </div>
                   ) : order.refundDetails?.status === 'processing' ? (
                     <p className="text-xs text-gray-500">Awaiting settlement — updates automatically when Razorpay confirms (~5-7 days).</p>
+                  ) : order.refundDetails?.offlineMethod && order.refundDetails?.status === 'completed' ? (
+                    /*
+                      Revert is offered ONLY for an offline record, keyed on
+                      `offlineMethod` rather than `refundMethod`.
+
+                      A Razorpay refund has genuinely left the account and no field write
+                      can pull it back. And a RETURN's offline refund mirrors onto this
+                      same subdoc with `refundMethod: 'offline'` while never setting
+                      `offlineMethod` (its reference goes in `transactionId`) —
+                      `claimRefundRevert` excludes those mirrors by their `Return <id>`
+                      note, so the looser test offered a button that always 409'd.
+                      Returns are reverted from the returns screen.
+                    */
+                    <button
+                      onClick={handleRevertRefund}
+                      disabled={refunding}
+                      className="w-full px-4 py-2 border border-red-300 text-red-700 text-sm font-medium rounded-md hover:bg-red-50 disabled:opacity-60"
+                    >
+                      {refunding ? 'Working…' : 'Revert — this was recorded by mistake'}
+                    </button>
                   ) : null}
+
+                  {offlineDialogOpen && (
+                  <OfflineRefundDialog
+                    open
+                    onClose={() => setOfflineDialogOpen(false)}
+                    onSubmit={handleMarkOffline}
+                    maxAmount={order.totalAmount}
+                    subject={`order #${order.orderNumber || order._id}`}
+                    defaultReference={offlineReference}
+                  />
+                  )}
                 </div>
               )}
             </div>

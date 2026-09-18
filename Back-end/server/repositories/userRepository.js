@@ -258,6 +258,35 @@ class UserRepository extends BaseRepository {
       { new: true, ...(session && { session }) }
     );
   }
+
+  /**
+   * Put spend BACK on net LTV — the inverse of decrementSpend, for an admin withdrawing
+   * a refund record that was a mistake. Leaves `paidOrderCount` alone for the same
+   * reason decrementSpend does: the order counted as a purchase throughout, and the
+   * refund that is being withdrawn never touched the count.
+   *
+   * ⚠️ NOT clamped to any ceiling, because there is no honest one to clamp to —
+   * `totalSpentPaise` is a running denorm across every order the customer has ever
+   * placed, so nothing here can tell what share of it belongs to this order. The caller
+   * is responsible for passing exactly what was subtracted; it reads that figure from
+   * the refund record rather than re-deriving it, so mark and revert are symmetric by
+   * construction. `decrementSpend` floors at 0, so a customer whose LTV was already at
+   * the floor gains back more than was taken — an unavoidable consequence of a floored
+   * counter, and the direction that overstates rather than hides a real purchase.
+   *
+   * @param {string} userId
+   * @param {{ amountPaise: number }} args
+   */
+  async incrementSpend(userId, { amountPaise = 0 } = {}, session = null) {
+    if (!userId) return null;
+    const inc = Math.max(0, Math.round(amountPaise));
+    if (inc === 0) return null;
+    return User.findByIdAndUpdate(
+      userId,
+      { $inc: { totalSpentPaise: inc } },
+      { new: true, ...(session && { session }) }
+    );
+  }
 }
 
 export default new UserRepository();

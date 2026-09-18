@@ -134,6 +134,85 @@ class ReturnRequestRepository {
       { new: true }
     );
   }
+
+  /**
+   * Atomically claim the reversal of an OFFLINE refund record — an admin saying the
+   * payout recorded here never actually happened.
+   *
+   * ⚠️ `refund.method: 'offline'` IS THE SAFETY GATE. Money that left through Razorpay
+   * is real and cannot be withdrawn by writing fields; if a gateway refund matched here
+   * the return would read unrefunded with the cash genuinely gone, and the next admin
+   * would refund it again. `razorpayRefundId` being absent is asserted alongside as
+   * belt and braces — the offline path never sets it, the gateway path always does.
+   *
+   * The return goes back to `received` (not `refunded`), because that plus a
+   * non-terminal refund is exactly what `claimForRefund` needs to be able to re-claim
+   * it — the same rewind the offline path's own phase-1 failure handler performs. The
+   * `refunded` timeline entry is dropped for the same reason.
+   *
+   * Matching on `completed` + `offline` rather than on a `revertedAt` sentinel is what
+   * lets a return be marked → reverted → marked again: after this write the refund is
+   * `pending`, so a second revert finds nothing to claim.
+   *
+   * @returns {Promise<Object|null>} the PRE-update document, so the caller can read the
+   *   finalAmount and affiliateClawbackPaise whose side effects it must now inverse.
+   */
+  claimRefundRevert(id, { revertedBy, reason }) {
+    return ReturnRequest.findOneAndUpdate(
+      {
+        _id: id,
+        'refund.status': 'completed',
+        'refund.method': 'offline',
+        $or: [
+          { 'refund.razorpayRefundId': { $exists: false } },
+          { 'refund.razorpayRefundId': null },
+        ],
+      },
+      {
+        $set: {
+          'refund.status': 'pending',
+          'refund.method': 'original_payment',
+          'refund.revertedAt': new Date(),
+          'refund.revertedBy': revertedBy,
+          'refund.revertReason': reason,
+          'refund.completedAt': null,
+          status: 'received',
+          // Re-arm both once-only guards so a subsequent genuine refund can run its
+          // side effects instead of being skipped as already-done.
+          'refund.ltvReversed': false,
+          'refund.paymentRecorded': false,
+        },
+        // Cleared for the same reason claimForRefund clears them on a gateway retry:
+        // a stale cash reference must not survive onto the next attempt.
+        $unset: {
+          'refund.offlineMethod': '',
+          'refund.reference': '',
+          'refund.paidAt': '',
+          'refund.affiliateClawbackPaise': '',
+          'refund.paymentRecordedPaise': '',
+          'refund.ltvDecrementedPaise': '',
+        },
+        $pull: { timeline: { status: 'refunded' } },
+      },
+      { new: false }
+    );
+  }
+
+  /**
+   * Persist what this refund's side effects ACTUALLY applied, in paise.
+   *
+   * Written only on the success path, so a revert reverses exactly what was added. The
+   * `ltvReversed` / `paymentRecorded` claim flags cannot serve this purpose — they are
+   * set BEFORE the work and stay `true` when it throws.
+   */
+  setAppliedAmounts(id, applied = {}) {
+    const set = {};
+    for (const key of ['affiliateClawbackPaise', 'paymentRecordedPaise', 'ltvDecrementedPaise']) {
+      if (applied[key] !== undefined) set[`refund.${key}`] = applied[key];
+    }
+    if (!Object.keys(set).length) return Promise.resolve(null);
+    return ReturnRequest.updateOne({ _id: id }, { $set: set });
+  }
 }
 
 export default new ReturnRequestRepository();
