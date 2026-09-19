@@ -247,6 +247,29 @@ export default function Filters({
   // offered 79 models including Hilux and Fortuner.
   const models = facets?.vehicleModels ?? [];
 
+  /**
+   * Denominator for the model counts, rendered as "21 of 39".
+   *
+   * A make and its models are two levels of the SAME overlapping set, not a total
+   * and its parts: 10 of BMW's 39 products fit more than one BMW model (two fit
+   * all four), so the model counts sum to 59 while the make is 39. Side by side
+   * and unqualified, that reads as an error — it is the first thing anyone asks
+   * about. Naming the denominator makes the overlap self-evident and removes the
+   * instinct to add the rows up, without dropping the signal a shopper actually
+   * uses (7 series leaves you 6 products, 5 Series leaves 21).
+   *
+   * Matched case-INSENSITIVELY: `?vehicleMake=bmw` filters perfectly well because
+   * the backend's vehicle index is keyed on lowercase, so an exact comparison
+   * here would silently drop the denominator for a working filter — the same trap
+   * that emptied this dropdown server-side. Null for a multi-make URL, where
+   * there is no single denominator to name; the counts then render bare.
+   */
+  const selectedMakeCount = useMemo(() => {
+    const picked = make.split(',').map((m) => m.trim().toLowerCase()).filter(Boolean);
+    if (picked.length !== 1) return null;
+    return makes.find((m) => m.value.toLowerCase() === picked[0])?.count ?? null;
+  }, [make, makes]);
+
   // Category tree: the panel used to render only top-level hubs (`!c.parent`)
   // though the taxonomy is two levels deep. parentId lets the children nest.
   const topCategories = (facets?.categories ?? []).filter((c) => !c.parentId);
@@ -398,7 +421,9 @@ export default function Filters({
                   keys. Scoping means only one make's models are ever selectable. */}
               {models.map((md) => (
                 <option key={`${md.make ?? ''}-${md.value}`} value={md.value}>
-                  {md.value} ({md.count})
+                  {md.value} ({selectedMakeCount == null
+                    ? md.count
+                    : `${md.count} of ${selectedMakeCount}`})
                 </option>
               ))}
             </select>
