@@ -16,6 +16,27 @@ const nextConfig: NextConfig = {
   // PostHog reverse-proxy (ADR-005) sends events to /ingest/* on our own domain; keep the
   // trailing slash intact so PostHog's flags/decide endpoints resolve correctly.
   skipTrailingSlashRedirect: true,
+
+  // ── Client Router Cache ─────────────────────────────────────────────────────
+  // Next 15 changed the default `staleTimes.dynamic` from 30s to 0, and EVERY
+  // route in this app is dynamically rendered (the root layout reads headers()
+  // for the CSP nonce, which opts the whole tree out of static rendering). The
+  // two together mean the client holds no reusable RSC payload at all: pressing
+  // Back, or revisiting a page seen seconds ago, refetches it from the origin
+  // every single time. That is the "spins and reloads on every revisit" symptom
+  // — it is this default, not origin latency (measured: ~100ms of origin work).
+  //
+  // 60s matches the PDP's own `next: { revalidate: 60 }` so that no layer in the
+  // stack is ever staler than a minute.
+  //
+  // Safe for money, deliberately: this cache only affects what is DISPLAYED.
+  // Checkout recomputes every line price, total, tax, shipping and coupon
+  // server-side from the live catalog (pricingService is the SSOT), so a stale
+  // price on screen can never become a wrong charge. Raise this only if that
+  // stays true.
+  experimental: {
+    staleTimes: { dynamic: 60, static: 300 },
+  },
   typescript: {
     ignoreBuildErrors: false,
   },

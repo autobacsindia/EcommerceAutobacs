@@ -24,7 +24,10 @@ const QUARANTINED = [
   'src/app/integration-tests/user-journey.test.tsx',
   'src/app/login/page.test.tsx',
   'src/app/page.test.tsx',
-  'src/app/products/page.test.tsx',
+  // Moved into the (list) route group (see src/app/soft404.test.ts). Parens are
+  // regex metacharacters here, so they must be escaped or the pattern silently
+  // stops matching and this known-broken suite quietly re-enters CI.
+  'src/app/products/\\(list\\)/page.test.tsx',
   'src/app/register/page.test.tsx',
   'src/components/layout/Header.test.tsx',
   'src/components/layout/SearchSuggestions.test.tsx',
