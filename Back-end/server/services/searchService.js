@@ -3,7 +3,7 @@ import Product from "../models/Product.js";
 import Vehicle from "../models/Vehicle.js";
 import categoryRepository from "../repositories/categoryRepository.js";
 import elasticsearchService from "./elasticsearchService.js";
-import atlasSearchService from "./atlasSearchService.js";
+import atlasSearchService, { normalizeList } from "./atlasSearchService.js";
 import categoryMappingService from "./categoryMappingService.js";
 import { expand as expandSynonyms, contentTokens } from "../config/searchSynonyms.js";
 import { NON_PURCHASABLE_STOCK } from "../utils/stockStatus.js";
@@ -408,31 +408,78 @@ class SearchService {
     }).filter((c) => c.label);
 
     // Vehicle ids → make names, matching what the sidebar's make dropdown sends.
-    const vehicleIds = raw.vehicleIdCounts.map((v) => v._id);
+    //
+    // `isActive: true` mirrors the filter index atlasSearchService.getVehicleIndex
+    // builds. Without it the sidebar offers makes it cannot then filter by: a
+    // product fitted to a DEACTIVATED Vehicle produced a live count, but selecting
+    // it resolved to no ids at all. (Admin vehicle "delete" only deactivates, so
+    // these rows genuinely exist.)
+    const vehicleIds = raw.vehicleIdSets.map((v) => v._id);
     const vehicles = vehicleIds.length > 0
-      ? await Vehicle.find({ _id: { $in: vehicleIds } }).select('_id make model').lean().maxTimeMS(2000)
+      ? await Vehicle.find({ _id: { $in: vehicleIds }, isActive: true })
+        .select('_id make model').lean().maxTimeMS(2000)
       : [];
     const vehicleById = new Map(vehicles.map((v) => [String(v._id), v]));
-    const makeCounts = new Map();
-    const modelCounts = new Map();
-    for (const { _id, count } of raw.vehicleIdCounts) {
+
+    // Union of DISTINCT product ids, not a sum of per-vehicle counts. A product
+    // fitting the 5 Series, 3 Series and X5 appears under three vehicle ids and
+    // must still count ONCE toward "BMW" — summing read 59 next to a grid of 39.
+    // Same reasoning, and same shape, as rollUpCategoryCounts above.
+    const makeIds = new Map();
+    const modelIds = new Map();
+    const addTo = (map, key, meta, ids) => {
+      let entry = map.get(key);
+      if (!entry) { entry = { ...meta, ids: new Set() }; map.set(key, entry); }
+      for (const id of ids) entry.ids.add(String(id));
+    };
+    for (const { _id, ids } of raw.vehicleIdSets) {
       const v = vehicleById.get(String(_id));
       if (!v) continue;
-      if (v.make) makeCounts.set(v.make, (makeCounts.get(v.make) || 0) + count);
-      if (v.model) modelCounts.set(v.model, { make: v.make, count: (modelCounts.get(v.model)?.count || 0) + count });
+      if (v.make) addTo(makeIds, v.make, { value: v.make }, ids || []);
+      // Keyed on make + model, not model alone: two makes sharing a model name
+      // would otherwise merge into one bucket AND have the later make overwrite
+      // the earlier, mislabelling the row.
+      if (v.model) addTo(modelIds, `${v.make} ${v.model}`, { value: v.model, make: v.make }, ids || []);
     }
 
-    const selectedMake = params.vehicleMake || params.vehicleType || '';
-    const selectedModel = params.vehicleModel || '';
+    // Matched the way resolveVehicleFilter matches: case-INSENSITIVELY, and over a
+    // comma list. `?vehicleMake=toyota` filters the grid to 255 products (the
+    // vehicle index is keyed on lowercase), so an exact `===` here would leave the
+    // make unhighlighted and — once models are scoped below — hand back an EMPTY,
+    // disabled model dropdown for a filter that is working perfectly.
+    const lower = (v) => String(v).toLowerCase();
+    const selectedMakes = new Set(
+      normalizeList(params.vehicleMake || params.vehicleType).map(lower)
+    );
+    const selectedModels = new Set(normalizeList(params.vehicleModel).map(lower));
     const byCount = (a, b) => Number(b.selected) - Number(a.selected) || b.count - a.count
       || String(a.value).localeCompare(String(b.value));
+
+    // Models are scoped to the selected make HERE, because the facet query cannot
+    // do it: `excludeVehicle` lifts the make and model filters together (exclusion
+    // is per-dimension), so the raw model list spans every make. Unscoped, picking
+    // BMW then "Fortuner" produced an impossible pair — which used to return the
+    // whole catalogue rather than nothing.
+    //
+    // The counts stay correct without a second Atlas pass: fitting a 5 Series
+    // implies the BMW make, so counting it over the make-excluded set is identical
+    // to counting it with make=BMW applied.
+    const models = Array.from(modelIds.values())
+      .filter((m) => selectedMakes.size === 0 || selectedMakes.has(lower(m.make)));
 
     return {
       total: raw.total,
       brands: raw.brands,
       categories,
-      vehicleMakes: Array.from(makeCounts, ([value, count]) => ({ value, count, selected: value === selectedMake })).sort(byCount),
-      vehicleModels: Array.from(modelCounts, ([value, v]) => ({ value, make: v.make, count: v.count, selected: value === selectedModel })).sort(byCount),
+      vehicleMakes: Array.from(makeIds.values())
+        .map((m) => ({ value: m.value, count: m.ids.size, selected: selectedMakes.has(lower(m.value)) }))
+        .sort(byCount),
+      // `make` is carried so the panel can disambiguate two makes that share a
+      // model name — the buckets are keyed on make+model, so `value` alone is not
+      // unique when no make is selected.
+      vehicleModels: models
+        .map((m) => ({ value: m.value, make: m.make, count: m.ids.size, selected: selectedModels.has(lower(m.value)) }))
+        .sort(byCount),
       price: raw.price,
       ratings: raw.ratings,
       availability: raw.availability,

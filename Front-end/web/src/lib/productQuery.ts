@@ -30,14 +30,33 @@ const SORTS: Record<string, { sortBy: string; order: string }> = {
 };
 
 const PASSTHROUGH = [
-  'category', 'search', 'page', 'minPrice', 'maxPrice', 'inStock',
+  'category', 'page', 'minPrice', 'maxPrice', 'inStock',
   'isFeatured', 'isFastMoving', 'rating', 'vehicleMake', 'vehicleModel', 'brand',
 ];
+
+/**
+ * The search term, under either spelling, normalized to ONE name.
+ *
+ * The storefront's shareable URLs use `q`; older links and the suggestion
+ * dropdown use `search`. This page read only `search`, while the filter sidebar
+ * forwards the WHOLE query string to /products/facets — so `/products?q=bmw` ran
+ * the grid over all 928 products beside a panel counting the 54 real matches.
+ *
+ * Normalized here rather than passed through as two params so that everything
+ * downstream keyed on `search` — the analytics list-view event in particular —
+ * keeps working instead of silently reporting a search as an unfiltered browse.
+ * Mirrors resolveSearchTerm on the backend, including the falsy fallthrough, and
+ * the search page's own q→search normalization.
+ */
+export const resolveTerm = (params: Record<string, string>): string =>
+  params.q || params.search || '';
 
 /** Turn the page's raw searchParams into the backend query string. */
 export function buildProductsQuery(params: Record<string, string>): string {
   const q = new URLSearchParams();
   PASSTHROUGH.forEach((k) => { if (params[k]) q.append(k, params[k]); });
+  const term = resolveTerm(params);
+  if (term) q.append('search', term);
   if (params.showAll === 'true') q.append('limit', '500');
   const sort = SORTS[params.sort ?? 'createdAt_desc'] ?? SORTS.createdAt_desc;
   q.append('sortBy', sort.sortBy);

@@ -11,8 +11,6 @@ import Eyebrow from '@/components/ui/Eyebrow';
 import apiClient from '@/lib/api';
 import { trackViewItemList } from '@/lib/analytics';
 
-const PAGE_SIZE = 12;
-
 async function getProducts(searchParams: any) {
   const queryParams = new URLSearchParams();
 
@@ -76,6 +74,8 @@ function SearchPageInner() {
   // Pagination data lives at the top level of the API response (not nested under "pagination")
   const [products, setProducts]     = useState<any[]>([]);
   const [total, setTotal]           = useState(0);
+  /** Size of page 1, used to tell "there was more than one page" from "there wasn't". */
+  const [firstPageSize, setFirstPageSize] = useState(0);
   const [hasNext, setHasNext]       = useState(false);
   const [loading, setLoading]       = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -109,6 +109,11 @@ function SearchPageInner() {
 
         const fetched: any[] = result.products || [];
         setProducts(fetched);
+        // Measured, not assumed. This page never sends `limit`, so the page size is
+        // whatever the backend defaults to — and that default differs per engine.
+        // A hardcoded constant here was wrong for years (12 against a real 20) and
+        // would quietly go wrong again on any engine or default change.
+        setFirstPageSize(fetched.length);
         setTotal(result.total || 0);
         setHasNext(result.hasNext || false);
         setRelaxed(Boolean(result.relaxed));
@@ -353,7 +358,7 @@ function SearchPageInner() {
                   </div>
                 )}
 
-                {!hasNext && total > PAGE_SIZE && (
+                {!hasNext && firstPageSize > 0 && total > firstPageSize && (
                   <p className="mt-8 text-center text-ink-muted text-sm">
                     All {total} products loaded
                   </p>

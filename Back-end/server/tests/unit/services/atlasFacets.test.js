@@ -10,7 +10,12 @@
  * single bucket and left the other four empty.
  */
 
-import { buildFilters, buildPriceHistogramBounds } from '../../../services/atlasSearchService.js';
+import {
+  buildFilters,
+  buildPriceHistogramBounds,
+  MATCH_NOTHING_PATH,
+} from '../../../services/atlasSearchService.js';
+import { ATLAS_SEARCH_INDEX_DEFINITION } from '../../../config/atlasSearchIndex.js';
 
 describe('buildFilters — per-dimension exclusion makes facets disjunctive', () => {
   const params = { brand: 'Auxbeam', minPrice: 1000, maxPrice: 50000, rating: '4', inStock: 'true' };
@@ -50,10 +55,29 @@ describe('buildFilters — per-dimension exclusion makes facets disjunctive', ()
     // Excluding the dimension means "no vehicle filter", which must NOT collapse
     // into the impossible-match clause that an unmatched vehicle produces.
     const unmatched = buildFilters(params, { vehicleFilterIds: [] });
-    expect(unmatched.mustNot).toContainEqual({ exists: { path: '_id' } });
+    expect(unmatched.mustNot).toContainEqual({ exists: { path: MATCH_NOTHING_PATH } });
 
     const excluded = buildFilters(params, { vehicleFilterIds: [] }, { excludeVehicle: true });
-    expect(excluded.mustNot).not.toContainEqual({ exists: { path: '_id' } });
+    expect(excluded.mustNot).not.toContainEqual({ exists: { path: MATCH_NOTHING_PATH } });
+  });
+
+  it('expresses match-nothing on a MAPPED path, or it means the opposite', () => {
+    // This assertion is the whole point of the clause, and the version that
+    // shipped failed it: the path was `_id`, which is absent from the index
+    // (`mappings.dynamic` is false). `exists` on an unmapped path matches
+    // nothing, so `mustNot` excluded nothing and an unresolvable vehicle filter
+    // served the ENTIRE catalogue — prod returned all 928 products for
+    // ?vehicleMake=Ferrari and for the impossible pair BMW + Fortuner.
+    //
+    // Asserted against the index definition rather than the literal 'isActive',
+    // so dropping that field from the mapping fails here instead of silently
+    // inverting the filter in production. The previous version of this test
+    // pinned `_id` and therefore enshrined the bug.
+    const { mustNot } = buildFilters(params, { vehicleFilterIds: [] });
+    const clause = mustNot.find((c) => c.exists);
+    expect(clause).toBeDefined();
+    expect(ATLAS_SEARCH_INDEX_DEFINITION.mappings.fields)
+      .toHaveProperty(clause.exists.path);
   });
 });
 

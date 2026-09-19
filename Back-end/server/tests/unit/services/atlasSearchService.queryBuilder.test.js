@@ -14,8 +14,10 @@ import {
   HIGH_SIGNAL_FIELDS,
   buildRankingShould,
   buildSynonymClause,
+  MATCH_NOTHING_PATH,
 } from '../../../services/atlasSearchService.js';
 import SearchService from '../../../services/searchService.js';
+import { ATLAS_SEARCH_INDEX_DEFINITION } from '../../../config/atlasSearchIndex.js';
 import { NON_PURCHASABLE_STOCK, PURCHASABLE_STOCK } from '../../../utils/stockStatus.js';
 
 /**
@@ -587,7 +589,14 @@ describe('buildFilters — visibility and narrowing', () => {
     expect(none.mustNot).toEqual([]);
 
     const unmatched = buildFilters({}, { vehicleFilterIds: [] });
-    expect(unmatched.mustNot).toContainEqual({ exists: { path: '_id' } });
+    expect(unmatched.mustNot).toContainEqual({ exists: { path: MATCH_NOTHING_PATH } });
+
+    // ...and the path must be MAPPED, or the clause silently means the opposite.
+    // It named `_id` until 2026-09-18; the index is `dynamic: false`, so `exists`
+    // matched nothing, `mustNot` excluded nothing, and prod served all 928
+    // products for ?vehicleMake=Ferrari. This test asserted the literal `_id`
+    // and so certified the bug as correct.
+    expect(ATLAS_SEARCH_INDEX_DEFINITION.mappings.fields).toHaveProperty(MATCH_NOTHING_PATH);
   });
 
   it('excludes both out AND backorder for "in stock only"', () => {
