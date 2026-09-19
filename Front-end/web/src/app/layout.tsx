@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { DM_Sans, Montserrat } from "next/font/google";
-import { headers } from "next/headers";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
@@ -22,9 +21,15 @@ import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import HelpWidget from "@/components/layout/HelpWidget";
 import { SITE_URL } from "@/lib/siteUrl";
-import { GOOGLE_ADS_ID, isGoogleAdsEnabled } from "@/lib/googleAds";
-import { META_PIXEL_ID, isMetaPixelEnabled } from "@/lib/metaPixel";
-import { GTM_ID, GTM_DATA_LAYER, isGtmEnabled } from "@/lib/gtm";
+import { isGoogleAdsEnabled } from "@/lib/googleAds";
+import { isMetaPixelEnabled } from "@/lib/metaPixel";
+import { GTM_ID, isGtmEnabled } from "@/lib/gtm";
+import {
+  gtmQueueSnippet,
+  gtmLoaderSnippet,
+  googleAdsSnippet,
+  metaPixelSnippet,
+} from "@/lib/analyticsSnippets";
 
 const dmSans = DM_Sans({
   variable: "--font-dm-sans",
@@ -179,13 +184,17 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Read the nonce that middleware.ts generated for this request and forwarded
-  // via the x-nonce request header. Every inline/injected script needs it under
-  // the strict nonce CSP (lib/csp.ts): it is applied directly to the GTM
-  // snippets below, and exposed in a <meta> tag so client-side code can read it
-  // when creating dynamic scripts — useRazorpay does exactly that, and is now
-  // the only thing loading Razorpay outside of app/checkout/layout.tsx.
-  const nonce = (await headers()).get('x-nonce') ?? undefined;
+  // NO nonce here, deliberately, and this is the load-bearing decision of the
+  // whole ISR change: `headers()` is a Dynamic API, and calling it in the ROOT
+  // layout opts EVERY route in the app out of static rendering. That single
+  // line was why 0 of ~110 routes were prerendered and every page carried
+  // `private, no-store`.
+  //
+  // The inline analytics scripts below are instead allowed by SHA-256 hash on
+  // the strict routes (lib/csp.ts buildStrictCsp) and by 'unsafe-inline' on the
+  // public ones. app/checkout/layout.tsx still reads x-nonce for Razorpay —
+  // a NESTED layout may, because /checkout is dynamic anyway, and Next still
+  // nonces its own scripts there (verified on a production build).
 
   // Resolve the header category nav server-side (data-driven, cached) so it
   // stays in sync with admin-managed categories and renders in the SSR HTML.
@@ -200,7 +209,12 @@ export default async function RootLayout({
     <html lang="en">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        {nonce && <meta name="csp-nonce" content={nonce} />}
+        {/* The <meta name="csp-nonce"> tag is gone with the nonce. hooks/useRazorpay.ts
+            reads it to stamp the script it injects, and already handles absence
+            (`if (nonce) script.nonce = nonce`). On /checkout and /orders/[id] —
+            the only places it runs — the strict CSP applies and 'strict-dynamic'
+            extends trust from the nonce'd Next bundle that calls it, so the
+            injected Razorpay script is allowed with or without the attribute. */}
         {/* Warm the TLS connection to the image origin — it serves the eager
             mobile hero LCP image and every product image, so this speeds the
             first image on any page.
@@ -240,11 +254,15 @@ export default async function RootLayout({
             wants lazy loading and is not subject to any coverage report — it
             just no longer belongs in THIS layout. See app/checkout/layout.tsx.
 
-            nonce={nonce} is REQUIRED on every one — the strict nonce CSP
-            (lib/csp.ts) blocks any unnonce'd script; 'strict-dynamic' then
-            propagates trust to whatever they inject. Every value interpolated
-            below is shape-validated by its isXEnabled guard (GTM-…, AW-digits,
-            digits) so none of them can break out of the snippet.
+            The bodies live in lib/analyticsSnippets.ts, NOT inline here, and
+            that indirection is load-bearing: these scripts carry no nonce (the
+            root layout cannot mint one without making every route dynamic), so
+            the strict CSP allows them by SHA-256 HASH. A hash matches the body
+            byte for byte, so the string that is hashed and the string that is
+            rendered must be the SAME string. Editing a snippet here instead of
+            there would silently stop it executing on /checkout and friends.
+            Every interpolated value is shape-validated by its isXEnabled guard
+            (GTM-…, AW-digits, digits) so none can break out of the snippet.
 
             ORDER MATTERS: each queue must be created before the loader that
             drains it. Keep every queue init immediately above its loader. */}
@@ -268,32 +286,16 @@ export default async function RootLayout({
                 Note the name: `gtmDataLayer`, NOT the default `dataLayer`. See
                 lib/gtm.ts — sharing one array let GTM replay gtag's `config`
                 and triple the page_view beacons. */}
-            <script
-              nonce={nonce}
-              dangerouslySetInnerHTML={{
-                __html: `window.${GTM_DATA_LAYER} = window.${GTM_DATA_LAYER} || [];`,
-              }}
-            />
-            {/* Google's stock snippet, plus the `j.setAttribute('nonce', …)`
-                line Google documents for nonce-based CSPs. Without it the
-                injected gtm.js carries no nonce and survives only on
-                'strict-dynamic' — which Chrome honours, but it leaves GTM with
-                no nonce to copy onto the tags IT injects. Any Custom HTML tag
-                added in the GTM UI later would then be blocked on a browser
-                without 'strict-dynamic' support, and blocked inline script
-                fails silently. The nonce is already public in the page source,
-                so interpolating it here reveals nothing. */}
-            <script
-              nonce={nonce}
-              dangerouslySetInnerHTML={{
-                __html: `(function(w,d,s,l,i,n){w[l]=w[l]||[];w[l].push({'gtm.start':
-new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-'https://www.googletagmanager.com/gtm.js?id='+i+dl;if(n)j.setAttribute('nonce',n);
-f.parentNode.insertBefore(j,f);
-})(window,document,'script','${GTM_DATA_LAYER}','${GTM_ID}',${JSON.stringify(nonce ?? '')});`,
-              }}
-            />
+            <script dangerouslySetInnerHTML={{ __html: gtmQueueSnippet }} />
+            {/* Google's stock loader. The `j.setAttribute('nonce', …)` line it
+                used to carry is gone — a hash-allowed script has no nonce to
+                propagate. 'strict-dynamic' still extends trust from this script
+                to the gtm.js it injects and onward to GTM's own tags, which is
+                precisely what strict-dynamic is for. The residual cost is
+                browsers that ignore strict-dynamic, where a Custom HTML tag
+                added in the GTM UI would be blocked; the script-src host
+                allowlist still covers gtm.js itself there. */}
+            <script dangerouslySetInnerHTML={{ __html: gtmLoaderSnippet }} />
           </>
         )}
 
@@ -316,21 +318,11 @@ f.parentNode.insertBefore(j,f);
                 window.dataLayer and gtag.js drains that queue in order when it
                 lands, so nothing is lost — and 'config' is always queued ahead
                 of any event. */}
-            <script
-              nonce={nonce}
-              dangerouslySetInnerHTML={{
-                __html: `window.dataLayer = window.dataLayer || [];
-function gtag(){dataLayer.push(arguments);}
-window.gtag = gtag;
-gtag('js', new Date());
-gtag('config', '${GOOGLE_ADS_ID}');`,
-              }}
-            />
-            <script
-              async
-              src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`}
-              nonce={nonce}
-            />
+            {/* One script, not two: the gtag.js loader is inside this snippet.
+                A sibling <script async src> would carry neither nonce nor hash,
+                and 'strict-dynamic' ignores host allowlists — so it was blocked
+                on every strict route. See lib/analyticsSnippets.ts. */}
+            <script dangerouslySetInnerHTML={{ __html: googleAdsSnippet }} />
           </>
         )}
 
@@ -343,21 +335,7 @@ gtag('config', '${GOOGLE_ADS_ID}');`,
             reads the served HTML too, which is the other half of why this is a
             raw <script>. */}
         {isMetaPixelEnabled && (
-          <script
-            nonce={nonce}
-            dangerouslySetInnerHTML={{
-              __html: `!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window,document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '${META_PIXEL_ID}');
-fbq('track', 'PageView');`,
-            }}
-          />
+          <script dangerouslySetInnerHTML={{ __html: metaPixelSnippet }} />
         )}
       </head>
       <body

@@ -2,9 +2,29 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import BrandPageClient from './BrandPageClient';
-import { getServerApiBase, internalApiHeaders } from '@/lib/server-api';
+import { getServerApiBase, internalApiHeaders, fetchEntityOrNull } from '@/lib/server-api';
 import { resolveSeo } from '@/lib/seo';
 import { SITE_URL } from '@/lib/siteUrl';
+
+import { brandSlugsForPrerender } from '@/lib/staticParams';
+
+/**
+ * Makes this route statically generatable, which is the point: a static route
+ * is one <Link> can PREFETCH in full, so hovering a brand card preloads the
+ * whole page and the click is instant. A dynamic route can only prefetch up to
+ * the nearest loading boundary, which is why this felt slow before.
+ *
+ * `dynamicParams` stays at its default (true): a slug absent from this list is
+ * rendered on first request and then cached like a prerendered one, so the
+ * entire brands catalogue is ISR-backed — the list only decides what is warm
+ * immediately after a deploy. See lib/staticParams.ts.
+ *
+ * notFound() still works: an unknown slug renders on demand, the fetch misses,
+ * and the page throws — producing a real 404, which soft404.test.ts guards.
+ */
+export async function generateStaticParams() {
+  return (await brandSlugsForPrerender()).map((slug) => ({ slug }));
+}
 
 /**
  * Server shell for /brands/[slug].
@@ -28,8 +48,13 @@ import { SITE_URL } from '@/lib/siteUrl';
 // cache()d so generateMetadata and the page body share ONE upstream call.
 const getBrand = cache(async (slug: string) => {
   try {
-    const res = await fetch(
+    return await fetchEntityOrNull<any>(
       `${getServerApiBase()}/products/brands/${encodeURIComponent(decodeURIComponent(slug))}/details`,
+      // The backend answers 404 for a brand with no Brand document AND no
+      // active products, which is precisely the "does not exist" signal.
+      // fetchEntityOrNull retries transients and throws on anything that is not
+      // a 404, so a blip can never be cached as a 404 by ISR.
+      (body: any) => (body?.success && body.brand?.name ? body.brand : null),
       {
         headers: internalApiHeaders(),
         // Time-based only, deliberately UNTAGGED. `brand:` is not in the
@@ -41,14 +66,9 @@ const getBrand = cache(async (slug: string) => {
         next: { revalidate: 300 },
       },
     );
-    // The backend answers 404 for a brand with no Brand document AND no active
-    // products, which is precisely the "does not exist" signal we want.
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.success && data.brand?.name ? data.brand : null;
   } catch (error) {
-    console.error('Brand metadata fetch error:', error);
-    return null;
+    console.error('[brands/[slug]] entity fetch failed:', error);
+    throw error;
   }
 });
 

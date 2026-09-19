@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose'; // Lightweight JWT verification (edge-compatible)
 import { isGonePath } from '@/lib/legacyPaths';
-import { buildCsp } from '@/lib/csp';
+import { buildPublicCsp, buildStrictCsp } from '@/lib/csp';
+import { isStrictCspPath } from '@/lib/cspRoutes';
 
 /**
  * Next.js Middleware — single edge entrypoint for the whole app.
@@ -38,6 +39,7 @@ import { buildCsp } from '@/lib/csp';
 // agreement; a route gated in one place and not the other is how the two drift.
 const PROTECTED_ROUTES = ['/account', '/orders', '/checkout', '/profile', '/wishlist'];
 const ADMIN_ROUTES = ['/admin'];
+
 
 // Verification options must match how the backend SIGNS tokens
 // (Back-end/server/utils/sessionManager.js → signToken with only { expiresIn }).
@@ -229,17 +231,35 @@ export async function middleware(req: NextRequest) {
   const referralRedirect = captureReferral(req);
   if (referralRedirect) return referralRedirect;
 
-  // Per-request nonce + CSP, attached to whichever response proceeds.
+  // Pick the policy for this route. Static routes must never receive a nonce —
+  // see STRICT_CSP_PREFIXES for why that combination is fatal and silent.
+  const strict = isStrictCspPath(pathname);
+
   // crypto.randomUUID() is available in the Edge runtime (Web Crypto API).
-  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
-  const csp = buildCsp(nonce);
+  // Minted only on the strict path: on a public route it would be dead weight
+  // in a header that no script can use.
+  const nonce = strict ? Buffer.from(crypto.randomUUID()).toString('base64') : null;
+  // Falling back to the public policy if hashing fails is deliberate: a strict
+  // route served a slightly weaker CSP still WORKS, whereas an unhandled throw
+  // here 500s the page outright. Degrade, never black out — and /checkout is on
+  // this path.
+  let csp: string;
+  try {
+    csp = nonce ? await buildStrictCsp(nonce) : buildPublicCsp();
+  } catch (err) {
+    console.error('[middleware] strict CSP build failed; falling back to public policy', err);
+    csp = buildPublicCsp();
+  }
 
   // Build a "proceed" response that forwards the nonce to server components via
   // the x-nonce request header and sets the CSP response header. Optionally
   // appends Set-Cookie headers (from a silent refresh).
   const proceed = (extraSetCookies?: string[]) => {
     const pageHeaders = new Headers(req.headers);
-    pageHeaders.set('x-nonce', nonce);
+    // Only strict routes get x-nonce. A statically rendered layout that read it
+    // would bake ONE request's nonce into HTML served to everyone — worse than
+    // having none, because it looks like it works.
+    if (nonce) pageHeaders.set('x-nonce', nonce);
     const res = NextResponse.next({ request: { headers: pageHeaders } });
     res.headers.set('Content-Security-Policy', csp);
     if (extraSetCookies) {

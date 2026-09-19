@@ -1,7 +1,7 @@
 'use client';
 
 import type { StockStatus } from '@/lib/stock';
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { SlidersHorizontal, X } from 'lucide-react';
@@ -194,7 +194,7 @@ async function getCategoryBySlug(slug: string): Promise<Category | null> {
   }
 }
 
-export default function ClientPage({ slug, initialCategory }: { slug: string; initialCategory?: Category | null }) {
+function ClientPageInner({ slug, initialCategory }: { slug: string; initialCategory?: Category | null }) {
   const searchParams = useSearchParams();
   // Reads the same cached taxonomy the chip strip above renders from.
   const fetchCategories = useCategoriesFetcher();
@@ -512,5 +512,26 @@ export default function ClientPage({ slug, initialCategory }: { slug: string; in
         </div>
       )}
     </div>
+  );
+}
+
+// useSearchParams() requires a Suspense boundary once this route is statically
+// generated. It sits INSIDE the client component on purpose: by the time this
+// renders the server has already awaited the category lookup, so a missing category
+// has thrown notFound() and committed a 404 before anything streams. Moving
+// this boundary up into page.tsx — or adding a loading.tsx to this segment or
+// any ancestor — puts the soft 404 straight back. Same shape as
+// app/brands/[slug]/BrandPageClient.tsx.
+// Props are DERIVED from the inner component rather than restated. `any` here
+// meant a future rename of `initialCategory` would compile clean and silently drop the
+// server-seeded data, sending the grid back to a client refetch — the exact
+// regression the seed exists to avoid.
+type ClientPageProps = Parameters<typeof ClientPageInner>[0];
+
+export default function ClientPage({ slug, initialCategory }: ClientPageProps) {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-obsidian-deep" />}>
+      <ClientPageInner slug={slug} initialCategory={initialCategory} />
+    </Suspense>
   );
 }

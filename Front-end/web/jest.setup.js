@@ -88,3 +88,20 @@ console.error = (...args) => {
   }
   originalConsoleError(...args);
 };
+
+// jsdom ships a `crypto` stub without `subtle`, but the Edge runtime that
+// actually runs middleware provides full Web Crypto. lib/csp.ts uses
+// crypto.subtle.digest to hash the inline analytics snippets, so without this
+// every CSP test fails on an environment difference rather than on behaviour.
+// Node's webcrypto is the same API, so this is a faithful stand-in.
+if (!globalThis.crypto?.subtle) {
+  const { webcrypto } = require('node:crypto');
+  Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true });
+}
+// Same story for TextEncoder/TextDecoder — present in the Edge runtime and in
+// Node, absent from this jsdom build.
+if (typeof globalThis.TextEncoder === 'undefined') {
+  const { TextEncoder, TextDecoder } = require('node:util');
+  globalThis.TextEncoder = TextEncoder;
+  globalThis.TextDecoder = TextDecoder;
+}

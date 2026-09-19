@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { formatDateTimeIST } from '@/lib/datetime';
@@ -68,7 +68,7 @@ interface SlipOrder {
   }>;
 }
 
-export default function PackingSlipPage() {
+function PackingSlipPageInner() {
   const { id } = useParams<{ id: string }>();
   /*
     `?shipment=<id>` prints the pick list for ONE parcel.
@@ -251,5 +251,16 @@ export default function PackingSlipPage() {
         This is a packing slip, not a tax invoice. Prices are intentionally omitted.
       </p>
     </div>
+  );
+}
+
+// useSearchParams() forces a client-side-rendering bailout, which is a hard
+// build error on a statically generated page. The Suspense boundary is the
+// documented remedy and matches the 15 other pages here that already do this.
+export default function PackingSlipPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <PackingSlipPageInner />
+    </Suspense>
   );
 }

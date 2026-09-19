@@ -1,7 +1,7 @@
 'use client';
 
 import type { StockStatus } from '@/lib/stock';
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -344,7 +344,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   );
 }
 
-export default function ClientPage({ slug, initialProduct }: { slug: string; initialProduct?: Product | null }) {
+function ClientPageInner({ slug, initialProduct }: { slug: string; initialProduct?: Product | null }) {
   const router = useRouter();
 
   // The server component already fetched this product (for metadata + JSON-LD)
@@ -407,4 +407,25 @@ export default function ClientPage({ slug, initialProduct }: { slug: string; ini
   }
 
   return <ProductDetailPageClient product={product} />;
+}
+
+// useSearchParams() requires a Suspense boundary once this route is statically
+// generated. It sits INSIDE the client component on purpose: by the time this
+// renders the server has already awaited the product lookup, so a missing product
+// has thrown notFound() and committed a 404 before anything streams. Moving
+// this boundary up into page.tsx — or adding a loading.tsx to this segment or
+// any ancestor — puts the soft 404 straight back. Same shape as
+// app/brands/[slug]/BrandPageClient.tsx.
+// Props are DERIVED from the inner component rather than restated. `any` here
+// meant a future rename of `initialProduct` would compile clean and silently drop the
+// server-seeded data, sending the grid back to a client refetch — the exact
+// regression the seed exists to avoid.
+type ClientPageProps = Parameters<typeof ClientPageInner>[0];
+
+export default function ClientPage({ slug, initialProduct }: ClientPageProps) {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-obsidian-deep" />}>
+      <ClientPageInner slug={slug} initialProduct={initialProduct} />
+    </Suspense>
+  );
 }

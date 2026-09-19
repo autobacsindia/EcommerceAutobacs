@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import apiClient from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Mail, Phone, Lock, CheckCircle } from 'lucide-react';
 
-export default function ClaimOrderPage() {
+function ClaimOrderPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
@@ -259,5 +259,16 @@ export default function ClaimOrderPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// useSearchParams() forces a client-side-rendering bailout, which is a hard
+// build error on a statically generated page. The Suspense boundary is the
+// documented remedy and matches the 15 other pages here that already do this.
+export default function ClaimOrderPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <ClaimOrderPageInner />
+    </Suspense>
   );
 }

@@ -4,7 +4,7 @@ import OrganizedCategoryGrid from '@/components/categories/OrganizedCategoryGrid
 import { Category } from '@/lib/types';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
-import { getServerApiBase } from '@/lib/server-api';
+import { getServerApiBase, shouldFailBuildOnFetchError } from '@/lib/server-api';
 import { SITE_URL } from '@/lib/siteUrl';
 
 // The category list has no per-request inputs, so it renders as a fully static
@@ -37,7 +37,23 @@ export default async function CategoriesPage() {
   // failure, and a cold request surfaces error.tsx (with a working reset()).
   // Swallowing the error here would let ISR cache an error page for `revalidate`
   // seconds and hand every visitor a dead "retry" link.
-  const categories = await getCategories();
+  let categories: Category[];
+  try {
+    categories = await getCategories();
+  } catch (error) {
+    // The throw is still the RIGHT behaviour at request time and during ISR
+    // revalidation — Next then keeps serving the last good page instead of
+    // caching a failure, which is why getCategories() has no try/catch.
+    //
+    // It is wrong in exactly one place: the initial `next build` in CI, which
+    // points NEXT_PUBLIC_API_URL at an unreachable localhost on purpose. Before
+    // ISR nothing prerendered, so a build never fetched anything; now it does,
+    // and rethrowing would fail every CI run. On Vercel this still throws and
+    // stops the deploy.
+    if (shouldFailBuildOnFetchError()) throw error;
+    console.warn('[categories] build-time fetch failed; prerendering empty shell', error);
+    categories = [];
+  }
 
   return (
     <div className="min-h-screen bg-obsidian-deep">

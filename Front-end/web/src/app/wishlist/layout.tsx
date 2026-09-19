@@ -1,20 +1,3 @@
-import { Metadata } from 'next';
-
-// SEO: Prevent indexing but allow following links (preserves link equity)
-export const metadata: Metadata = {
-  robots: {
-    index: false,
-    follow: true,
-  },
-};
-
-export default function CartLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <>{children}</>;
-}
 
 /**
  * Forces this segment to render dynamically — a SECURITY pairing, not a
@@ -38,3 +21,7 @@ export default function CartLayout({
  * manifest. Do not remove this without removing the route from that list.
  */
 export const dynamic = 'force-dynamic';
+
+export default function WishlistLayout({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}

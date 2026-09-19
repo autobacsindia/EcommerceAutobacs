@@ -2,10 +2,30 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 import ClientPage from './ClientPage';
-import { getServerApiBase } from '@/lib/server-api';
+import { getServerApiBase, fetchEntityOrNull, internalApiHeaders } from '@/lib/server-api';
 import { isOutOfStock, getStockStatus } from '@/lib/stock';
 import { resolveSeo } from '@/lib/seo';
 import { SITE_URL } from '@/lib/siteUrl';
+
+import { productSlugsForPrerender } from '@/lib/staticParams';
+
+/**
+ * Makes this route statically generatable, which is the point: a static route
+ * is one <Link> can PREFETCH in full, so hovering a product card preloads the
+ * whole page and the click is instant. A dynamic route can only prefetch up to
+ * the nearest loading boundary, which is why this felt slow before.
+ *
+ * `dynamicParams` stays at its default (true): a slug absent from this list is
+ * rendered on first request and then cached like a prerendered one, so the
+ * entire products catalogue is ISR-backed — the list only decides what is warm
+ * immediately after a deploy. See lib/staticParams.ts.
+ *
+ * notFound() still works: an unknown slug renders on demand, the fetch misses,
+ * and the page throws — producing a real 404, which soft404.test.ts guards.
+ */
+export async function generateStaticParams() {
+  return (await productSlugsForPrerender()).map((slug) => ({ slug }));
+}
 
 // JSON.stringify does not escape < > & so a product field containing </script>
 // would break out of the script tag. Unicode-escape these three characters so
@@ -24,13 +44,23 @@ const getProductForMetadata = cache(async (slug: string) => {
     // Slug-only lookup — ObjectId URLs are permanently redirected by the backend
     // revalidate 60s: keeps the page cached but shrinks the window between an
     // admin SEO/content edit and it appearing publicly (was 3600 = up to 1h).
-    const res = await fetch(`${getServerApiBase()}/products/slug/${encodeURIComponent(slug)}`, { next: { revalidate: 60, tags: [`product:${slug}`] } });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.product ?? null;
+    return await fetchEntityOrNull<any>(
+      `${getServerApiBase()}/products/slug/${encodeURIComponent(slug)}`,
+      (body: any) => body?.product ?? null,
+      // internalApiHeaders: SSR and build-time prerendering leave Vercel from a
+      // small pool of egress IPs, so without this every render in the fleet
+      // shares one 300/min per-IP bucket and starts taking 429s under load —
+      // which, now that a 429 is no longer silently treated as "missing", fails
+      // the build rather than caching a 404. This route was missing it.
+      { headers: internalApiHeaders(), next: { revalidate: 60, tags: [`product:${slug}`] } },
+    );
   } catch (error) {
-    console.error('Metadata fetch error:', error);
-    return null;
+    // Rethrown on purpose. Swallowing this into `null` made a transient 429 or
+    // 5xx look like "product deleted", and under ISR that 404 gets CACHED and
+    // outlives the blip — observed on a production build. Let it surface
+    // error.tsx, which is retryable and is not cached as a 404.
+    console.error('[products/[slug]] entity fetch failed:', error);
+    throw error;
   }
 });
 

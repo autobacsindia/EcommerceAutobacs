@@ -200,3 +200,16 @@ jobs:
           # Sentry source-map upload is skipped when SENTRY_AUTH_TOKEN is absent —
           # intentional in CI; uploads happen on Vercel at deploy time.
         run: npm run build
+
+      # Must run HERE, not in the test job: it reads .next/prerender-manifest.json,
+      # which only exists after a build. It asserts that no route receiving the
+      # strict nonce CSP is prerendered — a pairing whose failure serves a CSP
+      # naming a nonce that the cached HTML does not carry, blocking every script
+      # on the page while the build, the tests and curl all look healthy.
+      # REQUIRE_BUILD_MANIFEST=1 makes a missing manifest a failure rather than a
+      # silent skip.
+      - name: Verify CSP / render-mode pairing
+        if: needs.changes.outputs.run == 'true'
+        env:
+          REQUIRE_BUILD_MANIFEST: "1"
+        run: npx jest src/app/cspRoutePairing.test.ts --forceExit
