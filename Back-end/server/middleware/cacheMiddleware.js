@@ -1,5 +1,7 @@
 import cacheService from '../services/cacheService.js';
 import Sentry from '../config/sentry.js';
+import { pathsForPatterns } from '../config/cdnPurgeUrls.js';
+import { purgeEdgePaths } from '../services/cdnPurgeService.js';
 
 /**
  * Cache invalidation for write paths.
@@ -40,4 +42,23 @@ export const invalidateCache = (...patterns) => {
       console.warn(`[Cache] Invalidation failed for patterns: ${patterns.join(', ')}`, err);
       Sentry.captureException(err, { tags: { area: 'cache-invalidation' }, extra: { patterns } });
     });
+
+  //   3. The Cloudflare edge. Clearing Redis alone left the edge serving the old
+  //      response for the rest of its s-maxage, and NOTHING in this codebase
+  //      purged it — so the edge TTL was not a worst case before a purge, it was
+  //      simply how long the write stayed invisible. Only patterns with a CLOSED
+  //      set of request URLs can be purged on the Free plan (exact-URL purge
+  //      only); config/cdnPurgeUrls.js explains the rule and returns [] for
+  //      everything else, so this is a no-op for most calls.
+  //
+  //      Separate promise chain on purpose: a CDN timeout must not mark the
+  //      Redis invalidation above as failed, and vice versa.
+  const edgePaths = pathsForPatterns(patterns);
+  if (edgePaths.length) {
+    purgeEdgePaths(edgePaths).catch((err) => {
+      // purgeEdgePaths already logs + reports per batch; this is the last resort
+      // so an unexpected throw cannot surface as an unhandled rejection.
+      console.warn(`[Cache] Edge purge rejected for patterns: ${patterns.join(', ')}`, err);
+    });
+  }
 };

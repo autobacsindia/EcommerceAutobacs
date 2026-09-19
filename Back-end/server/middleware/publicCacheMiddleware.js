@@ -1,29 +1,22 @@
-import cacheService from '../services/cacheService.js';
-
 /**
  * Public-cache invalidation for write paths.
  *
  * NOTE: the response-caching middleware that used to live here
  * (`publicCacheResponse`) was retired in the caching overhaul — all cacheable
- * routes now use middleware/httpCache.js. This file keeps only the invalidation
- * helper, which some write paths already call.
+ * routes now use middleware/httpCache.js.
  *
- * Same dual mechanism as middleware/cacheMiddleware.js invalidateCache:
- * deterministic tag-index invalidation plus a SCAN-glob fallback for legacy /
- * untagged keys. Fire-and-forget; never awaited.
+ * `invalidatePublicCache` is now a thin alias for `invalidateCache`. The two
+ * were byte-identical implementations of the same Redis tag + SCAN-glob sweep,
+ * differing only in that this one did not report failures to Sentry. Keeping
+ * two copies meant every future change to invalidation — the Cloudflare edge
+ * purge being the immediate one — had to be made twice, and would be silently
+ * half-applied the first time someone forgot. One implementation, one
+ * chokepoint.
  *
- * @param {...string} patterns
+ * The export stays because ~5 call sites in routes/products.js and
+ * routes/vehicles.js use this name, and the rename is churn with no behaviour
+ * change. New code should import `invalidateCache` directly.
+ *
+ * @param {...string} patterns tags (primary) / key substrings (fallback)
  */
-export const invalidatePublicCache = (...patterns) => {
-  Promise.all(patterns.flatMap((pattern) => [
-    cacheService.invalidateTags(pattern),
-    cacheService.invalidatePattern(pattern),
-  ]))
-    .then((counts) => {
-      const total = counts.reduce((sum, n) => sum + (n || 0), 0);
-      console.log(`[PublicCache] Invalidated ${total} key(s) for patterns:`, patterns);
-    })
-    .catch((err) => {
-      console.warn(`[PublicCache] Invalidation failed for patterns: ${patterns.join(', ')}`, err);
-    });
-};
+export { invalidateCache as invalidatePublicCache } from './cacheMiddleware.js';

@@ -24,38 +24,10 @@
 
 import Redis from 'ioredis';
 import { RESPONSE_CACHE_PATTERNS, flushPattern } from '../services/cache/flush.js';
-
-/**
- * Purge the Cloudflare edge cache for the zone. No-op unless both env vars are set.
- * Token needs the "Zone → Cache Purge" permission, scoped to the zone.
- */
-async function purgeCloudflare() {
-  const token = process.env.CLOUDFLARE_API_TOKEN;
-  const zoneId = process.env.CLOUDFLARE_ZONE_ID;
-  if (!token || !zoneId) {
-    console.log('cloudflare  — skipped (CLOUDFLARE_API_TOKEN/CLOUDFLARE_ZONE_ID not set)');
-    return;
-  }
-  try {
-    const res = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ purge_everything: true }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.success === false) {
-      const detail = body?.errors?.map((e) => e.message).join('; ') || `HTTP ${res.status}`;
-      console.error(`cloudflare  — purge FAILED: ${detail}`);
-      return;
-    }
-    console.log('cloudflare  — edge cache purged (purge_everything)');
-  } catch (err) {
-    console.error('cloudflare  — purge error:', err.message);
-  }
-}
+// Shared with the write path (middleware/cacheMiddleware.js). This script is the
+// one caller that legitimately wants purge_everything: it runs after a bulk data
+// or SEO migration, where the blast radius on img.<domain> is the point.
+import { purgeEverything } from '../services/cdnPurgeService.js';
 
 async function main() {
   const url = process.env.REDIS_URL;
@@ -81,7 +53,7 @@ async function main() {
   await redis.quit();
 
   // Purge the edge after the origin, so a cache MISS re-fills from fresh data.
-  await purgeCloudflare();
+  await purgeEverything();
   console.log('\nDone.');
   process.exit(0);
 }
