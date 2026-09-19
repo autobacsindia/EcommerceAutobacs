@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -15,7 +15,7 @@ import { FaFacebook } from 'react-icons/fa';
 import OfferStrip from '@/components/offer/OfferStrip';
 import { getOffer } from '@/lib/offers';
 
-export default function RegisterPage() {
+function RegisterPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // Where to land after registering. Sanitised to an internal path to avoid
@@ -308,5 +308,16 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// useSearchParams() forces a client-side-rendering bailout, which is a hard
+// build error on a statically generated page. The Suspense boundary is the
+// documented remedy and matches the 15 other pages here that already do this.
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen" />}>
+      <RegisterPageInner />
+    </Suspense>
   );
 }

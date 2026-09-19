@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import ProductsPageClient from '../products/page'; // Adjust path if needed
+import ProductsPageClient from '../products/(list)/page'; // Adjust path if needed
 import apiClient from '@/lib/api';
 import { useSearchParams, useRouter } from 'next/navigation';
 

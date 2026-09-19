@@ -7,24 +7,24 @@
  * the UI can show is a generic failure. The same is true of the script nonce.
  * So the entries those paths need are pinned rather than left to review.
  */
-import { buildCsp } from './csp';
+import { buildStrictCsp, buildPublicCsp } from './csp';
 
 const directive = (csp: string, name: string) =>
   csp.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `)) || '';
 
 describe('connect-src', () => {
-  test('allows the R2 upload origin', () => {
+  test('allows the R2 upload origin', async () => {
     // Presigned PUTs go to the S3 endpoint. A private bucket has no custom
     // domain by design, so there is no narrower host available.
-    expect(directive(buildCsp('n0nc3'), 'connect-src')).toMatch(/r2\.cloudflarestorage\.com/);
+    expect(directive(await buildStrictCsp('n0nc3'), 'connect-src')).toMatch(/r2\.cloudflarestorage\.com/);
   });
 
-  test('still allows Cloudinary while both stores hold live assets', () => {
-    expect(directive(buildCsp('n0nc3'), 'connect-src')).toContain('https://api.cloudinary.com');
+  test('still allows Cloudinary while both stores hold live assets', async () => {
+    expect(directive(await buildStrictCsp('n0nc3'), 'connect-src')).toContain('https://api.cloudinary.com');
   });
 
-  test('keeps the page itself as an allowed origin', () => {
-    expect(directive(buildCsp('n0nc3'), 'connect-src')).toContain("'self'");
+  test('keeps the page itself as an allowed origin', async () => {
+    expect(directive(await buildStrictCsp('n0nc3'), 'connect-src')).toContain("'self'");
   });
 });
 
@@ -54,13 +54,13 @@ describe('connect-src actually matches a real R2 bucket host', () => {
     return host === base || host.endsWith(`.${base}`);
   };
 
-  const r2Sources = () =>
-    directive(buildCsp('n0nc3'), 'connect-src')
+  const r2Sources = async () =>
+    directive(await buildStrictCsp('n0nc3'), 'connect-src')
       .split(/\s+/)
       .filter((t) => t.includes('r2.cloudflarestorage.com'));
 
-  test.each(REAL_HOSTS)('allows %s', (host) => {
-    expect(r2Sources().some((src) => allows(src, host))).toBe(true);
+  test.each(REAL_HOSTS)('allows %s', async (host) => {
+    expect((await r2Sources()).some((src) => allows(src, host))).toBe(true);
   });
 
   /*
@@ -78,8 +78,8 @@ describe('img-src', () => {
     The R2 delivery host. Products render through it once Phase 6 rewrites the
     stored URLs; without this every product image is blocked at once.
   */
-  test('allows both image hosts during the migration', () => {
-    const img = directive(buildCsp('n0nc3'), 'img-src');
+  test('allows both image hosts during the migration', async () => {
+    const img = directive(await buildStrictCsp('n0nc3'), 'img-src');
     expect(img).toContain('https://img.autobacsindia.com');
     expect(img).toContain('https://res.cloudinary.com');
   });
@@ -91,16 +91,16 @@ describe('script-src', () => {
     the header the policy would still look well-formed while permitting nothing —
     the kind of breakage that gets "fixed" by relaxing the policy.
   */
-  test('carries the per-request nonce', () => {
-    expect(buildCsp('abc123')).toContain("'nonce-abc123'");
-    expect(buildCsp('different')).not.toContain("'nonce-abc123'");
+  test('carries the per-request nonce', async () => {
+    expect(await buildStrictCsp('abc123')).toContain("'nonce-abc123'");
+    expect(await buildStrictCsp('different')).not.toContain("'nonce-abc123'");
   });
 
-  test('never allows unsafe-eval in production', () => {
+  test('never allows unsafe-eval in production', async () => {
     const prev = process.env.NODE_ENV;
     try {
       Object.defineProperty(process.env, 'NODE_ENV', { value: 'production', configurable: true });
-      expect(directive(buildCsp('n0nc3'), 'script-src')).not.toContain("'unsafe-eval'");
+      expect(directive(await buildStrictCsp('n0nc3'), 'script-src')).not.toContain("'unsafe-eval'");
     } finally {
       Object.defineProperty(process.env, 'NODE_ENV', { value: prev, configurable: true });
     }
@@ -108,8 +108,8 @@ describe('script-src', () => {
 });
 
 describe('the always-on hardening', () => {
-  test('blocks plugins and framing outright', () => {
-    const csp = buildCsp('n0nc3');
+  test('blocks plugins and framing outright', async () => {
+    const csp = await buildStrictCsp('n0nc3');
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("base-uri 'self'");
@@ -139,31 +139,31 @@ describe('tags delivered through GTM', () => {
     });
   };
 
-  const csp = () => buildCsp('n0nc3');
+  const csp = () => buildStrictCsp('n0nc3');
 
-  test('img-src allows the Clarity pixel that was blocked in production', () => {
-    expect(allows(directive(csp(), 'img-src'), 'https://c.clarity.ms/c.gif')).toBe(true);
+  test('img-src allows the Clarity pixel that was blocked in production', async () => {
+    expect(allows(directive(await csp(), 'img-src'), 'https://c.clarity.ms/c.gif')).toBe(true);
   });
 
-  test('img-src allows the Bing host that pixel REDIRECTS to', () => {
+  test('img-src allows the Bing host that pixel REDIRECTS to', async () => {
     // c.clarity.ms/c.gif → 302 → c.bing.com/c.gif. CSP checks every hop, and the
     // violation is reported against the original url — so allowing clarity.ms
     // alone still blocks the pixel while making it look like the wildcard failed.
-    expect(allows(directive(csp(), 'img-src'), 'https://c.bing.com/c.gif')).toBe(true);
+    expect(allows(directive(await csp(), 'img-src'), 'https://c.bing.com/c.gif')).toBe(true);
   });
 
   test.each([
     'https://l.clarity.ms/collect',
     'https://k.clarity.ms/collect',
     'https://e.clarity.ms/collect',
-  ])('connect-src allows the Clarity ingest host %s', (url) => {
+  ])('connect-src allows the Clarity ingest host %s', async (url) => {
     // Clarity shards ingest across single-letter region hosts, so pinning one
     // host would break the day a visitor is routed to a different shard.
-    expect(allows(directive(csp(), 'connect-src'), url)).toBe(true);
+    expect(allows(directive(await csp(), 'connect-src'), url)).toBe(true);
   });
 
-  test('script-src still lists the tag host for browsers without strict-dynamic', () => {
-    expect(allows(directive(csp(), 'script-src'), 'https://www.clarity.ms/tag/abc123')).toBe(true);
+  test('script-src still lists the tag host for browsers without strict-dynamic', async () => {
+    expect(allows(directive(await csp(), 'script-src'), 'https://www.clarity.ms/tag/abc123')).toBe(true);
   });
 
   /**
@@ -182,18 +182,108 @@ describe('tags delivered through GTM', () => {
     ['connect-src', 'https://google.co.in/ccm/form-data/11434499615'],
     ['img-src', 'https://google.com/pagead/1p-user-list/11434499615/'],
     ['img-src', 'https://google.co.in/pagead/1p-user-list/11434499615/'],
-  ])('%s allows the APEX Google host %s', (name, url) => {
-    expect(allows(directive(csp(), name), url)).toBe(true);
+  ])('%s allows the APEX Google host %s', async (name, url) => {
+    expect(allows(directive(await csp(), name), url)).toBe(true);
   });
 
-  test('the www Google hosts are still allowed alongside the apex ones', () => {
+  test('the www Google hosts are still allowed alongside the apex ones', async () => {
     // Adding the apex must not have replaced the www entries: both are used.
-    expect(allows(directive(csp(), 'connect-src'), 'https://www.google.com/ccm/collect')).toBe(true);
-    expect(allows(directive(csp(), 'img-src'), 'https://www.google.co.in/pagead/1p-user-list/x/')).toBe(true);
+    expect(allows(directive(await csp(), 'connect-src'), 'https://www.google.com/ccm/collect')).toBe(true);
+    expect(allows(directive(await csp(), 'img-src'), 'https://www.google.co.in/pagead/1p-user-list/x/')).toBe(true);
   });
 
-  test('the GTM noscript iframe is framable', () => {
+  test('the GTM noscript iframe is framable', async () => {
     // Only JS-disabled visitors hit this, so a regression here is invisible.
-    expect(allows(directive(csp(), 'frame-src'), 'https://www.googletagmanager.com/ns.html?id=x')).toBe(true);
+    expect(allows(directive(await csp(), 'frame-src'), 'https://www.googletagmanager.com/ns.html?id=x')).toBe(true);
   });
+});
+
+/**
+ * The two-policy split, and the failure modes that are invisible without these.
+ *
+ * A nonce cannot exist in prerendered HTML, so cached routes and nonce-bearing
+ * routes are disjoint sets. Everything below pins a property whose breakage
+ * produces a page that looks fine to curl and is dead in a browser.
+ */
+describe('public policy (statically rendered routes)', () => {
+  test('carries NO nonce — there is no request to mint one for', () => {
+    expect(buildPublicCsp()).not.toContain('nonce-');
+  });
+
+  test("carries NO 'strict-dynamic'", () => {
+    // Without a nonce or hash to anchor it, 'strict-dynamic' discards the
+    // 'self' source and blocks every script on the page. This is precisely how
+    // the first spike build broke.
+    expect(directive(buildPublicCsp(), 'script-src')).not.toContain("'strict-dynamic'");
+  });
+
+  test("allows 'unsafe-inline', which Next's flight data requires", () => {
+    // Next emits React flight data as inline `self.__next_f.push(...)` scripts
+    // whose content differs per page and per build, so they cannot be hashed.
+    expect(directive(buildPublicCsp(), 'script-src')).toContain("'unsafe-inline'");
+  });
+
+  test('carries NO hashes — a hash would make browsers IGNORE unsafe-inline', () => {
+    // CSP3: when any hash or nonce is present, 'unsafe-inline' is discarded.
+    // Adding the snippet hashes here would therefore break hydration on every
+    // static page, which is why they are deliberately absent.
+    expect(directive(buildPublicCsp(), 'script-src')).not.toContain('sha256-');
+  });
+
+  test('still pins the third-party script hosts', () => {
+    const src = directive(buildPublicCsp(), 'script-src');
+    for (const host of [
+      'https://checkout.razorpay.com',
+      'https://www.googletagmanager.com',
+      'https://connect.facebook.net',
+    ]) {
+      expect(src).toContain(host);
+    }
+  });
+});
+
+describe('strict policy (dynamically rendered routes)', () => {
+  test('hashes every inline analytics snippet', async () => {
+    // These scripts lost their nonce when the root layout stopped calling
+    // headers(). The hash is now the ONLY thing allowing them here, and a hash
+    // mismatch fails silently — the browser simply refuses to run the script.
+    const src = directive(await buildStrictCsp('n0nc3'), 'script-src');
+    const { INLINE_ANALYTICS_SNIPPETS } = await import('./analyticsSnippets');
+    expect(INLINE_ANALYTICS_SNIPPETS.length).toBeGreaterThan(0);
+    expect((src.match(/'sha256-/g) ?? []).length).toBe(INLINE_ANALYTICS_SNIPPETS.length);
+  });
+
+  test('each hash matches the snippet byte for byte', async () => {
+    // The real risk is drift: someone edits a snippet in layout.tsx instead of
+    // in analyticsSnippets.ts, and the hash silently stops matching.
+    const { INLINE_ANALYTICS_SNIPPETS } = await import('./analyticsSnippets');
+    const src = directive(await buildStrictCsp('n0nc3'), 'script-src');
+    for (const snippet of INLINE_ANALYTICS_SNIPPETS) {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(snippet));
+      const b64 = Buffer.from(new Uint8Array(digest)).toString('base64');
+      expect(`${snippet.slice(0, 30)}… => ${src.includes(`'sha256-${b64}'`)}`).toBe(
+        `${snippet.slice(0, 30)}… => true`,
+      );
+    }
+  });
+
+  test('the GTM loader no longer interpolates a nonce', async () => {
+    // A hashed script has no nonce to propagate, and leaving the
+    // j.setAttribute('nonce', …) line in would also make the snippet body
+    // per-request — which would break its own hash.
+    const { gtmLoaderSnippet } = await import('./analyticsSnippets');
+    expect(gtmLoaderSnippet).not.toContain('setAttribute(\'nonce\'');
+  });
+});
+
+describe('both policies agree on everything except script-src', () => {
+  test.each(['connect-src', 'img-src', 'frame-src', 'style-src', 'font-src'])(
+    '%s is identical',
+    async (name) => {
+      // Shared so a new host added for one policy cannot be forgotten in the
+      // other — a drift that reads as "works on the product page, blocked at
+      // checkout".
+      expect(directive(buildPublicCsp(), name)).toBe(directive(await buildStrictCsp('n0nc3'), name));
+    },
+  );
 });

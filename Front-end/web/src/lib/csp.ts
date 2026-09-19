@@ -1,3 +1,4 @@
+import { INLINE_ANALYTICS_SNIPPETS } from './analyticsSnippets';
 /**
  * Content-Security-Policy for every HTML response.
  *
@@ -31,43 +32,51 @@
 const R2_UPLOAD_ORIGIN =
   process.env.NEXT_PUBLIC_R2_S3_ENDPOINT || 'https://*.r2.cloudflarestorage.com';
 
-export function buildCsp(nonce: string): string {
-  const isDev = process.env.NODE_ENV !== 'production';
+/**
+ * Base64 SHA-256 of each inline analytics snippet, computed once per runtime.
+ *
+ * These exist because those snippets no longer carry a nonce: the root layout
+ * cannot mint one without opting every route out of static rendering. On the
+ * strict routes the hash is what allows them, and 'strict-dynamic' then extends
+ * trust to the libraries they inject.
+ *
+ * Memoised as a promise at module scope — crypto.subtle is async and middleware
+ * runs on every request, so hashing four strings per request would be pure
+ * waste. The Edge runtime provides Web Crypto.
+ */
+let hashesPromise: Promise<string[]> | null = null;
 
-  // script-src:
-  //   'nonce-{n}'      — only scripts carrying this nonce may execute inline.
-  //   'strict-dynamic' — trust propagates to scripts loaded by a nonce'd script,
-  //                      so Razorpay can load its own sub-scripts. Domain
-  //                      allow-lists below are a fallback for browsers without it.
-  //   'unsafe-eval'    — dev only, for React Fast Refresh (HMR).
-  //   'wasm-unsafe-eval' — allows WebAssembly.instantiate (the Draco glTF
-  //                      decoder that powers the home 3D car) WITHOUT permitting
-  //                      general eval(); required in prod where 'unsafe-eval' is
-  //                      stripped. Without it the .glb never decodes → blank canvas.
-  const scriptSrc = [
-    "'self'",
-    `'nonce-${nonce}'`,
-    "'strict-dynamic'",
-    "'wasm-unsafe-eval'",
-    ...(isDev ? ["'unsafe-eval'"] : []),
-    'https://checkout.razorpay.com',
-    // Affordability/EMI widget on the PDP (RazorpayAffordabilitySuite).
-    'https://cdn.razorpay.com',
-    'https://maps.googleapis.com',
-    // Google Tag (gtag.js) for Google Ads conversion tracking. 'strict-dynamic'
-    // already trusts the sub-scripts the nonce'd loader pulls in; these explicit
-    // entries are the fallback for browsers that ignore 'strict-dynamic'.
-    // googleadservices.com serves the conversion linker / conversion_async.js.
-    'https://www.googletagmanager.com',
-    'https://www.googleadservices.com',
-    // Meta Pixel loader (fbevents.js). 'strict-dynamic' already trusts it via the
-    // nonce'd init snippet; this is the fallback for browsers ignoring strict-dynamic.
-    'https://connect.facebook.net',
-    // Microsoft Clarity (session replay), injected by the GTM container. Same
-    // fallback role — 'strict-dynamic' already trusts what GTM injects.
-    'https://*.clarity.ms',
-  ].join(' ');
+async function snippetHashes(): Promise<string[]> {
+  if (!hashesPromise) {
+    hashesPromise = Promise.all(
+      INLINE_ANALYTICS_SNIPPETS.map(async (snippet) => {
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(snippet));
+        // btoa over the raw bytes — the encoding CSP expects.
+        const bytes = new Uint8Array(digest);
+        let binary = '';
+        for (const b of bytes) binary += String.fromCharCode(b);
+        return `'sha256-${btoa(binary)}'`;
+      }),
+      // ⚠ Drop a REJECTED promise from the cache. Memoising the rejection would
+      // make one transient crypto failure permanent: every later request awaits
+      // the same settled rejection, middleware throws, and every strict route —
+      // /checkout included — 500s until the next deploy. Clearing it means the
+      // next request simply tries again.
+    ).catch((err) => {
+      hashesPromise = null;
+      throw err;
+    });
+  }
+  return hashesPromise;
+}
 
+/**
+ * Everything except script-src, which is the only directive the two policies
+ * disagree on. Shared so a new connect-src host or frame-src entry cannot be
+ * added to one policy and forgotten in the other — a drift that would present
+ * as "works on the product page, blocked at checkout".
+ */
+function buildPolicy(scriptSrc: string): string {
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
@@ -140,4 +149,107 @@ export function buildCsp(nonce: string): string {
     "form-action 'self' https://api.razorpay.com",
     "upgrade-insecure-requests",
   ].join('; ');
+}
+
+/**
+ * ── Two policies, because a nonce and a cached page are mutually exclusive ──
+ *
+ * A nonce must differ per response; a statically rendered page is built once
+ * and served to everyone. There is no third option in Next 15 — so the routes
+ * that are cached and the routes that carry a nonce are disjoint sets, and the
+ * middleware picks per request (see isStrictCspPath in middleware.ts).
+ *
+ * ⚠ Getting the pairing wrong is catastrophic AND SILENT: serving the strict,
+ * nonce-bearing policy over prerendered HTML (which contains no nonces) means
+ * 'strict-dynamic' discards the 'self' source and the browser blocks EVERY
+ * script on the page. The build passes, the tests pass, curl looks healthy, and
+ * only a browser console shows the site is inert. Measured on the spike build.
+ */
+
+/** Hosts allowed to serve scripts, shared by both policies. */
+const SCRIPT_HOSTS = [
+  'https://checkout.razorpay.com',
+  // Affordability/EMI widget on the PDP (RazorpayAffordabilitySuite).
+  'https://cdn.razorpay.com',
+  'https://maps.googleapis.com',
+  // Google Tag (gtag.js) for Ads conversion tracking. Under the strict policy
+  // 'strict-dynamic' already trusts what the nonce'd/hashed loaders pull in;
+  // these entries are the fallback for browsers that ignore strict-dynamic, and
+  // the PRIMARY mechanism under the public policy, which has no strict-dynamic.
+  'https://www.googletagmanager.com',
+  'https://www.googleadservices.com',
+  // Meta Pixel loader (fbevents.js).
+  'https://connect.facebook.net',
+  // Microsoft Clarity (session replay), injected by the GTM container.
+  'https://*.clarity.ms',
+  // ── Hosts gtag/GTM inject scripts FROM ───────────────────────────────────
+  // These were already trusted in img-src/connect-src but were missing here.
+  // Under the STRICT policy that was survivable ('strict-dynamic' propagates
+  // trust to whatever a trusted script inserts, so host entries are ignored).
+  // Under the PUBLIC policy there is no 'strict-dynamic' — the host allowlist
+  // is the ONLY gate — so on ~all storefront traffic a script injected from any
+  // of these would simply be blocked, silently.
+  'https://www.google-analytics.com',
+  'https://googleads.g.doubleclick.net',
+  'https://ad.doubleclick.net',
+  // Deliberately NOT added: www.google.com / google.co.in. They appear in
+  // connect-src and img-src for the enhanced-conversions /ccm/form-data
+  // endpoint and the pagead beacons, which are fetches and pixels — not
+  // scripts. Adding a host that broad to script-src would widen the policy for
+  // no demonstrated load.
+].join(' ');
+
+/**
+ * STRICT — for dynamically rendered routes only (checkout, account, orders,
+ * cart, admin, …). Per-request nonce + 'strict-dynamic'.
+ *
+ * The snippet hashes are here because the four inline analytics scripts in the
+ * root layout no longer carry a nonce; the root layout cannot mint one without
+ * making every route dynamic again. A hash-allowed script propagates
+ * 'strict-dynamic' trust exactly as a nonce'd one does.
+ */
+export async function buildStrictCsp(nonce: string): Promise<string> {
+  const isDev = process.env.NODE_ENV !== 'production';
+  const scriptSrc = [
+    "'self'",
+    `'nonce-${nonce}'`,
+    "'strict-dynamic'",
+    ...(await snippetHashes()),
+    // Allows WebAssembly.instantiate (the Draco glTF decoder behind the home 3D
+    // car) WITHOUT permitting general eval(); required in prod where
+    // 'unsafe-eval' is stripped. Without it the .glb never decodes.
+    "'wasm-unsafe-eval'",
+    ...(isDev ? ["'unsafe-eval'"] : []), // React Fast Refresh (HMR)
+    SCRIPT_HOSTS,
+  ].join(' ');
+  return buildPolicy(scriptSrc);
+}
+
+/**
+ * PUBLIC — for statically rendered / cacheable routes.
+ *
+ * No nonce (impossible in prebuilt HTML) and therefore no 'strict-dynamic',
+ * which without a nonce or hash anchor would block everything.
+ *
+ * 'unsafe-inline' is required, not preferred: Next emits its React flight data
+ * as inline `self.__next_f.push(...)` scripts whose content differs per page
+ * and per build, so they cannot be hashed. Note that adding any hash or nonce
+ * to this list would make browsers IGNORE 'unsafe-inline' and break hydration —
+ * which is why the snippet hashes are deliberately absent here.
+ *
+ * The trade, stated plainly: an injected <script> in stored HTML would execute
+ * on these pages. The remaining defence is server-side sanitization
+ * (Back-end/server/utils/htmlSanitizer.js — cleanHTML for product copy, reviews
+ * and Q&A; cleanArticleHTML for the blog).
+ */
+export function buildPublicCsp(): string {
+  const isDev = process.env.NODE_ENV !== 'production';
+  const scriptSrc = [
+    "'self'",
+    "'unsafe-inline'",
+    "'wasm-unsafe-eval'",
+    ...(isDev ? ["'unsafe-eval'"] : []),
+    SCRIPT_HOSTS,
+  ].join(' ');
+  return buildPolicy(scriptSrc);
 }
