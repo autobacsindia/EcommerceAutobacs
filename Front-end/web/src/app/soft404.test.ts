@@ -90,4 +90,35 @@ describe('soft-404 guard', () => {
       expect(fs.existsSync(path.join(APP_DIR, segment, 'loading.tsx'))).toBe(true)
     }
   })
+
+  /**
+   * The listing skeletons this fix originally had to delete, restored safely.
+   *
+   * A route GROUP — `products/(list)/` — is a SIBLING of `products/[slug]`, not
+   * an ancestor, so its Suspense boundary wraps only the listing page. That is
+   * what lets `/products` show a skeleton while `/products/<junk>` still
+   * answers 404. The distinction is invisible on disk (both look like "a
+   * loading.tsx under products/"), so it is asserted rather than commented.
+   *
+   * The failure this prevents is someone "simplifying" the group away by
+   * moving page.tsx + loading.tsx up one level — which silently re-breaks 404s
+   * on the detail route and re-opens the Google-indexes-junk-URLs bug.
+   */
+  describe('list skeletons live in a (list) route group', () => {
+    const LIST_SEGMENTS = ['products', 'categories', 'brands']
+
+    it.each(LIST_SEGMENTS)('%s has its loading.tsx inside (list), not at the segment root', (segment) => {
+      expect(fs.existsSync(path.join(APP_DIR, segment, '(list)', 'loading.tsx'))).toBe(true)
+      // The same file one level up would be an ancestor of [slug] — the bug.
+      expect(fs.existsSync(path.join(APP_DIR, segment, 'loading.tsx'))).toBe(false)
+    })
+
+    it.each(LIST_SEGMENTS)('%s keeps page.tsx beside its skeleton in (list)', (segment) => {
+      // A skeleton in (list) with the page still at the segment root would put
+      // the boundary on a route group that renders nothing — no skeleton, and
+      // the reader would assume it worked.
+      expect(fs.existsSync(path.join(APP_DIR, segment, '(list)', 'page.tsx'))).toBe(true)
+      expect(fs.existsSync(path.join(APP_DIR, segment, 'page.tsx'))).toBe(false)
+    })
+  })
 })

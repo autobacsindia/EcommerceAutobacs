@@ -25,8 +25,8 @@ import { CACHE_VERSION } from '../services/cache/config.js';
 import { routeNamespace } from '../utils/cacheKeys.js';
 import {
   CACHE_PROFILES,
-  HTTP_CACHE_HEADERS,
   PRIVATE_NO_STORE,
+  resolveCacheControl,
   resolveTags,
 } from '../config/cacheProfiles.js';
 import { canonicalizeQuery } from '../utils/facetCacheKey.js';
@@ -68,7 +68,11 @@ const applyCacheHeader = (res, profile) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     return;
   }
-  const header = profile.http && HTTP_CACHE_HEADERS[profile.http];
+  // resolveCacheControl applies the profile's `edge` classification: a
+  // money-path profile ('none') is downgraded to `private, max-age=N` so no
+  // shared cache — Cloudflare or otherwise — can hold a price we have no way to
+  // purge. 'purgeable' and 'ttl' keep the full header.
+  const header = resolveCacheControl(profile);
   if (header) {
     res.setHeader('Cache-Control', header);
     res.setHeader('Vary', 'Accept-Encoding');

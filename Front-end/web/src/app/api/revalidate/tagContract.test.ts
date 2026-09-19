@@ -99,8 +99,12 @@ describe('Next.js cache tag contract', () => {
   it('keeps the catalog and category listings on revalidatable tags', () => {
     // Named explicitly because these two are the highest-traffic stale surfaces:
     // a wrong price or availability on /products is a consumer-trust problem.
-    const products = readFileSync(join(SRC, 'app', 'products', 'page.tsx'), 'utf8');
-    const categories = readFileSync(join(SRC, 'app', 'categories', 'page.tsx'), 'utf8');
+    // Both live inside a `(list)` route group so their loading.tsx skeletons do
+    // not sit above `[slug]` and re-open the soft-404 (src/app/soft404.test.ts).
+    // readFileSync throws if these move again, which is the intent — this
+    // assertion is worthless if it silently reads the wrong file.
+    const products = readFileSync(join(SRC, 'app', 'products', '(list)', 'page.tsx'), 'utf8');
+    const categories = readFileSync(join(SRC, 'app', 'categories', '(list)', 'page.tsx'), 'utf8');
     expect(declaredTags(products)).toContain('product:list');
     expect(declaredTags(categories)).toContain('category:list');
   });

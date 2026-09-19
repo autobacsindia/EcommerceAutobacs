@@ -134,12 +134,27 @@ describe('httpCache Cache-Control header', () => {
   const original = process.env.NODE_ENV;
   afterEach(() => { process.env.NODE_ENV = original; });
 
-  it('emits the profile CDN directive in production', async () => {
+  it('emits the public CDN directive for an edge-cacheable profile', async () => {
+    // PAGESEO_PUBLIC is edge:'ttl' — open URL set but no money in the payload,
+    // so a shared cache may hold it.
+    process.env.NODE_ENV = 'production';
+    const mw = httpCache('PAGESEO_PUBLIC');
+    const res = makeRes();
+    await run(mw, makeReq({ originalUrl: '/api/v1/page-seo/product/1' }), res, { success: true });
+    expect(res.getHeader('Cache-Control')).toMatch(/^public, /);
+    expect(res.getHeader('Cache-Control')).toMatch(/s-maxage=/);
+  });
+
+  it('downgrades a money-path profile to private, so no shared cache holds a price', async () => {
+    // PRODUCT_DETAIL is edge:'none'. It used to emit
+    // `public, max-age=60, s-maxage=300, stale-while-revalidate=600`, which let
+    // Cloudflare serve a superseded price for up to 5 minutes with no purge path
+    // to cut it short. See the edge classification in config/cacheProfiles.js.
     process.env.NODE_ENV = 'production';
     const mw = httpCache('PRODUCT_DETAIL');
     const res = makeRes();
     await run(mw, makeReq({ originalUrl: '/api/v1/products/slug/x' }), res, { success: true, product: { _id: 'p', slug: 'x' } });
-    expect(res.getHeader('Cache-Control')).toBe('public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    expect(res.getHeader('Cache-Control')).toBe('private, max-age=60');
   });
 
   it('forces no-store outside production', async () => {
@@ -159,7 +174,10 @@ describe('httpCache Cache-Control header', () => {
     // Simulate the controller: sets X-Cache itself, and the CSRF middleware has
     // stamped a Set-Cookie earlier in the chain.
     await new Promise((resolve) => mw(makeReq({ originalUrl: '/api/v1/products' }), res, resolve));
-    expect(res.getHeader('Cache-Control')).toBe('public, max-age=300, s-maxage=600'); // optimistic
+    // Optimistic header. It is `private` now because PRODUCT_LIST is a money
+    // path (edge:'none'), NOT because of the cookie — the cookie guard below is
+    // what must still flip it to no-store.
+    expect(res.getHeader('Cache-Control')).toBe('private, max-age=300'); // optimistic
     res.setHeader('Set-Cookie', 'XSRF-TOKEN=abc');
     res.setHeader('X-Cache', 'MISS');
     res.json({ success: true, products: [] });
@@ -167,15 +185,32 @@ describe('httpCache Cache-Control header', () => {
     expect(res.getHeader('X-Cache')).toBe('MISS'); // controller's value preserved
   });
 
-  it('keeps the public header for a lock-profile response with no cookie', async () => {
+  it('keeps the profile header for a lock-profile response with no cookie', async () => {
     process.env.NODE_ENV = 'production';
     const mw = httpCache('PRODUCT_LIST');
     const res = makeRes();
     await new Promise((resolve) => mw(makeReq({ originalUrl: '/api/v1/products' }), res, resolve));
     res.setHeader('X-Cache', 'HIT');
     res.json({ success: true, products: [] });
-    expect(res.getHeader('Cache-Control')).toBe('public, max-age=300, s-maxage=600');
+    expect(res.getHeader('Cache-Control')).toBe('private, max-age=300');
     expect(res.getHeader('X-Cache')).toBe('HIT');
+  });
+
+  it('a Set-Cookie still strips a PUBLIC header — the shared-cache leak guard', async () => {
+    // The original regression was a public s-maxage header shipping alongside a
+    // Set-Cookie CSRF token, which a shared cache would store and then serve to
+    // other users. Once PRODUCT_LIST became `private` that test could no longer
+    // prove the guard, because the header was already private for another
+    // reason. This re-proves it on a profile that genuinely emits `public`.
+    process.env.NODE_ENV = 'production';
+    const mw = httpCache('PAGESEO_PUBLIC');
+    const res = makeRes();
+    await new Promise((resolve) => mw(makeReq({ originalUrl: '/api/v1/page-seo/product/1' }), res, resolve));
+    expect(res.getHeader('Cache-Control')).toMatch(/^public, /);
+
+    res.setHeader('Set-Cookie', 'XSRF-TOKEN=abc');
+    res.json({ success: true });
+    expect(res.getHeader('Cache-Control')).toMatch(/private, no-store/);
   });
 });
 

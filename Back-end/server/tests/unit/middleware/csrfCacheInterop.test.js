@@ -88,13 +88,28 @@ afterAll(() => {
 });
 
 describe('anonymous GET on a cacheable route', () => {
-  it('does not mint the CSRF cookie, so the response stays publicly cacheable', async () => {
+  it('does not mint the CSRF cookie, so the response stays cacheable', async () => {
     const res = makeRes();
     await runChain([csrfProtection, httpCache('CATEGORY_LIST')], makeReq(), res, { categories: ['a'] });
 
     expect(hasCsrfCookie(res)).toBe(false);
     expect(res.getHeader('Set-Cookie')).toBeUndefined();
+    // CATEGORY_LIST is edge:'none' — Cloudflare must not hold it, but Redis
+    // still does, so the cookie must stay suppressed. Asserting `^public` here
+    // would have quietly passed only because the cookie broke the cache.
+    expect(res.getHeader('Cache-Control')).toBe('private, max-age=60');
+  });
+
+  it('keeps an edge-cacheable profile public, and still mints no cookie', async () => {
+    // The other half of the contract: edge:'ttl' profiles must still reach
+    // Cloudflare. If this ever flips to `private`, the classification has
+    // over-reached and the CDN is doing nothing at all.
+    const res = makeRes();
+    await runChain([csrfProtection, httpCache('PAGESEO_PUBLIC')], makeReq(), res, { success: true });
+
+    expect(hasCsrfCookie(res)).toBe(false);
     expect(String(res.getHeader('Cache-Control'))).toMatch(/^public\b/);
+    expect(String(res.getHeader('Cache-Control'))).toMatch(/s-maxage=/);
   });
 
   it('actually populates the shared cache — second request is a HIT', async () => {
@@ -200,14 +215,16 @@ describe('/products/facets', () => {
     ...over,
   });
 
-  it('is publicly cacheable and mints no CSRF cookie', async () => {
+  it('is Redis-cacheable and mints no CSRF cookie', async () => {
     const req = facetsReq();
     const res = makeRes();
     await runChain([csrfProtection, httpCache('PRODUCT_FACETS')], req, res, { success: true, facets: {} });
 
     expect(hasCsrfCookie(res)).toBe(false);
     expect(res.getHeader('Set-Cookie')).toBeUndefined();
-    expect(res.getHeader('Cache-Control')).toBe('public, max-age=120, s-maxage=300');
+    // The facet sidebar reports stock and price ranges, so it is a money path:
+    // no s-maxage, but Redis still serves it and the cookie must stay off.
+    expect(res.getHeader('Cache-Control')).toBe('private, max-age=120');
   });
 
   it('does NOT open a second Redis entry — the controller owns that', async () => {
