@@ -16,7 +16,8 @@
  * Long TTLs go on `s-maxage`, at the edge, where a purge can reach them.
  */
 
-const { HTTP_CACHE_HEADERS } = await import('../../../config/cacheProfiles.js');
+const { HTTP_CACHE_HEADERS, CACHE_PROFILES, resolveCacheControl } =
+  await import('../../../config/cacheProfiles.js');
 
 const directive = (header, name) => {
   const match = new RegExp(`(?:^|[,\\s])${name}=(\\d+)`).exec(header);
@@ -43,14 +44,56 @@ describe('HTTP_CACHE_HEADERS browser TTLs', () => {
   it('vehicle-data does not let the edge outlive the origin cache', () => {
     const header = HTTP_CACHE_HEADERS['vehicle-data'];
 
-    // NOTHING in this codebase purges Cloudflare — invalidatePublicCache clears
-    // Redis only — so s-maxage is not "worst case before a purge", it is simply
-    // how long a deleted vehicle keeps being served. Vehicle deletion is
-    // permanent now, so a stale edge copy links the storefront to a hard 404.
+    // The edge IS purgeable now (services/cdnPurgeService.js) — but only for
+    // URLs with a closed set, and `vehicle-data` is worn by VEHICLE_LIST, whose
+    // /vehicles is also fetched as ?limit=1000. That open set is un-purgeable,
+    // so for THIS profile s-maxage remains "how long a deleted vehicle keeps
+    // being served", not "worst case before a purge". Deletion is permanent, so
+    // a stale edge copy links the storefront to a hard 404.
     expect(directive(header, 's-maxage')).toBeLessThanOrEqual(300);
 
     // stale-while-revalidate stacks ON TOP of s-maxage. On data with no purge
     // path that is pure added staleness, so this profile must not carry one.
     expect(directive(header, 'stale-while-revalidate')).toBeNull();
+  });
+
+  it('purgeable-static may outlive the others, because a write can reach it', () => {
+    // The inverse of the rule above, and the reason the purge work was done: a
+    // closed URL set IS purged on write, so a long s-maxage is a real worst case
+    // rather than a staleness window. If this ever drops back to ~300 someone
+    // has "tidied" away the benefit.
+    const header = HTTP_CACHE_HEADERS['purgeable-static'];
+    expect(directive(header, 's-maxage')).toBeGreaterThan(300);
+
+    // The browser floor still applies — nothing can purge a disk cache.
+    expect(directive(header, 'max-age')).toBeLessThanOrEqual(60);
+  });
+
+  it('no un-purgeable profile SHIPS a long s-maxage', () => {
+    // Asserted on the RESOLVED header, not the template: an edge:'none' profile
+    // is downgraded to `private` by resolveCacheControl, so the s-maxage sitting
+    // in its shared header template is dead and irrelevant. What matters is the
+    // string that actually reaches Cloudflare.
+    //
+    // Pointing an un-purgeable profile at a long-lived header is the exact
+    // mistake this classification exists to prevent, and it would look entirely
+    // reasonable in review.
+    for (const [name, profile] of Object.entries(CACHE_PROFILES)) {
+      if (!profile.http) continue;
+      const shipped = resolveCacheControl(profile);
+      const sMaxAge = directive(shipped, 's-maxage') ?? 0;
+      if (sMaxAge > 300) {
+        expect(`${name}:${profile.edge}`).toBe(`${name}:purgeable`);
+      }
+    }
+  });
+
+  it('every money-path profile ships `private`, so no shared cache can hold a price', () => {
+    for (const [name, profile] of Object.entries(CACHE_PROFILES)) {
+      if (profile.edge !== 'none') continue;
+      const shipped = resolveCacheControl(profile);
+      expect(`${name}: ${shipped}`).toMatch(/: private,/);
+      expect(shipped).not.toMatch(/s-maxage/);
+    }
   });
 });

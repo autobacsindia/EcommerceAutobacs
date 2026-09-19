@@ -65,8 +65,17 @@ async function trackCsrfFailure(clientIP) {
 
 const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 
-/** A `Cache-Control` that starts with `public` means a shared cache may store it. */
-const PUBLIC_CACHEABLE = /^\s*public\b/i;
+/**
+ * Whether some cache we control will store this response.
+ *
+ * Imported rather than re-implemented here: this predicate and the header it
+ * inspects must agree exactly, and they did not when money-path profiles
+ * started shipping `private, max-age=N` (see config/cacheProfiles.js). The old
+ * local regex only matched `^public`, so those responses read as
+ * non-cacheable, the CSRF cookie was minted, and httpCache then refused to
+ * store the very responses the change was meant to keep cacheable in Redis.
+ */
+import { isStorableCacheControl } from '../config/cacheProfiles.js';
 
 export const mintCsrfToken = () => crypto.randomBytes(32).toString('hex');
 
@@ -106,9 +115,10 @@ export const setCsrfCookie = (res, token = mintCsrfToken()) => {
  *
  * We wrap res.json BEFORE httpCache does, so our wrapper is the inner one and
  * runs LAST — by which point httpCache has already resolved Cache-Control to
- * either `public, …` (cacheable ⇒ suppress the cookie) or `private, no-store`
- * (⇒ mint it as before). Authenticated and non-cacheable requests are therefore
- * completely unaffected.
+ * either a storable header — `public, …` for edge-cacheable routes, or
+ * `private, max-age=N` for money-path routes that Redis still caches — in which
+ * case the cookie is suppressed, or `private, no-store` (⇒ mint it as before).
+ * Authenticated and non-cacheable requests are therefore completely unaffected.
  *
  * Clients that need a token without ever touching a private route can force one
  * from GET /api/v1/csrf-token.
@@ -117,7 +127,7 @@ const deferCsrfCookie = (res) => {
   const originalJson = res.json.bind(res);
   res.json = function (body) {
     const cacheControl = String(res.getHeader('Cache-Control') || '');
-    if (!PUBLIC_CACHEABLE.test(cacheControl) && !res.headersSent) {
+    if (!isStorableCacheControl(cacheControl) && !res.headersSent) {
       setCsrfCookie(res);
     }
     return originalJson(body);
