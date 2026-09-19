@@ -12,7 +12,7 @@ import { useProducts } from '@/hooks/queries/useProducts';
 import { normalizeParams } from '@/hooks/queries/keys';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
-import type { ProductsData } from '@/lib/productQuery';
+import { resolveTerm, type ProductsData } from '@/lib/productQuery';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import StoreProductCard from '@/components/products/redesign/StoreProductCard';
@@ -70,9 +70,13 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
     if (!isSuccess || isPlaceholderData) return;
     if (lastTrackedKey.current === spString) return;
     lastTrackedKey.current = spString;
+    // Read through resolveTerm, the same helper buildProductsQuery filters by.
+    // Keyed on `resolved.search` alone, a `?q=` search reported itself as an
+    // unfiltered 'all' browse while the grid really was filtered.
+    const term = resolveTerm(resolved);
     trackViewItemList({
-      listType: resolved.search ? 'search' : (resolved.category || resolved.brand) ? 'category' : 'all',
-      listName: resolved.search || resolved.category || resolved.brand,
+      listType: term ? 'search' : (resolved.category || resolved.brand) ? 'category' : 'all',
+      listName: term || resolved.category || resolved.brand,
       itemCount: data.products.length,
     });
   }, [spString, resolved, data.products.length, isSuccess, isPlaceholderData]);

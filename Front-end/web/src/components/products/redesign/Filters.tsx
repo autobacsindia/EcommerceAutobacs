@@ -237,9 +237,14 @@ export default function Filters({
   }, [searchParams, scopeCategoryId]);
 
   const makes = facets?.vehicleMakes ?? [];
-  // Models are already scoped to the selected make by the facet query's own
-  // filters, so no client-side narrowing is needed — and unlike the old global
-  // vehicle list, every entry here has at least one matching product.
+  // Models arrive already scoped to the selected make, and every entry has at
+  // least one matching product, so no client-side narrowing is needed.
+  //
+  // The scoping is done by SearchService.getAtlasFacets, NOT by the facet query's
+  // own filters — `excludeVehicle` lifts make and model together (disjunctive
+  // counting is per-dimension), so the raw list spans every make. This comment
+  // claimed the query handled it, and it never did: with BMW selected the panel
+  // offered 79 models including Hilux and Fortuner.
   const models = facets?.vehicleModels ?? [];
 
   // Category tree: the panel used to render only top-level hubs (`!c.parent`)
@@ -387,8 +392,14 @@ export default function Filters({
               aria-label="Vehicle model"
             >
               <option value="">{make ? 'All models' : 'Select a make first'}</option>
+              {/* Keyed on make+value: the facet buckets models by make+model, so
+                  `value` alone is not unique while no make is selected (two makes
+                  can ship a model of the same name) and React would see duplicate
+                  keys. Scoping means only one make's models are ever selectable. */}
               {models.map((md) => (
-                <option key={md.value} value={md.value}>{md.value} ({md.count})</option>
+                <option key={`${md.make ?? ''}-${md.value}`} value={md.value}>
+                  {md.value} ({md.count})
+                </option>
               ))}
             </select>
           </div>

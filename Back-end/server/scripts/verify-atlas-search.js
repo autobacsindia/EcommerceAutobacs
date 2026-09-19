@@ -87,6 +87,28 @@ const CASES = [
   { label: 'facets: multi-token search term', facets: { q: 'bmw steering wheel' }, matchesGrid: true },
   { label: 'facets: search + filter', facets: { q: 'spoiler', inStock: 'true' }, matchesGrid: true },
   { label: 'facets: vehicle filter reaches counts', facets: { vehicleMake: 'Toyota' }, matchesGrid: true },
+  // ⚠ `matchesGrid` compares TOTALS, and both of the 2026-09-18 vehicle bugs lived
+  // where the totals already agreed. These two carry the assertions that catch them.
+  //
+  // `makeCountsMatchGrid`: the make facet counted fitment SLOTS, so a product
+  // fitting three BMW models counted three times — "BMW (59)" beside a grid of 39.
+  // The sidebar total was right the whole time; only the per-make number lied.
+  { label: 'facets: make counts are distinct products', facets: { q: 'bmw' },
+    matchesGrid: true, makeCountsMatchGrid: ['BMW'] },
+  { label: 'facets: make counts, unfiltered catalogue', facets: {},
+    makeCountsMatchGrid: ['Toyota', 'Ford', 'Mahindra'] },
+  // Lowercase: the vehicle index is keyed on lowercase so the GRID filters fine,
+  // which is exactly why an exact-match comparison in the facet shaper went
+  // unnoticed — it only emptied the model dropdown, never the results.
+  { label: 'facets: lowercase make still scopes', facets: { vehicleMake: 'toyota' },
+    matchesGrid: true, expectModelsScopedTo: 'Toyota' },
+  // `expectEmpty`: an unresolvable vehicle filter must match NOTHING. It expressed
+  // that as `mustNot: [{ exists: { path: '_id' } }]`, and `_id` is unmapped under
+  // `dynamic: false`, so the clause matched nothing, mustNot excluded nothing, and
+  // prod served all 928 products. It parses perfectly — only a count can catch it.
+  { label: 'unknown make matches nothing', params: { vehicleMake: 'Ferrari' }, expectEmpty: true },
+  { label: 'impossible make+model matches nothing',
+    params: { vehicleMake: 'BMW', vehicleModel: 'Fortuner' }, expectEmpty: true },
   { label: 'suggestions (autocomplete)', suggest: 'brak' },
 ];
 
@@ -138,6 +160,43 @@ for (const testCase of CASES) {
         }
       }
 
+      // Every offered model must belong to the selected make, or the pair a shopper
+      // can assemble from this panel is impossible.
+      if (testCase.expectModelsScopedTo && process.env.SEARCH_ENGINE === 'atlas') {
+        const stray = f.vehicleModels.filter((m) => m.make !== testCase.expectModelsScopedTo);
+        if (f.vehicleModels.length === 0 || stray.length > 0) {
+          failures += 1;
+          console.error(
+            `❌ ${label} models not scoped to ${testCase.expectModelsScopedTo}: ` +
+            `${f.vehicleModels.length} offered, ${stray.length} from other makes`
+          );
+          continue;
+        }
+      }
+
+      // Per-make counts vs the grid you actually land on by picking that make.
+      // Distinct from matchesGrid above, which only compares the sidebar TOTAL and
+      // was green throughout the life of the inflated-make bug.
+      if (testCase.makeCountsMatchGrid && process.env.SEARCH_ENGINE === 'atlas') {
+        let mismatched = false;
+        for (const make of testCase.makeCountsMatchGrid) {
+          const shown = f.vehicleMakes.find((m) => m.value === make)?.count;
+          if (shown === undefined) continue; // make absent from this result set
+          const picked = await atlasSearchService.searchProducts({
+            ...testCase.facets, vehicleMake: make, limit: 1,
+          });
+          if (shown !== picked.pagination.total) {
+            failures += 1;
+            mismatched = true;
+            console.error(
+              `❌ ${label} facet offers ${make} (${shown}) but picking it returns ` +
+              `${picked.pagination.total} — the make count is not distinct products`
+            );
+          }
+        }
+        if (mismatched) continue;
+      }
+
       // A degenerate price scale means the facet carries no information — but only
       // when the facet is supposed to span the catalogue. Any narrowing parameter
       // can legitimately reduce the set to a single price point, and the check must
@@ -175,6 +234,14 @@ for (const testCase of CASES) {
     if (testCase.expectFewerThan && result.pagination.total >= testCase.expectFewerThan) {
       failures += 1;
       console.error(`❌ ${label} returned ${result.pagination.total} — filter looks DROPPED`);
+      continue;
+    }
+    if (testCase.expectEmpty && result.pagination.total !== 0) {
+      failures += 1;
+      console.error(
+        `❌ ${label} returned ${result.pagination.total} — an unresolvable vehicle filter ` +
+        'was DROPPED instead of matching nothing (check MATCH_NOTHING_PATH is mapped)'
+      );
       continue;
     }
     if (testCase.expectRelaxed && !result.relaxed) {

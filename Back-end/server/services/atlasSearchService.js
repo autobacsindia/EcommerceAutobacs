@@ -47,6 +47,35 @@ import { ATLAS_SEARCH_INDEX_NAME, ATLAS_SYNONYM_MAPPING_NAME } from '../config/a
 import { getRedisClient } from './cacheService.js';
 
 /**
+ * The path used to express "match nothing" as `mustNot: [{ exists: { path } }]`.
+ *
+ * Two properties are load-bearing and neither is obvious, which is why this is a
+ * named constant asserted against the index definition rather than a literal:
+ *
+ *  1. It MUST be declared in the index. `mappings.dynamic` is false, and an
+ *     `exists` on an unmapped path matches nothing — so mustNot would exclude
+ *     nothing and the clause would mean the OPPOSITE of "match nothing". That is
+ *     exactly what shipped with `_id` (see buildFilters).
+ *  2. EVERY indexed document must carry it, or the clause only excludes part of
+ *     the set. `isActive` qualifies: it has a schema default and every public
+ *     query already filters on it.
+ *
+ * Enforced by tests, NOT at import time. A boot-time throw would take the whole
+ * API down — payments included — for a search-facet config edit, and it would only
+ * ever validate the DECLARED definition: `createSearchIndex` no-ops on an existing
+ * index, so declared and live can differ and the throw would give false confidence
+ * about the failure that actually bites. The real coverage is layered:
+ *
+ *   • atlasFacets.test.js / atlasSearchService.queryBuilder.test.js assert this path
+ *     is present in the declared mappings.
+ *   • `npm run audit-atlas-search-index` diffs declared against LIVE.
+ *   • `npm run verify-atlas-search` asserts an unresolvable vehicle filter really
+ *     returns 0 against the live cluster — the only check that can catch the
+ *     inverted clause, since the wrong query parses perfectly.
+ */
+export const MATCH_NOTHING_PATH = 'isActive';
+
+/**
  * Field weights for free-text recall, carried over verbatim from the
  * Elasticsearch HIGH_SIGNAL list (name^3, brand^2, sku^2, tags^1.5).
  *
@@ -660,11 +689,22 @@ export function buildFilters(params, resolved = {}, exclude = {}) {
   // selected — the same failure the ES `vehicleType`/`vehicleMake` param mismatch
   // produced. Atlas rejects an empty `in`, so the impossible case is expressed
   // with a mustNot-everything clause instead.
+  //
+  // ⚠ THE PATH HERE MUST BE A MAPPED FIELD. This clause read `exists: { path: '_id' }`
+  // until 2026-09-18, and `_id` is NOT in config/atlasSearchIndex.js `mappings.fields`
+  // (the index is `dynamic: false`). An `exists` on an unmapped path matches NOTHING,
+  // so mustNot excluded nothing and the vehicle filter evaporated entirely: prod served
+  // `?vehicleMake=Ferrari` and `?vehicleMake=BMW&vehicleModel=Fortuner` as the WHOLE
+  // 928-product catalogue instead of zero results — precisely the failure the comment
+  // above says this branch exists to prevent. It is the same silent class as `score`
+  // beside an operator: the query parses, so verify-atlas-search reports ✅.
+  // `isActive` is mapped and carried by every indexed document, so mustNot-exists on it
+  // removes the whole matched set. Do not "simplify" this back to `_id`.
   if (Array.isArray(vehicleFilterIds) && !excludeVehicle) {
     if (vehicleFilterIds.length > 0) {
       filter.push({ in: { path: 'compatibleVehicles', value: vehicleFilterIds } });
     } else {
-      mustNot.push({ exists: { path: '_id' } });
+      mustNot.push({ exists: { path: MATCH_NOTHING_PATH } });
     }
   }
 
@@ -1571,9 +1611,15 @@ class AtlasSearchService {
         { $unwind: '$categories' },
         { $group: { _id: '$categories', ids: { $addToSet: '$_id' } } },
       ],
+      // Distinct product IDS, not a raw count — for the same reason as categories
+      // directly above, and it was wrong here for months after being got right there.
+      // A product fitting the BMW 5 Series, 3 Series and X5 holds three entries in
+      // compatibleVehicles, and SearchService sums the per-vehicle counts up to the
+      // make. So "BMW" read 59 beside a grid of 39, Toyota 284 beside 255. The make
+      // roll-up has to union product ids, which means this branch must emit them.
       vehicles: [
         { $unwind: '$compatibleVehicles' },
-        { $group: { _id: '$compatibleVehicles', count: { $sum: 1 } } },
+        { $group: { _id: '$compatibleVehicles', ids: { $addToSet: '$_id' } } },
       ],
       priceStats: [
         { $match: { price: { $gt: 0 } } },
@@ -1726,7 +1772,12 @@ class AtlasSearchService {
       // Raw id sets — SearchService rolls these up, because the parent/child index
       // lives in categoryMappingService on that side.
       categoryIdSets: (raw.categories || []).map((c) => ({ _id: c._id, ids: c.ids })),
-      vehicleIdCounts: (raw.vehicles || []).map((v) => ({ _id: v._id, count: v.count })),
+      // Raw id sets, like categoryIdSets above: SearchService resolves each vehicle
+      // id to a make/model and unions the sets, so a product fitting several models
+      // of one make counts ONCE toward that make. Renamed from `vehicleIdCounts`
+      // when the shape changed, so a consumer left on the old contract breaks
+      // loudly instead of reading `undefined` as zero.
+      vehicleIdSets: (raw.vehicles || []).map((v) => ({ _id: v._id, ids: v.ids })),
       price: {
         min: priceStats?.min ?? 0,
         max: priceStats?.max ?? 0,
