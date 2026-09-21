@@ -346,6 +346,16 @@ function OfflineReturnModal({ onClose, onCreated }: { onClose: () => void; onCre
                           <input type="checkbox" disabled={!returnable} checked={!!sel} onChange={() => toggleLine(key, item.quantity)} />
                           <span className="flex-1">
                             <span className="font-medium">{item.product?.name || item.name}</span>
+                            {/*
+                              WHICH MODEL. Two lines of the same variable product differ
+                              ONLY by this, so without it the operator picking a line to
+                              return is choosing between identical-looking rows.
+                            */}
+                            {item.variantLabel && (
+                              <span className="ml-1 rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">
+                                {item.variantLabel}
+                              </span>
+                            )}
                             <span className="text-gray-500"> · {item.quantity} × {inr(item.price)}</span>
                             {!returnable && (
                               <span className="block text-xs text-amber-700">
@@ -519,6 +529,14 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                       </div>
                       <div className="text-sm">
                         <p className="font-medium">{item.product.name}</p>
+                        {/* Snapshotted at request time; absent on pre-snapshot requests. */}
+                        {item.variantLabel && (
+                          <p className="mt-0.5">
+                            <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">
+                              {item.variantLabel}
+                            </span>
+                          </p>
+                        )}
                         <p className="text-gray-500">Qty: {item.quantity} · {inr(item.unitPrice)}</p>
                         <p className="text-red-600">{label(item.reason)}</p>
                       </div>

@@ -178,6 +178,14 @@ export interface ReturnRequestItem {
     images?: ProductImage[];
     price?: number;
   };
+  /** Which model came back. Snapshotted from the order line at request time. */
+  variantId?: string | null;
+  /**
+   * Display label for that variant. Absent on requests created before it was
+   * snapshotted — those carry only `variantId`, so render nothing rather than
+   * guessing from the live product.
+   */
+  variantLabel?: string | null;
   quantity: number;
   reason: string;
   unitPrice?: number;
@@ -304,6 +312,13 @@ export interface OrderItem {
   price: number;
   name: string;
   image: string;
+  /**
+   * Which model of a variable product, snapshotted at purchase. `name` above is the
+   * PARENT product's name and often lists every option at once, so this is frequently
+   * the only thing that identifies the line. Snapshot only — never re-derive it from
+   * the live product's variants.
+   */
+  variantLabel?: string | null;
 }
 
 /**

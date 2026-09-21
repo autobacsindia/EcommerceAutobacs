@@ -158,8 +158,71 @@ describe('OrderDetailPage', () => {
     fireEvent.click(buyAgainButton);
     
     await waitFor(() => {
-      expect(mockAddToCart).toHaveBeenCalledWith('p1', 1);
+      // A simple product re-adds with an explicit null variant.
+      expect(mockAddToCart).toHaveBeenCalledWith('p1', 1, undefined, null);
     });
+  });
+
+  /*
+    Buy Again on a VARIABLE product.
+
+    The server resolves a variable product's price and stock from the SELECTED variant
+    and rejects an add that names none ("Please select a variant before adding to cart",
+    routes/cart.js resolvePurchasable). Omitting `variantId` therefore made this button
+    400 on every variable product — and because the success toast fired BEFORE the
+    request, the customer saw "Added to cart" followed immediately by an error for the
+    same click.
+
+    The id comes from the ORDER SNAPSHOT, so this re-adds the model they actually
+    bought rather than whichever variant the product happens to list first.
+  */
+  it('re-adds the exact variant that was purchased', async () => {
+    (orderService.getOrderById as jest.Mock).mockResolvedValue({
+      ...mockOrder,
+      items: [{
+        ...mockOrder.items[0],
+        name: 'Filter Cover (Amber / Black)',
+        variantId: 'var-black',
+        variantLabel: 'Black',
+      }],
+    });
+
+    render(<OrderDetailPage />);
+    await waitFor(() => screen.getByText('#12345678'));
+
+    // The model is on screen — the whole point of the change.
+    expect(screen.getByText('Black')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Buy Again'));
+
+    await waitFor(() => {
+      expect(mockAddToCart).toHaveBeenCalledWith('p1', 1, undefined, 'var-black');
+    });
+  });
+
+  it('shows the variant of each line in the item list', async () => {
+    (orderService.getOrderById as jest.Mock).mockResolvedValue({
+      ...mockOrder,
+      items: [
+        { ...mockOrder.items[0], _id: 'i1', name: 'Filter Cover (Amber / Black)', variantId: 'v1', variantLabel: 'Black' },
+        { ...mockOrder.items[0], _id: 'i2', name: 'Filter Cover (Amber / Black)', variantId: 'v2', variantLabel: 'Amber' },
+      ],
+    });
+
+    render(<OrderDetailPage />);
+    await waitFor(() => screen.getByText('#12345678'));
+
+    // Two lines of ONE product: without the label they are the same string, which is
+    // exactly the state that made a real order unreadable.
+    expect(screen.getByText('Black')).toBeInTheDocument();
+    expect(screen.getByText('Amber')).toBeInTheDocument();
+  });
+
+  it('renders no variant node for a simple product', async () => {
+    render(<OrderDetailPage />);
+    await waitFor(() => screen.getByText('#12345678'));
+    // ~1,560 of 1,598 production orders are this case; they must look untouched.
+    expect(screen.queryByText('Black')).not.toBeInTheDocument();
   });
 
   it('handles delete order', async () => {

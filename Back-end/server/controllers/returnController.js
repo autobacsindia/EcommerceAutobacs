@@ -498,6 +498,9 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     returnItems.push({
       product: item.productId,
       variantId: orderLine.variantId || null,
+      // Snapshotted beside the id, like unitPrice: the admin screen must be able to
+      // say WHICH model is coming back without dereferencing the live product.
+      variantLabel: orderLine.variantLabel || null,
       quantity: qty,
       reason: item.reason,
       unitPrice: money(orderLine.price),
@@ -820,6 +823,7 @@ const snapshotReturnLines = (order, items) => {
     lines.push({
       product: productId,
       variantId: orderLine.variantId || null,
+      variantLabel: orderLine.variantLabel || null,
       // Clamped to what was actually bought — the refund base is Σ(unitPrice × qty),
       // so an over-entered quantity is an over-refund.
       quantity: Math.min(Number(item.quantity) || 1, orderLine.quantity),

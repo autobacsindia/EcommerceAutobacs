@@ -79,8 +79,8 @@ describe('goneQuantityByItem', () => {
 describe('remainingCancellable', () => {
   it('is everything on an untouched order', () => {
     expect(remainingCancellable(order())).toEqual([
-      { itemId: String(A), name: 'Wax', quantity: 3, packed: 0 },
-      { itemId: String(B), name: 'Polish', quantity: 1, packed: 0 },
+      { itemId: String(A), name: 'Wax', variantLabel: null, quantity: 3, packed: 0 },
+      { itemId: String(B), name: 'Polish', variantLabel: null, quantity: 1, packed: 0 },
     ]);
   });
 
@@ -89,7 +89,7 @@ describe('remainingCancellable', () => {
   it('keeps units in a PACKED parcel cancellable, and flags them', () => {
     const o = order({ shipments: [parcel('packed', [{ itemId: A, quantity: 2 }])] });
     const wax = remainingCancellable(o).find((l) => l.itemId === String(A));
-    expect(wax).toEqual({ itemId: String(A), name: 'Wax', quantity: 3, packed: 2 });
+    expect(wax).toEqual({ itemId: String(A), name: 'Wax', variantLabel: null, quantity: 3, packed: 2 });
   });
 
   it('removes units that have already shipped — those are a return, not a cancellation', () => {

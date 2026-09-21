@@ -24,7 +24,7 @@ import { productUrl, type OrderPaymentSummary } from '@/lib/types';
 import EmiPaymentNotice from '@/components/orders/EmiPaymentNotice';
 import OrderDetailSkeleton from '@/components/skeletons/OrderDetailSkeleton';
 import { formatDateIST, formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
-import { buildOrderLines } from '@/lib/orderLines';
+import { buildOrderLines, variantDisplayName } from '@/lib/orderLines';
 import OrderParcels from '@/components/orders/OrderParcels';
 import {
   canReturnItem,
@@ -86,6 +86,17 @@ interface OrderDetail {
     price: number;
     name?: string;
     image?: string;
+    /**
+     * Which model of a variable product this line is, snapshotted at purchase.
+     * `null`/absent on a simple product and on every pre-variants order.
+     *
+     * `name` above is the PARENT product's name and routinely lists every option
+     * at once ("… Filter Cover (Amber / Black)"), so without this the customer
+     * cannot tell from their own order history which one they bought.
+     */
+    variantLabel?: string | null;
+    /** The variant actually purchased — what "Buy Again" must re-add. */
+    variantId?: string | null;
   }>;
   trackingNumber?: string;
   carrier?: { name: string; code: string; trackingUrl?: string };
@@ -270,12 +281,28 @@ export default function OrderDetailPage() {
     processPayment(order._id, order.totalAmount, { name: order.shippingAddress.fullName, email: user.email, phone: order.shippingAddress.phone });
   };
 
+  /**
+   * Re-add THIS line to the cart — including the exact model that was bought.
+   *
+   * ⚠️ `variantId` is not optional here. The server resolves a variable product's
+   * price and stock from the SELECTED variant, and rejects an add with no variant
+   * outright ("Please select a variant before adding to cart", routes/cart.js
+   * resolvePurchasable). Omitting it made Buy Again fail with a 400 on every
+   * variable product — and because the success toast fired BEFORE the request, the
+   * customer saw "Added to cart" and then an error for the same click. The toast now
+   * waits for the server, which is also the house rule: the cart badge may be
+   * optimistic, but nothing tells the customer an add succeeded until it has.
+   *
+   * The id is a snapshot, so a variant deleted since the sale resolves to `missing`
+   * and the server says so — which is the honest answer, not a silent substitution
+   * of some other model.
+   */
   const handleBuyAgain = async (item: any) => {
     if (!item.product?._id) { toast.error('Product no longer available'); return; }
     try {
       setAddingToCart(item._id);
+      await addToCart(item.product._id, 1, undefined, item.variantId ?? null);
       toast.success('Added to cart');
-      await addToCart(item.product._id, 1);
     } catch (err: any) {
       toast.error(err.message || 'Failed to add to cart');
     } finally {
@@ -739,7 +766,13 @@ export default function OrderDetailPage() {
           itemNames={Object.fromEntries(
             order.items
               .filter((item) => item._id)
-              .map((item) => [String(item._id), item.name ?? item.product?.name ?? 'Item']),
+              // Flat string: the parcel list renders one label per line. Without the
+              // variant, two lines of the same product are indistinguishable, so a
+              // customer cannot tell which model is in which box.
+              .map((item) => [
+                String(item._id),
+                variantDisplayName(item.name ?? item.product?.name, item.variantLabel),
+              ]),
           )}
           rewardName={order.spinReward && !order.spinReward.voidedAt ? order.spinReward.name : null}
           cardClass={cardClass}
@@ -871,6 +904,16 @@ export default function OrderDetailPage() {
                       </Link>
                     ) : (
                       <p className="font-display font-light text-ink tracking-[-0.01em]">{productName}</p>
+                    )}
+                    {/*
+                      WHICH MODEL they bought. Styled exactly as on /cart and
+                      /checkout so one string follows the customer from cart to
+                      order history and never appears to change. Snapshot only —
+                      re-deriving it from the live product would let a later
+                      variant rename rewrite a historical order.
+                    */}
+                    {item.variantLabel && (
+                      <p className="text-[11px] uppercase tracking-[0.14em] text-gold mt-1">{item.variantLabel}</p>
                     )}
                     <p className="text-ink-muted font-display text-xs mt-1">Qty: {item.quantity}</p>
                     <p className="text-ink-muted font-display text-xs">₹{(item.price || 0).toFixed(2)} each</p>

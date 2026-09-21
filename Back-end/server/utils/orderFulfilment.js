@@ -106,8 +106,15 @@ const cancelledQuantityByItem = (order) => {
  * review request and the return window would never fire.
  *
  * @param {object} order
- * @returns {Array<{itemId: string, name: string|null, quantity: number}>} lines with
- *   a non-zero remainder; items fully shipped or fully cancelled are omitted.
+ * @returns {Array<{itemId: string, name: string|null, variantLabel: string|null,
+ *   quantity: number}>} lines with a non-zero remainder; items fully shipped or fully
+ *   cancelled are omitted.
+ *
+ * `variantLabel` is carried BESIDE `name` rather than folded into it because this is
+ * the packer's pick list: `name` is the parent product's name, which for a variable
+ * product routinely names every option at once, so it does not say which unit to put
+ * in the box. Kept a separate field so the client can style it distinctly; `null` on
+ * a simple product.
  */
 export const remainingToShip = (order) => {
   const shipped = shippedQuantityByItem(order);
@@ -118,6 +125,7 @@ export const remainingToShip = (order) => {
       return {
         itemId: id,
         name: item.name || item.product?.name || null,
+        variantLabel: item.variantLabel || null,
         quantity: (item.quantity || 0) - (shipped.get(id) || 0) - (cancelled.get(id) || 0),
       };
     })

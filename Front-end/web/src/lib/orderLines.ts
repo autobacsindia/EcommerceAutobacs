@@ -20,6 +20,37 @@
 
 export type OrderLineKind = 'sale' | 'reward';
 
+/**
+ * The name of a bought thing, WITH its variant, as one flat string.
+ *
+ * For a variable product the snapshotted line `name` is the PARENT product's name,
+ * and that name routinely enumerates every option it was sold in — a real order
+ * carries "Lightforce BEAST 230 Filter Cover (Amber / Black)" against the variant
+ * "Black". Rendering the name alone is therefore not merely terse, it is ambiguous
+ * in exactly the case that matters: nobody can tell which one to pick off the shelf
+ * or which one the customer is owed.
+ *
+ * ⚠️ READS THE SNAPSHOT ONLY. Never resolve the label from the live product's
+ * `variants` array — an order is an immutable financial record, and a variant
+ * renamed or deleted after the sale must not rewrite what was bought.
+ *
+ * Use this ONLY where the surface can hold a single string (the parcel/cancellation
+ * pickers, the orders-list preview). Surfaces with room — the admin and customer
+ * item lists, the packing slip — render the label as its own sub-line instead, which
+ * stays legible when the parent name is long.
+ *
+ * Mirrors `variantDisplayName` in Back-end/server/utils/orderLines.js.
+ */
+export const variantDisplayName = (
+  name?: string | null,
+  variantLabel?: string | null,
+  fallback = 'Item',
+): string => {
+  const base = (name || '').trim() || fallback;
+  const label = (variantLabel || '').trim();
+  return label ? `${base} — ${label}` : base;
+};
+
 /** The `spinReward` subdocument as the order APIs return it. */
 export interface SpinRewardSnapshot {
   name: string;

@@ -42,18 +42,38 @@ const parcel = (over = {}) => ({
 });
 
 describe('remainingToShip', () => {
+  /*
+    THE PACKER'S PICK LIST. `name` is the PARENT product's name, so two lines of the
+    same variable product are identical strings — a real order reads "Lightforce BEAST
+    230 Filter Cover (Amber / Black)" twice and the packer has nothing to choose by.
+    Carried as its own field, not folded into `name`, so the UI can style it and so
+    this assertion fails loudly if someone concatenates it instead.
+  */
+  it('carries the snapshotted variant so the packer knows which model to box', () => {
+    const o = order({
+      items: [
+        { _id: 'a', name: 'Filter Cover (Amber / Black)', quantity: 1, variantLabel: 'Black' },
+        { _id: 'b', name: 'Filter Cover (Amber / Black)', quantity: 2, variantLabel: 'Amber' },
+      ],
+    });
+    expect(remainingToShip(o)).toEqual([
+      { itemId: 'a', name: 'Filter Cover (Amber / Black)', variantLabel: 'Black', quantity: 1 },
+      { itemId: 'b', name: 'Filter Cover (Amber / Black)', variantLabel: 'Amber', quantity: 2 },
+    ]);
+  });
+
   it('is the whole order when nothing has shipped', () => {
     expect(remainingToShip(order())).toEqual([
-      { itemId: 'a', name: 'Wax', quantity: 2 },
-      { itemId: 'b', name: 'Polish', quantity: 1 },
+      { itemId: 'a', name: 'Wax', variantLabel: null, quantity: 2 },
+      { itemId: 'b', name: 'Polish', variantLabel: null, quantity: 1 },
     ]);
   });
 
   it('subtracts partial quantities and drops fully-shipped lines', () => {
     const o = order({ shipments: [parcel({ lines: [{ itemId: 'a', quantity: 1 }] })] });
     expect(remainingToShip(o)).toEqual([
-      { itemId: 'a', name: 'Wax', quantity: 1 },
-      { itemId: 'b', name: 'Polish', quantity: 1 },
+      { itemId: 'a', name: 'Wax', variantLabel: null, quantity: 1 },
+      { itemId: 'b', name: 'Polish', variantLabel: null, quantity: 1 },
     ]);
   });
 
@@ -67,8 +87,8 @@ describe('remainingToShip', () => {
   it('returns a LOST parcel’s units to the pool', () => {
     const o = order({ shipments: [parcel({ status: SHIPMENT_STATUS.LOST, lines: [{ itemId: 'a', quantity: 2 }] })] });
     expect(remainingToShip(o)).toEqual([
-      { itemId: 'a', name: 'Wax', quantity: 2 },
-      { itemId: 'b', name: 'Polish', quantity: 1 },
+      { itemId: 'a', name: 'Wax', variantLabel: null, quantity: 2 },
+      { itemId: 'b', name: 'Polish', variantLabel: null, quantity: 1 },
     ]);
   });
 
@@ -452,8 +472,8 @@ describe('cancellations', () => {
     const o = order();
     delete o.cancellations;
     expect(remainingToShip(o)).toEqual([
-      { itemId: A, name: 'Wax', quantity: 3 },
-      { itemId: B, name: 'Polish', quantity: 1 },
+      { itemId: A, name: 'Wax', variantLabel: null, quantity: 3 },
+      { itemId: B, name: 'Polish', variantLabel: null, quantity: 1 },
     ]);
     expect(fulfilmentSummary(o).totalUnits).toBe(4);
   });

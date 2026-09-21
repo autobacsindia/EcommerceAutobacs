@@ -24,6 +24,7 @@ import emailHandler from './emailHandler.js';
 import { companyInfo } from '../config/company.js';
 import { statesMatch } from '../config/gstStates.js';
 import counterRepository from '../repositories/counterRepository.js';
+import { variantDisplayName } from '../utils/orderLines.js';
 import { formatInvoiceNumber, invoiceFileName } from '../utils/invoiceFormat.js';
 import { formatLongDateIST } from '../utils/datetime.js';
 import paymentRepository from '../repositories/paymentRepository.js';
@@ -427,7 +428,13 @@ export const generateInvoicePdf = async (order, user = null) => {
       (order.items || []).forEach((it) => {
         const qty = it.quantity || 0;
         const lineTotal = qty * (it.price || 0);
-        const name = it.name || 'Item';
+        // The variant belongs ON the invoice line, not omitted from it: for a variable
+        // product `it.name` is the PARENT product's name, which routinely enumerates
+        // every option it was sold in, so the line alone does not say what was bought.
+        // This is the customer's only copy of the record (INVOICE_STORE_CLOUDINARY is
+        // off) and it is what a return or a warranty claim is argued from.
+        // Snapshot only — never resolved from the live product.
+        const name = variantDisplayName(it.name, it.variantLabel);
         const rowTop = y + 6;
         doc.font(FONT).fontSize(9).fillColor('#333');
         doc.text(name, col.product, rowTop, { width: col.qty - col.product - 10 });

@@ -12,6 +12,7 @@ import {
   linesGoodsTotal,
   isPhysicalReward,
   owesGoodie,
+  variantDisplayName,
   LINE_KIND,
 } from '../../../utils/orderLines.js';
 
@@ -166,5 +167,74 @@ describe('isPhysicalReward / owesGoodie', () => {
 
   it('still owes it after it has been packed — packing is not withdrawal', () => {
     expect(owesGoodie(orderWith(goodie({ fulfilledAt: new Date() })))).toBe(true);
+  });
+});
+
+
+/**
+ * WHICH MODEL the customer bought.
+ *
+ * The regression: a real paid order carried the line name "Lightforce BEAST 230 Filter
+ * Cover (Amber / Black)" against the variant "Black". Every display surface rendered
+ * `name` alone, so neither the admin nor the customer could tell which of the two
+ * options had been sold — while the answer sat snapshotted on the line the whole time.
+ * These assertions pin the formatting that the pickers, the invoice and the emails all
+ * share, so a fix in one of them cannot silently miss the others.
+ */
+describe('variantDisplayName', () => {
+  it('appends the variant, so a parent name that lists every option is still unambiguous', () => {
+    expect(variantDisplayName('Lightforce BEAST 230 Filter Cover (Amber / Black)', 'Black'))
+      .toBe('Lightforce BEAST 230 Filter Cover (Amber / Black) — Black');
+  });
+
+  // The overwhelming majority of orders. A simple product must render EXACTLY as it
+  // did before this change — no separator, no trailing whitespace, nothing.
+  it('leaves a simple product untouched', () => {
+    expect(variantDisplayName('Carnauba Wax', null)).toBe('Carnauba Wax');
+    expect(variantDisplayName('Carnauba Wax', undefined)).toBe('Carnauba Wax');
+    expect(variantDisplayName('Carnauba Wax', '')).toBe('Carnauba Wax');
+    // A label of pure whitespace is not a label; it must not produce a dangling dash.
+    expect(variantDisplayName('Carnauba Wax', '   ')).toBe('Carnauba Wax');
+  });
+
+  it('falls back when the snapshot has no name at all, and lets the caller pick the wording', () => {
+    expect(variantDisplayName(null, null)).toBe('Item');
+    expect(variantDisplayName(undefined, 'Black')).toBe('Item — Black');
+    expect(variantDisplayName(null, null, 'Unknown Product')).toBe('Unknown Product');
+  });
+});
+
+describe('buildOrderLines — variant', () => {
+  it('carries the snapshotted label onto the display line', () => {
+    const [line] = buildOrderLines({
+      items: [{ _id: 'i1', name: 'Grill', price: 100, quantity: 1, variantLabel: 'Everest White' }],
+    });
+    expect(line.variantLabel).toBe('Everest White');
+  });
+
+  /*
+    Orders are immutable financial records. If the variant were resolved from the live
+    product instead of the snapshot, renaming or deleting a variant would rewrite what a
+    customer was shown they had bought — the same class of bug as rendering a historical
+    order from live prices.
+  */
+  it('reads the SNAPSHOT and never the live product', () => {
+    const [line] = buildOrderLines({
+      items: [{
+        _id: 'i1', name: 'Grill', price: 100, quantity: 1,
+        variantLabel: 'Everest White',
+        product: { _id: 'p1', name: 'Grill', variants: [{ _id: 'v1', label: 'RENAMED LATER' }] },
+      }],
+    });
+    expect(line.variantLabel).toBe('Everest White');
+  });
+
+  it('is null on a simple product and on the goodie line', () => {
+    const lines = buildOrderLines(
+      { items: [{ _id: 'i1', name: 'Wax', price: 100, quantity: 1 }], spinReward: goodie() },
+      { audience: 'admin' },
+    );
+    expect(lines.find((l) => l.kind === LINE_KIND.SALE).variantLabel).toBeNull();
+    expect(lines.find((l) => l.kind === LINE_KIND.REWARD).variantLabel).toBeNull();
   });
 });

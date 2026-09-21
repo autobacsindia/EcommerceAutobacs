@@ -30,6 +30,40 @@ import { PRIZE_KIND } from '../config/spin.js';
 export const LINE_KIND = Object.freeze({ SALE: 'sale', REWARD: 'reward' });
 
 /**
+ * The name of a bought thing, WITH its variant, as one flat string.
+ *
+ * For a variable product the snapshotted line `name` is the PARENT product's name,
+ * and that name routinely enumerates every option it was sold in — a real order
+ * carries "Lightforce BEAST 230 Filter Cover (Amber / Black)" against the variant
+ * "Black". Rendering the name alone is therefore not merely terse, it is ambiguous
+ * in exactly the case that matters: nobody can tell which one to pick off the shelf
+ * or which one the customer is owed.
+ *
+ * ⚠️ READS THE SNAPSHOT ONLY. Never resolve the label from the live product's
+ * `variants` array — an order is an immutable financial record, and a variant
+ * renamed or deleted after the sale must not rewrite what was bought. The label was
+ * snapshotted onto the line at order time (pricingService) precisely so this is
+ * answerable for ever; `null` on a simple product and on every pre-variants order.
+ *
+ * Use this ONLY where the surface can hold a single string (the parcel/cancellation
+ * pickers, the invoice PDF, the emails). Surfaces with room — the admin and customer
+ * item lists, the packing slip — render the label as its own sub-line instead, which
+ * stays legible when the parent name is long.
+ *
+ * Mirrored by `variantDisplayName` in Front-end/web/src/lib/orderLines.ts.
+ *
+ * @param {string|null|undefined} name - the snapshotted line name
+ * @param {string|null|undefined} variantLabel - the snapshotted variant label
+ * @param {string} [fallback='Item'] - used when there is no name at all
+ * @returns {string}
+ */
+export const variantDisplayName = (name, variantLabel, fallback = 'Item') => {
+  const base = (name || '').trim() || fallback;
+  const label = (variantLabel || '').trim();
+  return label ? `${base} — ${label}` : base;
+};
+
+/**
  * Is this order's spin reward a PHYSICAL thing a human has to put in the parcel?
  *
  * Only `goodie` is. A `coupon` or `karma` prize is delivered by the coupon engine /

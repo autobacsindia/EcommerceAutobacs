@@ -275,8 +275,8 @@ describe('createOfflineReturn — records what the storefront flow would refuse'
     mockOrderRepo.findByIdWithProducts.mockResolvedValue(makeAwkwardOrder({
       subtotal: 1100, totalAmount: 1600,
       items: [
-        { _id: 'line-a', product: { _id: 'prod-1', name: 'Mat (Black)' }, variantId: 'var-black', quantity: 1, price: 300 },
-        { _id: 'line-b', product: { _id: 'prod-1', name: 'Mat (Beige)' }, variantId: 'var-beige', quantity: 2, price: 400 },
+        { _id: 'line-a', product: { _id: 'prod-1', name: 'Mat (Black / Beige)' }, variantId: 'var-black', variantLabel: 'Black', quantity: 1, price: 300 },
+        { _id: 'line-b', product: { _id: 'prod-1', name: 'Mat (Black / Beige)' }, variantId: 'var-beige', variantLabel: 'Beige', quantity: 2, price: 400 },
       ],
     }));
 
@@ -285,8 +285,36 @@ describe('createOfflineReturn — records what the storefront flow would refuse'
       user: ADMIN,
     });
     const doc = mockReturnRepo.create.mock.calls[0][0];
-    expect(doc.items[0]).toMatchObject({ variantId: 'var-beige', unitPrice: 400, quantity: 2 });
+    /*
+      The LABEL is snapshotted beside the id, from the ORDER LINE — not resolved from
+      the live product. Without it the approval screen shows `product.name`, which here
+      is "Mat (Black / Beige)" for BOTH lines, so an admin cannot tell which model is
+      coming back. Pinned in the same test as the id because they must agree: a label
+      taken from a different line than the id is worse than no label at all.
+    */
+    expect(doc.items[0]).toMatchObject({
+      variantId: 'var-beige', variantLabel: 'Beige', unitPrice: 400, quantity: 2,
+    });
     expect(doc.refund.productValue).toBe(800);
+  });
+
+  it('snapshots an explicit null label for a simple product, never undefined', async () => {
+    /*
+      Guards the `|| null`. A stray `undefined` is dropped on write, which makes "this
+      product has no variants" indistinguishable from "this request predates the field"
+      — and the screen must render nothing for the first and nothing for the second, so
+      the bug would be invisible until someone wrote a report that counted them.
+    */
+    mockOrderRepo.findByIdWithProducts.mockResolvedValue(makeAwkwardOrder({
+      subtotal: 300, totalAmount: 300,
+      items: [{ _id: 'line-a', product: { _id: 'prod-1', name: 'Wiper' }, quantity: 1, price: 300 }],
+    }));
+    await run(createOfflineReturn, {
+      body: { ...baseCreateBody, items: [{ itemId: 'line-a', productId: 'prod-1', quantity: 1, reason: 'wrong_item' }] },
+      user: ADMIN,
+    });
+    const doc = mockReturnRepo.create.mock.calls[0][0];
+    expect(doc.items[0].variantLabel).toBeNull();
   });
 
   it('falls back to variantId when no line id is sent', async () => {
