@@ -350,24 +350,24 @@ export default async function RootLayout({
              so the markup is set as raw HTML. */
           <noscript
             /*
-              suppressHydrationWarning is REQUIRED here, not cosmetic.
+              Defensive, NOT a proven fix for any specific error.
 
-              When JavaScript is enabled — i.e. for every visitor React hydrates
-              for — the browser parses <noscript> content as RAW TEXT rather than
-              as DOM. So the node React rendered on the server and the node it
-              finds in the document can never compare equal, and hydration throws
-              React error #418 ("the server rendered HTML didn't match the
-              client") on every single page load.
-              
-              That is not a warning to live with: React responds by DISCARDING
-              this tree and re-rendering it on the client, which is the opposite
-              of what server rendering is for. Browser-verified on production
-              2026-09-21; it had been firing since GTM was added in 7dac07ef and
-              was invisible because nobody had a console open.
+              With JavaScript enabled the browser parses <noscript> content as
+              raw TEXT rather than DOM, so React can never compare it equal to
+              what it rendered on the server. Suppressing is the correct posture
+              for content that is deliberately un-hydratable: there is no
+              client-side behaviour here to preserve.
 
-              Suppressing is correct rather than a workaround: the content is
-              deliberately un-hydratable markup for JS-less visitors, so there is
-              no client-side behaviour to preserve.
+              ⚠ An earlier version of this comment claimed this caused the React
+              #418 on the home page. That was WRONG and is recorded here so it
+              is not re-derived: an A/B of two production builds differing only
+              in this prop showed #418 in NEITHER. The real #418 is home-page
+              only (/privacy, /products, /categories are clean), is a MARKUP
+              mismatch (React's `args[]=HTML` means "not text" — it is unrelated
+              to dangerouslySetInnerHTML), and does not reproduce on a local
+              build, because production's HTML was generated from different
+              build-time data. Diagnose it with a dev-mode render of the real
+              page, which prints the offending element.
             */
             suppressHydrationWarning
             dangerouslySetInnerHTML={{

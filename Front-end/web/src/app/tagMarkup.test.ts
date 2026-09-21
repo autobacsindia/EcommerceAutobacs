@@ -152,14 +152,14 @@ describe('third-party tags are real markup in the served HTML', () => {
 
 describe('the GTM <noscript> fallback', () => {
   /**
-   * Browser-verified on production 2026-09-21: this threw React #418
-   * ("the server rendered HTML didn't match the client") on EVERY page load.
+   * <noscript> content is parsed as raw TEXT by the browser when JavaScript is
+   * enabled, so React can never hydrate it equal to what it rendered. The
+   * suppression is the correct posture for deliberately un-hydratable markup.
    *
-   * With JavaScript enabled the browser parses <noscript> content as raw TEXT,
-   * not DOM, so what React rendered server-side can never match what it finds.
-   * React's response is to discard the tree and re-render it on the client —
-   * the opposite of what SSR is for. It had been firing since GTM was added and
-   * was invisible because nothing server-side can observe a hydration mismatch.
+   * ⚠ This is DEFENSIVE, not a fix for the home page's React #418. An earlier
+   * version of this comment claimed it was; an A/B of two production builds
+   * differing only in this prop showed #418 in neither. Recorded so the wrong
+   * conclusion is not reached again.
    */
   it('suppresses hydration warnings — it is un-hydratable by construction', () => {
     // Self-closing (`… />`), so there is no `</noscript>` to slice to.
