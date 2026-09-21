@@ -349,6 +349,27 @@ export default async function RootLayout({
              child of <noscript> (it would be parsed as real DOM on the client),
              so the markup is set as raw HTML. */
           <noscript
+            /*
+              suppressHydrationWarning is REQUIRED here, not cosmetic.
+
+              When JavaScript is enabled — i.e. for every visitor React hydrates
+              for — the browser parses <noscript> content as RAW TEXT rather than
+              as DOM. So the node React rendered on the server and the node it
+              finds in the document can never compare equal, and hydration throws
+              React error #418 ("the server rendered HTML didn't match the
+              client") on every single page load.
+              
+              That is not a warning to live with: React responds by DISCARDING
+              this tree and re-rendering it on the client, which is the opposite
+              of what server rendering is for. Browser-verified on production
+              2026-09-21; it had been firing since GTM was added in 7dac07ef and
+              was invisible because nobody had a console open.
+
+              Suppressing is correct rather than a workaround: the content is
+              deliberately un-hydratable markup for JS-less visitors, so there is
+              no client-side behaviour to preserve.
+            */
+            suppressHydrationWarning
             dangerouslySetInnerHTML={{
               __html: `<iframe src="https://www.googletagmanager.com/ns.html?id=${GTM_ID}" height="0" width="0" style="display:none;visibility:hidden"></iframe>`,
             }}

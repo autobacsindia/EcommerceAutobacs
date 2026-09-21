@@ -149,3 +149,29 @@ describe('third-party tags are real markup in the served HTML', () => {
     expect(headBlock).not.toContain('googletagmanager.com/gtag/js')
   })
 })
+
+describe('the GTM <noscript> fallback', () => {
+  /**
+   * Browser-verified on production 2026-09-21: this threw React #418
+   * ("the server rendered HTML didn't match the client") on EVERY page load.
+   *
+   * With JavaScript enabled the browser parses <noscript> content as raw TEXT,
+   * not DOM, so what React rendered server-side can never match what it finds.
+   * React's response is to discard the tree and re-render it on the client —
+   * the opposite of what SSR is for. It had been firing since GTM was added and
+   * was invisible because nothing server-side can observe a hydration mismatch.
+   */
+  it('suppresses hydration warnings — it is un-hydratable by construction', () => {
+    // Self-closing (`… />`), so there is no `</noscript>` to slice to.
+    const start = source.indexOf('<noscript')
+    expect(start).toBeGreaterThan(-1)
+    const noscript = source.slice(start, source.indexOf('/>', source.indexOf('ns.html')) + 2)
+    expect(noscript).toContain('suppressHydrationWarning')
+    expect(noscript).toContain('dangerouslySetInnerHTML')
+  })
+
+  it('still ships the iframe for JS-less visitors', () => {
+    // The suppression must not turn into deleting the fallback.
+    expect(source).toContain('googletagmanager.com/ns.html')
+  })
+})
