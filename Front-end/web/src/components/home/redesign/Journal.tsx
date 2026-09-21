@@ -184,7 +184,27 @@ export default function Journal({ posts }: { posts?: JournalItem[] }) {
 
             return (
               <Link
-                key={p.href}
+                /*
+                  Keyed on href AND title, not href alone.
+
+                  Every entry in the `journalPosts` fallback (homeContent.ts)
+                  carries href '/blog' — it is a placeholder list shown when the
+                  articles fetch returns nothing, and all six cards deliberately
+                  point at the blog index. Keying on href alone therefore gave
+                  React six IDENTICAL keys, and React's response to duplicate
+                  keys is to duplicate and/or omit children.
+
+                  That is what produced the home page's React #418 hydration
+                  error: the server's markup and the client's disagreed about
+                  which cards existed. It only ever reproduced when the fallback
+                  was in use, which is why it appeared in production and not on
+                  a local build holding real articles.
+
+                  Titles are unique in both the fallback and the live data, so
+                  the pair is unique in either case. Index is avoided so a real
+                  reorder still moves DOM nodes rather than remounting them.
+                */
+                key={`${p.href}|${p.title}`}
                 href={p.href}
                 className={`jf-card${isActive ? ' is-active' : ''}`}
                 aria-label={`Read article: ${p.title}`}
