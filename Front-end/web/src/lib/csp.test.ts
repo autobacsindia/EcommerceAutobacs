@@ -287,3 +287,60 @@ describe('both policies agree on everything except script-src', () => {
     },
   );
 });
+
+/**
+ * Browser-verified violations, 2026-09-21.
+ *
+ * Found by opening a DevTools console on production — NOT by any server-side
+ * check, and that is the point: a blocked connect/frame/form produces no request
+ * to log, so these were silently dropping analytics in production for however
+ * long they had been there. All three predate the ISR work.
+ */
+describe('CSP gaps found in a real browser console', () => {
+  test('connect-src allows the APEX analytics.google.com, not just the wildcard', async () => {
+    // GA4 posts page_view to https://analytics.google.com/g/collect. A CSP host
+    // source matches ONE host: `*.analytics.google.com` does NOT cover the apex,
+    // exactly as `www.google.com` does not cover `google.com` (see the comment
+    // on connect-src). Third time this same trap has landed here.
+    for (const policy of [buildPublicCsp(), await buildStrictCsp('n0nc3')]) {
+      const connect = directive(policy, 'connect-src');
+      expect(connect).toContain('https://analytics.google.com');
+      expect(connect).toContain('https://*.analytics.google.com');
+    }
+  });
+
+  test('frame-src allows the Meta Pixel cookie-sync iframe', async () => {
+    for (const policy of [buildPublicCsp(), await buildStrictCsp('n0nc3')]) {
+      expect(directive(policy, 'frame-src')).toContain('https://www.facebook.com');
+    }
+  });
+
+  test('form-action allows the Meta Pixel form-POST fallback', async () => {
+    // The pixel POSTs a form to facebook.com/tr/ when a payload is too large for
+    // a beacon. Blocked, those conversions vanish with no server-side trace.
+    for (const policy of [buildPublicCsp(), await buildStrictCsp('n0nc3')]) {
+      expect(directive(policy, 'form-action')).toContain('https://www.facebook.com');
+    }
+  });
+
+  test('does NOT allowlist the Meta Pixel rotating relay hosts', async () => {
+    /*
+      The pixel also tries to reach randomised first-party relay endpoints such as
+      od-<hash>.ecs.us-east-2.on.aws and <hash>.us-central1.run.app. These stay
+      BLOCKED, deliberately and permanently.
+
+      Allowing them means `https://*.on.aws` and `https://*.run.app` — every AWS
+      Lambda URL and every Google Cloud Run service on the internet. That is an
+      open data-exfiltration channel for any XSS, and it is a far worse trade
+      than losing a redundant pixel transport: facebook.com/tr still works, so
+      the events are not lost.
+
+      If these violations must go away, the answer is disabling that pixel
+      feature in Meta Events Manager — not widening the CSP.
+    */
+    for (const policy of [buildPublicCsp(), await buildStrictCsp('n0nc3')]) {
+      expect(policy).not.toMatch(/on\.aws/);
+      expect(policy).not.toMatch(/run\.app/);
+    }
+  });
+});

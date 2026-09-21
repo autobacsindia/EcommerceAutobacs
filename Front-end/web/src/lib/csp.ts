@@ -137,16 +137,23 @@ function buildPolicy(scriptSrc: string): string {
     // which is the Google tag's enhanced-conversions form-data endpoint, silently
     // dropped on every product page while www.google.com sat in the list looking
     // like it covered it. Same trap as the clarity.ms → c.bing.com redirect above.
-    `connect-src 'self' ${R2_UPLOAD_ORIGIN} https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.google.com https://www.google.co.in https://google.com https://google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net https://*.clarity.ms`,
+    `connect-src 'self' ${R2_UPLOAD_ORIGIN} https://api.cloudinary.com https://*.ingest.sentry.io https://r.lr-ingest.io https://api.razorpay.com https://cdn.razorpay.com https://lumberjack.razorpay.com https://maps.googleapis.com https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://analytics.google.com https://www.google.com https://www.google.co.in https://google.com https://google.co.in https://googleads.g.doubleclick.net https://www.googleadservices.com https://ad.doubleclick.net https://www.facebook.com https://connect.facebook.net https://*.clarity.ms`,
     // Razorpay renders its payment UI (checkout) and the EMI affordability
     // widget's "View plans" modal inside iframes. googletagmanager.com is the
     // GTM <noscript> ns.html iframe (layout.tsx) — without it that fallback is
     // CSP-blocked for JS-less visitors, silently and only for them.
-    "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com https://www.googletagmanager.com",
+        // www.facebook.com: the Meta Pixel frames facebook.com to sync its cookie.
+    // Blocked in production until 2026-09-21 — browser-verified, and invisible
+    // from the server because a blocked frame produces no request to log.
+    "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.facebook.com",
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",
-    "form-action 'self' https://api.razorpay.com",
+        // www.facebook.com: when a pixel payload is too large for a GET beacon the
+    // Meta Pixel falls back to POSTing a form to facebook.com/tr/. Without this
+    // those events are dropped silently — form-action violations do not surface
+    // anywhere except a browser console.
+    "form-action 'self' https://api.razorpay.com https://www.facebook.com",
     "upgrade-insecure-requests",
   ].join('; ');
 }
