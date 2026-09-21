@@ -28,6 +28,7 @@ import companyInfo from '../config/company.js';
 // as an order reference here.
 import { orderNumber as orderRef } from './invoiceService.js';
 import { formatDateIST, formatDateTimeIST } from '../utils/datetime.js';
+import { variantDisplayName } from '../utils/orderLines.js';
 
 /**
  * Internal alert recipients. Reads ADMIN_NOTIFICATION_EMAILS (comma-separated)
@@ -68,7 +69,7 @@ const inr = (n) =>
 
 /** `Wiper Blade × 2` lines for an order's items, one per line. */
 const itemLines = (order) =>
-  (order.items || []).map((it) => `${it.name || 'Item'} × ${it.quantity || 0}`);
+  (order.items || []).map((it) => `${variantDisplayName(it.name, it.variantLabel)} × ${it.quantity || 0}`);
 
 /** Snapshot of the person who placed the order (user doc wins, address is the fallback). */
 const orderCustomer = (order) => {

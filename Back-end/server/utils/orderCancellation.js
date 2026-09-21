@@ -103,7 +103,7 @@ export const liveQuantityByItem = (order) => {
  * counts only shipped/delivered.
  *
  * @param {object} order
- * @returns {Array<{itemId:string, name:string|null, quantity:number, packed:number}>}
+ * @returns {Array<{itemId:string, name:string|null, variantLabel:string|null, quantity:number, packed:number}>}
  *   lines with a non-zero cancellable remainder. `packed` is how many of those units
  *   are currently in an unshipped box, so the UI can warn that a parcel will be edited.
  */
@@ -127,6 +127,9 @@ export const remainingCancellable = (order) => {
       return {
         itemId: id,
         name: item.name || item.product?.name || null,
+        // Beside `name`, not folded into it — the parent product's name does not
+        // identify which model is being cancelled. `null` on a simple product.
+        variantLabel: item.variantLabel || null,
         quantity: Math.max(0, available),
         // Capped at what is actually available: a packed count can exceed it only if
         // the data is already inconsistent, and reporting more than can be cancelled

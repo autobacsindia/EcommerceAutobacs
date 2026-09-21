@@ -13,6 +13,7 @@ import OrderHistorySkeleton from '@/components/skeletons/OrderHistorySkeleton';
 import { formatLongDateTimeIST } from '@/lib/datetime';
 import ParcelProgressBadge from '@/components/orders/shared/ParcelProgressBadge';
 import { hasCancellations } from '@/lib/orderFulfilment';
+import { variantDisplayName } from '@/lib/orderLines';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
 
 interface Order {
@@ -26,6 +27,11 @@ interface Order {
     productId?: { _id: string; name: string };
     quantity: number;
     price: number;
+    /**
+     * Which model of a variable product. Already on the wire — CUSTOMER_LIST_FIELDS
+     * projects `items` whole — so this costs no extra field and no extra request.
+     */
+    variantLabel?: string | null;
   }>;
   trackingNumber?: string;
   /**
@@ -331,8 +337,14 @@ export default function OrdersPage() {
                       const product = item.product || item.productId;
                       return (
                         <div key={index} className="flex justify-between text-sm">
+                          {/*
+                            Flat string, not a sub-line: this preview is a single
+                            row per item with the price hard-right, so the model has
+                            to ride on the name. `variantDisplayName` is the same
+                            rule the admin pickers use, so the two never disagree.
+                          */}
                           <span className="text-ink/70 font-display">
-                            {product?.name || 'Unknown Product'} × {item.quantity}
+                            {variantDisplayName(product?.name, item.variantLabel, 'Unknown Product')} × {item.quantity}
                           </span>
                           <span className="text-ink-muted font-display">₹{(item.price * item.quantity).toFixed(2)}</span>
                         </div>

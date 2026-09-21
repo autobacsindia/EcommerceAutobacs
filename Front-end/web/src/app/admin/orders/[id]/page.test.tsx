@@ -115,6 +115,63 @@ describe('AdminOrderDetailPage', () => {
     });
   });
 
+  /**
+   * WHICH MODEL was ordered.
+   *
+   * THE REGRESSION. A real paid order carried the line name "Lightforce BEAST 230
+   * Filter Cover (Amber / Black)" against the variant "Black". The admin screen showed
+   * the name alone, so nobody could answer "which one did they choose?" — while the
+   * answer sat snapshotted on the line the whole time.
+   */
+  describe('variant (which model was bought)', () => {
+    const withItems = (items: unknown[]) => {
+      (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/tracking/carriers')) {
+          return Promise.resolve({ carriers: [] });
+        }
+        return Promise.resolve({ order: { ...mockOrder, items } });
+      });
+    };
+
+    it('shows the model on the item row', async () => {
+      withItems([{
+        _id: 'i1',
+        product: { _id: 'p1', name: 'Filter Cover (Amber / Black)', images: [] },
+        name: 'Filter Cover (Amber / Black)',
+        variantLabel: 'Black',
+        quantity: 1, price: 100,
+      }]);
+
+      render(<AdminOrderDetailPage />);
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+      expect(screen.getByText('Black')).toBeInTheDocument();
+    });
+
+    it('tells two models of the same product apart', async () => {
+      withItems([
+        { _id: 'i1', product: { _id: 'p1', name: 'Filter Cover (Amber / Black)', images: [] },
+          name: 'Filter Cover (Amber / Black)', variantLabel: 'Black', quantity: 1, price: 100 },
+        { _id: 'i2', product: { _id: 'p1', name: 'Filter Cover (Amber / Black)', images: [] },
+          name: 'Filter Cover (Amber / Black)', variantLabel: 'Amber', quantity: 1, price: 100 },
+      ]);
+
+      render(<AdminOrderDetailPage />);
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+
+      // Without the label these two rows are byte-identical.
+      expect(screen.getByText('Black')).toBeInTheDocument();
+      expect(screen.getByText('Amber')).toBeInTheDocument();
+    });
+
+    // The default fixture is a simple product: the screen must look exactly as before
+    // for the ~1,560 of 1,598 production orders that have no variant at all.
+    it('renders nothing extra for a simple product', async () => {
+      render(<AdminOrderDetailPage />);
+      await waitFor(() => expect(screen.getByText('Test Product')).toBeInTheDocument());
+      expect(screen.queryByText(/^Model:/)).not.toBeInTheDocument();
+    });
+  });
+
   it('confirms via modal before updating status', async () => {
     render(<AdminOrderDetailPage />);
 

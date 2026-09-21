@@ -58,6 +58,12 @@ export interface Cancellation {
 interface RemainingLine {
   itemId: string;
   name: string | null;
+  /**
+   * Which model, for a variable product. A separate field rather than part of `name`
+   * because `name` is the PARENT product's name and often lists every option at once
+   * — so it alone does not identify the unit. `null` on a simple product.
+   */
+  variantLabel?: string | null;
   quantity: number;
   /** How many of these units are sitting in an unshipped parcel that will be edited. */
   packed: number;
@@ -288,6 +294,11 @@ export default function OrderCancellations({ orderId, itemNames, onChanged }: Pr
                 />
                 <span className="text-sm">
                   {line.name || 'Item'}
+                  {line.variantLabel && (
+                    <span className="ml-1 rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">
+                      {line.variantLabel}
+                    </span>
+                  )}
                   <span className="text-gray-500"> · {line.quantity} cancellable</span>
                   {line.packed > 0 && (
                     <span className="text-amber-700"> · {line.packed} already packed</span>

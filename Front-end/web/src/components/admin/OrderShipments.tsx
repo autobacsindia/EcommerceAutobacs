@@ -51,6 +51,12 @@ export interface Shipment {
 interface RemainingLine {
   itemId: string;
   name: string | null;
+  /**
+   * Which model, for a variable product. A separate field rather than part of `name`
+   * because `name` is the PARENT product's name and often lists every option at once
+   * — so it alone does not identify the unit. `null` on a simple product.
+   */
+  variantLabel?: string | null;
   quantity: number;
 }
 
@@ -330,6 +336,11 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
                 />
                 <span className="text-sm">
                   {line.name || 'Item'}
+                  {line.variantLabel && (
+                    <span className="ml-1 rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">
+                      {line.variantLabel}
+                    </span>
+                  )}
                   <span className="text-gray-500"> · {line.quantity} left to ship</span>
                 </span>
               </div>

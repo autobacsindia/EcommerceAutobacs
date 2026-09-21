@@ -47,6 +47,21 @@ const ReturnRequestSchema = new mongoose.Schema({
     },
     // Set for a returned line of a variable product (which variant was bought).
     variantId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    /**
+     * Human-readable name of that variant, snapshotted from the ORDER LINE for the
+     * same reason `unitPrice` below is — so the approval screen never re-reads a
+     * since-renamed or since-deleted variant off the live product.
+     *
+     * Display only; nothing in the refund maths reads it (`matchOrderLine` keys on
+     * `_id`, then product + `variantId`). It exists because `product.name` is the
+     * PARENT product's name and routinely lists every option at once, so an admin
+     * approving a return otherwise cannot tell WHICH model is coming back.
+     *
+     * `null` on a simple product, and absent on every return request created before
+     * this field — those still carry `variantId`, so nothing is lost, but the label
+     * simply does not render for them.
+     */
+    variantLabel: { type: String, default: null },
     quantity: {
       type: Number,
       required: true,

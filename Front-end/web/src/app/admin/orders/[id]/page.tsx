@@ -13,7 +13,7 @@ import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/ord
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 import { formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
 import EmiPaymentNotice from '@/components/orders/EmiPaymentNotice';
-import { buildOrderLines } from '@/lib/orderLines';
+import { buildOrderLines, variantDisplayName } from '@/lib/orderLines';
 import OrderShipments from '@/components/admin/OrderShipments';
 import OrderCancellations from '@/components/admin/OrderCancellations';
 import { cancelledQuantityForItem } from '@/lib/orderFulfilment';
@@ -50,6 +50,17 @@ interface OrderItem {
   price: number;
   /** Name snapshotted at purchase; authoritative over the live product name. */
   name?: string;
+  /**
+   * Which model of a variable product this line is, snapshotted at purchase.
+   * `null`/absent on a simple product and on every order placed before variants.
+   *
+   * Read the SNAPSHOT, never the live product's variants — an order is an immutable
+   * record, and this is frequently the only thing distinguishing the line, because
+   * `name` is the PARENT product's name and often lists every option at once
+   * ("… Filter Cover (Amber / Black)"). Without it a packer cannot tell Amber from
+   * Black and will ship the wrong one.
+   */
+  variantLabel?: string | null;
 }
 
 interface Order {
@@ -550,6 +561,22 @@ function AdminOrderDetailPageInner() {
                           )
                         )}
                       </div>
+                      {/*
+                        WHICH MODEL. Its own line rather than appended to the name,
+                        because the parent name is often long and already contains the
+                        option list — "… Filter Cover (Amber / Black)" against the
+                        variant "Black". Without this an admin answering "which one did
+                        they order?" has nothing to read, which is the bug this fixed.
+                        Snapshot only: never re-derived from the live product.
+                      */}
+                      {line.variantLabel && (
+                        <p className="mt-0.5 text-sm font-semibold text-gray-700">
+                          Model:{' '}
+                          <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs">
+                            {line.variantLabel}
+                          </span>
+                        </p>
+                      )}
                       <p className="text-gray-500 text-sm">Qty: {line.quantity}</p>
                       {cancelledQty > 0 && (
                         <p className="mt-0.5 text-sm font-medium text-red-700">
@@ -609,7 +636,13 @@ function AdminOrderDetailPageInner() {
             itemNames={Object.fromEntries(
               order.items
                 .filter((item) => item._id)
-                .map((item) => [String(item._id), item.name ?? item.product?.name ?? 'Item']),
+                .map((item) => [
+                  String(item._id),
+                  // Flat string: the picker renders one label per line and has no room
+                  // for a sub-line. A variable product's parent name does NOT identify
+                  // the unit to put in the box, so the variant must ride along here.
+                  variantDisplayName(item.name ?? item.product?.name, item.variantLabel),
+                ]),
             )}
             rewardName={order.spinReward && !order.spinReward.voidedAt ? order.spinReward.name : null}
             onChanged={fetchOrder}
@@ -626,7 +659,13 @@ function AdminOrderDetailPageInner() {
             itemNames={Object.fromEntries(
               order.items
                 .filter((item) => item._id)
-                .map((item) => [String(item._id), item.name ?? item.product?.name ?? 'Item']),
+                .map((item) => [
+                  String(item._id),
+                  // Flat string: the picker renders one label per line and has no room
+                  // for a sub-line. A variable product's parent name does NOT identify
+                  // the unit to put in the box, so the variant must ride along here.
+                  variantDisplayName(item.name ?? item.product?.name, item.variantLabel),
+                ]),
             )}
             onChanged={fetchOrder}
           />

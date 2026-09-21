@@ -5,7 +5,22 @@
 import { formatInvoiceNumber } from './invoiceFormat.js';
 import { formatLongDateIST } from './datetime.js';
 import { describeEmiPlan } from './paymentMethodDetails.js';
-import { buildOrderLines } from './orderLines.js';
+import { buildOrderLines, variantDisplayName } from './orderLines.js';
+
+/**
+ * The plain-text name of one display line, WITH its variant.
+ *
+ * Returns unescaped text: HTML callers must still run it through `esc`. The reward
+ * suffix ("free gift you won") is deliberately NOT included, because the text and
+ * HTML bodies mark it up differently.
+ *
+ * Every order email showed only `line.name`, which for a variable product is the
+ * PARENT product's name — so a confirmation for "… Filter Cover (Amber / Black)"
+ * never told the customer they were getting Black. Centralised here because that
+ * bug was four separate copies of the same expression, and a fix applied to three
+ * of them would look correct.
+ */
+const lineName = (line) => variantDisplayName(line?.name, line?.variantLabel);
 
 /**
  * Escape a value for safe interpolation into HTML text/attribute contexts.
@@ -552,7 +567,7 @@ export const orderConfirmationEmail = ({ order, user = null, company = {} }) => 
   const lines = buildOrderLines(order, { audience: 'customer' });
   const lineAmount = (line) => (line.isFree ? 'FREE' : inr(line.lineTotal));
   const lineLabel = (line) =>
-    `${line.name || 'Item'}${line.kind === 'reward' ? ' (free gift you won 🎁)' : ''}`;
+    `${lineName(line)}${line.kind === 'reward' ? ' (free gift you won 🎁)' : ''}`;
 
   const itemsText = lines
     .map((line) => `  • ${lineLabel(line)} × ${line.quantity} — ${lineAmount(line)}`)
@@ -913,7 +928,7 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
     ? '\n\nItems:\n' +
       statusLines
         .map((line) =>
-          `  • ${line.name || 'Item'}${line.kind === 'reward' ? ' (free gift you won 🎁)' : ''} × ${line.quantity}`)
+          `  • ${lineName(line)}${line.kind === 'reward' ? ' (free gift you won 🎁)' : ''} × ${line.quantity}`)
         .join('\n')
     : '';
 
@@ -926,7 +941,7 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
     ? '\n\nStill to come in a separate parcel:\n' +
       stillToCome
         .map((line) =>
-          `  • ${line.name || 'Item'}${line.kind === 'reward' ? ' (free gift you won 🎁)' : ''} × ${line.quantity}`)
+          `  • ${lineName(line)}${line.kind === 'reward' ? ' (free gift you won 🎁)' : ''} × ${line.quantity}`)
         .join('\n')
     : '';
 
@@ -980,7 +995,7 @@ ${companyName}
         <td style="padding:10px 0;border-bottom:1px solid #eee;width:56px;">
           ${line.image ? `<img src="${esc(line.image)}" alt="" width="48" height="48" style="border-radius:6px;object-fit:cover;display:block;">` : (line.kind === 'reward' ? '<span style="font-size:28px;line-height:1;">&#127873;</span>' : '')}
         </td>
-        <td style="padding:10px 0;border-bottom:1px solid #eee;">${esc(line.name || 'Item')}${line.kind === 'reward' ? ' <span style="color:#b45309;font-weight:bold;">(free gift you won)</span>' : ''}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #eee;">${esc(lineName(line))}${line.kind === 'reward' ? ' <span style="color:#b45309;font-weight:bold;">(free gift you won)</span>' : ''}</td>
         <td style="padding:10px 0;border-bottom:1px solid #eee;text-align:right;color:#555;">&times; ${line.quantity}</td>
       </tr>`
         )
@@ -995,7 +1010,7 @@ ${companyName}
   const stillToComeTable = isPartial && stillToCome.length
     ? `<div style="margin-top:20px;padding:14px 18px;background:#fbfbfb;border:1px dashed #ddd;border-radius:8px;">
         <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#888;">Still to come in a separate parcel</p>
-        ${stillToCome.map((line) => `<p style="margin:2px 0;font-size:14px;color:#555;">${esc(line.name || 'Item')}${line.kind === 'reward' ? ' (free gift you won)' : ''} &times; ${line.quantity}</p>`).join('')}
+        ${stillToCome.map((line) => `<p style="margin:2px 0;font-size:14px;color:#555;">${esc(lineName(line))}${line.kind === 'reward' ? ' (free gift you won)' : ''} &times; ${line.quantity}</p>`).join('')}
       </div>`
     : '';
 

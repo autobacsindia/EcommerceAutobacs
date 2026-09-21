@@ -7,7 +7,7 @@
  * same behaviour — a gift that is visible everywhere and priced nowhere.
  */
 
-import { buildOrderLines, linesGoodsTotal, isPhysicalReward, owesGoodie } from './orderLines';
+import { buildOrderLines, linesGoodsTotal, isPhysicalReward, owesGoodie, variantDisplayName } from './orderLines';
 import type { SpinRewardSnapshot } from './orderLines';
 
 const goodie = (over: Partial<SpinRewardSnapshot> = {}): SpinRewardSnapshot => ({
@@ -125,5 +125,52 @@ describe('isPhysicalReward / owesGoodie', () => {
 
   it('still owes it after it has been packed — packing is not withdrawal', () => {
     expect(owesGoodie(orderWith(goodie({ fulfilledAt: '2026-08-28' })))).toBe(true);
+  });
+});
+
+
+/**
+ * WHICH MODEL the customer bought — the frontend half of the same contract.
+ *
+ * Mirrors `variantDisplayName` in tests/unit/utils/orderLines.test.js case for case.
+ * The admin pickers, the customer parcel list and the orders-list preview all format
+ * through this one function, so drift between the two languages would put a different
+ * string in front of the packer than on the invoice.
+ */
+describe('variantDisplayName', () => {
+  it('appends the variant, so a parent name that lists every option is still unambiguous', () => {
+    expect(variantDisplayName('Lightforce BEAST 230 Filter Cover (Amber / Black)', 'Black'))
+      .toBe('Lightforce BEAST 230 Filter Cover (Amber / Black) — Black');
+  });
+
+  it('leaves a simple product untouched', () => {
+    expect(variantDisplayName('Carnauba Wax', null)).toBe('Carnauba Wax');
+    expect(variantDisplayName('Carnauba Wax', undefined)).toBe('Carnauba Wax');
+    expect(variantDisplayName('Carnauba Wax', '')).toBe('Carnauba Wax');
+    expect(variantDisplayName('Carnauba Wax', '   ')).toBe('Carnauba Wax');
+  });
+
+  it('falls back when the snapshot has no name at all, and lets the caller pick the wording', () => {
+    expect(variantDisplayName(null, null)).toBe('Item');
+    expect(variantDisplayName(undefined, 'Black')).toBe('Item — Black');
+    expect(variantDisplayName(null, null, 'Unknown Product')).toBe('Unknown Product');
+  });
+});
+
+describe('buildOrderLines — variant', () => {
+  it('carries the snapshotted label onto the display line', () => {
+    const [line] = buildOrderLines({
+      items: [{ _id: 'i1', name: 'Grill', price: 100, quantity: 1, variantLabel: 'Everest White' }],
+    });
+    expect(line.variantLabel).toBe('Everest White');
+  });
+
+  it('is null on a simple product and on the goodie line', () => {
+    const lines = buildOrderLines(
+      { items: [{ _id: 'i1', name: 'Wax', price: 100, quantity: 1 }], spinReward: goodie() },
+      { audience: 'admin' },
+    );
+    expect(lines.find((l) => l.kind === 'sale')!.variantLabel).toBeNull();
+    expect(lines.find((l) => l.kind === 'reward')!.variantLabel).toBeNull();
   });
 });
