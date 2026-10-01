@@ -18,7 +18,7 @@ export default function RedesignFooter() {
         <div className="footer-brand">
           <div className="logo-f">
             {brand.logo ? (
-              <Img src={brand.logo} alt={brand.logoAlt} className="logo-img footer-logo-img" sizes="200px" width={820} height={315} />
+              <Img src={brand.logo} alt={brand.logoAlt} className="logo-img footer-logo-img" sizes="200px" width={960} height={255} />
             ) : (
               <>
                 {brand.name}

@@ -36,7 +36,8 @@ const DISALLOW = [
   // Private campaign landing pages — reached only by the QR printed on a
   // thank-you card. Never indexed, never in the sitemap.
   '/festive',
-  // The in-store Onam offer — the printed counter QR is the only route in.
+  // The retired in-store Onam offer. The page is gone and the path redirects home,
+  // but printed counter QRs still hit it, so keep crawlers off it.
   '/onam',
   // Dev-only visual harnesses. They 404 in production; this is the second line of
   // defence for preview/test tiers, which are publicly reachable.

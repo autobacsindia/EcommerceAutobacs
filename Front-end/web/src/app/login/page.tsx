@@ -9,6 +9,7 @@ import { navigateTo } from '@/lib/utils/navigation';
 import { safeInternalPath } from '@/lib/utils';
 import { LEGAL_LINKS } from '@/lib/constants';
 import Image from 'next/image';
+import { brand } from '@/components/home/redesign/homeContent';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook } from 'react-icons/fa';
@@ -109,12 +110,12 @@ function LoginPageInner() {
       <div className="py-8">
         <Link href="/" className="block mx-auto">
           <Image
-            src="https://img.autobacsindia.com/autobacs/site/roavion-primary-trimmed.png"
+            src={brand.logo}
             alt="Roavion"
-            width={775}
-            height={309}
+            width={960}
+            height={255}
             priority
-            className="object-contain h-28 w-auto mx-auto"
+            className="object-contain h-20 w-auto mx-auto"
           />
         </Link>
       </div>

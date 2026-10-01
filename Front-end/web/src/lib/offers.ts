@@ -17,7 +17,13 @@
  * rather than a hunt through three components.
  */
 
-export type OfferKey = 'onam';
+/**
+ * No offer is running. To start one, widen this to its key (e.g. `'diwali'`) and add
+ * its entry to OFFERS below. Onam 2026 ended: its entry is removed, so an old
+ * `/login?offer=onam` link now shows the plain sign-in screen, and its landing path
+ * `/onam` redirects home (next.config.ts).
+ */
+export type OfferKey = never;
 
 export type Offer = {
   /** Query-param value and lookup key: `/login?offer=onam`. */
@@ -34,21 +40,12 @@ export type Offer = {
   landingPath: string;
 };
 
-export const OFFERS: Readonly<Record<OfferKey, Offer>> = Object.freeze({
-  /**
-   * Onam 2026, in-store. The QR is printed on the counter card, so `landingPath` is
-   * fixed at print time: if this route is ever renamed the printed cards die with it.
-   * Rename by adding a redirect, never by editing this string.
-   */
-  onam: {
-    key: 'onam',
-    eyebrow: 'Onam Special',
-    title: 'Your Onam coupon is waiting',
-    tagline: 'Sign in to activate it, and our team will apply it to your purchase.',
-    stripText: 'Onam Special — sign in to activate your coupon',
-    landingPath: '/onam',
-  },
-});
+/**
+ * A printed QR fixes an offer's `landingPath` at print time: if that route is ever
+ * renamed the printed cards die with it. Rename by adding a redirect, never by editing
+ * the string.
+ */
+export const OFFERS: Readonly<Record<OfferKey, Offer>> = Object.freeze({});
 
 /**
  * Resolve an `?offer=` query value to a known offer.

@@ -7,10 +7,12 @@ jest.mock('lucide-react', () => ({
 }));
 
 describe('OfferStrip', () => {
-  it('shows the offer copy for a known offer key', () => {
+  // Onam 2026 has ended. Customers still holding the printed counter card land on
+  // /login?offer=onam; they must get the plain sign-in screen, not a dead promotion.
+  it('renders nothing for the retired onam offer', () => {
     render(<OfferStrip offer="onam" />);
-    expect(screen.getByTestId('offer-strip')).toBeInTheDocument();
-    expect(screen.getByText(/Onam Special/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('offer-strip')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Onam/i)).not.toBeInTheDocument();
   });
 
   // The parameter comes off a URL anyone can type. An unknown value must leave the

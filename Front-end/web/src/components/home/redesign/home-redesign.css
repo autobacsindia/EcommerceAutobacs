@@ -105,11 +105,11 @@
 .hr .main-nav .logo { display: flex; align-items: center; font-size: 13px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; flex-shrink: 0; }
 .hr .main-nav .logo span { color: var(--gold); font-weight: 300; }
 /* Logo image (when brand.logo is set). The asset must be padding-trimmed
-   (we trim via Cloudinary e_trim in homeContent.ts) so height fills the mark.
-   The Roavion mark is a ~2.5:1 stacked lockup (wordmark + tagline), so it needs
-   a little more height than a wide horizontal mark to stay legible; keep height
+   (public/images/roavion-logo.png is) so height fills the mark.
+   The Roavion mark is a ~3.8:1 lockup with a small "Powered By" tagline, so it
+   needs enough height for the tagline to stay legible; keep height
    ≤ navbar height (76px) so it never overflows the bar. */
-.hr .logo-img { height: 48px; width: auto; max-width: 200px; object-fit: contain; }
+.hr .logo-img { height: 56px; width: auto; max-width: 260px; object-fit: contain; }
 .hr .footer-logo-img { height: 44px; }
 /* Mobile-only controls hidden on desktop. Scoped under .actions so this beats
    `.hr .main-nav .icon-btn { display:flex }` (which is more specific than a bare
@@ -1036,7 +1036,7 @@
   .hr .nav-burger { display: flex; justify-self: start; }
   .hr .main-nav .logo { justify-self: center; }
   /* keep height < mobile navbar (64px) and width within the centre column */
-  .hr .logo-img { height: 42px; max-width: 150px; }
+  .hr .logo-img { height: 44px; max-width: 180px; }
   .hr .main-nav .actions { justify-self: end; margin-left: 0; gap: 16px; }
   /* match the desktop hide rule's specificity (.main-nav .actions ...) */
   .hr .main-nav .actions .nav-search-toggle { display: flex; }
