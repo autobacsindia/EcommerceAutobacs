@@ -35,6 +35,7 @@ import {
   resendMagicLink
 } from "../controllers/magicLinkController.js";
 import emailHandler from "../services/emailHandler.js";
+import { describeStaff } from "../services/staffService.js";
 import sessionStore from "../services/sessionStore.js";
 import { 
   generateTokenPair as generateSessionTokenPair,
@@ -273,7 +274,9 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
       email: user.email,
       role: user.role,
       isVerified: user.isVerified,
-      avatar: user.avatar?.url || ''
+      avatar: user.avatar?.url || '',
+      // Team profile for staff (null otherwise) — lets the client land staff on /team.
+      staff: describeStaff(user)
     }
   });
 }));
@@ -296,7 +299,8 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
       // Used by the frontend cache invalidation logic — if this value changes
       // (ban, role change, force-logout), the client detects it on next background
       // revalidation and immediately updates state without waiting for TTL expiry.
-      sessionVersion: req.user.sessionVersion ?? 0
+      sessionVersion: req.user.sessionVersion ?? 0,
+      staff: describeStaff(req.user)
     }
   });
 }));

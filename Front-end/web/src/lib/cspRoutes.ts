@@ -36,6 +36,8 @@ const STRICT_CSP_PREFIXES = [
   '/wishlist',
   '/cart',
   '/admin',
+  // Staff panel: its layout reads cookies to verify the session, so it is always dynamic.
+  '/team',
 ];
 
 /** True when this path is dynamically rendered and may carry a per-request nonce. */

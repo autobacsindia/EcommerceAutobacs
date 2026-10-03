@@ -269,12 +269,12 @@ class AnalyticsReportService {
         ]),
         // Registration cohorts in the window.
         this.agg(User, [
-          { $match: { role: { $ne: 'admin' }, createdAt: { $gte: window.from, $lt: window.to } } },
+          { $match: { role: { $nin: ['admin', 'staff'] }, createdAt: { $gte: window.from, $lt: window.to } } },
           { $group: { _id: { $dateTrunc: { date: '$createdAt', unit } }, count: { $sum: 1 } } },
           { $sort: { _id: 1 } },
           { $project: { _id: 0, bucket: '$_id', count: 1 } },
         ]),
-        User.countDocuments({ role: { $ne: 'admin' } }),
+        User.countDocuments({ role: { $nin: ['admin', 'staff'] } }),
       ]);
 
       const pc = perCustomer[0] || { customers: 0, returning: 0, revenue: 0 };

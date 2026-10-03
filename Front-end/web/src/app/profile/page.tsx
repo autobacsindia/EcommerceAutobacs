@@ -381,6 +381,12 @@ export default function ProfilePage() {
                 Admin Dashboard
               </Link>
             )}
+            {user?.role === 'staff' && (
+              <Link href="/team" className="flex items-center gap-2 bg-obsidian-raised hover:bg-gold text-ink/70 hover:text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                <Shield className="h-4 w-4" />
+                Team Panel
+              </Link>
+            )}
             <button onClick={handleLogout} className="bg-obsidian-raised hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-hairline hover:border-red-500/30 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
               Logout
             </button>

@@ -129,6 +129,20 @@ export const admin = asyncHandler(async (req, res, next) => {
   next();
 });
 
+// Staff-panel gate: an ACTIVE staff member, or an admin. Run after `protect`.
+//
+// This is a separate gate on purpose — `admin` above stays admin-only, so none of
+// the existing admin API opens to staff. What a staff member may do inside a
+// staff route (own team only, heads vs members) is decided by staffService.
+export const staffOrAdmin = (req, res, next) => {
+  const user = req.user;
+  const ok = user && (user.role === 'admin' || (user.role === 'staff' && user.staff?.active === true));
+  if (!ok) {
+    return res.status(403).json({ success: false, message: 'Not authorized for the staff panel' });
+  }
+  next();
+};
+
 // How long to suppress duplicate context-change alerts for the same admin + device
 // fingerprint. Keeps the "anomaly" signal meaningful: one alert per device per hour
 // instead of one per request (the baseline is a single shared field, so a legitimate

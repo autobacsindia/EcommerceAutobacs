@@ -59,6 +59,7 @@ import dashboardRoutes from './dashboard.js';
 import analyticsRoutes from './analytics.js';
 import leadRoutes from './leads.js';
 import salesRepRoutes from './salesReps.js';
+import staffRoutes from './staff.js';
 import warehouseRoutes from './warehouses.js';
 import deliveryZoneRoutes from './deliveryZones.js';
 import mediaRoutes from './media.js';
@@ -161,6 +162,9 @@ apiRouter.use('/analytics', adminRouteRateLimit, analyticsRoutes);
 apiRouter.use('/leads', adminRouteRateLimit, leadRoutes);
 // Name-only sales-rep profiles for CRM attribution (admin-only; guarded in-route)
 apiRouter.use('/sales-reps', adminRouteRateLimit, salesRepRoutes);
+// Staff panel (/team): invite redemption is public; everything else is active staff
+// or admin, scoped per team inside staffService. Limiters are applied per route.
+apiRouter.use('/staff', staffRoutes);
 apiRouter.use('/warehouses', adminRouteRateLimit, warehouseRoutes);
 apiRouter.use('/delivery-zones', adminRouteRateLimit, deliveryZoneRoutes);
 apiRouter.use('/media', publicBrowsingRateLimit, mediaRoutes); // Public read access

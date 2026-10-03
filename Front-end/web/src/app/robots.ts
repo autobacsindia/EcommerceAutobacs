@@ -33,6 +33,9 @@ const DISALLOW = [
   '/forgot-password',
   '/verify-email',
   '/claim-order',
+  // Internal staff panel and its invite-redemption page.
+  '/team',
+  '/staff-invite',
   // Private campaign landing pages — reached only by the QR printed on a
   // thank-you card. Never indexed, never in the sitemap.
   '/festive',

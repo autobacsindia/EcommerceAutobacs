@@ -22,6 +22,7 @@ import { isStrictCspPath } from '@/lib/cspRoutes';
  *
  * Protected routes:
  *   - /admin/*    — Admin only (JWT verification + role check)
+ *   - /team/*     — Staff (or admin) only (JWT verification + role check)
  *   - /account/*  — Authenticated users (JWT verification)
  *   - /orders/*   — Authenticated users (JWT verification)
  *   - /checkout/* — Authenticated users (JWT verification)
@@ -39,6 +40,9 @@ import { isStrictCspPath } from '@/lib/cspRoutes';
 // agreement; a route gated in one place and not the other is how the two drift.
 const PROTECTED_ROUTES = ['/account', '/orders', '/checkout', '/profile', '/wishlist'];
 const ADMIN_ROUTES = ['/admin'];
+// Staff panel. Gated to a signed-in staff/admin token here (UX); the /team layout
+// re-checks with the backend, and the /staff API enforces team scope (security).
+const STAFF_ROUTES = ['/team'];
 
 
 // Verification options must match how the backend SIGNS tokens
@@ -270,10 +274,15 @@ export async function middleware(req: NextRequest) {
 
   const isProtectedRoute = PROTECTED_ROUTES.some(r => pathname.startsWith(r));
   const isAdminRoute     = ADMIN_ROUTES.some(r => pathname.startsWith(r));
+  const isStaffRoute     = STAFF_ROUTES.some(r => pathname === r || pathname.startsWith(`${r}/`));
   const isLogin          = pathname === '/login';
 
+  // A role that may not open this route, given its verified token role.
+  const roleBlocked = (role?: string) =>
+    (isAdminRoute && role !== 'admin') || (isStaffRoute && role !== 'staff' && role !== 'admin');
+
   // Public, non-login route — nothing to authenticate; just apply CSP.
-  if (!isProtectedRoute && !isAdminRoute && !isLogin) {
+  if (!isProtectedRoute && !isAdminRoute && !isStaffRoute && !isLogin) {
     return proceed();
   }
 
@@ -305,8 +314,8 @@ export async function middleware(req: NextRequest) {
   if (accessToken?.value) {
     const { valid, role } = await verifyToken(accessToken.value, secret);
     if (valid) {
-      if (isAdminRoute && role !== 'admin') {
-        console.warn(`[middleware] Non-admin blocked from ${pathname}`);
+      if (roleBlocked(role)) {
+        console.warn(`[middleware] Role '${role}' blocked from ${pathname}`);
         return NextResponse.redirect(new URL('/', req.url));
       }
       return proceed();
@@ -316,8 +325,8 @@ export async function middleware(req: NextRequest) {
   // ── Path B: token missing or expired — attempt silent refresh ────────────────
   const refreshed = await silentRefresh(req, secret);
   if (refreshed) {
-    if (isAdminRoute && refreshed.role !== 'admin') {
-      console.warn(`[middleware] Non-admin blocked from ${pathname} after refresh`);
+    if (roleBlocked(refreshed.role)) {
+      console.warn(`[middleware] Role '${refreshed.role}' blocked from ${pathname} after refresh`);
       return NextResponse.redirect(new URL('/', req.url));
     }
     // Let the request through; new cookies + CSP + nonce ride on the response.

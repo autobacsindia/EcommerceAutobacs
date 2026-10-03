@@ -12,11 +12,19 @@ import {
 import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
 import { identifyUser, resetAnalytics, trackSignUp, trackLogin } from '@/lib/analytics';
 
+export interface StaffProfile {
+  team: 'sales' | 'procurement' | 'accounts' | 'marketing';
+  teamLabel: string;
+  isHead: boolean;
+}
+
 interface User {
   _id: string;
   name: string;
   email: string;
-  role: 'customer' | 'admin';
+  role: 'customer' | 'staff' | 'admin';
+  /** Team profile for staff (null for customers and admins). Drives the /team panel. */
+  staff: StaffProfile | null;
   sessionVersion: number;
   isVerified: boolean;
   /** Cloudinary profile picture URL ('' when none uploaded). */
@@ -32,7 +40,8 @@ interface AuthContextType {
   /** True when a session could not be refreshed and expired mid-use. Drives an
    *  inline "please sign in again" prompt instead of a forced redirect. */
   sessionExpired: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /** Resolves with the signed-in user so the caller can route by role (staff → /team). */
+  login: (email: string, password: string) => Promise<User>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
@@ -79,6 +88,7 @@ function normalizeUser(raw: any): User {
     name:           raw.name,
     email:          raw.email,
     role:           raw.role,
+    staff:          raw.staff ?? null,
     sessionVersion: raw.sessionVersion ?? 0,
     isVerified:     raw.isVerified ?? false,
     avatarUrl,
@@ -284,6 +294,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Merge any guest (session) cart into this account. Fire-and-forget:
         // CartContext handles the merge + refresh so auth stays decoupled from cart.
         emitAuthLogin();
+        return userData;
       } else {
         throw new Error(response.message || 'Login failed');
       }

@@ -1540,3 +1540,64 @@ export const affiliatePayoutSentEmail = ({
 
   return { subject, text, html };
 };
+
+/**
+ * Staff invite. Sent when an admin or team head grants someone access to a team
+ * panel. The link sets a password and is the only way the access is activated.
+ *
+ * @param {Object} params
+ * @param {string} params.name       - Invitee name, as typed by the inviter
+ * @param {string} params.teamLabel  - e.g. "Sales"
+ * @param {boolean} params.isHead    - Invited as the team's head
+ * @param {string} params.inviterName
+ * @param {string} params.acceptUrl  - One-time link carrying the raw token
+ * @param {number} params.expiresInHours
+ * @returns {{ subject: string, text: string, html: string }}
+ */
+export const staffInviteEmail = ({ name, teamLabel, isHead, inviterName, acceptUrl, expiresInHours }) => {
+  const roleText = isHead ? `head of the ${teamLabel} team` : `a member of the ${teamLabel} team`;
+  const subject = `You've been added to the ${teamLabel} team — Autobacs India`;
+
+  const text = `
+Hi ${name},
+
+${inviterName} has added you as ${roleText} on the Autobacs India staff panel.
+
+To activate your access, open this link and set your password:
+${acceptUrl}
+
+The link works once and expires in ${expiresInHours} hours.
+
+If you weren't expecting this, you can ignore this email — nothing changes unless the link is used.
+
+Autobacs India
+  `.trim();
+
+  const body = `
+      <p style="margin:0 0 14px;">Hi ${escapeHtml(name)},</p>
+      <p style="margin:0 0 14px;">${escapeHtml(inviterName)} has added you as <strong>${escapeHtml(roleText)}</strong> on the Autobacs India staff panel.</p>
+      <p style="margin:0 0 22px;">Set your password to activate your access:</p>
+      <p style="margin:0 0 22px;text-align:center;">
+        <a href="${escapeHtml(acceptUrl)}" style="display:inline-block;background:#111210;color:#F7F5F0;text-decoration:none;padding:12px 26px;border-radius:6px;font-weight:600;">Activate my access</a>
+      </p>
+      <p style="margin:0 0 8px;font-size:12px;color:#777;">The link works once and expires in ${escapeHtml(expiresInHours)} hours.</p>
+      <p style="margin:0;font-size:12px;color:#777;">If you weren't expecting this, ignore this email — nothing changes unless the link is used.</p>`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtml(subject)}</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.65;color:#333;background:#f5f5f5;margin:0;padding:0;">
+  <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+    <div style="background:#111210;padding:24px 30px;">
+      <span style="color:#C93F1A;font-size:11px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;">Autobacs India · Staff</span>
+      <h1 style="color:#F7F5F0;margin:6px 0 0;font-size:20px;font-weight:600;">${escapeHtml(teamLabel)} team access</h1>
+    </div>
+    <div style="padding:30px;font-size:14px;color:#333;">${body}
+    </div>
+  </div>
+</body>
+</html>`.trim();
+
+  return { subject, text, html };
+};
