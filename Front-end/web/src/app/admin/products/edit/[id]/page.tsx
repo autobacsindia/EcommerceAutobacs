@@ -381,9 +381,10 @@ export default function EditProductPage() {
       [name]: type === 'checkbox' ? checked : value
     }));
 
-    if (name === 'name' && !slugCustomized) {
-      setSlug(generateSlug(value));
-    }
+    // Deliberately NO name → slug sync here (the create page has one). A published
+    // product's URL is already shared in ads, chats and search results, and there is
+    // no old-slug redirect, so renaming must never move it. The slug changes only via
+    // the explicit Permalink "Edit" control below.
   };
 
   /**
@@ -766,12 +767,13 @@ export default function EditProductPage() {
                     />
                     <button
                       type="button"
+                      disabled={!editingSlugValue}
                       onClick={() => {
                         setSlug(editingSlugValue);
                         setSlugCustomized(true);
                         setIsEditingSlug(false);
                       }}
-                      className="px-2 py-0.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                      className="px-2 py-0.5 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 disabled:opacity-50"
                     >
                       OK
                     </button>
@@ -782,6 +784,9 @@ export default function EditProductPage() {
                     >
                       Cancel
                     </button>
+                    <p className="w-full text-xs text-amber-700">
+                      Changing the URL breaks links already shared (ads, WhatsApp, Google). The old link will show &quot;Page Not Found&quot;.
+                    </p>
                   </>
                 ) : (
                   <>
