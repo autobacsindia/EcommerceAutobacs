@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { STAFF_TEAM_VALUES } from "../config/staff.js";
 
 const AddressSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
@@ -69,7 +70,24 @@ const UserSchema = new mongoose.Schema({
   // Not required for users migrated from WooCommerce (phpass hashes can't move to bcrypt);
   // those users are forced through password reset on first login (see mustResetPassword).
   passwordHash: { type: String, required: function () { return !this.migratedFromWp; } },
-  role: { type: String, enum: ["customer", "admin"], default: "customer" },
+  role: { type: String, enum: ["customer", "staff", "admin"], default: "customer" },
+
+  // Internal team membership (config/staff.js). Present only on accounts that were
+  // ever staff; `active` is the live switch. Deactivation also drops `role` back to
+  // 'customer', so a former staff member keeps an ordinary shopping account and
+  // nothing more. Kept (not deleted) so past actions stay attributable.
+  staff: {
+    type: new mongoose.Schema({
+      team: { type: String, enum: STAFF_TEAM_VALUES, required: true },
+      isHead: { type: Boolean, default: false },
+      active: { type: Boolean, default: true },
+      addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      addedAt: { type: Date, default: Date.now },
+      deactivatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      deactivatedAt: { type: Date, default: null },
+    }, { _id: false }),
+    default: undefined,
+  },
 
   // WooCommerce migration linkage (ADR-005)
   wpId: { type: Number, index: { unique: true, sparse: true } },

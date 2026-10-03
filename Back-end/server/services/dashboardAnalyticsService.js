@@ -250,7 +250,7 @@ class DashboardAnalyticsService {
 
       // Total customers
       const totalCustomers = await User.countDocuments({
-        role: { $ne: 'admin' }
+        role: { $nin: ['admin', 'staff'] }
       });
 
       return {

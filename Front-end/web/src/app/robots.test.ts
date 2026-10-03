@@ -61,7 +61,7 @@ describe('robots.txt', () => {
 
   it('private routes are disallowed for the wildcard agent too', () => {
     const disallow = ruleFor('*')!.disallow as string[]
-    for (const path of ['/admin', '/api/', '/checkout', '/profile', '/festive', '/onam']) {
+    for (const path of ['/admin', '/api/', '/checkout', '/profile', '/festive', '/onam', '/team', '/staff-invite']) {
       expect(disallow).toContain(path)
     }
   })

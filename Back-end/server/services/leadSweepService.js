@@ -217,7 +217,7 @@ export async function sweepDormantUsers() {
     {
       paidOrderCount: 0,
       isGuest: { $ne: true },
-      role: { $ne: 'admin' },
+      role: { $nin: ['admin', 'staff'] },
       createdAt: { $lt: dormancyCutoff() },
     },
     { limit: SWEEP_BATCH, sort: { createdAt: 1 } }

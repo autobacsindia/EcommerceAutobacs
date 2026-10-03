@@ -153,6 +153,54 @@ class UserRepository extends BaseRepository {
     return User.findByIdAndUpdate(userId, { $inc: { karmaPoints: delta } }, { new: true, session });
   }
 
+  /**
+   * Active staff, optionally for one team. Rides the existing `role` index: staff
+   * are a handful of rows, so the team filter is applied to that small set.
+   */
+  async findActiveStaff(team = null) {
+    const query = { role: 'staff', 'staff.active': true };
+    if (team) query['staff.team'] = team;
+    return User.find(query)
+      .select('name email phone staff createdAt')
+      .sort({ 'staff.isHead': -1, name: 1 })
+      .lean();
+  }
+
+  /**
+   * Grant staff access to an existing account (an invite was redeemed). Bumps
+   * sessionVersion so any session opened under the old role is re-issued.
+   */
+  async grantStaff(userId, { passwordHash, staff, phone }) {
+    const set = { role: 'staff', staff, passwordHash, isVerified: true, mustResetPassword: false };
+    if (phone) set.phone = phone;
+    return User.findOneAndUpdate(
+      { _id: userId, role: { $ne: 'admin' } },
+      { $set: set, $inc: { sessionVersion: 1 } },
+      { new: true }
+    );
+  }
+
+  /**
+   * Remove staff access: back to an ordinary customer account. Conditional on the
+   * account still being active staff so a double click is a no-op, not a second
+   * sessionVersion bump. Returns the updated user, or null if nothing changed.
+   */
+  async revokeStaff(userId, deactivatedBy, now = new Date()) {
+    return User.findOneAndUpdate(
+      { _id: userId, role: 'staff', 'staff.active': true },
+      {
+        $set: {
+          role: 'customer',
+          'staff.active': false,
+          'staff.deactivatedBy': deactivatedBy,
+          'staff.deactivatedAt': now,
+        },
+        $inc: { sessionVersion: 1 },
+      },
+      { new: true }
+    );
+  }
+
   /** Assignable sales reps for the CRM assign dropdown + reporting. */
   async findSalesReps() {
     return User.find({ isSalesRep: true }).select('name email salesTarget').sort({ name: 1 }).lean();

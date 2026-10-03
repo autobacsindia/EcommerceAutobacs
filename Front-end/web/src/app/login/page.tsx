@@ -80,8 +80,9 @@ function LoginPageInner() {
     if (!validateForm()) return;
     try {
       setIsLoading(true);
-      await login(formData.email, formData.password);
-      router.push(redirectTo);
+      const signedIn = await login(formData.email, formData.password);
+      // Staff land on their panel unless they were sent here from a specific page.
+      router.push(redirectTo === '/' && signedIn?.role === 'staff' ? '/team' : redirectTo);
     } catch (err: any) {
       // Migrated WooCommerce accounts (ADR-005) have no password yet — send them to set one.
       if (err.rawData?.code === 'PASSWORD_RESET_REQUIRED') {
