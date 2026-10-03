@@ -268,62 +268,64 @@ export default function AdminStockRequestsPage() {
                           ) : requesters[key].length === 0 ? (
                             <div className="text-gray-500 text-xs py-2">No requesters.</div>
                           ) : (
-                            <table className="w-full text-xs">
-                              <thead className="text-gray-500">
-                                <tr>
-                                  <th className="text-left py-1 pr-4">Customer</th>
-                                  <th className="text-left py-1 pr-4">Email</th>
-                                  <th className="text-left py-1 pr-4">Requested</th>
-                                  {status === 'notified' && <th className="text-left py-1 pr-4">Notified</th>}
-                                  {kind === 'backorder' && <th className="text-left py-1">Lead status</th>}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {requesters[key].map((req) => (
-                                  <tr key={req._id} className="border-t border-gray-200">
-                                    <td className="py-1.5 pr-4">{req.user?.name || <span className="text-gray-400">Guest</span>}</td>
-                                    <td className="py-1.5 pr-4">{req.user?.email || req.email || '—'}</td>
-                                    <td className="py-1.5 pr-4 text-gray-600">{new Date(req.createdAt).toLocaleString()}</td>
-                                    {status === 'notified' && (
-                                      <td className="py-1.5 pr-4 text-gray-600">
-                                        {req.notifiedAt ? new Date(req.notifiedAt).toLocaleString() : '—'}
-                                      </td>
-                                    )}
-                                    {kind === 'backorder' && (
-                                      <td className="py-1.5">
-                                        {req.leadStatus ? (
-                                          <div className="flex items-center gap-2">
-                                            <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${LEAD_STATUS_COLORS[req.leadStatus]}`}>
-                                              {LEAD_STATUS_LABELS[req.leadStatus]}
-                                            </span>
-                                            {req.leadStatus === 'new' && (
-                                              <button
-                                                onClick={() => markContacted(req)}
-                                                disabled={markingLead === req._id}
-                                                className="rounded border border-gray-300 bg-white px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                                                title="Mark this person contacted (updates the CRM lead)"
-                                              >
-                                                {markingLead === req._id ? 'Saving…' : 'Mark contacted'}
-                                              </button>
-                                            )}
-                                            {req.leadId && (
-                                              <Link
-                                                href={`/admin/leads/${req.leadId}`}
-                                                className="text-blue-600 hover:underline"
-                                              >
-                                                View lead ↗
-                                              </Link>
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <span className="text-gray-400">No lead</span>
-                                        )}
-                                      </td>
-                                    )}
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs">
+                                <thead className="text-gray-500">
+                                  <tr>
+                                    <th className="text-left py-1 pr-4">Customer</th>
+                                    <th className="text-left py-1 pr-4">Email</th>
+                                    <th className="text-left py-1 pr-4">Requested</th>
+                                    {status === 'notified' && <th className="text-left py-1 pr-4">Notified</th>}
+                                    {kind === 'backorder' && <th className="text-left py-1">Lead status</th>}
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                </thead>
+                                <tbody>
+                                  {requesters[key].map((req) => (
+                                    <tr key={req._id} className="border-t border-gray-200">
+                                      <td className="py-1.5 pr-4">{req.user?.name || <span className="text-gray-400">Guest</span>}</td>
+                                      <td className="py-1.5 pr-4">{req.user?.email || req.email || '—'}</td>
+                                      <td className="py-1.5 pr-4 text-gray-600">{new Date(req.createdAt).toLocaleString()}</td>
+                                      {status === 'notified' && (
+                                        <td className="py-1.5 pr-4 text-gray-600">
+                                          {req.notifiedAt ? new Date(req.notifiedAt).toLocaleString() : '—'}
+                                        </td>
+                                      )}
+                                      {kind === 'backorder' && (
+                                        <td className="py-1.5">
+                                          {req.leadStatus ? (
+                                            <div className="flex items-center gap-2">
+                                              <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${LEAD_STATUS_COLORS[req.leadStatus]}`}>
+                                                {LEAD_STATUS_LABELS[req.leadStatus]}
+                                              </span>
+                                              {req.leadStatus === 'new' && (
+                                                <button
+                                                  onClick={() => markContacted(req)}
+                                                  disabled={markingLead === req._id}
+                                                  className="rounded border border-gray-300 bg-white px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                                  title="Mark this person contacted (updates the CRM lead)"
+                                                >
+                                                  {markingLead === req._id ? 'Saving…' : 'Mark contacted'}
+                                                </button>
+                                              )}
+                                              {req.leadId && (
+                                                <Link
+                                                  href={`/admin/leads/${req.leadId}`}
+                                                  className="text-blue-600 hover:underline"
+                                                >
+                                                  View lead ↗
+                                                </Link>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            <span className="text-gray-400">No lead</span>
+                                          )}
+                                        </td>
+                                      )}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           )}
                         </td>
                       </tr>

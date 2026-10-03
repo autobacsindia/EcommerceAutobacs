@@ -147,6 +147,11 @@ const nextConfig: NextConfig = {
       // from the login and register page footers (so it has real inbound traffic
       // and possibly external links), and a delete-to-404 throws that away.
       { source: '/conditions', destination: '/terms', permanent: true },
+      // The Onam 2026 in-store offer has ended and its landing page is removed. The
+      // counter-card QR codes still point here and can't be reprinted, so send them
+      // home instead of to a 404. Temporary (not permanent) so a future campaign can
+      // reuse the path without browsers having cached this redirect forever.
+      { source: '/onam', destination: '/', permanent: false },
     ];
   },
 

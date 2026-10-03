@@ -84,12 +84,12 @@ export const brand = {
    * or use a CDN/Cloudinary URL. Leave it empty ('') to keep the text wordmark
    * (AUTO + BAACS) below. Used in both the nav and the footer.
    */
-  // `e_trim` strips the transparent padding baked into the source PNG (the
-  // Roavion stacked lockup is ~775×309 inside a 1160×660 canvas), so the logo
-  // fills its height in the navbar instead of floating tiny and off-centre.
-  // f_auto,q_auto = optimised delivery. Display size is controlled in CSS via
-  // `.logo-img` (see home-redesign.css), NOT by inflating the asset height.
-  logo: 'https://img.autobacsindia.com/autobacs/site/roavion-primary-trimmed.png',
+  // The asset is pre-trimmed to the mark (960×255, no transparent padding), so the
+  // logo fills its height in the navbar instead of floating tiny and off-centre.
+  // An untrimmed square canvas renders the wordmark a few pixels tall. Display size
+  // is controlled in CSS via `.logo-img` (see home-redesign.css), NOT by inflating
+  // the asset height.
+  logo: '/images/roavion-logo.png',
   logoAlt: 'Autobacs India',
   // Profile avatar in the nav (replace with the signed-in user's image later).
   avatar:

@@ -272,48 +272,50 @@ export default function ProductTierPanel({ campaignId }: { campaignId: string })
           )}
 
           <div className="max-h-80 overflow-y-auto rounded border border-zinc-800">
-            <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-zinc-900 text-xs uppercase tracking-wide text-zinc-500">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Include</th>
-                  <th className="px-3 py-2 font-medium">Product</th>
-                  <th className="px-3 py-2 font-medium">Price</th>
-                  <th className="px-3 py-2 font-medium">Lands in</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800">
-                {preview.products.map((p) => {
-                  const dropped = excluded.has(p.id);
-                  return (
-                    <tr key={p.id} className={dropped ? 'opacity-40' : ''}>
-                      <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
-                          checked={!dropped}
-                          onChange={() => toggle(p.id)}
-                          aria-label={`Include ${p.name}`}
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-zinc-200">
-                        {p.name}
-                        {p.brand && <span className="ml-2 text-xs text-zinc-500">{p.brand}</span>}
-                      </td>
-                      <td className="px-3 py-2 text-zinc-300">
-                        {inr(p.price)}
-                        {p.onSale && <span className="ml-2 text-xs text-amber-300">on offer → 2%</span>}
-                      </td>
-                      <td className="px-3 py-2 text-zinc-300">
-                        {p.resultingTier === tierCode
-                          ? <span className="text-emerald-300">{tierLabel(tiers, p.resultingTier)}</span>
-                          // Lowest-wins kept it where it was. Said plainly here so the
-                          // outcome is a reviewed decision, not a later surprise.
-                          : <span className="text-sky-300">stays {tierLabel(tiers, p.resultingTier)}</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-zinc-900 text-xs uppercase tracking-wide text-zinc-500">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Include</th>
+                    <th className="px-3 py-2 font-medium">Product</th>
+                    <th className="px-3 py-2 font-medium">Price</th>
+                    <th className="px-3 py-2 font-medium">Lands in</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {preview.products.map((p) => {
+                    const dropped = excluded.has(p.id);
+                    return (
+                      <tr key={p.id} className={dropped ? 'opacity-40' : ''}>
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={!dropped}
+                            onChange={() => toggle(p.id)}
+                            aria-label={`Include ${p.name}`}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-zinc-200">
+                          {p.name}
+                          {p.brand && <span className="ml-2 text-xs text-zinc-500">{p.brand}</span>}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-300">
+                          {inr(p.price)}
+                          {p.onSale && <span className="ml-2 text-xs text-amber-300">on offer → 2%</span>}
+                        </td>
+                        <td className="px-3 py-2 text-zinc-300">
+                          {p.resultingTier === tierCode
+                            ? <span className="text-emerald-300">{tierLabel(tiers, p.resultingTier)}</span>
+                            // Lowest-wins kept it where it was. Said plainly here so the
+                            // outcome is a reviewed decision, not a later surprise.
+                            : <span className="text-sky-300">stays {tierLabel(tiers, p.resultingTier)}</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -371,35 +373,37 @@ export default function ProductTierPanel({ campaignId }: { campaignId: string })
         </p>
       ) : (
         <>
-          <table className="w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wide text-zinc-500">
-              <tr>
-                <th className="px-3 py-2 font-medium">Product</th>
-                <th className="px-3 py-2 font-medium">Tier</th>
-                <th className="px-3 py-2 font-medium">Also matched</th>
-                <th className="px-3 py-2 font-medium">From</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800">
-              {data.rows.map((row) => (
-                <tr key={row._id}>
-                  <td className="px-3 py-2 text-zinc-200">{row.product?.name ?? '—'}</td>
-                  <td className="px-3 py-2">
-                    <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-200">
-                      {tierLabel(tiers, row.tierCode)} · {tierPercent(tiers, row.tierCode)}%
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-zinc-500">
-                    {/* Why this product is where it is — the answer to "why is this
-                        Profender kit at 3% when Thanos is 8%?" is one row, not a
-                        re-derivation from queries that may since have been edited. */}
-                    {row.matchedCodes.filter((c) => c !== row.tierCode).map((c) => tierLabel(tiers, c)).join(', ') || '—'}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-zinc-500">{row.matchedQueries.join(', ') || '—'}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs uppercase tracking-wide text-zinc-500">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Product</th>
+                  <th className="px-3 py-2 font-medium">Tier</th>
+                  <th className="px-3 py-2 font-medium">Also matched</th>
+                  <th className="px-3 py-2 font-medium">From</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {data.rows.map((row) => (
+                  <tr key={row._id}>
+                    <td className="px-3 py-2 text-zinc-200">{row.product?.name ?? '—'}</td>
+                    <td className="px-3 py-2">
+                      <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-200">
+                        {tierLabel(tiers, row.tierCode)} · {tierPercent(tiers, row.tierCode)}%
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-zinc-500">
+                      {/* Why this product is where it is — the answer to "why is this
+                          Profender kit at 3% when Thanos is 8%?" is one row, not a
+                          re-derivation from queries that may since have been edited. */}
+                      {row.matchedCodes.filter((c) => c !== row.tierCode).map((c) => tierLabel(tiers, c)).join(', ') || '—'}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-zinc-500">{row.matchedQueries.join(', ') || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div className="mt-4 flex items-center gap-3">
             <button

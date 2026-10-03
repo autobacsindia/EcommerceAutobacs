@@ -70,15 +70,16 @@ export default function RedesignNav() {
              downloaded as the 254 KB source PNG. Lighthouse named this exact
              <img> as the home page's LCP element at 3.8 s (630 ms of that pure
              lazy-discovery delay). `sizes` mirrors the .logo-img CSS cap
-             (200px desktop / 150px <=768px, see home-redesign.css) so the
-             browser takes a ~10 KB ladder rung instead. */
+             (260px desktop / 180px <=768px, see home-redesign.css).
+             width/height are the asset's intrinsic size so the box is reserved
+             at the right aspect ratio before the image loads (no CLS). */
           <Img
             src={brand.logo}
             alt={brand.logoAlt}
             className="logo-img"
-            sizes="(max-width: 768px) 150px, 200px"
-            width={820}
-            height={315}
+            sizes="(max-width: 768px) 180px, 260px"
+            width={960}
+            height={255}
             priority
           />
         ) : (
