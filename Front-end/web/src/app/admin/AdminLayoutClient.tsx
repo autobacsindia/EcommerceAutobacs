@@ -131,20 +131,28 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
 
   const navSections = NAV_SECTIONS;
 
+  // The ONE nav item for the current page: the longest href that equals the path or is
+  // a parent of it. A plain prefix test lit several at once — `/admin/affiliates/payouts`
+  // also lit "Affiliates", and `/admin` (Dashboard) prefixes every admin page — while
+  // still needing parent matching so a detail page (`/admin/orders/123`) lights "Orders".
+  const activeHref = NAV_SECTIONS
+    .flatMap(section => section.items.map(item => item.href))
+    .filter((href): href is string =>
+      !!href && (pathname === href || pathname.startsWith(href + '/')))
+    .reduce<string | null>((best, href) => (!best || href.length > best.length ? href : best), null);
+
   // Auto-expand the section that contains the current page; collapse everything else
   useEffect(() => {
     const updates: Record<string, boolean> = {};
     NAV_SECTIONS.forEach(section => {
-      const hasActive = section.items.some(
-        item => item.href && (pathname === item.href || pathname.startsWith(item.href + '/'))
-      );
+      const hasActive = section.items.some(item => item.href === activeHref);
       // Only flip sections that are collapsible (not 'Main')
       if (section.title !== 'Main') {
         updates[section.title] = hasActive;
       }
     });
     setExpandedSections(updates);
-  }, [pathname]);
+  }, [activeHref]);
 
   const toggleSection = (title: string) => {
     setExpandedSections(prev => ({
@@ -153,10 +161,7 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
     }));
   };
 
-  const isLinkActive = (href?: string) => {
-    if (!href) return false;
-    return pathname === href || pathname.startsWith(href + '/');
-  };
+  const isLinkActive = (href?: string) => !!href && href === activeHref;
 
   const handleLogout = async () => {
     try {
@@ -260,9 +265,12 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Content. `min-w-0` lets this flex item shrink below its content width:
+          without it a wide table stretches the whole page past the viewport (page-level
+          horizontal scroll, sidebar overlapping content) instead of scrolling inside its
+          own overflow-x-auto wrapper. */}
       <main
-        className={`flex-1 ${
+        className={`flex-1 min-w-0 ${
           sidebarOpen ? 'ml-64' : 'ml-20'
         } transition-all duration-300`}
       >

@@ -478,7 +478,7 @@ export default function WarehouseDetailPage() {
               <p className="text-green-700 font-medium">All items are adequately stocked</p>
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
               <table className="w-full divide-y divide-gray-200">
                 <thead className="bg-red-50">
                   <tr>

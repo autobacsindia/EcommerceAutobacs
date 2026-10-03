@@ -992,34 +992,36 @@ export default function SpinCampaignDetailPage() {
         {!odds ? (
           <p className="text-sm text-gray-500">Odds unavailable.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-gray-600">
-              <tr>
-                <th className="px-3 py-2">Prize</th>
-                <th className="px-3 py-2 text-right">Chance per spin</th>
-                <th className="px-3 py-2 text-right">Expected wins/day</th>
-                <th className="px-3 py-2 text-right">Stock lasts</th>
-              </tr>
-            </thead>
-            <tbody>
-              {odds.rows.map((r) => (
-                <tr key={r.prizeId} className={`border-t border-gray-100 ${r.isFloorPrize ? 'bg-indigo-50/50' : ''}`}>
-                  <td className="px-3 py-2 text-gray-900">
-                    {r.name} {r.isFloorPrize && <span className="text-xs text-indigo-700">(fallback)</span>}
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium">{(r.probability * 100).toFixed(1)}%</td>
-                  <td className="px-3 py-2 text-right text-gray-600">{r.expectedWinsPerDay.toFixed(1)}</td>
-                  <td className="px-3 py-2 text-right text-gray-600">
-                    {r.daysToExhaustion === null
-                      ? '∞'
-                      : <span className={r.daysToExhaustion < 7 ? 'font-semibold text-red-600' : ''}>
-                          {r.daysToExhaustion.toFixed(0)} days
-                        </span>}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-gray-600">
+                <tr>
+                  <th className="px-3 py-2">Prize</th>
+                  <th className="px-3 py-2 text-right">Chance per spin</th>
+                  <th className="px-3 py-2 text-right">Expected wins/day</th>
+                  <th className="px-3 py-2 text-right">Stock lasts</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {odds.rows.map((r) => (
+                  <tr key={r.prizeId} className={`border-t border-gray-100 ${r.isFloorPrize ? 'bg-indigo-50/50' : ''}`}>
+                    <td className="px-3 py-2 text-gray-900">
+                      {r.name} {r.isFloorPrize && <span className="text-xs text-indigo-700">(fallback)</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium">{(r.probability * 100).toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right text-gray-600">{r.expectedWinsPerDay.toFixed(1)}</td>
+                    <td className="px-3 py-2 text-right text-gray-600">
+                      {r.daysToExhaustion === null
+                        ? '∞'
+                        : <span className={r.daysToExhaustion < 7 ? 'font-semibold text-red-600' : ''}>
+                            {r.daysToExhaustion.toFixed(0)} days
+                          </span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
     </div>

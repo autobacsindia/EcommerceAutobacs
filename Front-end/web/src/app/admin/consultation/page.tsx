@@ -151,70 +151,72 @@ export default function AdminConsultationPage() {
               <p className="text-sm mt-1">They&apos;ll appear here once users submit the form.</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Customer</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Vehicle</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 hidden lg:table-cell">Upgrades</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600 hidden sm:table-cell">Date</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {consultations.map(c => (
-                  <tr
-                    key={c._id}
-                    onClick={() => setSelected(c)}
-                    className={`cursor-pointer hover:bg-gray-50 transition-colors ${selected?._id === c._id ? 'bg-red-50' : ''}`}
-                  >
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-gray-900">{c.name}</p>
-                      <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
-                        <Phone className="h-3 w-3" />{c.whatsapp}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <p className="font-medium text-gray-800">{c.makeModel}</p>
-                      <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><MapPin className="h-3 w-3" />{c.city}</p>
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
-                      <div className="flex flex-wrap gap-1">
-                        {c.upgrades.slice(0, 2).map(u => (
-                          <span key={u} className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">{u}</span>
-                        ))}
-                        {c.upgrades.length > 2 && <span className="text-xs text-gray-400">+{c.upgrades.length - 2}</span>}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={c.status}
-                        onClick={e => e.stopPropagation()}
-                        onChange={e => updateStatus(c._id, e.target.value)}
-                        disabled={updatingId === c._id}
-                        className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border cursor-pointer focus:outline-none ${STATUS_STYLES[c.status]}`}
-                      >
-                        {STATUS_OPTIONS.map(s => <option key={s} value={s} className="bg-white text-gray-800">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                      </select>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-400 hidden sm:table-cell whitespace-nowrap">
-                      {new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <button onClick={e => { e.stopPropagation(); setSelected(c); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button onClick={e => { e.stopPropagation(); deleteConsultation(c._id); }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Customer</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Vehicle</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600 hidden lg:table-cell">Upgrades</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600 hidden sm:table-cell">Date</th>
+                    <th className="px-4 py-3" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {consultations.map(c => (
+                    <tr
+                      key={c._id}
+                      onClick={() => setSelected(c)}
+                      className={`cursor-pointer hover:bg-gray-50 transition-colors ${selected?._id === c._id ? 'bg-red-50' : ''}`}
+                    >
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-gray-900">{c.name}</p>
+                        <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                          <Phone className="h-3 w-3" />{c.whatsapp}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        <p className="font-medium text-gray-800">{c.makeModel}</p>
+                        <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><MapPin className="h-3 w-3" />{c.city}</p>
+                      </td>
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        <div className="flex flex-wrap gap-1">
+                          {c.upgrades.slice(0, 2).map(u => (
+                            <span key={u} className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">{u}</span>
+                          ))}
+                          {c.upgrades.length > 2 && <span className="text-xs text-gray-400">+{c.upgrades.length - 2}</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={c.status}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => updateStatus(c._id, e.target.value)}
+                          disabled={updatingId === c._id}
+                          className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border cursor-pointer focus:outline-none ${STATUS_STYLES[c.status]}`}
+                        >
+                          {STATUS_OPTIONS.map(s => <option key={s} value={s} className="bg-white text-gray-800">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-400 hidden sm:table-cell whitespace-nowrap">
+                        {new Date(c.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <button onClick={e => { e.stopPropagation(); setSelected(c); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          <button onClick={e => { e.stopPropagation(); deleteConsultation(c._id); }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {/* Pagination */}

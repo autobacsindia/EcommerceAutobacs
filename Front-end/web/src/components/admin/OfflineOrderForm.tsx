@@ -328,44 +328,46 @@ export default function OfflineOrderForm({
 
       {/* Line items */}
       {items.length > 0 && (
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-gray-500">
-            <tr>
-              <th className="py-1">Product</th>
-              <th className="py-1 w-16">Qty</th>
-              <th className="py-1 w-24 text-right">List ₹</th>
-              <th className="py-1 w-28">Your price ₹</th>
-              <th className="py-1 w-24 text-right">Line ₹</th>
-              <th className="py-1 w-8"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it, idx) => {
-              const saving = Math.max(0, (it.listPrice - it.price)) * it.quantity;
-              return (
-                <tr key={it.product} className="border-t border-gray-100 align-top">
-                  <td className="py-2">{it.name}</td>
-                  <td className="py-2"><input type="number" min={1} value={it.quantity} onChange={(e) => updateItem(idx, { quantity: Math.max(1, Number(e.target.value)) })} className="w-14 rounded border border-gray-300 px-2 py-1" /></td>
-                  {/* Catalogue price — read-only anchor the rep negotiates down from */}
-                  <td className="py-2 pt-3 text-right text-gray-500">₹{it.listPrice.toLocaleString()}</td>
-                  <td className="py-2">
-                    <input
-                      type="number"
-                      min={0}
-                      value={it.price}
-                      onChange={(e) => updateItem(idx, { price: Math.max(0, Number(e.target.value)) })}
-                      title="Leave at the list price, or lower it to give the customer a better price"
-                      className={`w-24 rounded border px-2 py-1 ${it.price < it.listPrice ? 'border-green-500 text-green-700 font-medium' : 'border-gray-300'}`}
-                    />
-                    {saving > 0 && <p className="mt-0.5 text-[11px] text-green-600">−₹{saving.toLocaleString()} off</p>}
-                  </td>
-                  <td className="py-2 pt-3 text-right font-medium text-gray-900">₹{(it.price * it.quantity).toLocaleString()}</td>
-                  <td className="py-2 pt-3"><button onClick={() => setItems((prev) => prev.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700"><Trash2 className="h-4 w-4" /></button></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-gray-500">
+              <tr>
+                <th className="py-1">Product</th>
+                <th className="py-1 w-16">Qty</th>
+                <th className="py-1 w-24 text-right">List ₹</th>
+                <th className="py-1 w-28">Your price ₹</th>
+                <th className="py-1 w-24 text-right">Line ₹</th>
+                <th className="py-1 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it, idx) => {
+                const saving = Math.max(0, (it.listPrice - it.price)) * it.quantity;
+                return (
+                  <tr key={it.product} className="border-t border-gray-100 align-top">
+                    <td className="py-2">{it.name}</td>
+                    <td className="py-2"><input type="number" min={1} value={it.quantity} onChange={(e) => updateItem(idx, { quantity: Math.max(1, Number(e.target.value)) })} className="w-14 rounded border border-gray-300 px-2 py-1" /></td>
+                    {/* Catalogue price — read-only anchor the rep negotiates down from */}
+                    <td className="py-2 pt-3 text-right text-gray-500">₹{it.listPrice.toLocaleString()}</td>
+                    <td className="py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        value={it.price}
+                        onChange={(e) => updateItem(idx, { price: Math.max(0, Number(e.target.value)) })}
+                        title="Leave at the list price, or lower it to give the customer a better price"
+                        className={`w-24 rounded border px-2 py-1 ${it.price < it.listPrice ? 'border-green-500 text-green-700 font-medium' : 'border-gray-300'}`}
+                      />
+                      {saving > 0 && <p className="mt-0.5 text-[11px] text-green-600">−₹{saving.toLocaleString()} off</p>}
+                    </td>
+                    <td className="py-2 pt-3 text-right font-medium text-gray-900">₹{(it.price * it.quantity).toLocaleString()}</td>
+                    <td className="py-2 pt-3"><button onClick={() => setItems((prev) => prev.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700"><Trash2 className="h-4 w-4" /></button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Payment mode */}

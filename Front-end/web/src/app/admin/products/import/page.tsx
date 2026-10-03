@@ -116,7 +116,7 @@ export default function BulkImportPage() {
               <span className="text-gray-500">of {results.total} rows</span>
             </div>
             {results.errors.length > 0 && (
-              <div className="border border-gray-200 rounded overflow-hidden">
+              <div className="border border-gray-200 rounded overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-gray-600">
                     <tr>

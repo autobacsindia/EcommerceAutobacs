@@ -635,30 +635,32 @@ function ProductCalculatorPanel({ campaignId }: { campaignId: string }) {
             </p>
           )}
 
-          <table className="mt-4 w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-zinc-500">
-                <th className="pb-2">Product</th><th className="pb-2">Tier</th>
-                <th className="pb-2">Rate</th><th className="pb-2">They save</th>
-              </tr>
-            </thead>
-            <tbody className="text-zinc-300">
-              {run.data.products.map((p) => (
-                <tr key={p.id} className="border-t border-zinc-800">
-                  <td className="py-2">{p.name}</td>
-                  <td className="py-2">
-                    {p.tierLabel ?? '—'}
-                    {p.unassigned && <span className="ml-2 text-xs text-amber-400">unassigned</span>}
-                  </td>
-                  <td className="py-2">
-                    {p.percent}%
-                    {p.onSaleCapped && <span className="ml-2 text-xs text-zinc-500">capped, already on offer</span>}
-                  </td>
-                  <td className="py-2 text-emerald-400">{inr(p.savesRupees)}</td>
+          <div className="overflow-x-auto">
+            <table className="mt-4 w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-wide text-zinc-500">
+                  <th className="pb-2">Product</th><th className="pb-2">Tier</th>
+                  <th className="pb-2">Rate</th><th className="pb-2">They save</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="text-zinc-300">
+                {run.data.products.map((p) => (
+                  <tr key={p.id} className="border-t border-zinc-800">
+                    <td className="py-2">{p.name}</td>
+                    <td className="py-2">
+                      {p.tierLabel ?? '—'}
+                      {p.unassigned && <span className="ml-2 text-xs text-amber-400">unassigned</span>}
+                    </td>
+                    <td className="py-2">
+                      {p.percent}%
+                      {p.onSaleCapped && <span className="ml-2 text-xs text-zinc-500">capped, already on offer</span>}
+                    </td>
+                    <td className="py-2 text-emerald-400">{inr(p.savesRupees)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           {run.data.orderCapRupees != null && (
             /* Stated because the column does NOT add up to what a cart of these would
@@ -704,22 +706,24 @@ function SimulatorPanel({ campaignId }: { campaignId: string }) {
       </div>
 
       {run.data && (
-        <table className="mt-4 w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-zinc-500">
-              <th className="pb-2">Cart</th><th className="pb-2">They save</th><th className="pb-2">Tier</th>
-            </tr>
-          </thead>
-          <tbody className="text-zinc-300">
-            {run.data.results.map((r) => (
-              <tr key={r.cartRupees} className="border-t border-zinc-800">
-                <td className="py-2">{inr(r.cartRupees)}</td>
-                <td className="py-2 text-emerald-400">{inr(r.discountRupees)}</td>
-                <td className="py-2 text-zinc-500">{r.label ?? '—'}</td>
+        <div className="overflow-x-auto">
+          <table className="mt-4 w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-zinc-500">
+                <th className="pb-2">Cart</th><th className="pb-2">They save</th><th className="pb-2">Tier</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="text-zinc-300">
+              {run.data.results.map((r) => (
+                <tr key={r.cartRupees} className="border-t border-zinc-800">
+                  <td className="py-2">{inr(r.cartRupees)}</td>
+                  <td className="py-2 text-emerald-400">{inr(r.discountRupees)}</td>
+                  <td className="py-2 text-zinc-500">{r.label ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       {run.isError && <p className="mt-3 text-sm text-red-400">{(run.error as Error).message}</p>}
     </div>
