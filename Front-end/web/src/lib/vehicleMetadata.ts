@@ -20,18 +20,37 @@ interface VehicleMeta {
  * upstream call. Exported because the route files need the null answer too: a
  * slug with no Vehicle must 404, not render a listing titled after the slug.
  */
-export const fetchVehicle = cache(async function fetchVehicle(slug: string): Promise<VehicleMeta | null> {
+export type VehicleLookup =
+  | { status: 'found'; vehicle: VehicleMeta }
+  | { status: 'missing' }
+  | { status: 'error' };
+
+/**
+ * Like fetchVehicle, but keeps "no such vehicle" (the API answered 404) apart from
+ * "the lookup failed". Only the former may send a legacy /model/<tag> URL on to a
+ * permanent search redirect — redirecting on an outage would permanently cache a
+ * redirect away from a real vehicle page.
+ */
+export const lookupVehicle = cache(async function lookupVehicle(slug: string): Promise<VehicleLookup> {
   try {
     const res = await fetch(`${getServerApiBase()}/vehicles/slug/${slug}`, {
       next: { revalidate: 3600 },
     });
-    if (!res.ok) return null;
+    if (res.status === 404) return { status: 'missing' };
+    if (!res.ok) return { status: 'error' };
     const data = await res.json();
-    return data?.success && data.vehicle ? (data.vehicle as VehicleMeta) : null;
+    return data?.success && data.vehicle
+      ? { status: 'found', vehicle: data.vehicle as VehicleMeta }
+      : { status: 'missing' };
   } catch (error) {
     console.error('Vehicle metadata fetch error:', error);
-    return null;
+    return { status: 'error' };
   }
+});
+
+export const fetchVehicle = cache(async function fetchVehicle(slug: string): Promise<VehicleMeta | null> {
+  const result = await lookupVehicle(slug);
+  return result.status === 'found' ? result.vehicle : null;
 });
 
 export async function buildVehicleMetadata(slug: string, page = 1): Promise<Metadata> {
