@@ -1,11 +1,12 @@
 import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { permanentRedirect } from 'next/navigation';
 import { cache } from 'react';
 import ClientPage from './ClientPage';
 import { getServerApiBase, fetchEntityOrNull, internalApiHeaders } from '@/lib/server-api';
 import { isOutOfStock, getStockStatus } from '@/lib/stock';
 import { resolveSeo } from '@/lib/seo';
 import { SITE_URL } from '@/lib/siteUrl';
+import { legacySearchPath } from '@/lib/legacySearchRedirect';
 
 import { productSlugsForPrerender } from '@/lib/staticParams';
 
@@ -20,8 +21,9 @@ import { productSlugsForPrerender } from '@/lib/staticParams';
  * entire products catalogue is ISR-backed — the list only decides what is warm
  * immediately after a deploy. See lib/staticParams.ts.
  *
- * notFound() still works: an unknown slug renders on demand, the fetch misses,
- * and the page throws — producing a real 404, which soft404.test.ts guards.
+ * Unknown slugs still resolve correctly: one renders on demand, the fetch misses,
+ * and the page throws a permanent redirect to a product search for the slug's
+ * words (never a 200 soft 404), which soft404.test.ts guards.
  */
 export async function generateStaticParams() {
   return (await productSlugsForPrerender()).map((slug) => ({ slug }));
@@ -68,17 +70,22 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const product = await getProductForMetadata(slug);
 
-  // notFound() rather than a "Product Not Found" TITLE. Returning a title here
+  // A redirect rather than a "Product Not Found" TITLE. Returning a title here
   // rendered the page with HTTP 200 — a soft 404: Google keeps the dead product
   // URL in its index (the ~550 stale WooCommerce slugs are exactly this shape),
   // and any uptime/link check keyed on status reports a dead PDP as healthy.
   //
-  // This only produces a real 404 while there is NO Suspense boundary above this
-  // segment. A `loading.tsx` at `/products/[slug]`, at `/products`, or at the app
-  // root makes Next flush the shell — and therefore commit HTTP 200 — before this
-  // ever throws. Those three files were removed for exactly this reason; adding
-  // any of them back silently restores the soft 404. See src/app/soft404.test.ts.
-  if (!product) notFound();
+  // A missing product is almost always a renamed or retired one still linked from
+  // ads, chats and old search results, so the visitor is sent to a product search
+  // for the same words (permanent redirect) instead of a dead end. `product` is
+  // null ONLY on a confirmed API 404 — a failed fetch throws above (error.tsx), so
+  // an outage can never cache a redirect away from a live product.
+  //
+  // The redirect (like the 404 before it) only takes effect while there is NO
+  // Suspense boundary above this segment. A `loading.tsx` at `/products/[slug]`,
+  // at `/products`, or at the app root makes Next flush the shell — committing
+  // HTTP 200 — before this ever throws. See src/app/soft404.test.ts.
+  if (!product) permanentRedirect(legacySearchPath(slug));
 
   // Build canonical URL — slug is the only identifier; no _id fallback
   const url = product.slug ? `${SITE_URL}/products/${product.slug}` : null;
@@ -164,10 +171,10 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const { slug } = await params;
   const product = await getProductForMetadata(slug);
 
-  // Unknown slug => real 404 (see the note in generateMetadata). Previously this
-  // fell through to <ClientPage initialProduct={null}>, which refetched on the
-  // client and rendered its own "not found" state under a 200.
-  if (!product) notFound();
+  // Unknown slug => search redirect (see the note in generateMetadata). Previously
+  // this fell through to <ClientPage initialProduct={null}>, which refetched on
+  // the client and rendered its own "not found" state under a 200.
+  if (!product) permanentRedirect(legacySearchPath(slug));
 
   // Build JSON-LD structured data for Google rich results
   const jsonLd = product?.slug ? {

@@ -28,14 +28,19 @@ const APP_DIR = path.join(process.cwd(), 'src', 'app')
  * Routes that must answer 404 for an unknown entity, and the file that decides
  * it. A layout is listed where the page itself is a client component (client
  * components cannot call notFound()), so a server layout gates the segment.
+ *
+ * `redirects`: the route sends a confirmed-unknown slug to a product search
+ * (permanentRedirect) instead — still never a 200, and still needing no Suspense
+ * boundary above it. /products/[slug] redirects only; /model/* redirects a
+ * confirmed miss and keeps notFound() for a failed lookup.
  */
-const MUST_404: { route: string; file: string }[] = [
+const MUST_404: { route: string; file: string; redirects?: boolean }[] = [
   { route: '/[slug]',                  file: '[slug]/page.tsx' },
-  { route: '/products/[slug]',         file: 'products/[slug]/page.tsx' },
+  { route: '/products/[slug]',         file: 'products/[slug]/page.tsx', redirects: true },
   { route: '/categories/[slug]',       file: 'categories/[slug]/page.tsx' },
   { route: '/brands/[slug]',           file: 'brands/[slug]/page.tsx' },
-  { route: '/model/[slug]',            file: 'model/[slug]/page.tsx' },
-  { route: '/model/[slug]/page/[page]', file: 'model/[slug]/page/[page]/page.tsx' },
+  { route: '/model/[slug]',            file: 'model/[slug]/page.tsx', redirects: true },
+  { route: '/model/[slug]/page/[page]', file: 'model/[slug]/page/[page]/page.tsx', redirects: true },
   { route: '/vehicles/[make]',         file: 'vehicles/[make]/layout.tsx' },
   { route: '/vehicles/[make]/[model]', file: 'vehicles/[make]/[model]/layout.tsx' },
 ]
@@ -53,10 +58,10 @@ function ancestorSegments(relFile: string): string[] {
 }
 
 describe('soft-404 guard', () => {
-  describe.each(MUST_404)('$route', ({ file }) => {
-    it('still calls notFound()', () => {
+  describe.each(MUST_404)('$route', ({ file, redirects }) => {
+    it(redirects ? 'still 404s or redirects an unknown slug' : 'still calls notFound()', () => {
       const source = fs.readFileSync(path.join(APP_DIR, file), 'utf8')
-      expect(source).toMatch(/notFound\(\)/)
+      expect(source).toMatch(redirects ? /notFound\(\)|permanentRedirect\(/ : /notFound\(\)/)
     })
 
     it('has no loading.tsx in any ancestor segment', () => {
