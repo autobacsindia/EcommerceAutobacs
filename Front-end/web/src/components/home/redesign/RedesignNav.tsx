@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import Img from './Img';
 import RedesignVehicleMenu from './RedesignVehicleMenu';
 import RedesignNavSearch from './RedesignNavSearch';
@@ -22,6 +23,10 @@ export default function RedesignNav() {
   const { itemCount } = useCart();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const pathname = usePathname();
+  // A menu item is current on its own page and anything beneath it.
+  const isCurrent = (href: string) =>
+    !!pathname && (pathname === href || pathname.startsWith(`${href}/`));
 
   /*
     Affiliate-ness is DATA, not a role (there is no `affiliate` in User.role), so
@@ -95,7 +100,12 @@ export default function RedesignNav() {
           l.label === VEHICLE_LABEL ? (
             <RedesignVehicleMenu key={l.label} variant="dropdown" />
           ) : (
-            <Link key={l.label} href={l.href}>
+            <Link
+              key={l.label}
+              href={l.href}
+              className={isCurrent(l.href) ? 'is-active' : undefined}
+              aria-current={isCurrent(l.href) ? 'page' : undefined}
+            >
               {l.label}
             </Link>
           )

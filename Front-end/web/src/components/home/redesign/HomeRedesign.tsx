@@ -5,6 +5,7 @@ import './home-redesign.css';
 
 import RedesignNav from './RedesignNav';
 import Hero from './Hero';
+import VehicleFinder from './VehicleFinder';
 import Manifesto from './Manifesto';
 import Categories from './Categories';
 import Showreel from './Showreel';
@@ -122,6 +123,7 @@ export default function HomeRedesign({
         ) : null}
         <Hero spinTeaser={data.spinTeaser} />
       </div>
+      <VehicleFinder />
       <Manifesto />
       <Categories categories={data.categories} />
       <Showreel hotspots={data.carHotspots} />
