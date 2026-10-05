@@ -10,6 +10,7 @@ import ProductGrid from '@/components/products/ProductGrid';
 import Filters from '@/components/products/redesign/Filters';
 import CategoryChips from '@/components/products/redesign/CategoryChips';
 import Eyebrow from '@/components/ui/Eyebrow';
+import ShopContactHero from '@/components/products/ShopContactHero';
 import Pagination from '@/components/layout/Pagination';
 import Breadcrumb from '@/components/layout/Breadcrumb';
 import { trackViewItemList } from '@/lib/analytics';
@@ -371,18 +372,14 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
         ]}
       />
 
-      {/* Hero */}
-      <div className="bg-obsidian border-b border-hairline py-14">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Category</p>
-          <h1 className="mt-4 text-[clamp(36px,5.5vw,68px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">
-            {category?.name || 'Products'}
-          </h1>
-          {category?.description && (
-            <p className="mt-4 max-w-2xl font-display text-[14px] font-light leading-relaxed text-ink-muted">{category.description}</p>
-          )}
-        </div>
-      </div>
+      {/* Hero: the shared contact header, titled with the category name. */}
+      <ShopContactHero
+        eyebrow="Category"
+        title={category?.name || 'Products'}
+        description={category?.description || undefined}
+        contactLine={`Not sure which ${category?.name ? category.name.toLowerCase() : 'parts'} fit your car? Our specialists will help you choose.`}
+        placement="category_hero"
+      />
 
       {/* Category strip — the same control as /products. Without it, arriving here
           from a chip was a one-way door: no way to reach a sibling hub but Back. */}

@@ -107,6 +107,10 @@ export default function Hero({ spinTeaser = null }: { spinTeaser?: SpinTeaser | 
               <em>{hero.headlineAccent}</em>
             </h1>
             <p className="tagline">{hero.tagline}</p>
+            <Link href="/products" className="hero-shop">
+              <span>Shop now</span>
+              <span className="hero-shop-arrow" aria-hidden="true">→</span>
+            </Link>
           </div>
 
           <div className="floor-glow" />

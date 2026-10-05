@@ -33,3 +33,22 @@ export function useVehicleMakes() {
     staleTime: 24 * 60 * 60 * 1000,
   });
 }
+
+async function fetchVehicleModels(make: string): Promise<string[]> {
+  const res = await apiClient.get<{ models?: string[] }>(`/vehicles/models/${encodeURIComponent(make)}`);
+  return res?.models ?? [];
+}
+
+/**
+ * Models for one make (e.g. Toyota → Hilux, Fortuner…). Disabled until a make is
+ * chosen. Same long staleTime as the make list — the catalogue of vehicles is
+ * admin-edited and rarely changes.
+ */
+export function useVehicleModels(make: string) {
+  return useQuery({
+    queryKey: ['vehicles', 'models', make],
+    queryFn: () => fetchVehicleModels(make),
+    enabled: !!make,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+}
