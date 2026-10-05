@@ -59,6 +59,18 @@ describe('robots.txt', () => {
     expect(new Set(lists).size).toBe(1)
   })
 
+  // Legacy WooCommerce action URLs must stay blocked, and the patterns must stay
+  // anchored to the parameter — a bare '/*cart' would block the real /products pages.
+  it('blocks legacy WooCommerce action parameters without touching real pages', () => {
+    const disallow = ruleFor('*')!.disallow as string[]
+    for (const p of ['/*?add-to-cart=', '/*&add-to-cart=', '/*remove_item=', '/*_wpnonce=']) {
+      expect(disallow).toContain(p)
+    }
+    for (const live of ['/products', '/categories', '/model', '/brands', '/blog', '/']) {
+      expect(disallow).not.toContain(live)
+    }
+  })
+
   it('private routes are disallowed for the wildcard agent too', () => {
     const disallow = ruleFor('*')!.disallow as string[]
     for (const path of ['/admin', '/api/', '/checkout', '/profile', '/festive', '/onam', '/team', '/staff-invite']) {
