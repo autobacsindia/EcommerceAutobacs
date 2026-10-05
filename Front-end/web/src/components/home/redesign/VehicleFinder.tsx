@@ -2,22 +2,28 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, Search } from 'lucide-react';
 import { useVehicleMakes, useVehicleModels } from '@/hooks/queries/useVehicleMakes';
 import { useCategories } from '@/hooks/queries/useCategories';
 import { capture } from '@/lib/analytics';
+import apiClient from '@/lib/api';
+import { productKeys } from '@/hooks/queries/keys';
 
 /**
  * "Find parts for your car" — make → model → main category → Search.
  *
- * Lands on the category page with the vehicle filter applied
- * (/categories/<slug>?vehicleMake=Toyota&vehicleModel=Hilux); the category page
- * already honours both params through its filter sidebar, so there is no new
- * search path to keep in step.
+ * With a category it lands on the category page with the vehicle filter applied
+ * (/categories/<slug>?vehicleMake=Toyota&vehicleModel=Hilux); without one it
+ * shows every part for the vehicle (/products?vehicleMake=…&vehicleModel=…).
+ * Both pages already honour these params, so there is no new search path.
  *
- * Search stays visible but dimmed and disabled until a category is picked, so
- * the next step is always obvious. Make and model narrow the result but are not
- * required — a visitor who only knows the category can still go.
+ * Search stays visible but dimmed until a model (or a category) is chosen.
+ *
+ * Once a vehicle is chosen the chips show how many parts fit it and hide the
+ * categories with none — not every category stocks parts for every car, and a
+ * chip that leads to an empty page is a dead end. If the counts can't be loaded
+ * the chips simply show without them.
  *
  * Built with Tailwind, so the root opts out of the home page's CSS reset
  * (`hr-unscoped`, see home-redesign.css) — otherwise the reset strips every
@@ -37,21 +43,51 @@ export default function VehicleFinder() {
   const { data: categories } = useCategories();
 
   // Main categories only (no parent) that have a page to land on.
-  const hubs = useMemo(
+  const allHubs = useMemo(
     () => (categories ?? []).filter((c) => !c.parent && c.slug).sort((a, b) => a.name.localeCompare(b.name)),
     [categories],
   );
 
-  const ready = !!categorySlug;
+  const vehicleChosen = !!(make && model);
+
+  // Parts per main category for the chosen vehicle (subtree-rolled counts from
+  // the same facets endpoint the shop sidebar uses).
+  const { data: fitCounts } = useQuery({
+    queryKey: productKeys.facets({ vehicleMake: make, vehicleModel: model }),
+    queryFn: async () => {
+      const qs = new URLSearchParams({ vehicleMake: make, vehicleModel: model }).toString();
+      const res = await apiClient.get<{ facets?: { categories?: { categoryId: string; count: number }[] } }>(
+        `/products/facets?${qs}`,
+      );
+      return new Map((res?.facets?.categories ?? []).map((c) => [String(c.categoryId), c.count]));
+    },
+    enabled: vehicleChosen,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // With a vehicle and its counts: only categories that have parts for it.
+  const hubs = useMemo(
+    () => (vehicleChosen && fitCounts ? allHubs.filter((h) => (fitCounts.get(String(h._id)) ?? 0) > 0) : allHubs),
+    [allHubs, vehicleChosen, fitCounts],
+  );
+  const countFor = (id: string) => (vehicleChosen && fitCounts ? fitCounts.get(String(id)) : undefined);
+
+  // A category picked before the vehicle may not fit it — drop it rather than
+  // send the visitor to an empty page.
+  const activeSlug = hubs.some((h) => h.slug === categorySlug) ? categorySlug : '';
+  const activeName = hubs.find((h) => h.slug === activeSlug)?.name ?? '';
+
+  const ready = vehicleChosen || !!activeSlug;
 
   const search = () => {
     if (!ready) return;
     const params = new URLSearchParams();
     if (make) params.set('vehicleMake', make);
     if (make && model) params.set('vehicleModel', model);
-    capture('vehicle_finder_search', { make, model, category: categorySlug });
+    capture('vehicle_finder_search', { make, model, category: activeSlug || 'all' });
     const qs = params.toString();
-    router.push(`/categories/${encodeURIComponent(categorySlug)}${qs ? `?${qs}` : ''}`);
+    const path = activeSlug ? `/categories/${encodeURIComponent(activeSlug)}` : '/products';
+    router.push(`${path}${qs ? `?${qs}` : ''}`);
   };
 
   return (
@@ -101,14 +137,15 @@ export default function VehicleFinder() {
           {/* Step 3: category */}
           <div className="mt-8 border-t border-white/10 pt-7">
             <p id="finder-cat-label" className="mb-4 text-center text-[11px] uppercase tracking-[0.24em] text-[#f0ede7]/55">
-              Choose a category
+              {vehicleChosen ? 'Choose a category (optional)' : 'Choose a category'}
             </p>
             <div role="radiogroup" aria-labelledby="finder-cat-label" className="flex flex-wrap justify-center gap-2.5">
               {hubs.length === 0 && (
                 <span className="text-sm text-[#f0ede7]/45">Loading categories…</span>
               )}
               {hubs.map((c) => {
-                const active = c.slug === categorySlug;
+                const active = c.slug === activeSlug;
+                const count = countFor(c._id);
                 return (
                   <button
                     key={c._id}
@@ -123,6 +160,9 @@ export default function VehicleFinder() {
                     }`}
                   >
                     {c.name}
+                    {count !== undefined && (
+                      <span className={`ml-1.5 ${active ? 'text-[#111212]/70' : 'text-[#c9a870]'}`}>{count}</span>
+                    )}
                   </button>
                 );
               })}
@@ -144,12 +184,14 @@ export default function VehicleFinder() {
             >
               <Search className="h-4 w-4" /> Search parts
             </button>
-            <p className="text-xs text-[#f0ede7]/45" aria-live="polite">
-              {ready
-                ? make && model
-                  ? `Showing ${hubs.find((h) => h.slug === categorySlug)?.name ?? ''} parts for ${make} ${model}`
-                  : 'Tip: add your make and model to see only parts that fit'
-                : 'Choose a category to search'}
+            <p className="text-center text-xs text-[#f0ede7]/45" aria-live="polite">
+              {vehicleChosen
+                ? activeSlug
+                  ? `${activeName} parts for ${make} ${model}`
+                  : `All parts for ${make} ${model} — or pick a category above`
+                : activeSlug
+                  ? 'Tip: add your make and model to see only parts that fit'
+                  : 'Select your make and model to search'}
             </p>
           </div>
         </div>

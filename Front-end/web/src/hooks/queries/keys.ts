@@ -29,6 +29,9 @@ export const productKeys = {
    * backend route with its own cache tags, not a filter on the main listing. */
   offers: () => [...productKeys.all, 'offers'] as const,
   offersPage: (page: number) => [...productKeys.offers(), page] as const,
+  /** `/products/facets` — per-filter counts (e.g. categories that fit one vehicle). */
+  facets: (params: Record<string, string | undefined>) =>
+    [...productKeys.all, 'facets', normalizeParams(params)] as const,
 };
 
 export const categoryKeys = {
