@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import VehicleFinder from './VehicleFinder';
 
 const push = jest.fn();
@@ -19,59 +20,107 @@ jest.mock('@/hooks/queries/useCategories', () => ({
     data: [
       { _id: '1', name: 'Exterior', slug: 'exterior', parent: null },
       { _id: '2', name: 'Lighting', slug: 'lighting', parent: null },
+      { _id: '5', name: 'Audio', slug: 'audio', parent: null },
       { _id: '3', name: 'Spoiler', slug: 'spoiler', parent: '1' },  // child: not a main category
       { _id: '4', name: 'No Slug', parent: null },                  // no page to land on
     ],
   }),
 }));
 
+// Parts per category for the chosen vehicle: a Hilux has Exterior and Lighting
+// parts but no Audio.
+const get = jest.fn();
+jest.mock('@/lib/api', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a) } }));
+
+const renderFinder = () =>
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <VehicleFinder />
+    </QueryClientProvider>,
+  );
+
 const searchButton = () => screen.getByRole('button', { name: /search parts/i });
+const selects = () => screen.getAllByRole('combobox');
+const chooseVehicle = (make: string, model: string) => {
+  fireEvent.change(selects()[0], { target: { value: make } });
+  fireEvent.change(selects()[1], { target: { value: model } });
+};
 
 describe('VehicleFinder', () => {
-  beforeEach(() => push.mockReset());
-
-  it('offers only main categories that have a page', () => {
-    render(<VehicleFinder />);
-    const chips = screen.getAllByRole('radio').map((c) => c.textContent);
-    expect(chips).toEqual(['Exterior', 'Lighting']);
+  beforeEach(() => {
+    push.mockReset();
+    get.mockReset();
+    get.mockResolvedValue({ facets: { categories: [
+      { categoryId: '1', count: 65 },
+      { categoryId: '2', count: 15 },
+      { categoryId: '5', count: 0 },
+    ] } });
   });
 
-  it('keeps Search visible but disabled until a category is picked', () => {
-    render(<VehicleFinder />);
+  it('offers only main categories that have a page', () => {
+    renderFinder();
+    expect(screen.getAllByRole('radio').map((c) => c.textContent)).toEqual(['Audio', 'Exterior', 'Lighting']);
+  });
+
+  it('keeps Search visible but disabled until a model is chosen', () => {
+    renderFinder();
     expect(searchButton()).toBeDisabled();
-    fireEvent.click(screen.getByRole('radio', { name: 'Exterior' }));
+    fireEvent.change(selects()[0], { target: { value: 'Toyota' } });
+    expect(searchButton()).toBeDisabled();
+    fireEvent.change(selects()[1], { target: { value: 'Hilux' } });
     expect(searchButton()).toBeEnabled();
   });
 
-  it('unlocks the model list only after a make is chosen', () => {
-    render(<VehicleFinder />);
-    const [, modelSelect] = screen.getAllByRole('combobox');
-    expect(modelSelect).toBeDisabled();
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Toyota' } });
-    expect(screen.getAllByRole('combobox')[1]).toBeEnabled();
+  it('shows every part for the vehicle when no category is picked', () => {
+    renderFinder();
+    chooseVehicle('Toyota', 'Hilux');
+    fireEvent.click(searchButton());
+    expect(push).toHaveBeenCalledWith('/products?vehicleMake=Toyota&vehicleModel=Hilux');
   });
 
-  it('opens the category filtered to the chosen vehicle', () => {
-    render(<VehicleFinder />);
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Land Rover' } });
-    fireEvent.change(screen.getAllByRole('combobox')[1], { target: { value: 'Defender' } });
-    fireEvent.click(screen.getByRole('radio', { name: 'Lighting' }));
+  it('opens a category filtered to the vehicle when one is picked', async () => {
+    renderFinder();
+    chooseVehicle('Land Rover', 'Defender');
+    fireEvent.click(await screen.findByRole('radio', { name: /lighting/i }));
     fireEvent.click(searchButton());
     expect(push).toHaveBeenCalledWith('/categories/lighting?vehicleMake=Land+Rover&vehicleModel=Defender');
   });
 
-  it('clears the model when the make changes', () => {
-    render(<VehicleFinder />);
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Toyota' } });
-    fireEvent.change(screen.getAllByRole('combobox')[1], { target: { value: 'Hilux' } });
-    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'Land Rover' } });
-    fireEvent.click(screen.getByRole('radio', { name: 'Exterior' }));
-    fireEvent.click(searchButton());
-    expect(push).toHaveBeenCalledWith('/categories/exterior?vehicleMake=Land+Rover');
+  it('hides categories with no parts for the vehicle and shows the counts', async () => {
+    renderFinder();
+    chooseVehicle('Toyota', 'Hilux');
+    await waitFor(() => expect(screen.queryByRole('radio', { name: /audio/i })).not.toBeInTheDocument());
+    expect(screen.getByRole('radio', { name: /exterior/i })).toHaveTextContent('65');
+    expect(get).toHaveBeenCalledWith('/products/facets?vehicleMake=Toyota&vehicleModel=Hilux');
   });
 
-  it('searches a category alone when no vehicle is chosen', () => {
-    render(<VehicleFinder />);
+  it('drops a category picked earlier if the chosen vehicle has no parts in it', async () => {
+    renderFinder();
+    fireEvent.click(screen.getByRole('radio', { name: 'Audio' }));
+    chooseVehicle('Toyota', 'Hilux');
+    await waitFor(() => expect(screen.queryByRole('radio', { name: /audio/i })).not.toBeInTheDocument());
+    fireEvent.click(searchButton());
+    expect(push).toHaveBeenCalledWith('/products?vehicleMake=Toyota&vehicleModel=Hilux');
+  });
+
+  it('still shows all categories if the counts cannot be loaded', async () => {
+    get.mockRejectedValue(new Error('network'));
+    renderFinder();
+    chooseVehicle('Toyota', 'Hilux');
+    await waitFor(() => expect(get).toHaveBeenCalled());
+    expect(screen.getAllByRole('radio')).toHaveLength(3);
+  });
+
+  it('clears the model when the make changes', () => {
+    renderFinder();
+    chooseVehicle('Toyota', 'Hilux');
+    fireEvent.change(selects()[0], { target: { value: 'Land Rover' } });
+    expect((selects()[1] as HTMLSelectElement).value).toBe('');
+    expect(searchButton()).toBeDisabled();
+  });
+
+  it('can still search a category alone without a vehicle', () => {
+    renderFinder();
     fireEvent.click(screen.getByRole('radio', { name: 'Exterior' }));
     fireEvent.click(searchButton());
     expect(push).toHaveBeenCalledWith('/categories/exterior');
