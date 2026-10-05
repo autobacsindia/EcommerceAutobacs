@@ -152,6 +152,13 @@ const nextConfig: NextConfig = {
       // home instead of to a 404. Temporary (not permanent) so a future campaign can
       // reuse the path without browsers having cached this redirect forever.
       { source: '/onam', destination: '/', permanent: false },
+      // Old WooCommerce theme pages Google still requests (Search Console, Sep 2026).
+      // All four answered 404 here; each now points at its live equivalent. Query
+      // strings are forwarded, so `/search?q=winch` lands on the product search.
+      { source: '/my-cart', destination: '/cart', permanent: true },
+      { source: '/home-5', destination: '/', permanent: true },
+      { source: '/home-4-2', destination: '/', permanent: true },
+      { source: '/search', destination: '/products/search', permanent: true },
     ];
   },
 

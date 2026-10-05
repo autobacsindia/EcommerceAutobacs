@@ -47,6 +47,14 @@ const DISALLOW = [
   '/dev',
   '/integration-tests',
   '/_next/static/',
+  // Legacy WooCommerce action parameters. Google still holds hundreds of old URLs
+  // carrying these (Search Console, Sep 2026: 616 of 911 "crawled – not indexed"
+  // had add-to-cart). This site never emits them, so blocking them only stops the
+  // crawl of junk permutations; the clean page stays crawlable without them.
+  '/*?add-to-cart=',
+  '/*&add-to-cart=',
+  '/*remove_item=',
+  '/*_wpnonce=',
 ]
 
 export default function robots(): MetadataRoute.Robots {
