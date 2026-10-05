@@ -14,6 +14,7 @@ import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import { resolveTerm, type ProductsData } from '@/lib/productQuery';
 import Eyebrow from '@/components/ui/Eyebrow';
+import ShopContactHero from '@/components/products/ShopContactHero';
 import Reveal from '@/components/ui/Reveal';
 import StoreProductCard from '@/components/products/redesign/StoreProductCard';
 import CategoryChips from '@/components/products/redesign/CategoryChips';
@@ -94,17 +95,22 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
 
   return (
     <div className="min-h-screen bg-obsidian font-display text-ink">
-      {/* Header */}
-      <header className="border-b border-hairline bg-obsidian-deep px-5 py-12 sm:px-8">
-        <div className="mx-auto max-w-[1400px]">
-          <Reveal>
-            <Eyebrow>{eyebrow}</Eyebrow>
-            <h1 className="mt-4 text-[clamp(38px,6vw,72px)] font-light leading-[0.95] tracking-[-0.01em]">
-              {title}
-            </h1>
-          </Reveal>
-        </div>
-      </header>
+      {/* Header: the full catalogue opens with a "talk to us" block; the curated
+          Featured / Fast Moving lists keep their title, which says what is shown. */}
+      {isFeatured || isFastMoving ? (
+        <header className="border-b border-hairline bg-obsidian-deep px-5 py-12 sm:px-8">
+          <div className="mx-auto max-w-[1400px]">
+            <Reveal>
+              <Eyebrow>{eyebrow}</Eyebrow>
+              <h1 className="mt-4 text-[clamp(38px,6vw,72px)] font-light leading-[0.95] tracking-[-0.01em]">
+                {title}
+              </h1>
+            </Reveal>
+          </div>
+        </header>
+      ) : (
+        <ShopContactHero />
+      )}
 
       <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
         {/* Sticky category chips */}
