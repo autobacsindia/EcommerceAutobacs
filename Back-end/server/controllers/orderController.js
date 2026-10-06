@@ -9,6 +9,7 @@ import orderStatusService from '../services/orderStatusService.js';
 import shipmentService from '../services/shipmentService.js';
 import { remainingToShip, fulfilmentSummary } from '../utils/orderFulfilment.js';
 import cancellationService from '../services/cancellationService.js';
+import { createOfflineOrderRecord } from '../services/offlineOrderService.js';
 import offlineRefundService from '../services/offlineRefundService.js';
 import { isAlreadyRefundedAtGateway, alreadyRefundedGuidance } from '../utils/gatewayRefundErrors.js';
 import { remainingCancellable } from '../utils/orderCancellation.js';
@@ -21,9 +22,7 @@ import { extractMetaTracking } from '../utils/metaTracking.js';
 import { extractAffiliateRef } from '../utils/affiliateAttribution.js';
 import { resolveBuyerAndAcceptance } from '../services/buyerService.js';
 import { BUYER_TYPES } from '../config/buyer.js';
-import { ACCEPTANCE_CHANNELS } from '../config/legalDocuments.js';
 import { contentIdForLineItem } from '../utils/metaCatalogId.js';
-import { hashToken } from '../utils/tokenUtils.js';
 import { STORE_TZ_OFFSET } from '../utils/storeTime.js';
 import { generateInvoicePdf, invoiceFileName, assignInvoiceNumber } from '../services/invoiceService.js';
 import { getNotificationsQueue } from '../queue/queues.js';
@@ -661,53 +660,7 @@ export const createOfflineOrder = async (req, res) => {
   }
 
   try {
-    /*
-      Validate the buyer BEFORE creating the customer, for the same reason as the
-      guest path: an admin mistyping a GSTIN would otherwise 400 the request and
-      leave behind a brand-new `mustResetPassword` account for a person who has no
-      order — an account they could be prompted to claim.
-
-      `requireAcceptance: false` because the customer is not at a browser to tick a
-      box; the GSTIN is still validated identically. See the note at the buyer
-      block below.
-    */
-    const { buyer, legalAcceptance } = resolveBuyerAndAcceptance(req.body, {
-      requireAcceptance: false,
-      // The channel is what keeps this distinguishable from a real acceptance.
-      // No ipHash: the only address available here is the ADMIN's, which is not
-      // evidence of anything the customer did.
-      channel: ACCEPTANCE_CHANNELS.OFFLINE_ADMIN,
-      recordedBy: req.user?.id || null,
-    });
-
-    // ── Find or create the customer ──────────────────────────────────────────
-    const normEmail = email.toLowerCase();
-    let user = await userRepository.findByEmail(normEmail);
-    let isNewUser = false;
-
-    if (!user) {
-      const randomPassword = crypto.randomBytes(16).toString('hex');
-      const passwordHash = await bcrypt.hash(randomPassword, await bcrypt.genSalt(10));
-      user = await userRepository.create({
-        name: name || shippingAddress.fullName || 'Offline Customer',
-        email: normEmail,
-        phone,
-        passwordHash,
-        isVerified: false,
-        // First login forces a password set — exactly the guest/WP-claim flow.
-        mustResetPassword: true,
-      });
-      isNewUser = true;
-    } else if (!user.phone && phone) {
-      // Existing customer with no phone on file → backfill from this offline
-      // order (convenience contact field, never overwrite an existing value).
-      // Without this the number lives only on the Lead/Order and the account
-      // stays un-findable by phone.
-      user.phone = phone;
-      await userRepository.save(user);
-    }
-
-    // ── Build the order (amounts in rupees, matching the rest of the system) ──
+    // ── Build the order lines (amounts in rupees, matching the rest of the system) ──
     const lineItems = items.map((i) => ({
       product: i.product,
       // Offline orders carry the admin-picked variant + its manually-entered price
@@ -727,160 +680,31 @@ export const createOfflineOrder = async (req, res) => {
       name: i.name || '',
       image: i.image || '',
     }));
-    const subtotal = lineItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const totalAmount = Math.max(0, subtotal + Number(shippingCost || 0) - Number(discount || 0));
 
-    const address = {
-      fullName: (shippingAddress.fullName || name || user.name || '').trim(),
-      phone: String(shippingAddress.phone || phone).trim(),
-      addressLine1: String(shippingAddress.addressLine1).trim(),
-      addressLine2: String(shippingAddress.addressLine2 || '').trim(),
-      city: String(shippingAddress.city).trim(),
-      state: String(shippingAddress.state).trim(),
-      postalCode,
-      country: String(shippingAddress.country || 'India').trim(),
-    };
-
-    // Offline is the MOST likely enterprise path — an admin recording a dealer or
-    // workshop deal is exactly the B2B case. Resolved at the top of the try block
-    // so nothing is persisted before the GSTIN is known to be good.
-    let order = await orderRepository.create({
-      user: user._id,
-      source: 'offline',
-      salesRep: salesRepId,
-      ...(buyer.type === BUYER_TYPES.ENTERPRISE && { buyer }),
-      // Recorded with track + versions so an offline enterprise order is not a
-      // hole in the audit trail, but `acceptedAt` reflects when the ADMIN
-      // recorded it, which is why it is not evidence of the customer's click.
-      legalAcceptance,
-      // Link flow converts the chosen lead on payment (deferred), so remember it —
-      // identity-based conversion alone can miss a phone-only/consultation lead.
-      crmLeadId: paymentMode === 'link' ? (leadId || null) : null,
-      items: lineItems,
-      shippingAddress: address,
-      subtotal,
-      shippingCost: Number(shippingCost || 0),
-      discount: Number(discount || 0),
-      totalAmount,
-      status: 'awaiting_payment',
-      guestEmail: normEmail,
-      statusHistory: [
-        {
-          status: 'awaiting_payment',
-          timestamp: new Date(),
-          updatedBy: req.user.id,
-          reason: 'manual_confirmation',
-          notes: notes || 'Offline order created by admin',
-        },
-      ],
+    // Everything from "find or create the buyer" to "settle or send the link" is
+    // shared with the sales panel — see services/offlineOrderService.js.
+    const { order, customer, paymentLink } = await createOfflineOrderRecord({
+      body: req.body,
+      email,
+      phone,
+      name,
+      lineItems,
+      shippingAddress: { ...shippingAddress, postalCode },
+      shippingCost,
+      discount,
+      status,
+      notes,
+      leadId,
+      salesRepId,
+      paymentMode,
+      actorId: req.user.id,
     });
-
-    if (buyer.type === BUYER_TYPES.ENTERPRISE) {
-      saveBusinessProfile(user._id, buyer).catch((err) =>
-        console.error('[Order] offline businessProfile save failed:', err.message)
-      );
-    }
-
-    // ── Settle the order ──────────────────────────────────────────────────────
-    let paymentLink = null;
-    if (paymentMode === 'link') {
-      // Collect via Razorpay: the order stays `awaiting_payment`. Razorpay sends
-      // the link to the customer (SMS + email); the `payment_link.paid` webhook
-      // then drives it paid → processing and converts the lead — no manual mark.
-      let link;
-      try {
-        link = await razorpayService.createPaymentLink(order, { name: address.fullName, email: normEmail, phone });
-      } catch (linkErr) {
-        // Roll back so a Razorpay failure doesn't strand an unpayable order — and,
-        // for a brand-new buyer, an account they can never claim.
-        await orderRepository.delete(order._id).catch(() => {});
-        if (isNewUser) await userRepository.delete(user._id).catch(() => {});
-        return res.status(502).json({ success: false, message: `Could not create payment link: ${linkErr.message}` });
-      }
-      order.paymentLinkId = link.id;
-      order.paymentLinkUrl = link.shortUrl;
-      await orderRepository.save(order);
-      order = await orderRepository.findById(order._id);
-      paymentLink = link;
-    } else {
-      // Already paid offline → drive through the normal status machinery so all
-      // side-effects fire (purchase tag + lead conversion on confirm; karma earn +
-      // emails on delivery). Admin bypass lets us set the final state directly.
-      await orderStatusService.updateOrderStatus(order._id.toString(), 'processing', {
-        userId: req.user.id,
-        isAdmin: true,
-        reason: 'manual_confirmation',
-        notes: 'Offline sale confirmed (paid)',
-      });
-      if (status === 'delivered') {
-        await orderStatusService.updateOrderStatus(order._id.toString(), 'delivered', {
-          userId: req.user.id,
-          isAdmin: true,
-          reason: 'customer_received',
-          notes: 'Offline sale delivered',
-        });
-      }
-      order = await orderRepository.findById(order._id);
-
-      // Explicitly convert the originating lead when the rep closed a specific one
-      // (its identity may differ from the order's, e.g. consultation had phone-only).
-      // For the link flow this happens later, on payment, via the webhook.
-      if (leadId) {
-        await leadSyncService.safeSync(() =>
-          leadSyncService.applyLeadStatus(leadId, 'won', {
-            actorId: req.user.id,
-            repId: salesRepId, // credit the closing rep on the conversion
-            notes: 'Closed via offline order',
-            convertedOrder: order._id,
-          })
-        );
-      }
-    }
-
-    // New buyer: mint the single-use account-claim (set-password) token NOW. This
-    // is a DB write and must NOT depend on the queue — otherwise a Redis outage at
-    // creation time leaves the buyer with an account they can never claim (random
-    // password + mustResetPassword, no token). Email the RAW token; store only its
-    // hash at rest (like the reset-password flow). The email below is best-effort.
-    let magicRawToken = null;
-    if (isNewUser) {
-      magicRawToken = crypto.randomBytes(32).toString('hex');
-      user.magicLinkToken = hashToken(magicRawToken);
-      // 7 days: the set-password link is emailed at creation but for a link-flow
-      // order the customer may not pay (and want to log in) until up to 48h later,
-      // so a 24h token would be dead on arrival. Generous but still expiring.
-      user.magicLinkExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      await userRepository.save(user);
-    }
-
-    // ── Emails (best-effort, idempotent) ─────────────────────────────────────
-    if (process.env.REDIS_URL) {
-      const queue = getNotificationsQueue();
-      // Invoice only for an already-paid order. The link flow invoices on payment
-      // success (processPaymentSuccess), so we don't send a receipt before payment.
-      if (paymentMode !== 'link') {
-        queue
-          .add('send-order-invoice', { orderId: order._id.toString() })
-          .catch((err) => console.error('[Queue] Failed to enqueue send-order-invoice:', err.message));
-      }
-
-      // New buyer: email the set-password (magic) link so they can claim the account.
-      if (isNewUser) {
-        queue
-          .add('send-magic-link-email', {
-            email: normEmail,
-            token: magicRawToken,
-            orderId: order._id.toString(),
-          })
-          .catch((err) => console.error('[Queue] Failed to enqueue send-magic-link-email:', err.message));
-      }
-    }
 
     res.status(201).json({
       success: true,
       message: paymentMode === 'link' ? 'Offline order created — payment link sent' : 'Offline order created',
       order,
-      customer: { id: user._id, email: user.email, isNewUser },
+      customer,
       paymentLink, // { id, shortUrl } for the link flow, else null
     });
   } catch (err) {

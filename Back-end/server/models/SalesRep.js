@@ -20,6 +20,10 @@ const SalesRepSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true, index: true },
     // The admin who created the profile — audit only.
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    // The staff login (team panel) this profile belongs to, when the rep has one.
+    // Lets orders a rep creates in /team credit the same CRM profile admins
+    // assign on leads. Absent for name-only reps.
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },
   { timestamps: true }
 );
@@ -29,5 +33,8 @@ SalesRepSchema.index({ isActive: 1, name: 1 }); // assignable-list default sort
 // controller's findByName pre-check is a TOCTOU that concurrent creates can slip
 // past). strength:2 makes "Rahul" and "rahul" collide, matching findByName.
 SalesRepSchema.index({ name: 1 }, { unique: true, collation: { locale: "en", strength: 2 } });
+// One profile per staff login. Partial on $type (not $ne — MongoDB rejects $ne in a
+// partialFilterExpression) so the many name-only reps with no user don't collide.
+SalesRepSchema.index({ user: 1 }, { unique: true, partialFilterExpression: { user: { $type: "objectId" } } });
 
 export default mongoose.model("SalesRep", SalesRepSchema);

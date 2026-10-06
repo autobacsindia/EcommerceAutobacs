@@ -22,6 +22,15 @@ const OrderSchema = new mongoose.Schema({
   // awaiting_payment until the customer pays the link, then the webhook confirms it.
   paymentLinkId: { type: String, default: null, index: true },
   paymentLinkUrl: { type: String, default: null },
+  // When the current link stops being payable (Razorpay expire_by). A fresh link
+  // may only be issued after this, or after the old one is cancelled, so one
+  // order can never have two payable links at once.
+  paymentLinkExpiresAt: { type: Date, default: null },
+  // How many links this order has had; makes each Razorpay reference_id unique.
+  paymentLinkAttempts: { type: Number, default: 0 },
+  // The staff member (team panel, sales team) who created this offline order.
+  // Drives "my orders" / team scoping; `salesRep` stays the name-only CRM credit.
+  salesUser: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   // The specific CRM lead this offline order closes. Set when payment is deferred
   // (link flow) so the webhook converts THAT lead even if its identity (e.g. a
   // phone-only consultation) differs from the order's. See leadSyncService.
@@ -779,6 +788,18 @@ OrderSchema.index({ user: 1, createdAt: -1 }); // User order history (sorted by 
 // see the note on SpinResult.order.
 OrderSchema.index({ user: 1, status: 1 });      // User orders filtered by status (order tracking page)
 OrderSchema.index({ status: 1, createdAt: -1 }); // Admin dashboard (filter by status, sort by date)
+// Team panel: a sales member's own orders, newest first (keyset by createdAt/_id).
+// Partial: only staff-created orders carry salesUser, so web orders add no entries.
+OrderSchema.index(
+  { salesUser: 1, createdAt: -1, _id: -1 },
+  { partialFilterExpression: { salesUser: { $type: 'objectId' } } }
+);
+// Team panel: every staff-created order by payment state (sales head, accounts,
+// procurement), newest first.
+OrderSchema.index(
+  { paymentStatus: 1, createdAt: -1, _id: -1 },
+  { partialFilterExpression: { salesUser: { $type: 'objectId' } }, name: 'staff_sales_by_payment' }
+);
 
 // SINGLE-FIELD indexes for specific lookups
 // Declared retroactively from $indexStats (2026-08-21): these were hand-built in

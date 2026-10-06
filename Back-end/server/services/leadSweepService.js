@@ -82,7 +82,16 @@ const SWEEP_BATCH = Number(process.env.LEAD_SWEEP_BATCH) || 500;
  */
 export async function sweepAbandonedOrders() {
   const orders = await orderRepository.find(
-    { status: 'awaiting_payment', paymentStatus: 'pending', createdAt: { $lt: abandonedCutoff() } },
+    {
+      status: 'awaiting_payment',
+      paymentStatus: 'pending',
+      createdAt: { $lt: abandonedCutoff() },
+      // Sales-panel orders are not abandoned checkouts: a sales member is already
+      // working the customer, and the order's payment link stays payable for 48h —
+      // longer than this sweep's 24h expiry, which would mark a live order expired.
+      // Their lifecycle is the link's (paymentLinkExpiresAt), managed in /team.
+      salesUser: null,
+    },
     { limit: SWEEP_BATCH, sort: { createdAt: 1 } }
   );
   const expireBefore = expireCutoff();

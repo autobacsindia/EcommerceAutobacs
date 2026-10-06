@@ -14,6 +14,10 @@ import {
   validateMemberIdParam,
   validateInviteToken,
   validateAcceptInvite,
+  validateSalesProductSearch,
+  validateCursorQuery,
+  validateOrderIdParam,
+  validateSalesOrder,
 } from '../validators/staff.validator.js';
 import {
   describeStaff,
@@ -24,6 +28,14 @@ import {
   verifyInvite,
   acceptInvite,
 } from '../services/staffService.js';
+import {
+  searchSalesProducts,
+  createSalesOrder,
+  listSalesOrders,
+  listPaidSalesOrders,
+  reissuePaymentLink,
+  cancelUnpaidSalesOrder,
+} from '../services/salesOrderService.js';
 
 /**
  * Staff panel API (/api/v1/staff). Two halves:
@@ -79,6 +91,39 @@ router.delete('/invites/:id', validateInviteIdParam, validateRequest, asyncHandl
 router.post('/members/:id/deactivate', validateMemberIdParam, validateRequest, asyncHandler(async (req, res) => {
   const member = await deactivateMember(req.user, req.params.id, req);
   res.json({ success: true, member });
+}));
+
+// ── Sales panel (team scope enforced in salesOrderService) ──────────────────
+
+// @route  GET /staff/sales/products?q= — product picker with current prices
+router.get('/sales/products', validateSalesProductSearch, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, products: await searchSalesProducts(req.user, req.query.q) });
+}));
+
+// @route  POST /staff/sales/orders — create an order + its Razorpay payment link
+router.post('/sales/orders', validateSalesOrder, validateRequest, asyncHandler(async (req, res) => {
+  const result = await createSalesOrder(req.user, req.body, req);
+  res.status(201).json({ success: true, ...result });
+}));
+
+// @route  GET /staff/sales/orders?cursor= — own orders (member) / all (head)
+router.get('/sales/orders', validateCursorQuery, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listSalesOrders(req.user, { cursor: req.query.cursor })) });
+}));
+
+// @route  POST /staff/sales/orders/:id/payment-link — issue a new link (old one retired)
+router.post('/sales/orders/:id/payment-link', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await reissuePaymentLink(req.user, req.params.id, req)) });
+}));
+
+// @route  POST /staff/sales/orders/:id/cancel — cancel an UNPAID order
+router.post('/sales/orders/:id/cancel', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await cancelUnpaidSalesOrder(req.user, req.params.id, req) });
+}));
+
+// @route  GET /staff/orders/paid?cursor= — paid sales orders (accounts, procurement, sales head)
+router.get('/orders/paid', validateCursorQuery, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listPaidSalesOrders(req.user, { cursor: req.query.cursor })) });
 }));
 
 export default router;

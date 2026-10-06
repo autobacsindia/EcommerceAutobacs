@@ -17,6 +17,7 @@ import consultationRepository from '../repositories/consultationRepository.js';
 import jobApplicationRepository from '../repositories/jobApplicationRepository.js';
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
+import userRepository from '../repositories/userRepository.js';
 import { RETURN_REASON_LABELS } from '../config/returnPolicy.js';
 import emailHandler from './emailHandler.js';
 import companyInfo from '../config/company.js';
@@ -680,4 +681,92 @@ export default {
   emailAdminRefundFailedAlert,
   emailAdminReturnAlert,
   emailAdminReturnRefundedAlert,
+};
+
+/**
+ * Tell the team that a sales-panel order has been PAID: the Accounts and
+ * Procurement heads (so payment can be checked and stock arranged) and the sales
+ * person who created it.
+ *
+ * Enqueued from razorpayService.processPaymentSuccess under the same create-once
+ * gate as the invoice, so a duplicate webhook never re-alerts. A failed send to one
+ * person is logged and does not throw — throwing would make the queue retry the
+ * whole job and re-email the people who already got it.
+ *
+ * @param {string} orderId
+ * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'|'no-recipients'}>}
+ */
+export const emailStaffSalesPaidAlert = async (orderId) => {
+  const order = await orderRepository.findById(orderId, [
+    { path: 'user', select: 'name email' },
+    { path: 'salesUser', select: 'name email role staff' },
+  ]);
+  if (!order || !order.salesUser) return { status: 'not-found' };
+
+  const heads = (await Promise.all([
+    userRepository.findActiveStaff('accounts'),
+    userRepository.findActiveStaff('procurement'),
+  ])).flat().filter((u) => u.staff?.isHead);
+
+  const seller = order.salesUser;
+  const recipients = new Map(heads.map((u) => [String(u.email).toLowerCase(), u]));
+  if (seller?.role === 'staff' && seller.staff?.active && seller.email) {
+    recipients.set(String(seller.email).toLowerCase(), seller);
+  }
+  if (recipients.size === 0) return { status: 'no-recipients' };
+
+  const ref = orderRef(order);
+  const customer = orderCustomer(order);
+  const addr = order.shippingAddress || {};
+  const items = itemLines(order);
+  const shipTo = [addr.city, addr.state, addr.postalCode].filter(Boolean).join(', ');
+  const panelLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/team/orders`;
+
+  const subject = `Paid: sales order ${ref} — ${inr(order.totalAmount)}`;
+  const intro = `The customer has paid. Created by ${seller?.name || 'the sales team'}.`;
+  const text = [
+    intro,
+    '',
+    `Order   : ${ref}`,
+    `Paid    : ${inr(order.totalAmount)}`,
+    `Customer: ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
+    customer.phone ? `Phone   : ${customer.phone}` : null,
+    shipTo ? `Ship to : ${shipTo}` : null,
+    '',
+    'Items:',
+    ...items.map((l) => `  - ${l}`),
+    '',
+    `Open the team panel: ${panelLink}`,
+  ]
+    .filter((v) => v !== null)
+    .join('\n');
+  const html = renderEmail(
+    subject,
+    intro,
+    [
+      ['Order', escapeHtml(ref)],
+      ['Paid', `<strong>${escapeHtml(inr(order.totalAmount))}</strong>`],
+      ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
+      ['Phone', escapeHtml(customer.phone)],
+      ['Ship to', escapeHtml(shipTo)],
+      ['Sales person', escapeHtml(seller?.name || '')],
+      ['Items', items.map((l) => escapeHtml(l)).join('<br>')],
+    ],
+    'Open team panel',
+    panelLink
+  );
+
+  let anySent = false;
+  for (const to of recipients.keys()) {
+    try {
+      const result = await emailHandler.sendEmail({ to, subject, text, html });
+      if (result?.success) anySent = true;
+      else if (!result?.fallbackToConsole) {
+        console.error(`[Notify] Sales paid alert NOT sent (order ${orderId} → ${to}): ${result?.error || 'unknown error'}`);
+      }
+    } catch (err) {
+      console.error(`[Notify] Sales paid alert failed (order ${orderId} → ${to}): ${err?.message || 'unknown error'}`);
+    }
+  }
+  return { status: anySent ? 'sent' : 'skipped-disabled' };
 };
