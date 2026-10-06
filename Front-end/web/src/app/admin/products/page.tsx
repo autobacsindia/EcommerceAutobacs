@@ -10,6 +10,7 @@ import { revalidateHome } from '@/lib/revalidateHome';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Plus, Edit, Trash2, Search, X, Package, ChevronUp, Upload } from 'lucide-react';
 import Link from 'next/link';
+import ExportProductsButton from '@/components/admin/ExportProductsButton';
 
 interface Product {
   _id: string;
@@ -193,7 +194,8 @@ function AdminProductsPageInner() {
     <div className="p-4 md:p-6 w-full">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <h1 className="text-2xl md:text-3xl font-bold">Products Management</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-start gap-2">
+          <ExportProductsButton />
           <Link href="/admin/products/import" className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm">
             <Upload className="h-4 w-4" />
             Import CSV

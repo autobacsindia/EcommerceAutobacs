@@ -98,6 +98,26 @@ class ProductRepository {
   }
 
   /**
+   * One page of the admin "Export to Excel" catalogue, keyset-paged on `_id` so the
+   * read stays bounded however large the catalogue grows. Drafts ARE included —
+   * this is the admin's whole working catalogue, not the storefront — but
+   * soft-deleted products are not (`deletedAt: null` also matches a missing field).
+   * Only the first image is read; the export carries one image link per row.
+   */
+  async findForExport({ afterId = null, limit = 500 } = {}) {
+    return Product.find({ deletedAt: null, ...(afterId && { _id: { $gt: afterId } }) })
+      .select({
+        name: 1, sku: 1, slug: 1, brand: 1, categories: 1, compatibleVehicles: 1,
+        price: 1, originalPrice: 1, saleEndsAt: 1, stock: 1, isActive: 1,
+        productType: 1, variants: 1, updatedAt: 1, images: { $slice: 1 },
+      })
+      .sort({ _id: 1 })
+      .limit(limit)
+      .lean()
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
+  /**
    * Find products by query
    */
   async find(query, options = {}) {

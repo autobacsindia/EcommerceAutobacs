@@ -46,6 +46,9 @@ import {
   deleteProductImage,
 } from "../controllers/productImageController.js";
 import { uploadCSV, importProductsCSV } from "../controllers/productBulkController.js";
+import { buildProductsWorkbook } from "../services/productExportService.js";
+import auditLogger from "../services/auditLogger.js";
+import { formatIsoDateIST } from "../utils/datetime.js";
 import { createNotifyRequest, createWaitlistRequest } from "../controllers/stockNotificationController.js";
 import {
   getBrandProducts,
@@ -99,6 +102,20 @@ router.get("/", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, http
 // Defined before "/:id" so the literal path wins over the id param. No cache
 // middleware here on purpose — admins must see their edits immediately.
 router.get("/admin/list", protect, admin, validateProductSearch, asyncHandler(getAdminProducts));
+
+// @route   GET /products/admin/export
+// @desc    Whole catalogue (drafts included, deleted excluded) as an .xlsx download,
+//          one row per product or per option. Built fully before any byte is sent,
+//          so a failure is a normal JSON error rather than a truncated file.
+// @access  Private/Admin
+router.get("/admin/export", protect, admin, asyncHandler(async (req, res) => {
+  const { buffer, rowCount } = await buildProductsWorkbook();
+  auditLogger.logAction(req, 'EXPORT', 'Product', null, { format: 'xlsx', rows: rowCount });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="autobacs-products-${formatIsoDateIST(new Date())}.xlsx"`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(buffer);
+}));
 
 // @route   GET /products/facets
 // @desc    Per-brand and per-category counts for the filter sidebar (accepts the same filters)
