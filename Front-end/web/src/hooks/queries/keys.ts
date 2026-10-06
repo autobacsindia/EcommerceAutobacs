@@ -148,4 +148,7 @@ export const staffKeys = {
   salesOrders: () => [...staffKeys.orders(), 'sales'] as const,
   paidOrders: () => [...staffKeys.orders(), 'paid'] as const,
   salesProducts: (q: string) => [...staffKeys.all, 'sales-products', q.trim().toLowerCase()] as const,
+  /** Team workflow — invalidate `orders()` after any action, since one action moves an order between lists. */
+  workQueue: (queue: string) => [...staffKeys.orders(), 'work', queue] as const,
+  workOrder: (id: string) => [...staffKeys.orders(), 'work-order', id] as const,
 };

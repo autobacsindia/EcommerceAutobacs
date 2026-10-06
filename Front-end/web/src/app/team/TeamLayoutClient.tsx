@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, LogOut, PlusCircle, ReceiptText, BadgeCheck } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -12,16 +12,18 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 /** Links per team. The API enforces the same split; this only hides what would 403. */
 function navFor(team: string, isHead: boolean): NavItem[] {
   const nav: NavItem[] = [{ href: '/team', label: 'Dashboard', icon: LayoutDashboard }];
+  const paid: NavItem = { href: '/team/orders', label: 'Paid orders', icon: BadgeCheck };
   if (team === 'sales') {
     nav.push(
       { href: '/team/sales/new', label: 'New order', icon: PlusCircle },
       { href: '/team/sales', label: isHead ? 'Team orders' : 'My orders', icon: ReceiptText },
+      { href: '/team/decisions', label: 'Customer decisions', icon: PhoneCall },
     );
-    if (isHead) nav.push({ href: '/team/orders', label: 'Paid orders', icon: BadgeCheck });
+    if (isHead) nav.push(paid);
   }
-  if (team === 'accounts' || team === 'procurement') {
-    nav.push({ href: '/team/orders', label: 'Paid orders', icon: BadgeCheck });
-  }
+  if (team === 'procurement') nav.push({ href: '/team/procurement', label: 'Stock & shipping', icon: PackageSearch }, paid);
+  if (team === 'accounts') nav.push({ href: '/team/refunds', label: 'Refund approvals', icon: Wallet }, paid);
+  if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid);
   nav.push({ href: '/team/members', label: 'My team', icon: Users });
   return nav;
 }

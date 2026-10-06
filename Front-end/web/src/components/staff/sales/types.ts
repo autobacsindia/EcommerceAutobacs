@@ -28,6 +28,10 @@ export type SalesOrder = {
     postalCode?: string;
   } | null;
   salesPerson: string;
+  /** Sales-panel order, or a website order (team workflow). */
+  source?: 'sales' | 'website';
+  /** Where the team workflow has got to; null for orders paid before it existed. */
+  workflowSummary?: string | null;
   /** null once paid / closed. */
   linkState: 'active' | 'expired' | null;
   paymentLinkUrl: string | null;

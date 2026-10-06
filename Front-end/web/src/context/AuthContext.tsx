@@ -13,7 +13,7 @@ import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
 import { identifyUser, resetAnalytics, trackSignUp, trackLogin } from '@/lib/analytics';
 
 export interface StaffProfile {
-  team: 'sales' | 'procurement' | 'accounts' | 'marketing';
+  team: 'sales' | 'procurement' | 'accounts' | 'marketing' | 'operations';
   teamLabel: string;
   isHead: boolean;
 }
