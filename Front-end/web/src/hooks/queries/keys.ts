@@ -136,3 +136,16 @@ export const adminKeys = {
   /** Header counters (pending orders / revenue) — polled, shared by every admin screen. */
   stats: () => [...adminKeys.all, 'stats'] as const,
 };
+
+/**
+ * Staff panel (/team). Every list is scoped server-side to the caller's team (and,
+ * for a sales member, to their own orders), so the keys carry no user id.
+ */
+export const staffKeys = {
+  all: ['staff'] as const,
+  /** Every sales-order list (own / team / paid) — invalidate after create, re-link or cancel. */
+  orders: () => [...staffKeys.all, 'orders'] as const,
+  salesOrders: () => [...staffKeys.orders(), 'sales'] as const,
+  paidOrders: () => [...staffKeys.orders(), 'paid'] as const,
+  salesProducts: (q: string) => [...staffKeys.all, 'sales-products', q.trim().toLowerCase()] as const,
+};

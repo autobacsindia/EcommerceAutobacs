@@ -113,9 +113,13 @@ class RazorpayService {
    *
    * @param {Object} order - our Order (needs _id, totalAmount, orderNumber)
    * @param {{name?:string, email?:string, phone?:string}} customer
+   * @param {{attempt?: number}} [opts] - 2+ when re-issuing after an expired or
+   *   cancelled link. Razorpay requires a unique reference_id per link, so a
+   *   re-issue is `<orderId>-r<attempt>`; the webhook resolves the order from
+   *   `notes.orderId` first, which never changes.
    * @returns {Promise<{id:string, shortUrl:string}>}
    */
-  async createPaymentLink(order, { name, email, phone } = {}) {
+  async createPaymentLink(order, { name, email, phone } = {}, { attempt = 1 } = {}) {
     const amount = Math.round((order.totalAmount || 0) * 100); // paise
     if (!amount || amount < 100) {
       throw new Error('Payment link amount must be at least ₹1');
@@ -132,7 +136,8 @@ class RazorpayService {
         currency: 'INR',
         accept_partial: false,
         description: `Autobacs India — order ${order.orderNumber || order._id}`,
-        reference_id: order._id.toString(), // unique per order
+        // Unique per link (Razorpay rejects a repeated reference_id).
+        reference_id: attempt > 1 ? `${order._id.toString()}-r${attempt}` : order._id.toString(),
         customer: {
           ...(name ? { name } : {}),
           ...(email ? { email } : {}),
@@ -154,6 +159,46 @@ class RazorpayService {
       console.error('[Razorpay] payment link creation failed:', desc);
       throw new Error(`Failed to create payment link: ${desc}`);
     }
+  }
+
+  /**
+   * Cancel a payment link so it can no longer be paid. Used before re-issuing or
+   * cancelling an unpaid order, so an order never has two payable links.
+   *
+   * Razorpay refuses to cancel a link that is already PAID — that error is
+   * surfaced (not swallowed), so the caller stops instead of issuing a second link
+   * for money that has already been taken.
+   *
+   * @param {string} linkId
+   * @returns {Promise<{status: string}>}
+   */
+  async cancelPaymentLink(linkId) {
+    const Razorpay = await import('razorpay');
+    const instance = new Razorpay.default({ key_id: this.key_id, key_secret: this.key_secret });
+    try {
+      const link = await instance.paymentLink.cancel(linkId);
+      return { status: link?.status || 'cancelled' };
+    } catch (error) {
+      const desc =
+        error?.error?.description ||
+        error?.description ||
+        error?.message ||
+        String(error);
+      console.error('[Razorpay] payment link cancel failed:', desc);
+      throw new Error(`Failed to cancel payment link: ${desc}`);
+    }
+  }
+
+  /**
+   * Fetch a payment link's live status ('created' | 'paid' | 'expired' | 'cancelled' …).
+   * @param {string} linkId
+   * @returns {Promise<{status: string}>}
+   */
+  async fetchPaymentLinkStatus(linkId) {
+    const Razorpay = await import('razorpay');
+    const instance = new Razorpay.default({ key_id: this.key_id, key_secret: this.key_secret });
+    const link = await instance.paymentLink.fetch(linkId);
+    return { status: link?.status || 'unknown' };
   }
 
   /**
@@ -241,12 +286,15 @@ class RazorpayService {
       // delivery already committed. Only the creator fires post-commit side-effects
       // (invoice email), so duplicate webhooks never double-send.
       let createdHere = false;
+      // Created from the team panel by a sales member → alert Accounts/Procurement.
+      let isStaffSalesOrder = false;
 
       await session.withTransaction(async () => {
         // Reset per-attempt: withTransaction re-runs this callback on a WriteConflict.
         createdHere = false;
 
         const order = await orderRepository.findById(orderId, [], session);
+        isStaffSalesOrder = !!order?.salesUser;
         if (!order) {
           throw new Error('Order not found');
         }
@@ -335,6 +383,16 @@ class RazorpayService {
           .catch((err) =>
             console.error(`[Queue] Failed to enqueue send-admin-order-placed-alert for ${orderId}:`, err.message)
           );
+
+        // A sales-panel order: tell the Accounts and Procurement heads and the sales
+        // person it is paid. Same create-once gate, so a webhook retry can't re-alert.
+        if (isStaffSalesOrder) {
+          queue
+            .add('send-staff-sales-paid-alert', { orderId })
+            .catch((err) =>
+              console.error(`[Queue] Failed to enqueue send-staff-sales-paid-alert for ${orderId}:`, err.message)
+            );
+        }
       }
 
       /*

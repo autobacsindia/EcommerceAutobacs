@@ -11,6 +11,7 @@
  *   send-back-in-stock-email   { requestId }            — provider send for one claimed request
  *   send-admin-review-alert          { reviewId }       — notify support inbox of a new customer review
  *   send-admin-consultation-alert    { consultationId } — notify support inbox of a new consultation request
+ *   send-staff-sales-paid-alert      { orderId } — tell Accounts/Procurement heads + the seller a sales order is paid
  *   send-admin-careers-alert         { applicationId }  — notify support inbox of a new careers application
  *   send-careers-acknowledgement     { applicationId }  — confirm receipt to the applicant (idempotent)
  *   send-careers-rejection           { applicationId }  — notify the applicant they weren't selected (idempotent)
@@ -43,6 +44,7 @@ import {
   emailAdminConsultationAlert,
   emailAdminCareersAlert,
   emailAdminOrderPlacedAlert,
+  emailStaffSalesPaidAlert,
   emailAdminOrderCancelledAlert,
   emailAdminRefundFailedAlert,
   emailAdminReturnAlert,
@@ -140,6 +142,11 @@ const handlers = {
   'send-admin-order-placed-alert': async (job) => {
     const { orderId } = job.data;
     await emailAdminOrderPlacedAlert(orderId);
+  },
+
+  'send-staff-sales-paid-alert': async (job) => {
+    const { orderId } = job.data;
+    await emailStaffSalesPaidAlert(orderId);
   },
 
   'send-admin-order-cancelled-alert': async (job) => {

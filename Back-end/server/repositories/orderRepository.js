@@ -747,6 +747,19 @@ class OrderRepository extends BaseRepository {
   }
 
   /**
+   * Point an UNPAID order at a freshly issued payment link. Conditional on the
+   * order still awaiting payment, so a capture that lands meanwhile is never
+   * overwritten. Returns the updated order, or null if it was paid/closed.
+   */
+  async setPaymentLinkIfUnpaid(orderId, { linkId, url, expiresAt, attempt }) {
+    return Order.findOneAndUpdate(
+      { _id: orderId, status: 'awaiting_payment', paymentStatus: { $ne: 'paid' } },
+      { $set: { paymentLinkId: linkId, paymentLinkUrl: url, paymentLinkExpiresAt: expiresAt, paymentLinkAttempts: attempt } },
+      { new: true }
+    );
+  }
+
+  /**
    * Orders that may have paid but were never confirmed — the reconciliation sweep's
    * candidate set. Still in the pre-payment fulfillment state, not yet marked paid,
    * carrying a gateway order id (so there is something to ask Razorpay about), and

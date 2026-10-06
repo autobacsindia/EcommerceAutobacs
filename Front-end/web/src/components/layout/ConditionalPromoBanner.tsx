@@ -50,7 +50,8 @@ export default function ConditionalPromoBanner({ banner }: { banner: PromoBanner
     path === '/register' ||
     path === '/cart' ||
     path.startsWith('/checkout') ||
-    path.startsWith('/admin');
+    path.startsWith('/admin') ||
+    path === '/team' || path.startsWith('/team/');
 
   if (hide || rewardRibbonShowing) return null;
 
