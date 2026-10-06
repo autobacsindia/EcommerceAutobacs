@@ -1,15 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { Users } from 'lucide-react';
+import { Users, PlusCircle, ReceiptText, BadgeCheck } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 /** What each team's panel will hold. Shown so the team knows what is coming. */
 const COMING_SOON: Record<string, string[]> = {
   sales: [
-    'Create an order for a WhatsApp / phone customer with the agreed price',
-    'Send a payment link or QR that is tied to that order',
-    'See live when the customer has paid, and follow the order to delivery',
+    'Follow each paid order through stock check, shipping and delivery',
   ],
   procurement: [
     'See every paid order waiting for a stock check',
@@ -27,10 +26,29 @@ const COMING_SOON: Record<string, string[]> = {
   ],
 };
 
+type Shortcut = { href: string; title: string; text: string; icon: LucideIcon };
+
+/** What each team can already do — the same split the API enforces. */
+function shortcutsFor(team: string | undefined, isHead: boolean): Shortcut[] {
+  if (team === 'sales') {
+    const list: Shortcut[] = [
+      { href: '/team/sales/new', title: 'New order', text: 'For a customer on the phone or WhatsApp: pick products, give an offer price, send a payment link and QR.', icon: PlusCircle },
+      { href: '/team/sales', title: isHead ? 'Team orders' : 'My orders', text: 'See who has paid, resend a link or cancel an unpaid order.', icon: ReceiptText },
+    ];
+    if (isHead) list.push({ href: '/team/orders', title: 'Paid orders', text: 'Every sales order the customer has paid for.', icon: BadgeCheck });
+    return list;
+  }
+  if (team === 'accounts' || team === 'procurement') {
+    return [{ href: '/team/orders', title: 'Paid orders', text: 'Orders the sales team took by phone or WhatsApp, once paid. You are also emailed for each one.', icon: BadgeCheck }];
+  }
+  return [];
+}
+
 export default function TeamDashboardPage() {
   const { user } = useAuth();
   const staff = user?.staff;
   const items = (staff && COMING_SOON[staff.team]) || [];
+  const shortcuts = shortcutsFor(staff?.team, !!staff?.isHead);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -43,12 +61,28 @@ export default function TeamDashboardPage() {
         </p>
       </div>
 
+      {shortcuts.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {shortcuts.map(({ href, title, text, icon: Icon }) => (
+            <Link key={href} href={href} className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-5 hover:border-blue-400">
+              <Icon className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{title}</p>
+                <p className="text-xs text-gray-500">{text}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {items.length > 0 && (
       <div className="rounded-lg border border-gray-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-semibold text-gray-800">Coming to your panel</h2>
         <ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">
           {items.map((item) => <li key={item}>{item}</li>)}
         </ul>
       </div>
+      )}
 
       <Link
         href="/team/members"

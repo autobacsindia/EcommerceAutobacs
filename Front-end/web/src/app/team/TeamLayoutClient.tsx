@@ -3,22 +3,39 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, PlusCircle, ReceiptText, BadgeCheck } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
-const NAV = [
-  { href: '/team', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/team/members', label: 'My team', icon: Users },
-];
+type NavItem = { href: string; label: string; icon: LucideIcon };
+
+/** Links per team. The API enforces the same split; this only hides what would 403. */
+function navFor(team: string, isHead: boolean): NavItem[] {
+  const nav: NavItem[] = [{ href: '/team', label: 'Dashboard', icon: LayoutDashboard }];
+  if (team === 'sales') {
+    nav.push(
+      { href: '/team/sales/new', label: 'New order', icon: PlusCircle },
+      { href: '/team/sales', label: isHead ? 'Team orders' : 'My orders', icon: ReceiptText },
+    );
+    if (isHead) nav.push({ href: '/team/orders', label: 'Paid orders', icon: BadgeCheck });
+  }
+  if (team === 'accounts' || team === 'procurement') {
+    nav.push({ href: '/team/orders', label: 'Paid orders', icon: BadgeCheck });
+  }
+  nav.push({ href: '/team/members', label: 'My team', icon: Users });
+  return nav;
+}
 
 /** Staff panel shell: sidebar on desktop, top bar on phones. */
 export default function TeamLayoutClient({
   userName,
+  team,
   teamLabel,
   isHead,
   children,
 }: {
   userName: string;
+  team: string;
   teamLabel: string;
   isHead: boolean;
   children: ReactNode;
@@ -32,13 +49,13 @@ export default function TeamLayoutClient({
     router.push('/login');
   };
 
-  const links = NAV.map(({ href, label, icon: Icon }) => {
+  const links = navFor(team, isHead).map(({ href, label, icon: Icon }) => {
     const active = pathname === href;
     return (
       <Link
         key={href}
         href={href}
-        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+        className={`flex items-center gap-3 shrink-0 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
           active ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
         }`}
       >

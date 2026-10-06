@@ -58,6 +58,7 @@ export default async function TeamLayout({ children }: { children: ReactNode }) 
   return (
     <TeamLayoutClient
       userName={user.name || user.email || 'Team member'}
+      team={user.staff.team}
       teamLabel={user.staff.teamLabel}
       isHead={user.staff.isHead}
     >

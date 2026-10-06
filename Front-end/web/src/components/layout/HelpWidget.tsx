@@ -56,6 +56,7 @@ function isSuppressed(pathname: string | null): boolean {
   if (!pathname) return false;
   return (
     pathname.startsWith('/admin') ||
+    pathname === '/team' || pathname.startsWith('/team/') ||
     pathname.startsWith('/checkout') ||
     pathname === '/contact' ||
     pathname === '/login' ||
