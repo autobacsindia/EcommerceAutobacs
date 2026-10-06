@@ -11,7 +11,11 @@
  *   send-back-in-stock-email   { requestId }            — provider send for one claimed request
  *   send-admin-review-alert          { reviewId }       — notify support inbox of a new customer review
  *   send-admin-consultation-alert    { consultationId } — notify support inbox of a new consultation request
- *   send-staff-sales-paid-alert      { orderId } — tell Accounts/Procurement heads + the seller a sales order is paid
+ *   send-staff-sales-paid-alert      { orderId } — a paid order entered the team workflow: Accounts/Procurement/Operations heads + the seller
+ *   send-team-shipped-alert          { orderId, shipmentId } — supplier proof uploaded: sales side + Operations heads
+ *   send-team-out-of-stock-alert     { orderId, itemId } — sales side must ask the customer: wait or refund
+ *   send-team-refund-requested-alert { orderId, itemId } — Accounts heads must approve a refund
+ *   send-admin-team-refund-ready-alert { orderId, itemId } — admins: an approved refund is ready to pay
  *   send-admin-careers-alert         { applicationId }  — notify support inbox of a new careers application
  *   send-careers-acknowledgement     { applicationId }  — confirm receipt to the applicant (idempotent)
  *   send-careers-rejection           { applicationId }  — notify the applicant they weren't selected (idempotent)
@@ -45,6 +49,10 @@ import {
   emailAdminCareersAlert,
   emailAdminOrderPlacedAlert,
   emailStaffSalesPaidAlert,
+  emailTeamShippedAlert,
+  emailTeamOutOfStockAlert,
+  emailTeamRefundRequestedAlert,
+  emailAdminTeamRefundReadyAlert,
   emailAdminOrderCancelledAlert,
   emailAdminRefundFailedAlert,
   emailAdminReturnAlert,
@@ -148,6 +156,13 @@ const handlers = {
     const { orderId } = job.data;
     await emailStaffSalesPaidAlert(orderId);
   },
+
+  // Team workflow alerts. Each sender never throws (per-recipient errors are logged),
+  // so a flaky inbox cannot make BullMQ re-send to everyone else.
+  'send-team-shipped-alert': async (job) => { await emailTeamShippedAlert(job.data); },
+  'send-team-out-of-stock-alert': async (job) => { await emailTeamOutOfStockAlert(job.data); },
+  'send-team-refund-requested-alert': async (job) => { await emailTeamRefundRequestedAlert(job.data); },
+  'send-admin-team-refund-ready-alert': async (job) => { await emailAdminTeamRefundReadyAlert(job.data); },
 
   'send-admin-order-cancelled-alert': async (job) => {
     const { orderId } = job.data;

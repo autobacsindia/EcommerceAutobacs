@@ -60,6 +60,7 @@ class ShipmentService {
    * @param {object} [payload.carrier] - { name, code, trackingUrl }
    * @param {Date}   [payload.estimatedDelivery]
    * @param {object} [payload.shippingSlip] - { url, publicId, uploadedAt }
+   * @param {object} [payload.proofPhoto] - team panel: supplier's private parcel photo ref
    * @param {boolean} [payload.dispatch=true] - false leaves the parcel `packed`
    * @param {string} [payload.notes]
    * @param {object} [opts]
@@ -130,6 +131,9 @@ class ShipmentService {
         trackingNumber: payload.trackingNumber,
         carrier: payload.carrier,
         shippingSlip: payload.shippingSlip,
+        // Team panel: the supplier's private photo of the dispatched parcel. Not
+        // mirrored to the order and never emailed — see Order.shipments[].proofPhoto.
+        proofPhoto: payload.proofPhoto,
         estimatedDelivery: payload.estimatedDelivery,
         shippedAt: dispatch ? now : undefined,
         createdBy: userId,

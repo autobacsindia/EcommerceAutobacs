@@ -31,6 +31,60 @@ const OrderSchema = new mongoose.Schema({
   // The staff member (team panel, sales team) who created this offline order.
   // Drives "my orders" / team scoping; `salesRep` stays the name-only CRM credit.
   salesUser: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+
+  /*
+    Team workflow (the /team panel): stock check → supplier → proof → delivery, or
+    out of stock → customer decision → accounts approval → admin refund.
+
+    Started ONCE, when the order first becomes paid (orderStatusService, on the move
+    to `processing`), so orders paid before this existed are simply not in it and
+    admins finish those as before.
+
+    It records only the TEAM decisions. What physically happened is still read from
+    the order's own records — `shipments[]` for what left and arrived,
+    `cancellations[]` for what was cancelled and refunded — through the same
+    services the admin panel uses, so the two panels can never disagree about an
+    order. utils/teamWorkflow.js derives each line's stage from all three.
+  */
+  workflow: {
+    enteredAt: { type: Date, default: undefined },
+    // True while some team still has something to do; the work queues read only
+    // open orders (indexed). Recomputed after every team action.
+    open: { type: Boolean, default: undefined },
+    lines: {
+      type: [{
+        itemId: { type: mongoose.Schema.Types.ObjectId, required: true }, // Order.items[]._id
+        stock: { type: String, enum: ['pending', 'in_stock', 'ordered', 'out_of_stock'], default: 'pending' },
+        supplierName: { type: String, trim: true, maxlength: 120 },
+        stockBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        stockAt: Date,
+        // Out of stock: the sales person asked the customer and they want their money back.
+        refundRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        refundRequestedAt: Date,
+        // Accounts' approval. On approval the line is cancelled through
+        // cancellationService, whose refund record then waits for an admin.
+        accountsApprovedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        accountsApprovedAt: Date,
+        cancellationId: { type: mongoose.Schema.Types.ObjectId },
+        _id: false
+      }],
+      default: undefined
+    },
+    // Who did what, when. Small and bounded (a handful of events per line).
+    history: {
+      type: [{
+        at: { type: Date, required: true },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        byName: String,
+        team: String,
+        action: { type: String, required: true },
+        itemId: mongoose.Schema.Types.ObjectId,
+        note: { type: String, maxlength: 500 },
+        _id: false
+      }],
+      default: undefined
+    }
+  },
   // The specific CRM lead this offline order closes. Set when payment is deferred
   // (link flow) so the webhook converts THAT lead even if its identity (e.g. a
   // phone-only consultation) differs from the order's. See leadSyncService.
@@ -537,6 +591,23 @@ const OrderSchema = new mongoose.Schema({
       provider: { type: String, enum: ['cloudinary', 'r2'], default: undefined },
       uploadedAt: Date
     },
+    /*
+      The supplier's photo / screenshot of the dispatched parcel, uploaded by the
+      procurement team (team panel). PRIVATE: it shows the customer's name, address
+      and phone, so it is never attached to the customer email and never given a
+      public URL — staff read it through an authorised proxy, and the sales person
+      shares it with the customer themselves. Kept apart from `shippingSlip`, which
+      IS emailed and is a PDF.
+    */
+    proofPhoto: {
+      publicId: String,
+      provider: { type: String, enum: ['cloudinary', 'r2'], default: undefined },
+      url: String,            // Cloudinary-era refs only; empty on R2
+      contentType: String,
+      bytes: Number,
+      uploadedAt: Date,
+      uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    },
     estimatedDelivery: Date,
     shippedAt: Date,
     deliveredAt: Date,
@@ -799,6 +870,17 @@ OrderSchema.index(
 OrderSchema.index(
   { paymentStatus: 1, createdAt: -1, _id: -1 },
   { partialFilterExpression: { salesUser: { $type: 'objectId' } }, name: 'staff_sales_by_payment' }
+);
+// Team work queues: orders some team still has work on, oldest first (keyset).
+// Partial on `open: true`, so the index only ever holds the live queue.
+OrderSchema.index(
+  { 'workflow.open': 1, 'workflow.enteredAt': 1, _id: 1 },
+  { partialFilterExpression: { 'workflow.open': true }, name: 'team_workflow_open' }
+);
+// Team "Paid orders": every order in the team workflow, newest first.
+OrderSchema.index(
+  { paymentStatus: 1, createdAt: -1, _id: -1 },
+  { partialFilterExpression: { 'workflow.enteredAt': { $type: 'date' } }, name: 'team_workflow_paid' }
 );
 
 // SINGLE-FIELD indexes for specific lookups

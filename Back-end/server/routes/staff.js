@@ -18,7 +18,26 @@ import {
   validateCursorQuery,
   validateOrderIdParam,
   validateSalesOrder,
+  validateWorkQueue,
+  validateWorkOrder,
+  validateWorkParcel,
+  validateStockUpdate,
+  validateShipWithProof,
+  validateCustomerDecision,
+  validateRefundReview,
+  validateMarkDelivered,
 } from '../validators/staff.validator.js';
+import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard } from '../middleware/uploadMiddleware.js';
+import {
+  listQueue,
+  getOrder as getWorkOrder,
+  getProofPhoto,
+  setStock,
+  shipWithProof,
+  recordDecision,
+  reviewRefund,
+  markDelivered,
+} from '../services/teamWorkflowService.js';
 import {
   describeStaff,
   listTeam,
@@ -124,6 +143,61 @@ router.post('/sales/orders/:id/cancel', validateOrderIdParam, validateRequest, a
 // @route  GET /staff/orders/paid?cursor= — paid sales orders (accounts, procurement, sales head)
 router.get('/orders/paid', validateCursorQuery, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listPaidSalesOrders(req.user, { cursor: req.query.cursor })) });
+}));
+
+// ── Team workflow (scope enforced in teamWorkflowService) ───────────────────
+
+// @route  GET /staff/work?queue=procurement|decisions|refunds|deliveries&cursor=
+router.get('/work', validateWorkQueue, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listQueue(req.user, req.query.queue, { cursor: req.query.cursor })) });
+}));
+
+// @route  GET /staff/work/orders/:id — one order, with the actions this person may take
+router.get('/work/orders/:id', validateWorkOrder, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await getWorkOrder(req.user, req.params.id) });
+}));
+
+// @route  GET /staff/work/orders/:id/parcels/:shipmentId/photo — supplier proof (private)
+router.get('/work/orders/:id/parcels/:shipmentId/photo', validateWorkParcel, validateRequest, asyncHandler(async (req, res) => {
+  const { buffer, contentType } = await getProofPhoto(req.user, req.params.id, req.params.shipmentId);
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.send(buffer);
+}));
+
+// @route  POST /staff/work/orders/:id/lines/:itemId/stock  { stock, supplierName? } — procurement
+router.post('/work/orders/:id/lines/:itemId/stock', validateStockUpdate, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await setStock(req.user, req.params.id, req.params.itemId, req.body, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/ship  multipart: photo, itemIds?, courierName?, trackingNumber? — procurement
+router.post(
+  '/work/orders/:id/ship',
+  concurrentUploadGuard,
+  uploadProofPhoto,
+  handleProofPhotoError,
+  validateShipWithProof,
+  validateRequest,
+  asyncHandler(async (req, res) => {
+    const { itemIds = [], courierName, trackingNumber } = req.body;
+    res.json({ success: true, order: await shipWithProof(req.user, req.params.id, { itemIds, courierName, trackingNumber }, req.file, req) });
+  }),
+);
+
+// @route  POST /staff/work/orders/:id/lines/:itemId/decision  { decision: wait|refund, note? } — sales
+router.post('/work/orders/:id/lines/:itemId/decision', validateCustomerDecision, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await recordDecision(req.user, req.params.id, req.params.itemId, req.body, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/lines/:itemId/refund  { approve, note? } — accounts
+router.post('/work/orders/:id/lines/:itemId/refund', validateRefundReview, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await reviewRefund(req.user, req.params.id, req.params.itemId, req.body, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/delivered  { shipmentId? } — operations
+router.post('/work/orders/:id/delivered', validateMarkDelivered, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await markDelivered(req.user, req.params.id, req.body, req) });
 }));
 
 export default router;

@@ -18,6 +18,9 @@ export const STAFF_TEAMS = Object.freeze({
   PROCUREMENT: 'procurement',
   ACCOUNTS: 'accounts',
   MARKETING: 'marketing',
+  // Delivery follow-up: sees every paid order and the supplier's shipping proof,
+  // and marks parcels delivered.
+  OPERATIONS: 'operations',
 });
 
 export const STAFF_TEAM_VALUES = Object.freeze(Object.values(STAFF_TEAMS));
@@ -27,6 +30,7 @@ export const STAFF_TEAM_LABELS = Object.freeze({
   procurement: 'Procurement',
   accounts: 'Accounts',
   marketing: 'Marketing',
+  operations: 'Operations',
 });
 
 /** How long an emailed invite link stays usable. Personal inboxes are read late. */

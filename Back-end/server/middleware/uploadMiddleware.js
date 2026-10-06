@@ -343,6 +343,42 @@ export const validatePdfUpload = (req, res, next) => {
   next();
 };
 
+// ── Team panel: supplier shipping proof ─────────────────────────────────────
+
+/**
+ * 8 MB, one photo. Larger than the product-image limit because this is a phone
+ * photo or WhatsApp screenshot, not a catalogue asset — the panel also shrinks it
+ * before upload, so the cap is a backstop. The service re-checks the bytes are a
+ * real image (services/storage/contentSniff.js) before storing anything.
+ */
+export const MAX_PROOF_PHOTO_SIZE = 8 * 1024 * 1024;
+
+const proofPhotoUpload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE',
+        `Invalid file type "${file.mimetype}". Upload a JPG, PNG or WebP photo.`), false);
+    }
+    cb(null, true);
+  },
+  limits: { fileSize: MAX_PROOF_PHOTO_SIZE, files: 1 },
+});
+
+/** Single proof photo (field `photo`). Errors go through handleProofPhotoError. */
+export const uploadProofPhoto = proofPhotoUpload.single('photo');
+
+/** Multer errors for the proof upload, with this route's own size limit in the message. */
+export const handleProofPhotoError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    const message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'The photo is too large (8 MB maximum).'
+      : (err.field || err.message || 'Upload error.');
+    return res.status(400).json({ success: false, message });
+  }
+  next(err);
+};
+
 // ── Exported middleware factories ──────────────────────────────────────────
 
 /**
