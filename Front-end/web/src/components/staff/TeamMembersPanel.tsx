@@ -6,13 +6,14 @@ import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
 import { formatDateIST } from '@/lib/datetime';
 
-export type StaffTeam = 'sales' | 'procurement' | 'accounts' | 'marketing';
+export type StaffTeam = 'sales' | 'procurement' | 'accounts' | 'marketing' | 'operations';
 
 export const STAFF_TEAM_LABELS: Record<StaffTeam, string> = {
   sales: 'Sales',
   procurement: 'Procurement',
   accounts: 'Accounts',
   marketing: 'Marketing',
+  operations: 'Operations',
 };
 
 type Member = { id: string; name: string; email: string; phone: string; isHead: boolean; addedAt: string };

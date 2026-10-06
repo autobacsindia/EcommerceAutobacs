@@ -1,25 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, PlusCircle, ReceiptText, BadgeCheck } from 'lucide-react';
+import { Users, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
-/** What each team's panel will hold. Shown so the team knows what is coming. */
+/** Still to come, per team. Shown so the team knows what is planned. */
 const COMING_SOON: Record<string, string[]> = {
-  sales: [
-    'Follow each paid order through stock check, shipping and delivery',
-  ],
-  procurement: [
-    'See every paid order waiting for a stock check',
-    'Mark each one In stock, or Not available (sends it for refund)',
-    'Add the courier, tracking number and shipping photo',
-  ],
-  accounts: [
-    'Approve each payment before the order can ship',
-    'Work the refund queue for orders that cannot be fulfilled',
-    'Daily payment and refund reports',
-  ],
+  sales: [],
+  procurement: ['Reminders when an order has waited too long for a stock check or supplier proof'],
+  accounts: ['Daily payment and refund reports'],
+  operations: ['Reminders for parcels that have been in transit too long'],
   marketing: [
     'Orders and leads by source: Google Ads, Meta, website',
     'Coupon and campaign performance',
@@ -28,20 +19,32 @@ const COMING_SOON: Record<string, string[]> = {
 
 type Shortcut = { href: string; title: string; text: string; icon: LucideIcon };
 
-/** What each team can already do — the same split the API enforces. */
+const PAID: Shortcut = {
+  href: '/team/orders', title: 'Paid orders',
+  text: 'Every paid order — website and sales — with who sold it, the payment and where it is up to.', icon: BadgeCheck,
+};
+
+/** What each team can do — the same split the API enforces. */
 function shortcutsFor(team: string | undefined, isHead: boolean): Shortcut[] {
-  if (team === 'sales') {
-    const list: Shortcut[] = [
-      { href: '/team/sales/new', title: 'New order', text: 'For a customer on the phone or WhatsApp: pick products, give an offer price, send a payment link and QR.', icon: PlusCircle },
-      { href: '/team/sales', title: isHead ? 'Team orders' : 'My orders', text: 'See who has paid, resend a link or cancel an unpaid order.', icon: ReceiptText },
-    ];
-    if (isHead) list.push({ href: '/team/orders', title: 'Paid orders', text: 'Every sales order the customer has paid for.', icon: BadgeCheck });
-    return list;
+  switch (team) {
+    case 'sales': {
+      const list: Shortcut[] = [
+        { href: '/team/sales/new', title: 'New order', text: 'For a customer on the phone or WhatsApp: pick products, give an offer price, send a payment link and QR.', icon: PlusCircle },
+        { href: '/team/sales', title: isHead ? 'Team orders' : 'My orders', text: 'Payment, stock, the supplier\'s photo and tracking — and a button to send them to the customer.', icon: ReceiptText },
+        { href: '/team/decisions', title: 'Customer decisions', text: 'Out-of-stock items: ask the customer to wait or take a refund.', icon: PhoneCall },
+      ];
+      if (isHead) list.push(PAID);
+      return list;
+    }
+    case 'procurement':
+      return [{ href: '/team/procurement', title: 'Stock & shipping', text: 'Check stock for each paid order, record the supplier, upload the supplier\'s photo when dispatched.', icon: PackageSearch }, PAID];
+    case 'accounts':
+      return [{ href: '/team/refunds', title: 'Refund approvals', text: 'Approve refunds for out-of-stock items. An admin then pays them.', icon: Wallet }, PAID];
+    case 'operations':
+      return [{ href: '/team/deliveries', title: 'Deliveries', text: 'Parcels on their way — follow up and mark them delivered.', icon: Truck }, PAID];
+    default:
+      return [];
   }
-  if (team === 'accounts' || team === 'procurement') {
-    return [{ href: '/team/orders', title: 'Paid orders', text: 'Orders the sales team took by phone or WhatsApp, once paid. You are also emailed for each one.', icon: BadgeCheck }];
-  }
-  return [];
 }
 
 export default function TeamDashboardPage() {

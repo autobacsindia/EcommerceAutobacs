@@ -1231,6 +1231,94 @@ class OrderRepository extends BaseRepository {
     return res.modifiedCount === 1;
   }
 
+  // ── Team workflow (/team panel) ─────────────────────────────────────────────
+
+  /**
+   * Change one workflow line, but only if it is still in the state the caller
+   * validated — compare-and-set, so two people acting on the same line at once
+   * cannot both win (the loser gets null and re-reads). The history event is
+   * appended in the same write, so the record and its "who did it" never disagree.
+   *
+   * @param {string} orderId
+   * @param {string} itemId                 Order.items[]._id the line refers to
+   * @param {object} expect                 line field → required current value
+   *                                         (null matches "unset")
+   * @param {object} [set]                  line fields to set
+   * @param {string[]} [unset]              line fields to clear
+   * @param {object|null} event             workflow.history entry (null: none)
+   * @returns {Promise<object|null>} the updated order (lean), or null if the line moved
+   */
+  async updateWorkflowLineIf(orderId, itemId, expect, { set = {}, unset = [] } = {}, event) {
+    const itemOid = new mongoose.Types.ObjectId(String(itemId));
+    const lineMatch = { itemId: itemOid, ...expect };
+    const arrayFilter = Object.fromEntries(Object.entries(lineMatch).map(([k, v]) => [`l.${k}`, v]));
+
+    const update = event ? { $push: { 'workflow.history': { $each: [event], $slice: -300 } } } : {};
+    if (Object.keys(set).length) {
+      update.$set = Object.fromEntries(Object.entries(set).map(([k, v]) => [`workflow.lines.$[l].${k}`, v]));
+    }
+    if (unset.length) {
+      update.$unset = Object.fromEntries(unset.map((k) => [`workflow.lines.$[l].${k}`, '']));
+    }
+
+    return Order.findOneAndUpdate(
+      { _id: orderId, 'workflow.lines': { $elemMatch: lineMatch } },
+      update,
+      { new: true, arrayFilters: [arrayFilter] },
+    ).lean();
+  }
+
+  /** Append a workflow history event (actions not tied to one line: shipped, delivered). */
+  async pushWorkflowEvent(orderId, event) {
+    return Order.updateOne(
+      { _id: orderId, 'workflow.enteredAt': { $type: 'date' } },
+      { $push: { 'workflow.history': { $each: [event], $slice: -300 } } },
+    );
+  }
+
+  /** Move an order into or out of the open work queue. A no-op when already there. */
+  async setWorkflowOpen(orderId, open) {
+    return Order.updateOne(
+      { _id: orderId, 'workflow.enteredAt': { $type: 'date' }, 'workflow.open': { $ne: open } },
+      { $set: { 'workflow.open': open } },
+    );
+  }
+
+  /** The fields every team view of an order needs — one projection, one place. */
+  static WORKFLOW_SELECT = 'orderNumber createdAt status paymentStatus totalAmount subtotal items '
+    + 'shippingAddress user salesUser guestEmail shipments cancellations workflow payment spinReward';
+
+  /**
+   * One page of the open work queue, oldest first, keyset-paged on
+   * (workflow.enteredAt, _id). Served by the partial `team_workflow_open` index.
+   */
+  async findOpenWorkflowPage({ after = null, limit = 50 } = {}) {
+    const query = { 'workflow.open': true };
+    if (after) {
+      query.$or = [
+        { 'workflow.enteredAt': { $gt: after.enteredAt } },
+        { 'workflow.enteredAt': after.enteredAt, _id: { $gt: after.id } },
+      ];
+    }
+    return Order.find(query)
+      .select(OrderRepository.WORKFLOW_SELECT)
+      .populate({ path: 'user', select: 'name email phone' })
+      .populate({ path: 'salesUser', select: 'name email' })
+      .sort({ 'workflow.enteredAt': 1, _id: 1 })
+      .limit(limit)
+      .lean();
+  }
+
+  /** One order with everything a team view needs (lean). */
+  async findForWorkflow(orderId) {
+    return Order.findById(orderId)
+      .select(OrderRepository.WORKFLOW_SELECT)
+      .populate({ path: 'user', select: 'name email phone' })
+      .populate({ path: 'salesUser', select: 'name email' })
+      .populate({ path: 'payment', select: 'gatewayPaymentId method status amount createdAt' })
+      .lean();
+  }
+
   async save(order, session = null) {
     if (session) return order.save({ session });
     return order.save();

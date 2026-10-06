@@ -233,6 +233,11 @@ export async function createOfflineOrderRecord({
       queue
         .add('send-order-invoice', { orderId: order._id.toString() })
         .catch((err) => console.error('[Queue] Failed to enqueue send-order-invoice:', err.message));
+      // Paid now (not via the webhook), so it entered the team workflow here — the
+      // teams are told the same way as for a Razorpay payment.
+      queue
+        .add('send-staff-sales-paid-alert', { orderId: order._id.toString() })
+        .catch((err) => console.error('[Queue] Failed to enqueue send-staff-sales-paid-alert:', err.message));
     }
     if (isNewUser) {
       queue

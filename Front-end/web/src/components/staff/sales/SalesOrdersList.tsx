@@ -7,12 +7,18 @@ import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import PaymentLinkCard from './PaymentLinkCard';
+import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
 import { errorMessage, rupees, type SalesOrder, type SalesOrderPage } from './types';
 
 type Mode = 'sales' | 'paid';
 
 /** One status pill per row, in words the team uses. */
 function statusOf(o: SalesOrder): { text: string; cls: string } {
+  // Paid orders in the team workflow say where they are (stock check, shipped…).
+  if (o.paymentStatus !== 'pending' && o.workflowSummary) {
+    const done = /Delivered/.test(o.workflowSummary);
+    return { text: o.workflowSummary, cls: done ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800' };
+  }
   if (o.paymentStatus === 'paid') {
     const after: Record<string, string> = { shipped: 'Paid · shipped', delivered: 'Paid · delivered', cancelled: 'Paid · cancelled' };
     return { text: after[o.status] || 'Paid', cls: 'bg-green-100 text-green-800' };
@@ -58,7 +64,7 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
           </p>
           <p className="text-xs text-gray-500">
             {formatDateTimeIST(order.createdAt)}
-            {showSeller && order.salesPerson ? ` · by ${order.salesPerson}` : ''}
+            {showSeller ? (order.salesPerson ? ` · by ${order.salesPerson}` : order.source === 'website' ? ' · Website order' : '') : ''}
             {` · ${order.items.length} item${order.items.length === 1 ? '' : 's'}`}
           </p>
         </div>
@@ -67,7 +73,12 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
         <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {open && (
+      {open && !unpaid && order.status !== 'cancelled' && (
+        // Paid: the shared team view (items, stock, parcels + supplier photos, refunds, history).
+        <div className="border-t border-gray-100 p-4"><WorkOrderPanel orderId={order.id} /></div>
+      )}
+
+      {open && (unpaid || order.status === 'cancelled') && (
         <div className="space-y-4 border-t border-gray-100 p-4">
           <table className="w-full text-sm">
             <tbody className="divide-y divide-gray-100">
@@ -192,7 +203,7 @@ export default function SalesOrdersList({ mode }: { mode: Mode }) {
   if (orders.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-        {mode === 'paid' ? 'No paid sales orders yet.' : 'No orders yet. Create one from “New order”.'}
+        {mode === 'paid' ? 'No paid orders yet.' : 'No orders yet. Create one from “New order”.'}
       </p>
     );
   }

@@ -286,15 +286,12 @@ class RazorpayService {
       // delivery already committed. Only the creator fires post-commit side-effects
       // (invoice email), so duplicate webhooks never double-send.
       let createdHere = false;
-      // Created from the team panel by a sales member → alert Accounts/Procurement.
-      let isStaffSalesOrder = false;
 
       await session.withTransaction(async () => {
         // Reset per-attempt: withTransaction re-runs this callback on a WriteConflict.
         createdHere = false;
 
         const order = await orderRepository.findById(orderId, [], session);
-        isStaffSalesOrder = !!order?.salesUser;
         if (!order) {
           throw new Error('Order not found');
         }
@@ -384,15 +381,14 @@ class RazorpayService {
             console.error(`[Queue] Failed to enqueue send-admin-order-placed-alert for ${orderId}:`, err.message)
           );
 
-        // A sales-panel order: tell the Accounts and Procurement heads and the sales
-        // person it is paid. Same create-once gate, so a webhook retry can't re-alert.
-        if (isStaffSalesOrder) {
-          queue
-            .add('send-staff-sales-paid-alert', { orderId })
-            .catch((err) =>
-              console.error(`[Queue] Failed to enqueue send-staff-sales-paid-alert for ${orderId}:`, err.message)
-            );
-        }
+        // Every paid order now enters the team workflow (website or sales panel):
+        // tell the Accounts, Procurement and Operations heads, and the sales person
+        // on their own orders. Same create-once gate, so a webhook retry can't re-alert.
+        queue
+          .add('send-staff-sales-paid-alert', { orderId })
+          .catch((err) =>
+            console.error(`[Queue] Failed to enqueue send-staff-sales-paid-alert for ${orderId}:`, err.message)
+          );
       }
 
       /*

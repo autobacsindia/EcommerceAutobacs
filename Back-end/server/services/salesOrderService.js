@@ -27,6 +27,7 @@ import productRepository from '../repositories/productRepository.js';
 import { effectivePrice } from '../utils/productPrice.js';
 import { isPurchasable } from '../utils/stockStatus.js';
 import { STAFF_TEAMS } from '../config/staff.js';
+import { workflowView } from '../utils/teamWorkflow.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -58,8 +59,10 @@ function decodeCursor(cursor) {
 
 async function page(baseQuery, cursor, { includePayment = false } = {}) {
   const c = decodeCursor(cursor);
+  // $and, not a spread: the base query may carry its own $or, which a spread would
+  // silently replace with the cursor's — page 2 would then ignore the filter.
   const query = c
-    ? { ...baseQuery, $or: [{ createdAt: { $lt: c.createdAt } }, { createdAt: c.createdAt, _id: { $lt: c.id } }] }
+    ? { $and: [baseQuery, { $or: [{ createdAt: { $lt: c.createdAt } }, { createdAt: c.createdAt, _id: { $lt: c.id } }] }] }
     : baseQuery;
   const populate = [
     { path: 'user', select: 'name email phone' },
@@ -69,7 +72,8 @@ async function page(baseQuery, cursor, { includePayment = false } = {}) {
   const rows = await orderRepository.find(query, {
     limit: PAGE_SIZE + 1,
     sort: { createdAt: -1, _id: -1 },
-    select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser paymentLinkUrl paymentLinkExpiresAt payment',
+    select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
+      + 'paymentLinkUrl paymentLinkExpiresAt payment workflow shipments cancellations',
     populate,
   });
   const hasMore = rows.length > PAGE_SIZE;
@@ -102,11 +106,14 @@ function shape(o) {
     })),
     customer: {
       name: o.user?.name || o.shippingAddress?.fullName || '',
-      email: o.user?.email || '',
+      email: o.user?.email || o.guestEmail || '',
       phone: o.shippingAddress?.phone || o.user?.phone || '',
     },
     shippingAddress: o.shippingAddress || null,
     salesPerson: o.salesUser?.name || '',
+    source: o.salesUser ? 'sales' : 'website',
+    // Where the team workflow has got to (null for orders paid before it existed).
+    workflowSummary: workflowView(o)?.summary || null,
     linkState: linkState(o),
     paymentLinkUrl: linkState(o) === 'active' ? o.paymentLinkUrl : null,
     paymentLinkExpiresAt: o.paymentLinkExpiresAt || null,
@@ -237,14 +244,27 @@ export async function listSalesOrders(actor, { cursor } = {}) {
   return { orders: items.map(shape), nextCursor, scope: isSalesHead(actor) ? 'team' : 'mine' };
 }
 
-/** Accounts / Procurement (and the sales head): every PAID sales-panel order. */
+/**
+ * Every paid order the teams handle: sales-panel orders, plus every order (website
+ * included) paid since the team workflow started. Accounts, Procurement, Operations,
+ * the sales head — and admin, who can see everything anyway.
+ */
 export async function listPaidSalesOrders(actor, { cursor } = {}) {
-  const allowed = onTeam(actor, STAFF_TEAMS.ACCOUNTS)
+  const allowed = actor?.role === 'admin'
+    || onTeam(actor, STAFF_TEAMS.ACCOUNTS)
     || onTeam(actor, STAFF_TEAMS.PROCUREMENT)
+    || onTeam(actor, STAFF_TEAMS.OPERATIONS)
     || isSalesHead(actor);
   if (!allowed) throw fail('Not authorized.', 403);
   const { items, nextCursor } = await page(
-    { salesUser: { $type: 'objectId' }, paymentStatus: 'paid' },
+    {
+      // `refunded` stays listed so Accounts can still see an order after its refund.
+      paymentStatus: { $in: ['paid', 'refunded'] },
+      $or: [
+        { salesUser: { $type: 'objectId' } },              // staff_sales_by_payment
+        { 'workflow.enteredAt': { $type: 'date' } },       // team_workflow_paid
+      ],
+    },
     cursor,
     { includePayment: true },
   );

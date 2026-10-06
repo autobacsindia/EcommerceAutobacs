@@ -683,90 +683,185 @@ export default {
   emailAdminReturnRefundedAlert,
 };
 
+// ── Team panel alerts (/team) ──────────────────────────────────────────────────
+//
+// Rule of thumb: each alert goes to the team HEADS who own that step, plus the sales
+// person on the order when it is theirs. Members see the same work in their panel's
+// queue, so no one is emailed per order just for being on a team.
+
+const teamPanelLink = (path = '/team/orders') => `${appUrl()}${path}`;
+
+/** Active staff of a team; only heads when `headsOnly`. */
+const teamStaff = async (team, { headsOnly = false } = {}) => {
+  const staff = await userRepository.findActiveStaff(team);
+  return headsOnly ? staff.filter((u) => u.staff?.isHead) : staff;
+};
+
 /**
- * Tell the team that a sales-panel order has been PAID: the Accounts and
- * Procurement heads (so payment can be checked and stock arranged) and the sales
- * person who created it.
- *
- * Enqueued from razorpayService.processPaymentSuccess under the same create-once
- * gate as the invoice, so a duplicate webhook never re-alerts. A failed send to one
- * person is logged and does not throw — throwing would make the queue retry the
- * whole job and re-email the people who already got it.
- *
- * @param {string} orderId
- * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'|'no-recipients'}>}
+ * The sales side of an order: its sales person if they are still active staff;
+ * otherwise (a website order, or a seller who has left) the sales heads.
  */
-export const emailStaffSalesPaidAlert = async (orderId) => {
-  const order = await orderRepository.findById(orderId, [
-    { path: 'user', select: 'name email' },
-    { path: 'salesUser', select: 'name email role staff' },
-  ]);
-  if (!order || !order.salesUser) return { status: 'not-found' };
+const salesContacts = async (order) => {
+  const seller = order.salesUser && typeof order.salesUser === 'object' ? order.salesUser : null;
+  if (seller?.role === 'staff' && seller.staff?.active && seller.email) return [seller];
+  return teamStaff('sales', { headsOnly: true });
+};
 
-  const heads = (await Promise.all([
-    userRepository.findActiveStaff('accounts'),
-    userRepository.findActiveStaff('procurement'),
-  ])).flat().filter((u) => u.staff?.isHead);
-
-  const seller = order.salesUser;
-  const recipients = new Map(heads.map((u) => [String(u.email).toLowerCase(), u]));
-  if (seller?.role === 'staff' && seller.staff?.active && seller.email) {
-    recipients.set(String(seller.email).toLowerCase(), seller);
-  }
+/** Send one message to each staff recipient (de-duplicated). Never throws. */
+const sendToStaff = async (people, { subject, text, html }, context) => {
+  const recipients = new Map();
+  for (const u of people) if (u?.email) recipients.set(String(u.email).toLowerCase(), u);
   if (recipients.size === 0) return { status: 'no-recipients' };
-
-  const ref = orderRef(order);
-  const customer = orderCustomer(order);
-  const addr = order.shippingAddress || {};
-  const items = itemLines(order);
-  const shipTo = [addr.city, addr.state, addr.postalCode].filter(Boolean).join(', ');
-  const panelLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/team/orders`;
-
-  const subject = `Paid: sales order ${ref} — ${inr(order.totalAmount)}`;
-  const intro = `The customer has paid. Created by ${seller?.name || 'the sales team'}.`;
-  const text = [
-    intro,
-    '',
-    `Order   : ${ref}`,
-    `Paid    : ${inr(order.totalAmount)}`,
-    `Customer: ${customer.name}${customer.email ? ` <${customer.email}>` : ''}`,
-    customer.phone ? `Phone   : ${customer.phone}` : null,
-    shipTo ? `Ship to : ${shipTo}` : null,
-    '',
-    'Items:',
-    ...items.map((l) => `  - ${l}`),
-    '',
-    `Open the team panel: ${panelLink}`,
-  ]
-    .filter((v) => v !== null)
-    .join('\n');
-  const html = renderEmail(
-    subject,
-    intro,
-    [
-      ['Order', escapeHtml(ref)],
-      ['Paid', `<strong>${escapeHtml(inr(order.totalAmount))}</strong>`],
-      ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
-      ['Phone', escapeHtml(customer.phone)],
-      ['Ship to', escapeHtml(shipTo)],
-      ['Sales person', escapeHtml(seller?.name || '')],
-      ['Items', items.map((l) => escapeHtml(l)).join('<br>')],
-    ],
-    'Open team panel',
-    panelLink
-  );
-
   let anySent = false;
   for (const to of recipients.keys()) {
     try {
       const result = await emailHandler.sendEmail({ to, subject, text, html });
       if (result?.success) anySent = true;
       else if (!result?.fallbackToConsole) {
-        console.error(`[Notify] Sales paid alert NOT sent (order ${orderId} → ${to}): ${result?.error || 'unknown error'}`);
+        console.error(`[Notify] ${context} NOT sent (→ ${to}): ${result?.error || 'unknown error'}`);
       }
     } catch (err) {
-      console.error(`[Notify] Sales paid alert failed (order ${orderId} → ${to}): ${err?.message || 'unknown error'}`);
+      console.error(`[Notify] ${context} failed (→ ${to}): ${err?.message || 'unknown error'}`);
     }
   }
   return { status: anySent ? 'sent' : 'skipped-disabled' };
+};
+
+const teamOrder = (orderId) => orderRepository.findById(orderId, [
+  { path: 'user', select: 'name email' },
+  { path: 'salesUser', select: 'name email role staff' },
+]);
+
+const soldBy = (order) => (order.salesUser?.name ? order.salesUser.name : 'Website');
+
+/** Rows shared by every team alert. */
+const orderRows = (order, extra = []) => {
+  const customer = orderCustomer(order);
+  const addr = order.shippingAddress || {};
+  const shipTo = [addr.city, addr.state, addr.postalCode].filter(Boolean).join(', ');
+  return [
+    ['Order', escapeHtml(orderRef(order))],
+    ['Customer', `${escapeHtml(customer.name)}${customer.email ? ` &lt;${escapeHtml(customer.email)}&gt;` : ''}`],
+    ['Phone', escapeHtml(customer.phone)],
+    ['Ship to', escapeHtml(shipTo)],
+    ['Sold by', escapeHtml(soldBy(order))],
+    ...extra,
+  ];
+};
+
+const textOf = (intro, rows, link) => [
+  intro,
+  '',
+  ...rows.filter(([, v]) => v != null && String(v).trim() !== '')
+    .map(([k, v]) => `${k}: ${stripHtml(String(v).replace(/<br>/g, ', '))}`),
+  '',
+  `Open the team panel: ${link}`,
+].join('\n');
+
+const lineName = (order, itemId) => {
+  const item = (order.items || []).find((i) => String(i._id) === String(itemId));
+  return item ? `${variantDisplayName(item.name, item.variantLabel)} × ${item.quantity || 0}` : 'An item';
+};
+
+/**
+ * A paid order has entered the team workflow (website or sales panel). Accounts,
+ * procurement and operations heads are told; the sales person too for their own.
+ * Job name kept as `send-staff-sales-paid-alert` so jobs already queued still run.
+ */
+export const emailStaffSalesPaidAlert = async (orderId) => {
+  const order = await teamOrder(orderId);
+  if (!order) return { status: 'not-found' };
+
+  const heads = (await Promise.all([
+    teamStaff('accounts', { headsOnly: true }),
+    teamStaff('procurement', { headsOnly: true }),
+    teamStaff('operations', { headsOnly: true }),
+  ])).flat();
+  const seller = order.salesUser;
+  const people = [...heads];
+  if (seller?.role === 'staff' && seller.staff?.active) people.push(seller);
+
+  const ref = orderRef(order);
+  const kind = order.salesUser ? 'sales order' : 'website order';
+  const subject = `Paid: ${kind} ${ref} — ${inr(order.totalAmount)}`;
+  const intro = order.salesUser
+    ? `The customer has paid. Created by ${seller?.name || 'the sales team'}. Procurement: please check stock.`
+    : 'A website order has been paid. Procurement: please check stock.';
+  const link = teamPanelLink('/team/orders');
+  const rows = orderRows(order, [
+    ['Paid', `<strong>${escapeHtml(inr(order.totalAmount))}</strong>`],
+    ['Items', itemLines(order).map((l) => escapeHtml(l)).join('<br>')],
+  ]);
+  return sendToStaff(people, {
+    subject, text: textOf(intro, rows, link), html: renderEmail(subject, intro, rows, 'Open team panel', link),
+  }, `Paid alert (order ${orderId})`);
+};
+
+/** Procurement uploaded the supplier's proof: the sales side and operations heads are told. */
+export const emailTeamShippedAlert = async ({ orderId, shipmentId }) => {
+  const order = await teamOrder(orderId);
+  if (!order) return { status: 'not-found' };
+  const parcel = (order.shipments || []).find((s) => String(s._id) === String(shipmentId));
+  if (!parcel) return { status: 'not-found' };
+
+  const people = [...await salesContacts(order), ...await teamStaff('operations', { headsOnly: true })];
+  const ref = orderRef(order);
+  const subject = `Shipped: ${ref}${parcel.trackingNumber ? ` — ${parcel.trackingNumber}` : ''}`;
+  const intro = 'Procurement has uploaded the supplier\'s shipping proof. Sales: send the photo and tracking to the customer.';
+  const link = teamPanelLink(order.salesUser ? '/team/sales' : '/team/orders');
+  const rows = orderRows(order, [
+    ['Courier', escapeHtml(parcel.carrier?.name || '')],
+    ['Tracking', escapeHtml(parcel.trackingNumber || '')],
+    ['In this parcel', (parcel.lines || []).map((l) => escapeHtml(lineName(order, l.itemId))).join('<br>')],
+  ]);
+  return sendToStaff(people, {
+    subject, text: textOf(intro, rows, link), html: renderEmail(subject, intro, rows, 'Open team panel', link),
+  }, `Shipped alert (order ${orderId})`);
+};
+
+/** Procurement marked an item out of stock: the sales side must ask the customer. */
+export const emailTeamOutOfStockAlert = async ({ orderId, itemId }) => {
+  const order = await teamOrder(orderId);
+  if (!order) return { status: 'not-found' };
+  const people = await salesContacts(order);
+  const ref = orderRef(order);
+  const subject = `Out of stock: ${ref} — ask the customer`;
+  const intro = 'Procurement could not get this item. Please call the customer: will they wait for stock, or do they want a refund?';
+  const link = teamPanelLink('/team/decisions');
+  const rows = orderRows(order, [['Item', escapeHtml(lineName(order, itemId))]]);
+  return sendToStaff(people, {
+    subject, text: textOf(intro, rows, link), html: renderEmail(subject, intro, rows, 'Record the decision', link),
+  }, `Out-of-stock alert (order ${orderId})`);
+};
+
+/** The customer wants their money back: accounts heads approve. */
+export const emailTeamRefundRequestedAlert = async ({ orderId, itemId }) => {
+  const order = await teamOrder(orderId);
+  if (!order) return { status: 'not-found' };
+  const people = await teamStaff('accounts', { headsOnly: true });
+  const ref = orderRef(order);
+  const subject = `Refund to approve: ${ref}`;
+  const intro = 'An item is out of stock and the customer wants a refund. Please review and approve.';
+  const link = teamPanelLink('/team/refunds');
+  const rows = orderRows(order, [['Item', escapeHtml(lineName(order, itemId))]]);
+  return sendToStaff(people, {
+    subject, text: textOf(intro, rows, link), html: renderEmail(subject, intro, rows, 'Review refund', link),
+  }, `Refund-requested alert (order ${orderId})`);
+};
+
+/** Accounts approved: the refund now waits for an admin on the Refunds page. */
+export const emailAdminTeamRefundReadyAlert = async ({ orderId, itemId }) => {
+  const order = await teamOrder(orderId);
+  if (!order) return { status: 'not-found' };
+  const ref = orderRef(order);
+  const subject = `Refund approved — ready to pay: ${ref}`;
+  const intro = 'Sales and Accounts have approved a refund for an out-of-stock item. Process it from the admin Refunds page.';
+  const rows = orderRows(order, [['Item', escapeHtml(lineName(order, itemId))]]);
+  const link = adminOrderLink(order);
+  return sendToAdmins({
+    subject,
+    text: textOf(intro, rows, link),
+    html: renderEmail(subject, intro, rows, 'Open the order', link,
+      alertBanner('REFUND APPROVED — ACTION REQUIRED', 'Pay it from Admin → Refunds.')),
+  }, `team refund ready ${orderId}`);
 };

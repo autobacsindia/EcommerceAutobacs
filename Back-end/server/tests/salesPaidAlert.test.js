@@ -1,7 +1,7 @@
 /**
- * When a sales-panel order is paid, Accounts / Procurement / the seller are alerted
+ * When an order is paid it enters the team workflow, and the teams are alerted
  * ONCE — through the real capture path (real transactions), however many times
- * Razorpay delivers the event. A website order never triggers this alert.
+ * Razorpay delivers the event. Sales-panel and website orders alike.
  */
 
 import { jest } from '@jest/globals';
@@ -88,11 +88,18 @@ describe('sales order paid alert', () => {
     expect((await Order.findById(order._id).lean()).paymentStatus).toBe('paid');
   });
 
-  it('is not sent for a website order', async () => {
+  it('is sent once for a website order too — every paid order enters the team workflow', async () => {
     const order = await seedOrder();
-    await razorpayService.handlePaymentCaptured(captured(order, `pay_${Date.now()}_w`));
-    expect(alerts()).toHaveLength(0);
+    const payload = captured(order, `pay_${Date.now()}_w`);
+    await razorpayService.handlePaymentCaptured(payload);
+    await razorpayService.handlePaymentCaptured(payload); // Razorpay retry
+
+    expect(alerts()).toEqual([{ name: 'send-staff-sales-paid-alert', data: { orderId: String(order._id) } }]);
     // The ordinary website notifications still go out.
     expect(enqueued.some((j) => j.name === 'send-order-invoice')).toBe(true);
+    // And the order is now waiting for procurement's stock check.
+    const fresh = await Order.findById(order._id).lean();
+    expect(fresh.workflow.enteredAt).toBeTruthy();
+    expect(fresh.workflow.lines.map((l) => l.stock)).toEqual(['pending']);
   });
 });

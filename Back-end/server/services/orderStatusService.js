@@ -3,6 +3,7 @@
  * Handles order status transitions with validation and tracking
  */
 
+import { initialWorkflow } from '../utils/teamWorkflow.js';
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { remainingCancellable } from '../utils/orderCancellation.js';
@@ -242,6 +243,17 @@ class OrderStatusService {
 
       // Update specific fields based on status
       switch (newStatus) {
+        case 'processing':
+          /*
+            Paid → the team workflow starts (stock check first). Set on THIS save, so
+            it commits with the status change — inside the payment transaction when
+            the webhook drives it — and never on its own. Once only: an order that
+            somehow returns to processing keeps its history.
+          */
+          if (order.paymentStatus === 'paid' && !order.workflow?.enteredAt) {
+            order.workflow = initialWorkflow(order);
+          }
+          break;
         case 'cancelled':
           order.cancelledAt = new Date();
           if (reason) {

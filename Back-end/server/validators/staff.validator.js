@@ -93,3 +93,59 @@ export const validateSalesOrder = [
   body('items.*.offerPrice').optional({ values: 'null' }).isFloat({ min: 0, max: 10000000 }).withMessage('Invalid offer price'),
   body('notes').optional().isString().isLength({ max: 1000 }),
 ];
+
+// ── Team workflow ────────────────────────────────────────────────────────────
+
+export const validateWorkQueue = [
+  query('queue').isIn(['procurement', 'decisions', 'refunds', 'deliveries']).withMessage('Unknown work list'),
+  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+];
+
+export const validateWorkOrder = [
+  param('id').custom(isObjectId).withMessage('Invalid order id'),
+];
+
+export const validateWorkLine = [
+  param('id').custom(isObjectId).withMessage('Invalid order id'),
+  param('itemId').custom(isObjectId).withMessage('Invalid item'),
+];
+
+export const validateWorkParcel = [
+  param('id').custom(isObjectId).withMessage('Invalid order id'),
+  param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
+];
+
+export const validateStockUpdate = [
+  ...validateWorkLine,
+  body('stock').isIn(['in_stock', 'ordered', 'out_of_stock']).withMessage('Unknown stock status'),
+  body('supplierName').optional({ values: 'falsy' }).isString().trim().isLength({ max: 120 })
+    .withMessage('Supplier name is too long'),
+];
+
+export const validateShipWithProof = [
+  ...validateWorkOrder,
+  // Multipart fields arrive as strings; item ids as a JSON array or comma list.
+  body('itemIds').optional({ values: 'falsy' }).customSanitizer((v) => {
+    if (Array.isArray(v)) return v;
+    try { const parsed = JSON.parse(v); return Array.isArray(parsed) ? parsed : [v]; } catch { return String(v).split(','); }
+  }).custom((v) => Array.isArray(v) && v.length <= 50 && v.every(isObjectId)).withMessage('Invalid items'),
+  body('courierName').optional({ values: 'falsy' }).isString().trim().isLength({ max: 80 }).withMessage('Courier name is too long'),
+  body('trackingNumber').optional({ values: 'falsy' }).isString().trim().isLength({ max: 80 }).withMessage('Tracking number is too long'),
+];
+
+export const validateCustomerDecision = [
+  ...validateWorkLine,
+  body('decision').isIn(['wait', 'refund']).withMessage('Choose "will wait" or "wants a refund"'),
+  body('note').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 }),
+];
+
+export const validateRefundReview = [
+  ...validateWorkLine,
+  body('approve').isBoolean().withMessage('Approve or send back').toBoolean(),
+  body('note').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 }),
+];
+
+export const validateMarkDelivered = [
+  ...validateWorkOrder,
+  body('shipmentId').optional({ values: 'falsy' }).custom(isObjectId).withMessage('Invalid parcel'),
+];
