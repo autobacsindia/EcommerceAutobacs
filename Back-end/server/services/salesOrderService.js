@@ -214,6 +214,10 @@ export async function createSalesOrder(actor, input, req) {
   auditLogger.logAction(req, 'CREATE', 'Order', order._id, {
     via: 'sales_panel', totalAmount: order.totalAmount, lines: lineItems.length,
     discounted: lineItems.some((l) => l.listPrice),
+    // Sold under half the catalogue price. Allowed — the call agreed the number
+    // and the panel already asked the seller to confirm — but it is the shape a
+    // dropped zero takes, so it must be findable without diffing every order.
+    deepDiscount: lineItems.some((l) => l.listPrice && l.price < l.listPrice * 0.5),
   });
 
   const populated = await orderRepository.findById(order._id, [

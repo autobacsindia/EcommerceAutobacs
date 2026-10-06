@@ -7,6 +7,7 @@ import { Loader2, Minus, Plus, Search, Trash2, CheckCircle2 } from 'lucide-react
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import PaymentLinkCard from './PaymentLinkCard';
+import { deepDiscountLines, deepDiscountWarning, isDeepDiscount } from './offerGuard';
 import { errorMessage, rupees, type SalesOrder, type SalesProduct } from './types';
 
 type Line = {
@@ -133,6 +134,10 @@ export default function NewSalesOrderForm() {
     setError('');
     if (lines.length === 0) { setError('Add at least one product.'); return; }
     if (hasProblem) { setError('Fix the offer prices marked in red.'); return; }
+    // Last stop before a real, payable order: a price under half the catalogue
+    // one is far more often a dropped zero than a deal (see offerGuard).
+    const suspicious = deepDiscountLines(lines.map((l) => ({ ...l, offer: lineOffer(l) })));
+    if (suspicious.length > 0 && !window.confirm(deepDiscountWarning(suspicious, rupees))) return;
     create.mutate();
   }
 
@@ -306,6 +311,7 @@ export default function NewSalesOrderForm() {
             {lines.map((l) => {
               const problem = lineProblem(l);
               const offer = lineOffer(l);
+              const deep = !problem && isDeepDiscount(l.listPrice, offer);
               return (
                 <li key={l.key} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -340,11 +346,13 @@ export default function NewSalesOrderForm() {
                           placeholder={String(l.listPrice)}
                           value={l.offer}
                           onChange={(e) => update(l.key, { offer: e.target.value.replace(/[^\d.]/g, '') })}
-                          className={`${input} pl-7 ${problem ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : ''}`}
+                          className={`${input} pl-7 ${problem ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : deep ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100' : ''}`}
                         />
                       </div>
-                      <p className={`mt-1 text-xs ${problem ? 'text-red-600' : 'text-gray-500'}`}>
-                        {problem || (offer < l.listPrice ? `Offer · saves ${rupees((l.listPrice - offer) * l.quantity)}` : 'Offer price (optional)')}
+                      <p className={`mt-1 text-xs ${problem ? 'text-red-600' : deep ? 'font-medium text-amber-700' : 'text-gray-500'}`}>
+                        {problem
+                          || (deep ? 'Less than half price — check it' : null)
+                          || (offer < l.listPrice ? `Offer · saves ${rupees((l.listPrice - offer) * l.quantity)}` : 'Offer price (optional)')}
                       </p>
                     </div>
                     <button type="button" aria-label={`Remove ${l.name}`} onClick={() => setLines(lines.filter((x) => x.key !== l.key))}
