@@ -11,8 +11,12 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { Plus, Edit, Trash2, Search, X, Package, ChevronUp, Upload } from 'lucide-react';
 import Link from 'next/link';
 import ExportProductsButton from '@/components/admin/ExportProductsButton';
+import SeoScoreBadge from '@/components/admin/SeoScoreBadge';
+import type { ScorableProduct } from '@/lib/seoScore';
 
-interface Product {
+// ScorableProduct: the admin list returns the full content fields, which is what
+// lets each row show the editor's SEO score without another request.
+interface Product extends ScorableProduct {
   _id: string;
   name: string;
   price: number;
@@ -292,6 +296,9 @@ function AdminProductsPageInner() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Stock
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Same score as the SEO panel in the product editor">
+                  SEO
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Featured
                 </th>
@@ -303,7 +310,7 @@ function AdminProductsPageInner() {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-sm text-gray-500">
+                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-500">
                     Loading...
                   </td>
                 </tr>
@@ -348,6 +355,9 @@ function AdminProductsPageInner() {
                     <div className={`text-sm ${product.stock === 'in' ? 'text-green-600' : product.stock === 'low' ? 'text-orange-600' : 'text-red-600'}`}>
                       {getStockLabel(product)}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <SeoScoreBadge product={product} href={`/admin/products/edit/${product._id}`} />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span
