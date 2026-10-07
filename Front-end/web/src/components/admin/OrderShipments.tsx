@@ -46,6 +46,8 @@ export interface Shipment {
   shippedAt?: string;
   deliveredAt?: string;
   notes?: string;
+  /** Supplier's photo from the team panel — a private, staff-only link (admins only). */
+  proofPhotoUrl?: string;
 }
 
 interface RemainingLine {
@@ -461,6 +463,24 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
                 </button>
               )}
             </div>
+
+            {shipment.proofPhotoUrl && (
+              <a
+                href={shipment.proofPhotoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-flex items-center gap-3 rounded-lg border border-gray-200 p-1.5 pr-3 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={shipment.proofPhotoUrl}
+                  alt={`Supplier photo for parcel ${shipment.sequence}`}
+                  className="h-16 w-16 rounded object-cover"
+                  loading="lazy"
+                />
+                Supplier photo — open full size
+              </a>
+            )}
 
             <ul className="mt-2 space-y-0.5 text-sm text-gray-700">
               {describe(shipment).map((line) => (

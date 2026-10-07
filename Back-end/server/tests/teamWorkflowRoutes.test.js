@@ -117,3 +117,48 @@ it('validates the queue name', async () => {
   const res = await request(app).get(`${BASE}/staff/work?queue=everything`).set(as(procurement));
   expect(res.status).toBe(400);
 });
+
+it('shows the supplier photo to admins on the admin order page — and never to the customer', async () => {
+  // The customer owns the order, so they can open their own order pages.
+  n += 1;
+  const custEmail = `cust${n}@autobacs.test`;
+  const password = 'SecurePass123!';
+  const customer = await User.create({ name: 'Ravi', email: custEmail, phone: '9876543210', passwordHash: await bcrypt.hash(password, 10), role: 'customer' });
+  const custLogin = await request(app).post(`${BASE}/auth/login`).send({ email: custEmail, password });
+  const custToken = (custLogin.headers['set-cookie'] || []).find((c) => c.startsWith('accessToken=')).split(';')[0].slice('accessToken='.length);
+
+  const o = await Order.create({
+    user: customer._id,
+    items: [{ product: new mongoose.Types.ObjectId(), name: 'Snorkel', price: 30000, quantity: 1 }],
+    shippingAddress: { fullName: 'Ravi', phone: '9876543210', addressLine1: '1 Road', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
+    subtotal: 30000, totalAmount: 30000, status: 'awaiting_payment', paymentStatus: 'pending',
+  });
+  await orderStatusService.updateOrderStatus(String(o._id), 'processing', { isAdmin: true, reason: 'payment_verified' });
+  const itemId = String(o.items[0]._id);
+  const procurement = await login('staff', { team: 'procurement' });
+  await request(app).post(`${BASE}/staff/work/orders/${o._id}/lines/${itemId}/stock`).set(as(procurement)).send({ stock: 'in_stock' }).expect(200);
+  await request(app).post(`${BASE}/staff/work/orders/${o._id}/ship`).set(as(procurement))
+    .field('trackingNumber', 'DL1').attach('photo', JPEG, { filename: 'p.jpg', contentType: 'image/jpeg' }).expect(200);
+
+  // Admin: the parcels panel gets a link, and the link serves the photo.
+  const admin = await login('admin');
+  const adminParcels = await request(app).get(`${BASE}/orders/${o._id}/shipments`).set(as(admin)).expect(200);
+  const parcel = adminParcels.body.shipments[0];
+  expect(parcel.proofPhoto).toBeUndefined();
+  expect(parcel.proofPhotoUrl).toBe(`/api/v1/staff/work/orders/${o._id}/parcels/${parcel._id}/photo`);
+  const photo = await request(app).get(parcel.proofPhotoUrl.replace('/api/v1', BASE)).set(as(admin)).expect(200);
+  expect(photo.headers['content-type']).toMatch(/image\/jpeg/);
+  const adminOrder = await request(app).get(`${BASE}/orders/${o._id}`).set(as(admin)).expect(200);
+  expect(adminOrder.body.order?.shipments?.[0]?.proofPhotoUrl || adminOrder.body.shipments?.[0]?.proofPhotoUrl).toBeTruthy();
+
+  // Customer: their own order pages carry no trace of the photo ref.
+  const custParcels = await request(app).get(`${BASE}/orders/${o._id}/shipments`).set(as(custToken)).expect(200);
+  const custOrder = await request(app).get(`${BASE}/orders/${o._id}`).set(as(custToken)).expect(200);
+  const custList = await request(app).get(`${BASE}/orders`).set(as(custToken)).expect(200);
+  for (const body of [custParcels.body, custOrder.body, custList.body]) {
+    expect(JSON.stringify(body)).not.toMatch(/proofPhoto|shipping-slips\/proof-/);
+  }
+  // …and cannot fetch the photo through the staff proxy either.
+  const blocked = await request(app).get(parcel.proofPhotoUrl.replace('/api/v1', BASE)).set(as(custToken));
+  expect(blocked.status).toBe(403);
+});
