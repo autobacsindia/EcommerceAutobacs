@@ -7,7 +7,8 @@ export type LineStage =
   | 'accounts_approval' | 'shipped' | 'delivered' | 'cancelled';
 
 export type LineAction =
-  | 'in_stock' | 'ordered' | 'out_of_stock' | 'ship' | 'wait' | 'refund' | 'approve' | 'reject';
+  | 'in_stock' | 'ordered' | 'out_of_stock' | 'ship' | 'wait' | 'refund' | 'approve' | 'reject'
+  | 'payment_initiated' | 'payment_undo';
 
 export type WorkRow = {
   id: string;
@@ -45,6 +46,8 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
   lines: (WorkRow['lines'][number] & {
     stock: 'pending' | 'in_stock' | 'ordered' | 'out_of_stock' | null;
     supplierName: string;
+    /** Procurement marked the supplier payment as started (in-stock items). Status only. */
+    paymentInitiatedAt: string | null;
     refundRequestedAt: string | null;
     accountsApprovedAt: string | null;
     unshipped: number;

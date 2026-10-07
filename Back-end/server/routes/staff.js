@@ -22,6 +22,7 @@ import {
   validateWorkOrder,
   validateWorkParcel,
   validateStockUpdate,
+  validatePaymentInitiated,
   validateShipWithProof,
   validateCustomerDecision,
   validateRefundReview,
@@ -33,6 +34,7 @@ import {
   getOrder as getWorkOrder,
   getProofPhoto,
   setStock,
+  setPaymentInitiated,
   shipWithProof,
   recordDecision,
   reviewRefund,
@@ -169,6 +171,11 @@ router.get('/work/orders/:id/parcels/:shipmentId/photo', validateWorkParcel, val
 // @route  POST /staff/work/orders/:id/lines/:itemId/stock  { stock, supplierName? } — procurement
 router.post('/work/orders/:id/lines/:itemId/stock', validateStockUpdate, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, order: await setStock(req.user, req.params.id, req.params.itemId, req.body, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/lines/:itemId/payment  { initiated: boolean } — procurement
+router.post('/work/orders/:id/lines/:itemId/payment', validatePaymentInitiated, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await setPaymentInitiated(req.user, req.params.id, req.params.itemId, req.body, req) });
 }));
 
 // @route  POST /staff/work/orders/:id/ship  multipart: photo, itemIds?, courierName?, trackingNumber? — procurement

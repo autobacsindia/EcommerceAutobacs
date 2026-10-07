@@ -143,7 +143,9 @@ function lineActions(u, order, line) {
   if (can.procurement(u)) {
     switch (line.stage) {
       case STAGE.STOCK_CHECK: out.push('in_stock', 'ordered', 'out_of_stock'); break;
-      case STAGE.TO_SHIP: out.push('ordered', 'out_of_stock', 'ship'); break;
+      case STAGE.TO_SHIP:
+        out.push('ordered', 'out_of_stock', 'ship', line.paymentInitiatedAt ? 'payment_undo' : 'payment_initiated');
+        break;
       case STAGE.WITH_SUPPLIER: out.push('in_stock', 'ordered', 'out_of_stock', 'ship'); break;
       case STAGE.CUSTOMER_DECISION: out.push('in_stock', 'ordered'); break;
       case STAGE.ACCOUNTS_APPROVAL: if (!line.accountsApprovedAt) out.push('in_stock', 'ordered'); break;
@@ -160,6 +162,8 @@ const HISTORY_LABELS = {
   stock_in_stock: 'Marked in stock',
   stock_ordered: 'Ordered from supplier',
   stock_out_of_stock: 'Marked out of stock',
+  payment_initiated: 'Supplier payment initiated',
+  payment_undone: 'Supplier payment mark removed',
   customer_waits: 'Customer will wait for stock',
   refund_requested: 'Customer wants a refund',
   refund_rejected: 'Refund sent back by accounts',
@@ -192,6 +196,7 @@ function detail(u, o) {
         ...l,
         stock: wl?.stock || null,
         supplierName: wl?.supplierName || '',
+        paymentInitiatedAt: wl?.paymentInitiatedAt || null,
         refundRequestedAt: wl?.refundRequestedAt || null,
         accountsApprovedAt: wl?.accountsApprovedAt || null,
         unshipped: unshippedQuantity(o, l.itemId),
@@ -372,6 +377,7 @@ export async function setStock(actor, orderId, itemId, { stock, supplierName } =
   }
 
   const backFromRefund = !!line.refundRequestedAt;
+  const clearsPayment = !!line.paymentInitiatedAt && stock !== STOCK.IN_STOCK;
   const updated = await orderRepository.updateWorkflowLineIf(
     orderId, itemId,
     { stock: line.stock, refundRequestedAt: line.refundRequestedAt || null, accountsApprovedAt: null },
@@ -382,11 +388,18 @@ export async function setStock(actor, orderId, itemId, { stock, supplierName } =
         stockAt: new Date(),
         ...(stock === STOCK.ORDERED && { supplierName: supplier }),
       },
-      unset: backFromRefund && stock !== STOCK.OUT_OF_STOCK ? ['refundRequestedBy', 'refundRequestedAt'] : [],
+      unset: [
+        ...(backFromRefund && stock !== STOCK.OUT_OF_STOCK ? ['refundRequestedBy', 'refundRequestedAt'] : []),
+        // "Payment initiated" belongs to an in-stock line only; leaving in stock drops it.
+        ...(clearsPayment ? ['paymentInitiatedBy', 'paymentInitiatedAt'] : []),
+      ],
     },
     event(actor, `stock_${stock}`, {
       itemId: line.itemId,
-      note: stock === STOCK.ORDERED ? `Supplier: ${supplier}` : (backFromRefund ? 'Stock found — refund request withdrawn' : ''),
+      note: [
+        stock === STOCK.ORDERED ? `Supplier: ${supplier}` : (backFromRefund ? 'Stock found — refund request withdrawn' : ''),
+        clearsPayment ? 'Supplier payment mark removed' : '',
+      ].filter(Boolean).join(' · '),
     }),
   );
   if (!updated) throw fail(RACE, 409);
@@ -394,6 +407,39 @@ export async function setStock(actor, orderId, itemId, { stock, supplierName } =
   await refreshOpen(orderId);
   if (stock === STOCK.OUT_OF_STOCK) enqueue('send-team-out-of-stock-alert', { orderId: String(orderId), itemId: String(itemId) });
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_stock', itemId: String(itemId), stock });
+  return getOrder(actor, orderId);
+}
+
+/**
+ * Procurement: mark (or unmark) that payment to the supplier has been initiated for an
+ * in-stock item. A status marker everyone viewing the order can see — no money moves,
+ * and the tracking upload does not wait for it.
+ *
+ * Compare-and-set on the line's current mark, so a double press or two people at once
+ * record it once; the loser is told to refresh.
+ */
+export async function setPaymentInitiated(actor, orderId, itemId, { initiated } = {}, req) {
+  if (!can.procurement(actor)) throw fail('Only the procurement team can update supplier payment.', 403);
+  const on = initiated === true || initiated === 'true';
+
+  const { order, line } = await loadLine(orderId, itemId);
+  if (!lineActions(actor, order, line).includes(on ? 'payment_initiated' : 'payment_undo')) {
+    throw fail(on
+      ? `Payment can only be marked on an in-stock item that has not shipped (this one is "${STAGE_LABELS[line.stage]}").`
+      : 'There is no payment mark to remove on this item.', 409);
+  }
+
+  const updated = await orderRepository.updateWorkflowLineIf(
+    orderId, itemId,
+    { stock: STOCK.IN_STOCK, paymentInitiatedAt: on ? null : line.paymentInitiatedAt },
+    on
+      ? { set: { paymentInitiatedBy: actor._id, paymentInitiatedAt: new Date() } }
+      : { unset: ['paymentInitiatedBy', 'paymentInitiatedAt'] },
+    event(actor, on ? 'payment_initiated' : 'payment_undone', { itemId: line.itemId }),
+  );
+  if (!updated) throw fail(RACE, 409);
+
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_supplier_payment', itemId: String(itemId), initiated: on });
   return getOrder(actor, orderId);
 }
 
