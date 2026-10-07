@@ -58,6 +58,11 @@ const OrderSchema = new mongoose.Schema({
         supplierName: { type: String, trim: true, maxlength: 120 },
         stockBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         stockAt: Date,
+        // In stock: procurement has started paying the supplier. A status marker only —
+        // no money moves here, and shipping is not blocked on it. Cleared (with a
+        // history entry) if the line stops being in stock.
+        paymentInitiatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        paymentInitiatedAt: Date,
         // Out of stock: the sales person asked the customer and they want their money back.
         refundRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         refundRequestedAt: Date,

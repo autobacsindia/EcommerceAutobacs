@@ -21,7 +21,7 @@ const base: WorkOrder = {
   payment: { razorpayPaymentId: 'pay_1', method: 'upi' },
   lines: [{
     itemId: 'i1', name: 'Snorkel', variantLabel: null, quantity: 1, price: 6000,
-    stage: 'stock_check', stageLabel: 'Needs stock check', stock: 'pending', supplierName: '',
+    stage: 'stock_check', stageLabel: 'Needs stock check', stock: 'pending', supplierName: '', paymentInitiatedAt: null,
     refundRequestedAt: null, accountsApprovedAt: null, unshipped: 1, actions: ['in_stock', 'ordered', 'out_of_stock'],
   }],
   parcels: [], cancellations: [], history: [], canShip: false, canContactCustomer: true,
@@ -144,5 +144,48 @@ describe('WorkOrderPanel', () => {
     renderPanel();
     fireEvent.click(await screen.findByRole('button', { name: 'In stock' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/Someone else just updated/);
+  });
+
+  describe('supplier payment initiated', () => {
+    const inStock = (over: Partial<WorkOrder['lines'][number]> = {}): WorkOrder => ({
+      ...base,
+      lines: [{ ...base.lines[0], stage: 'to_ship', stageLabel: 'In stock — to ship', stock: 'in_stock', actions: ['ordered', 'out_of_stock', 'ship', 'payment_initiated'], ...over }],
+      canShip: true,
+    });
+
+    it('procurement marks it on an in-stock item, and the mark shows', async () => {
+      get.mockResolvedValue({ success: true, order: inStock() });
+      post.mockResolvedValue({ success: true, order: inStock({ paymentInitiatedAt: '2026-10-07T06:00:00Z', actions: ['ordered', 'out_of_stock', 'ship', 'payment_undo'] }) });
+      renderPanel();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Payment initiated' }));
+      await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/lines/i1/payment', { initiated: true }));
+      expect(await screen.findByText(/Supplier payment initiated/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Undo payment' })).toBeInTheDocument();
+      // Shipping is not blocked by it.
+      expect(screen.getByRole('button', { name: /Upload proof/ })).toBeInTheDocument();
+    });
+
+    it('undo asks first, then removes the mark', async () => {
+      const marked = inStock({ paymentInitiatedAt: '2026-10-07T06:00:00Z', actions: ['ordered', 'out_of_stock', 'ship', 'payment_undo'] });
+      get.mockResolvedValue({ success: true, order: marked });
+      post.mockResolvedValue({ success: true, order: inStock() });
+      renderPanel();
+
+      (window.confirm as jest.Mock).mockReturnValueOnce(false);
+      fireEvent.click(await screen.findByRole('button', { name: 'Undo payment' }));
+      expect(post).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Undo payment' }));
+      await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/lines/i1/payment', { initiated: false }));
+      expect(await screen.findByRole('button', { name: 'Payment initiated' })).toBeInTheDocument();
+    });
+
+    it('other teams see the mark but get no button', async () => {
+      get.mockResolvedValue({ success: true, order: { ...inStock({ paymentInitiatedAt: '2026-10-07T06:00:00Z', actions: [] }), canShip: false } });
+      renderPanel();
+      expect(await screen.findByText(/Supplier payment initiated/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Payment initiated|Undo payment/ })).not.toBeInTheDocument();
+    });
   });
 });

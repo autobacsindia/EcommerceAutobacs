@@ -122,6 +122,11 @@ export const validateStockUpdate = [
     .withMessage('Supplier name is too long'),
 ];
 
+export const validatePaymentInitiated = [
+  ...validateWorkLine,
+  body('initiated').isBoolean().withMessage('initiated must be true or false').toBoolean(),
+];
+
 export const validateShipWithProof = [
   ...validateWorkOrder,
   // Multipart fields arrive as strings; item ids as a JSON array or comma list.

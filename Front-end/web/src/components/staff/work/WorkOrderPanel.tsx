@@ -115,6 +115,10 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
           onClick={() => { setSupplierFor(line.itemId); setSupplier(line.supplierName || ''); }}>Ordered from supplier</button>}
         {has('out_of_stock') && <button type="button" disabled={busy} className={danger}
           onClick={() => { if (window.confirm(`Mark "${line.name}" out of stock? The sales team will ask the customer to wait or take a refund.`)) act.mutate({ path: `${path}/stock`, body: { stock: 'out_of_stock' } }); }}>Out of stock</button>}
+        {has('payment_initiated') && <button type="button" disabled={busy} className={primary}
+          onClick={() => act.mutate({ path: `${path}/payment`, body: { initiated: true } })}>Payment initiated</button>}
+        {has('payment_undo') && <button type="button" disabled={busy} className={secondary}
+          onClick={() => { if (window.confirm(`Remove the "Payment initiated" mark from "${line.name}"?`)) act.mutate({ path: `${path}/payment`, body: { initiated: false } }); }}>Undo payment</button>}
         {has('wait') && <button type="button" disabled={busy} className={secondary}
           onClick={() => act.mutate({ path: `${path}/decision`, body: { decision: 'wait' } })}>Customer will wait</button>}
         {has('refund') && <button type="button" disabled={busy} className={danger}
@@ -170,6 +174,11 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                 <div>
                   <p className="font-medium text-gray-900">{line.name}{line.variantLabel ? ` — ${line.variantLabel}` : ''} <span className="font-normal text-gray-500">× {line.quantity}</span></p>
                   {line.supplierName && line.stage === 'with_supplier' && <p className="text-xs text-gray-500">Supplier: {line.supplierName}</p>}
+                  {line.paymentInitiatedAt && line.stage === 'to_ship' && (
+                    <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                      <CheckCircle2 className="h-3 w-3" /> Supplier payment initiated · {formatDateTimeIST(line.paymentInitiatedAt)}
+                    </p>
+                  )}
                 </div>
                 {line.stage && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STAGE_TONE[line.stage]}`}>{line.stageLabel}</span>}
               </div>

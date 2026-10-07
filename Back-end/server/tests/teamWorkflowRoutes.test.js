@@ -162,3 +162,26 @@ it('shows the supplier photo to admins on the admin order page — and never to 
   const blocked = await request(app).get(parcel.proofPhotoUrl.replace('/api/v1', BASE)).set(as(custToken));
   expect(blocked.status).toBe(403);
 });
+
+it('supplier payment: procurement marks it over HTTP; bad input and other roles are refused', async () => {
+  const order = await paidOrder();
+  const itemId = String(order.items[0]._id);
+  const procurement = await login('staff', { team: 'procurement' });
+  const operations = await login('staff', { team: 'operations' });
+  const url = `${BASE}/staff/work/orders/${order._id}/lines/${itemId}/payment`;
+
+  await request(app).post(`${BASE}/staff/work/orders/${order._id}/lines/${itemId}/stock`)
+    .set(as(procurement)).send({ stock: 'in_stock' }).expect(200);
+
+  expect((await request(app).post(url).set(as(procurement)).send({ initiated: 'maybe' })).status).toBe(400);
+  expect((await request(app).post(url).set(as(operations)).send({ initiated: true })).status).toBe(403);
+  expect([401, 403]).toContain((await request(app).post(url).send({ initiated: true })).status);
+
+  const res = await request(app).post(url).set(as(procurement)).send({ initiated: true }).expect(200);
+  const line = res.body.order.lines.find((l) => l.itemId === itemId);
+  expect(line.paymentInitiatedAt).toBeTruthy();
+
+  // Operations sees it on the same order.
+  const seen = await request(app).get(`${BASE}/staff/work/orders/${order._id}`).set(as(operations)).expect(200);
+  expect(seen.body.order.lines.find((l) => l.itemId === itemId).paymentInitiatedAt).toBeTruthy();
+});
