@@ -9,11 +9,12 @@ import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import shipmentService from '../services/shipmentService.js';
 import { remainingToShip, fulfilmentSummary } from '../utils/orderFulfilment.js';
-import cancellationService from '../services/cancellationService.js';
+import cancellationService, { needsRefundRepair } from '../services/cancellationService.js';
 import { createOfflineOrderRecord } from '../services/offlineOrderService.js';
 import offlineRefundService from '../services/offlineRefundService.js';
 import { isAlreadyRefundedAtGateway, alreadyRefundedGuidance } from '../utils/gatewayRefundErrors.js';
 import { remainingCancellable } from '../utils/orderCancellation.js';
+import { fromPaise } from '../utils/money.js';
 import AppError from '../utils/AppError.js';
 import orderTrackingService, { OTHER_CARRIER_CODE } from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
@@ -169,7 +170,18 @@ export const getRefunds = async (req, res) => {
       : null,
   });
 
-  const refunds = orders.map(order => {
+  const wants = (status) => !req.query.status || req.query.status === 'all' || req.query.status === status;
+
+  /*
+    One order can produce several rows:
+      - the order-level refund (refundDetails, or a legacy cancelled+paid order) — one row
+      - an order cancelled LINE BY LINE — one row per cancellation, each with its own
+        Process Refund (POST /orders/:id/cancellations/:cid/refund)
+      - an order the old whole-order cancel left with unrecorded lines — one "repair"
+        row, processed through POST /orders/:id/refund-all
+    Rows are filtered to the requested status here because the query matches ORDERS.
+  */
+  const orderRow = (order) => {
     // Legacy cancelled+paid orders surface here with no refundDetails subdoc — present
     // them as a pending, full refund of the order total.
     const rd = order.refundDetails || {};
@@ -200,7 +212,62 @@ export const getRefunds = async (req, res) => {
       status: rd.status || 'pending',
       requestedAt: rd.requestedAt || order.updatedAt
     };
-  });
+  };
+
+  const nameOf = (order, itemId) => {
+    const item = (order.items || []).find((i) => String(i._id) === String(itemId));
+    if (!item) return 'Item';
+    return item.variantLabel ? `${item.name} (${item.variantLabel})` : (item.name || 'Item');
+  };
+
+  const refunds = [];
+  for (const order of orders) {
+    const hasLines = (order.cancellations || []).length > 0;
+    const orderLevel = order.refundDetails?.requestedAt || !hasLines;
+    if (orderLevel) {
+      const row = orderRow(order);
+      if (wants(row.status)) refunds.push({ ...row, kind: 'order' });
+    }
+
+    for (const c of order.cancellations || []) {
+      const r = c.refund || {};
+      if (!r.status || r.status === 'not_applicable' || !wants(r.status)) continue;
+      refunds.push({
+        _id: `${order._id}-${c._id}`,
+        kind: 'cancellation',
+        cancellationId: c._id,
+        order: { _id: order._id, orderNumber: order._id },
+        user: { name: order.user ? order.user.name : 'Unknown' },
+        // What was actually sent once claimed (the headroom cap can lower it); before
+        // that, the server-priced value of the cancelled lines.
+        amount: fromPaise(r.amountPaise > 0 ? r.amountPaise : (r.productValuePaise || 0)),
+        refundType: 'cancelled_items',
+        items: (c.lines || []).map((l) => `${nameOf(order, l.itemId)} × ${l.quantity}`),
+        refundMethod: r.offlineMethod ? 'offline' : 'original_payment',
+        offlineMethod: r.offlineMethod || null,
+        offlineReference: r.offlineReference || null,
+        revertedAt: r.revertedAt || null,
+        failureReason: r.failureReason || null,
+        status: r.status,
+        requestedAt: c.cancelledAt || order.updatedAt,
+      });
+    }
+
+    if (wants('pending') && needsRefundRepair(order)) {
+      refunds.push({
+        _id: `${order._id}-repair`,
+        kind: 'repair',
+        order: { _id: order._id, orderNumber: order._id },
+        user: { name: order.user ? order.user.name : 'Unknown' },
+        amount: null, // priced by the server when Refund records the lines
+        refundType: 'cancelled_items',
+        items: remainingCancellable(order).map((l) => `${nameOf(order, l.itemId)} × ${l.quantity}`),
+        refundMethod: 'original_payment',
+        status: 'pending',
+        requestedAt: order.cancelledAt || order.updatedAt,
+      });
+    }
+  }
 
   res.json({
     success: true,
@@ -819,6 +886,29 @@ export const cancelOrder = async (req, res) => {
   });
 };
 
+// @desc    The order page's single Refund button: send everything this order still owes
+// @route   POST /orders/:id/refund-all
+// @access  Private/Admin
+//
+// Two shapes of order, two existing paths — this only picks between them:
+//   no per-line cancellations → processRefund (whole-order refund), byte-for-byte
+//   per-line cancellations    → cancellationService.refundAllDue, which sends each due
+//                               line refund through the idempotent per-line path
+// Never sends money itself, so it adds no new way to pay twice.
+export const refundAll = async (req, res) => {
+  const order = await orderRepository.findById(req.params.id);
+  if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+  if (!(order.cancellations || []).length) {
+    req.body = {}; // gateway refund only — offline records go through their own button
+    return processRefund(req, res);
+  }
+
+  const result = await cancellationService.refundAllDue(req.params.id, { userId: req.user.id });
+  const { statusCode, ...body } = result;
+  return res.status(result.success ? 200 : (statusCode || 400)).json(body);
+};
+
 // @desc    Refund a cancelled, paid order — through Razorpay, or record one already
 //          settled outside it (admin-triggered)
 // @route   POST /orders/:id/refund
@@ -1159,6 +1249,29 @@ export const deleteOrder = async (req, res) => {
   res.json({ success: true, message: 'Order deleted successfully', id: req.params.id });
 };
 
+/**
+ * Admin cancel of an order that ALREADY has per-line cancellations.
+ *
+ * Such an order tracks its money per line. The plain status transition would move it to
+ * `cancelled` while recording no refund for the lines still live (orderStatusService
+ * skips its order-level refund flag once cancellations exist), so that money silently
+ * never went back. Same routing cancelOrder does for the customer path.
+ *
+ * @returns {Promise<object|null>} cancelLines' result, or null when the plain
+ *   transition should run (no earlier cancellations, or nothing left live).
+ */
+async function cancelRemainderPerLine(orderId, { reason, notes, userId }) {
+  const order = await orderRepository.findById(orderId);
+  if (!order || !(order.cancellations || []).length) return null;
+  const live = remainingCancellable(order);
+  if (!live.length) return null;
+  return cancellationService.cancelLines(
+    String(orderId),
+    { lines: live.map((l) => ({ itemId: l.itemId, quantity: l.quantity })), reason, notes },
+    { userId },
+  );
+}
+
 // @desc    Update order status with validation (Admin only)
 // @route   PUT /orders/:id/status
 // @access  Private/Admin
@@ -1330,7 +1443,13 @@ export const updateOrderStatus = async (req, res) => {
         await shipmentService.deliverAllOutstanding(req.params.id));
     }
 
-    result = await orderStatusService.updateOrderStatus(req.params.id, status, {
+    // An order with earlier per-line cancellations must cancel its remainder per line
+    // too, or the remaining lines get no refund record. See cancelRemainderPerLine.
+    const routed = status === 'cancelled'
+      ? await cancelRemainderPerLine(req.params.id, { reason, notes, userId: req.user.id })
+      : null;
+
+    result = routed || await orderStatusService.updateOrderStatus(req.params.id, status, {
       userId: req.user.id,
       isAdmin: true,
       cancelledBy: 'admin', // only consumed when status === 'cancelled'
@@ -1412,6 +1531,9 @@ export const getCancellations = async (req, res) => {
     // would imply a control they do not have.
     remaining: req.user.role === 'admin' ? view.remaining : [],
     summary: view.summary,
+    // Admin-only: the order was cancelled whole after per-line cancellations, and its
+    // remaining lines have no refund record yet. The Refund button records and sends them.
+    refundRepairNeeded: req.user.role === 'admin' && needsRefundRepair(order),
   });
 };
 
@@ -1760,7 +1882,12 @@ export const bulkUpdateStatus = async (req, res) => {
         }
       }
 
-      const result = await orderStatusService.updateOrderStatus(orderId, status, {
+      // Same per-line routing as the single-order dropdown — see cancelRemainderPerLine.
+      const routed = status === 'cancelled'
+        ? await cancelRemainderPerLine(orderId, { reason, notes, userId: req.user.id })
+        : null;
+
+      const result = routed || await orderStatusService.updateOrderStatus(orderId, status, {
         userId: req.user.id,
         isAdmin: true,
         cancelledBy: 'admin', // only consumed when status === 'cancelled'

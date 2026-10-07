@@ -130,4 +130,42 @@ describe('ClientPage', () => {
       );
     });
   });
+
+  // ── A failed refresh must never pass for "this product does not exist" ──
+  it('keeps the product on screen when a background refresh fails (dropped connection)', async () => {
+    // Server already rendered the product; its client refresh hits a network error.
+    (apiClient.get as jest.Mock).mockRejectedValue(Object.assign(new Error('Failed to fetch'), { status: 0 }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ClientPage slug="p1" initialProduct={mockProduct as never} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('heading', { name: 'Test Product' })).toBeInTheDocument();
+    // Force the background refresh (in the browser: staleness, focus, reconnect…).
+    await client.refetchQueries();
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith('/products/slug/p1'));
+    expect(screen.getByRole('heading', { name: 'Test Product' })).toBeInTheDocument();
+    expect(screen.queryByText('Product not found')).not.toBeInTheDocument();
+  });
+
+  it('says "not found" only when the API really answers 404', async () => {
+    (apiClient.get as jest.Mock).mockRejectedValue(Object.assign(new Error('Not found'), { status: 404 }));
+    renderPDP(<ClientPage slug="gone" />);
+    expect(await screen.findByText('Product not found')).toBeInTheDocument();
+  });
+
+  it('offers a retry instead of "not found" when nothing could be loaded', async () => {
+    (apiClient.get as jest.Mock)
+      .mockRejectedValueOnce(Object.assign(new Error('Failed to fetch'), { status: 0 }))
+      .mockResolvedValue({ product: mockProduct });
+    renderPDP(<ClientPage slug="p1" />);
+
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    expect(screen.getByText(/couldn.t load this product/i)).toBeInTheDocument();
+    expect(screen.queryByText('Product not found')).not.toBeInTheDocument();
+
+    fireEvent.click(retry);
+    expect(await screen.findByRole('heading', { name: 'Test Product' })).toBeInTheDocument();
+  });
 });

@@ -618,7 +618,28 @@ class OrderRepository extends BaseRepository {
     const legacyDue = {
       status: 'cancelled',
       paymentStatus: 'paid',
-      'refundDetails.status': { $exists: false }
+      'refundDetails.status': { $exists: false },
+      /*
+        NOT an order cancelled line by line. Its money lives in `cancellations[].refund`
+        (the lane below, one row per cancellation); listing it here offered a whole-order
+        "Process Refund" for the full total that processRefund refuses with a 409.
+      */
+      'cancellations.0': { $exists: false }
+    };
+
+    /*
+      Per-line cancellation refunds. `not_applicable` (unpaid order, ₹0 line) is never
+      listed — nothing is owed. `repairDue` catches an order the old whole-order admin
+      cancel left with live lines and no refund record (cancellationService.
+      needsRefundRepair); the query cannot see "live lines", so it over-matches and
+      getRefunds emits a row only when the repair is really needed.
+    */
+    const LISTED_CX = ['pending', 'processing', 'completed', 'failed'];
+    const repairDue = {
+      status: 'cancelled',
+      paymentStatus: 'paid',
+      'cancellations.0': { $exists: true },
+      'refundDetails.requestedAt': { $exists: false }
     };
 
     // A *real* refund is always stamped with `refundDetails.requestedAt` at write
@@ -629,11 +650,12 @@ class OrderRepository extends BaseRepository {
 
     let base;
     if (statusFilter && statusFilter !== 'all') {
+      const cxLane = { 'cancellations.refund.status': statusFilter };
       base = statusFilter === 'pending'
-        ? { $or: [{ ...realRefund, 'refundDetails.status': 'pending' }, legacyDue] }
-        : { ...realRefund, 'refundDetails.status': statusFilter };
+        ? { $or: [{ ...realRefund, 'refundDetails.status': 'pending' }, legacyDue, cxLane, repairDue] }
+        : { $or: [{ ...realRefund, 'refundDetails.status': statusFilter }, cxLane] };
     } else {
-      base = { $or: [realRefund, legacyDue] };
+      base = { $or: [realRefund, legacyDue, { 'cancellations.refund.status': { $in: LISTED_CX } }, repairDue] };
     }
 
     // Every additional predicate is $and-ed on, never merged into `base` — the status
@@ -670,7 +692,10 @@ class OrderRepository extends BaseRepository {
         because a mocked repository returns whatever the test hands it and would never
         notice a field going missing.
       */
-      .select('totalAmount createdAt updatedAt refundDetails user')
+      // status/paymentStatus/items/cancellations/shipments: the per-line rows, and the
+      // live-lines check behind the repair row (remainingCancellable reads all three).
+      .select('totalAmount createdAt updatedAt refundDetails user status paymentStatus '
+        + 'items._id items.name items.variantLabel items.quantity cancellations shipments.status shipments.lines')
       .populate('user', 'name email')
       .sort({ createdAt: -1, _id: -1 })
       // One extra row is the "is there another page?" probe — cheaper and race-free

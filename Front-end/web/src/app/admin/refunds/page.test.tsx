@@ -256,3 +256,73 @@ describe('AdminRefundsPage — review regressions', () => {
     await waitFor(() => expect(screen.getByText('#ORD-001')).toBeInTheDocument());
   });
 });
+
+describe('AdminRefundsPage — one row per cancelled item group', () => {
+  const base = { user: { name: 'Asha' }, refundType: 'cancelled_items', refundMethod: 'original_payment', requestedAt: '2026-10-07T00:00:00Z' };
+  const rows = [
+    { ...base, _id: 'o9-c1', kind: 'cancellation', cancellationId: 'c1', order: { _id: 'o9', orderNumber: 'o9' }, amount: 10, items: ['Test item × 1'], status: 'pending' },
+    { ...base, _id: 'o9-c2', kind: 'cancellation', cancellationId: 'c2', order: { _id: 'o9', orderNumber: 'o9' }, amount: 5, items: ['Wax × 1'], status: 'failed', failureReason: 'timeout' },
+    { ...base, _id: 'o8-repair', kind: 'repair', order: { _id: 'o8', orderNumber: 'o8' }, amount: null, items: ['Polish × 1'], status: 'pending' },
+    { ...base, _id: 'o7', kind: 'order', order: { _id: 'o7', orderNumber: 'o7' }, amount: 99, refundType: 'full', status: 'pending' },
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    (apiClient.get as jest.Mock).mockResolvedValue({ refunds: rows });
+    (apiClient.post as jest.Mock).mockResolvedValue({ message: 'ok' });
+  });
+
+  const processButtons = async () => {
+    await screen.findByText('Test item × 1');
+    return screen.getAllByRole('button', { name: /Process Refund|Retry/ });
+  };
+
+  it('shows what each row covers, and the failure reason', async () => {
+    render(<AdminRefundsPage />);
+    expect(await screen.findByText('Test item × 1')).toBeInTheDocument();
+    expect(screen.getByText('Wax × 1')).toBeInTheDocument();
+    expect(screen.getByText(/last attempt: timeout/)).toBeInTheDocument();
+    expect(screen.getByText('Priced on refund')).toBeInTheDocument();
+    expect(screen.getByText(/no refund record yet/)).toBeInTheDocument();
+  });
+
+  it('sends each kind of row to its own endpoint', async () => {
+    render(<AdminRefundsPage />);
+    const [cx, retry, repair, whole] = await processButtons();
+
+    fireEvent.click(cx);
+    await waitFor(() => expect(apiClient.post).toHaveBeenLastCalledWith('/orders/o9/cancellations/c1/refund', {}));
+    fireEvent.click(retry);
+    await waitFor(() => expect(apiClient.post).toHaveBeenLastCalledWith('/orders/o9/cancellations/c2/refund', {}));
+    fireEvent.click(repair);
+    await waitFor(() => expect(apiClient.post).toHaveBeenLastCalledWith('/orders/o8/refund-all', {}));
+    fireEvent.click(whole);
+    await waitFor(() => expect(apiClient.post).toHaveBeenLastCalledWith(API_ENDPOINTS.REFUND_PROCESS('o7'), {}));
+  });
+
+  it('sends nothing when the admin cancels the confirm', async () => {
+    (window.confirm as jest.Mock).mockReturnValue(false);
+    render(<AdminRefundsPage />);
+    const [cx] = await processButtons();
+    fireEvent.click(cx);
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it('offers Mark offline on item rows but not on a repair row (nothing recorded yet)', async () => {
+    render(<AdminRefundsPage />);
+    await screen.findByText('Test item × 1');
+    // cancellation ×2 + whole-order — the repair row has none.
+    expect(screen.getAllByRole('button', { name: 'Mark offline' })).toHaveLength(3);
+  });
+
+  it('records an offline payout against THAT item, not the whole order', async () => {
+    render(<AdminRefundsPage />);
+    await screen.findByText('Test item × 1');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Mark offline' })[0]);
+    fireEvent.change(screen.getByLabelText(/reference/i), { target: { value: 'UTR123' } });
+    fireEvent.click(screen.getByRole('button', { name: /Record refund/ }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith(
+      '/orders/o9/cancellations/c1/refund', expect.objectContaining({ method: 'offline', reference: 'UTR123' })));
+  });
+});

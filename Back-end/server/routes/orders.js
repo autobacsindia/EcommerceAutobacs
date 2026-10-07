@@ -37,6 +37,7 @@ import {
   createOfflineOrder,
   cancelOrder,
   processRefund,
+  refundAll,
   revertOfflineRefund,
   revertCancellationOfflineRefund,
   cancelPayment,
@@ -121,6 +122,12 @@ router.put("/:id/cancel", protect, validateOrderCancellation, validateCancellati
 //          a payout already settled outside Razorpay instead of calling the gateway.
 // @access  Private/Admin
 router.post("/:id/refund", protect, admin, validateOrderRefundBody, asyncHandler(processRefund));
+
+// @route   POST /orders/:id/refund-all
+// @desc    Refund everything still owed on the order — whole-order or per cancelled
+//          line — through the existing idempotent refund paths (Admin only)
+// @access  Private/Admin
+router.post("/:id/refund-all", protect, admin, validateIdParam, asyncHandler(refundAll));
 
 // @route   POST /orders/:id/refund/revert
 // @desc    Withdraw an OFFLINE refund record that was a mistake, putting the order back

@@ -26,7 +26,9 @@ beforeAll(async () => { await db.connect(); });
 afterAll(async () => { await db.closeDatabase(); });
 
 // Every field controllers/orderController.js getRefunds reads off a row.
-const MAPPER_FIELDS = ['_id', 'totalAmount', 'updatedAt', 'refundDetails', 'user'];
+const MAPPER_FIELDS = ['_id', 'totalAmount', 'updatedAt', 'refundDetails', 'user',
+  // the per-cancellation rows and the repair check (needsRefundRepair)
+  'status', 'paymentStatus', 'items', 'cancellations'];
 
 let userId;
 
@@ -72,6 +74,26 @@ describe('findWithRefunds — projection contract', () => {
     // The populated buyer, projected to what the row shows.
     expect(orders[0].user.name).toBe('Priya Menon');
     expect(orders[0].refundDetails.amount).toBe(1500);
+  });
+
+  it('carries the line and cancellation fields the per-item rows read', async () => {
+    const itemId = new mongoose.Types.ObjectId();
+    await makeOrder({
+      refundDetails: undefined,
+      items: [{ _id: itemId, product: new mongoose.Types.ObjectId(), name: 'Wax', variantLabel: 'Red', price: 10, quantity: 2 }],
+      cancellations: [{ sequence: 1, lines: [{ itemId, quantity: 1 }], cancelledAt: new Date(),
+        refund: { productValuePaise: 1000, status: 'pending' } }],
+      shipments: [{ sequence: 1, status: 'packed', lines: [{ itemId, quantity: 1 }] }],
+    });
+    const { orders } = await orderRepository.findWithRefunds('pending');
+    expect(orders).toHaveLength(1);
+    const [o] = orders;
+    expect(o.items[0]).toMatchObject({ name: 'Wax', variantLabel: 'Red', quantity: 2 });
+    expect(String(o.items[0]._id)).toBe(String(itemId));
+    expect(o.cancellations[0].refund).toMatchObject({ productValuePaise: 1000, status: 'pending' });
+    expect(o.cancellations[0].lines[0].quantity).toBe(1);
+    expect(o.shipments[0]).toMatchObject({ status: 'packed' });
+    expect(o.shipments[0].lines[0].quantity).toBe(1);
   });
 
   it('carries the offline fields the queue now displays', async () => {

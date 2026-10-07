@@ -122,6 +122,8 @@ export const API_ENDPOINTS = {
   // Refunds
   REFUNDS_LIST: '/orders/refunds',
   REFUND_PROCESS: (orderId: string) => `/orders/${orderId}/refund`,
+  // The order page's single Refund button: everything still owed, whole-order or per line.
+  REFUND_ALL: (orderId: string) => `/orders/${orderId}/refund-all`,
   // Withdraw an OFFLINE refund record that was a mistake. Refuses for a refund that
   // actually went through Razorpay — that money cannot be un-refunded by a field write.
   REFUND_REVERT: (orderId: string) => `/orders/${orderId}/refund/revert`,

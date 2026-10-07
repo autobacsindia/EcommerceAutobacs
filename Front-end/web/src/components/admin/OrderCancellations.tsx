@@ -85,6 +85,8 @@ interface Props {
   itemNames: Record<string, string>;
   /** Called after any change, so the parent can refetch the order's derived status. */
   onChanged?: () => void;
+  /** Bumped by the parent when a refund was sent elsewhere on the page, to re-read. */
+  refreshKey?: number;
 }
 
 const REFUND_STYLE: Record<string, string> = {
@@ -106,7 +108,7 @@ const REFUND_LABEL: Record<string, string> = {
 const rupees = (paise: number) =>
   `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export default function OrderCancellations({ orderId, itemNames, onChanged }: Props) {
+export default function OrderCancellations({ orderId, itemNames, onChanged, refreshKey = 0 }: Props) {
   const [cancellations, setCancellations] = useState<Cancellation[]>([]);
   const [remaining, setRemaining] = useState<RemainingLine[]>([]);
   const [summary, setSummary] = useState<CancellationSummary | null>(null);
@@ -143,7 +145,7 @@ export default function OrderCancellations({ orderId, itemNames, onChanged }: Pr
     }
   }, [orderId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
   const chosenLines = remaining
     .map((l) => ({ itemId: l.itemId, quantity: Number(qty[l.itemId] || 0) }))

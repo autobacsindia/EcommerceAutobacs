@@ -16,6 +16,7 @@ import EmiPaymentNotice from '@/components/orders/EmiPaymentNotice';
 import { buildOrderLines, variantDisplayName } from '@/lib/orderLines';
 import OrderShipments from '@/components/admin/OrderShipments';
 import OrderCancellations from '@/components/admin/OrderCancellations';
+import RefundAllPanel from '@/components/admin/RefundAllPanel';
 import { cancelledQuantityForItem } from '@/lib/orderFulfilment';
 import { outstandingParcels } from '@/lib/orderFulfilment';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
@@ -188,6 +189,9 @@ function AdminOrderDetailPageInner() {
   const [updating, setUpdating] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [refunding, setRefunding] = useState(false);
+  // Bumped after any cancellation/refund change so both money panels re-read together.
+  const [refundsVersion, setRefundsVersion] = useState(0);
+  const refreshRefunds = () => { setRefundsVersion((v) => v + 1); fetchOrder(); };
   const [offlineDialogOpen, setOfflineDialogOpen] = useState(false);
   // Prefilled from a failed gateway attempt when the error carried a Razorpay refund id,
   // so reconciling a dashboard refund does not mean copying the id across by hand.
@@ -667,7 +671,8 @@ function AdminOrderDetailPageInner() {
                   variantDisplayName(item.name ?? item.product?.name, item.variantLabel),
                 ]),
             )}
-            onChanged={fetchOrder}
+            refreshKey={refundsVersion}
+            onChanged={refreshRefunds}
           />
 
           {/* Buyer & legal acceptance — enterprise orders only.
@@ -933,8 +938,24 @@ function AdminOrderDetailPageInner() {
                 </div>
               )}
 
+              {/*
+                An order cancelled LINE BY LINE keeps its money per line, so it gets the
+                single Refund button that sends every line refund still owed. The whole-
+                order block below would offer a "full refund" the server refuses (409).
+              */}
+              {(order.cancellations?.length ?? 0) > 0 && (
+                <RefundAllPanel
+                  orderId={orderId}
+                  paymentStatus={order.paymentStatus}
+                  customerName={order.user?.name}
+                  refreshKey={refundsVersion}
+                  onChanged={refreshRefunds}
+                />
+              )}
+
               {/* Refund control — only for cancelled orders where money was captured. */}
-              {order.status === 'cancelled' && ['paid', 'refunded'].includes(order.paymentStatus || '') && (
+              {order.status === 'cancelled' && ['paid', 'refunded'].includes(order.paymentStatus || '')
+                && !(order.cancellations?.length) && (
                 <div className="mt-4 p-4 border border-gray-200 rounded-md">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-semibold text-gray-900">Refund</h3>
