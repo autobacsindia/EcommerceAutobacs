@@ -19,8 +19,21 @@ interface Refund {
   user: {
     name: string;
   };
-  amount: number;
+  /** null only on a `repair` row — the server prices those lines when it records them. */
+  amount: number | null;
   refundType: string;
+  /**
+   * Which refund this row is (absent on an older server = 'order'):
+   *   order        — the whole-order refund (POST /orders/:id/refund)
+   *   cancellation — ONE cancelled item group (POST /orders/:id/cancellations/:cid/refund)
+   *   repair       — items cancelled with the order but never given a refund record;
+   *                  Refund records and sends them (POST /orders/:id/refund-all)
+   */
+  kind?: 'order' | 'cancellation' | 'repair';
+  cancellationId?: string;
+  /** "Wax × 2" — what the cancellation covers. */
+  items?: string[];
+  failureReason?: string | null;
   refundMethod: string;
   /** Present when the payout was settled outside Razorpay — see src/lib/offlineRefund.ts. */
   offlineMethod?: string | null;
@@ -65,14 +78,30 @@ export default function AdminRefundsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, searchTerm]);
 
-  // Admin-triggered Razorpay refund for a cancelled, paid order.
+  // Each row kind has its own server endpoint — see `Refund.kind`. Every one of them
+  // claims atomically on the server, so a double-click cannot pay twice.
+  const processEndpoint = (refund: Refund) => {
+    if (refund.kind === 'cancellation' && refund.cancellationId) {
+      return API_ENDPOINTS.ORDER_CANCELLATION_REFUND(refund.order._id, refund.cancellationId);
+    }
+    if (refund.kind === 'repair') return API_ENDPOINTS.REFUND_ALL(refund.order._id);
+    return API_ENDPOINTS.REFUND_PROCESS(refund.order._id);
+  };
+
+  const describeRefund = (refund: Refund) =>
+    refund.items?.length ? `${refund.items.join(', ')} on order #${refund.order.orderNumber}` : `order #${refund.order.orderNumber}`;
+
+  // Admin-triggered Razorpay refund.
   const handleProcess = async (refund: Refund) => {
-    if (!window.confirm(`Refund ₹${(refund.amount || 0).toLocaleString()} for order #${refund.order.orderNumber} via Razorpay? This cannot be undone.`)) {
+    const what = refund.amount == null
+      ? `the items cancelled without a refund record (${describeRefund(refund)}) — the server prices them first`
+      : `₹${refund.amount.toLocaleString()} for ${describeRefund(refund)}`;
+    if (!window.confirm(`Refund ${what} via Razorpay? This cannot be undone.`)) {
       return;
     }
     setProcessingId(refund._id);
     try {
-      const res = await apiClient.post<{ message?: string }>(API_ENDPOINTS.REFUND_PROCESS(refund.order._id), {});
+      const res = await apiClient.post<{ message?: string }>(processEndpoint(refund), {});
       toast.success(res.message || 'Refund initiated.');
       await fetchRefunds();
     } catch (err: any) {
@@ -97,7 +126,9 @@ export default function AdminRefundsPage() {
   /** Record a payout settled outside Razorpay. Errors rethrow so the dialog keeps the form. */
   const handleMarkOffline = async (refund: Refund, values: OfflineRefundSubmission) => {
     const res = await apiClient.post<{ message?: string; warnings?: string[] }>(
-      API_ENDPOINTS.REFUND_PROCESS(refund.order._id),
+      refund.kind === 'cancellation' && refund.cancellationId
+        ? API_ENDPOINTS.ORDER_CANCELLATION_REFUND(refund.order._id, refund.cancellationId)
+        : API_ENDPOINTS.REFUND_PROCESS(refund.order._id),
       { method: 'offline', ...values },
     );
     toast.success(res.message || 'Refund recorded.', { duration: res.warnings?.length ? 10000 : 4000 });
@@ -106,13 +137,16 @@ export default function AdminRefundsPage() {
 
   /** Withdraw an offline record that was a mistake, putting the order back to "refund due". */
   const handleRevert = async (refund: Refund) => {
-    const reason = promptRevertReason(`order #${refund.order.orderNumber}`);
+    const reason = promptRevertReason(describeRefund(refund));
     if (!reason) return;
 
     setProcessingId(refund._id);
     try {
       const res = await apiClient.post<{ message?: string }>(
-        API_ENDPOINTS.REFUND_REVERT(refund.order._id), { reason });
+        refund.kind === 'cancellation' && refund.cancellationId
+          ? API_ENDPOINTS.ORDER_CANCELLATION_REFUND_REVERT(refund.order._id, refund.cancellationId)
+          : API_ENDPOINTS.REFUND_REVERT(refund.order._id),
+        { reason });
       toast.success(res.message || 'Refund record withdrawn.');
       await fetchRefunds();
     } catch (err: any) {
@@ -255,6 +289,15 @@ export default function AdminRefundsPage() {
                   >
                     #{refund.order.orderNumber}
                   </Link>
+                  {refund.items?.length ? (
+                    <div className="text-xs text-gray-600 mt-0.5">{refund.items.join(', ')}</div>
+                  ) : null}
+                  {refund.kind === 'repair' && (
+                    <div className="text-xs text-amber-700 mt-0.5">cancelled with the order — no refund record yet</div>
+                  )}
+                  {refund.status === 'failed' && refund.failureReason && (
+                    <div className="text-xs text-red-600 mt-0.5">last attempt: {refund.failureReason}</div>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900">{refund.user.name}</div>
@@ -267,7 +310,7 @@ export default function AdminRefundsPage() {
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center text-sm font-medium text-gray-900">
                     <DollarSign className="h-4 w-4 mr-1" />
-                    ₹{(refund.amount || 0).toLocaleString()}
+                    {refund.amount == null ? 'Priced on refund' : `₹${refund.amount.toLocaleString()}`}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -305,13 +348,16 @@ export default function AdminRefundsPage() {
                         >
                           {processingId === refund._id ? 'Processing…' : refund.status === 'failed' ? 'Retry' : 'Process Refund'}
                         </button>
-                        <button
-                          onClick={() => setOfflineFor(refund)}
-                          disabled={processingId === refund._id}
-                          className="px-3 py-1 border border-gray-300 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-50 disabled:opacity-60"
-                        >
-                          Mark offline
-                        </button>
+                        {/* A repair row has no record to mark yet — Process Refund creates it. */}
+                        {refund.kind !== 'repair' && (
+                          <button
+                            onClick={() => setOfflineFor(refund)}
+                            disabled={processingId === refund._id}
+                            className="px-3 py-1 border border-gray-300 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-50 disabled:opacity-60"
+                          >
+                            Mark offline
+                          </button>
+                        )}
                       </>
                     )}
                     {/*
@@ -376,7 +422,7 @@ export default function AdminRefundsPage() {
           onClose={() => setOfflineFor(null)}
           onSubmit={(values) => handleMarkOffline(offlineFor, values)}
           maxAmount={offlineFor.amount || 0}
-          subject={`order #${offlineFor.order.orderNumber}`}
+          subject={describeRefund(offlineFor)}
         />
       )}
     </div>

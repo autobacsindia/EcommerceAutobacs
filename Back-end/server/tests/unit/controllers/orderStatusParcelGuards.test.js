@@ -51,7 +51,10 @@ jest.unstable_mockModule('../../../services/orderTrackingService.js', () => ({
   default: mockTracking,
   OTHER_CARRIER_CODE: 'OTHER',
 }));
-jest.unstable_mockModule('../../../services/cancellationService.js', () => ({ default: mockCancellationService }));
+jest.unstable_mockModule('../../../services/cancellationService.js', () => ({
+  default: mockCancellationService,
+  needsRefundRepair: () => false,
+}));
 
 const { updateOrderStatus, bulkUpdateStatus, cancelOrder } =
   await import('../../../controllers/orderController.js');
@@ -357,7 +360,9 @@ describe('POST /orders/bulk/status → other statuses', () => {
       body: { orderIds: ['order-1'], status: 'cancelled' }, user: ADMIN,
     });
 
-    expect(mockOrderRepo.findById).not.toHaveBeenCalled();
+    // The order IS read now — only to see whether it has earlier per-line
+    // cancellations (tests/adminCancelRemainderRefund.test.js). With none, it takes
+    // the plain whole-order transition below, untouched by the parcel logic.
     expect(mockShipmentService.deliverAllOutstanding).not.toHaveBeenCalled();
     expect(body.results.successful).toHaveLength(1);
     expect(mockOrderStatusService.updateOrderStatus).toHaveBeenCalledWith(

@@ -64,6 +64,25 @@ const MAX_PUSH_ATTEMPTS = 4;
  */
 const CANCELLABLE_ORDER_STATUSES = new Set(['awaiting_payment', 'processing', 'shipped']);
 
+/** Cancellation refund states that still owe the customer money and may be sent. */
+const REFUND_DUE = new Set(['pending', 'failed']);
+
+/**
+ * An order that a whole-order admin cancel moved to `cancelled` AFTER some lines were
+ * cancelled individually — before that path learned to route the remainder per line.
+ * Its still-live lines carry no refund record anywhere: orderStatusService skipped the
+ * order-level flag (cancellations exist) and no cancellation covers them.
+ *
+ * Deliberately narrow. A real order-level refund record (`requestedAt`) or a payment
+ * no longer `paid` means the money is accounted for some other way — never repaired.
+ */
+export const needsRefundRepair = (order) =>
+  order?.status === 'cancelled'
+  && order.paymentStatus === 'paid'
+  && (order.cancellations || []).length > 0
+  && !order.refundDetails?.requestedAt
+  && remainingCancellable(order).length > 0;
+
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 
 class CancellationService {
@@ -77,16 +96,20 @@ class CancellationService {
    * @param {string} [payload.notes]
    * @param {object} [opts]
    * @param {string} [opts.userId] - the admin doing it
+   * @param {boolean} [opts.repairCancelledOrder] - record lines on an order ALREADY at
+   *   `cancelled` whose live lines never got a refund record. Only refundAllDue passes
+   *   this, after checking the order is in exactly that broken shape.
    * @returns {Promise<{success: boolean, message: string, order?, cancellation?, refund?}>}
    */
   async cancelLines(orderId, payload = {}, opts = {}) {
-    const { userId } = opts;
+    const { userId, repairCancelledOrder = false } = opts;
 
     for (let attempt = 0; attempt < MAX_PUSH_ATTEMPTS; attempt += 1) {
       const order = await orderRepository.findById(orderId);
       if (!order) return { success: false, message: 'Order not found' };
 
-      if (!CANCELLABLE_ORDER_STATUSES.has(order.status)) {
+      const repairing = repairCancelledOrder && needsRefundRepair(order);
+      if (!CANCELLABLE_ORDER_STATUSES.has(order.status) && !repairing) {
         return {
           success: false,
           message: `Cannot cancel lines on an order in '${order.status}'.`,
@@ -323,6 +346,108 @@ class CancellationService {
 
       return { success: false, message: `Refund failed: ${err.message}`, statusCode: 502 };
     }
+  }
+
+  /**
+   * Refund everything this order still owes for its cancelled lines — the order page's
+   * single "Refund" button.
+   *
+   * An orchestrator only: every send goes through `refundCancellation`, whose atomic
+   * claim is what makes a double-click or two admins at once pay ONCE. Sequential on
+   * purpose, so each send's headroom check sees the previous one's claim.
+   *
+   *   - completed / processing / not_applicable records are skipped
+   *   - a failure leaves its record `failed`; pressing again retries only that one
+   *   - an order the old whole-order cancel left without records is repaired first
+   *
+   * @returns {Promise<{success: boolean, message: string, statusCode?: number,
+   *   repaired: boolean, results: Array, refundedRupees: number}>}
+   */
+  async refundAllDue(orderId, opts = {}) {
+    let order = await orderRepository.findById(orderId);
+    if (!order) return { success: false, message: 'Order not found', statusCode: 404 };
+
+    if (order.paymentStatus !== 'paid') {
+      return {
+        success: false,
+        message: 'No captured payment to refund on this order.',
+        statusCode: 400,
+      };
+    }
+
+    let repaired = false;
+    if (needsRefundRepair(order)) {
+      const live = remainingCancellable(order);
+      const res = await this.cancelLines(
+        String(orderId),
+        {
+          lines: live.map((l) => ({ itemId: l.itemId, quantity: l.quantity })),
+          reason: 'refund_repair',
+          notes: 'Recorded by Refund: these lines were cancelled with the order but had no refund record',
+        },
+        { userId: opts.userId, repairCancelledOrder: true },
+      );
+      if (!res.success) return { success: false, message: res.message, statusCode: 400 };
+      repaired = true;
+      order = res.order;
+    }
+
+    const due = (order.cancellations || []).filter((c) => REFUND_DUE.has(c.refund?.status));
+    if (!due.length) {
+      const inFlight = (order.cancellations || []).some((c) => c.refund?.status === 'processing');
+      return {
+        success: true,
+        message: inFlight
+          ? 'Nothing new to refund — a refund is already on its way and will settle automatically.'
+          : 'Nothing left to refund on this order.',
+        repaired,
+        results: [],
+        refundedRupees: 0,
+      };
+    }
+
+    const results = [];
+    for (const record of due) {
+      const res = await this.refundCancellation(String(orderId), String(record._id));
+      results.push({
+        cancellationId: String(record._id),
+        sequence: record.sequence,
+        success: res.success,
+        // 409 = another click already claimed it: in progress, not a failure.
+        inProgress: !res.success && res.statusCode === 409,
+        status: res.refund?.status || (res.statusCode === 409 ? 'processing' : 'failed'),
+        amountRupees: res.refund?.amountRupees ?? 0,
+        message: res.message,
+      });
+    }
+
+    const failed = results.filter((r) => !r.success && !r.inProgress);
+    const refundedRupees = results
+      .filter((r) => r.success && ['completed', 'processing'].includes(r.status))
+      .reduce((sum, r) => fromPaise(toPaise(sum) + toPaise(r.amountRupees)), 0);
+
+    if (failed.length) {
+      return {
+        success: false,
+        statusCode: 502,
+        message: `${refundedRupees > 0 ? `₹${refundedRupees} sent. ` : ''}`
+          + `${failed.length} refund(s) failed: ${failed[0].message}. `
+          + 'Press Refund again to retry only the failed one(s).',
+        repaired,
+        results,
+        refundedRupees,
+      };
+    }
+
+    return {
+      success: true,
+      message: refundedRupees > 0
+        ? `Refund of ₹${refundedRupees} sent to the customer's original payment method.`
+        : 'Nothing left to refund on this order.',
+      repaired,
+      results,
+      refundedRupees,
+    };
   }
 
   /**
