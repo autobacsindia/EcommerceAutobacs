@@ -16,6 +16,8 @@ import { toast } from 'react-hot-toast';
 import ImageUploader, { CloudinaryImage, GalleryItem, existingImageKey } from '@/components/ui/ImageUploader';
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import SeoScorePanel from '@/components/ui/SeoScorePanel';
+import SeoReviewControl from '@/components/admin/SeoReviewControl';
+import type { SeoReview } from '@/lib/seoReview';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } from '@/components/admin/VariantsEditor';
 import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
@@ -42,6 +44,7 @@ interface Brand {
 interface Product {
   _id: string;
   name: string;
+  seoReview?: SeoReview | null;
   slug?: string;
   description: string;
   shortDescription: string;
@@ -1491,7 +1494,8 @@ export default function EditProductPage() {
       </form>
 
       {/* Sticky SEO Score sidebar */}
-      <aside className="w-72 shrink-0 sticky top-6 self-start">
+      <aside className="w-72 shrink-0 sticky top-6 self-start space-y-4">
+        {product && <SeoReviewControl key={product._id} productId={product._id} initial={product.seoReview} />}
         <SeoScorePanel
           data={{
             name: formData.name,

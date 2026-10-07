@@ -118,6 +118,19 @@ class ProductRepository {
   }
 
   /**
+   * Set the SEO team's status on one product. `timestamps: false` keeps
+   * `updatedAt` untouched — a review marker is not a content change.
+   * @returns {Promise<object|null>} `{ _id, seoReview }`, or null if not found
+   */
+  async setSeoReview(productId, { status, userId }) {
+    return Product.findOneAndUpdate(
+      { _id: productId, deletedAt: null },
+      { $set: { 'seoReview.status': status, 'seoReview.updatedBy': userId, 'seoReview.updatedAt': new Date() } },
+      { new: true, timestamps: false, runValidators: true, projection: { seoReview: 1 } },
+    ).lean();
+  }
+
+  /**
    * Find products by query
    */
   async find(query, options = {}) {

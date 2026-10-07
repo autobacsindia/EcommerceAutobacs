@@ -190,6 +190,9 @@ const normalizePreUploaded = (raw) => {
 // ────────────────────────────────────────────────────────────────────────────
 const parseProductFields = (body) => {
   const fields = { ...body };
+  // Set only through PATCH /products/:id/seo-review, so a product save can never
+  // overwrite (or forge) the SEO team's status and its who/when.
+  delete fields.seoReview;
 
   ['categories', 'features', 'whyChoose', 'packageContents', 'tags',
    'specifications', 'compatibleVehicles', 'seo', 'variants', 'uploadedImages',
