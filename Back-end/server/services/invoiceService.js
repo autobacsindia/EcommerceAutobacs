@@ -255,41 +255,29 @@ const rs = (n) =>
  */
 const fmtDate = (d) => formatLongDateIST(d);
 
-// ── Company logo (fetched from the navbar's Cloudinary asset, cached) ──────────
-// pdfkit only embeds PNG/JPEG, so the configured URL is normalised to f_png for
-// Cloudinary assets. The buffer is fetched at most once per process on success;
-// on any failure we return null (text-only header) and retry on the next invoice.
+// ── Company logo (bundled with the server; same artwork as the storefront navbar) ──
+// Read from disk like the fonts above: no network fetch per process, nothing to
+// time out, and no stale URL in an environment variable can resurrect an old
+// logo (the Onam-season artwork lingered on invoices that way). When the brand
+// logo changes, replace assets/brand/roavion-logo.png with the navbar's file
+// (Front-end/web/public/images/roavion-logo.png). It is white-on-transparent,
+// which is why the header draws it on a dark chip.
+const LOGO_PATH = join(__dirname, '..', 'assets', 'brand', 'roavion-logo.png');
 let cachedLogo;
-const pngUrl = (url) => {
-  if (!url || !url.includes('/upload/')) return url;
-  // Rewrite an existing format token (e.g. f_auto → f_png); else inject f_png as a
-  // leading transformation. Preserves other transforms, the version, and the path.
-  if (/[/,]f_[a-z0-9]+/i.test(url)) return url.replace(/([/,])f_[a-z0-9]+/i, '$1f_png');
-  return url.replace('/upload/', '/upload/f_png/');
-};
 
-const loadLogo = async () => {
-  if (cachedLogo !== undefined) return cachedLogo; // cached success (Buffer) or explicit null-config
-  const url = pngUrl(companyInfo.logoUrl);
-  if (!url) return (cachedLogo = null);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 6000);
-  timer.unref?.(); // never let the abort timer keep the event loop (or Jest) alive
+export const loadLogo = async () => {
+  if (cachedLogo !== undefined) return cachedLogo;
   try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buf = Buffer.from(await res.arrayBuffer());
+    const buf = readFileSync(LOGO_PATH);
     const isPng = buf.subarray(0, 4).toString('hex') === '89504e47';
     const isJpeg = buf[0] === 0xff && buf[1] === 0xd8;
     if (!isPng && !isJpeg) throw new Error('unsupported image format');
-    cachedLogo = buf; // cache only on success so transient failures retry next time
-    return cachedLogo;
+    cachedLogo = buf;
   } catch (err) {
-    console.warn(`[Invoice] Logo fetch failed, rendering text header: ${err.message}`);
-    return null; // not cached — retry on the next invoice
-  } finally {
-    clearTimeout(timer);
+    console.warn(`[Invoice] Logo unavailable, rendering text header: ${err.message}`);
+    cachedLogo = null;
   }
+  return cachedLogo;
 };
 
 /**
