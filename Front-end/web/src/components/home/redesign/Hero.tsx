@@ -2,7 +2,7 @@
 
 import { useMemo, useRef } from 'react';
 import Link from 'next/link';
-import HeroSequence from './HeroSequence';
+import HeroSequence, { HERO_LAYOUT_SCRIPT, useHeroLayoutClass } from './HeroSequence';
 import HeroSpinSlide from './HeroSpinSlide';
 import useHeroCarousel from './useHeroCarousel';
 import { hero } from './homeContent';
@@ -35,6 +35,8 @@ export default function Hero({ spinTeaser = null }: { spinTeaser?: SpinTeaser | 
   const heroRef = useRef<HTMLElement>(null);
   const pinRef = useRef<HTMLDivElement>(null);
   const parallaxRef = useRef<HTMLDivElement>(null);
+  // The pinned layout, decided before paint on client renders too (see HeroSequence).
+  useHeroLayoutClass(pinRef);
 
   /*
     A campaign that ended between this page being cached and being viewed must not be
@@ -77,7 +79,15 @@ export default function Hero({ spinTeaser = null }: { spinTeaser?: SpinTeaser | 
     // so the whole screen stays fixed while the frame sequence scrubs, then the
     // page scrolls on once the sequence finishes. On mobile the wrapper collapses
     // and the hero is a normal stacked section.
-    <div className="hero-pin" ref={pinRef}>
+    <div className="hero-pin" ref={pinRef} suppressHydrationWarning>
+    {/* Decides the pinned layout BEFORE the hero paints — see LAYOUT_CLASS in
+        HeroSequence.tsx. First child, so `document.currentScript.parentElement` is
+        this wrapper and none of the hero has been parsed yet. The home page serves
+        the public CSP, which allows inline scripts; if one is ever blocked, the
+        layout effect (useHeroLayoutClass) applies the class at hydration instead.
+        The wrapper carries suppressHydrationWarning because the class this adds is
+        deliberately not in the server markup. */}
+    <script dangerouslySetInnerHTML={{ __html: HERO_LAYOUT_SCRIPT }} />
     <section
       className="hero"
       ref={heroRef}

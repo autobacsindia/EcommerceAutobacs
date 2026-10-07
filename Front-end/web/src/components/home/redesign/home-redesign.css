@@ -262,13 +262,23 @@
 .hr .hero .center-img { position: absolute; left: var(--car-x); top: 50%; transform: translate(-50%, -50%); z-index: 2; opacity: 0; animation: hr-fadeIn 1.3s ease 0.45s forwards; }
 .hr .hero .center-img img { width: var(--car-w); max-width: 80vw; height: auto; object-fit: contain; filter: drop-shadow(0 48px 96px rgba(0, 0, 0, 0.85)); opacity: 0.9; }
 /* ── HERO SCROLL SEQUENCE ──
-   The pinned, frame-scrubbed hero is gated on .hero-seq-active, which
-   HeroSequence.tsx puts on .hero-pin only once it has decided to run AND the
-   first frame is on the canvas. Nothing here is a bare media query, because the
-   decision is not purely a breakpoint: reduced-motion, data-saver and sub-2GB
-   devices opt out at every width and must keep the plain stacked hero rather
-   than a dead scroll track with a blank canvas in it. Desktop and mobile scrub
-   DIFFERENT frame sets (1440x808 vs 720x404) — see heroSequenceMobile. */
+   Two classes on .hero-pin, deliberately separate (see HeroSequence.tsx):
+
+   .hero-seq-layout — the pinned LAYOUT (tall track, sticky stage, copy over the
+     car). Decided BEFORE the first paint by the inline script Hero.tsx renders,
+     from the same signals pickSequence() reads. It used to hang off
+     .hero-seq-active, which only lands once frame 0 is decoded (~1.3 s on a
+     mid-range phone): the stacked hero painted first and then the whole stage
+     jumped — a 0.44-0.77 layout shift, the biggest single cost in the mobile
+     Lighthouse score.
+   .hero-seq-active — the canvas swap only: show the frame sequence, hide the
+     still photo. Lands once a real frame is on the canvas, so the stage is never
+     blank; until then the still photo sits in the canvas's own box.
+
+   Nothing here is a bare media query, because the decision is not purely a
+   breakpoint: reduced-motion, data-saver and sub-2GB devices opt out at every
+   width and keep the plain stacked hero. Desktop and mobile scrub DIFFERENT
+   frame sets (1440x808 vs 720x404) — see heroSequenceMobile. */
 .hr .hero .center-img .hero-seq { display: none; }
 .hr .hero-pin.hero-seq-active .center-img .hero-seq { display: block; }
 .hr .hero-pin.hero-seq-active .center-img .hero-seq-fallback { display: none; }
@@ -277,20 +287,30 @@
   /* PINNED HERO — the whole screen stays fixed while the frames scrub; the page
      only scrolls on once the sequence finishes. .hero sticks for the full height
      of .hero-pin (300vh ⇒ ~200vh of scrub distance; tune the 300vh to taste). */
-  .hr .hero-pin.hero-seq-active { height: 300vh; }
-  .hr .hero-pin.hero-seq-active .hero { position: sticky; top: 0; height: 100vh; background: #080e16; }
+  .hr .hero-pin.hero-seq-layout { height: 300vh; }
+  .hr .hero-pin.hero-seq-layout .hero { position: sticky; top: 0; height: 100vh; background: #080e16; }
   /* Match the hero bg to the video's flat #080e16 background, with a faint cool
      glow behind the car, so the feathered canvas edges dissolve seamlessly. */
-  .hr .hero-pin.hero-seq-active .hero .bg-glow { background: radial-gradient(ellipse 95% 85% at 50% 50%, #131c26 0%, #0a1019 55%, #070b12 100%); }
+  .hr .hero-pin.hero-seq-layout .hero .bg-glow { background: radial-gradient(ellipse 95% 85% at 50% 50%, #131c26 0%, #0a1019 55%, #070b12 100%); }
 
   /* Bigger car + edges feathered into the bg (no hard rectangle). */
-  .hr .hero-pin.hero-seq-active .hero .center-img { left: 50%; }
-  .hr .hero-pin.hero-seq-active .hero .center-img .hero-seq {
+  .hr .hero-pin.hero-seq-layout .hero .center-img { left: 50%; }
+  .hr .hero-pin.hero-seq-layout .hero .center-img .hero-seq {
     width: min(1240px, 86vw);
     max-width: none;
     height: auto;
     aspect-ratio: 1440 / 808;
     opacity: 0.97;
+    -webkit-mask-image: radial-gradient(ellipse 90% 88% at 50% 48%, #000 56%, transparent 100%);
+    mask-image: radial-gradient(ellipse 90% 88% at 50% 48%, #000 56%, transparent 100%);
+  }  /* Until frame 0 is drawn the still photo stands in, in the canvas's exact box, so
+     the swap to the sequence moves nothing. */
+  .hr .hero-pin.hero-seq-layout .hero .center-img .hero-seq-fallback {
+    width: min(1240px, 86vw);
+    max-width: none;
+    height: auto;
+    aspect-ratio: 1440 / 808;
+    object-fit: cover;
     -webkit-mask-image: radial-gradient(ellipse 90% 88% at 50% 48%, #000 56%, transparent 100%);
     mask-image: radial-gradient(ellipse 90% 88% at 50% 48%, #000 56%, transparent 100%);
   }
@@ -312,8 +332,8 @@
      4. The copy is absolutely positioned OVER the frame, like desktop, instead
         of stacked above it — the top of every frame is dark ceiling, so the
         headline has somewhere to sit without fighting the car. */
-  .hr .hero-pin.hero-seq-active { height: 180vh; }
-  .hr .hero-pin.hero-seq-active .hero {
+  .hr .hero-pin.hero-seq-layout { height: 180vh; }
+  .hr .hero-pin.hero-seq-layout .hero {
     position: sticky;
     top: 0;
     height: 100vh; /* fallback for browsers without svh */
@@ -325,10 +345,10 @@
   }
   /* The promo strip stays in flow above the pin; the sticky hero positions its
      own copy clear of the nav, so it must not also inherit the strip's offset. */
-  .hr .hr-promo-slot + .hero-pin.hero-seq-active .hero { padding-top: 0; }
-  .hr .hero-pin.hero-seq-active .hero .bg-glow { background: radial-gradient(ellipse 130% 70% at 50% 52%, #131c26 0%, #0a1019 55%, #070b12 100%); }
+  .hr .hr-promo-slot + .hero-pin.hero-seq-layout .hero { padding-top: 0; }
+  .hr .hero-pin.hero-seq-layout .hero .bg-glow { background: radial-gradient(ellipse 130% 70% at 50% 52%, #131c26 0%, #0a1019 55%, #070b12 100%); }
 
-  .hr .hero-pin.hero-seq-active .hero .hero-left {
+  .hr .hero-pin.hero-seq-layout .hero .hero-left {
     position: absolute;
     top: 96px;
     left: 22px;
@@ -338,13 +358,13 @@
     text-align: center;
     z-index: 5;
   }
-  .hr .hero-pin.hero-seq-active .hero .headline { font-size: clamp(38px, 12.5vw, 56px); }
-  .hr .hero-pin.hero-seq-active .hero .tagline { margin-top: 16px; max-width: 300px; }
-  .hr .hero-pin.hero-seq-active .hero .hero-shop { margin-top: 18px; }
+  .hr .hero-pin.hero-seq-layout .hero .headline { font-size: clamp(38px, 12.5vw, 56px); }
+  .hr .hero-pin.hero-seq-layout .hero .tagline { margin-top: 16px; max-width: 300px; }
+  .hr .hero-pin.hero-seq-layout .hero .hero-shop { margin-top: 18px; }
 
   /* Sits below centre so the car clears the headline, tagline and Shop now
      button above it (was 58% before the button existed). */
-  .hr .hero-pin.hero-seq-active .hero .center-img {
+  .hr .hero-pin.hero-seq-layout .hero .center-img {
     position: absolute;
     top: 64%;
     left: 50%;
@@ -357,8 +377,8 @@
   }
   /* Flex centring makes the overscaled canvas overflow evenly on both sides, so
      the car stays centred while the garage is cropped away. */
-  .hr .hero-pin.hero-seq-active .hero .center-img > div { display: flex; justify-content: center; width: 100%; }
-  .hr .hero-pin.hero-seq-active .hero .center-img .hero-seq {
+  .hr .hero-pin.hero-seq-layout .hero .center-img > div { display: flex; justify-content: center; width: 100%; }
+  .hr .hero-pin.hero-seq-layout .hero .center-img .hero-seq {
     flex: 0 0 auto;
     width: 170%;
     max-width: 720px;
@@ -372,7 +392,18 @@
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 76%, transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 76%, transparent 100%);
   }
-  .hr .hero-pin.hero-seq-active .hero .hero-consult-wrap {
+  /* Still photo in the canvas's box until frame 0 lands (see the desktop rule). */
+  .hr .hero-pin.hero-seq-layout .hero .center-img .hero-seq-fallback {
+    flex: 0 0 auto;
+    width: 170%;
+    max-width: 720px;
+    height: auto;
+    aspect-ratio: 720 / 404;
+    object-fit: cover;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 76%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 76%, transparent 100%);
+  }
+  .hr .hero-pin.hero-seq-layout .hero .hero-consult-wrap {
     position: absolute;
     left: 0;
     right: 0;
@@ -381,7 +412,7 @@
     text-align: center;
     z-index: 6;
   }
-  .hr .hero-pin.hero-seq-active .hero .floor-glow { bottom: 16%; }
+  .hr .hero-pin.hero-seq-layout .hero .floor-glow { bottom: 16%; }
 }
 
 /* ── HERO CAROUSEL ──
@@ -1087,7 +1118,7 @@
   /* HERO → stacked, content-driven height */
   /* ── STACKED HERO × CAROUSEL ──
      This is the phone layout used when the frame sequence opted OUT — reduced
-     motion, data saver, or a sub-2GB device — so .hero-seq-active never lands and
+     motion, data saver, or a sub-2GB device — so .hero-seq-layout never lands and
      .hero is content-height with its children back in normal flow (below).
 
      The carousel is `position: absolute` in every other mode, which is right when
@@ -1096,12 +1127,12 @@
      hero would vanish, on exactly the devices least able to tell you why. So the
      track goes back in flow as a flex row of full-width slides; the same
      translate3d still moves it, and .hero's existing `overflow: hidden` clips it. */
-  .hr .hero-pin:not(.hero-seq-active) .hero .hero-carousel {
+  .hr .hero-pin:not(.hero-seq-layout) .hero .hero-carousel {
     position: static;
     display: flex;
     align-items: flex-start;
   }
-  .hr .hero-pin:not(.hero-seq-active) .hero .hero-slide {
+  .hr .hero-pin:not(.hero-seq-layout) .hero .hero-slide {
     position: relative;
     inset: auto;
     left: auto;
@@ -1109,12 +1140,12 @@
     width: 100%;
     height: auto;
   }
-  .hr .hero-pin:not(.hero-seq-active) .hero .hero-spin {
+  .hr .hero-pin:not(.hero-seq-layout) .hero .hero-spin {
     position: relative;
     inset: auto;
     padding: 8px 0 0;
   }
-  .hr .hero-pin:not(.hero-seq-active) .hero .hero-dots {
+  .hr .hero-pin:not(.hero-seq-layout) .hero .hero-dots {
     position: relative;
     left: auto;
     bottom: auto;

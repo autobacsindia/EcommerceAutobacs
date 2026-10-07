@@ -7,7 +7,7 @@ import { join } from 'path';
  * The carousel is `position: absolute` in every mode where `.hero` is a fixed
  * 100vh/100svh stage. There is one mode where it must NOT be: the phone layout used
  * when the frame sequence opts out (reduced motion, data saver, sub-2GB device). There
- * `.hero-seq-active` never lands, `.hero` is content-height, and its children are back
+ * `.hero-seq-layout` never lands, `.hero` is content-height, and its children are back
  * in normal flow — so an absolutely-positioned track takes the section's only in-flow
  * content out of flow and collapses the hero to its padding. The hero disappears
  * entirely, on exactly the devices least able to report why.
@@ -59,9 +59,9 @@ describe('hero carousel CSS', () => {
     // Without these three the hero collapses to zero height whenever the frame
     // sequence opts out.
     for (const selector of [
-      '.hr .hero-pin:not(.hero-seq-active) .hero .hero-carousel',
-      '.hr .hero-pin:not(.hero-seq-active) .hero .hero-slide',
-      '.hr .hero-pin:not(.hero-seq-active) .hero .hero-spin',
+      '.hr .hero-pin:not(.hero-seq-layout) .hero .hero-carousel',
+      '.hr .hero-pin:not(.hero-seq-layout) .hero .hero-slide',
+      '.hr .hero-pin:not(.hero-seq-layout) .hero .hero-spin',
     ]) {
       expect(block).toContain(selector);
     }
@@ -113,7 +113,7 @@ describe('hero carousel CSS', () => {
     wider than its slide, the slide MUST clip.
   */
   it('clips each slide, because the phone canvas is wider than one', () => {
-    const phoneSeq = /\.hero-pin\.hero-seq-active \.hero \.center-img \.hero-seq\s*\{([^}]*)\}/
+    const phoneSeq = /\.hero-pin\.hero-seq-layout \.hero \.center-img \.hero-seq\s*\{([^}]*)\}/
       .exec(stackedMobileBlocks())?.[1] ?? '';
     const width = /width:\s*(\d+)%/.exec(phoneSeq);
     expect(width).not.toBeNull(); // a non-% width means this guard needs rewriting

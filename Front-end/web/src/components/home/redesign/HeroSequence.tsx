@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import Img from './Img';
 import {
   hero,
@@ -20,6 +20,36 @@ export const DESKTOP_MEDIA_QUERY = '(min-width: 769px)';
  * pin with a blank canvas in it.
  */
 export const ACTIVE_CLASS = 'hero-seq-active';
+
+/**
+ * Set on the pin wrapper when the device WILL run the sequence — the pinned
+ * LAYOUT, as opposed to ACTIVE_CLASS's canvas swap. Decided before the first
+ * paint (HERO_LAYOUT_SCRIPT, rendered by Hero.tsx), so the hero is drawn in its
+ * final layout from the start.
+ *
+ * It used to share ACTIVE_CLASS, which lands only once frame 0 is decoded: the
+ * stacked hero painted first and the whole stage then jumped. Measured on the
+ * live home page (412px, 4x CPU): CLS 0.44-0.77, the largest single cost in the
+ * mobile Lighthouse score.
+ */
+export const LAYOUT_CLASS = 'hero-seq-layout';
+
+/**
+ * Runs during HTML parse, as the first child of .hero-pin, before anything in the
+ * hero is painted. Mirrors pickSequence()'s opt-outs exactly (both layouts are
+ * pinned, so the breakpoint does not matter here) — HeroSequence.test.tsx runs
+ * this string against every signal combination to hold the two together.
+ *
+ * Plain ES5 in a try/catch: if it fails or is blocked, the layout effect below
+ * still applies the class, merely after hydration (the old behaviour).
+ */
+export const HERO_LAYOUT_SCRIPT =
+  "(function(){try{var s=document.currentScript,p=s&&s.parentElement;if(!p)return;"
+  + "var w=window,n=w.navigator,c=n.connection,m=n.deviceMemory;"
+  + "if(w.matchMedia&&w.matchMedia('(prefers-reduced-motion: reduce)').matches)return;"
+  + "if(c&&c.saveData===true)return;"
+  + "if(typeof m==='number'&&m>0&&m<2)return;"
+  + `p.classList.add('${LAYOUT_CLASS}')}catch(e){}})();`;
 
 /**
  * Below this the URL bar collapsing/expanding is assumed to be the cause of an
@@ -66,6 +96,27 @@ export function readDeviceSignals(win: Window): DeviceSignals {
     saveData: nav.connection?.saveData === true,
     deviceMemory: nav.deviceMemory,
   };
+}
+
+/**
+ * Puts the pinned-layout class on the pin wrapper before paint, on every render
+ * path: on a client-side navigation (where the inline script never runs — React
+ * does not execute scripts it inserts), and it removes the class if the inline
+ * script and pickSequence() ever disagree. A layout effect, so neither case paints
+ * the wrong layout first.
+ *
+ * ⚠ Call it from the component that OWNS the wrapper's ref (Hero), not from
+ * HeroSequence. Layout effects run child-first, and a parent element's ref is
+ * attached after its children's layout effects — so inside HeroSequence the ref is
+ * still null on mount and this would silently do nothing. A test pins this.
+ */
+export function useHeroLayoutClass(pinRef: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const pin = pinRef.current;
+    if (!pin) return;
+    if (pickSequence(readDeviceSignals(window))) pin.classList.add(LAYOUT_CLASS);
+    else pin.classList.remove(LAYOUT_CLASS);
+  }, [pinRef]);
 }
 
 /**
@@ -177,6 +228,7 @@ export default function HeroSequence({
     function activate() {
       if (activated) return;
       activated = true;
+      section.classList.add(LAYOUT_CLASS);
       section.classList.add(ACTIVE_CLASS);
       setShowFallback(false);
       // The canvas was display:none until the class landed, so it had no box to
@@ -273,6 +325,13 @@ export default function HeroSequence({
       } catch {
         // Network/decode error or aborted teardown — skip this frame; render()
         // falls back to the nearest loaded one.
+        //
+        // Frame 0 is different: the pinned layout went on before the first paint
+        // on the promise of a sequence. If its first frame cannot arrive, fall back
+        // to the stacked hero rather than leave a tall scroll track over a still
+        // photo. (One shift, on a failure path only; a later frame that does land
+        // re-applies the layout through activate().)
+        if (i === 0 && !cancelled && !activated) section.classList.remove(LAYOUT_CLASS);
       }
     }
     async function loadNext(): Promise<void> {
@@ -401,6 +460,7 @@ export default function HeroSequence({
       window.removeEventListener('orientationchange', onOrientationChange);
       if (scrollBound) window.removeEventListener('scroll', onScroll);
       section.classList.remove(ACTIVE_CLASS);
+      section.classList.remove(LAYOUT_CLASS);
       // Release decoded-bitmap memory eagerly instead of waiting for GC.
       for (const bmp of images) bmp?.close();
     };

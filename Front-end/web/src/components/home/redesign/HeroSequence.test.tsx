@@ -144,3 +144,49 @@ describe('readDeviceSignals', () => {
     expect(readDeviceSignals(stubWindow({})).saveData).toBe(false);
   });
 });
+
+describe('HERO_LAYOUT_SCRIPT — the pre-paint twin of pickSequence', () => {
+  // The inline script cannot import pickSequence (it runs before any bundle), so it is
+  // a hand-written copy. Run it against every signal combination and require the same
+  // answer: if the two ever disagree, the page paints one layout and switches to the
+  // other — the exact jump this script exists to remove.
+  const { HERO_LAYOUT_SCRIPT, LAYOUT_CLASS } = jest.requireActual('./HeroSequence') as typeof import('./HeroSequence');
+
+  function runScript(signals: DeviceSignals, opts: { noConnection?: boolean } = {}) {
+    const el = document.createElement('div');
+    const fakeWindow = {
+      matchMedia: (q: string) => ({ matches: q.includes('reduce') ? signals.reducedMotion : signals.isDesktop }),
+      navigator: {
+        ...(opts.noConnection ? {} : { connection: { saveData: signals.saveData } }),
+        deviceMemory: signals.deviceMemory,
+      },
+    };
+    const fakeDocument = { currentScript: { parentElement: el } };
+    // The script reads the globals `window` and `document`; shadow them.
+    new Function('window', 'document', HERO_LAYOUT_SCRIPT)(fakeWindow, fakeDocument);
+    return el.classList.contains(LAYOUT_CLASS);
+  }
+
+  const memories = [undefined, 0, 0.5, 1, 1.99, 2, 4, 8];
+  for (const isDesktop of [false, true]) {
+    for (const reducedMotion of [false, true]) {
+      for (const saveData of [false, true]) {
+        for (const deviceMemory of memories) {
+          const s: DeviceSignals = { isDesktop, reducedMotion, saveData, deviceMemory };
+          it(`agrees with pickSequence for ${JSON.stringify(s)}`, () => {
+            expect(runScript(s)).toBe(pickSequence(s) !== null);
+          });
+        }
+      }
+    }
+  }
+
+  it('treats a missing Network Information API as "not saving data", like readDeviceSignals', () => {
+    expect(runScript(phone, { noConnection: true })).toBe(true);
+  });
+
+  it('never throws, even with no parent or no matchMedia', () => {
+    expect(() => new Function('window', 'document', HERO_LAYOUT_SCRIPT)({ navigator: {} }, { currentScript: null })).not.toThrow();
+    expect(() => new Function('window', 'document', HERO_LAYOUT_SCRIPT)({ navigator: {} }, { currentScript: { parentElement: document.createElement('div') } })).not.toThrow();
+  });
+});
