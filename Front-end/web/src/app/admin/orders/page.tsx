@@ -19,6 +19,7 @@ import { formatDateIST, formatTimeIST, formatIsoDateIST, formatIsoDateTimeIST } 
 import ParcelProgressBadge from '@/components/orders/shared/ParcelProgressBadge';
 import { outstandingParcels, hasCancellations, hasOpenReturn } from '@/lib/orderFulfilment';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
+import { getRefundBadge } from '@/lib/refundBadge';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -76,7 +77,12 @@ interface Order {
    */
   shipments?: ShipmentSummary[];
   /** Cancelled lines, for the part-cancelled badge. */
-  cancellations?: Array<{ _id: string; lines?: Array<{ itemId: string; quantity: number }> }>;
+  cancellations?: Array<{
+    _id: string;
+    lines?: Array<{ itemId: string; quantity: number }>;
+    /** Per-item refund — the Refund badge reads this for item-by-item cancellations. */
+    refund?: { status?: string };
+  }>;
   /**
    * Business-purchase marker. Only `type` and `gstin` reach this table
    * (repositories/orderProjections.js ADMIN_LIST_FIELDS); the registered name and
@@ -99,30 +105,6 @@ const CANCELLED_BY_TEXT: Record<string, string> = {
   admin: 'by Admin',
   system: 'by System',
 };
-
-/**
- * Refund state for a row, derived from the cancellation refund flow:
- * cancelled + paid with no terminal refund yet ⇒ "due"; then processing → completed/failed.
- * Returns null when there's nothing to show (order not a paid cancellation).
- */
-function getRefundBadge(order: Order): { label: string; className: string } | null {
-  const isPaidCancellation = order.status === 'cancelled' && (order.paymentStatus === 'paid' || order.paymentStatus === 'refunded');
-  const refundStatus = order.refundDetails?.status;
-
-  if (order.paymentStatus === 'refunded' || refundStatus === 'completed') {
-    return { label: 'Refunded ✓', className: 'bg-green-100 text-green-800' };
-  }
-  if (refundStatus === 'processing') {
-    return { label: 'Refunding…', className: 'bg-blue-100 text-blue-800' };
-  }
-  if (refundStatus === 'failed') {
-    return { label: 'Refund failed', className: 'bg-red-100 text-red-800' };
-  }
-  if (isPaidCancellation) {
-    return { label: 'Refund due', className: 'bg-yellow-100 text-yellow-800' };
-  }
-  return null;
-}
 
 interface OrdersResponse {
   success: boolean;
