@@ -162,14 +162,17 @@ async function getProducts(searchParams: any, categoryId: string): Promise<Produ
     }
     return { products: [], pagination: {} };
   } catch (error: any) {
-    // Don't log 404 errors for products as they might be expected when no products match filters
-    if (!(error.status === 404 || error.responseStatus === 404)) {
-      console.error('Error fetching products:', error);
-    }
-    // Return empty data instead of throwing to prevent crashing the page
-    return { products: [], pagination: {} };
+    // 404 means "nothing matches" — a genuinely empty result.
+    if (error.status === 404 || error.responseStatus === 404) return { products: [], pagination: {} };
+    // Anything else (dropped connection, server hiccup) is NOT an empty category:
+    // throw so the page offers a retry instead of claiming there are no products.
+    console.error('Error fetching products:', error);
+    throw new Error(LOAD_FAILED);
   }
 }
+
+/** A load that failed for a reason other than "not found" — shown with a retry. */
+const LOAD_FAILED = 'We couldn\'t load products right now. Please check your connection and try again.';
 
 // Function to fetch category by slug
 async function getCategoryBySlug(slug: string): Promise<Category | null> {
@@ -189,9 +192,9 @@ async function getCategoryBySlug(slug: string): Promise<Category | null> {
       return null;
     }
     
-    // For other unexpected errors, log and return null
+    // Anything else is a failed load, not a missing category — see getProducts.
     console.error('Unexpected error fetching category:', error);
-    return null;
+    throw new Error(LOAD_FAILED);
   }
 }
 
@@ -206,6 +209,8 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Bumped by "Try again" to re-run the load effect after a failed fetch.
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Get current sort value from URL parameters
   const currentSort = searchParams.get('sort') || 'createdAt_desc';
@@ -303,7 +308,7 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
     };
     // `fetchCategories` is stable (memoised on the query client), so listing it
     // satisfies the lint rule without re-running the effect.
-  }, [slug, searchParams, fetchCategories]);
+  }, [slug, searchParams, fetchCategories, reloadKey]);
 
   // Handle sort change
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -467,6 +472,17 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
                     </div>
                   </div>
                 ))}
+              </div>
+            ) : error === LOAD_FAILED ? (
+              <div className="text-center py-12" role="alert">
+                <p className="text-ink-muted font-display mb-4">{LOAD_FAILED}</p>
+                <button
+                  type="button"
+                  onClick={() => setReloadKey((k) => k + 1)}
+                  className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm"
+                >
+                  Try again
+                </button>
               </div>
             ) : data.products.length > 0 ? (
               <ProductGrid products={data.products} />

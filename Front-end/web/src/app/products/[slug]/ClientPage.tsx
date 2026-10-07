@@ -24,16 +24,22 @@ import { variantImageIndex } from '@/lib/variantImage';
 import BuyBox, { type ProductVariant } from '@/components/products/redesign/BuyBox';
 import ConsultSpecialistBanner from '@/components/products/ConsultSpecialistBanner';
 
+/**
+ * `null` means the product genuinely does not exist (the API said 404). Any other
+ * failure — a dropped mobile connection, a server hiccup, a rate limit — is THROWN,
+ * so TanStack Query keeps the product already on screen and retries, instead of
+ * caching "missing" and replacing a page the customer is reading with
+ * "Product not found". That swap was observed on the live site during a 2-second
+ * network drop.
+ */
 async function getProduct(slugOrId: string): Promise<Product | null> {
   try {
     const response = await apiClient.get<{ product?: Product }>(`/products/slug/${encodeURIComponent(slugOrId)}`);
-    if (response?.product) return response.product;
+    return response?.product ?? null;
   } catch (slugError: unknown) {
-    if ((slugError as { status?: number })?.status !== 404) {
-      console.error('Slug lookup error:', slugError);
-    }
+    if ((slugError as { status?: number })?.status === 404) return null;
+    throw slugError;
   }
-  return null;
 }
 
 interface Product {
@@ -352,7 +358,7 @@ function ClientPageInner({ slug, initialProduct }: { slug: string; initialProduc
   // NO spinner and NO duplicate client fetch — the previous version threw the
   // server data away and re-fetched here. TanStack Query still owns it after
   // hydration (staleTime 60s), shared with any other consumer of this key.
-  const { data: product = null, isLoading } = useQuery({
+  const { data: product = null, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: productKeys.detail(slug),
     queryFn: () => getProduct(slug),
     initialData: initialProduct ?? undefined,
@@ -380,6 +386,29 @@ function ClientPageInner({ slug, initialProduct }: { slug: string; initialProduc
         <div className="text-center">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-b-2 border-gold" />
           <p className="mt-4 font-display text-[13px] tracking-[0.1em] text-ink-muted">Loading product…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Could not load, and nothing to fall back on (a cold client-side navigation):
+  // say so and offer a retry — this is NOT the same as the product not existing.
+  if (!product && isError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-obsidian">
+        <div className="max-w-md px-4 text-center">
+          <h2 className="mb-3 font-display text-[28px] font-light text-ink">We couldn&apos;t load this product</h2>
+          <p className="mb-8 font-display text-[14px] font-light text-ink-muted">
+            Please check your connection and try again.
+          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="rounded-sm bg-gold px-6 py-3 font-display text-[12px] font-bold uppercase tracking-widest text-obsidian transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {isFetching ? 'Trying…' : 'Try again'}
+          </button>
         </div>
       </div>
     );
