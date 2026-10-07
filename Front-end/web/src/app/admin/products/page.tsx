@@ -12,12 +12,14 @@ import { Plus, Edit, Trash2, Search, X, Package, ChevronUp, Upload } from 'lucid
 import Link from 'next/link';
 import ExportProductsButton from '@/components/admin/ExportProductsButton';
 import SeoScoreBadge from '@/components/admin/SeoScoreBadge';
+import { SEO_REVIEW, seoReviewStatus, type SeoReview } from '@/lib/seoReview';
 import type { ScorableProduct } from '@/lib/seoScore';
 
 // ScorableProduct: the admin list returns the full content fields, which is what
 // lets each row show the editor's SEO score without another request.
 interface Product extends ScorableProduct {
   _id: string;
+  seoReview?: SeoReview | null;
   name: string;
   price: number;
   stock: StockStatus;
@@ -299,6 +301,9 @@ function AdminProductsPageInner() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="Same score as the SEO panel in the product editor">
                   SEO
                 </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="SEO team's progress — set from the product editor">
+                  SEO work
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Featured
                 </th>
@@ -310,7 +315,7 @@ function AdminProductsPageInner() {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-500">
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-500">
                     Loading...
                   </td>
                 </tr>
@@ -358,6 +363,16 @@ function AdminProductsPageInner() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <SeoScoreBadge product={product} href={`/admin/products/edit/${product._id}`} />
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {(() => {
+                      const s = SEO_REVIEW[seoReviewStatus(product.seoReview)];
+                      return (
+                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold ${s.badge}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} /> {s.label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span

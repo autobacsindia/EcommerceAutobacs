@@ -1,5 +1,6 @@
 import orderRepository from '../repositories/orderRepository.js';
 import { CUSTOMER_LIST_FIELDS, ADMIN_LIST_FIELDS } from '../repositories/orderProjections.js';
+import { shipmentsForViewer } from '../utils/shipmentView.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import userRepository from '../repositories/userRepository.js';
@@ -135,7 +136,8 @@ export const getOrders = async (req, res) => {
   res.json({
     success: true,
     count: orders.length,
-    orders,
+    // The supplier's private photo ref never goes to a customer.
+    orders: orders.map((o) => (o.shipments ? { ...o, shipments: shipmentsForViewer(o.shipments) } : o)),
     pagination: {
       currentPage: Number(page),
       totalPages: Math.ceil(total / Number(limit)),
@@ -276,7 +278,7 @@ export const getOrderById = async (req, res) => {
   const [signedSlip, signedShipments] = await Promise.all([
     withSignedSlip(order.shippingSlip),
     Array.isArray(order.shipments)
-      ? Promise.all(order.shipments.map(async (sh) => ({
+      ? Promise.all(shipmentsForViewer(order.shipments, { orderId: order._id, isAdmin }).map(async (sh) => ({
         ...sh, shippingSlip: await withSignedSlip(sh.shippingSlip),
       })))
       : Promise.resolve(order.shipments),
@@ -1380,7 +1382,8 @@ export const getShipments = async (req, res) => {
 
   res.json({
     success: true,
-    shipments: order.shipments || [],
+    // Admins get a viewable link to the supplier's photo; customers never see the ref.
+    shipments: shipmentsForViewer(order.shipments || [], { orderId: order._id, isAdmin: req.user.role === 'admin' }),
     remaining: remainingToShip(order),
     summary: fulfilmentSummary(order),
   });

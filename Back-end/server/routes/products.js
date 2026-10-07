@@ -1,4 +1,6 @@
 import express from "express";
+import { validateRequest } from "../middleware/validateRequest.js";
+import { body } from "express-validator";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import productRepository from "../repositories/productRepository.js";
 import rateLimit from 'express-rate-limit';
@@ -394,6 +396,26 @@ router.put(
   // route-level hook here used PRODUCT_DETAIL:*/PRODUCT_LIST* patterns that
   // never matched the real md5 keys — a silent no-op.
   asyncHandler(updateProductWithImages)
+);
+
+// @route   PATCH /products/:id/seo-review  { status: todo|in_progress|done }
+// @desc    SEO team's work status for a product (admin "SEO work" column).
+//          Admin-only workflow marker: no catalogue cache to purge, and the
+//          product's updatedAt is deliberately left alone.
+// @access  Private/Admin
+router.patch(
+  "/:id/seo-review",
+  protect,
+  admin,
+  validateProductIdParam,
+  body('status').isIn(['todo', 'in_progress', 'done']).withMessage('Choose Needs check, Working or Completed'),
+  validateRequest,
+  asyncHandler(async (req, res) => {
+    const updated = await productRepository.setSeoReview(req.params.id, { status: req.body.status, userId: req.user._id });
+    if (!updated) return res.status(404).json({ success: false, message: 'Product not found' });
+    auditLogger.logAction(req, 'UPDATE', 'Product', req.params.id, { change: 'seo_review', status: req.body.status });
+    res.json({ success: true, seoReview: updated.seoReview });
+  })
 );
 
 // @route   DELETE /products/:id

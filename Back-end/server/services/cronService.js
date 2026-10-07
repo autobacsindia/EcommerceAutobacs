@@ -7,7 +7,9 @@ import { runFrequentSweeps, runDailySweeps } from './leadSweepService.js';
 import { reconcileStuckPayments } from './paymentReconciliationService.js';
 import { recomputeSalesScores } from './salesScoreService.js';
 import { checkInboundLiveness, sweepSlaBreaches, requeueStuckInbound } from './supportHealthService.js';
-import { getNotificationsQueue } from '../queue/queues.js';
+import { getNotificationsQueue, enqueueVariantGeneration, variantJobId } from '../queue/queues.js';
+import { findOriginalsMissingVariants } from './storage/variantSweep.js';
+import { storageProvider } from '../config/storage.js';
 
 class CronService {
   constructor() {
@@ -58,6 +60,7 @@ class CronService {
     this.scheduleSupportHealth();
     this.scheduleCareersMediaRetention();
     this.scheduleAffiliateMaturation();
+    this.scheduleVariantSweep();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -320,6 +323,45 @@ class CronService {
    * best-effort and idempotent regardless. Skipped when Razorpay isn't configured
    * (e.g. local/dev without keys) so the constructor throw never breaks boot.
    */
+  /**
+   * Nightly image-variant catch-up: originals the upload-time media job never
+   * rendered get handed back to it (see services/storage/variantSweep.js).
+   * Off-peak, bounded per night, and the media worker's own low concurrency does
+   * the encoding — so it cannot crowd out the API the way a bulk run would.
+   * Skipped unless images live on R2 and a queue Redis is configured.
+   */
+  scheduleVariantSweep() {
+    if (storageProvider() !== 'r2' || (!process.env.REDIS_URL && !process.env.QUEUE_REDIS_URL)) return;
+    const schedule = process.env.VARIANT_SWEEP_CRON || '30 21 * * *'; // 21:30 UTC = 03:00 IST
+    const limit = Number(process.env.VARIANT_SWEEP_LIMIT) || 300;
+
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid VARIANT_SWEEP_CRON "${schedule}" — variant sweep NOT scheduled`);
+      return;
+    }
+
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:variantSweep', 60 * 60, async () => {
+        try {
+          const { scanned, missingTotal, missing } = await findOriginalsMissingVariants({ limit });
+          const day = new Date().toISOString().slice(0, 10);
+          // Spread the night's work out: one new job every 3 s on top of the
+          // worker's concurrency cap.
+          missing.forEach((key, i) => enqueueVariantGeneration(key, { delayMs: i * 3000, jobId: variantJobId(key, 'sweep', day) }));
+          console.log(`[CronService] Variant sweep: ${scanned} originals scanned, ${missingTotal} without variants, ${missing.length} queued`);
+        } catch (err) {
+          console.error('[CronService] Variant sweep failed:', err.message);
+        }
+      })
+    );
+    this.scheduledTasks.push({
+      name: 'variantSweep',
+      task,
+      schedule,
+      description: 'Images: render variants for any originals the upload-time job missed',
+    });
+  }
+
   /**
    * Nightly recompute of Product.salesScore — the commercial signal in search
    * ranking. Off-peak by default: it rewrites documents, which drives the change

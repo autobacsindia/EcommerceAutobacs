@@ -320,6 +320,18 @@ const ProductSchema = new mongoose.Schema({
   // noindex, internal focus keyword). All optional — blank fields fall back to
   // values derived from the product on the frontend. See models/shared/seoSchema.js.
   seo: { type: SeoSchema, default: () => ({}) },
+  /*
+    SEO team's own progress marker (admin "SEO work" status) — workflow, not
+    content. Written ONLY by PATCH /products/:id/seo-review (parseProductFields
+    drops it from normal saves), and without bumping `updatedAt`, so marking a
+    product reviewed never looks like a content change to the sitemap or feeds.
+    Absent = never looked at, shown as "Needs check".
+  */
+  seoReview: {
+    status: { type: String, enum: ['todo', 'in_progress', 'done'], default: undefined },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    updatedAt: Date,
+  },
 
   externalId: {
     type: String,

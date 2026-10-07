@@ -86,7 +86,20 @@ export function getMediaQueue() {
  * The worker re-checks and retries, so the delay is just to avoid burning the
  * first attempt on a certainty.
  */
-export function enqueueVariantGeneration(key, { delayMs = 20_000 } = {}) {
+/**
+ * Job id for one original's variant render.
+ *
+ * ⚠ BullMQ REJECTS a custom id containing ':' unless it has exactly three
+ * ':'-separated parts ("Custom Id cannot contain :"). The id used to be
+ * `variants:<key>` — two parts — so EVERY upload-time enqueue threw, the catch
+ * below swallowed it, and no photo uploaded after the one-off backfill ever got
+ * variants: product grids served 1–2 MB originals. '|' is the separator, and any
+ * ':' in the key itself is neutralised so this can never recur.
+ */
+export const variantJobId = (key, ...scope) =>
+  [scope.length ? `variants-${scope.join('-')}` : 'variants', String(key).replace(/:/g, '_')].join('|');
+
+export function enqueueVariantGeneration(key, { delayMs = 20_000, jobId } = {}) {
   if (!process.env.REDIS_URL && !process.env.QUEUE_REDIS_URL) return;
   if (!key) return;
   try {
@@ -95,8 +108,10 @@ export function enqueueVariantGeneration(key, { delayMs = 20_000 } = {}) {
         delay: delayMs,
         // The key identifies the work completely, so a duplicate enqueue (a
         // retried signature request, a double-clicked save) collapses onto one
-        // job instead of encoding everything twice.
-        jobId: `variants:${key}`,
+        // job instead of encoding everything twice. The nightly sweep passes its
+        // own id: a FAILED job keeps its id for 7 days, and reusing it would make
+        // the retry a silent no-op.
+        jobId: jobId || variantJobId(key),
       })
       .catch((err) => console.error(`[Queue] variant enqueue failed for ${key}: ${err.message}`));
   } catch (err) {
