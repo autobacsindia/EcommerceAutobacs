@@ -36,7 +36,7 @@ jest.mock('./HeroSequence', () => {
     }, []);
     return React.createElement('canvas', { 'data-testid': 'hero-seq' });
   }
-  return { __esModule: true, default: MockHeroSequence };
+  return { __esModule: true, default: MockHeroSequence, HERO_LAYOUT_SCRIPT: '/* layout */', useHeroLayoutClass: () => {} };
 });
 
 function mockMatchMedia(reducedMotion = false) {
@@ -233,5 +233,17 @@ describe('Hero — the frame sequence must survive the carousel', () => {
     const after = container.querySelectorAll('.hero-slide');
     expect(after[0]).toHaveAttribute('inert');
     expect(after[1]).not.toHaveAttribute('inert');
+  });
+});
+
+describe('pre-paint layout decision', () => {
+  it('renders the layout script as the FIRST child of .hero-pin, ahead of the hero', () => {
+    // document.currentScript.parentElement must be the pin wrapper, and nothing of the
+    // hero may be parsed before it — otherwise it paints in the wrong layout and jumps.
+    const { container } = render(<Hero />);
+    const pin = container.querySelector('.hero-pin')!;
+    expect(pin.firstElementChild?.tagName).toBe('SCRIPT');
+    expect(pin.firstElementChild?.innerHTML).toBe('/* layout */');
+    expect(pin.children[1]?.classList.contains('hero')).toBe(true);
   });
 });
