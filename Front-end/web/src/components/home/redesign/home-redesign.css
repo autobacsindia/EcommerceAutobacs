@@ -665,7 +665,7 @@
  * (see Categories.tsx); the `display` guards at the bottom pick exactly one per
  * breakpoint — so the right variant is in the SSR HTML and there's no layout
  * shift:
- *   • md/lg (≥769px): pinned horizontal scroll gallery  → .categories-scroll
+ *   • md/lg (≥769px): sideways-scrolling row with arrows → .categories-scroll
  *   • phone (≤768px): 3D coverflow carousel             → .categories-cf
  * The variants reuse class names (.cat-card, .cat-info, …) with different
  * layouts, so every rule is namespaced under its variant wrapper. */
@@ -680,20 +680,28 @@
 
 /* ── md/lg: pinned horizontal scroll gallery ── */
 .hr .categories-scroll { padding: 0; background: var(--bg); position: relative; }
-.hr .categories-scroll .cat-sticky { position: sticky; top: 0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
-.hr .categories-scroll .cat-head { display: flex; justify-content: space-between; align-items: flex-end; padding: 84px 52px 0; flex-shrink: 0; gap: 24px; }
+/* No sticky panel: it used to pin for ~3,700px and turn the page's scroll sideways. */
+.hr .categories-scroll .cat-sticky { display: flex; flex-direction: column; padding-bottom: 80px; }
+.hr .categories-scroll .cat-head { display: flex; justify-content: space-between; align-items: flex-end; padding: 96px 52px 0; margin-bottom: 40px; flex-shrink: 0; gap: 24px; }
 .hr .categories-scroll .cat-head h2 { font-size: clamp(32px, 4vw, 52px); font-weight: 300; line-height: 1; }
 .hr .categories-scroll .cat-head-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 16px; }
 .hr .categories-scroll .cat-counter { font-size: 13px; letter-spacing: 0.1em; color: var(--muted); }
 .hr .categories-scroll .cat-counter b { color: var(--text); font-weight: 400; }
 .hr .categories-scroll .cat-progress { width: 160px; height: 1px; background: var(--line); position: relative; overflow: hidden; }
 .hr .categories-scroll .cat-progress-bar { position: absolute; left: 0; top: 0; height: 100%; width: 0; background: var(--gold); }
-.hr .categories-scroll .cat-scroll-hint { display: flex; align-items: center; gap: 10px; font-size: 9px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
-.hr .categories-scroll .cat-track-wrap { flex: 1; display: flex; align-items: center; overflow: hidden; }
-.hr .categories-scroll .cat-track { display: flex; gap: 22px; padding: 0 52px; will-change: transform; }
-.hr .categories-scroll .cat-card { position: relative; overflow: hidden; cursor: pointer; background: #1a1c1c; flex: 0 0 clamp(300px, 30vw, 400px); height: min(60vh, 540px); }
-.hr .categories-scroll .cat-card img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.85s cubic-bezier(0.16, 1, 0.3, 1); filter: brightness(0.52); }
-.hr .categories-scroll .cat-card:hover img { transform: scale(1.07); filter: brightness(0.62); }
+.hr .categories-scroll .cat-nav { display: flex; gap: 10px; }
+.hr .categories-scroll .cat-nav-btn { width: 48px; height: 48px; border: 1px solid rgba(201, 168, 112, 0.35); background: rgba(255, 255, 255, 0.02); color: var(--text); border-radius: 999px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color 0.25s, color 0.25s, background 0.25s, opacity 0.25s; }
+.hr .categories-scroll .cat-nav-btn:hover:not(:disabled) { border-color: var(--gold); background: var(--gold); color: #111212; }
+.hr .categories-scroll .cat-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.hr .categories-scroll .cat-nav-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.hr .categories-scroll .cat-track-wrap { position: relative; }
+.hr .categories-scroll .cat-track { display: flex; gap: 22px; padding: 6px 52px 18px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-left: 52px; scrollbar-width: none; }
+.hr .categories-scroll .cat-track::-webkit-scrollbar { display: none; }
+.hr .categories-scroll .cat-card { position: relative; overflow: hidden; cursor: pointer; background: #1a1c1c; flex: 0 0 clamp(290px, 28vw, 380px); height: min(58vh, 520px); border-radius: 18px; border: 1px solid rgba(201, 168, 112, 0.14); scroll-snap-align: start; box-shadow: 0 24px 50px -28px rgba(0, 0, 0, 0.8); transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.45s, box-shadow 0.45s; }
+.hr .categories-scroll .cat-card:hover { transform: translateY(-6px); border-color: rgba(201, 168, 112, 0.55); box-shadow: 0 34px 60px -26px rgba(201, 168, 112, 0.35); }
+.hr .categories-scroll .cat-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+.hr .categories-scroll .cat-card img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.85s cubic-bezier(0.16, 1, 0.3, 1), filter 0.6s; filter: brightness(0.72); }
+.hr .categories-scroll .cat-card:hover img { transform: scale(1.07); filter: brightness(0.85); }
 .hr .categories-scroll .cat-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, transparent 60%); z-index: 1; }
 .hr .categories-scroll .cat-num-ghost { position: absolute; top: 28px; right: 30px; font-size: clamp(48px, 4vw, 72px); font-weight: 300; line-height: 1; color: rgba(255, 255, 255, 0.08); z-index: 2; transition: color 0.45s ease, transform 0.45s ease; }
 .hr .categories-scroll .cat-card:hover .cat-num-ghost { color: rgba(201, 168, 112, 0.42); transform: translateY(-4px); }
@@ -701,11 +709,11 @@
 .hr .categories-scroll .cat-name { font-size: 26px; font-weight: 400; line-height: 1.16; }
 .hr .categories-scroll .cat-underline { width: 0; height: 1px; background: var(--gold); margin-top: 18px; transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 .hr .categories-scroll .cat-card:hover .cat-underline { width: 64px; }
-.hr .categories-scroll .cat-explore { display: flex; align-items: center; gap: 10px; margin-top: 18px; opacity: 0; transform: translateY(8px); transition: opacity 0.4s ease, transform 0.4s ease; }
-.hr .categories-scroll .cat-card:hover .cat-explore { opacity: 1; transform: translateY(0); }
-.hr .categories-scroll .cat-explore span { font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text); }
+.hr .categories-scroll .cat-explore { display: flex; align-items: center; gap: 10px; margin-top: 16px; opacity: 0.85; transition: opacity 0.4s ease, gap 0.4s ease; }
+.hr .categories-scroll .cat-card:hover .cat-explore { opacity: 1; gap: 14px; }
+.hr .categories-scroll .cat-explore span { font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text); }
 .hr .categories-scroll .cat-explore svg { color: var(--gold); }
-.hr .categories-scroll .cat-end-card { flex: 0 0 clamp(260px, 22vw, 320px); height: min(60vh, 540px); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 8px; }
+.hr .categories-scroll .cat-end-card { flex: 0 0 clamp(260px, 22vw, 320px); height: min(58vh, 520px); scroll-snap-align: start; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 8px; }
 .hr .categories-scroll .cat-end-card .ec-eyebrow { font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--gold); margin-bottom: 18px; }
 .hr .categories-scroll .cat-end-card .ec-title { font-size: 30px; font-weight: 300; line-height: 1.1; margin-bottom: 26px; }
 

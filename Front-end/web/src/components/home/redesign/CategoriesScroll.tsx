@@ -3,21 +3,23 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Img from './Img';
-import { ArrowRight, ScrollArrow } from './icons';
+import { ArrowRight, ChevronLeft, ChevronRight } from './icons';
 import { categories as fallbackCategories, type CategoryItem } from './homeContent';
 
 /**
- * Featured-category gallery for md/lg screens: a scroll-pinned horizontal track.
+ * Featured-category gallery for md/lg screens: a sideways-scrolling row with arrow
+ * buttons. It never pins the page or hijacks its scroll (see the effect below).
  * Phones get the coverflow variant instead (see Categories.tsx dispatcher).
  */
 export default function CategoriesScroll({ categories }: { categories?: CategoryItem[] }) {
   // Live category hubs from the DB; static placeholders if none resolved.
   const items = categories?.length ? categories : fallbackCategories;
   const secRef = useRef<HTMLElement>(null);
-  const outerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const [current, setCurrent] = useState('01');
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
 
   // Defensive local scroll-reveal: HomeRedesign's global observer normally
   // reveals `.reveal` elements, but scanning it locally too keeps the heading
@@ -42,63 +44,56 @@ export default function CategoriesScroll({ categories }: { categories?: Category
     return () => io.disconnect();
   }, []);
 
+  /*
+    ── A normal sideways row, never a scroll trap ──────────────────────────────
+    This used to be a sticky 100vh panel inside a track ~3,700px tall: the page's
+    vertical scroll was converted into sideways card movement, so the page stopped
+    moving down for several screens. Customers read that as the site being stuck.
+
+    Now the row scrolls on its own axis — trackpad swipe, shift+wheel, touch, or the
+    arrow buttons — and the page's own scroll is never touched. The counter and the
+    progress bar follow the ROW's scroll position.
+  */
   useEffect(() => {
-    const outer = outerRef.current;
     const track = trackRef.current;
-    if (!outer || !track) return;
-
-    // This variant only mounts on md/lg (≥769px). Guard anyway so a resize down
-    // to a narrow window clears the inline pinning styles instead of breaking.
-    const desktop = window.matchMedia('(min-width: 769px)');
-    let distance = 0;
-    const count = items.length;
-
-    const layout = () => {
-      if (!desktop.matches) {
-        outer.style.height = '';
-        track.style.transform = '';
-        return;
-      }
-      const prev = track.style.transform;
-      track.style.transform = 'translateX(0px)';
-      const trackWidth = track.scrollWidth;
-      track.style.transform = prev;
-      distance = Math.max(0, trackWidth - window.innerWidth);
-      outer.style.height = window.innerHeight + distance + 'px';
-    };
-
+    if (!track) return;
+    let frame = 0;
     const update = () => {
-      if (!desktop.matches) return;
-      const rect = outer.getBoundingClientRect();
-      const total = outer.offsetHeight - window.innerHeight;
-      const scrolled = Math.min(Math.max(-rect.top, 0), total);
-      const progress = total > 0 ? scrolled / total : 0;
-      track.style.transform = `translateX(${-progress * distance}px)`;
-      if (barRef.current) barRef.current.style.width = progress * 100 + '%';
-      const idx = Math.min(count, Math.max(1, Math.round(progress * (count - 1)) + 1));
+      frame = 0;
+      const max = track.scrollWidth - track.clientWidth;
+      const progress = max > 0 ? track.scrollLeft / max : 0;
+      if (barRef.current) barRef.current.style.width = `${Math.max(progress, 0.04) * 100}%`;
+      const idx = Math.min(items.length, Math.max(1, Math.round(progress * (items.length - 1)) + 1));
       setCurrent(String(idx).padStart(2, '0'));
+      setAtStart(track.scrollLeft <= 4);
+      setAtEnd(track.scrollLeft >= max - 4);
     };
-
-    const onResize = () => {
-      layout();
-      update();
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(update);
     };
-
-    layout();
     update();
-    window.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', onResize);
-    window.addEventListener('load', onResize);
+    track.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
     return () => {
-      window.removeEventListener('scroll', update);
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('load', onResize);
+      if (frame) cancelAnimationFrame(frame);
+      track.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
     };
   }, [items.length]);
 
+  /** One card (plus its gap) per press. */
+  const nudge = (dir: 1 | -1) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const card = track.querySelector<HTMLElement>('.cat-card');
+    const stepPx = card ? card.offsetWidth + 22 : track.clientWidth * 0.8;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    track.scrollBy({ left: dir * stepPx, behavior: reduce ? 'auto' : 'smooth' });
+  };
+
   return (
     <section ref={secRef} className="categories categories-scroll">
-      <div className="cat-scroll-outer" ref={outerRef}>
+      <div className="cat-scroll-outer">
         <div className="cat-sticky">
           <div className="cat-head">
             <h2 className="reveal">Shop by Category</h2>
@@ -109,9 +104,13 @@ export default function CategoriesScroll({ categories }: { categories?: Category
               <div className="cat-progress">
                 <div className="cat-progress-bar" ref={barRef} />
               </div>
-              <div className="cat-scroll-hint">
-                <span>Scroll to explore</span>
-                <ScrollArrow />
+              <div className="cat-nav" role="group" aria-label="Browse categories">
+                <button type="button" className="cat-nav-btn" aria-label="Previous categories" onClick={() => nudge(-1)} disabled={atStart}>
+                  <ChevronLeft />
+                </button>
+                <button type="button" className="cat-nav-btn" aria-label="More categories" onClick={() => nudge(1)} disabled={atEnd}>
+                  <ChevronRight />
+                </button>
               </div>
             </div>
           </div>
