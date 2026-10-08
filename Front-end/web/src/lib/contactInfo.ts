@@ -5,6 +5,8 @@
  */
 export const SUPPORT_PHONE_DISPLAY = '+91 98952 57905';
 export const SUPPORT_PHONE_TEL = '+919895257905';
+/** Same address the Terms page and invoices publish. */
+export const SUPPORT_EMAIL = 'support@autobacsindia.com';
 const SUPPORT_WHATSAPP_NUMBER = '919895257905';
 
 /** WhatsApp click-to-chat link with an optional pre-filled message. */

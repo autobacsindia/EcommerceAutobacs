@@ -1056,26 +1056,62 @@
   .hr .jf-cap { transition: none; }
 }
 
-/* ── FOOTER ── */
-.hr .footer { background: var(--bg2); padding: 80px 52px 40px; border-top: 1px solid var(--line); }
-.hr .footer-top { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 60px; margin-bottom: 72px; }
+/* ── FOOTER ──
+   Premium but legible. Links were 13px weight-300 at the AA floor (--muted) and
+   read as grey haze; they are now 14px at a higher-contrast tone (--ft-link,
+   ~10:1 on the footer ground). The grid used to have 4 tracks for 5 blocks, so
+   "Legal" wrapped under the logo and left a hole; it is now brand + 4 columns.
+   The social icons moved out of the bottom bar, where the fixed WhatsApp / call
+   bubbles covered the last one. */
+.hr .footer {
+  --ft-link: rgba(240, 237, 231, 0.78);
+  --ft-soft: rgba(240, 237, 231, 0.66);
+  position: relative;
+  background: radial-gradient(ellipse 70% 60% at 15% 0%, rgba(201, 168, 112, 0.07) 0%, transparent 60%), linear-gradient(180deg, #121313 0%, #0b0c0c 100%);
+  padding: 72px 52px 36px;
+}
+/* A gold hairline that fades out at both ends, instead of a flat grey rule. */
+.hr .footer::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(201, 168, 112, 0.55), transparent); }
+
+/* Contact strip — four ways to reach a person. */
+.hr .footer-contact { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 64px; }
+.hr .fc-item { display: flex; align-items: center; gap: 14px; padding: 18px 20px; border: 1px solid rgba(201, 168, 112, 0.18); border-radius: 14px; background: rgba(255, 255, 255, 0.02); transition: border-color 0.25s, background 0.25s, transform 0.25s; min-width: 0; }
+.hr .fc-item:hover { border-color: rgba(201, 168, 112, 0.6); background: rgba(201, 168, 112, 0.06); transform: translateY(-2px); }
+.hr .fc-item:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.hr .fc-icon { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--gold); background: rgba(201, 168, 112, 0.12); border: 1px solid rgba(201, 168, 112, 0.3); }
+.hr .fc-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hr .fc-label { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
+.hr .fc-value { font-size: 14px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
+/* Four cards in a row need ~1380px before the email address fits on one line; below
+   that they go 2 x 2 rather than break "autobacsindia.com" mid-word. */
+@media (max-width: 1380px) {
+  .hr .footer-contact { grid-template-columns: repeat(2, 1fr); }
+}
+
+.hr .footer-top { display: grid; grid-template-columns: 1.5fr repeat(4, 1fr); gap: 48px; margin-bottom: 56px; }
 .hr .footer-brand .logo-f { font-size: 14px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; margin-bottom: 20px; }
 .hr .footer-brand .logo-f span { color: var(--gold); font-weight: 300; }
-.hr .footer-brand p { font-size: 13px; font-weight: 300; line-height: 1.8; color: var(--muted); max-width: 260px; margin-bottom: 28px; }
-.hr .footer-newsletter { display: flex; gap: 0; border: 1px solid var(--line); max-width: 320px; }
-.hr .footer-newsletter input { flex: 1; min-width: 0; background: none; border: none; outline: none; padding: 12px 16px; font-size: 12px; color: var(--text); font-family: var(--display-font); }
-.hr .footer-newsletter input::placeholder { color: var(--muted); }
-.hr .footer-newsletter button { background: var(--gold); border: none; padding: 12px 18px; cursor: pointer; color: var(--bg); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; font-family: var(--display-font); font-weight: 500; transition: opacity 0.2s; }
-.hr .footer-newsletter button:hover { opacity: 0.85; }
-.hr .footer-col h4 { font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--gold); margin-bottom: 20px; }
-.hr .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 12px; }
-.hr .footer-col ul li a { font-size: 13px; font-weight: 300; color: var(--muted); transition: color 0.25s; }
-.hr .footer-col ul li a:hover { color: var(--text); }
-.hr .footer-bottom { display: flex; justify-content: space-between; align-items: center; padding-top: 36px; border-top: 1px solid var(--line); gap: 20px; }
-.hr .footer-bottom p { font-size: 11px; color: var(--muted); letter-spacing: 0.05em; }
-.hr .social-links { display: flex; gap: 20px; }
-.hr .social-links a { width: 36px; height: 36px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--muted); transition: all 0.25s; }
-.hr .social-links a:hover { border-color: var(--gold); color: var(--gold); }
+.hr .footer-brand p { font-size: 14px; font-weight: 400; line-height: 1.75; color: var(--ft-soft); max-width: 320px; margin-bottom: 24px; }
+.hr .footer-newsletter { display: flex; gap: 0; border: 1px solid rgba(201, 168, 112, 0.35); border-radius: 999px; overflow: hidden; max-width: 340px; transition: border-color 0.25s; }
+.hr .footer-newsletter:focus-within { border-color: var(--gold); }
+.hr .footer-newsletter input { flex: 1; min-width: 0; background: none; border: none; outline: none; padding: 14px 18px; font-size: 13px; color: var(--text); font-family: var(--display-font); }
+.hr .footer-newsletter input::placeholder { color: var(--ft-soft); }
+.hr .footer-newsletter button { background: var(--gold); border: none; padding: 14px 20px; cursor: pointer; color: #111212; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; font-family: var(--display-font); font-weight: 600; transition: filter 0.2s; }
+.hr .footer-newsletter button:hover { filter: brightness(1.08); }
+.hr .footer-col h4 { font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold); margin-bottom: 22px; padding-bottom: 12px; position: relative; }
+.hr .footer-col h4::after { content: ''; position: absolute; left: 0; bottom: 0; width: 24px; height: 1.5px; background: var(--gold); opacity: 0.7; }
+.hr .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 13px; }
+.hr .footer-col ul li a { font-size: 14px; font-weight: 400; color: var(--ft-link); transition: color 0.25s, transform 0.25s; display: inline-block; }
+.hr .footer-col ul li a:hover { color: var(--gold); transform: translateX(3px); }
+.hr .footer-col ul li a:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+/* Bottom bar: padded clear of the fixed WhatsApp / call bubbles at bottom-right. */
+.hr .footer-bottom { display: flex; justify-content: space-between; align-items: center; padding: 28px 110px 0 0; border-top: 1px solid rgba(255, 255, 255, 0.08); gap: 20px; flex-wrap: wrap; }
+.hr .footer-bottom p { font-size: 12px; color: var(--ft-soft); letter-spacing: 0.04em; }
+.hr .footer-secure { display: inline-flex; align-items: center; gap: 8px; }
+.hr .footer-secure svg { color: var(--gold); flex: 0 0 auto; }
+.hr .social-links { display: flex; gap: 12px; margin-top: 24px; }
+.hr .social-links a { width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(201, 168, 112, 0.3); display: flex; align-items: center; justify-content: center; color: var(--text); transition: all 0.25s; }
+.hr .social-links a:hover { border-color: var(--gold); background: var(--gold); color: #111212; }
 
 /* ════════════════════════════ RESPONSIVE ════════════════════════════ */
 
@@ -1088,6 +1124,7 @@
   /* Journal scrapbook → stack the header; the card track stays full-width. */
   .hr .journal-head { flex-direction: column; align-items: flex-start; gap: 28px; margin-bottom: 48px; }
   .hr .journal-desc { max-width: none; }
+  .hr .footer-contact { grid-template-columns: 1fr 1fr; }
   .hr .footer-top { grid-template-columns: 1fr 1fr; gap: 48px; }
   .hr .footer-brand { grid-column: 1 / -1; }
   .hr .anim-header { flex-direction: column; align-items: flex-start; gap: 20px; }
@@ -1222,9 +1259,16 @@
   .hr .jf-cap { padding: 20px 18px 18px; }
 
   /* FOOTER */
-  .hr .footer { padding: 64px 22px 32px; }
-  .hr .footer-top { grid-template-columns: 1fr; gap: 40px; margin-bottom: 48px; }
-  .hr .footer-bottom { flex-direction: column; align-items: flex-start; gap: 18px; }
+  /* Bottom padding keeps the last line clear of the fixed WhatsApp / call bubbles. */
+  .hr .footer { padding: 56px 20px 120px; }
+  .hr .footer-contact { grid-template-columns: 1fr; gap: 12px; margin-bottom: 48px; }
+  /* Two link columns side by side, not one long list — every link stays on screen
+     with half the scrolling. The brand block spans both. */
+  .hr .footer-top { grid-template-columns: 1fr 1fr; gap: 40px 24px; margin-bottom: 40px; }
+  .hr .footer-brand { grid-column: 1 / -1; }
+  .hr .footer-brand p { max-width: none; }
+  .hr .footer-newsletter { max-width: none; }
+  .hr .footer-bottom { flex-direction: column; align-items: flex-start; gap: 12px; padding-right: 0; }
 }
 
 /* Honour reduced-motion preferences */

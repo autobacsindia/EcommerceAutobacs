@@ -125,3 +125,38 @@ export const LinkedIn = (p: SVGProps<SVGSVGElement>) => (
     <circle cx="4" cy="4" r="2" />
   </svg>
 );
+
+export const Phone = (p: SVGProps<SVGSVGElement>) => (
+  <svg width="18" height="18" {...base} {...p}>
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+  </svg>
+);
+
+export const Mail = (p: SVGProps<SVGSVGElement>) => (
+  <svg width="18" height="18" {...base} {...p}>
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="m22 6-10 7L2 6" />
+  </svg>
+);
+
+export const WhatsApp = (p: SVGProps<SVGSVGElement>) => (
+  <svg width="18" height="18" {...base} {...p}>
+    <path d="M3 21l1.65-3.8A9 9 0 1 1 7.4 20.2L3 21z" />
+    <path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 1c-1-.5-1.5-1-2-2l1-1-1-2L9 9.5z" />
+  </svg>
+);
+
+export const Headset = (p: SVGProps<SVGSVGElement>) => (
+  <svg width="18" height="18" {...base} {...p}>
+    <path d="M3 14v-3a9 9 0 0 1 18 0v3" />
+    <path d="M21 19a2 2 0 0 1-2 2h-1v-7h3z" />
+    <path d="M3 19a2 2 0 0 0 2 2h1v-7H3z" />
+  </svg>
+);
+
+export const Lock = (p: SVGProps<SVGSVGElement>) => (
+  <svg width="13" height="13" {...base} {...p}>
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </svg>
+);
