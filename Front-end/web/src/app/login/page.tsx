@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useRateLimitTimer } from '@/lib/hooks/useRateLimitTimer';
 import { navigateTo } from '@/lib/utils/navigation';
 import { safeInternalPath } from '@/lib/utils';
-import { LEGAL_LINKS } from '@/lib/constants';
+import { LEGAL_LINKS, COMPANY_LEGAL_NAME } from '@/lib/constants';
 import Image from 'next/image';
 import { brand } from '@/components/home/redesign/homeContent';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -278,7 +278,7 @@ function LoginPageInner() {
               <Link href="/help" className="hover:text-ink transition-colors">Help</Link>
             </div>
             <p className="text-xs text-ink-muted font-display">
-              Copyright © 2025 AutoBacs India. All rights reserved
+              Copyright © {new Date().getFullYear()} {COMPANY_LEGAL_NAME}. All rights reserved
             </p>
           </div>
         </div>

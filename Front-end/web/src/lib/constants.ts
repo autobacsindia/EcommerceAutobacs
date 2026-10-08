@@ -391,6 +391,10 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
 //
 // The storefront footer, the login page and the register page all read this.
 // Adding a policy page means adding it here, never inlining a label.
+/** Registered legal entity, shown in the site footer, the login/register copyright
+ *  lines and the Terms page. The brand remains "Autobacs India" (URLs, emails, feeds). */
+export const COMPANY_LEGAL_NAME = 'Roavion Automotive Pvt Ltd';
+
 export const LEGAL_LINKS = {
   terms:    { href: '/terms',    label: 'Terms and Conditions' },
   privacy:  { href: '/privacy',  label: 'Privacy Policy' },
