@@ -9,7 +9,8 @@ import RedesignNavSearch from './RedesignNavSearch';
 import ProfileAvatar from './ProfileAvatar';
 import KarmaBadge from '@/components/profile/KarmaBadge';
 import { CheckCircle2, Handshake } from 'lucide-react';
-import { Search, Heart, Cart, Menu, Close, UserIcon } from './icons';
+import { Search, Heart, Cart, Menu, Close, UserIcon, Phone, WhatsApp } from './icons';
+import { SUPPORT_PHONE_TEL, SUPPORT_PHONE_DISPLAY, whatsappLink } from '@/lib/contactInfo';
 import { brand, navLinks } from './homeContent';
 import { useAuth } from '@/context/AuthContext';
 import { useMyAffiliate } from '@/hooks/queries/useAffiliate';
@@ -103,7 +104,9 @@ export default function RedesignNav() {
             <Link
               key={l.label}
               href={l.href}
-              className={isCurrent(l.href) ? 'is-active' : undefined}
+              // Offers is the one link a shopper should never miss: gold, with a
+              // small live dot.
+              className={[isCurrent(l.href) && 'is-active', l.label === 'Offers' && 'nav-offers'].filter(Boolean).join(' ') || undefined}
               aria-current={isCurrent(l.href) ? 'page' : undefined}
             >
               {l.label}
@@ -206,11 +209,20 @@ export default function RedesignNav() {
             l.label === VEHICLE_LABEL ? (
               <RedesignVehicleMenu key={l.label} variant="inline" onNavigate={() => setMenuOpen(false)} />
             ) : (
-              <Link key={l.label} href={l.href} onClick={() => setMenuOpen(false)}>
+              <Link
+                key={l.label}
+                href={l.href}
+                className={[isCurrent(l.href) && 'is-active', l.label === 'Offers' && 'nav-offers'].filter(Boolean).join(' ') || undefined}
+                onClick={() => setMenuOpen(false)}
+              >
                 {l.label}
               </Link>
             )
           )}
+          <Link href="/track" className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
+            <Cart width={16} height={16} />
+            Track Order
+          </Link>
           <Link href="/wishlist" className="nav-mobile-row" onClick={() => setMenuOpen(false)}>
             <Heart width={16} height={16} />
             Wishlist
@@ -222,6 +234,16 @@ export default function RedesignNav() {
               Affiliate Dashboard
             </Link>
           )}
+          {/* A person to talk to, one tap away — the same numbers the floating
+              buttons use. */}
+          <div className="nav-mobile-contact">
+            <a href={`tel:${SUPPORT_PHONE_TEL}`} className="nmc-btn" aria-label={`Call ${SUPPORT_PHONE_DISPLAY}`}>
+              <Phone width={16} height={16} /> Call us
+            </a>
+            <a href={whatsappLink('Hi, I need help choosing a part.')} className="nmc-btn nmc-wa" target="_blank" rel="noopener noreferrer">
+              <WhatsApp width={16} height={16} /> WhatsApp
+            </a>
+          </div>
         </div>
       )}
     </nav>

@@ -20,12 +20,20 @@ const Car3D = dynamic(() => import('./Car3D'), {
 export default function CarStage({
   hotspots,
   onSelect,
+  activeId = null,
+  onHover,
 }: {
   hotspots: ResolvedCarHotspot[];
   onSelect?: (id: string) => void;
+  /** Part highlighted from the side panel (or by hovering a marker). */
+  activeId?: string | null;
+  onHover?: (id: string | null) => void;
 }) {
   const canRender3D = useCanRender3D();
   const [inView, setInView] = useState(false);
+  // The 3D model is ~3.9 MB. Until it is on screen the still render (captured
+  // from the same model) stands in, so the stage is never an empty dark box.
+  const [ready3D, setReady3D] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,13 +53,22 @@ export default function CarStage({
   }, [inView]);
 
   const handleSelect = (id: string) => onSelect?.(id);
+  const show3D = canRender3D && inView;
 
   return (
     <div ref={ref} className="absolute inset-0 z-[2]">
-      {canRender3D && inView ? (
-        <Car3D hotspots={hotspots} onSelect={handleSelect} />
-      ) : (
-        <CarStatic hotspots={hotspots} onSelect={handleSelect} />
+      <div className={`absolute inset-0 transition-opacity duration-700 ${show3D && ready3D ? 'pointer-events-none opacity-0' : 'opacity-100'}`}>
+        <CarStatic hotspots={hotspots} onSelect={handleSelect} activeId={activeId} onHover={onHover} />
+      </div>
+      {show3D && (
+        <div className={`absolute inset-0 transition-opacity duration-700 ${ready3D ? 'opacity-100' : 'opacity-0'}`}>
+          <Car3D hotspots={hotspots} onSelect={handleSelect} activeId={activeId} onHover={onHover} onReady={() => setReady3D(true)} />
+        </div>
+      )}
+      {show3D && !ready3D && (
+        <div className="pointer-events-none absolute left-1/2 top-4 z-[4] -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#f0ede7]/75 backdrop-blur">
+          Loading 3D view…
+        </div>
       )}
     </div>
   );

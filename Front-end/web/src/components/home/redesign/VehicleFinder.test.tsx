@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import VehicleFinder from './VehicleFinder';
 
@@ -124,5 +124,25 @@ describe('VehicleFinder', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Exterior' }));
     fireEvent.click(searchButton());
     expect(push).toHaveBeenCalledWith('/categories/exterior');
+  });
+});
+
+describe('VehicleFinder guidance', () => {
+  beforeEach(() => { get.mockResolvedValue({ facets: { categories: [] } }); });
+
+  it('shows the three steps and lights them up as the visitor goes', () => {
+    renderFinder();
+    const steps = screen.getByRole('list', { name: /how it works/i });
+    expect(within(steps).getByText(/choose make/i)).toBeInTheDocument();
+    expect(within(steps).getByText(/choose model/i)).toBeInTheDocument();
+    expect(within(steps).getByText(/pick a category/i)).toBeInTheDocument();
+  });
+
+  it('a popular-make shortcut fills the make (only for makes we stock)', () => {
+    renderFinder();
+    // Toyota and Land Rover are in the mocked catalogue; Mahindra is not.
+    expect(screen.queryByRole('button', { name: 'Mahindra' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Toyota' }));
+    expect((selects()[0] as HTMLSelectElement).value).toBe('Toyota');
   });
 });

@@ -52,12 +52,17 @@ export const HERO_LAYOUT_SCRIPT =
   + `p.classList.add('${LAYOUT_CLASS}')}catch(e){}})();`;
 
 /**
- * Below this the URL bar collapsing/expanding is assumed to be the cause of an
- * `innerHeight` change, not a real viewport change. Mobile browsers resize the
- * visual viewport by ~60-100px mid-scroll; feeding that into the scrub distance
- * makes the animation jump under the user's thumb.
+ * Playback rate. Desktop plays its 145 frames in ~4.8 s; phones play their
+ * decimated 49 in ~3 s — the same motion, slightly brisker on the smaller set.
  */
-const URL_BAR_TOLERANCE_PX = 140;
+const DESKTOP_FPS = 30;
+const MOBILE_FPS = 16;
+
+/** Pause after the page's `load` before the car starts moving. */
+const START_DELAY_MS = 300;
+
+/** How long the fully exploded build is held before it reassembles. */
+const EXPLODED_HOLD_MS = 900;
 
 /** Parallel frame fetches. Enough to saturate a connection, few enough to not stampede HTTP/1.1. */
 const CONCURRENCY = 6;
@@ -120,9 +125,11 @@ export function useHeroLayoutClass(pinRef: RefObject<HTMLElement | null>) {
 }
 
 /**
- * Scroll-driven hero animation. Renders a <canvas> that scrubs through a WebP
- * frame sequence based on how far the user has scrolled past the hero (frame 0
- * at the top, last frame as the pinned hero releases).
+ * Hero animation. Renders a <canvas> that plays a WebP frame sequence ONCE, on
+ * its own, after the page has loaded: forward (the car comes apart), a short hold,
+ * then in reverse (it reassembles), resting on the complete car. It never
+ * listens to scroll: the page scrolls normally the whole time (see "Playback"
+ * below for why it stopped being scroll-scrubbed).
  *
  * Production guard rails:
  *   - Mobile runs a SEPARATE, decimated frame set (49 x 720x404 instead of
@@ -131,14 +138,12 @@ export function useHeroLayoutClass(pinRef: RefObject<HTMLElement | null>) {
  *     iOS Safari kills a tab over. The mobile set is ~57 MB and ~0.64 MB on the
  *     wire.
  *   - Reduced-motion, data-saver and sub-2 GB devices never fetch a frame; CSS
- *     keeps the static `hero.image` because the ACTIVE_CLASS is never applied.
- *   - Frames are preloaded with bounded concurrency (the first frame alone
- *     first, so the LCP paint isn't queued behind five others), decoded off the
- *     main thread as ImageBitmaps, and missing frames fall back to the nearest
- *     loaded one so the canvas is never blank.
- *   - Scroll is sampled inside a single rAF, the canvas is sized to a capped
- *     devicePixelRatio, the viewport height is cached against URL-bar chrome,
- *     and the scroll listener is only attached while the hero is near screen.
+ *     keeps the static `hero.image` because the classes are never applied.
+ *   - Frame 0 is fetched alone and early (it replaces the still photo); the rest
+ *     wait for the page's `load`, then load with bounded concurrency, decoded off
+ *     the main thread as ImageBitmaps.
+ *   - Playback buffers on a frame that has not arrived, skips one that failed,
+ *     and pauses while the hero is off screen.
  */
 export default function HeroSequence({
   sectionRef,
@@ -174,25 +179,14 @@ export default function HeroSequence({
     const frameUrl = (i: number) =>
       `${dir}/${prefix}${String(i + 1).padStart(pad, '0')}.${ext}`;
 
-    // ImageBitmaps are decoded off the main thread (see loadNext), so drawing a
-    // frame never triggers a synchronous WebP decode inside the scroll frame —
-    // that sync decode was the source of the first-scroll stutter.
+    // ImageBitmaps are decoded off the main thread (see loadOne), so drawing a
+    // frame never forces a synchronous WebP decode inside an animation frame.
     const images: (ImageBitmap | null)[] = new Array(count).fill(null);
+    // A frame that failed for good (404, decode error). Playback steps over it
+    // rather than waiting for it forever.
+    const failed: boolean[] = new Array(count).fill(false);
     let currentIndex = -1;
-    let targetIndex = 0;
     let cancelled = false;
-    // Cached so URL-bar chrome can't rewrite the scrub distance mid-scroll.
-    let viewportHeight = window.innerHeight;
-    const viewportTolerance = signals.isDesktop ? 0 : URL_BAR_TOLERANCE_PX;
-
-    function nearestLoaded(i: number): ImageBitmap | null {
-      if (images[i]) return images[i];
-      for (let d = 1; d < count; d++) {
-        if (i - d >= 0 && images[i - d]) return images[i - d];
-        if (i + d < count && images[i + d]) return images[i + d];
-      }
-      return null;
-    }
 
     function drawCover(img: ImageBitmap) {
       const cw = canvas.width;
@@ -212,18 +206,15 @@ export default function HeroSequence({
       ctx.drawImage(img, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
     }
 
-    function render() {
-      const img = nearestLoaded(targetIndex);
-      if (img) {
-        drawCover(img);
-        currentIndex = targetIndex;
-      }
+    function show(i: number) {
+      const img = images[i];
+      if (!img) return;
+      drawCover(img);
+      currentIndex = i;
     }
 
-    // Switch the layout on only once a real frame is on the canvas. Doing it
-    // earlier (on mount, or in a media query) leaves a blank canvas over the
-    // whole first paint and, if the frames never arrive at all, forever — this
-    // way a failed fetch degrades to the static hero instead of an empty stage.
+    // Swap the still photo for the canvas only once a real frame is on it, so
+    // the stage is never blank — and a failed fetch degrades to the photo.
     let activated = false;
     function activate() {
       if (activated) return;
@@ -234,8 +225,6 @@ export default function HeroSequence({
       // The canvas was display:none until the class landed, so it had no box to
       // measure; size it against the real one now and repaint.
       resize();
-      computeTarget();
-      render();
     }
 
     function resize() {
@@ -244,66 +233,10 @@ export default function HeroSequence({
       const cssHeight = cssWidth * (config.naturalHeight / config.naturalWidth);
       canvas.width = Math.round(cssWidth * dpr);
       canvas.height = Math.round(cssHeight * dpr);
-      const img = nearestLoaded(currentIndex < 0 ? 0 : currentIndex);
-      if (img) drawCover(img);
+      if (currentIndex >= 0) show(currentIndex);
     }
-
-    function computeTarget() {
-      // `section` is the tall pin wrapper; the hero sticks for its full height.
-      // The scrub distance is therefore wrapper height minus one viewport — the
-      // frames reach the last one exactly as the sticky hero releases. Uses the
-      // cached viewport height, NOT window.innerHeight, so a collapsing mobile
-      // URL bar doesn't shift the distance out from under an in-progress scrub.
-      const rect = section.getBoundingClientRect();
-      const distance = Math.max(section.offsetHeight - viewportHeight, 1);
-      const scrolled = Math.min(Math.max(-rect.top, 0), distance);
-      const progress = scrolled / distance;
-      targetIndex = Math.min(count - 1, Math.round(progress * (count - 1)));
-    }
-
-    let ticking = false;
-
-    /*
-      Recompute which frame the current scroll position calls for, throttled to
-      one rAF. Deliberately does NOT touch the preload: the IntersectionObserver
-      below calls this once on attach to prime the first frame, and the hero is
-      on screen at load, so anything triggered from here effectively runs at
-      mount. Wiring the preload into this path is exactly what made the 5 s
-      mobile delay a no-op — all 49 frames still began inside 300 ms.
-    */
-    function syncToScroll() {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        ticking = false;
-        computeTarget();
-        if (targetIndex !== currentIndex) render();
-      });
-    }
-
-    /* Real scroll events only — a genuine signal that the user is scrubbing, so
-       the remaining frames are wanted NOW rather than after the idle delay. */
-    function onScroll() {
-      startBulkPreload();
-      syncToScroll();
-    }
-
-    // Adopt a genuinely new viewport (rotation, desktop window resize) but
-    // ignore the browser-chrome-sized changes a mobile scroll produces.
-    function onViewportChange(force = false) {
-      const h = window.innerHeight;
-      if (!force && Math.abs(h - viewportHeight) <= viewportTolerance) return;
-      viewportHeight = h;
-      computeTarget();
-      render();
-    }
-    const onWindowResize = () => onViewportChange(false);
-    const onOrientationChange = () => onViewportChange(true);
 
     // --- bounded-concurrency progressive preload ---------------------------
-    // fetch → blob → createImageBitmap decodes each frame OFF the main thread,
-    // so by the time it lands in `images[]` it's a ready-to-blit bitmap and
-    // drawCover never forces a synchronous decode during scroll.
     let nextToLoad = 0;
     const abort = new AbortController();
     async function loadOne(i: number): Promise<void> {
@@ -316,22 +249,18 @@ export default function HeroSequence({
           return;
         }
         images[i] = bitmap;
-        // Draw immediately if this is the frame we currently want (or the very
-        // first frame to arrive), so the hero is never blank.
-        if (i === targetIndex || currentIndex < 0) {
-          render();
+        if (currentIndex < 0) {
+          show(i);
           activate();
         }
       } catch {
-        // Network/decode error or aborted teardown — skip this frame; render()
-        // falls back to the nearest loaded one.
-        //
+        if (cancelled) return;
+        failed[i] = true;
         // Frame 0 is different: the pinned layout went on before the first paint
         // on the promise of a sequence. If its first frame cannot arrive, fall back
-        // to the stacked hero rather than leave a tall scroll track over a still
-        // photo. (One shift, on a failure path only; a later frame that does land
-        // re-applies the layout through activate().)
-        if (i === 0 && !cancelled && !activated) section.classList.remove(LAYOUT_CLASS);
+        // to the stacked hero rather than an empty stage. (One shift, on a failure
+        // path only; a later frame that does land re-applies it via activate().)
+        if (i === 0 && !activated) section.classList.remove(LAYOUT_CLASS);
       }
     }
     async function loadNext(): Promise<void> {
@@ -342,123 +271,125 @@ export default function HeroSequence({
       return loadNext();
     }
 
-    resize();
-    computeTarget();
-    // The first frame is the hero's first paint, so fetch it on its own before
-    // opening the other lanes — otherwise LCP waits behind five frames nobody
-    // can see yet.
-    nextToLoad = 1;
-
     /*
-      ── The other 144 frames wait for the page to finish its own work ─────────
-      Frame 0 stays eager: it is what activate() hangs off, so deferring it would
-      delay the pin/sticky layout switching on and widen the window where an
-      early scroll behaves like a plain stacked hero.
+      ── Playback: time-driven, never scroll-driven ─────────────────────────────
+      This used to scrub the frames against scroll position inside a 300vh (180vh on
+      phones) sticky track, so the page stopped moving under the visitor's scroll
+      while the car played. Customers read that as the site being stuck.
 
-      The REST used to open all six lanes the instant frame 0 resolved. On the
-      desktop set that is ~4.87 MB of WebP plus 144 createImageBitmap decodes
-      fired during the exact window the page is still fetching its own CSS, JS
-      and product imagery — measured on the live home page as 4.92 MB / 145
-      requests in a Lighthouse run that never scrolled a single pixel.
-
-      Nothing above the fold needs them: the canvas shows frame 0 until the user
-      starts scrolling. So they now start at whichever comes first —
-        • the browser going idle after `load`, or
-        • the first scroll, so a user who scrolls immediately is never starved.
-      `nearestLoaded()` already covers a not-yet-arrived frame by drawing the
-      closest one it has, so an in-progress preload degrades to a slightly
-      coarser scrub rather than a blank canvas.
+      Now the sequence plays ONCE on its own, like a short video: the car comes
+      apart (frame 0 → last), holds on the exploded build, then reassembles (last →
+      frame 0) and rests on the complete car. The page scrolls normally the whole
+      time; nothing here listens to scroll at all. It advances only onto frames that have arrived (a slow link
+      buffers instead of skipping to a blank), steps over frames that failed for
+      good, and pauses while the hero is off screen so it never burns CPU unseen.
     */
-    let bulkStarted = false;
-    function startBulkPreload() {
-      if (bulkStarted || cancelled) return;
-      bulkStarted = true;
-      for (let k = 0; k < CONCURRENCY; k++) void loadNext();
+    const fps = signals.isDesktop ? DESKTOP_FPS : MOBILE_FPS;
+    const step = 1000 / fps;
+    // Position along the forward-then-back path: 0..lastIdx is the car coming
+    // apart, lastIdx..2*lastIdx is it coming back together.
+    const lastIdx = count - 1;
+    const endPos = 2 * lastIdx;
+    const frameAt = (p: number) => (p <= lastIdx ? p : endPos - p);
+    let pos = 0;
+    let frame = 0;
+    let holdUntil = 0;
+    let last = 0;
+    let raf = 0;
+    let visible = true;
+    let started = false;
+    let finished = false;
+
+    /** Next position whose frame did not fail for good (endPos + 1 = done). */
+    const nextPlayable = (from: number) => {
+      let p = from + 1;
+      while (p <= endPos && failed[frameAt(p)]) p += 1;
+      return p;
+    };
+
+    function tick(now: number) {
+      raf = 0;
+      if (cancelled || finished || !visible) return;
+      // A long gap (tab in the background, a slow frame) must not fast-forward
+      // through dozens of frames in one go.
+      if (!last || now - last > step * 4) last = now - step;
+      // Pause on the fully exploded build before it comes back together.
+      if (holdUntil) {
+        if (now < holdUntil) {
+          raf = requestAnimationFrame(tick);
+          return;
+        }
+        holdUntil = 0;
+        last = now - step;
+      }
+      while (now - last >= step) {
+        const p = nextPlayable(pos);
+        if (p > endPos) {
+          finished = true;
+          break;
+        }
+        const n = frameAt(p);
+        if (!images[n]) {
+          last = now; // buffering: hold the clock until the frame arrives
+          break;
+        }
+        pos = p;
+        frame = n;
+        last += step;
+        if (pos === lastIdx) {
+          holdUntil = now + EXPLODED_HOLD_MS;
+          break;
+        }
+      }
+      if (frame !== currentIndex) show(frame);
+      if (!finished) raf = requestAnimationFrame(tick);
+    }
+    function play() {
+      if (cancelled || finished || raf || !visible || !started) return;
+      last = 0;
+      raf = requestAnimationFrame(tick);
+    }
+    function pause() {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
     }
 
-    const idleWin = window as Window & {
-      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
-      cancelIdleCallback?: (handle: number) => void;
-    };
-    let idleHandle = 0;
+    // Start after the page's own load, so the frames never compete with the
+    // HTML, CSS, JS and product images for the first paint.
+    function start() {
+      if (cancelled || started) return;
+      started = true;
+      for (let k = 0; k < CONCURRENCY; k++) void loadNext();
+      timeoutHandle = window.setTimeout(play, START_DELAY_MS);
+    }
     let timeoutHandle = 0;
 
-    /*
-      Hanging the preload straight off `load` + requestIdleCallback was not
-      enough. On a fast connection `load` fires early and the page is instantly
-      idle, so the callback ran almost immediately — measured on the mobile
-      profile, the frames still began at 229 ms and were the single largest
-      payload on the page (745 KB, more than images, scripts and fonts
-      combined). "Idle" is not the same thing as "the hero has finished".
-
-      So the speculative fetch is now held for a fixed window after `load`. The
-      user-driven path is unaffected: onScroll calls startBulkPreload() directly,
-      so anyone who actually scrubs gets the frames at once; this delay only
-      governs the fetch for someone still sitting at the top of the page.
-
-      Mobile waits considerably longer. Its link is the scarce resource, its
-      frame set is already decimated to 49, and a phone visitor who never
-      scrolls should not spend ~745 KB of their data on an animation they never
-      saw.
-    */
-    const bulkPreloadDelayMs = signals.isDesktop ? 2000 : 5000;
-    function scheduleBulkPreload() {
-      if (cancelled || bulkStarted) return;
-      timeoutHandle = window.setTimeout(() => {
-        if (cancelled || bulkStarted) return;
-        // Idle is a nicety on top of the delay, never a substitute for it;
-        // `timeout` guarantees it still runs on a page that never goes idle.
-        if (typeof idleWin.requestIdleCallback === 'function') {
-          idleHandle = idleWin.requestIdleCallback(startBulkPreload, { timeout: 3000 });
-        } else {
-          startBulkPreload();
-        }
-      }, bulkPreloadDelayMs);
-    }
-
+    resize();
+    // Frame 0 alone first: it is what activate() hangs off.
+    nextToLoad = 1;
     void loadOne(0);
-    if (document.readyState === 'complete') {
-      scheduleBulkPreload();
-    } else {
-      window.addEventListener('load', scheduleBulkPreload, { once: true });
-    }
+    if (document.readyState === 'complete') start();
+    else window.addEventListener('load', start, { once: true });
 
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(canvas);
-    window.addEventListener('resize', onWindowResize, { passive: true });
-    window.addEventListener('orientationchange', onOrientationChange);
 
-    let scrollBound = false;
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !scrollBound) {
-          window.addEventListener('scroll', onScroll, { passive: true });
-          scrollBound = true;
-          // Prime the canvas at the current offset WITHOUT counting as a scroll.
-          syncToScroll();
-        } else if (!entry.isIntersecting && scrollBound) {
-          window.removeEventListener('scroll', onScroll);
-          scrollBound = false;
-        }
-      },
-      { rootMargin: '100px' }
-    );
+    // Pause while the hero is off screen; resume (from where it was) on return.
+    const io = new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      if (visible) play();
+      else pause();
+    });
     io.observe(section);
 
     return () => {
       cancelled = true;
       abort.abort();
-      // Drop the deferred preload if the section unmounts before it fires.
-      window.removeEventListener('load', scheduleBulkPreload);
-      if (idleHandle && typeof idleWin.cancelIdleCallback === 'function') {
-        idleWin.cancelIdleCallback(idleHandle);
-      }
+      pause();
+      window.removeEventListener('load', start);
       if (timeoutHandle) window.clearTimeout(timeoutHandle);
       resizeObserver.disconnect();
       io.disconnect();
-      window.removeEventListener('resize', onWindowResize);
-      window.removeEventListener('orientationchange', onOrientationChange);
-      if (scrollBound) window.removeEventListener('scroll', onScroll);
       section.classList.remove(ACTIVE_CLASS);
       section.classList.remove(LAYOUT_CLASS);
       // Release decoded-bitmap memory eagerly instead of waiting for GC.

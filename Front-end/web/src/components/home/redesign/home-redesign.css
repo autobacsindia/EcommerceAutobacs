@@ -98,10 +98,13 @@
 .hr .main-nav {
   position: fixed; top: 0; left: 0; right: 0; height: 76px;
   display: flex; align-items: center; gap: 22px; padding: 0 28px;
-  z-index: 50; border-bottom: 1px solid var(--line);
-  background: rgba(17, 18, 18, 0.88); backdrop-filter: blur(18px);
+  z-index: 50; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(18, 19, 19, 0.94) 0%, rgba(13, 14, 14, 0.86) 100%); backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.9);
   transition: background 0.3s;
 }
+/* Premium detail: a gold hairline under the bar that fades out at both ends. */
+.hr .main-nav::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(201, 168, 112, 0.5), transparent); }
 .hr .main-nav .logo { display: flex; align-items: center; font-size: 13px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; flex-shrink: 0; }
 .hr .main-nav .logo span { color: var(--gold); font-weight: 300; }
 /* Logo image (when brand.logo is set). The asset must be padding-trimmed
@@ -145,16 +148,23 @@
 .hr .main-nav .nav-links a:hover::after,
 .hr .main-nav .nav-links a.is-active::after { transform: scaleX(1); }
 .hr .main-nav .nav-links a.is-active { color: var(--gold); }
+.hr .main-nav .nav-links a:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+/* Offers: gold, with a softly pulsing dot so it reads as "live deals". */
+.hr .main-nav .nav-links a.nav-offers { color: var(--gold); padding-left: 14px; }
+.hr .main-nav .nav-links a.nav-offers::before { content: ''; position: absolute; left: 0; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 0 rgba(201, 168, 112, 0.6); animation: hr-offer-pulse 2.4s ease-out infinite; }
+@keyframes hr-offer-pulse { 0% { box-shadow: 0 0 0 0 rgba(201, 168, 112, 0.6); } 70%, 100% { box-shadow: 0 0 0 7px rgba(201, 168, 112, 0); } }
+@media (prefers-reduced-motion: reduce) { .hr .main-nav .nav-links a.nav-offers::before { animation: none; } }
 @media (min-width: 1200px) {
   .hr .main-nav .nav-links { gap: 30px; }
   .hr .main-nav .nav-links a,
   .hr .main-nav .nav-links .veh-trigger { font-size: 12px; }
 }
-.hr .main-nav .nav-search { position: relative; flex: 0 1 220px; max-width: 220px; min-width: 110px; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); transition: border-color 0.25s; }
-.hr .main-nav .nav-search:focus-within { border-color: rgba(201, 168, 112, 0.55); }
-.hr .main-nav .nav-search svg { flex-shrink: 0; }
-.hr .main-nav .nav-search input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 11px; letter-spacing: 0.1em; }
-.hr .main-nav .nav-search input::placeholder { color: var(--muted); text-transform: uppercase; letter-spacing: 0.16em; font-size: 10px; }
+.hr .main-nav .nav-search { position: relative; flex: 0 1 290px; max-width: 290px; min-width: 120px; display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 16px; border: 1px solid rgba(201, 168, 112, 0.28); border-radius: 999px; background: rgba(255, 255, 255, 0.04); transition: border-color 0.25s, background 0.25s, box-shadow 0.25s; }
+.hr .main-nav .nav-search:hover { border-color: rgba(201, 168, 112, 0.5); }
+.hr .main-nav .nav-search:focus-within { border-color: var(--gold); background: rgba(255, 255, 255, 0.06); box-shadow: 0 0 0 4px rgba(201, 168, 112, 0.12); }
+.hr .main-nav .nav-search svg { flex-shrink: 0; color: var(--gold); }
+.hr .main-nav .nav-search input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 13px; letter-spacing: 0.02em; }
+.hr .main-nav .nav-search input::placeholder { color: rgba(240, 237, 231, 0.6); letter-spacing: 0.02em; font-size: 13px; }
 
 /* ── Search suggestions dropdown (live typeahead + recent searches) ──────────
  * Anchored to the search box (desktop: right-aligned, wider than the input;
@@ -180,11 +190,13 @@
 .hr .nav-search-panel .nsp-seeall { border-top: 1px solid var(--line); color: var(--gold); font-size: 11px; letter-spacing: 0.08em; }
 .hr .nav-search-panel .nsp-seeall svg { color: var(--gold); flex-shrink: 0; }
 .hr .nav-search-panel .nsp-seeall span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hr .main-nav .actions { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
-.hr .main-nav .icon-btn { position: relative; color: rgba(240, 237, 231, 0.6); cursor: pointer; display: flex; transition: color 0.25s; background: none; border: none; }
-.hr .main-nav .icon-btn:hover { color: var(--gold); }
-.hr .main-nav .icon-btn .badge { position: absolute; top: -7px; right: -8px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--gold); color: var(--bg); font-size: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
-.hr .main-nav .avatar { width: 34px; height: 34px; border-radius: 50%; overflow: hidden; border: 1px solid rgba(201, 168, 112, 0.45); cursor: pointer; flex-shrink: 0; transition: border-color 0.25s; }
+.hr .main-nav .actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+/* Round, outlined icon buttons: easy targets, clearly buttons, gold on hover. */
+.hr .main-nav .icon-btn { position: relative; width: 40px; height: 40px; border-radius: 50%; color: rgba(240, 237, 231, 0.85); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color 0.25s, border-color 0.25s, background 0.25s; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
+.hr .main-nav .icon-btn:hover { color: var(--gold); border-color: rgba(201, 168, 112, 0.5); background: rgba(201, 168, 112, 0.08); }
+.hr .main-nav .icon-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.hr .main-nav .icon-btn .badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--gold); color: #111212; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #121313; }
+.hr .main-nav .avatar { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; border: 1px solid rgba(201, 168, 112, 0.45); cursor: pointer; flex-shrink: 0; transition: border-color 0.25s; }
 .hr .main-nav .avatar:hover { border-color: var(--gold); }
 .hr .main-nav .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .hr .nav-burger { display: none; background: none; border: none; color: var(--text); cursor: pointer; }
@@ -284,11 +296,17 @@
 .hr .hero-pin.hero-seq-active .center-img .hero-seq-fallback { display: none; }
 
 @media (min-width: 769px) {
-  /* PINNED HERO — the whole screen stays fixed while the frames scrub; the page
-     only scrolls on once the sequence finishes. .hero sticks for the full height
-     of .hero-pin (300vh ⇒ ~200vh of scrub distance; tune the 300vh to taste). */
-  .hr .hero-pin.hero-seq-layout { height: 300vh; }
-  .hr .hero-pin.hero-seq-layout .hero { position: sticky; top: 0; height: 100vh; background: #080e16; }
+  /* FULL-SCREEN HERO — one screen tall, scrolling normally. It used to be a 300vh
+     track with a sticky hero that froze the page while the frames scrubbed against
+     the scroll; customers read that as the site being stuck. The sequence now
+     plays on its own (HeroSequence.tsx), so no track and no sticky. */
+  .hr .hero-pin.hero-seq-layout .hero { position: relative; height: 100vh; background: #080e16; }
+  /* The sequence plays out to the exploded build, which reaches under the copy.
+     A soft scrim on the left keeps the tagline readable throughout without
+     dimming the car. Inside the car slide's own stacking context (the carousel is
+     z 1, so a scrim on .hero would sit over the copy too): above the canvas
+     (.center-img, z 2), below the copy (.hero-left, z 5). */
+  .hr .hero-pin.hero-seq-layout .hero .hero-slide:first-child::before { content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: linear-gradient(90deg, rgba(8, 14, 22, 0.88) 0%, rgba(8, 14, 22, 0.55) 22%, rgba(8, 14, 22, 0) 42%); }
   /* Match the hero bg to the video's flat #080e16 background, with a faint cool
      glow behind the car, so the feathered canvas edges dissolve seamlessly. */
   .hr .hero-pin.hero-seq-layout .hero .bg-glow { background: radial-gradient(ellipse 95% 85% at 50% 50%, #131c26 0%, #0a1019 55%, #070b12 100%); }
@@ -319,8 +337,8 @@
 @media (max-width: 768px) {
   /* PINNED HERO, PHONE — the desktop composition (car filling the stage, copy
      over it) adapted to portrait, with four differences that matter:
-     1. 180vh not 300vh. A pin eats the user's scroll, and a thumb flick covers
-        far more of the page than a wheel notch; 300vh reads as "stuck".
+     1. No pin and no tall track — one screen, scrolling normally (see the
+        desktop note above). It used to be a 180vh sticky track.
      2. 100svh, not 100vh. On mobile 100vh is the LARGE viewport (URL bar
         hidden), so a 100vh sticky hero has its bottom cut off while the bar is
         showing — which is exactly when the user first sees it.
@@ -332,10 +350,8 @@
      4. The copy is absolutely positioned OVER the frame, like desktop, instead
         of stacked above it — the top of every frame is dark ceiling, so the
         headline has somewhere to sit without fighting the car. */
-  .hr .hero-pin.hero-seq-layout { height: 180vh; }
   .hr .hero-pin.hero-seq-layout .hero {
-    position: sticky;
-    top: 0;
+    position: relative;
     height: 100vh; /* fallback for browsers without svh */
     height: 100svh;
     min-height: 0;
@@ -661,7 +677,7 @@
  * (see Categories.tsx); the `display` guards at the bottom pick exactly one per
  * breakpoint — so the right variant is in the SSR HTML and there's no layout
  * shift:
- *   • md/lg (≥769px): pinned horizontal scroll gallery  → .categories-scroll
+ *   • md/lg (≥769px): sideways-scrolling row with arrows → .categories-scroll
  *   • phone (≤768px): 3D coverflow carousel             → .categories-cf
  * The variants reuse class names (.cat-card, .cat-info, …) with different
  * layouts, so every rule is namespaced under its variant wrapper. */
@@ -676,20 +692,28 @@
 
 /* ── md/lg: pinned horizontal scroll gallery ── */
 .hr .categories-scroll { padding: 0; background: var(--bg); position: relative; }
-.hr .categories-scroll .cat-sticky { position: sticky; top: 0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
-.hr .categories-scroll .cat-head { display: flex; justify-content: space-between; align-items: flex-end; padding: 84px 52px 0; flex-shrink: 0; gap: 24px; }
+/* No sticky panel: it used to pin for ~3,700px and turn the page's scroll sideways. */
+.hr .categories-scroll .cat-sticky { display: flex; flex-direction: column; padding-bottom: 80px; }
+.hr .categories-scroll .cat-head { display: flex; justify-content: space-between; align-items: flex-end; padding: 96px 52px 0; margin-bottom: 40px; flex-shrink: 0; gap: 24px; }
 .hr .categories-scroll .cat-head h2 { font-size: clamp(32px, 4vw, 52px); font-weight: 300; line-height: 1; }
 .hr .categories-scroll .cat-head-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 16px; }
 .hr .categories-scroll .cat-counter { font-size: 13px; letter-spacing: 0.1em; color: var(--muted); }
 .hr .categories-scroll .cat-counter b { color: var(--text); font-weight: 400; }
 .hr .categories-scroll .cat-progress { width: 160px; height: 1px; background: var(--line); position: relative; overflow: hidden; }
 .hr .categories-scroll .cat-progress-bar { position: absolute; left: 0; top: 0; height: 100%; width: 0; background: var(--gold); }
-.hr .categories-scroll .cat-scroll-hint { display: flex; align-items: center; gap: 10px; font-size: 9px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
-.hr .categories-scroll .cat-track-wrap { flex: 1; display: flex; align-items: center; overflow: hidden; }
-.hr .categories-scroll .cat-track { display: flex; gap: 22px; padding: 0 52px; will-change: transform; }
-.hr .categories-scroll .cat-card { position: relative; overflow: hidden; cursor: pointer; background: #1a1c1c; flex: 0 0 clamp(300px, 30vw, 400px); height: min(60vh, 540px); }
-.hr .categories-scroll .cat-card img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.85s cubic-bezier(0.16, 1, 0.3, 1); filter: brightness(0.52); }
-.hr .categories-scroll .cat-card:hover img { transform: scale(1.07); filter: brightness(0.62); }
+.hr .categories-scroll .cat-nav { display: flex; gap: 10px; }
+.hr .categories-scroll .cat-nav-btn { width: 48px; height: 48px; border: 1px solid rgba(201, 168, 112, 0.35); background: rgba(255, 255, 255, 0.02); color: var(--text); border-radius: 999px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color 0.25s, color 0.25s, background 0.25s, opacity 0.25s; }
+.hr .categories-scroll .cat-nav-btn:hover:not(:disabled) { border-color: var(--gold); background: var(--gold); color: #111212; }
+.hr .categories-scroll .cat-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.hr .categories-scroll .cat-nav-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.hr .categories-scroll .cat-track-wrap { position: relative; }
+.hr .categories-scroll .cat-track { display: flex; gap: 22px; padding: 6px 52px 18px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-left: 52px; scrollbar-width: none; }
+.hr .categories-scroll .cat-track::-webkit-scrollbar { display: none; }
+.hr .categories-scroll .cat-card { position: relative; overflow: hidden; cursor: pointer; background: #1a1c1c; flex: 0 0 clamp(290px, 28vw, 380px); height: min(58vh, 520px); border-radius: 18px; border: 1px solid rgba(201, 168, 112, 0.14); scroll-snap-align: start; box-shadow: 0 24px 50px -28px rgba(0, 0, 0, 0.8); transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.45s, box-shadow 0.45s; }
+.hr .categories-scroll .cat-card:hover { transform: translateY(-6px); border-color: rgba(201, 168, 112, 0.55); box-shadow: 0 34px 60px -26px rgba(201, 168, 112, 0.35); }
+.hr .categories-scroll .cat-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+.hr .categories-scroll .cat-card img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.85s cubic-bezier(0.16, 1, 0.3, 1), filter 0.6s; filter: brightness(0.72); }
+.hr .categories-scroll .cat-card:hover img { transform: scale(1.07); filter: brightness(0.85); }
 .hr .categories-scroll .cat-card::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, transparent 60%); z-index: 1; }
 .hr .categories-scroll .cat-num-ghost { position: absolute; top: 28px; right: 30px; font-size: clamp(48px, 4vw, 72px); font-weight: 300; line-height: 1; color: rgba(255, 255, 255, 0.08); z-index: 2; transition: color 0.45s ease, transform 0.45s ease; }
 .hr .categories-scroll .cat-card:hover .cat-num-ghost { color: rgba(201, 168, 112, 0.42); transform: translateY(-4px); }
@@ -697,11 +721,11 @@
 .hr .categories-scroll .cat-name { font-size: 26px; font-weight: 400; line-height: 1.16; }
 .hr .categories-scroll .cat-underline { width: 0; height: 1px; background: var(--gold); margin-top: 18px; transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
 .hr .categories-scroll .cat-card:hover .cat-underline { width: 64px; }
-.hr .categories-scroll .cat-explore { display: flex; align-items: center; gap: 10px; margin-top: 18px; opacity: 0; transform: translateY(8px); transition: opacity 0.4s ease, transform 0.4s ease; }
-.hr .categories-scroll .cat-card:hover .cat-explore { opacity: 1; transform: translateY(0); }
-.hr .categories-scroll .cat-explore span { font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text); }
+.hr .categories-scroll .cat-explore { display: flex; align-items: center; gap: 10px; margin-top: 16px; opacity: 0.85; transition: opacity 0.4s ease, gap 0.4s ease; }
+.hr .categories-scroll .cat-card:hover .cat-explore { opacity: 1; gap: 14px; }
+.hr .categories-scroll .cat-explore span { font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text); }
 .hr .categories-scroll .cat-explore svg { color: var(--gold); }
-.hr .categories-scroll .cat-end-card { flex: 0 0 clamp(260px, 22vw, 320px); height: min(60vh, 540px); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 8px; }
+.hr .categories-scroll .cat-end-card { flex: 0 0 clamp(260px, 22vw, 320px); height: min(58vh, 520px); scroll-snap-align: start; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 8px; }
 .hr .categories-scroll .cat-end-card .ec-eyebrow { font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--gold); margin-bottom: 18px; }
 .hr .categories-scroll .cat-end-card .ec-title { font-size: 30px; font-weight: 300; line-height: 1.1; margin-bottom: 26px; }
 
@@ -791,6 +815,43 @@
 .hr .anim-data-3 { bottom: 60px; right: 52px; text-align: right; }
 .hr .anim-data-3 .anim-data-line { margin-left: auto; }
 .hr .anim-pulse { position: absolute; width: 88px; height: 88px; border-radius: 50%; border: 1px solid rgba(201, 168, 112, 0.15); z-index: 3; animation: hr-pulse-ring 3s ease-in-out infinite; pointer-events: none; }
+/* ── Shop by fitment: car stage + "Choose an area" panel ── */
+.hr .ce-layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.hr .ce-layout .anim-stage { aspect-ratio: auto; min-height: clamp(420px, 46vw, 640px); background: radial-gradient(ellipse 70% 60% at 50% 60%, rgba(201, 168, 112, 0.08) 0%, transparent 70%), #080909; cursor: grab; }
+.hr .ce-layout .anim-stage:active { cursor: grabbing; }
+.hr .ce-hint { position: absolute; left: 24px; bottom: 22px; z-index: 5; display: inline-flex; align-items: center; gap: 10px; padding: 9px 16px; border-radius: 999px; background: rgba(13, 14, 14, 0.85); border: 1px solid rgba(201, 168, 112, 0.35); backdrop-filter: blur(8px); font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text); pointer-events: none; }
+.hr .ce-hint-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 4px rgba(201, 168, 112, 0.2); }
+.hr .ce-panel { background: linear-gradient(180deg, #121313 0%, #0d0e0e 100%); border-left: 1px solid var(--line); padding: 30px 26px; display: flex; flex-direction: column; gap: 18px; }
+.hr .ce-panel-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold); }
+.hr .ce-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.hr .ce-item { display: flex; align-items: center; gap: 14px; padding: 11px 12px; border-radius: 12px; border: 1px solid transparent; color: rgba(240, 237, 231, 0.88); font-size: 14px; transition: background 0.2s, border-color 0.2s, color 0.2s; }
+.hr .ce-item:hover, .hr .ce-item.is-active, .hr .ce-item:focus-visible { background: rgba(201, 168, 112, 0.1); border-color: rgba(201, 168, 112, 0.45); color: var(--text); outline: none; }
+.hr .ce-num { flex: 0 0 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px solid rgba(201, 168, 112, 0.7); color: var(--gold); font-size: 11px; font-weight: 700; transition: background 0.2s, color 0.2s; }
+.hr .ce-item:hover .ce-num, .hr .ce-item.is-active .ce-num { background: var(--gold); color: #111212; }
+.hr .ce-label { flex: 1; }
+.hr .ce-arrow { color: var(--gold); opacity: 0; transform: translateX(-4px); transition: opacity 0.2s, transform 0.2s; }
+.hr .ce-item:hover .ce-arrow, .hr .ce-item.is-active .ce-arrow { opacity: 1; transform: none; }
+.hr .ce-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.hr .ce-chips-label { width: 100%; font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+.hr .ce-chip { padding: 7px 14px; border-radius: 999px; border: 1px solid rgba(201, 168, 112, 0.3); font-size: 12px; color: var(--text); transition: border-color 0.2s, background 0.2s; }
+.hr .ce-chip:hover { border-color: var(--gold); background: rgba(201, 168, 112, 0.1); }
+.hr .ce-credit { margin-top: auto; font-size: 10px; color: var(--muted); }
+@media (max-width: 1024px) {
+  .hr .ce-layout { grid-template-columns: 1fr; }
+  .hr .ce-panel { border-left: none; border-top: 1px solid var(--line); }
+  .hr .ce-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 768px) {
+  /* Phones get the still render: enlarge it (cropped by the stage) so the ten
+     numbered points have room instead of piling on top of each other. */
+  .hr .ce-layout .anim-stage { min-height: 0; aspect-ratio: 1 / 1; }
+  /* The render has wide empty margins; at 200% the car fills the stage and every
+     point (they span ~37–65% of the image) stays in view. */
+  .hr .ce-layout .ce-static-box { width: 200%; max-width: none; flex: 0 0 auto; }
+  .hr .ce-hint { left: 50%; transform: translateX(-50%); bottom: 12px; font-size: 10px; white-space: nowrap; }
+  .hr .ce-panel { padding: 24px 18px; }
+  .hr .ce-item { font-size: 13px; padding: 10px; gap: 10px; }
+}
 .hr .anim-strip { display: flex; align-items: center; justify-content: space-between; padding: 28px 52px; border-top: 1px solid var(--line); gap: 16px; }
 .hr .anim-strip-label { font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted); }
 .hr .anim-strip-link { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); display: flex; align-items: center; gap: 10px; cursor: pointer; transition: gap 0.25s; }
@@ -824,6 +885,25 @@
 .hr .ce-card:hover .ce-name { color: var(--bg); }
 .hr .ce-price { font-size: 18px; font-weight: 500; color: var(--text); transition: color 0.45s ease; }
 .hr .ce-card:hover .ce-price { color: var(--bg); }
+/* ── Driver's Choice product card (ProductCard.tsx) ── */
+.hr .section-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.26em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+.hr .pc-card { flex: 0 0 300px; display: flex; flex-direction: column; border-radius: 18px; overflow: hidden; background: #151616; border: 1px solid rgba(255, 255, 255, 0.07); box-shadow: 0 24px 50px -30px rgba(0, 0, 0, 0.9); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s, box-shadow 0.4s; }
+.hr .pc-card:hover { transform: translateY(-6px); border-color: rgba(201, 168, 112, 0.5); box-shadow: 0 30px 60px -28px rgba(201, 168, 112, 0.35); }
+.hr .pc-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+.hr .pc-media { position: relative; aspect-ratio: 4 / 3.2; overflow: hidden; background: radial-gradient(ellipse 80% 70% at 50% 40%, #2a2c2c 0%, #181919 70%); }
+.hr .pc-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+.hr .pc-card:hover .pc-img { transform: scale(1.06); }
+.hr .pc-cat { position: absolute; left: 14px; top: 14px; padding: 5px 12px; border-radius: 999px; background: rgba(13, 14, 14, 0.82); border: 1px solid rgba(201, 168, 112, 0.35); backdrop-filter: blur(6px); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text); }
+.hr .pc-body { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 18px 20px 20px; }
+.hr .pc-brand { font-size: 11px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); }
+.hr .pc-name { font-size: 16px; font-weight: 500; line-height: 1.4; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8em; }
+.hr .pc-foot { margin-top: auto; padding-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.hr .pc-price { font-size: 20px; font-weight: 600; color: var(--text); letter-spacing: 0.01em; }
+.hr .pc-cta { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; background: var(--gold); color: #111212; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; transition: gap 0.25s, filter 0.25s; }
+.hr .pc-card:hover .pc-cta { gap: 12px; filter: brightness(1.08); }
+.hr .pc-flat { flex: none; width: 100%; }
+.hr .prod-nav button { border-radius: 50%; border-color: rgba(201, 168, 112, 0.35) !important; }
+.hr .prod-nav button:hover { background: var(--gold); color: #111212 !important; }
 .hr .prod-progress { height: 2px; background: var(--line); margin-top: 28px; position: relative; }
 .hr .prod-progress-bar { position: absolute; left: 0; top: 0; height: 100%; background: var(--gold); width: 33%; transition: left 0.55s cubic-bezier(0.16, 1, 0.3, 1), width 0.55s ease; }
 
@@ -872,48 +952,74 @@
    et al.) so the source renders ~1:1 or downscaled = crisp on standard-DPI big
    screens. High-DPR/4K crispness still needs a ≥2560px source (see
    homeContent.ts transformation note); the responsive srcSet then serves it. */
-.hr .split-reveal { position: relative; width: 100%; max-width: 1340px; margin: 0 auto 64px; aspect-ratio: 16 / 9; overflow: hidden; background: #1a1c1c; cursor: ew-resize; user-select: none; touch-action: none; }
+.hr .tf-sub { margin-top: 18px; font-size: 15px; color: rgba(240, 237, 231, 0.66); }
+/* Framed showcase: rounded, gold-edged, with a caption bar. */
+.hr .tf-frame { max-width: 1340px; margin: 0 auto 64px; border-radius: 22px; overflow: hidden; border: 1px solid rgba(201, 168, 112, 0.3); background: #121313; box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.95), 0 0 60px -30px rgba(201, 168, 112, 0.35); }
+/* pan-y: vertical swipes on the photo scroll the page (this was touch-action:none,
+   which trapped the page on phones). Sideways drags move the divider (see JS). */
+.hr .split-reveal { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #1a1c1c; cursor: ew-resize; user-select: none; touch-action: pan-y; }
+.hr .tf-caption { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px; border-top: 1px solid rgba(201, 168, 112, 0.2); background: linear-gradient(180deg, #151616, #101111); }
+.hr .tf-caption > div { display: flex; flex-direction: column; gap: 4px; }
+.hr .tf-caption-eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold); }
+.hr .tf-caption-title { font-size: 18px; font-weight: 500; color: var(--text); }
+.hr .tf-cta { display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px; border-radius: 999px; background: var(--gold); color: #111212; font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; transition: gap 0.25s, filter 0.25s; white-space: nowrap; }
+.hr .tf-cta:hover { gap: 14px; filter: brightness(1.08); }
 .hr .split-reveal img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 .hr .split-after { filter: brightness(0.78); }
 .hr .split-before { filter: brightness(0.78); }
 /* clip lives on the wrapper (.split-before-wrap), driven by JS */
 .hr .split-before-wrap { position: absolute; inset: 0; clip-path: inset(0 50% 0 0); }
-.hr .split-label { position: absolute; bottom: 24px; font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--text); background: rgba(0, 0, 0, 0.55); padding: 7px 15px; backdrop-filter: blur(8px); z-index: 4; pointer-events: none; }
-.hr .split-label-before { left: 24px; }
-.hr .split-label-after { right: 24px; color: var(--gold); }
-.hr .split-handle { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: var(--gold); transform: translateX(-50%); z-index: 5; pointer-events: none; }
-.hr .split-grip { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 54px; height: 54px; border-radius: 50%; background: rgba(17, 18, 18, 0.55); border: 1px solid var(--gold); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; gap: 6px; z-index: 6; transition: background 0.25s, transform 0.18s ease; }
-.hr .split-reveal:hover .split-grip { background: rgba(201, 168, 112, 0.16); }
+.hr .split-label { position: absolute; top: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text); background: rgba(13, 14, 14, 0.78); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 999px; padding: 8px 16px; backdrop-filter: blur(8px); z-index: 4; pointer-events: none; }
+.hr .split-label-before { left: 20px; }
+.hr .split-label-after { right: 20px; color: #111212; background: var(--gold); border-color: var(--gold); }
+.hr .split-handle { position: absolute; top: 0; bottom: 0; left: 50%; width: 3px; background: var(--gold); box-shadow: 0 0 18px rgba(201, 168, 112, 0.7); transform: translateX(-50%); z-index: 5; pointer-events: none; transition: left 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+.hr .split-reveal.dragging .split-handle, .hr .split-reveal.dragging .split-before-wrap { transition: none; }
+.hr .split-before-wrap { transition: clip-path 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+.hr .split-grip { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; border-radius: 50%; background: var(--gold); border: 3px solid rgba(255, 255, 255, 0.9); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); pointer-events: auto; cursor: ew-resize; display: flex; align-items: center; justify-content: center; gap: 6px; z-index: 6; transition: background 0.25s, transform 0.18s ease; }
+.hr .split-reveal:hover .split-grip { transform: translate(-50%, -50%) scale(1.06); }
 .hr .split-reveal.dragging .split-grip { transform: translate(-50%, -50%) scale(0.94); }
-.hr .split-grip svg { color: var(--gold); }
-.hr .split-hint { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-size: 9px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--muted); z-index: 4; pointer-events: none; transition: opacity 0.4s; }
-.hr .transform-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
-.hr .transform-stat { background: var(--bg3); padding: 36px 32px; text-align: center; }
-.hr .transform-stat .num { font-size: 44px; font-weight: 300; color: var(--text); margin-bottom: 8px; }
+.hr .split-grip svg { color: #111212; }
+.hr .split-grip:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.hr .split-hint { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 8px 16px; border-radius: 999px; background: rgba(13, 14, 14, 0.8); font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text); z-index: 4; pointer-events: none; }
+.hr .transform-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1340px; margin: 0 auto; }
+.hr .transform-stat { background: linear-gradient(180deg, #171818, #121313); border: 1px solid rgba(201, 168, 112, 0.18); border-radius: 18px; padding: 34px 26px; text-align: center; }
+.hr .transform-stat .num { font-size: 44px; font-weight: 300; color: var(--gold); margin-bottom: 8px; }
 .hr .transform-stat .num sup { font-size: 22px; }
-.hr .transform-stat .desc { font-size: 9px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
+.hr .transform-stat .desc { font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(240, 237, 231, 0.75); }
 
 /* ── TESTIMONIALS ── */
 .hr .testimonials { background: var(--bg2); padding: 120px 52px; overflow: hidden; }
 .hr .testimonials .section-header { text-align: center; margin-bottom: 64px; }
 .hr .testimonials .section-header h2 { font-size: clamp(32px, 4vw, 52px); font-weight: 300; }
 .hr .testimonials .section-header p { font-size: 14px; font-weight: 300; color: var(--muted); margin-top: 16px; }
+.hr .testimonials .section-header .section-eyebrow { font-size: 11px; font-weight: 600; color: var(--gold); margin: 0 0 12px; }
 .hr .testi-track-wrap { position: relative; }
 .hr .testi-track { display: flex; gap: 24px; transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
-.hr .testi-card { flex: 0 0 calc(33.333% - 16px); background: var(--bg3); border: 1px solid var(--line); padding: 40px 36px; position: relative; }
-.hr .testi-quote { font-size: 15px; font-weight: 300; line-height: 1.85; color: var(--text); margin-bottom: 28px; font-style: italic; }
-.hr .testi-quote::before { content: '\201C'; font-size: 48px; color: var(--gold); opacity: 0.4; line-height: 0; vertical-align: -16px; margin-right: 4px; }
+.hr .testi-card { flex: 0 0 calc(33.333% - 16px); display: flex; flex-direction: column; gap: 20px; background: linear-gradient(180deg, #181919 0%, #131414 100%); border: 1px solid rgba(201, 168, 112, 0.16); border-radius: 20px; padding: 32px 30px 26px; position: relative; transition: border-color 0.3s, transform 0.3s; }
+.hr .testi-card:hover { border-color: rgba(201, 168, 112, 0.45); transform: translateY(-4px); }
+.hr .testi-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.hr .testi-mark { font-size: 64px; line-height: 0.6; color: var(--gold); opacity: 0.35; font-family: Georgia, serif; }
+.hr .testi-stars-off { color: rgba(240, 237, 231, 0.18); }
+.hr .testi-quote { flex: 1; font-size: 16px; font-weight: 400; line-height: 1.75; color: rgba(240, 237, 231, 0.92); }
+
 .hr .testi-author { display: flex; align-items: center; gap: 14px; }
-.hr .testi-avatar { width: 40px; height: 40px; border-radius: 50%; background: #2a2c2c; overflow: hidden; flex-shrink: 0; }
+.hr .testi-avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #c9a870, #8a6d3f); color: #111212; font-weight: 700; font-size: 17px; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
 .hr .testi-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.hr .testi-name { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+.hr .testi-name { font-size: 15px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hr .testi-verified { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #4ade80; border: 1px solid rgba(74, 222, 128, 0.4); border-radius: 999px; padding: 3px 8px; }
+.hr .testi-product { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.07); transition: border-color 0.25s, background 0.25s; }
+.hr a.testi-product:hover { border-color: rgba(201, 168, 112, 0.5); background: rgba(201, 168, 112, 0.06); }
+.hr .testi-product-img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: #222; }
+.hr .testi-product-name { flex: 1; min-width: 0; font-size: 12px; font-weight: 500; line-height: 1.4; color: rgba(240, 237, 231, 0.85); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.hr .testi-product-go { color: var(--gold); }
 .hr .testi-car { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold); }
 /* Own line above the quote. Pinned top-right it overlapped the first line of the
    quote on narrow cards (every phone). */
-.hr .testi-stars { color: var(--gold); font-size: 13px; letter-spacing: 3px; margin-bottom: 18px; }
+.hr .testi-stars { color: var(--gold); font-size: 16px; letter-spacing: 3px; }
 .hr .testi-controls { display: flex; justify-content: center; gap: 12px; margin-top: 48px; }
-.hr .testi-controls button { width: 42px; height: 42px; border: 1px solid var(--line); background: none; color: var(--text); cursor: pointer; transition: all 0.25s; font-size: 18px; display: flex; align-items: center; justify-content: center; }
-.hr .testi-controls button:hover { border-color: var(--gold); color: var(--gold); }
+.hr .testi-controls button { width: 46px; height: 46px; border-radius: 50%; border: 1px solid rgba(201, 168, 112, 0.35); background: none; color: var(--text); cursor: pointer; transition: all 0.25s; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+.hr .testi-controls button:hover:not(:disabled) { border-color: var(--gold); background: var(--gold); color: #111212; }
+.hr .testi-controls button:disabled { opacity: 0.3; cursor: default; }
 .hr .testi-dots { display: flex; gap: 8px; align-items: center; margin: 0 20px; }
 /* Scoped under .testi-controls on purpose: the arrow-button rule above
    (`.testi-controls button`, 42px boxed) is more specific than a bare `.testi-dot`
@@ -1158,9 +1264,24 @@
   .hr .nav-search-bar input::placeholder { color: var(--muted); }
 
   /* mobile dropdown menu */
-  .hr .nav-mobile { position: fixed; top: 64px; left: 0; right: 0; z-index: 49; background: rgba(11, 12, 12, 0.98); backdrop-filter: blur(18px); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; padding: 8px 18px 18px; gap: 2px; max-height: calc(100vh - 64px); overflow-y: auto; }
-  .hr .nav-mobile a { padding: 14px 4px; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); }
-  .hr .nav-mobile a:last-child { border-bottom: none; }
+  /* Phone menu: full-height panel, large readable rows with a chevron, and a
+     call / WhatsApp pair at the bottom. */
+  /* An explicit height, not `bottom: 0`: the nav's backdrop-filter makes IT the
+     containing block for this fixed panel, so bottom:0 resolved against the 64px
+     bar and collapsed the menu to nothing. */
+  .hr .nav-mobile { position: fixed; top: 64px; left: 0; right: 0; height: calc(100vh - 64px); height: calc(100dvh - 64px); z-index: 49; background: linear-gradient(180deg, #0e0f0f, #0a0b0b); display: flex; flex-direction: column; padding: 10px 20px 28px; gap: 0; overflow-y: auto; }
+  .hr .nav-mobile a { position: relative; display: flex; align-items: center; gap: 12px; padding: 16px 28px 16px 4px; font-size: 15px; font-weight: 500; letter-spacing: 0.04em; color: var(--text); border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+  .hr .nav-mobile a::after { content: ''; position: absolute; right: 8px; top: 50%; width: 7px; height: 7px; margin-top: -4px; border-right: 1.5px solid rgba(201, 168, 112, 0.7); border-top: 1.5px solid rgba(201, 168, 112, 0.7); transform: rotate(45deg); }
+  .hr .nav-mobile a.is-active, .hr .nav-mobile a.nav-offers { color: var(--gold); }
+  .hr .nav-mobile .nav-mobile-account-main::after { display: none; }
+  .hr .nav-mobile-contact { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+  .hr .nav-mobile .nmc-btn { justify-content: center; gap: 8px; padding: 14px 10px; border: 1px solid rgba(201, 168, 112, 0.4); border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; color: var(--text); }
+  .hr .nav-mobile .nmc-btn::after { display: none; }
+  .hr .nav-mobile .nmc-btn svg { color: var(--gold); }
+  .hr .nav-mobile .nmc-wa { background: #25d366; border-color: #25d366; color: #0b1a10; }
+  .hr .nav-mobile .nmc-wa svg { color: #0b1a10; }
+  /* Round buttons shrink a touch to fit the three-zone phone bar. */
+  .hr .main-nav .icon-btn { width: 38px; height: 38px; }
 
   /* HERO → stacked, content-driven height */
   /* ── STACKED HERO × CAROUSEL ──
@@ -1237,7 +1358,10 @@
   /* TRANSFORMATION */
   .hr .transformation { padding: 72px 22px; }
   .hr .transformation .section-header { margin-bottom: 44px; }
-  .hr .split-reveal { aspect-ratio: 3 / 4; margin-bottom: 40px; }
+  .hr .split-reveal { aspect-ratio: 4 / 5; }
+  .hr .tf-frame { margin-bottom: 40px; border-radius: 16px; }
+  .hr .tf-caption { flex-direction: column; align-items: flex-start; padding: 16px 18px; }
+  .hr .transform-stats { gap: 10px; }
   .hr .transform-stats { grid-template-columns: 1fr 1fr; }
   .hr .transform-stat { padding: 28px 18px; }
   .hr .transform-stat .num { font-size: 34px; }
@@ -1245,7 +1369,7 @@
   /* TESTIMONIALS → one card per view */
   .hr .testimonials { padding: 72px 22px; }
   .hr .testimonials .section-header { margin-bottom: 44px; }
-  .hr .testi-card { flex: 0 0 100%; padding: 32px 26px; }
+  .hr .testi-card { flex: 0 0 100%; padding: 26px 22px 22px; }
 
   /* JOURNAL scrapbook — mobile: near-full-width peeking cards, gentler tilt so
      rotated corners don't clip or trigger phantom horizontal scroll. */

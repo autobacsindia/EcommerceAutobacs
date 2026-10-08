@@ -6,6 +6,7 @@ import { OrbitControls, Html, ContactShadows, useGLTF } from '@react-three/drei'
 import * as THREE from 'three';
 import Link from 'next/link';
 import type { ResolvedCarHotspot } from '@/lib/carHotspots';
+import MarkerDot from './Marker';
 
 const MODEL_URL = '/models/toyota-hilux/hilux.glb';
 const DRACO_PATH = '/draco/gltf/'; // self-hosted decoder (CSP blocks the CDN default)
@@ -16,9 +17,15 @@ useGLTF.preload(MODEL_URL, DRACO_PATH);
 function CarModel({
   hotspots,
   onSelect,
+  activeId,
+  onHover,
+  onReady,
 }: {
   hotspots: ResolvedCarHotspot[];
   onSelect: (id: string) => void;
+  activeId: string | null;
+  onHover?: (id: string | null) => void;
+  onReady?: () => void;
 }) {
   const { scene } = useGLTF(MODEL_URL, DRACO_PATH);
   const groupRef = useRef<THREE.Group>(null);
@@ -32,7 +39,13 @@ function CarModel({
     const c = box.getCenter(new THREE.Vector3());
     // Recentre on X/Z, sit the car on the ground (min Y -> 0).
     setOffset([-c.x, -box.min.y, -c.z]);
+    // The model is parsed and placed — the stage can swap the still render out.
+    onReady?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model]);
+
+  // Number the points in the same order as the still view and the side panel.
+  const numberOf = new Map(hotspots.filter((h) => !h.chip).map((h, i) => [h.id, i + 1]));
 
   return (
     <group ref={groupRef} position={offset}>
@@ -52,15 +65,13 @@ function CarModel({
               aria-label={`${h.label} — view products`}
               onPointerDown={(e) => e.stopPropagation()}
               onClick={() => onSelect(h.id)}
+              onMouseEnter={() => onHover?.(h.id)}
+              onMouseLeave={() => onHover?.(null)}
+              onFocus={() => onHover?.(h.id)}
+              onBlur={() => onHover?.(null)}
               className="group/mk relative flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
             >
-              <span className="relative flex h-4 w-4 items-center justify-center">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold opacity-60 group-hover/mk:opacity-90" />
-                <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-white bg-gold shadow" />
-              </span>
-              <span className="pointer-events-none absolute left-1/2 top-5 -translate-x-1/2 whitespace-nowrap rounded-md bg-obsidian-deep px-2 py-1 text-xs font-medium text-ink opacity-0 shadow-lg transition-opacity group-hover/mk:opacity-100">
-                {h.label}
-              </span>
+              <MarkerDot n={numberOf.get(h.id) ?? 0} label={h.label} active={activeId === h.id} />
             </Link>
           </Html>
         ) : null,
@@ -73,10 +84,16 @@ export default function Car3D({
   hotspots,
   onSelect,
   autoRotate = true,
+  activeId = null,
+  onHover,
+  onReady,
 }: {
   hotspots: ResolvedCarHotspot[];
   onSelect: (id: string) => void;
   autoRotate?: boolean;
+  activeId?: string | null;
+  onHover?: (id: string | null) => void;
+  onReady?: () => void;
 }) {
   return (
     <Canvas
@@ -93,7 +110,7 @@ export default function Car3D({
       <directionalLight position={[-6, 4, -4]} intensity={0.4} />
 
       <Suspense fallback={null}>
-        <CarModel hotspots={hotspots} onSelect={onSelect} />
+        <CarModel hotspots={hotspots} onSelect={onSelect} activeId={activeId} onHover={onHover} onReady={onReady} />
         <ContactShadows position={[0, 0, 0]} opacity={0.5} scale={14} blur={2.4} far={5} />
       </Suspense>
 
@@ -101,7 +118,7 @@ export default function Car3D({
         makeDefault
         enablePan={false}
         enableZoom={false}
-        autoRotate={autoRotate}
+        autoRotate={autoRotate && !activeId}
         autoRotateSpeed={0.7}
         minPolarAngle={Math.PI / 6}
         maxPolarAngle={Math.PI / 2.05}

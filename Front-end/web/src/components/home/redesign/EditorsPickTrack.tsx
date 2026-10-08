@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import Img from './Img';
-import { Diagonal } from './icons';
+import ProductCard from './ProductCard';
+import { ChevronLeft, ChevronRight } from './icons';
 import { useCurrency } from '@/context/CurrencyContext';
 import { products as fallbackProducts, type ProductItem } from './homeContent';
 
@@ -55,13 +55,16 @@ export default function EditorsPickTrack({ products }: { products?: ProductItem[
   return (
     <section className="products products-track">
       <div className="section-header">
-        <h2 className="reveal">Driver&apos;s Choice</h2>
+        <div>
+          <p className="section-eyebrow">Hand-picked by our specialists</p>
+          <h2 className="reveal">Driver&apos;s Choice</h2>
+        </div>
         <div className="prod-nav">
           <button type="button" aria-label="Previous" onClick={() => slide(-1)}>
-            &#8592;
+            <ChevronLeft />
           </button>
           <button type="button" aria-label="Next" onClick={() => slide(1)}>
-            &#8594;
+            <ChevronRight />
           </button>
         </div>
       </div>
@@ -69,29 +72,9 @@ export default function EditorsPickTrack({ products }: { products?: ProductItem[
       <div className="ce-track-wrap">
         <div className="prod-track reveal reveal-d1" ref={trackRef}>
           {items.map((p) => (
-            <Link href={p.href} className="ce-card" key={p.name}>
-              <Img src={p.image} alt={p.name} className="ce-bg" sizes="(max-width: 768px) 100vw, 320px" />
-              <div className="ce-overlay" />
-              <div className="ce-circle" />
-              <div className="ce-content">
-                <div className="ce-top">
-                  <span className="ce-cat">{p.category}</span>
-                  <div className="ce-iconbtn">
-                    <Diagonal />
-                  </div>
-                </div>
-                <div className="ce-bottom">
-                  <div className="ce-brand">{p.brand}</div>
-                  <div className="ce-name">{p.name}</div>
-                  {/* Curated fallbacks carry only the formatted string; a
-                      catalogue row carries the number too, and that goes through
-                      CurrencyContext like every other price. */}
-                  <div className="ce-price">
-                    {p.priceValue != null ? formatPrice(p.priceValue) : p.price}
-                  </div>
-                </div>
-              </div>
-            </Link>
+            // Curated fallbacks carry only the formatted string; a catalogue row
+            // carries the number too, and that goes through CurrencyContext.
+            <ProductCard key={p.name} p={p} price={p.priceValue != null ? formatPrice(p.priceValue) : p.price} />
           ))}
         </div>
         <div className="prod-progress">
