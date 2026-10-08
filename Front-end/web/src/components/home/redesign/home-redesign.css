@@ -952,26 +952,40 @@
    et al.) so the source renders ~1:1 or downscaled = crisp on standard-DPI big
    screens. High-DPR/4K crispness still needs a ≥2560px source (see
    homeContent.ts transformation note); the responsive srcSet then serves it. */
-.hr .split-reveal { position: relative; width: 100%; max-width: 1340px; margin: 0 auto 64px; aspect-ratio: 16 / 9; overflow: hidden; background: #1a1c1c; cursor: ew-resize; user-select: none; touch-action: none; }
+.hr .tf-sub { margin-top: 18px; font-size: 15px; color: rgba(240, 237, 231, 0.66); }
+/* Framed showcase: rounded, gold-edged, with a caption bar. */
+.hr .tf-frame { max-width: 1340px; margin: 0 auto 64px; border-radius: 22px; overflow: hidden; border: 1px solid rgba(201, 168, 112, 0.3); background: #121313; box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.95), 0 0 60px -30px rgba(201, 168, 112, 0.35); }
+/* pan-y: vertical swipes on the photo scroll the page (this was touch-action:none,
+   which trapped the page on phones). Sideways drags move the divider (see JS). */
+.hr .split-reveal { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #1a1c1c; cursor: ew-resize; user-select: none; touch-action: pan-y; }
+.hr .tf-caption { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px; border-top: 1px solid rgba(201, 168, 112, 0.2); background: linear-gradient(180deg, #151616, #101111); }
+.hr .tf-caption > div { display: flex; flex-direction: column; gap: 4px; }
+.hr .tf-caption-eyebrow { font-size: 10px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold); }
+.hr .tf-caption-title { font-size: 18px; font-weight: 500; color: var(--text); }
+.hr .tf-cta { display: inline-flex; align-items: center; gap: 10px; padding: 12px 22px; border-radius: 999px; background: var(--gold); color: #111212; font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; transition: gap 0.25s, filter 0.25s; white-space: nowrap; }
+.hr .tf-cta:hover { gap: 14px; filter: brightness(1.08); }
 .hr .split-reveal img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 .hr .split-after { filter: brightness(0.78); }
 .hr .split-before { filter: brightness(0.78); }
 /* clip lives on the wrapper (.split-before-wrap), driven by JS */
 .hr .split-before-wrap { position: absolute; inset: 0; clip-path: inset(0 50% 0 0); }
-.hr .split-label { position: absolute; bottom: 24px; font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--text); background: rgba(0, 0, 0, 0.55); padding: 7px 15px; backdrop-filter: blur(8px); z-index: 4; pointer-events: none; }
-.hr .split-label-before { left: 24px; }
-.hr .split-label-after { right: 24px; color: var(--gold); }
-.hr .split-handle { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: var(--gold); transform: translateX(-50%); z-index: 5; pointer-events: none; }
-.hr .split-grip { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 54px; height: 54px; border-radius: 50%; background: rgba(17, 18, 18, 0.55); border: 1px solid var(--gold); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; gap: 6px; z-index: 6; transition: background 0.25s, transform 0.18s ease; }
-.hr .split-reveal:hover .split-grip { background: rgba(201, 168, 112, 0.16); }
+.hr .split-label { position: absolute; top: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text); background: rgba(13, 14, 14, 0.78); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 999px; padding: 8px 16px; backdrop-filter: blur(8px); z-index: 4; pointer-events: none; }
+.hr .split-label-before { left: 20px; }
+.hr .split-label-after { right: 20px; color: #111212; background: var(--gold); border-color: var(--gold); }
+.hr .split-handle { position: absolute; top: 0; bottom: 0; left: 50%; width: 3px; background: var(--gold); box-shadow: 0 0 18px rgba(201, 168, 112, 0.7); transform: translateX(-50%); z-index: 5; pointer-events: none; transition: left 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+.hr .split-reveal.dragging .split-handle, .hr .split-reveal.dragging .split-before-wrap { transition: none; }
+.hr .split-before-wrap { transition: clip-path 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+.hr .split-grip { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; border-radius: 50%; background: var(--gold); border: 3px solid rgba(255, 255, 255, 0.9); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); pointer-events: auto; cursor: ew-resize; display: flex; align-items: center; justify-content: center; gap: 6px; z-index: 6; transition: background 0.25s, transform 0.18s ease; }
+.hr .split-reveal:hover .split-grip { transform: translate(-50%, -50%) scale(1.06); }
 .hr .split-reveal.dragging .split-grip { transform: translate(-50%, -50%) scale(0.94); }
-.hr .split-grip svg { color: var(--gold); }
-.hr .split-hint { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-size: 9px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--muted); z-index: 4; pointer-events: none; transition: opacity 0.4s; }
-.hr .transform-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); }
-.hr .transform-stat { background: var(--bg3); padding: 36px 32px; text-align: center; }
-.hr .transform-stat .num { font-size: 44px; font-weight: 300; color: var(--text); margin-bottom: 8px; }
+.hr .split-grip svg { color: #111212; }
+.hr .split-grip:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.hr .split-hint { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 8px 16px; border-radius: 999px; background: rgba(13, 14, 14, 0.8); font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text); z-index: 4; pointer-events: none; }
+.hr .transform-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1340px; margin: 0 auto; }
+.hr .transform-stat { background: linear-gradient(180deg, #171818, #121313); border: 1px solid rgba(201, 168, 112, 0.18); border-radius: 18px; padding: 34px 26px; text-align: center; }
+.hr .transform-stat .num { font-size: 44px; font-weight: 300; color: var(--gold); margin-bottom: 8px; }
 .hr .transform-stat .num sup { font-size: 22px; }
-.hr .transform-stat .desc { font-size: 9px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
+.hr .transform-stat .desc { font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(240, 237, 231, 0.75); }
 
 /* ── TESTIMONIALS ── */
 .hr .testimonials { background: var(--bg2); padding: 120px 52px; overflow: hidden; }
@@ -1332,7 +1346,10 @@
   /* TRANSFORMATION */
   .hr .transformation { padding: 72px 22px; }
   .hr .transformation .section-header { margin-bottom: 44px; }
-  .hr .split-reveal { aspect-ratio: 3 / 4; margin-bottom: 40px; }
+  .hr .split-reveal { aspect-ratio: 4 / 5; }
+  .hr .tf-frame { margin-bottom: 40px; border-radius: 16px; }
+  .hr .tf-caption { flex-direction: column; align-items: flex-start; padding: 16px 18px; }
+  .hr .transform-stats { gap: 10px; }
   .hr .transform-stats { grid-template-columns: 1fr 1fr; }
   .hr .transform-stat { padding: 28px 18px; }
   .hr .transform-stat .num { font-size: 34px; }
