@@ -98,10 +98,13 @@
 .hr .main-nav {
   position: fixed; top: 0; left: 0; right: 0; height: 76px;
   display: flex; align-items: center; gap: 22px; padding: 0 28px;
-  z-index: 50; border-bottom: 1px solid var(--line);
-  background: rgba(17, 18, 18, 0.88); backdrop-filter: blur(18px);
+  z-index: 50; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(18, 19, 19, 0.94) 0%, rgba(13, 14, 14, 0.86) 100%); backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.9);
   transition: background 0.3s;
 }
+/* Premium detail: a gold hairline under the bar that fades out at both ends. */
+.hr .main-nav::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; pointer-events: none; background: linear-gradient(90deg, transparent, rgba(201, 168, 112, 0.5), transparent); }
 .hr .main-nav .logo { display: flex; align-items: center; font-size: 13px; font-weight: 500; letter-spacing: 0.3em; text-transform: uppercase; flex-shrink: 0; }
 .hr .main-nav .logo span { color: var(--gold); font-weight: 300; }
 /* Logo image (when brand.logo is set). The asset must be padding-trimmed
@@ -145,16 +148,23 @@
 .hr .main-nav .nav-links a:hover::after,
 .hr .main-nav .nav-links a.is-active::after { transform: scaleX(1); }
 .hr .main-nav .nav-links a.is-active { color: var(--gold); }
+.hr .main-nav .nav-links a:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+/* Offers: gold, with a softly pulsing dot so it reads as "live deals". */
+.hr .main-nav .nav-links a.nav-offers { color: var(--gold); padding-left: 14px; }
+.hr .main-nav .nav-links a.nav-offers::before { content: ''; position: absolute; left: 0; top: 50%; width: 6px; height: 6px; margin-top: -3px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 0 rgba(201, 168, 112, 0.6); animation: hr-offer-pulse 2.4s ease-out infinite; }
+@keyframes hr-offer-pulse { 0% { box-shadow: 0 0 0 0 rgba(201, 168, 112, 0.6); } 70%, 100% { box-shadow: 0 0 0 7px rgba(201, 168, 112, 0); } }
+@media (prefers-reduced-motion: reduce) { .hr .main-nav .nav-links a.nav-offers::before { animation: none; } }
 @media (min-width: 1200px) {
   .hr .main-nav .nav-links { gap: 30px; }
   .hr .main-nav .nav-links a,
   .hr .main-nav .nav-links .veh-trigger { font-size: 12px; }
 }
-.hr .main-nav .nav-search { position: relative; flex: 0 1 220px; max-width: 220px; min-width: 110px; display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.03); transition: border-color 0.25s; }
-.hr .main-nav .nav-search:focus-within { border-color: rgba(201, 168, 112, 0.55); }
-.hr .main-nav .nav-search svg { flex-shrink: 0; }
-.hr .main-nav .nav-search input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 11px; letter-spacing: 0.1em; }
-.hr .main-nav .nav-search input::placeholder { color: var(--muted); text-transform: uppercase; letter-spacing: 0.16em; font-size: 10px; }
+.hr .main-nav .nav-search { position: relative; flex: 0 1 290px; max-width: 290px; min-width: 120px; display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 16px; border: 1px solid rgba(201, 168, 112, 0.28); border-radius: 999px; background: rgba(255, 255, 255, 0.04); transition: border-color 0.25s, background 0.25s, box-shadow 0.25s; }
+.hr .main-nav .nav-search:hover { border-color: rgba(201, 168, 112, 0.5); }
+.hr .main-nav .nav-search:focus-within { border-color: var(--gold); background: rgba(255, 255, 255, 0.06); box-shadow: 0 0 0 4px rgba(201, 168, 112, 0.12); }
+.hr .main-nav .nav-search svg { flex-shrink: 0; color: var(--gold); }
+.hr .main-nav .nav-search input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 13px; letter-spacing: 0.02em; }
+.hr .main-nav .nav-search input::placeholder { color: rgba(240, 237, 231, 0.6); letter-spacing: 0.02em; font-size: 13px; }
 
 /* ── Search suggestions dropdown (live typeahead + recent searches) ──────────
  * Anchored to the search box (desktop: right-aligned, wider than the input;
@@ -180,11 +190,13 @@
 .hr .nav-search-panel .nsp-seeall { border-top: 1px solid var(--line); color: var(--gold); font-size: 11px; letter-spacing: 0.08em; }
 .hr .nav-search-panel .nsp-seeall svg { color: var(--gold); flex-shrink: 0; }
 .hr .nav-search-panel .nsp-seeall span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hr .main-nav .actions { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
-.hr .main-nav .icon-btn { position: relative; color: rgba(240, 237, 231, 0.6); cursor: pointer; display: flex; transition: color 0.25s; background: none; border: none; }
-.hr .main-nav .icon-btn:hover { color: var(--gold); }
-.hr .main-nav .icon-btn .badge { position: absolute; top: -7px; right: -8px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: var(--gold); color: var(--bg); font-size: 8px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
-.hr .main-nav .avatar { width: 34px; height: 34px; border-radius: 50%; overflow: hidden; border: 1px solid rgba(201, 168, 112, 0.45); cursor: pointer; flex-shrink: 0; transition: border-color 0.25s; }
+.hr .main-nav .actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+/* Round, outlined icon buttons: easy targets, clearly buttons, gold on hover. */
+.hr .main-nav .icon-btn { position: relative; width: 40px; height: 40px; border-radius: 50%; color: rgba(240, 237, 231, 0.85); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color 0.25s, border-color 0.25s, background 0.25s; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); }
+.hr .main-nav .icon-btn:hover { color: var(--gold); border-color: rgba(201, 168, 112, 0.5); background: rgba(201, 168, 112, 0.08); }
+.hr .main-nav .icon-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.hr .main-nav .icon-btn .badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--gold); color: #111212; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #121313; }
+.hr .main-nav .avatar { width: 40px; height: 40px; border-radius: 50%; overflow: hidden; border: 1px solid rgba(201, 168, 112, 0.45); cursor: pointer; flex-shrink: 0; transition: border-color 0.25s; }
 .hr .main-nav .avatar:hover { border-color: var(--gold); }
 .hr .main-nav .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .hr .nav-burger { display: none; background: none; border: none; color: var(--text); cursor: pointer; }
@@ -1170,9 +1182,24 @@
   .hr .nav-search-bar input::placeholder { color: var(--muted); }
 
   /* mobile dropdown menu */
-  .hr .nav-mobile { position: fixed; top: 64px; left: 0; right: 0; z-index: 49; background: rgba(11, 12, 12, 0.98); backdrop-filter: blur(18px); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; padding: 8px 18px 18px; gap: 2px; max-height: calc(100vh - 64px); overflow-y: auto; }
-  .hr .nav-mobile a { padding: 14px 4px; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); }
-  .hr .nav-mobile a:last-child { border-bottom: none; }
+  /* Phone menu: full-height panel, large readable rows with a chevron, and a
+     call / WhatsApp pair at the bottom. */
+  /* An explicit height, not `bottom: 0`: the nav's backdrop-filter makes IT the
+     containing block for this fixed panel, so bottom:0 resolved against the 64px
+     bar and collapsed the menu to nothing. */
+  .hr .nav-mobile { position: fixed; top: 64px; left: 0; right: 0; height: calc(100vh - 64px); height: calc(100dvh - 64px); z-index: 49; background: linear-gradient(180deg, #0e0f0f, #0a0b0b); display: flex; flex-direction: column; padding: 10px 20px 28px; gap: 0; overflow-y: auto; }
+  .hr .nav-mobile a { position: relative; display: flex; align-items: center; gap: 12px; padding: 16px 28px 16px 4px; font-size: 15px; font-weight: 500; letter-spacing: 0.04em; color: var(--text); border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+  .hr .nav-mobile a::after { content: ''; position: absolute; right: 8px; top: 50%; width: 7px; height: 7px; margin-top: -4px; border-right: 1.5px solid rgba(201, 168, 112, 0.7); border-top: 1.5px solid rgba(201, 168, 112, 0.7); transform: rotate(45deg); }
+  .hr .nav-mobile a.is-active, .hr .nav-mobile a.nav-offers { color: var(--gold); }
+  .hr .nav-mobile .nav-mobile-account-main::after { display: none; }
+  .hr .nav-mobile-contact { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+  .hr .nav-mobile .nmc-btn { justify-content: center; gap: 8px; padding: 14px 10px; border: 1px solid rgba(201, 168, 112, 0.4); border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; color: var(--text); }
+  .hr .nav-mobile .nmc-btn::after { display: none; }
+  .hr .nav-mobile .nmc-btn svg { color: var(--gold); }
+  .hr .nav-mobile .nmc-wa { background: #25d366; border-color: #25d366; color: #0b1a10; }
+  .hr .nav-mobile .nmc-wa svg { color: #0b1a10; }
+  /* Round buttons shrink a touch to fit the three-zone phone bar. */
+  .hr .main-nav .icon-btn { width: 38px; height: 38px; }
 
   /* HERO → stacked, content-driven height */
   /* ── STACKED HERO × CAROUSEL ──
