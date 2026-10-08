@@ -284,11 +284,17 @@
 .hr .hero-pin.hero-seq-active .center-img .hero-seq-fallback { display: none; }
 
 @media (min-width: 769px) {
-  /* PINNED HERO — the whole screen stays fixed while the frames scrub; the page
-     only scrolls on once the sequence finishes. .hero sticks for the full height
-     of .hero-pin (300vh ⇒ ~200vh of scrub distance; tune the 300vh to taste). */
-  .hr .hero-pin.hero-seq-layout { height: 300vh; }
-  .hr .hero-pin.hero-seq-layout .hero { position: sticky; top: 0; height: 100vh; background: #080e16; }
+  /* FULL-SCREEN HERO — one screen tall, scrolling normally. It used to be a 300vh
+     track with a sticky hero that froze the page while the frames scrubbed against
+     the scroll; customers read that as the site being stuck. The sequence now
+     plays on its own (HeroSequence.tsx), so no track and no sticky. */
+  .hr .hero-pin.hero-seq-layout .hero { position: relative; height: 100vh; background: #080e16; }
+  /* The sequence plays out to the exploded build, which reaches under the copy.
+     A soft scrim on the left keeps the tagline readable throughout without
+     dimming the car. Inside the car slide's own stacking context (the carousel is
+     z 1, so a scrim on .hero would sit over the copy too): above the canvas
+     (.center-img, z 2), below the copy (.hero-left, z 5). */
+  .hr .hero-pin.hero-seq-layout .hero .hero-slide:first-child::before { content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: linear-gradient(90deg, rgba(8, 14, 22, 0.88) 0%, rgba(8, 14, 22, 0.55) 22%, rgba(8, 14, 22, 0) 42%); }
   /* Match the hero bg to the video's flat #080e16 background, with a faint cool
      glow behind the car, so the feathered canvas edges dissolve seamlessly. */
   .hr .hero-pin.hero-seq-layout .hero .bg-glow { background: radial-gradient(ellipse 95% 85% at 50% 50%, #131c26 0%, #0a1019 55%, #070b12 100%); }
@@ -319,8 +325,8 @@
 @media (max-width: 768px) {
   /* PINNED HERO, PHONE — the desktop composition (car filling the stage, copy
      over it) adapted to portrait, with four differences that matter:
-     1. 180vh not 300vh. A pin eats the user's scroll, and a thumb flick covers
-        far more of the page than a wheel notch; 300vh reads as "stuck".
+     1. No pin and no tall track — one screen, scrolling normally (see the
+        desktop note above). It used to be a 180vh sticky track.
      2. 100svh, not 100vh. On mobile 100vh is the LARGE viewport (URL bar
         hidden), so a 100vh sticky hero has its bottom cut off while the bar is
         showing — which is exactly when the user first sees it.
@@ -332,10 +338,8 @@
      4. The copy is absolutely positioned OVER the frame, like desktop, instead
         of stacked above it — the top of every frame is dark ceiling, so the
         headline has somewhere to sit without fighting the car. */
-  .hr .hero-pin.hero-seq-layout { height: 180vh; }
   .hr .hero-pin.hero-seq-layout .hero {
-    position: sticky;
-    top: 0;
+    position: relative;
     height: 100vh; /* fallback for browsers without svh */
     height: 100svh;
     min-height: 0;
