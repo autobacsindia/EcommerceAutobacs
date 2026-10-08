@@ -117,7 +117,9 @@ interface ApiTestimonial {
   name: string;
   title?: string;
   comment?: string;
-  product?: { name?: string; image?: string | null } | null;
+  rating?: number;
+  isVerifiedPurchase?: boolean;
+  product?: { name?: string; slug?: string; image?: string | null } | null;
 }
 interface ApiArticle {
   title: string;
@@ -183,8 +185,12 @@ const mapTestimonial = (t: ApiTestimonial): TestimonialItem => ({
   quote: t.comment || t.title || '',
   name: t.name || 'Verified Buyer',
   detail: t.product?.name || '',
-  // No user avatar in the review payload; Img renders its fallback swatch.
+  // No user avatar in the review payload; the card shows the reviewer's initial.
   avatar: '',
+  rating: typeof t.rating === 'number' ? t.rating : undefined,
+  verified: t.isVerifiedPurchase === true,
+  productHref: t.product?.slug ? `/products/${t.product.slug}` : undefined,
+  productImage: t.product?.image || undefined,
 });
 
 const mapArticle = (a: ApiArticle): JournalItem => ({

@@ -57,6 +57,13 @@ export interface TestimonialItem {
   name: string;
   detail: string;
   avatar: string;
+  /** The review's own star rating (1–5). Absent on curated fallbacks. */
+  rating?: number;
+  /** Only a genuinely verified purchase may say so on the card. */
+  verified?: boolean;
+  /** The reviewed product's page and photo, when the review carries them. */
+  productHref?: string;
+  productImage?: string;
 }
 
 export interface JournalItem {

@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import Img from './Img';
+import { ChevronLeft, ChevronRight } from './icons';
 import { testimonials as fallbackTestimonials, type TestimonialItem } from './homeContent';
 
 export default function Testimonials({ testimonials }: { testimonials?: TestimonialItem[] }) {
@@ -43,33 +45,59 @@ export default function Testimonials({ testimonials }: { testimonials?: Testimon
   return (
     <section className="testimonials">
       <div className="section-header">
+        <p className="section-eyebrow">Customer reviews</p>
         <h2 className="reveal">What Enthusiasts Say</h2>
         <p className="reveal reveal-d1">Real builds. Real results. Real people.</p>
       </div>
 
       <div className="testi-track-wrap">
         <div className="testi-track" ref={trackRef}>
-          {items.map((t) => (
-            <div className="testi-card" key={t.name}>
-              <div className="testi-stars">★★★★★</div>
-              <div className="testi-quote">{t.quote}</div>
-              <div className="testi-author">
-                <div className="testi-avatar">
-                  <Img src={t.avatar} alt={t.name} sizes="40px" />
+          {items.map((t) => {
+            // Real stars when the review carries a rating; curated fallbacks keep five.
+            const stars = Math.max(0, Math.min(5, Math.round(t.rating ?? 5)));
+            const initial = (t.name.trim()[0] || '?').toUpperCase();
+            return (
+              <article className="testi-card" key={t.name}>
+                <div className="testi-head">
+                  <div className="testi-stars" role="img" aria-label={`Rated ${stars} out of 5`}>
+                    {'★'.repeat(stars)}<span className="testi-stars-off">{'★'.repeat(5 - stars)}</span>
+                  </div>
+                  <span className="testi-mark" aria-hidden="true">&ldquo;</span>
                 </div>
-                <div>
-                  <div className="testi-name">{t.name}</div>
-                  <div className="testi-car">{t.detail}</div>
+                <blockquote className="testi-quote">{t.quote}</blockquote>
+                <div className="testi-author">
+                  <div className="testi-avatar" aria-hidden="true">
+                    {t.avatar ? <Img src={t.avatar} alt="" sizes="44px" /> : <span>{initial}</span>}
+                  </div>
+                  <div className="testi-who">
+                    <div className="testi-name">
+                      {t.name}
+                      {t.verified && <span className="testi-verified">Verified purchase</span>}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
+                {t.detail && (
+                  t.productHref ? (
+                    <Link href={t.productHref} className="testi-product">
+                      {t.productImage && <Img src={t.productImage} alt="" sizes="44px" className="testi-product-img" />}
+                      <span className="testi-product-name">{t.detail}</span>
+                      <span className="testi-product-go" aria-hidden="true">→</span>
+                    </Link>
+                  ) : (
+                    <div className="testi-product">
+                      <span className="testi-product-name">{t.detail}</span>
+                    </div>
+                  )
+                )}
+              </article>
+            );
+          })}
         </div>
       </div>
 
       <div className="testi-controls">
-        <button type="button" aria-label="Previous" onClick={() => apply(idx - 1)}>
-          &#8592;
+        <button type="button" aria-label="Previous reviews" onClick={() => apply(idx - 1)} disabled={idx === 0}>
+          <ChevronLeft />
         </button>
         <div className="testi-dots">
           {Array.from({ length: pages }).map((_, i) => (
@@ -82,8 +110,8 @@ export default function Testimonials({ testimonials }: { testimonials?: Testimon
             />
           ))}
         </div>
-        <button type="button" aria-label="Next" onClick={() => apply(idx + 1)}>
-          &#8594;
+        <button type="button" aria-label="More reviews" onClick={() => apply(idx + 1)} disabled={idx >= pages - 1}>
+          <ChevronRight />
         </button>
       </div>
     </section>
