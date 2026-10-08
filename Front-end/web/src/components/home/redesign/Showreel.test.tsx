@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import Showreel from './Showreel';
 import { FALLBACK_CAR_HOTSPOTS } from '@/lib/carHotspots';
 
@@ -43,5 +43,30 @@ describe('Showreel — interactive car explorer', () => {
     render(<Showreel hotspots={[]} />);
     expect(screen.getByText('Play Showreel')).toBeInTheDocument();
     expect(screen.queryByText('Interactive Fitment Explorer')).toBeNull();
+  });
+});
+
+describe('Showreel — "Choose an area" panel', () => {
+  it('numbers every part and highlights it on the car when hovered', () => {
+    const { container } = render(<Showreel hotspots={FALLBACK_CAR_HOTSPOTS} />);
+    const panel = screen.getByRole('complementary', { name: /browse by part of the car/i });
+    const points = FALLBACK_CAR_HOTSPOTS.filter((h) => !h.chip);
+    const items = panel.querySelectorAll('.ce-item');
+    expect(items).toHaveLength(points.length);
+
+    fireEvent.mouseEnter(items[0]);
+    expect(items[0]).toHaveClass('is-active');
+    // The matching numbered marker on the car shows its label pill.
+    const marker = container.querySelector(`.anim-stage a[aria-label^="${points[0].label}"]`) as HTMLElement;
+    expect(marker.textContent).toContain('1');
+    expect(marker.querySelector('.opacity-100')).not.toBeNull();
+
+    fireEvent.mouseLeave(items[0]);
+    expect(items[0]).not.toHaveClass('is-active');
+  });
+
+  it('tells the shopper how to use it', () => {
+    render(<Showreel hotspots={FALLBACK_CAR_HOTSPOTS} />);
+    expect(screen.getByText(/drag to rotate · click a point to shop/i)).toBeInTheDocument();
   });
 });
