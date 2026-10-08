@@ -138,6 +138,11 @@ export default function Hero({ spinTeaser = null }: { spinTeaser?: SpinTeaser | 
           {/* Bottom-right on md/lg (absolute); flows below the hero image on small screens (static). */}
           <div className="hero-consult-wrap">
             <Link href="/consultation" className="hero-consult">
+              <svg className="hero-consult-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 14v-3a9 9 0 0 1 18 0v3" />
+                <path d="M21 19a2 2 0 0 1-2 2h-1v-7h3z" />
+                <path d="M3 19a2 2 0 0 0 2 2h1v-7H3z" />
+              </svg>
               <span>Consult a specialist</span>
               <span className="hero-consult-arrow" aria-hidden="true">→</span>
             </Link>
