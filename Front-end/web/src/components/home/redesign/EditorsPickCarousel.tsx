@@ -1,9 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import Img from './Img';
-import { Diagonal } from './icons';
+import ProductCard from './ProductCard';
+import { ChevronLeft, ChevronRight } from './icons';
 import { useCurrency } from '@/context/CurrencyContext';
 import { products as fallbackProducts, type ProductItem } from './homeContent';
 
@@ -50,37 +49,18 @@ export default function EditorsPickCarousel({ products }: { products?: ProductIt
   return (
     <section className="products products-basic">
       <div className="section-header">
-        <h2 className="reveal">Driver&apos;s Choice</h2>
+        <div>
+          <p className="section-eyebrow">Hand-picked by our specialists</p>
+          <h2 className="reveal">Driver&apos;s Choice</h2>
+        </div>
       </div>
 
       <div className="bc">
         <div className="bc-track" ref={trackRef} onScroll={syncActive}>
           {items.map((p) => (
-            <Link href={p.href} className="bc-slide" key={p.name}>
-              <div className="ce-card">
-                <Img src={p.image} alt={p.name} className="ce-bg" sizes="(max-width: 768px) 100vw, 320px" />
-                <div className="ce-overlay" />
-                <div className="ce-circle" />
-                <div className="ce-content">
-                  <div className="ce-top">
-                    <span className="ce-cat">{p.category}</span>
-                    <div className="ce-iconbtn">
-                      <Diagonal />
-                    </div>
-                  </div>
-                  <div className="ce-bottom">
-                    <div className="ce-brand">{p.brand}</div>
-                    <div className="ce-name">{p.name}</div>
-                    {/* Curated fallbacks carry only the formatted string; a
-                        catalogue row carries the number too, and that goes
-                        through CurrencyContext like every other price. */}
-                    <div className="ce-price">
-                      {p.priceValue != null ? formatPrice(p.priceValue) : p.price}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Link>
+            <div className="bc-slide" key={p.name}>
+              <ProductCard p={p} price={p.priceValue != null ? formatPrice(p.priceValue) : p.price} className="pc-flat" />
+            </div>
           ))}
         </div>
 
@@ -91,7 +71,7 @@ export default function EditorsPickCarousel({ products }: { products?: ProductIt
           onClick={() => goTo(active - 1)}
           disabled={active === 0}
         >
-          &#8592;
+          <ChevronLeft />
         </button>
         <button
           type="button"
@@ -100,7 +80,7 @@ export default function EditorsPickCarousel({ products }: { products?: ProductIt
           onClick={() => goTo(active + 1)}
           disabled={active === last}
         >
-          &#8594;
+          <ChevronRight />
         </button>
       </div>
 

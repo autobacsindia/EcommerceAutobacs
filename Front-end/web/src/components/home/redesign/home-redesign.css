@@ -885,6 +885,25 @@
 .hr .ce-card:hover .ce-name { color: var(--bg); }
 .hr .ce-price { font-size: 18px; font-weight: 500; color: var(--text); transition: color 0.45s ease; }
 .hr .ce-card:hover .ce-price { color: var(--bg); }
+/* ── Driver's Choice product card (ProductCard.tsx) ── */
+.hr .section-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.26em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+.hr .pc-card { flex: 0 0 300px; display: flex; flex-direction: column; border-radius: 18px; overflow: hidden; background: #151616; border: 1px solid rgba(255, 255, 255, 0.07); box-shadow: 0 24px 50px -30px rgba(0, 0, 0, 0.9); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.4s, box-shadow 0.4s; }
+.hr .pc-card:hover { transform: translateY(-6px); border-color: rgba(201, 168, 112, 0.5); box-shadow: 0 30px 60px -28px rgba(201, 168, 112, 0.35); }
+.hr .pc-card:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+.hr .pc-media { position: relative; aspect-ratio: 4 / 3.2; overflow: hidden; background: radial-gradient(ellipse 80% 70% at 50% 40%, #2a2c2c 0%, #181919 70%); }
+.hr .pc-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+.hr .pc-card:hover .pc-img { transform: scale(1.06); }
+.hr .pc-cat { position: absolute; left: 14px; top: 14px; padding: 5px 12px; border-radius: 999px; background: rgba(13, 14, 14, 0.82); border: 1px solid rgba(201, 168, 112, 0.35); backdrop-filter: blur(6px); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text); }
+.hr .pc-body { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 18px 20px 20px; }
+.hr .pc-brand { font-size: 11px; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); }
+.hr .pc-name { font-size: 16px; font-weight: 500; line-height: 1.4; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8em; }
+.hr .pc-foot { margin-top: auto; padding-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.hr .pc-price { font-size: 20px; font-weight: 600; color: var(--text); letter-spacing: 0.01em; }
+.hr .pc-cta { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px; background: var(--gold); color: #111212; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; transition: gap 0.25s, filter 0.25s; }
+.hr .pc-card:hover .pc-cta { gap: 12px; filter: brightness(1.08); }
+.hr .pc-flat { flex: none; width: 100%; }
+.hr .prod-nav button { border-radius: 50%; border-color: rgba(201, 168, 112, 0.35) !important; }
+.hr .prod-nav button:hover { background: var(--gold); color: #111212 !important; }
 .hr .prod-progress { height: 2px; background: var(--line); margin-top: 28px; position: relative; }
 .hr .prod-progress-bar { position: absolute; left: 0; top: 0; height: 100%; background: var(--gold); width: 33%; transition: left 0.55s cubic-bezier(0.16, 1, 0.3, 1), width 0.55s ease; }
 
