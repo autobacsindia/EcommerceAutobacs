@@ -15,7 +15,7 @@
  * at `/images/home/...` paths before the files exist.
  */
 
-import { LEGAL_LINK_LIST } from '@/lib/constants';
+import { LEGAL_LINK_LIST, COMPANY_LEGAL_NAME } from '@/lib/constants';
 
 /** Neutral placeholder shown when an `image` is empty/missing. */
 export const FALLBACK_IMAGE = '';
@@ -516,7 +516,7 @@ export const footer = {
       links: LEGAL_LINK_LIST.map((l) => ({ label: l.label, href: l.href })),
     },
   ],
-  copyright: `© ${new Date().getFullYear()} Autobacs India Pvt. Ltd. All rights reserved.`,
+  copyright: `© ${new Date().getFullYear()} ${COMPANY_LEGAL_NAME}. All rights reserved.`,
   social: [
     { label: 'Facebook', href: 'https://www.facebook.com/autobacsindia' },
     { label: 'Instagram', href: 'https://www.instagram.com/autobacsindia' },

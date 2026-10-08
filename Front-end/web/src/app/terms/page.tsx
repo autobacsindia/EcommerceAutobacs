@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { buildPageMetadata } from '@/lib/pageSeo';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal/legalVersions';
 import { formatLongDateIST } from '@/lib/datetime';
-import { LEGAL_LINKS } from '@/lib/constants';
+import { LEGAL_LINKS, COMPANY_LEGAL_NAME } from '@/lib/constants';
 
 // Server component on purpose. This page has no hooks and no event handlers, so
 // the `'use client'` it used to carry bought nothing — and cost real SEO: a client
@@ -181,7 +181,7 @@ export default function TermsPage() {
       heading: '19. Contact Information',
       content: (
         <p>
-          If you have any questions about these Terms and Conditions, please contact us at AutoBacs India Private Limited —
+          If you have any questions about these Terms and Conditions, please contact us at {COMPANY_LEGAL_NAME} —
           Email:{' '}<Link href="mailto:support@autobacsindia.com" className="text-gold hover:text-ink transition-colors">support@autobacsindia.com</Link>
           {' '}— Phone: +91 9895257905
         </p>
