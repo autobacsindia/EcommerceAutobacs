@@ -403,11 +403,13 @@
     -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 76%, transparent 100%);
     mask-image: linear-gradient(to bottom, transparent 0%, #000 20%, #000 76%, transparent 100%);
   }
+  /* Clear of the fixed WhatsApp + call bubbles (bottom-right, ~128px tall
+     together): at 30px the centred pill ran under the call button. */
   .hr .hero-pin.hero-seq-layout .hero .hero-consult-wrap {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 30px;
+    bottom: 136px;
     margin: 0;
     text-align: center;
     z-index: 6;
@@ -621,9 +623,17 @@
 /* "Consult a specialist" CTA — pinned bottom-right on md/lg; overridden to a
    centered static block below the hero image on small screens (<=768px). */
 /* right: clears the floating WhatsApp/Call buttons (ContactFab: 16px inset + 56px wide). */
-.hr .hero .hero-consult-wrap { position: absolute; right: 128px; bottom: 52px; z-index: 6; }
-.hr .hero .hero-consult { display: inline-flex; align-items: center; gap: 12px; padding: 14px 24px; border: 1px solid rgba(201, 168, 112, 0.4); border-radius: 999px; background: rgba(201, 168, 112, 0.06); backdrop-filter: blur(6px); font-size: 11px; font-weight: 400; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); cursor: pointer; opacity: 0; animation: hr-fadeUp 0.7s ease 1.3s forwards; transition: border-color 0.25s, background 0.25s, transform 0.25s; }
-.hr .hero .hero-consult:hover { border-color: var(--gold); background: rgba(201, 168, 112, 0.14); transform: translateY(-2px); }
+.hr .hero .hero-consult-wrap { position: absolute; right: 150px; bottom: 84px; z-index: 6; }
+/* "Consult a specialist" — the hero's second action, made to be SEEN. It used to be
+   11px gold-on-dark in a 40%-opacity hairline, fading in 1.3s after everything else
+   in the corner beside the chat bubbles, and customers reported not noticing it.
+   Now: full-strength gold border, light text at 600 weight, a headset icon, a soft
+   gold glow, and it arrives with the other calls to action. Still an outline — the
+   filled gold pill stays "Shop now", the primary action. */
+.hr .hero .hero-consult { display: inline-flex; align-items: center; gap: 12px; padding: 17px 30px; border: 1.5px solid var(--gold); border-radius: 999px; background: rgba(201, 168, 112, 0.18); backdrop-filter: blur(6px); box-shadow: 0 0 0 5px rgba(201, 168, 112, 0.1), 0 14px 34px -12px rgba(201, 168, 112, 0.75); font-size: 12.5px; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; color: #f7f0e3; cursor: pointer; opacity: 0; animation: hr-fadeUp 0.6s ease 0.35s forwards; transition: border-color 0.25s, background 0.25s, transform 0.25s, box-shadow 0.25s; }
+.hr .hero .hero-consult:hover { background: rgba(201, 168, 112, 0.3); box-shadow: 0 0 0 6px rgba(201, 168, 112, 0.16), 0 16px 38px -12px rgba(201, 168, 112, 0.9); transform: translateY(-2px); }
+.hr .hero .hero-consult:focus-visible { outline: 2px solid #f7f0e3; outline-offset: 3px; }
+.hr .hero .hero-consult .hero-consult-icon { flex: 0 0 auto; }
 .hr .hero .hero-consult .hero-consult-arrow { transition: transform 0.25s; }
 .hr .hero .hero-consult:hover .hero-consult-arrow { transform: translateX(4px); }
 .hr .hero .bottom-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 72px; display: flex; align-items: center; padding: 0 52px; border-top: 1px solid var(--line); opacity: 0; animation: hr-fadeIn 0.7s ease 1.35s forwards; }
