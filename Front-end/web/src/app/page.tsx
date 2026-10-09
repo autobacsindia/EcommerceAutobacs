@@ -1,29 +1,26 @@
-import HomeRedesign from '@/components/home/redesign/HomeRedesign';
-import { getHomeData } from '@/components/home/redesign/homeData';
+import StoreHome from '@/components/home/store/StoreHome';
+import { getStoreHomeData } from '@/components/home/store/storeData';
 import { getActivePromoBanner } from '@/lib/promoBanner';
 
 /**
- * Home page — redesigned (Hero.html).
+ * Home page — the light, Amazon-style store (components/home/store).
  *
- * Server Component: the DB-backed sections (featured products, category hubs,
- * testimonials, blog posts, brands) are fetched server-side via getHomeData()
- * and passed into the client tree as props — so the page ships real content in
- * its initial HTML (SEO + no loading flash). Each section degrades to a static
- * placeholder if its endpoint is empty/down (see homeData.ts).
+ * Server Component: every shelf (deals, best sellers, category rows, new
+ * arrivals, brands, reviews) is fetched server-side by getStoreHomeData() and
+ * shipped in the initial HTML (SEO, no loading flash). Each section degrades to
+ * empty and an empty shelf is not rendered — see storeData.ts.
  *
- * The redesign ships its own fixed nav + footer, so the global Header/Footer
- * are suppressed on `/` (see ConditionalHeader / ConditionalFooter). The whole
- * tree is scoped under `.hr` (components/home/redesign/home-redesign.css), uses
- * Montserrat via the `--font-montserrat` variable wired in app/layout.tsx, and
- * pulls all copy + curated imagery from components/home/redesign/homeContent.ts.
+ * The page ships its own header and footer, so the global Header/Footer are
+ * suppressed on `/` (see ConditionalHeader / ConditionalFooter). Styles are
+ * scoped under `.sh` / `.sf` (components/home/store/store.css).
  */
 
-// ISR: refresh the home page's DB-backed data at most every 5 minutes.
+// ISR: refresh the home page's data at most every 5 minutes (and on-demand via the
+// same `home:*` cache tags the admin write paths already revalidate).
 export const revalidate = 300;
 
 export default async function Home() {
-  // Independent reads — run them concurrently rather than making the promo strip
-  // wait on the (much heavier) home data fetch.
-  const [data, promoBanner] = await Promise.all([getHomeData(), getActivePromoBanner()]);
-  return <HomeRedesign data={data} promoBanner={promoBanner} />;
+  // Independent reads — the promo strip never waits on the heavier shelves.
+  const [data, promoBanner] = await Promise.all([getStoreHomeData(), getActivePromoBanner()]);
+  return <StoreHome data={data} promoBanner={promoBanner} />;
 }
