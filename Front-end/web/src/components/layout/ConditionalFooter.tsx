@@ -4,9 +4,9 @@ import { usePathname } from 'next/navigation';
 import StoreFooter from '@/components/home/store/StoreFooter';
 
 /**
- * Global storefront footer — the light store footer with the green band, the same
- * one the home page renders. Suppressed on `/` (the home page ships its own), the
- * auth pages, careers, `/admin/*` and the team panel.
+ * Global storefront footer — the light store footer with the green band, on every
+ * storefront page including the home page (which no longer ships its own copy).
+ * Suppressed on the auth pages, careers, `/admin/*` and the team panel.
  */
 export default function ConditionalFooter() {
   const pathname = usePathname();
@@ -16,7 +16,6 @@ export default function ConditionalFooter() {
   // sync with ConditionalHeader.
   const path = pathname?.replace(/\/+$/, '') || '/';
   const hide =
-    path === '/' ||
     path === '/careers' ||
     path === '/login' ||
     path === '/register' ||

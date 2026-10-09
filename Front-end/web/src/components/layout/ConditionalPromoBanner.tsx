@@ -14,10 +14,6 @@ import type { PromoBanner as PromoBannerData } from '@/lib/promoBanner';
  * and passed in, so nothing here costs a request or delays first paint.
  *
  * Suppressed on:
- *  - `/`                   → the home page mounts the banner itself, below the
- *                            hero. Its nav is `position: fixed` and lives inside
- *                            HomeRedesign, so a strip rendered from the layout
- *                            would sit underneath that bar.
  *  - `/admin/*`            → internal tooling; marketing chrome is noise there
  *  - `/login`, `/register` → minimal auth chrome, and a promo mid-signin is a
  *                            distraction on a conversion-critical screen
@@ -45,7 +41,6 @@ export default function ConditionalPromoBanner({ banner }: { banner: PromoBanner
   const path = pathname?.replace(/\/+$/, '') || '/';
 
   const hide =
-    path === '/' ||
     path === '/login' ||
     path === '/register' ||
     path === '/cart' ||

@@ -1,14 +1,10 @@
-import StoreHeader, { type HeaderCategory } from './StoreHeader';
 import HeroBanners, { type BannerSlide } from './HeroBanners';
 import CategoryCards from './CategoryCards';
 import ProductRow from './ProductRow';
 import BrandStrip from './BrandStrip';
 import TrustStrip from './TrustStrip';
 import ReviewStrip from './ReviewStrip';
-import StoreFooter from './StoreFooter';
 import { discountPct, type StoreHomeData } from './storeData';
-import PromoBanner from '@/components/layout/PromoBanner';
-import type { PromoBanner as PromoBannerData } from '@/lib/promoBanner';
 import './store.css';
 
 /** Banner slides composed from live catalogue content (see HeroBanners). */
@@ -58,21 +54,14 @@ function buildSlides(data: StoreHomeData): BannerSlide[] {
  * category bar, offers carousel with overlapping category cards, then product
  * shelves — every one from live data, empty shelves skipped.
  */
-export default function StoreHome({
-  data,
-  promoBanner = null,
-  nav,
-}: {
-  data: StoreHomeData;
-  promoBanner?: PromoBannerData | null;
-  /** Curated header departments (same list as every other page); falls back to the home categories. */
-  nav?: HeaderCategory[];
-}) {
+export default function StoreHome({ data }: { data: StoreHomeData }) {
+  // The header, the admin promo strip and the footer come from the root layout
+  // (ConditionalHeader / ConditionalPromoBanner / ConditionalFooter), exactly as on
+  // every other page. The home page used to render its own copies and rely on
+  // the layout hiding its versions on '/'; on Vercel the ISR-regenerated home
+  // page rendered BOTH, so customers saw two headers and two footers.
   return (
-    <div className="sh sh-theme" id="top">
-      <StoreHeader categories={nav?.length ? nav : data.categories} />
-      {/* The admin promo strip, whenever one is active (Admin → Promo Banners). */}
-      {promoBanner && <PromoBanner banner={promoBanner} />}
+    <div className="sh sh-theme">
       <main className="sh-main">
         {/* The page's one H1, for search engines and screen readers; the banner
             titles below are the visible headlines. */}
@@ -116,7 +105,6 @@ export default function StoreHome({
           <ReviewStrip reviews={data.reviews} />
         </div>
       </main>
-      <StoreFooter />
     </div>
   );
 }

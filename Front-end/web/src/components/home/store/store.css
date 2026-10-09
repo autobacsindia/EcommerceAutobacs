@@ -58,7 +58,12 @@
 .sh-theme .sh-btn-lg { padding: 14px 28px; font-size: 15px; }
 .sh-theme .sh-btn-outline { background: #fff; color: var(--ink); border-color: var(--line); }
 .sh-theme .sh-btn-wa { background: #25d366; color: #0b1a10; }
-.sh-theme :focus-visible { outline: 3px solid #e6a817; outline-offset: 2px; }
+/* Keyboard focus ring for buttons and links, in the brand green. Text fields are
+   excluded: a field counts as :focus-visible even on a mouse click, so this rule
+   drew a 3px gold box inside the header search every time it was clicked. Fields
+   show focus with their own green border/ring (.sh-search:focus-within etc.). */
+.sh-theme :focus-visible:not(input, textarea, select) { outline: 2px solid #12753f; outline-offset: 2px; }
+.sh-theme :is(input, textarea, select):focus-visible { outline: none; }
 .sh-theme .sh-chip { display: inline-flex; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 13px; color: var(--ink-2); transition: border-color 0.2s, color 0.2s; }
 .sh-theme .sh-chip:hover { border-color: var(--g); color: var(--g); }
 .sh-theme .sh-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -146,7 +151,8 @@
 .sh-content { position: relative; z-index: 2; padding: 0 20px 28px; display: flex; flex-direction: column; gap: 20px; }
 
 /* Hero carousel */
-.sh-hero { position: relative; overflow: hidden; height: 400px; }
+.sh-hero { position: relative; overflow: hidden; height: 400px; touch-action: pan-y; user-select: none; }
+.sh-hero img { -webkit-user-drag: none; pointer-events: none; }
 .sh-hero-track { display: flex; height: 100%; transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
 @media (prefers-reduced-motion: reduce) { .sh-hero-track { transition: none; } }
 .sh-slide { flex: 0 0 100%; height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 24px; padding: 34px 72px 120px; }
@@ -249,8 +255,10 @@
 .sh-trust-text { display: block; font-size: 13px; color: var(--muted); }
 
 /* Brands */
-.sh-brands { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 12px; }
-.sh-brand { aspect-ratio: 3 / 2; border: 1px solid var(--line); border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 12px; background: #fff; transition: border-color 0.2s, box-shadow 0.2s; }
+.sh-brands { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: 180px; gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; padding-bottom: 2px; }
+.sh-brands::-webkit-scrollbar { display: none; }
+.sh-brand-arrow { top: calc(50% - 42px); }
+.sh-brand { scroll-snap-align: start; aspect-ratio: 3 / 2; border: 1px solid var(--line); border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 12px; background: #fff; transition: border-color 0.2s, box-shadow 0.2s; }
 .sh-brand:hover { border-color: var(--g); box-shadow: 0 4px 14px rgba(10, 92, 51, 0.12); }
 .sh-brand-img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
@@ -270,18 +278,20 @@
 .sf-top { display: block; text-align: center; padding: 14px; background: var(--g-600); color: #fff !important; font-size: 13px; font-weight: 600; }
 .sf-top:hover { background: #0e7a45; }
 .sf-band { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--g); color: #fff; }
-.sf-band a { display: flex; flex-direction: column; gap: 3px; padding: 20px 24px; border-right: 1px solid rgba(255, 255, 255, 0.14); }
+.sf-band a { display: flex; flex-direction: row; align-items: center; gap: 14px; padding: 20px 24px; border-right: 1px solid rgba(255, 255, 255, 0.14); }
 .sf-band a:last-child { border-right: none; }
 .sf-band a:hover { background: var(--g-700); }
 .sf-band strong { font-size: 15px; }
-.sf-band span { font-size: 13px; opacity: 0.85; }
+.sf-band-txt > span { font-size: 13px; opacity: 0.85; overflow-wrap: anywhere; }
 .sf-main { max-width: 1500px; margin: 0 auto; display: grid; grid-template-columns: 1.4fr repeat(4, minmax(0, 1fr)); gap: 36px; padding: 40px 28px 28px; }
 .sf-logo-chip { display: inline-flex; padding: 10px 14px; border-radius: 10px; background: var(--hdr); margin-bottom: 14px; }
 .sf-logo { height: 34px; width: auto; display: block; }
 .sf-brand p { line-height: 1.6; color: var(--muted); max-width: 320px; }
 .sf-social { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.sf-social a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; }
-.sf-social a:hover { border-color: var(--g); color: var(--g); }
+.sf-social a { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--g-100); color: var(--g); transition: background 0.2s, color 0.2s, transform 0.2s; }
+.sf-social a:hover { background: var(--g); color: #fff; transform: translateY(-2px); }
+.sf-band-ico { flex-shrink: 0; opacity: 0.9; }
+.sf-band-txt { display: flex; flex-direction: column; min-width: 0; }
 .sf-col h3 { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
 .sf-col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
 .sf-col a { color: var(--muted); }
@@ -366,7 +376,6 @@
 /* ── responsive ────────────────────────────────────────────────────────── */
 @media (max-width: 1200px) {
   .sh-quads { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sh-brands { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .sf-main { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .sf-brand { grid-column: 1 / -1; }
 }
@@ -409,7 +418,11 @@
   .sh-slide-title { font-size: 25px; }
   .sh-slide-sub { font-size: 14px; }
   .sh-slide-art { justify-content: flex-start; }
-  .sh-slide-pic { flex-basis: 30%; border-radius: 12px; }
+  .sh-slide-pic { flex: 1 1 0; min-width: 0; max-width: 33%; border-radius: 12px; }
+  .sh-slide-art { gap: 10px; }
+  /* The raised middle photo overlapped the slide's button on phones. */
+  .sh-slide-art-3 .sh-slide-pic:nth-child(2) { transform: none; }
+  .sh-slide-art { height: auto; }
   .sh-hero-arrow { display: none; }
   .sh-hero-dots { bottom: 96px; }
 
@@ -428,7 +441,8 @@
   .sh-trust-icon { flex-basis: 38px; height: 38px; }
   .sh-trust-title { font-size: 13px; }
   .sh-trust-text { font-size: 12px; }
-  .sh-brands { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sh-brands { grid-auto-columns: 132px; gap: 10px; }
+  .sh-brand-arrow { display: none; }
   .sh-reviews { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
   .sh-review { flex: 0 0 82%; scroll-snap-align: start; }
 

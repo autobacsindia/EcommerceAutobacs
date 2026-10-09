@@ -209,17 +209,19 @@ export default function HelpWidget() {
       }}
       style={{ top: `${top}px`, touchAction: 'none' }}
       className={`group fixed right-0 z-[60] flex select-none flex-col items-center gap-1.5
-        rounded-l-xl border border-r-0 border-white/20 bg-gold px-2 py-3 sm:px-2.5 sm:py-3.5
-        text-white shadow-[0_8px_22px_rgba(10,92,51,0.35)]
+        rounded-l-2xl border border-r-0 border-[#4fd283]/40 bg-[#121414] px-2 py-3.5 sm:px-2.5 sm:py-4
+        text-white shadow-[0_10px_28px_rgba(0,0,0,0.35)]
         transition-[background-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
-        hover:bg-[#0b6b3c] hover:shadow-[0_10px_26px_rgba(10,92,51,0.45)]
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e6a817]
+        hover:-translate-x-0.5 hover:bg-[#1d2121] hover:shadow-[0_12px_32px_rgba(0,0,0,0.45)]
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6fdc9c]
         ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
     >
-      <LifeBuoy
-        className="h-5 w-5 shrink-0 transition-transform duration-300 group-hover:rotate-12"
-        aria-hidden="true"
-      />
+      <span className="grid h-7 w-7 place-items-center rounded-full bg-[#4fd283] text-[#0b1a10]">
+        <LifeBuoy
+          className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:rotate-12"
+          aria-hidden="true"
+        />
+      </span>
       <span
         className="font-display text-[12px] font-semibold uppercase leading-none tracking-[0.12em]"
         style={{ writingMode: 'vertical-rl' }}

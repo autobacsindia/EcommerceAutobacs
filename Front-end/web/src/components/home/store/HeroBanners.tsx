@@ -18,6 +18,8 @@ export interface BannerSlide {
 }
 
 const AUTOPLAY_MS = 6000;
+/** Horizontal travel (px) that counts as a swipe rather than a tap. */
+const SWIPE_PX = 40;
 
 /**
  * Amazon-style hero carousel. Until your team uploads banner artwork (admin
@@ -41,6 +43,36 @@ export default function HeroBanners({ slides }: { slides: BannerSlide[] }) {
     return () => window.clearTimeout(t);
   }, [i, paused, count, go]);
 
+  // Swipe / drag between slides (phones especially — there are no arrows there).
+  // A horizontal move past SWIPE_PX changes slide; anything smaller is a tap, so
+  // the slide's button still works. A real drag swallows the click that follows,
+  // so lifting the finger over the CTA does not also open it.
+  const drag = useRef<{ x: number; y: number; id: number } | null>(null);
+  const dragged = useRef(false);
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (count < 2 || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    drag.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    dragged.current = false;
+  };
+  const onPointerUp = (e: React.PointerEvent) => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy)) {
+      dragged.current = true;
+      go(dx < 0 ? i + 1 : i - 1);
+    }
+  };
+  const onClickCapture = (e: React.MouseEvent) => {
+    if (dragged.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      dragged.current = false;
+    }
+  };
+
   if (!count) return null;
 
   return (
@@ -52,6 +84,10 @@ export default function HeroBanners({ slides }: { slides: BannerSlide[] }) {
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerCancel={() => { drag.current = null; }}
+      onClickCapture={onClickCapture}
     >
       <div className="sh-hero-track" style={{ transform: `translateX(-${i * 100}%)` }}>
         {slides.map((s, n) => (

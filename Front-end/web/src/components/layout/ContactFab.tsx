@@ -56,7 +56,7 @@ export default function ContactFab() {
         aria-label="Chat with us on WhatsApp"
         title="Chat on WhatsApp"
         onClick={() => capture('contact_click', { channel: 'whatsapp', path: pathname })}
-        className="flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-black/20 ring-2 ring-white transition-transform hover:scale-105 focus:outline-none focus-visible:ring-[#e6a817]"
+        className="flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-black/20 ring-2 ring-white transition-transform hover:scale-105 focus:outline-none focus-visible:ring-[#6fdc9c]"
       >
         <WhatsAppIcon className="h-6 w-6 md:h-7 md:w-7" />
       </a>
@@ -65,7 +65,7 @@ export default function ContactFab() {
         aria-label={`Call us on ${SUPPORT_PHONE_DISPLAY}`}
         title={`Call ${SUPPORT_PHONE_DISPLAY}`}
         onClick={() => capture('contact_click', { channel: 'call', path: pathname })}
-        className="flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-gold text-white shadow-lg shadow-[rgba(10,92,51,0.35)] ring-2 ring-white transition-transform hover:scale-105 hover:bg-[#0b6b3c] focus:outline-none focus-visible:ring-[#e6a817]"
+        className="flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-gold text-white shadow-lg shadow-[rgba(10,92,51,0.35)] ring-2 ring-white transition-transform hover:scale-105 hover:bg-[#0b6b3c] focus:outline-none focus-visible:ring-[#6fdc9c]"
       >
         <Phone className="h-5 w-5 md:h-6 md:w-6" />
       </a>

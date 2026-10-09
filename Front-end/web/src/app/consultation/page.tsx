@@ -205,7 +205,7 @@ export default function ConsultationPage() {
                 <div>
                   <label htmlFor="c-wa" className={labelClass}>WhatsApp number <span className="text-gold">*</span></label>
                   <input id="c-wa" type="tel" inputMode="tel" autoComplete="tel" value={form.whatsapp}
-                    onChange={(e) => set('whatsapp', e.target.value)} placeholder="98765 43210" maxLength={16} className={field('whatsapp')} />
+                    onChange={(e) => set('whatsapp', e.target.value)} placeholder="10-digit mobile number" maxLength={16} className={field('whatsapp')} />
                   {fieldError('whatsapp')}
                 </div>
                 <div>

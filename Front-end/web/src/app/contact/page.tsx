@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from '@/lib/constants';
 import ContactForm from '@/components/support/ContactForm';
+import StorePageHeader from '@/components/store/StorePageHeader';
 
 const SUPPORT_EMAIL = 'support@autobacsindia.com';
 const SUPPORT_PHONE_DISPLAY = '+91 98952 57905';
@@ -62,17 +63,8 @@ function ContactPageInner() {
   ];
 
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Hero */}
-      <section className="bg-obsidian border-b border-hairline">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Support</p>
-          <h1 className="text-4xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Contact Us</h1>
-          <p className="text-ink/70 font-display max-w-2xl mx-auto">
-            Have questions or need assistance? We&apos;re here to help you with all your automotive needs.
-          </p>
-        </div>
-      </section>
+    <div className="sp sh-theme">
+      <StorePageHeader crumbs={[{ label: 'Contact Us' }]} title={'Contact Us'} subtitle={<>Have questions or need assistance? We&apos;re here to help you with all your automotive needs.</>} />
 
       {/* Contact Info + Form */}
       <section className="py-16">

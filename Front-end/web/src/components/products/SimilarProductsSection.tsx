@@ -126,17 +126,17 @@ export default function SimilarProductsSection({ productId }: SimilarProductsSec
 
   if (loading) {
     return (
-      <section className="py-8 bg-obsidian-deep">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold mb-6 text-ink">Similar Products</h2>
+      <section className="mt-6 rounded-xl bg-white p-5 shadow-sm sm:p-8">
+        <div>
+          <h2 className="mb-4 font-display text-[22px] font-bold text-ink">Similar Products</h2>
           <div className={RAIL_CONTAINER}>
             {[...Array(RAIL_LIMIT)].map((_, i) => (
-              <div key={i} className={`${RAIL_ITEM} bg-obsidian-raised rounded-lg shadow-sm overflow-hidden animate-pulse`}>
-                <div className="h-48 bg-obsidian-raised" />
+              <div key={i} className={`${RAIL_ITEM} border border-hairline bg-white rounded-xl overflow-hidden animate-pulse`}>
+                <div className="h-48 bg-obsidian-deep" />
                 <div className="p-4">
-                  <div className="h-4 bg-obsidian-raised rounded w-3/4 mb-2" />
-                  <div className="h-4 bg-obsidian-raised rounded w-1/2 mb-3" />
-                  <div className="h-6 bg-obsidian-raised rounded w-1/3" />
+                  <div className="h-4 bg-obsidian-deep rounded w-3/4 mb-2" />
+                  <div className="h-4 bg-obsidian-deep rounded w-1/2 mb-3" />
+                  <div className="h-6 bg-obsidian-deep rounded w-1/3" />
                 </div>
               </div>
             ))}
@@ -154,13 +154,13 @@ export default function SimilarProductsSection({ productId }: SimilarProductsSec
     <section 
       ref={containerRef}
       aria-labelledby="similar-products-heading"
-      className="py-8 bg-obsidian-deep"
+      className="mt-6 rounded-xl bg-white p-5 shadow-sm sm:p-8"
       tabIndex={-1}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div>
         <h2 
           id="similar-products-heading"
-          className="text-2xl font-bold mb-6 text-ink"
+          className="mb-4 font-display text-[22px] font-bold text-ink"
           aria-live="polite"
         >
           Similar Products
@@ -170,7 +170,7 @@ export default function SimilarProductsSection({ productId }: SimilarProductsSec
           {products.map((product) => (
             <article
               key={product._id}
-              className={`${RAIL_ITEM} bg-obsidian-raised hover:bg-obsidian-raised rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
+              className={`${RAIL_ITEM} border border-hairline bg-white rounded-xl shadow-sm overflow-hidden transition-all duration-300 hover:shadow-md focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
               tabIndex={0}
             >
               <Link 
@@ -196,7 +196,7 @@ export default function SimilarProductsSection({ productId }: SimilarProductsSec
                     </div>
                   )}
                   {campaignSavingFor(product) && (
-                    <div className="absolute top-2 right-2 flex items-center gap-1 rounded border border-gold/50 bg-obsidian-deep/85 px-2 py-1 text-xs font-bold text-gold backdrop-blur">
+                    <div className="absolute top-2 right-2 flex items-center gap-1 rounded border border-gold/50 bg-white/95 px-2 py-1 text-xs font-bold text-gold">
                       <Gift className="h-3 w-3 shrink-0" aria-hidden />
                       {campaignSavingFor(product)}
                     </div>

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from '@/lib/constants';
+import StorePageHeader from '@/components/store/StorePageHeader';
 
 export default function FAQPage() {
   const faqCategories = [
@@ -54,17 +55,8 @@ export default function FAQPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Hero */}
-      <section className="bg-obsidian border-b border-hairline">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Support</p>
-          <h1 className="text-4xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Frequently Asked Questions</h1>
-          <p className="text-ink/70 font-display max-w-2xl mx-auto">
-            Find answers to common questions about our products, services, and policies.
-          </p>
-        </div>
-      </section>
+    <div className="sp sh-theme">
+      <StorePageHeader crumbs={[{ label: 'Frequently Asked Questions' }]} title={'Frequently Asked Questions'} subtitle={<>Find answers to common questions about our products, services, and policies.</>} />
 
       {/* FAQ Content */}
       <section className="py-16">

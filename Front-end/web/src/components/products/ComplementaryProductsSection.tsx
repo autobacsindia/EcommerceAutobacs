@@ -156,24 +156,24 @@ export default function ComplementaryProductsSection({ productId }: Complementar
     return (
       <section 
         aria-labelledby="complementary-products-heading"
-        className="mt-16"
+        className="mt-6 rounded-xl bg-white p-5 shadow-sm sm:p-8"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div>
           <h2 
             id="complementary-products-heading"
-            className="text-2xl font-bold mb-6 text-ink"
+            className="mb-4 font-display text-[22px] font-bold text-ink"
           >
             Frequently Bought Together
           </h2>
           
           <div className={RAIL_CONTAINER}>
             {[...Array(RAIL_LIMIT)].map((_, i) => (
-              <div key={i} className={`${RAIL_ITEM} bg-obsidian-raised rounded-lg shadow-sm overflow-hidden animate-pulse`}>
-                <div className="aspect-square bg-obsidian-raised" />
+              <div key={i} className={`${RAIL_ITEM} border border-hairline bg-white rounded-xl overflow-hidden animate-pulse`}>
+                <div className="aspect-square bg-obsidian-deep" />
                 <div className="p-4 space-y-3">
-                  <div className="h-4 bg-obsidian-raised rounded w-3/4" />
-                  <div className="h-3 bg-obsidian-raised rounded w-1/2" />
-                  <div className="h-5 bg-obsidian-raised rounded w-1/3" />
+                  <div className="h-4 bg-obsidian-deep rounded w-3/4" />
+                  <div className="h-3 bg-obsidian-deep rounded w-1/2" />
+                  <div className="h-5 bg-obsidian-deep rounded w-1/3" />
                 </div>
               </div>
             ))}
@@ -190,15 +190,15 @@ export default function ComplementaryProductsSection({ productId }: Complementar
   return (
     <section 
       aria-labelledby="complementary-products-heading"
-      className="mt-16 py-12 bg-obsidian-deep"
+      className="mt-6 rounded-xl bg-white p-5 shadow-sm sm:p-8"
       ref={containerRef}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div>
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 
               id="complementary-products-heading"
-              className="text-2xl font-bold text-ink"
+              className="font-display text-[22px] font-bold text-ink"
               aria-live="polite"
             >
               Frequently Bought Together
@@ -252,7 +252,7 @@ export default function ComplementaryProductsSection({ productId }: Complementar
                 key={product._id}
                 // flex-col + mt-auto on the action row keeps the CTA bottom-aligned
                 // now that cards stretch to a common height in both layouts.
-                className={`${RAIL_ITEM} flex flex-col bg-obsidian-raised hover:bg-obsidian-raised rounded-lg shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
+                className={`${RAIL_ITEM} flex flex-col border border-hairline bg-white rounded-xl shadow-sm overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 focus-within:ring-2 focus-within:ring-gold focus-within:ring-offset-2`}
                 tabIndex={0}
                 role="link"
                 // Screen readers got the raw integer here — "₹268000" — while

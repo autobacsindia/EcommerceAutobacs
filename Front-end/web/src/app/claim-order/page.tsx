@@ -155,7 +155,7 @@ function ClaimOrderPageInner() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className={inputWithIconClass}
-                  placeholder="+91 98765 43210"
+                  placeholder="10-digit mobile number"
                 />
               </div>
             </div>

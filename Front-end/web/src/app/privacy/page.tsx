@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import React from 'react';
 import Link from 'next/link';
 import { buildPageMetadata } from '@/lib/pageSeo';
+import StorePageHeader from '@/components/store/StorePageHeader';
 
 // Same gap /terms had: this page was already a server component but never exported
 // generateMetadata, so it shipped bare and its admin PageSeo override was inert.
@@ -16,17 +17,8 @@ export default function PrivacyPage() {
   const lastUpdated = 'December 9, 2025';
 
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Hero */}
-      <section className="bg-obsidian border-b border-hairline">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Legal</p>
-          <h1 className="text-4xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Privacy Policy</h1>
-          <p className="text-ink/70 font-display max-w-2xl mx-auto">
-            Your privacy is important to us. This policy outlines how we collect, use, and protect your personal information.
-          </p>
-        </div>
-      </section>
+    <div className="sp sh-theme">
+      <StorePageHeader crumbs={[{ label: 'Privacy Policy' }]} title={'Privacy Policy'} subtitle={<>Your privacy is important to us. This policy outlines how we collect, use, and protect your personal information.</>} />
 
       {/* Content */}
       <section className="py-16">

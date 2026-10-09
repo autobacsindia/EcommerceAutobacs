@@ -250,6 +250,10 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
           </Reveal>
         </div>
 
+        {/* Similar products first — the shopper is still choosing, so alternatives
+            sit right under the buy box, above the specialist prompt. */}
+        <SimilarProductsSection productId={product._id} />
+
         {/* Consult a specialist */}
         <Reveal y={20}>
           <ConsultSpecialistBanner productSlug={product.slug} className="mt-6" />
@@ -334,12 +338,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         </section>
 
         {/* Similar + complementary */}
-        <section className={sectionCls}>
-          <SimilarProductsSection productId={product._id} />
-        </section>
-        <section className="mt-6">
-          <ComplementaryProductsSection productId={product._id} />
-        </section>
+        <ComplementaryProductsSection productId={product._id} />
       </div>
 
       <StickyCartBar
