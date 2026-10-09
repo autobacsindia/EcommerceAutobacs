@@ -139,7 +139,7 @@ export default function ProductShowcase() {
           <p className="text-red-800">{error}</p>
           <button 
             onClick={() => window.location.reload()}
-            className="mt-4 bg-red-600 text-ink px-4 py-2 rounded hover:bg-red-700"
+            className="mt-4 bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
           >
             Retry
           </button>

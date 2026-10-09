@@ -198,7 +198,7 @@ export default function BuyBox({
         <div className="mt-4 flex items-center gap-2.5">
           <span className="text-[15px] tracking-[2px] text-gold" aria-hidden>
             {'★'.repeat(rounded)}
-            <span className="text-hairline">{'★'.repeat(5 - rounded)}</span>
+            <span className="text-ink-muted/50">{'★'.repeat(5 - rounded)}</span>
           </span>
           <span className="text-[13px] text-ink">{product.averageRating.toFixed(1)}</span>
           {product.totalReviews > 0 && (

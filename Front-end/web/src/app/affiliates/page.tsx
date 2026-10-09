@@ -506,7 +506,7 @@ export default function AffiliatesPage() {
           </div>
 
           {error && (
-            <p role="alert" className="mt-6 text-sm font-display text-red-300 bg-red-500/10 border border-red-500/30 rounded-sm px-3 py-2">
+            <p role="alert" className="mt-6 text-sm font-display text-red-600 bg-red-500/10 border border-red-500/30 rounded-sm px-3 py-2">
               {error}
             </p>
           )}

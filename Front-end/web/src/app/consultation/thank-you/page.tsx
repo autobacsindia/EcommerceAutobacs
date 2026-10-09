@@ -41,7 +41,7 @@ export default function ConsultationThankYouPage() {
       <div className="mx-auto max-w-3xl">
         <div className="text-center">
           <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-green-500/40 bg-green-500/15">
-            <CheckCircle2 className="h-10 w-10 text-green-400" />
+            <CheckCircle2 className="h-10 w-10 text-green-700" />
           </div>
           <p className="mb-3 font-display text-[11px] uppercase tracking-[0.28em] text-gold">Request received</p>
           <h1 className="mb-4 font-display text-4xl font-light tracking-[-0.01em] md:text-5xl">

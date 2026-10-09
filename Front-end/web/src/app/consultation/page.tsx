@@ -66,7 +66,7 @@ function enquiryFromUrl(): string {
   return item ? item.replace(/-/g, ' ') : '';
 }
 
-const inputClass = 'w-full bg-black/40 border border-white/15 text-ink placeholder:text-ink-muted rounded-sm px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/25 font-display text-sm transition-colors';
+const inputClass = 'w-full bg-white border border-[#c9cfcd] text-ink placeholder:text-ink-muted rounded-sm px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/25 font-display text-sm transition-colors';
 const labelClass = 'block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1.5';
 
 export default function ConsultationPage() {
@@ -131,7 +131,7 @@ export default function ConsultationPage() {
 
   const field = (key: keyof FormState) => `${inputClass} ${errors[key] ? 'border-red-500 focus:border-red-400' : ''}`;
   const fieldError = (key: keyof FormState) =>
-    errors[key] ? <p className="mt-1 text-xs text-red-400 font-display">{errors[key]}</p> : null;
+    errors[key] ? <p className="mt-1 text-xs text-red-600 font-display">{errors[key]}</p> : null;
 
   return (
     <div className="bg-obsidian-deep min-h-screen text-ink">
@@ -145,7 +145,7 @@ export default function ConsultationPage() {
           sizes="100vw"
           className="object-cover"
         />
-        <div className="absolute inset-0 bg-linear-to-br from-black/90 via-black/75 to-gold/30" />
+        <div className="absolute inset-0 bg-linear-to-br from-white/95 via-white/85 to-gold/25" />
         <div className="absolute inset-0 bg-linear-to-t from-obsidian-deep via-transparent to-transparent" />
 
         <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:px-6 md:py-20 lg:grid-cols-2 lg:gap-16 lg:px-8">
@@ -183,7 +183,7 @@ export default function ConsultationPage() {
             id="consultation-form"
             onSubmit={submit}
             noValidate
-            className="relative overflow-hidden rounded-md border border-gold/45 bg-[#141414]/95 p-6 shadow-[0_0_0_1px_rgba(201,168,112,0.08),0_30px_80px_-20px_rgba(0,0,0,0.9),0_0_70px_-10px_rgba(201,168,112,0.28)] backdrop-blur sm:p-8"
+            className="relative overflow-hidden rounded-md border border-gold/40 bg-white p-6 shadow-[0_20px_50px_-20px_rgba(10,92,51,0.35)] sm:p-8"
           >
             {/* Gold accent strip — draws the eye to the form against the photo. */}
             <div aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-gold/40 via-gold to-gold/40" />
@@ -240,7 +240,7 @@ export default function ConsultationPage() {
             </div>
 
             {error && (
-              <p role="alert" className="mt-4 flex items-start gap-2 rounded-sm border border-red-500/40 bg-red-500/10 p-3 font-display text-sm text-red-400">
+              <p role="alert" className="mt-4 flex items-start gap-2 rounded-sm border border-red-500/40 bg-red-500/10 p-3 font-display text-sm text-red-600">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {error}
               </p>
             )}

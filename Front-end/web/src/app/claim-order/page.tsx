@@ -95,7 +95,7 @@ function ClaimOrderPageInner() {
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12 px-4">
         <div className="max-w-md w-full text-center">
           <div className="bg-obsidian border border-hairline rounded-sm p-10">
-            <CheckCircle className="h-20 w-20 text-green-400 mx-auto mb-6 animate-bounce" />
+            <CheckCircle className="h-20 w-20 text-green-700 mx-auto mb-6 animate-bounce" />
             <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Account Claimed!</h2>
             <p className="text-ink/70 font-display mb-8">You&apos;re now logged in. Redirecting to your orders...</p>
             <div className="w-full bg-obsidian-raised rounded-full h-1.5">
@@ -231,7 +231,7 @@ function ClaimOrderPageInner() {
             </div>
 
             <div className="bg-green-500/10 border border-green-500/30 rounded-sm px-4 py-3">
-              <p className="text-green-300 font-display text-sm text-center">
+              <p className="text-green-700 font-display text-sm text-center">
                 After verification, you&apos;ll be automatically logged in.
               </p>
             </div>

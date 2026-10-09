@@ -42,7 +42,7 @@ function OffersPageInner() {
 
         {!isPending && isError && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center">
-            <p className="text-red-400 font-display">Failed to load offers</p>
+            <p className="text-red-600 font-display">Failed to load offers</p>
           </div>
         )}
 

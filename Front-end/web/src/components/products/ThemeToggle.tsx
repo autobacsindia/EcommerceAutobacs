@@ -23,7 +23,7 @@ export default function ThemeToggle({ isDark, onToggle }: ThemeToggleProps) {
       aria-label={`Switch to ${isDark ? 'light' : 'dark'} theme`}
     >
       {isDark ? (
-        <Sun className="w-5 h-5 text-yellow-400" />
+        <Sun className="w-5 h-5 text-yellow-700" />
       ) : (
         <Moon className="w-5 h-5 text-ink/80" />
       )}

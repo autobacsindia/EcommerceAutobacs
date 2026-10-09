@@ -111,7 +111,7 @@ const Reviews: React.FC<ReviewsProps> = ({ productId, isAuthenticated }) => {
   }
 
   if (error) {
-    return <div className="py-6 text-sm text-red-400">{error}</div>;
+    return <div className="py-6 text-sm text-red-600">{error}</div>;
   }
 
   return (

@@ -76,7 +76,7 @@ function ResetPasswordPageInner() {
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12 px-4">
         <div className="max-w-md w-full text-center">
           <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8 mb-6">
-            <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+            <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
             <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-2">Invalid Link</h3>
             <p className="text-ink/70 font-display text-sm mb-6">{errorMessage}</p>
             <Link
@@ -99,7 +99,7 @@ function ResetPasswordPageInner() {
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12 px-4">
         <div className="max-w-md w-full text-center">
           <div className="bg-green-500/10 border border-green-500/30 rounded-sm p-8">
-            <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
+            <CheckCircle className="h-12 w-12 text-green-700 mx-auto mb-4" />
             <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-2">Password Reset Successful</h3>
             <p className="text-ink/70 font-display text-sm mb-6">
               Your password has been successfully updated. You can now log in with your new password.
@@ -128,8 +128,8 @@ function ResetPasswordPageInner() {
         <form onSubmit={handleSubmit} className="bg-obsidian border border-hairline rounded-sm p-6 space-y-4">
           {status === 'error' && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-3 flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-              <p className="text-red-300 font-display text-sm">{errorMessage}</p>
+              <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+              <p className="text-red-600 font-display text-sm">{errorMessage}</p>
             </div>
           )}
 

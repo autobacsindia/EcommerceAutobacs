@@ -41,12 +41,12 @@ interface ThreadMessage {
 }
 
 const STATUS_STYLE: Record<TicketStatus, string> = {
-  new: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
-  open: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
-  pending_customer: 'bg-purple-500/10 text-purple-300 border-purple-500/30',
-  on_hold: 'bg-gray-500/10 text-gray-300 border-gray-500/30',
-  resolved: 'bg-green-500/10 text-green-300 border-green-500/30',
-  closed: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
+  new: 'bg-blue-500/10 text-blue-700 border-blue-500/30',
+  open: 'bg-amber-500/10 text-amber-700 border-amber-500/30',
+  pending_customer: 'bg-purple-500/10 text-purple-700 border-purple-500/30',
+  on_hold: 'bg-gray-500/10 text-gray-700 border-gray-500/30',
+  resolved: 'bg-green-500/10 text-green-700 border-green-500/30',
+  closed: 'bg-gray-500/10 text-gray-600 border-gray-500/30',
 };
 
 export default function SupportPage() {
@@ -147,7 +147,7 @@ export default function SupportPage() {
       <section className="py-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           {error && (
-            <p role="alert" className="text-red-400 font-display text-sm mb-4">{error}</p>
+            <p role="alert" className="text-red-600 font-display text-sm mb-4">{error}</p>
           )}
 
           {tickets.length === 0 ? (

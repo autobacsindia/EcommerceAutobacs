@@ -124,7 +124,7 @@ export default function VehicleSelector({
           value={selectedModel}
           onChange={handleModelChange}
           disabled={!selectedMake}
-          className="w-full rounded-md border border-hairline bg-obsidian py-2 px-3 shadow-sm focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold disabled:bg-obsidian-raised"
+          className="w-full rounded-md border border-hairline bg-obsidian py-2 px-3 shadow-sm focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold disabled:bg-obsidian-deep disabled:text-ink-muted"
         >
           <option value="">Select Model</option>
           {models.map((model) => (

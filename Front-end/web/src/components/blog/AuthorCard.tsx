@@ -22,7 +22,7 @@ export default function AuthorCard({ name, type }: Props) {
   return (
     <div className="mt-6 bg-obsidian rounded-xl border border-hairline p-5 flex items-center gap-4">
       <div
-        className="flex-shrink-0 w-14 h-14 rounded-full bg-red-600 flex items-center justify-center text-ink font-bold text-lg select-none"
+        className="flex-shrink-0 w-14 h-14 rounded-full bg-red-600 flex items-center justify-center text-white font-bold text-lg select-none"
         aria-hidden="true"
       >
         {abbr}

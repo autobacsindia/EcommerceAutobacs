@@ -273,7 +273,7 @@ export default function ConfirmStatusChangeModal({
             <div className="mb-6 space-y-4">
               <div>
                 <label htmlFor="tracking-number" className="block text-sm font-medium text-gray-700 mb-2">
-                  Tracking number <span className="text-red-400">*</span>
+                  Tracking number <span className="text-red-600">*</span>
                 </label>
                 <input
                   id="tracking-number"
@@ -288,7 +288,7 @@ export default function ConfirmStatusChangeModal({
 
               <div>
                 <label htmlFor="carrier" className="block text-sm font-medium text-gray-700 mb-2">
-                  Carrier <span className="text-red-400">*</span>
+                  Carrier <span className="text-red-600">*</span>
                 </label>
                 <select
                   id="carrier"
@@ -312,7 +312,7 @@ export default function ConfirmStatusChangeModal({
               {isOtherCarrier && (
                 <div>
                   <label htmlFor="carrier-name" className="block text-sm font-medium text-gray-700 mb-2">
-                    Courier name <span className="text-red-400">*</span>
+                    Courier name <span className="text-red-600">*</span>
                   </label>
                   <input
                     id="carrier-name"
@@ -388,10 +388,10 @@ export default function ConfirmStatusChangeModal({
           {/* Error */}
           {error && (
             <div className="bg-red-500/10 border border-red-500/40 rounded-lg p-4 mb-6 flex gap-3">
-              <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
               {/* whitespace-pre-line: a bulk update reports one line per order it could
                   not change, and without it they collapse into an unreadable run-on. */}
-              <p className="text-sm text-red-400 whitespace-pre-line">{error}</p>
+              <p className="text-sm text-red-600 whitespace-pre-line">{error}</p>
             </div>
           )}
 

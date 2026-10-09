@@ -241,7 +241,7 @@ export default function ModernFastMovingSection({
 
                 {/* Badge */}
                 {(product.originalPrice && product.originalPrice > product.price) && (
-                  <div className="absolute top-4 left-4 bg-red-500 text-ink text-xs font-bold px-3 py-1 rounded-full shadow-md">
+                  <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-md">
                     -{Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}%
                   </div>
                 )}

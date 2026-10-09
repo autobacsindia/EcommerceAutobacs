@@ -52,14 +52,14 @@ export default function ForgotPasswordPage() {
         {status === 'success' ? (
           <div className="bg-green-500/10 border border-green-500/30 rounded-sm p-5">
             <div className="flex gap-3">
-              <Mail className="h-5 w-5 text-green-400 shrink-0 mt-0.5" />
+              <Mail className="h-5 w-5 text-green-700 shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-sm font-display font-bold text-green-400 uppercase tracking-wide">Check Your Email</h3>
-                <p className="mt-2 text-sm text-green-300/80 font-display">
+                <h3 className="text-sm font-display font-bold text-green-700 uppercase tracking-wide">Check Your Email</h3>
+                <p className="mt-2 text-sm text-green-700/80 font-display">
                   If an account exists for {email}, we have sent a password reset link to it.
                   Please check your inbox and spam folder.
                 </p>
-                <Link href="/login" className="mt-4 inline-flex items-center gap-1 text-sm font-display font-bold text-green-400 hover:text-ink transition-colors uppercase tracking-widest">
+                <Link href="/login" className="mt-4 inline-flex items-center gap-1 text-sm font-display font-bold text-green-700 hover:text-ink transition-colors uppercase tracking-widest">
                   <ArrowLeft className="h-4 w-4" />
                   Back to Login
                 </Link>
@@ -70,7 +70,7 @@ export default function ForgotPasswordPage() {
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             {status === 'error' && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-4">
-                <p className="text-sm text-red-400 font-display">{errorMessage}</p>
+                <p className="text-sm text-red-600 font-display">{errorMessage}</p>
               </div>
             )}
 

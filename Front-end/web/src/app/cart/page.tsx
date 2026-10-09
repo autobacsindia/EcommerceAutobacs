@@ -302,7 +302,7 @@ function CartPageContent() {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center py-12 px-6">
-          <ShoppingBag className="mx-auto h-16 w-16 text-hairline mb-8" strokeWidth={1} />
+          <ShoppingBag className="mx-auto h-16 w-16 text-ink-muted/50 mb-8" strokeWidth={1} />
           <Eyebrow className="mb-4">Your bag</Eyebrow>
           <h2 className="text-[clamp(32px,5vw,52px)] font-light leading-tight text-ink mb-4">Your cart is empty</h2>
           <p className="text-ink-muted font-display font-light mb-8">Nothing here yet — let&apos;s find something.</p>
@@ -337,13 +337,13 @@ function CartPageContent() {
         {recentChanges.length > 0 && (
           <div className="mb-6 bg-orange-500/10 border-l-4 border-orange-500 rounded-sm p-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-6 w-6 text-orange-400 shrink-0 mt-0.5" />
+              <AlertTriangle className="h-6 w-6 text-orange-700 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="text-sm font-display font-bold text-orange-400 uppercase tracking-wide">Cart Updates Due to Stock Changes</h3>
+                <h3 className="text-sm font-display font-bold text-orange-700 uppercase tracking-wide">Cart Updates Due to Stock Changes</h3>
                 <ul className="mt-2 space-y-1">
                   {recentChanges.map((change, idx) => (
-                    <li key={idx} className="text-sm text-orange-300 font-display flex items-start gap-2">
-                      <span className="text-orange-400 mt-0.5">·</span>
+                    <li key={idx} className="text-sm text-orange-700 font-display flex items-start gap-2">
+                      <span className="text-orange-700 mt-0.5">·</span>
                       <span>
                         {change.type === 'REMOVED_OUT_OF_STOCK' ? (
                           <strong>{change.productName}</strong>
@@ -365,7 +365,7 @@ function CartPageContent() {
             <div className="bg-obsidian border border-hairline rounded-lg">
               <div className="p-4 border-b border-hairline flex justify-between items-center">
                 <h2 className="font-display font-light text-ink tracking-[-0.01em]">Cart Items</h2>
-                <button onClick={handleClearCart} className="text-sm text-red-400 hover:text-red-300 font-display transition-colors">
+                <button onClick={handleClearCart} className="text-sm text-red-600 hover:text-red-600 font-display transition-colors">
                   Clear Cart
                 </button>
               </div>
@@ -412,7 +412,7 @@ function CartPageContent() {
                           </div>
                           <button
                             onClick={() => handleRemoveItem(item.product._id, item.variantId)}
-                            className="text-ink-muted hover:text-red-400 transition-colors"
+                            className="text-ink-muted hover:text-red-600 transition-colors"
                             title="Remove item"
                           >
                             <Trash2 className="h-5 w-5" />
@@ -445,12 +445,12 @@ function CartPageContent() {
                         </div>
 
                         {item.product.stock === 'out' ? (
-                          <div className="mt-2 flex items-center gap-2 text-red-400 bg-red-500/10 border border-red-500/30 px-3 py-2 rounded-sm">
+                          <div className="mt-2 flex items-center gap-2 text-red-600 bg-red-500/10 border border-red-500/30 px-3 py-2 rounded-sm">
                             <AlertTriangle className="h-4 w-4" />
                             <span className="text-sm font-display">This item is now out of stock</span>
                           </div>
                         ) : item.product.stock === 'low' ? (
-                          <p className="text-sm text-orange-400 font-display mt-2">⚠ Low stock</p>
+                          <p className="text-sm text-orange-700 font-display mt-2">⚠ Low stock</p>
                         ) : null}
                       </div>
                     </div>
@@ -469,7 +469,7 @@ function CartPageContent() {
 
           {/* Order Summary */}
           <div className="lg:col-span-4 mt-8 lg:mt-0">
-            <div className="bg-obsidian border border-hairline rounded-lg p-6 sticky top-20">
+            <div className="bg-obsidian border border-hairline rounded-lg p-6 sticky top-[calc(var(--store-header-h)+20px)]">
               <h2 className="text-lg font-display font-light text-ink tracking-[-0.01em] mb-4">Order Summary</h2>
 
               {/* Renders only for an eligible invited customer with a non-empty cart. */}
@@ -501,7 +501,7 @@ function CartPageContent() {
                 /* The totals below are the browser's own fallback when the server's
                    pricing call fails — no tax, no discount. Saying so is the difference
                    between a wrong number and a known-unreliable one. */
-                <p className="mb-4 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                <p className="mb-4 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
                   We could not price your bag just now, so tax and any offer are not shown
                   here. Your final total is confirmed at checkout.
                 </p>
@@ -577,7 +577,7 @@ function CartPageContent() {
                     <button
                       onClick={handleRemoveCoupon}
                       disabled={couponBusy}
-                      className="text-ink-muted hover:text-red-400 transition-colors disabled:opacity-50"
+                      className="text-ink-muted hover:text-red-600 transition-colors disabled:opacity-50"
                       title="Remove coupon"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -645,7 +645,7 @@ function CartPageContent() {
                 )}
 
                 {couponError && (
-                  <p className="text-red-400 text-xs font-display mt-1.5">{couponError}</p>
+                  <p className="text-red-600 text-xs font-display mt-1.5">{couponError}</p>
                 )}
                 {/* A coupon valid at apply time can lapse (expiry, stock, cart edits). The
                     checkout re-quotes and order creation hard-fails on a now-invalid code. */}
@@ -662,13 +662,13 @@ function CartPageContent() {
                     customer either can fix or must know about.
                   */
                   quote.couponErrorCode === 'affiliate_no_discount' ? (
-                    <p className="text-white/50 text-xs font-display mt-1.5">
+                    <p className="text-ink-muted text-xs font-display mt-1.5">
                       {quote.couponError} — no discount on this order, but{' '}
                       <strong className="font-mono">{cart.couponCode}</strong> still credits
                       whoever referred you.
                     </p>
                   ) : (
-                    <p className="text-red-400 text-xs font-display mt-1.5">{quote.couponError}</p>
+                    <p className="text-red-600 text-xs font-display mt-1.5">{quote.couponError}</p>
                   )
                 )}
               </div>

@@ -85,7 +85,7 @@ export default function HeaderInteractiveBar({ navCategories }: { navCategories:
         <Link href="/wishlist" className="relative p-2 text-ink hover:text-gold transition-colors">
           <Heart className="h-5 w-5" />
           {wishlistCount > 0 && (
-            <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-ink text-xs rounded-full h-5 w-5 flex items-center justify-center">
+            <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
               {wishlistCount}
             </span>
           )}
@@ -94,7 +94,7 @@ export default function HeaderInteractiveBar({ navCategories }: { navCategories:
         <Link href="/cart" className="relative p-2 text-ink hover:text-gold transition-colors" aria-label="Cart">
           <ShoppingCart className="h-5 w-5" />
           {itemCount > 0 && (
-            <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-ink text-xs rounded-full h-5 w-5 flex items-center justify-center">
+            <span className="absolute top-0 right-0 -mt-1 -mr-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
               {itemCount}
             </span>
           )}

@@ -107,7 +107,7 @@ export default function HeaderVehicleSelector() {
       {/* Vehicle Selector Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="text-sm font-medium transition-colors relative py-1 whitespace-nowrap text-ink hover:text-green-200 flex items-center gap-1"
+        className="text-sm font-medium transition-colors relative py-1 whitespace-nowrap text-ink hover:text-green-700 flex items-center gap-1"
       >
         <Car className="h-4 w-4" />
         <span>Vehicle</span>
@@ -159,7 +159,7 @@ export default function HeaderVehicleSelector() {
                 value={selectedModel}
                 onChange={handleModelChange}
                 disabled={!selectedMake || loading}
-                className="w-full rounded-md border border-hairline bg-obsidian py-2 px-3 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:bg-obsidian-raised disabled:cursor-not-allowed"
+                className="w-full rounded-md border border-hairline bg-obsidian py-2 px-3 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed"
               >
                 <option value="">
                   {!selectedMake ? 'Select Make First' : loading ? 'Loading...' : 'Select Model'}
@@ -176,7 +176,7 @@ export default function HeaderVehicleSelector() {
             <button
               onClick={handleBrowseParts}
               disabled={!selectedMake || !selectedModel}
-              className="w-full bg-green-600 text-ink py-2 px-4 rounded-md text-sm font-medium hover:bg-green-700 transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed"
+              className="w-full bg-green-600 text-white py-2 px-4 rounded-md text-sm font-medium hover:bg-green-700 transition-colors disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed"
             >
               Browse {selectedModel || 'Parts'}
             </button>

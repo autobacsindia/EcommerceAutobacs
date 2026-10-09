@@ -24,8 +24,19 @@ export default function ShopByVehicleCard() {
 
   return (
     <div className="st-card sh-quad sh-vcard">
-      <h2 className="st-h3">Parts that fit your car</h2>
-      <p className="st-sub">Pick your car — we&apos;ll show only what fits.</p>
+      <div className="sh-vcard-head">
+        <span className="sh-vcard-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 17h14M5 17a2 2 0 1 1-4 0v-4l2.5-5.5A2 2 0 0 1 5.3 6h13.4a2 2 0 0 1 1.8 1.5L23 13v4a2 2 0 1 1-4 0" />
+            <circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" />
+          </svg>
+        </span>
+        <div>
+          <h2 className="st-h3">Parts that fit your car</h2>
+          <p className="st-sub">Pick your car — we&apos;ll show only what fits.</p>
+        </div>
+      </div>
+      <div className="sh-vcard-body">
       <label className="sh-field">
         <span>Make</span>
         <select value={make} onChange={(e) => { setMake(e.target.value); setModel(''); }} aria-label="Car make">
@@ -40,7 +51,7 @@ export default function ShopByVehicleCard() {
           {models.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
       </label>
-      <button type="button" className="sh-btn sh-btn-primary" onClick={go} disabled={!make}>Show parts</button>
+      <button type="button" className="sh-btn sh-btn-primary sh-vcard-go" onClick={go} disabled={!make}>Show parts</button>
       {popular.length > 0 && (
         <div className="sh-vchips">
           {popular.map((n) => (
@@ -48,6 +59,7 @@ export default function ShopByVehicleCard() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

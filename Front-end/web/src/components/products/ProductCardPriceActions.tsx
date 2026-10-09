@@ -80,7 +80,7 @@ export default function ProductCardPriceActions({
         <button
           onClick={handleAddToCart}
           disabled={stock === 'out'}
-          className="flex items-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-sm hover:bg-gold transition-colors disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed font-display font-bold text-sm tracking-wider uppercase"
+          className="flex items-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-sm hover:bg-gold transition-colors disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed font-display font-bold text-sm tracking-wider uppercase"
         >
           <ShoppingCart className="h-4 w-4" />
           <span className="text-sm font-medium">Add</span>

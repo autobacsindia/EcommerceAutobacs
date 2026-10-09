@@ -17,7 +17,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       secondary: "bg-obsidian-raised text-ink hover:bg-obsidian-raised",
       outline: "border border-input hover:bg-accent hover:text-accent-foreground",
       ghost: "hover:bg-accent hover:text-accent-foreground",
-      danger: "bg-red-600 text-ink hover:bg-red-700",
+      danger: "bg-red-600 text-white hover:bg-red-700",
     };
     
     const sizes = {

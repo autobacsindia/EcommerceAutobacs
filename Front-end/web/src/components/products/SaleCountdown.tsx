@@ -54,7 +54,7 @@ export default function SaleCountdown({ saleEndsAt, className = '' }: SaleCountd
     <div
       role="timer"
       aria-live="off"
-      className={`inline-flex items-center gap-2 rounded-full border border-orange-500/30 bg-orange-500/15 px-3 py-1 text-sm font-semibold text-orange-400 ${className}`}
+      className={`inline-flex items-center gap-2 rounded-full border border-orange-500/30 bg-orange-500/15 px-3 py-1 text-sm font-semibold text-orange-700 ${className}`}
     >
       <span className="relative flex h-2 w-2">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75" />

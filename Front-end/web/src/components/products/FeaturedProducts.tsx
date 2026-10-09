@@ -153,7 +153,7 @@ export default function FeaturedProducts({
             <p className="text-ink/70 font-display">Popular products customers love to buy</p>
           </div>
           <div className="text-center py-12">
-            <div className="text-red-400 font-display mb-4">{error}</div>
+            <div className="text-red-600 font-display mb-4">{error}</div>
             <button
               onClick={() => fetchProducts()}
               className="px-6 py-3 bg-gold hover:opacity-90 text-obsidian rounded-sm font-display font-bold uppercase tracking-widest transition-colors"
@@ -221,12 +221,12 @@ export default function FeaturedProducts({
 
                   {/* Badges */}
                   {product.stock === 'out' && (
-                    <div className="absolute top-2 left-2 bg-red-500 text-ink px-2 py-1 rounded text-xs font-semibold">
+                    <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
                       Out of Stock
                     </div>
                   )}
                   {product.stock !== 'out' && product.originalPrice && product.originalPrice > product.price && (
-                    <div className="absolute top-2 left-2 bg-red-500 text-ink px-2 py-1 rounded text-xs font-bold">
+                    <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">
                       Sale
                     </div>
                   )}
@@ -249,7 +249,7 @@ export default function FeaturedProducts({
                             className={`h-3 w-3 ${
                               i < Math.floor(product.averageRating)
                                 ? 'text-gold fill-current'
-                                : 'text-hairline'
+                                : 'text-ink-muted/50'
                             }`}
                           />
                         ))}
@@ -282,7 +282,7 @@ export default function FeaturedProducts({
                   <button
                     onClick={(e) => handleAddToCart(product._id, e)}
                     disabled={product.stock === 'out'}
-                    className="w-full flex items-center justify-center gap-2 bg-gold hover:opacity-90 text-obsidian px-4 py-2 rounded-sm transition-colors disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed font-display font-bold text-sm uppercase tracking-wider"
+                    className="w-full flex items-center justify-center gap-2 bg-gold hover:opacity-90 text-obsidian px-4 py-2 rounded-sm transition-colors disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed font-display font-bold text-sm uppercase tracking-wider"
                   >
                     <ShoppingCart className="h-4 w-4" />
                     <span>{product.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}</span>

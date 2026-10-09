@@ -116,7 +116,7 @@ export default function KarmaBadge() {
                     <span className="text-ink/70 font-display font-bold uppercase tracking-wide text-xs">{TYPE_LABEL[e.type] || e.type}</span>
                     <span className="text-ink-muted font-display ml-2">{new Date(e.createdAt).toLocaleDateString()}</span>
                   </div>
-                  <span className={`font-display font-bold ${e.points >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <span className={`font-display font-bold ${e.points >= 0 ? 'text-green-700' : 'text-red-600'}`}>
                     {e.points >= 0 ? '+' : ''}{e.points} pts
                   </span>
                 </div>

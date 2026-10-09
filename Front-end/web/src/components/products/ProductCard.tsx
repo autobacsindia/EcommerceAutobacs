@@ -50,13 +50,13 @@ export default function ProductCard({
 
       <div className="absolute top-10 left-2 flex gap-1 flex-wrap">
         {product.stock === 'out' && (
-          <div className="bg-red-500 text-ink px-2 py-1 rounded text-xs font-semibold">Out of Stock</div>
+          <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">Out of Stock</div>
         )}
         {product.stock !== 'out' && (product as any).isNew && (
-          <div className="bg-green-500 text-ink px-2 py-1 rounded text-xs font-semibold">New</div>
+          <div className="bg-green-500 text-white px-2 py-1 rounded text-xs font-semibold">New</div>
         )}
         {product.originalPrice && product.originalPrice > product.price && (
-          <div className="bg-red-500 text-ink px-2 py-1 rounded text-xs font-semibold">
+          <div className="bg-red-500 text-white px-2 py-1 rounded text-xs font-semibold">
             {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
           </div>
         )}
@@ -113,7 +113,7 @@ export default function ProductCard({
               {[1, 2, 3, 4, 5].map((star) => (
                 <svg
                   key={star}
-                  className={cn('h-4 w-4', star <= product.averageRating ? 'text-gold' : 'text-hairline')}
+                  className={cn('h-4 w-4', star <= product.averageRating ? 'text-gold' : 'text-ink-muted/50')}
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >

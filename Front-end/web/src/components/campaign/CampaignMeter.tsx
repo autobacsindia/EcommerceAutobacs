@@ -95,15 +95,15 @@ export default function CampaignMeter({
           </span>
         </div>
         <div className="text-right">
-          <p className="text-xs uppercase tracking-wide text-zinc-500">You save</p>
-          <p className="font-display text-xl font-bold text-emerald-400">{inr(saving)}</p>
+          <p className="text-xs uppercase tracking-wide text-ink-muted">You save</p>
+          <p className="font-display text-xl font-bold text-emerald-700">{inr(saving)}</p>
         </div>
       </div>
 
       {/* A bar implies a journey with a far end. There isn't one under a per-product
           ladder, so it would be decoration pretending to be information. */}
       {!ladder && (
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-obsidian-deep">
           <div
             className="h-full rounded-full bg-gradient-to-r from-gold/60 to-gold transition-all duration-500"
             style={{ width: `${progress}%` }}
@@ -120,10 +120,10 @@ export default function CampaignMeter({
           arithmetic; the ceiling, where one is configured, is the one extra fact worth
           adding because it bounds what the number above can ever become.
         */
-        <p className="mt-2.5 text-xs text-zinc-400">
+        <p className="mt-2.5 text-xs text-ink-muted">
           {ceiling && (
             <>
-              <span className="font-semibold text-white">
+              <span className="font-semibold text-ink">
                 {ceiling.charAt(0).toUpperCase() + ceiling.slice(1)}
               </span>
               {' — '}
@@ -133,13 +133,13 @@ export default function CampaignMeter({
           your bag.
         </p>
       ) : next ? (
-        <p className="mt-2.5 flex items-center gap-1.5 text-xs text-zinc-400">
+        <p className="mt-2.5 flex items-center gap-1.5 text-xs text-ink-muted">
           <TrendingUp size={12} className="text-gold" />
-          Add <span className="font-semibold text-white">{inr(next.addRupees)}</span> more to save
-          <span className="font-semibold text-emerald-400"> {inr(next.extraRupees)}</span> extra
+          Add <span className="font-semibold text-ink">{inr(next.addRupees)}</span> more to save
+          <span className="font-semibold text-emerald-700"> {inr(next.extraRupees)}</span> extra
         </p>
       ) : (
-        <p className="mt-2.5 text-xs text-zinc-400">
+        <p className="mt-2.5 text-xs text-ink-muted">
           You&apos;ve unlocked the best tier available. Applied automatically at checkout.
         </p>
       )}

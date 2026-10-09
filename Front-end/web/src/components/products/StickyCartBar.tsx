@@ -159,7 +159,7 @@ export default function StickyCartBar({
               whileTap={{ scale: 0.95 }}
               onClick={handleAddToCart}
               disabled={loading}
-              className="bg-orange-500 hover:bg-orange-600 disabled:bg-obsidian-raised text-ink font-bold py-3 px-5 rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg shadow-orange-500/30"
+              className="bg-orange-500 hover:bg-orange-600 disabled:bg-obsidian-deep disabled:text-ink-muted text-white font-bold py-3 px-5 rounded-xl transition-all duration-200 flex items-center gap-2 shadow-lg shadow-orange-500/30"
             >
               <ShoppingCart className="w-5 h-5" />
               <span className="hidden sm:inline">{loading ? 'Adding...' : 'Add'}</span>
@@ -168,7 +168,7 @@ export default function StickyCartBar({
               whileTap={{ scale: 0.95 }}
               onClick={handleBuyNow}
               disabled={buyNowLoading}
-              className="bg-obsidian-raised hover:bg-obsidian-raised disabled:bg-obsidian-raised text-ink font-bold py-3 px-5 rounded-xl transition-all duration-200 flex items-center gap-2"
+              className="bg-obsidian-raised hover:bg-obsidian-raised disabled:bg-obsidian-deep disabled:text-ink-muted text-ink font-bold py-3 px-5 rounded-xl transition-all duration-200 flex items-center gap-2"
             >
               <Zap className="w-5 h-5" />
               <span className="hidden sm:inline">{buyNowLoading ? '...' : 'Buy'}</span>

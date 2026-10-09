@@ -48,11 +48,11 @@ export default function TestimonialsSection() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {items.map((t) => (
             <div key={t.id} className="relative bg-obsidian border border-hairline rounded-sm p-6 flex flex-col">
-              <Quote className="absolute top-5 right-5 h-7 w-7 text-hairline" />
+              <Quote className="absolute top-5 right-5 h-7 w-7 text-ink-muted/50" />
 
               <div className="flex items-center gap-1 mb-3">
                 {[1, 2, 3, 4, 5].map((s) => (
-                  <Star key={s} className={`h-4 w-4 ${s <= t.rating ? 'text-yellow-400 fill-yellow-400' : 'text-[#333]'}`} />
+                  <Star key={s} className={`h-4 w-4 ${s <= t.rating ? 'text-yellow-700 fill-yellow-400' : 'text-[#333]'}`} />
                 ))}
               </div>
 

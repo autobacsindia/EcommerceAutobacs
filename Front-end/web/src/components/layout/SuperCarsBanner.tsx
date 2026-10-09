@@ -64,7 +64,7 @@ export default function SuperCarsBanner() {
             <div className="animate-slide-in-left animation-delay-400">
               <Link
                 href="/super-cars"
-                className="group inline-flex items-center gap-3 px-8 py-4 bg-obsidian text-ink font-semibold text-lg rounded-full hover:bg-linear-to-r hover:from-orange-500 hover:to-red-600 hover:text-ink transition-all duration-300 shadow-lg hover:shadow-2xl hover:scale-105"
+                className="group inline-flex items-center gap-3 px-8 py-4 bg-obsidian text-ink font-semibold text-lg rounded-full hover:bg-linear-to-r hover:from-orange-500 hover:to-red-600 hover:text-white transition-all duration-300 shadow-lg hover:shadow-2xl hover:scale-105"
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
               >

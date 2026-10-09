@@ -80,7 +80,7 @@ export default function HeroSection({ product }: HeroSectionProps) {
                   <span className="text-2xl text-ink-muted line-through">
                     ₹{product.originalPrice!.toLocaleString('en-IN')}
                   </span>
-                  <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full font-semibold text-sm border border-green-500/30">
+                  <span className="px-3 py-1 bg-green-500/20 text-green-700 rounded-full font-semibold text-sm border border-green-500/30">
                     {Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)}% OFF
                   </span>
                 </>
@@ -95,7 +95,7 @@ export default function HeroSection({ product }: HeroSectionProps) {
               <p className="text-ink-muted flex items-center gap-2">
                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                 {product.stock === 'low' ? (
-                  <span className="text-orange-400 font-semibold">
+                  <span className="text-orange-700 font-semibold">
                     Low stock - Order now!
                   </span>
                 ) : (

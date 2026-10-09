@@ -70,7 +70,7 @@ export default function VehiclesPage() {
           </div>
         ) : error ? (
           <div className="text-center py-16">
-            <h3 className="text-2xl font-display font-bold text-red-400 uppercase mb-4">Error Loading Vehicles</h3>
+            <h3 className="text-2xl font-display font-bold text-red-600 uppercase mb-4">Error Loading Vehicles</h3>
             <p className="text-ink/70 font-display mb-6">{error}</p>
             <button
               onClick={() => window.location.reload()}

@@ -229,7 +229,7 @@ export default function SimilarProductsSection({ productId }: SimilarProductsSec
                   
                   {product.averageRating ? (
                     <div className="flex items-center mb-2">
-                      <span className="text-yellow-400 mr-1">★</span>
+                      <span className="text-yellow-700 mr-1">★</span>
                       <span className="text-sm text-ink-muted">
                         {product.averageRating.toFixed(1)} ({product.totalReviews || 0})
                       </span>

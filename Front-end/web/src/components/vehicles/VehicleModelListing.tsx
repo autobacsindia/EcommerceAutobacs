@@ -355,13 +355,13 @@ export default function VehicleModelListing({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <nav className="text-sm font-display">
           <Link href="/" className="text-ink-muted hover:text-gold transition-colors">Home</Link>
-          <span className="mx-2 text-hairline">/</span>
+          <span className="mx-2 text-ink-muted/50">/</span>
           <Link href="/vehicles" className="text-ink-muted hover:text-gold transition-colors">Vehicles</Link>
-          <span className="mx-2 text-hairline">/</span>
+          <span className="mx-2 text-ink-muted/50">/</span>
           {currentPage > 1 ? (
             <>
               <Link href={`/model/${slug}`} className="text-ink-muted hover:text-gold transition-colors">{displayName}</Link>
-              <span className="mx-2 text-hairline">/</span>
+              <span className="mx-2 text-ink-muted/50">/</span>
               <span className="text-ink/70">Page {currentPage}</span>
             </>
           ) : (
@@ -375,7 +375,7 @@ export default function VehicleModelListing({
         <div className="lg:grid lg:grid-cols-4 lg:gap-8">
           {/* Sidebar */}
           <aside className="hidden lg:block">
-            <div className="bg-obsidian border border-hairline rounded-sm p-6 sticky top-24">
+            <div className="bg-obsidian border border-hairline rounded-sm p-6 sticky top-[calc(var(--store-header-h)+20px)]">
               <h2 className="font-display font-light text-ink tracking-[-0.01em] mb-5 flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gold shrink-0" />
                 Category Filters
@@ -448,7 +448,7 @@ export default function VehicleModelListing({
               </div>
             ) : error ? (
               <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8 text-center max-w-2xl mx-auto">
-                <h3 className="text-lg font-display font-bold text-red-400 uppercase tracking-wide mb-3">Error Loading Products</h3>
+                <h3 className="text-lg font-display font-bold text-red-600 uppercase tracking-wide mb-3">Error Loading Products</h3>
                 <p className="text-ink/70 font-display mb-5">{error}</p>
                 <button
                   onClick={() => router.refresh()}

@@ -128,8 +128,8 @@ export default function ShippingPage() {
                   processed the next business day. Processing time does not include weekends or holidays.
                 </p>
                 <div className="bg-yellow-500/10 border-l-4 border-yellow-500 p-4 flex items-start gap-3">
-                  <CreditCard className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
-                  <p className="text-yellow-300 font-display text-sm leading-relaxed">
+                  <CreditCard className="h-5 w-5 text-yellow-700 shrink-0 mt-0.5" />
+                  <p className="text-yellow-700 font-display text-sm leading-relaxed">
                     <strong>Note:</strong> Pre-orders and backordered items may have different shipping timelines.
                     You&apos;ll receive a separate notification with estimated delivery dates for these items.
                   </p>

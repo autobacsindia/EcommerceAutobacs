@@ -73,7 +73,7 @@ function VideosContent() {
   return (
     <div>
       {/* Header */}
-      <div className="bg-linear-to-r from-red-700 to-red-900 text-ink py-14 px-4">
+      <div className="bg-linear-to-r from-red-700 to-red-900 text-white py-14 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
             <Video className="h-8 w-8 opacity-80" />
@@ -91,7 +91,7 @@ function VideosContent() {
               <button
                 key={c}
                 onClick={() => updateParam('category', c)}
-                className={`px-4 py-1.5 text-sm rounded-full border transition-colors capitalize ${category === c ? 'bg-red-600 text-ink border-transparent' : 'border-hairline text-ink-muted hover:border-hairline'}`}
+                className={`px-4 py-1.5 text-sm rounded-full border transition-colors capitalize ${category === c ? 'bg-red-600 text-white border-transparent' : 'border-hairline text-ink-muted hover:border-hairline'}`}
               >
                 {c === 'all' ? 'All Videos' : c}
               </button>
@@ -166,7 +166,7 @@ function VideosContent() {
               <button
                 key={i}
                 onClick={() => updateParam('page', String(i + 1))}
-                className={`w-9 h-9 rounded-lg text-sm font-medium border transition-colors ${page === i + 1 ? 'bg-red-600 text-ink border-transparent' : 'border-hairline text-ink-muted hover:bg-obsidian-deep'}`}
+                className={`w-9 h-9 rounded-lg text-sm font-medium border transition-colors ${page === i + 1 ? 'bg-red-600 text-white border-transparent' : 'border-hairline text-ink-muted hover:bg-obsidian-deep'}`}
               >
                 {i + 1}
               </button>

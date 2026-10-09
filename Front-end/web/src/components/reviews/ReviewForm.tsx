@@ -76,7 +76,7 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ onSubmit, onCancel }) => {
             Rating *
           </label>
           <StarRating rating={rating} interactive onRatingChange={setRating} size="large" />
-          {errors.rating && <span className="block text-sm text-red-400">{errors.rating}</span>}
+          {errors.rating && <span className="block text-sm text-red-600">{errors.rating}</span>}
         </div>
 
         <div className="space-y-2">
@@ -91,7 +91,7 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ onSubmit, onCancel }) => {
             placeholder="Summarize your review (optional)"
             className={inputCls}
           />
-          {errors.title && <span className="block text-sm text-red-400">{errors.title}</span>}
+          {errors.title && <span className="block text-sm text-red-600">{errors.title}</span>}
         </div>
 
         <div className="space-y-2">
@@ -107,7 +107,7 @@ const ReviewForm: React.FC<ReviewFormProps> = ({ onSubmit, onCancel }) => {
             className={`${inputCls} resize-none`}
           />
           <div className="text-right text-xs text-ink-muted">{comment.length}/1000</div>
-          {errors.comment && <span className="block text-sm text-red-400">{errors.comment}</span>}
+          {errors.comment && <span className="block text-sm text-red-600">{errors.comment}</span>}
         </div>
 
         <div className="flex items-center gap-3 pt-1">

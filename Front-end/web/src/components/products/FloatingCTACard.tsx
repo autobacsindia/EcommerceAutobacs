@@ -99,7 +99,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
             <span className="text-ink-muted line-through">
               ₹{product.originalPrice?.toLocaleString('en-IN')}
             </span>
-            <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-bold border border-green-500/30">
+            <span className="px-3 py-1 bg-green-500/20 text-green-700 rounded-full text-sm font-bold border border-green-500/30">
               {discount}% OFF
             </span>
           </div>
@@ -141,7 +141,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           </button>
         </div>
         {product.stock === 'low' && (
-          <span className="text-orange-400 text-sm font-semibold">
+          <span className="text-orange-700 text-sm font-semibold">
             Low stock!
           </span>
         )}
@@ -153,7 +153,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           whileTap={{ scale: 0.98 }}
           onClick={handleAddToCart}
           disabled={product.stock === 'out' || cartLoading}
-          className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-obsidian-raised text-ink font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg shadow-lg shadow-orange-500/30"
+          className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-obsidian-deep disabled:text-ink-muted text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg shadow-lg shadow-orange-500/30"
         >
           <ShoppingCart className="w-6 h-6" />
           {cartLoading ? 'Adding...' : 'Add to Cart'}
@@ -163,7 +163,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           whileTap={{ scale: 0.98 }}
           onClick={handleBuyNow}
           disabled={product.stock === 'out' || buyNowLoading}
-          className="w-full bg-obsidian/10 hover:bg-obsidian/20 disabled:bg-obsidian-raised border border-hairline/30 text-ink font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg"
+          className="w-full bg-obsidian/10 hover:bg-obsidian/20 disabled:bg-obsidian-deep disabled:text-ink-muted border border-hairline/30 text-ink font-bold py-4 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg"
         >
           <Zap className="w-6 h-6" />
           {buyNowLoading ? 'Processing...' : 'Buy Now'}
@@ -175,7 +175,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           disabled={wishlistLoading}
           className={`w-full border font-bold py-3 px-6 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 text-lg ${
             isWishlisted
-              ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30'
+              ? 'bg-red-500/20 border-red-500/50 text-red-600 hover:bg-red-500/30'
               : 'bg-obsidian/5 border-hairline/20 text-ink/70 hover:bg-obsidian/10 hover:border-hairline/30'
           }`}
         >
@@ -193,7 +193,7 @@ export default function FloatingCTACard({ product }: FloatingCTACardProps) {
           const Icon = TRUST_ICONS[icon];
           return (
             <div key={label} className="flex flex-col items-center text-center gap-2">
-              <Icon className="w-6 h-6 text-orange-400" />
+              <Icon className="w-6 h-6 text-orange-700" />
               <span className="text-xs text-ink/70 font-medium">{label}</span>
             </div>
           );

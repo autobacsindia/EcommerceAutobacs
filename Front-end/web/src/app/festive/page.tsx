@@ -148,7 +148,7 @@ export default function FestivePage() {
   const offerOver = !isLoading && !campaign;
 
   return (
-    <main className="min-h-screen bg-[#0B0B0B] text-white">
+    <main className="min-h-screen bg-obsidian text-ink">
       <div className="mx-auto max-w-2xl px-6 py-16">
 
         {/* ── Hero ─────────────────────────────────────────────────────────── */}
@@ -161,7 +161,7 @@ export default function FestivePage() {
             Thank you for driving with us.
           </h1>
 
-          <p className="mt-4 text-lg text-zinc-400">
+          <p className="mt-4 text-lg text-ink-muted">
             {ceiling
               ? <>Your reward is waiting — <span className="text-gold">{ceiling}</span>, applied automatically at checkout.</>
               /*
@@ -175,9 +175,9 @@ export default function FestivePage() {
           </p>
 
           {countdown && (
-            <p className="mt-5 inline-flex items-center gap-2 text-sm text-zinc-500">
+            <p className="mt-5 inline-flex items-center gap-2 text-sm text-ink-muted">
               <Clock size={14} />
-              Closes in <span className="text-white">{countdown.days}d {countdown.hours}h {countdown.minutes}m</span>
+              Closes in <span className="font-semibold text-ink">{countdown.days}d {countdown.hours}h {countdown.minutes}m</span>
             </p>
           )}
         </div>
@@ -188,35 +188,35 @@ export default function FestivePage() {
             settling moment and then their reward — not "you cannot have this" for half
             a second while the write lands, which is the version they would screenshot. */}
         {isLoading || authLoading || activating ? (
-          <div className="mt-12 h-44 animate-pulse rounded-xl border border-zinc-800 bg-zinc-900/50" />
+          <div className="mt-12 h-44 animate-pulse rounded-xl border border-hairline bg-obsidian-raised" />
         ) : offerOver ? (
           /* The campaign 404s when it is off, unconfigured, or past its end date. All
              the same to a cardholder, and there is nothing they could do differently —
              what they need is a way onward, not a diagnosis. */
-          <div className="mt-12 rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center">
+          <div className="mt-12 rounded-xl border border-hairline bg-obsidian-raised p-8 text-center">
             <h2 className="text-xl font-semibold">This offer has ended.</h2>
-            <p className="mt-2 text-zinc-400">
+            <p className="mt-2 text-ink-muted">
               Thank you for scanning — this reward is no longer available, but there is
               plenty worth looking at.
             </p>
             <Link
               href="/products"
-              className="mt-6 inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
+              className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#c9cfcd] px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
             >
               Browse the catalogue <ArrowRight size={16} />
             </Link>
           </div>
         ) : campaign?.eligible ? (
-          <div className="mt-12 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-8 text-center">
-            <CheckCircle2 className="mx-auto text-emerald-400" size={32} />
+          <div className="mt-12 rounded-xl border border-emerald-600/30 bg-emerald-50 p-8 text-center">
+            <CheckCircle2 className="mx-auto text-emerald-600" size={32} />
             <h2 className="mt-4 text-2xl font-semibold">You&apos;re in.</h2>
-            <p className="mt-2 text-zinc-300">
+            <p className="mt-2 text-ink-muted">
               Your reward is active. Add items to your cart and the discount is applied
               for you — no code to enter.
             </p>
             <Link
               href="/products"
-              className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-6 py-3 font-semibold text-black transition hover:brightness-110"
+              className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-6 py-3 font-semibold text-white transition hover:brightness-110"
             >
               Start shopping <ArrowRight size={16} />
             </Link>
@@ -240,13 +240,13 @@ export default function FestivePage() {
           for three rates they would have to apply themselves.
         */}
         {ladder && (
-          <p className="mt-12 text-center text-sm text-zinc-500">
+          <p className="mt-12 text-center text-sm text-ink-muted">
             The saving is shown in rupees on every product, and again on each item in your
             bag before you pay. Nothing to enter — it is applied for you.
           </p>
         )}
 
-        <p className="mt-12 flex items-center justify-center gap-2 text-center text-xs text-zinc-600">
+        <p className="mt-12 flex items-center justify-center gap-2 text-center text-xs text-ink-muted">
           <ShieldCheck size={13} />
           One reward per customer. Applied at checkout once you&apos;re signed in.
         </p>
@@ -268,27 +268,27 @@ function Blocked({ reasonCode, signedIn, onRetry }: {
   /** Present only when the refusal is a failed activation, which is the one a retry fixes. */
   onRetry?: () => void;
 }) {
-  const box = 'mt-12 rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center';
+  const box = 'mt-12 rounded-xl border border-hairline bg-obsidian-raised p-8 text-center';
 
   // The commonest case by far: a public offer, and the visitor simply is not signed in.
   if (!signedIn) {
     return (
       <div className={box}>
         <h2 className="text-xl font-semibold">Sign in to claim it.</h2>
-        <p className="mt-2 text-zinc-400">
+        <p className="mt-2 text-ink-muted">
           Your reward is tied to your account, so we can honour it once per customer.
           New here? Creating an account takes a moment.
         </p>
         <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href={`/login?redirect=${encodeURIComponent('/festive')}`}
-            className="inline-flex items-center gap-2 rounded-lg bg-gold px-6 py-3 font-semibold text-black transition hover:brightness-110"
+            className="inline-flex items-center gap-2 rounded-lg bg-gold px-6 py-3 font-semibold text-white transition hover:brightness-110"
           >
             Sign in <ArrowRight size={15} />
           </Link>
           <Link
             href={`/register?redirect=${encodeURIComponent('/festive')}`}
-            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
+            className="inline-flex items-center gap-2 rounded-lg border border-[#c9cfcd] px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
           >
             Create an account
           </Link>
@@ -310,14 +310,14 @@ function Blocked({ reasonCode, signedIn, onRetry }: {
     return (
       <div className={box}>
         <h2 className="text-xl font-semibold">Almost there.</h2>
-        <p className="mt-2 text-zinc-400">
+        <p className="mt-2 text-ink-muted">
           We could not activate your reward just now. It is still yours — try once more.
         </p>
         {onRetry && (
           <button
             type="button"
             onClick={onRetry}
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-6 py-3 font-semibold text-black transition hover:brightness-110"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-6 py-3 font-semibold text-white transition hover:brightness-110"
           >
             Activate my reward <ArrowRight size={15} />
           </button>
@@ -330,15 +330,15 @@ function Blocked({ reasonCode, signedIn, onRetry }: {
   if (reasonCode === 'unverified') {
     return (
       <div className={box}>
-        <MailWarning className="mx-auto text-amber-400" size={28} />
+        <MailWarning className="mx-auto text-amber-600" size={28} />
         <h2 className="mt-4 text-xl font-semibold">Confirm your email to unlock it.</h2>
-        <p className="mt-2 text-zinc-400">
+        <p className="mt-2 text-ink-muted">
           We sent a confirmation link when you registered. Open it and your reward goes
           live — this is how we keep the offer to one per customer.
         </p>
         <Link
           href="/verify-email"
-          className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-6 py-3 font-semibold text-black transition hover:brightness-110"
+          className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gold px-6 py-3 font-semibold text-white transition hover:brightness-110"
         >
           Resend the link <ArrowRight size={15} />
         </Link>
@@ -350,13 +350,13 @@ function Blocked({ reasonCode, signedIn, onRetry }: {
     return (
       <div className={box}>
         <h2 className="text-xl font-semibold">This offer has been fully claimed.</h2>
-        <p className="mt-2 text-zinc-400">
+        <p className="mt-2 text-ink-muted">
           Every reward has been taken. Thank you for scanning — do have a look at what
           else is on.
         </p>
         <Link
           href="/products"
-          className="mt-6 inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
+          className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#c9cfcd] px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
         >
           Browse the catalogue <ArrowRight size={16} />
         </Link>
@@ -367,9 +367,9 @@ function Blocked({ reasonCode, signedIn, onRetry }: {
   if (reasonCode === 'already_used') {
     return (
       <div className={box}>
-        <CheckCircle2 className="mx-auto text-emerald-400" size={28} />
+        <CheckCircle2 className="mx-auto text-emerald-600" size={28} />
         <h2 className="mt-4 text-xl font-semibold">You&apos;ve already used this one.</h2>
-        <p className="mt-2 text-zinc-400">
+        <p className="mt-2 text-ink-muted">
           The reward is one per customer, and yours has been redeemed. Thank you.
         </p>
       </div>
@@ -380,12 +380,12 @@ function Blocked({ reasonCode, signedIn, onRetry }: {
   return (
     <div className={box}>
       <h2 className="text-xl font-semibold">This reward isn&apos;t available just yet.</h2>
-      <p className="mt-2 text-zinc-400">
+      <p className="mt-2 text-ink-muted">
         Check back shortly — and in the meantime, the catalogue is open.
       </p>
       <Link
         href="/products"
-        className="mt-6 inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
+        className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#c9cfcd] px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
       >
         Browse the catalogue <ArrowRight size={16} />
       </Link>

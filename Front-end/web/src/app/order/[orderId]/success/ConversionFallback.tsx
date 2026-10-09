@@ -52,7 +52,7 @@ export default function ConversionFallback({ orderId }: { orderId: string }) {
       )}
       <div className="max-w-2xl mx-auto px-4 text-center">
         <div className="bg-green-500/10 border border-green-500/30 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
-          <CheckCircle className="h-12 w-12 text-green-400" />
+          <CheckCircle className="h-12 w-12 text-green-700" />
         </div>
         <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-3">
           Thank you for your order

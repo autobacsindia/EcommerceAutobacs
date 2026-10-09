@@ -547,7 +547,7 @@ export default function Filters({
                 label={
                   <span className="flex items-center gap-1.5">
                     <span className="text-gold tracking-[2px]">
-                      {'★'.repeat(r.value)}<span className="text-hairline">{'★'.repeat(5 - r.value)}</span>
+                      {'★'.repeat(r.value)}<span className="text-ink-muted/50">{'★'.repeat(5 - r.value)}</span>
                     </span>
                     <span className="text-[11px]">&amp; up</span>
                   </span>

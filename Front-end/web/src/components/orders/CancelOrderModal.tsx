@@ -304,7 +304,7 @@ export default function CancelOrderModal({
             <button
               type="submit"
               disabled={isSubmitting || !selectedReason || !confirmationChecked}
-              className="flex-1 px-6 py-3 bg-red-600 text-ink rounded-lg hover:bg-red-700 font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <>

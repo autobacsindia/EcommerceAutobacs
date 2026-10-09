@@ -248,15 +248,15 @@ export default function SpinSection({ orderId }: { orderId: string }) {
         also carries the coupon code itself, because that code is the thing the customer
         actually needs and the dialog is transient.
       */}
-      <section className="mt-8 overflow-hidden rounded-2xl border border-[#2f2a20] bg-gradient-to-b from-[#151515] to-[#0b0b0b] p-5 text-white shadow-lg">
+      <section className="mt-8 overflow-hidden rounded-2xl border border-gold/30 bg-gradient-to-b from-white to-[#f2f8f4] p-5 text-ink shadow-lg">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
-            <h3 className="text-lg font-bold tracking-tight text-[#c9a870]">
+            <h3 className="text-lg font-bold tracking-tight text-gold">
               {phase === 'revealed'
                 ? `You won${prize ? `: ${prize.name}` : '!'}`
                 : 'Rev it up — you’ve earned a spin'}
             </h3>
-            <p className="mt-0.5 text-sm text-[#b3aca0]">
+            <p className="mt-0.5 text-sm text-ink-muted">
               {phase === 'pending'
                 ? 'Confirming your payment…'
                 : phase === 'revealed'
@@ -268,7 +268,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
                 type="button"
                 onClick={copyCode}
                 title="Copy code"
-                className="mt-2 rounded-lg border-2 border-dashed border-[#c9a870]/50 bg-[#c9a870]/10 px-3 py-1.5 font-mono text-base font-bold tracking-[0.12em] text-[#c9a870]"
+                className="mt-2 rounded-lg border-2 border-dashed border-gold/50 bg-gold/10 px-3 py-1.5 font-mono text-base font-bold tracking-[0.12em] text-gold"
               >
                 {prize.couponCode}
                 <span className="ml-2 font-sans text-[10px] font-normal tracking-normal opacity-70">
@@ -279,11 +279,11 @@ export default function SpinSection({ orderId }: { orderId: string }) {
           </div>
 
           {phase === 'pending' ? (
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#2f2a20] border-t-[#c9a870]" />
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gold/15 border-t-gold" />
           ) : (
             <button
               onClick={() => setOpen(true)}
-              className="rounded-full bg-[#c9a870] px-6 py-2.5 text-sm font-bold text-[#1a1205] shadow transition hover:bg-[#e8cfa0] active:scale-95"
+              className="rounded-full bg-gold px-6 py-2.5 text-sm font-bold text-white shadow transition hover:bg-[#0b6b3c] active:scale-95"
             >
               {phase === 'revealed' ? 'View your prize' : 'Spin now'}
             </button>
@@ -292,12 +292,12 @@ export default function SpinSection({ orderId }: { orderId: string }) {
       </section>
 
       <SpinModal open={open} onClose={() => setOpen(false)} labelledBy="spin-modal-title">
-        <section className="overflow-hidden rounded-2xl border border-[#2f2a20] bg-gradient-to-b from-[#151515] to-[#0b0b0b] p-6 text-white shadow-xl">
+        <section className="overflow-hidden rounded-2xl border border-gold/30 bg-gradient-to-b from-white to-[#f2f8f4] p-6 text-ink shadow-xl">
       <div className="mb-4 text-center">
-        <h2 id="spin-modal-title" className="text-xl font-bold tracking-tight text-[#c9a870]">
+        <h2 id="spin-modal-title" className="text-xl font-bold tracking-tight text-gold">
           {phase === 'revealed' ? 'You won!' : 'Rev it up — you’ve earned a spin'}
         </h2>
-        <p className="mt-1 text-sm text-[#b3aca0]">
+        <p className="mt-1 text-sm text-ink-muted">
           {phase === 'pending'
             ? 'Confirming your payment…'
             : phase === 'revealed'
@@ -308,8 +308,8 @@ export default function SpinSection({ orderId }: { orderId: string }) {
 
       {phase === 'pending' ? (
         <div className="flex flex-col items-center py-10">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#2f2a20] border-t-[#c9a870]" />
-          <p className="mt-4 max-w-xs text-center text-xs text-[#8a8378]">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-gold/15 border-t-gold" />
+          <p className="mt-4 max-w-xs text-center text-xs text-ink-muted">
             We&apos;ll unlock your spin the moment your payment is confirmed. This page updates
             on its own — no need to refresh.
           </p>
@@ -325,25 +325,25 @@ export default function SpinSection({ orderId }: { orderId: string }) {
           />
 
           {error && (
-            <p className="mt-3 rounded-lg bg-red-500/15 px-3 py-2 text-center text-sm text-red-300">{error}</p>
+            <p className="mt-3 rounded-lg bg-red-500/15 px-3 py-2 text-center text-sm text-red-600">{error}</p>
           )}
 
           {phase === 'ready' && (
             <button
               onClick={spin}
-              className="mx-auto mt-5 block rounded-full bg-[#c9a870] px-10 py-3 text-base font-bold text-[#1a1205] shadow-lg transition hover:bg-[#e8cfa0] active:scale-95"
+              className="mx-auto mt-5 block rounded-full bg-gold px-10 py-3 text-base font-bold text-white shadow-lg transition hover:bg-[#0b6b3c] active:scale-95"
             >
               SPIN
             </button>
           )}
 
           {phase === 'spinning' && (
-            <p className="mt-5 text-center text-sm font-semibold text-[#b3aca0]">Spinning…</p>
+            <p className="mt-5 text-center text-sm font-semibold text-ink-muted">Spinning…</p>
           )}
 
           {phase === 'revealed' && prize && settled && (
             <div className="mt-5 animate-[fadeIn_400ms_ease]">
-              <div className="rounded-xl bg-[#c9a870] px-5 py-4 text-center text-[#1a1205]">
+              <div className="rounded-xl bg-gold px-5 py-4 text-center text-white">
                 <div className="text-xs font-semibold uppercase tracking-wider opacity-70">Your prize</div>
                 {prize.imageUrl && (
                   /* The picture they just watched land, shown big enough to actually see.
@@ -351,7 +351,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
                      later re-photographed or retired. */
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={prize.imageUrl} alt=""
-                    className="mx-auto mt-2 h-20 w-20 rounded-full border-2 border-[#1a1205]/20 object-cover" />
+                    className="mx-auto mt-2 h-20 w-20 rounded-full border-2 border-white/40 object-cover" />
                 )}
                 <div className="mt-0.5 text-lg font-bold">{prize.name}</div>
                 <div className="mt-1 text-xs opacity-80">
@@ -372,7 +372,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
                     <button
                       type="button"
                       onClick={copyCode}
-                      className="w-full rounded-lg border-2 border-dashed border-[#1a1205]/40 bg-white/40 px-4 py-3 font-mono text-xl font-bold tracking-[0.15em] text-[#1a1205] transition hover:bg-white/60"
+                      className="w-full rounded-lg border-2 border-dashed border-white/60 bg-white/15 px-4 py-3 font-mono text-xl font-bold tracking-[0.15em] text-white transition hover:bg-white/25"
                       title="Copy code"
                     >
                       {prize.couponCode}
@@ -391,18 +391,18 @@ export default function SpinSection({ orderId }: { orderId: string }) {
                 risks the removal of existing legitimate reviews.
               */}
               {reviewCta?.url && !reviewDismissed && (
-                <div className="mt-4 rounded-xl border border-[#191919] bg-[#191919] p-4 text-center">
-                  <p className="text-sm font-semibold text-white">
+                <div className="mt-4 rounded-xl border border-hairline bg-white p-4 text-center">
+                  <p className="text-sm font-semibold text-ink">
                     {reviewCta.headline || 'Loved your order?'}
                   </p>
-                  {reviewCta.body && <p className="mt-1 text-xs text-[#b3aca0]">{reviewCta.body}</p>}
+                  {reviewCta.body && <p className="mt-1 text-xs text-ink-muted">{reviewCta.body}</p>}
                   <div className="mt-3 flex items-center justify-center gap-3">
                     <button onClick={openReview}
-                      className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-[#151515] hover:bg-gray-100">
+                      className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-white hover:bg-[#0b6b3c]">
                       ⭐ Review us on Google
                     </button>
                     <button onClick={() => setReviewDismissed(true)}
-                      className="text-xs text-[#8a8378] underline hover:text-[#b3aca0]">
+                      className="text-xs text-ink-muted underline hover:text-ink-muted">
                       No thanks
                     </button>
                   </div>
@@ -421,7 +421,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
             Shown in every phase, revealed included: "you won a dashcam" is precisely the
             moment a customer forms an expectation about what will arrive.
           */}
-          <div className="mx-auto mt-4 max-w-md text-center text-[10px] leading-relaxed text-[#8a7f6b]">
+          <div className="mx-auto mt-4 max-w-md text-center text-[10px] leading-relaxed text-ink-muted">
             <p>{PRIZE_DISCLAIMER}</p>
             {terms && <p className="mt-2">{terms}</p>}
           </div>

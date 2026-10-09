@@ -207,7 +207,7 @@ export default function ComplementaryProductsSection({ productId }: Complementar
               Complete your purchase with these complementary items
             </p>
           </div>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-900/50 text-green-300">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
             💡 Recommended
           </span>
         </div>
@@ -270,7 +270,7 @@ export default function ComplementaryProductsSection({ productId }: Complementar
                       loading="lazy"
                     />
                     {discount && (
-                      <div className="absolute top-2 left-2 bg-red-500 text-ink px-2 py-1 rounded text-xs font-bold">
+                      <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold">
                         {discount}% OFF
                       </div>
                     )}
@@ -305,7 +305,7 @@ export default function ComplementaryProductsSection({ productId }: Complementar
                     
                     {product.averageRating != null && product.averageRating > 0 && (
                       <div className="flex items-center gap-1 mb-2">
-                        <svg className="w-4 h-4 text-yellow-400 fill-current" viewBox="0 0 20 20">
+                        <svg className="w-4 h-4 text-yellow-700 fill-current" viewBox="0 0 20 20">
                           <path d="M10 15l-5.878 3.09 1.123-6.545L.489 6.91l6.572-.955L10 0l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
                         </svg>
                         <span className="text-sm text-ink-muted">

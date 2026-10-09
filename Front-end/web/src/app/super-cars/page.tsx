@@ -83,29 +83,29 @@ export default function SuperCarsPage() {
 
         <div className="relative container mx-auto px-4 py-20 text-center z-10">
           <div className="animate-slide-up-enter">
-            <span className="inline-block px-4 py-1 mb-6 border border-red-500/50 rounded-full bg-red-500/10 text-red-400 text-sm font-tracking-wider uppercase">
+            <span className="inline-block px-4 py-1 mb-6 border border-red-500/50 rounded-full bg-red-500/10 text-red-200 text-sm font-tracking-wider uppercase">
               ROAVION - Powered by AutoBacs India
             </span>
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-linear-to-r from-ink via-gold to-gold bg-clip-text text-transparent">
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-linear-to-r from-white via-[#bfe3cd] to-white bg-clip-text text-transparent">
               DISCOVER A NEW IMMERSIVE EXPERIENCE
               <br />
-              <span className="text-2xl md:text-4xl lg:text-5xl font-light text-ink-muted mt-2 block">
+              <span className="text-2xl md:text-4xl lg:text-5xl font-light text-white/75 mt-2 block">
                 BUILT AROUND YOUR SUPERCAR
               </span>
             </h1>
             
-            <p className="text-lg md:text-xl text-ink/70 max-w-4xl mx-auto mb-10 leading-relaxed animation-delay-100 animate-slide-up-enter opacity-0">
+            <p className="text-lg md:text-xl text-white/80 max-w-4xl mx-auto mb-10 leading-relaxed animation-delay-100 animate-slide-up-enter opacity-0">
               YOU CAN ENJOY THE BEAUTY OF YOUR CAR EVEN WHEN YOU DON’T HIT THE ROAD.
             </p>
             
-            <p className="text-ink-muted max-w-3xl mx-auto mb-12 text-base md:text-lg animation-delay-200 animate-slide-up-enter opacity-0">
+            <p className="text-white/75 max-w-3xl mx-auto mb-12 text-base md:text-lg animation-delay-200 animate-slide-up-enter opacity-0">
               Owning a supercar isn’t just about the ride—it’s about making a statement. With AUTOBACS INDIA’s cutting-edge concepts, you can now display your prized vehicle in a space as remarkable as the car itself, turning storage into a masterpiece of style.
             </p>
 
             <div className="animation-delay-300 animate-slide-up-enter opacity-0">
               <Link 
                 href="/contact" 
-                className="inline-flex items-center gap-2 px-8 py-4 bg-linear-to-r from-red-600 to-red-800 rounded-full text-ink font-semibold tracking-wide hover:shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all duration-300 hover:scale-105"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-linear-to-r from-red-600 to-red-800 rounded-full text-white font-semibold tracking-wide hover:shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all duration-300 hover:scale-105"
               >
                 Start Your Journey
                 <ArrowRight className="w-5 h-5" />
@@ -136,7 +136,7 @@ export default function SuperCarsPage() {
                 key={index}
                 className="group bg-obsidian-raised/50 border border-hairline/50 p-8 rounded-2xl hover:bg-obsidian-raised hover:border-red-500/30 transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
               >
-                <div className="mb-6 inline-flex p-3 rounded-lg bg-red-500/10 text-red-500 group-hover:bg-red-500 group-hover:text-ink transition-colors duration-300">
+                <div className="mb-6 inline-flex p-3 rounded-lg bg-red-500/10 text-red-500 group-hover:bg-red-500 group-hover:text-white transition-colors duration-300">
                   <upgrade.icon className="w-8 h-8" />
                 </div>
                 <h3 className="text-xl font-bold text-ink mb-4 group-hover:text-red-400 transition-colors">
@@ -160,7 +160,7 @@ export default function SuperCarsPage() {
 
       {/* CTA Section */}
       <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-linear-to-r from-red-900 to-black opacity-50"></div>
+        <div className="absolute inset-0 bg-linear-to-r from-gold/15 via-obsidian to-gold/10"></div>
         <div className="container mx-auto px-4 relative z-10 text-center">
           <h2 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-linear-to-b from-ink to-gold mb-8 tracking-tight animate-fade-in-slow">
             SKY IS THE LIMIT
@@ -168,7 +168,7 @@ export default function SuperCarsPage() {
           <div className="hover:scale-105 transition-transform duration-300 inline-block">
             <Link 
               href="/contact"
-              className="inline-flex items-center gap-3 px-10 py-5 bg-obsidian text-ink text-lg font-bold rounded-full hover:bg-obsidian-raised transition-colors shadow-2xl"
+              className="inline-flex items-center gap-3 px-10 py-5 bg-gold text-white text-lg font-bold rounded-full hover:bg-[#0b6b3c] transition-colors shadow-lg"
             >
               Contact us for Expert Suggestions
               <ArrowRight className="w-5 h-5" />

@@ -53,7 +53,7 @@ const RecentlyViewed = () => {
           </div>
           <button
             onClick={clearHistory}
-            className="text-sm text-ink/70 hover:text-red-400 font-display px-3 py-1 rounded-sm hover:bg-obsidian-raised transition-colors"
+            className="text-sm text-ink/70 hover:text-red-600 font-display px-3 py-1 rounded-sm hover:bg-obsidian-raised transition-colors"
           >
             Clear History
           </button>
