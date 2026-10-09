@@ -218,7 +218,7 @@ function SearchPageInner() {
         <div className="flex gap-6 pt-6">
           {/* Filters Sidebar */}
           <aside className="hidden w-64 shrink-0 lg:block">
-            <div className="sticky top-[calc(var(--store-header-h)+20px)] max-h-[calc(100vh-var(--store-header-h)-40px)] overflow-y-auto rounded-xl bg-white p-5 shadow-sm">
+            <div className="rounded-xl bg-white p-5 shadow-sm">
               <Filters basePath="/products/search" />
             </div>
           </aside>

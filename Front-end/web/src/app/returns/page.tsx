@@ -1,20 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import StorePageHeader from '@/components/store/StorePageHeader';
 
 export default function ReturnsPage() {
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Hero */}
-      <section className="bg-obsidian border-b border-hairline">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Policy</p>
-          <h1 className="text-4xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Return and Exchange Policy</h1>
-          <p className="text-ink/70 font-display max-w-3xl mx-auto">
-            At Autobacs India, we strive to ensure customer satisfaction. Please read our policy carefully before making a purchase.
-          </p>
-        </div>
-      </section>
+    <div className="sp sh-theme">
+      <StorePageHeader crumbs={[{ label: 'Return and Exchange Policy' }]} title={'Return and Exchange Policy'} subtitle={<>At Autobacs India, we strive to ensure customer satisfaction. Please read our policy carefully before making a purchase.</>} />
 
       {/* Content */}
       <section className="py-16">

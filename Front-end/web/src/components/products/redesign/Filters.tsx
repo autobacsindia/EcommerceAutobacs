@@ -70,7 +70,7 @@ function Group({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-hairline py-4 first:border-t-0 first:pt-0">
+    <div className="border-t border-hairline py-4 first-of-type:border-t-0 first-of-type:pt-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

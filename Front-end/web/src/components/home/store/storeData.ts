@@ -163,7 +163,7 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
     return (res.brands ?? [])
       .filter((b) => b.name && b.slug && b.logo)
       .sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0))
-      .slice(0, 16)
+      // Every brand with a logo — the strip scrolls sideways in two rows.
       .map((b) => ({ name: b.name, href: `/brands/${b.slug}`, logo: b.logo! }));
   }, [] as StoreBrand[]);
 

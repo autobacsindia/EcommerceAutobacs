@@ -826,7 +826,7 @@ function CheckoutPageContent() {
                   </div>
                   <div>
                     <label className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">Phone Number</label>
-                    <input type="tel" value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} placeholder="+91 98765 43210" className={inputClass} required={!guestEmail} />
+                    <input type="tel" value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} placeholder="10-digit mobile number" className={inputClass} required={!guestEmail} />
                   </div>
                   <div className="bg-gold/10 border border-gold/30 rounded-lg p-4">
                     <p className="text-sm text-ink/70 font-display">

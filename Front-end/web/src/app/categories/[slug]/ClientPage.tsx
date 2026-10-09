@@ -390,8 +390,7 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
         <div className="flex gap-6 pt-6">
           {/* Filters Sidebar */}
           <aside className="hidden w-64 shrink-0 lg:block">
-            {/* Clears the sticky category strip above, same offset /products uses. */}
-            <div className="sticky top-[calc(var(--store-header-h)+80px)] max-h-[calc(100vh-var(--store-header-h)-100px)] overflow-y-auto rounded-xl bg-white p-5 shadow-sm">
+            <div className="rounded-xl bg-white p-5 shadow-sm">
               <Filters basePath={`/categories/${slug}`} scopeCategoryId={category?._id} />
             </div>
           </aside>

@@ -9,7 +9,6 @@ import type { NavCategory } from '@/lib/navCategories';
  * (components/home/store/StoreHeader), the same one the home page renders.
  *
  * Suppressed on:
- *  - `/`                → the home page ships its own header
  *  - `/careers`         → standalone recruiting landing ships its own header
  *  - `/login`, `/register` → minimal auth chrome
  *  - `/admin/*`         → admin has its own light-theme shell
@@ -26,7 +25,6 @@ export default function ConditionalHeader({ navCategories }: { navCategories: Na
   // (the double-header bug). Collapse trailing slashes, keeping root as '/'.
   const path = pathname?.replace(/\/+$/, '') || '/';
   const hide =
-    path === '/' ||
     path === '/careers' ||
     path === '/login' ||
     path === '/register' ||

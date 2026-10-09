@@ -3,6 +3,7 @@ import React from 'react';
 import { buildPageMetadata } from '@/lib/pageSeo';
 import Link from 'next/link';
 import { RETURN_WINDOW_DAYS } from '@/lib/constants';
+import StorePageHeader from '@/components/store/StorePageHeader';
 
 // Admin-managed via /admin/seo (override -> this fallback -> site default).
 export const generateMetadata = (): Promise<Metadata> =>
@@ -13,17 +14,8 @@ export const generateMetadata = (): Promise<Metadata> =>
 
 export default function HelpPage() {
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Hero */}
-      <section className="bg-obsidian border-b border-hairline">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Support</p>
-          <h1 className="text-4xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Help Centre</h1>
-          <p className="text-ink/70 font-display max-w-2xl mx-auto">
-            Find answers to common questions below, or reach out to our team directly.
-          </p>
-        </div>
-      </section>
+    <div className="sp sh-theme">
+      <StorePageHeader crumbs={[{ label: 'Help Centre' }]} title={'Help Centre'} subtitle={<>Find answers to common questions below, or reach out to our team directly.</>} />
 
       {/* Content */}
       <section className="py-16">

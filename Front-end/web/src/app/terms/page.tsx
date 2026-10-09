@@ -4,6 +4,7 @@ import { buildPageMetadata } from '@/lib/pageSeo';
 import { CURRENT_TERMS_VERSION } from '@/lib/legal/legalVersions';
 import { formatLongDateIST } from '@/lib/datetime';
 import { LEGAL_LINKS, COMPANY_LEGAL_NAME } from '@/lib/constants';
+import StorePageHeader from '@/components/store/StorePageHeader';
 
 // Server component on purpose. This page has no hooks and no event handlers, so
 // the `'use client'` it used to carry bought nothing — and cost real SEO: a client
@@ -217,17 +218,8 @@ export default function TermsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Hero */}
-      <section className="bg-obsidian border-b border-hairline">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Legal</p>
-          <h1 className="text-4xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Terms and Conditions</h1>
-          <p className="text-ink/70 font-display max-w-3xl mx-auto">
-            Please read these terms and conditions carefully before using our website and services.
-          </p>
-        </div>
-      </section>
+    <div className="sp sh-theme">
+      <StorePageHeader crumbs={[{ label: 'Terms and Conditions' }]} title={'Terms and Conditions'} subtitle={<>Please read these terms and conditions carefully before using our website and services.</>} />
 
       {/* Content */}
       <section className="py-16">

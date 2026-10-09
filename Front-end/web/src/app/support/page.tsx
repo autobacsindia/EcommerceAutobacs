@@ -22,6 +22,7 @@ import {
   SUPPORT_HOURS_LABEL,
   type TicketStatus,
 } from '@/lib/supportConstants';
+import StorePageHeader from '@/components/store/StorePageHeader';
 
 interface TicketSummary {
   reference: string;
@@ -133,16 +134,8 @@ export default function SupportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      <section className="bg-obsidian border-b border-hairline">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
-          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Support</p>
-          <h1 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-3">
-            Your requests
-          </h1>
-          <p className="text-ink/70 font-display text-sm">{SUPPORT_HOURS_LABEL}</p>
-        </div>
-      </section>
+    <div className="sp sh-theme">
+      <StorePageHeader crumbs={[{ label: 'Your requests' }]} title={'Your requests'} subtitle={<>{SUPPORT_HOURS_LABEL}</>} />
 
       <section className="py-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">

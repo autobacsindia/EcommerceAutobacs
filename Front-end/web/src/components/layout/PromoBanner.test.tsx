@@ -254,7 +254,8 @@ describe('ConditionalPromoBanner', () => {
     return render(<ConditionalPromoBanner banner={banner} />);
   };
 
-  it.each(['/products', '/products/some-part', '/categories/audio', '/offers', '/about'])(
+  // '/' included: the home page no longer mounts its own copy, the layout's is the one.
+  it.each(['/', '/products', '/products/some-part', '/categories/audio', '/offers', '/about'])(
     'shows on the storefront route %s',
     (path) => {
       const { container } = renderAt(path);
@@ -263,7 +264,6 @@ describe('ConditionalPromoBanner', () => {
   );
 
   it.each([
-    ['/', 'the home page mounts it itself, below the hero'],
     ['/admin', 'internal tooling'],
     ['/admin/orders', 'internal tooling'],
     ['/login', 'minimal auth chrome'],

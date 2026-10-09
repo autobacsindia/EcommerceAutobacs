@@ -5,6 +5,8 @@
  */
 import React from 'react';
 import { render, screen, within, fireEvent } from '@testing-library/react';
+import ConditionalHeader from '@/components/layout/ConditionalHeader';
+import ConditionalFooter from '@/components/layout/ConditionalFooter';
 import StoreHome from '@/components/home/store/StoreHome';
 import type { StoreHomeData, StoreProduct } from '@/components/home/store/storeData';
 
@@ -69,16 +71,29 @@ it('skips a shelf with no products', () => {
   expect(screen.queryByRole('heading', { name: 'New Arrivals' })).toBeNull();
 });
 
-it('search goes to the search page', () => {
-  render(<StoreHome data={data} />);
+// The double-header bug: the home page drew its own header/footer and relied on the
+// layout hiding its copies on '/'. On Vercel the ISR-regenerated page showed BOTH.
+// Now there is one source — the layout — on every page, the home page included.
+it('draws no header, promo strip or footer of its own', () => {
+  const { container } = render(<StoreHome data={data} />);
+  expect(container.querySelector('.sh-header')).toBeNull();
+  expect(container.querySelector('footer')).toBeNull();
+  expect(screen.queryByRole('searchbox')).toBeNull();
+});
+
+it('the layout header, search and footer appear on the home page exactly once', () => {
+  const { container } = render(
+    <>
+      <ConditionalHeader navCategories={[{ label: 'Audio', href: '/categories/audio' }]} />
+      <StoreHome data={data} />
+      <ConditionalFooter />
+    </>,
+  );
+  expect(container.querySelectorAll('.sh-header')).toHaveLength(1);
+  expect(container.querySelectorAll('footer.sf')).toHaveLength(1);
+  expect(screen.getByRole('link', { name: 'Cart, 2 items' })).toHaveAttribute('href', '/cart');
+  expect(screen.getByRole('link', { name: /back to top/i })).toBeInTheDocument();
   fireEvent.change(screen.getByRole('searchbox', { name: 'Search products' }), { target: { value: 'hilux bumper' } });
   fireEvent.submit(screen.getByRole('search'));
   expect(push).toHaveBeenCalledWith('/products/search?q=hilux%20bumper');
-});
-
-it('shows the cart count, the promo strip when active, and the footer links', () => {
-  render(<StoreHome data={data} promoBanner={null} />);
-  expect(screen.getByRole('link', { name: 'Cart, 2 items' })).toHaveAttribute('href', '/cart');
-  expect(screen.getByRole('link', { name: 'Terms and Conditions' })).toBeInTheDocument();
-  expect(screen.getByRole('link', { name: /back to top/i })).toBeInTheDocument();
 });

@@ -2,22 +2,14 @@
 
 import Link from 'next/link';
 import { Truck, Clock, MapPin, CreditCard } from 'lucide-react';
+import StorePageHeader from '@/components/store/StorePageHeader';
 
 export default function ShippingPage() {
   const lastUpdated = 'December 9, 2025';
 
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Hero */}
-      <section className="bg-obsidian border-b border-hairline">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Policy</p>
-          <h1 className="text-4xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Shipping & Delivery</h1>
-          <p className="text-ink/70 font-display max-w-3xl mx-auto">
-            Learn about our shipping options, delivery times, and policies to ensure your order arrives safely and on time.
-          </p>
-        </div>
-      </section>
+    <div className="sp sh-theme">
+      <StorePageHeader crumbs={[{ label: 'Shipping & Delivery' }]} title={'Shipping & Delivery'} subtitle={<>Learn about our shipping options, delivery times, and policies to ensure your order arrives safely and on time.</>} />
 
       {/* Content */}
       <section className="py-16">
