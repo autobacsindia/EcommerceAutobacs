@@ -87,16 +87,16 @@ function ClaimOrderPageInner() {
     }
   };
 
-  const inputClass = 'w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-4 py-2.5 focus:outline-none focus:border-gold font-display text-sm transition-colors';
+  const inputClass = 'w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg px-4 py-2.5 focus:outline-none focus:border-gold font-display text-sm transition-colors';
   const inputWithIconClass = inputClass + ' pl-10';
 
   if (claimed) {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12 px-4">
         <div className="max-w-md w-full text-center">
-          <div className="bg-obsidian border border-hairline rounded-sm p-10">
+          <div className="bg-obsidian border border-hairline rounded-lg p-10">
             <CheckCircle className="h-20 w-20 text-green-700 mx-auto mb-6 animate-bounce" />
-            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Account Claimed!</h2>
+            <h2 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Account Claimed!</h2>
             <p className="text-ink/70 font-display mb-8">You&apos;re now logged in. Redirecting to your orders...</p>
             <div className="w-full bg-obsidian-raised rounded-full h-1.5">
               <div className="bg-gold h-1.5 rounded-full animate-pulse" style={{ width: '100%' }} />
@@ -111,8 +111,8 @@ function ClaimOrderPageInner() {
     <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12 px-4">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Account Access</p>
-          <h2 className="text-4xl font-display font-light text-ink tracking-[-0.01em]">
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Account Access</p>
+          <h2 className="text-4xl font-display font-bold text-ink tracking-[-0.01em]">
             {step === 'request' ? 'Claim Your Order' : 'Verify Magic Link'}
           </h2>
           <p className="mt-2 text-ink/70 font-display text-sm">
@@ -123,9 +123,9 @@ function ClaimOrderPageInner() {
         </div>
 
         {step === 'request' ? (
-          <form onSubmit={handleRequestMagicLink} className="bg-obsidian border border-hairline rounded-sm p-6 space-y-4">
+          <form onSubmit={handleRequestMagicLink} className="bg-obsidian border border-hairline rounded-lg p-6 space-y-4">
             <div>
-              <label htmlFor="email" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
+              <label htmlFor="email" className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">
                 Email Address
               </label>
               <div className="relative">
@@ -143,7 +143,7 @@ function ClaimOrderPageInner() {
             </div>
 
             <div>
-              <label htmlFor="phone" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
+              <label htmlFor="phone" className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">
                 Phone Number
               </label>
               <div className="relative">
@@ -161,7 +161,7 @@ function ClaimOrderPageInner() {
             </div>
 
             <div>
-              <label htmlFor="orderId" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
+              <label htmlFor="orderId" className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">
                 Order ID <span className="normal-case font-display tracking-normal">(optional)</span>
               </label>
               <input
@@ -175,7 +175,7 @@ function ClaimOrderPageInner() {
               />
             </div>
 
-            <div className="bg-gold/10 border border-gold/30 rounded-sm px-4 py-3">
+            <div className="bg-gold/10 border border-gold/30 rounded-lg px-4 py-3">
               <p className="text-gold font-display text-sm text-center">
                 We&apos;ll send a magic link to your email/SMS to verify your identity.
               </p>
@@ -184,7 +184,7 @@ function ClaimOrderPageInner() {
             <button
               type="submit"
               disabled={loading || (!email && !phone)}
-              className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-gold hover:opacity-90 text-white font-display font-bold py-3 rounded-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (
                 <><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-hairline" /> Sending...</>
@@ -194,9 +194,9 @@ function ClaimOrderPageInner() {
             </button>
           </form>
         ) : (
-          <form onSubmit={handleVerifyMagicLink} className="bg-obsidian border border-hairline rounded-sm p-6 space-y-4">
+          <form onSubmit={handleVerifyMagicLink} className="bg-obsidian border border-hairline rounded-lg p-6 space-y-4">
             <div>
-              <label htmlFor="token" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
+              <label htmlFor="token" className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">
                 Magic Link Token
               </label>
               <div className="relative">
@@ -215,7 +215,7 @@ function ClaimOrderPageInner() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
+              <label htmlFor="password" className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">
                 Set Password <span className="normal-case font-display tracking-normal">(optional)</span>
               </label>
               <input
@@ -230,7 +230,7 @@ function ClaimOrderPageInner() {
               <p className="text-ink-muted font-display text-xs mt-1">Leave blank for passwordless login via magic link</p>
             </div>
 
-            <div className="bg-green-500/10 border border-green-500/30 rounded-sm px-4 py-3">
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3">
               <p className="text-green-700 font-display text-sm text-center">
                 After verification, you&apos;ll be automatically logged in.
               </p>
@@ -239,7 +239,7 @@ function ClaimOrderPageInner() {
             <button
               type="submit"
               disabled={loading || !token}
-              className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-gold hover:opacity-90 text-white font-display font-bold py-3 rounded-full flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (
                 <><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-hairline" /> Verifying...</>
@@ -251,7 +251,7 @@ function ClaimOrderPageInner() {
             <button
               type="button"
               onClick={() => setStep('request')}
-              className="w-full text-sm font-display font-bold text-gold hover:text-ink uppercase tracking-widest transition-colors py-2"
+              className="w-full text-sm font-display font-bold text-gold hover:text-ink uppercase tracking-[0.12em] transition-colors py-2"
             >
               ← Request New Magic Link
             </button>

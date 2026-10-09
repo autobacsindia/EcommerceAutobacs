@@ -91,7 +91,7 @@ export default function KarmaBadge() {
         className="flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1.5 text-gold hover:bg-gold/20 transition-colors"
       >
         <Sparkles className="h-4 w-4" />
-        <span className="text-sm font-display font-bold uppercase tracking-widest">{balance} pts</span>
+        <span className="text-sm font-display font-bold uppercase tracking-[0.12em]">{balance} pts</span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
 
@@ -99,7 +99,7 @@ export default function KarmaBadge() {
         <div className="absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-3rem)] z-20 bg-obsidian border border-hairline rounded-lg p-4 shadow-xl">
           <div className="flex items-center justify-between border-b border-hairline pb-3 mb-3">
             <div>
-              <p className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Karma Points</p>
+              <p className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Karma Points</p>
               <p className="text-xl font-display font-bold text-ink">{balance}</p>
             </div>
             <p className="text-xs text-ink-muted font-display">≈ ₹{(balance * pointValue).toFixed(2)}</p>

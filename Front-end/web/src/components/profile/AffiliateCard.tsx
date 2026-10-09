@@ -33,7 +33,7 @@ export default function AffiliateCard() {
   const affiliate = data.affiliate;
 
   const shell = 'bg-obsidian border border-hairline rounded-lg p-6 mb-6';
-  const heading = 'text-xs font-display font-bold text-ink-muted uppercase tracking-widest';
+  const heading = 'text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]';
 
   /*
     ── Applied, but we cannot prove this inbox is theirs ────────────────────────
@@ -86,7 +86,7 @@ export default function AffiliateCard() {
           </div>
           <Link
             href="/affiliates"
-            className="shrink-0 inline-flex items-center gap-1 text-xs font-display font-bold uppercase tracking-widest text-gold hover:text-gold/80 transition"
+            className="shrink-0 inline-flex items-center gap-1 text-[12px] font-display font-bold uppercase tracking-[0.12em] text-gold hover:text-gold/80 transition"
           >
             Learn more <ChevronRight className="h-3 w-3" aria-hidden />
           </Link>
@@ -147,7 +147,7 @@ export default function AffiliateCard() {
             )}
           </p>
         </div>
-        <span className="shrink-0 inline-flex items-center gap-1 text-xs font-display font-bold uppercase tracking-widest text-gold">
+        <span className="shrink-0 inline-flex items-center gap-1 text-[12px] font-display font-bold uppercase tracking-[0.12em] text-gold">
           Open <ChevronRight className="h-3 w-3" aria-hidden />
         </span>
       </Link>

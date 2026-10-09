@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Img from '../redesign/Img';
 import { brand } from '../redesign/homeContent';
 import { useAuth } from '@/context/AuthContext';
@@ -23,6 +23,7 @@ export type HeaderCategory = { name: string; href: string; slug?: string };
  */
 export default function StoreHeader({ categories }: { categories: HeaderCategory[] }) {
   const router = useRouter();
+  const pathname = usePathname() || '/';
   const { isAuthenticated, user } = useAuth();
   const { itemCount } = useCart();
   const [q, setQ] = useState('');
@@ -51,11 +52,12 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
   const cartLabel = itemCount > 0 ? `Cart, ${itemCount} item${itemCount === 1 ? '' : 's'}` : 'Cart';
 
   const barLinks = [
-    { label: "Today's Deals", href: '/offers', hot: true },
-    ...categories.slice(0, 8).map((c) => ({ label: c.name, href: c.href, hot: false })),
-    { label: 'Vehicle Makes', href: '/vehicles', hot: false },
-    { label: 'Track Order', href: '/track', hot: false },
+    { label: "Today's Deals", href: '/offers' },
+    ...categories.slice(0, 9).map((c) => ({ label: c.name, href: c.href })),
+    { label: 'Vehicle Makes', href: '/vehicles' },
   ];
+  // The department you are in is underlined, so the bar doubles as a "you are here".
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <header className="sh-header">
@@ -66,19 +68,8 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
         <Link href="/" className="sh-logo" aria-label={brand.logoAlt}>
           <Img src={brand.logo} alt={brand.logoAlt} className="sh-logo-img" sizes="(max-width: 768px) 140px, 190px" width={960} height={255} priority />
         </Link>
+        <span className="sh-divider sh-only-desktop" aria-hidden="true" />
         <div className="sh-only-desktop"><VehiclePicker /></div>
-        <form className="sh-search" role="search" onSubmit={submit}>
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search parts, brands or your car model"
-            aria-label="Search products"
-          />
-          <button type="submit" aria-label="Search">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-          </button>
-        </form>
         <Link href={accountHref} className="sh-account">
           <span className="sh-small">{isAuthenticated ? `Hello, ${firstName || 'there'}` : 'Hello, sign in'}</span>
           <span className="sh-big">Account &amp; Lists</span>
@@ -87,12 +78,20 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
           <span className="sh-small">Returns</span>
           <span className="sh-big">&amp; Orders</span>
         </Link>
+        <form className="sh-search" role="search" onSubmit={submit}>
+          <svg className="sh-search-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search parts, brands or your car model"
+            aria-label="Search products"
+          />
+          <button type="submit" className="sh-go" aria-label="Search">Go</button>
+        </form>
         <Link href="/cart" className="sh-cart" aria-label={cartLabel}>
-          <span className="sh-cart-icon">
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L21 8H6.2" /><circle cx="9.5" cy="19.5" r="1.4" /><circle cx="17" cy="19.5" r="1.4" /></svg>
-            <span className="sh-cart-count" aria-hidden="true">{itemCount > 99 ? '99+' : itemCount}</span>
-          </span>
-          <span className="sh-big sh-only-desktop">Cart</span>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L21 8H6.2" /><circle cx="9.5" cy="19.5" r="1.4" /><circle cx="17" cy="19.5" r="1.4" /></svg>
+          <span className="sh-cart-count" aria-hidden="true">{itemCount > 99 ? '99+' : itemCount}</span>
         </Link>
       </div>
 
@@ -103,9 +102,16 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
         <button type="button" className="sh-bar-all" onClick={() => setMenuOpen(true)}>
           <span className="sh-bar-burger" aria-hidden="true"><span /><span /><span /></span> All
         </button>
+        <span className="sh-bar-sep" aria-hidden="true" />
         {barLinks.map((l) => (
-          <Link key={l.label} href={l.href} className={l.hot ? 'is-hot' : undefined}>{l.label}</Link>
+          <Link key={l.label} href={l.href} className={isActive(l.href) ? 'is-active' : undefined} aria-current={isActive(l.href) ? 'page' : undefined}>
+            {l.label}
+          </Link>
         ))}
+        <Link href="/track" className={`sh-bar-track${isActive('/track') ? ' is-active' : ''}`}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7" /><circle cx="7" cy="17" r="1.8" /><circle cx="17" cy="17" r="1.8" /></svg>
+          Track Order
+        </Link>
       </nav>
 
       {/* Portalled to <body>: the sticky header is its own stacking context, which would

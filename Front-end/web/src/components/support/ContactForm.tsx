@@ -79,8 +79,8 @@ export default function ContactForm({ defaultSubject = '', orderId = null }: Pro
 
   if (status === 'sent') {
     return (
-      <div className="bg-obsidian border border-hairline rounded-sm p-6 sm:p-8">
-        <h3 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-3">
+      <div className="bg-obsidian border border-hairline rounded-lg p-6 sm:p-8">
+        <h3 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-3">
           Thanks — we&apos;ve got it
         </h3>
         <p className="text-ink/70 font-display text-sm mb-4">
@@ -109,19 +109,19 @@ export default function ContactForm({ defaultSubject = '', orderId = null }: Pro
   }
 
   const inputClass =
-    'w-full bg-obsidian-raised border border-hairline focus:border-gold rounded-sm px-4 py-3 ' +
+    'w-full bg-obsidian-raised border border-hairline focus:border-gold rounded-lg px-4 py-3' +
     'text-ink font-display text-sm outline-none transition-colors placeholder:text-ink-muted';
 
   return (
     <form
       onSubmit={onSubmit}
-      className="bg-obsidian border border-hairline rounded-sm p-6 sm:p-8 space-y-4"
+      className="bg-obsidian border border-hairline rounded-lg p-6 sm:p-8 space-y-4"
       noValidate
     >
       {!user && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="contact-name" className="block text-[10px] font-display font-bold uppercase tracking-widest text-ink-muted mb-2">
+            <label htmlFor="contact-name" className="block text-[12px] font-display font-bold uppercase tracking-[0.12em] text-ink-muted mb-2">
               Your name
             </label>
             <input
@@ -135,7 +135,7 @@ export default function ContactForm({ defaultSubject = '', orderId = null }: Pro
             />
           </div>
           <div>
-            <label htmlFor="contact-email" className="block text-[10px] font-display font-bold uppercase tracking-widest text-ink-muted mb-2">
+            <label htmlFor="contact-email" className="block text-[12px] font-display font-bold uppercase tracking-[0.12em] text-ink-muted mb-2">
               Email
             </label>
             <input
@@ -152,7 +152,7 @@ export default function ContactForm({ defaultSubject = '', orderId = null }: Pro
       )}
 
       <div>
-        <label htmlFor="contact-subject" className="block text-[10px] font-display font-bold uppercase tracking-widest text-ink-muted mb-2">
+        <label htmlFor="contact-subject" className="block text-[12px] font-display font-bold uppercase tracking-[0.12em] text-ink-muted mb-2">
           Subject
         </label>
         <input
@@ -166,7 +166,7 @@ export default function ContactForm({ defaultSubject = '', orderId = null }: Pro
       </div>
 
       <div>
-        <label htmlFor="contact-message" className="block text-[10px] font-display font-bold uppercase tracking-widest text-ink-muted mb-2">
+        <label htmlFor="contact-message" className="block text-[12px] font-display font-bold uppercase tracking-[0.12em] text-ink-muted mb-2">
           Message
         </label>
         <textarea
@@ -189,7 +189,7 @@ export default function ContactForm({ defaultSubject = '', orderId = null }: Pro
       <button
         type="submit"
         disabled={status === 'submitting'}
-        className="w-full bg-gold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-opacity"
+        className="w-full bg-gold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-display font-bold px-6 py-3 rounded-full transition-opacity"
       >
         {status === 'submitting' ? 'Sending…' : 'Send message'}
       </button>

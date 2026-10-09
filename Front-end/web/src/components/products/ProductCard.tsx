@@ -61,7 +61,7 @@ export default function ProductCard({
           </div>
         )}
         {product.isFeatured && product.stock !== 'out' && product.originalPrice && product.originalPrice <= product.price && (
-          <div className="bg-gold text-obsidian px-2 py-1 rounded text-xs font-semibold">Popular</div>
+          <div className="bg-gold text-white px-2 py-1 rounded text-xs font-semibold">Popular</div>
         )}
       </div>
     </>
@@ -83,7 +83,7 @@ export default function ProductCard({
       )}
 
       <div className="p-4">
-        <p className="text-xs text-gold uppercase font-display font-bold tracking-widest mb-1">
+        <p className="text-[12px] text-gold uppercase font-display font-bold tracking-[0.12em] mb-1">
           {product.categories && product.categories.length > 0 ? (
             product.categories[0].name.toUpperCase()
           ) : typeof product.category === 'object' && product.category !== null ? (

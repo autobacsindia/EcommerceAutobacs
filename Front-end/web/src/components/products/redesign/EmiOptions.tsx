@@ -221,8 +221,8 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
       <div
         className={
           widgetPainted
-            ? 'overflow-hidden rounded-sm border border-hairline bg-[#f4f2ee] px-3 py-1 opacity-100 transition-opacity duration-300'
-            : 'pointer-events-none h-0 overflow-hidden rounded-sm border border-transparent px-3 opacity-0'
+            ? 'overflow-hidden rounded-lg border border-hairline bg-[#f4f2ee] px-3 py-1 opacity-100 transition-opacity duration-300'
+            : 'pointer-events-none h-0 overflow-hidden rounded-lg border border-transparent px-3 opacity-0'
         }
       >
         <div id={WIDGET_CONTAINER_ID} ref={containerRef} />
@@ -232,7 +232,7 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
           amount, or the CDN blocked). State only what is true regardless — Razorpay
           checkout shows whatever methods the account has enabled. No rate claims. */}
       {widgetPainted === false && (
-        <p className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">
+        <p className="text-[12px] uppercase tracking-[0.12em] text-ink-muted font-semibold">
           EMI &amp; pay-later options are shown at checkout
         </p>
       )}
@@ -240,7 +240,7 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
       {/* The part Razorpay's widget never says. Collapsed by default so it informs
           without competing with the buy CTA. */}
       <details className="group mt-3">
-        <summary className="cursor-pointer list-none text-[11px] uppercase tracking-[0.16em] text-ink-muted transition-colors hover:text-gold">
+        <summary className="cursor-pointer list-none text-[12px] uppercase tracking-[0.12em] text-ink-muted transition-colors hover:text-gold font-semibold">
           How EMI works
           <span className="ml-1 inline-block transition-transform group-open:rotate-90">›</span>
         </summary>

@@ -58,12 +58,12 @@ export default function RecentlyViewedProducts() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-1">Your History</p>
-            <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">Recently Viewed</h2>
+            <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-1 font-semibold">Your History</p>
+            <h2 className="text-2xl font-display font-bold text-ink tracking-[-0.01em]">Recently Viewed</h2>
           </div>
           <button
             onClick={clearHistory}
-            className="text-sm text-ink/70 hover:text-red-600 font-display px-3 py-1 rounded-sm hover:bg-obsidian-raised transition-colors"
+            className="text-sm text-ink/70 hover:text-red-600 font-display px-3 py-1 rounded-lg hover:bg-obsidian-raised transition-colors"
           >
             Clear History
           </button>
@@ -100,7 +100,7 @@ export default function RecentlyViewedProducts() {
                 <div className="mt-3 flex items-end justify-between">
                   <div className="flex items-baseline gap-2">
                     {product.productType === 'variable' && (product.priceMax ?? product.price) > (product.priceMin ?? product.price) && (
-                      <span className="text-[10px] uppercase tracking-[0.14em] text-ink-muted">From</span>
+                      <span className="text-[12px] uppercase tracking-[0.12em] text-ink-muted font-semibold">From</span>
                     )}
                     <span className="text-lg font-display font-bold text-gold">
                       {formatPrice(product.productType === 'variable' ? (product.priceMin ?? product.price) : product.price)}

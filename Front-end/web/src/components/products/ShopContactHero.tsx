@@ -13,72 +13,50 @@ function WhatsAppGlyph({ className }: { className?: string }) {
   );
 }
 
-const button = 'inline-flex w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sm px-6 py-3.5 text-xs font-bold uppercase tracking-[0.16em] transition sm:w-auto';
-
 /**
- * Centred "talk to us" header for listing pages — the shop (/products) and every
- * category page. It carries the page's single <h1>: the shop uses the default
- * question; a category page passes its own name so the heading still says what
- * the page is (and keeps the category keyword in the h1).
+ * Slim "talk to an expert" strip for listing pages (the shop and every category).
+ * It used to be a full-height hero carrying the page's <h1>, which pushed every
+ * product below the first screen; the page title now lives in StorePageHeader and
+ * this is a compact green band under it (styles: `.sp-help` in store.css).
  */
 export default function ShopContactHero({
-  eyebrow = 'Shop with an expert',
   title = 'Not sure what fits your car?',
-  description,
-  contactLine = 'Our specialists help you choose the right parts for your exact make and model — fitment, pricing and availability, before you buy.',
+  contactLine = 'Our specialists confirm fitment, price and availability before you buy.',
   placement = 'shop_hero',
 }: {
-  eyebrow?: string;
   title?: string;
-  /** Optional page copy shown above the contact line (e.g. a category description). */
-  description?: string;
   contactLine?: string;
   /** Analytics label for where the buttons were clicked. */
   placement?: string;
 } = {}) {
   return (
-    <header className="relative overflow-hidden border-b border-hairline bg-obsidian-deep px-5 py-14 sm:px-8 sm:py-16">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(201,168,112,0.14),transparent_65%)]"
-      />
-      <div className="relative mx-auto max-w-3xl text-center">
-        <p className="text-[11px] uppercase tracking-[0.28em] text-gold">{eyebrow}</p>
-        <h1 className="mt-4 text-[clamp(30px,4.5vw,52px)] font-light leading-[1.05] tracking-[-0.01em]">
-          {title}
-        </h1>
-        {description && (
-          <p className="mx-auto mt-4 max-w-2xl text-sm font-light leading-relaxed text-ink-muted">{description}</p>
-        )}
-        <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-ink/70 sm:text-base">
-          {contactLine}
-        </p>
-
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
-          <a
-            href={whatsappLink('Hi Autobacs India! I need help choosing a product.')}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => capture('contact_click', { channel: 'whatsapp', placement })}
-            className={`${button} bg-[#128C7E] text-white hover:bg-[#0f7a6d]`}
-          >
-            <WhatsAppGlyph className="h-4 w-4" /> WhatsApp us
-          </a>
-          <a
-            href={`tel:${SUPPORT_PHONE_TEL}`}
-            onClick={() => capture('contact_click', { channel: 'call', placement })}
-            className={`${button} bg-gold text-obsidian hover:opacity-90`}
-          >
-            <Phone className="h-4 w-4" /> Call {SUPPORT_PHONE_DISPLAY}
-          </a>
-          <Link
-            href="/consultation"
-            className={`${button} border border-hairline text-ink hover:border-gold`}
-          >
-            <CalendarCheck className="h-4 w-4" /> Book a consultation
-          </Link>
-        </div>
+    <div className="sp-help">
+      <div>
+        <p className="sp-help-title">{title}</p>
+        <p className="sp-help-sub">{contactLine}</p>
       </div>
-    </header>
+      <div className="sp-help-actions">
+        <a
+          href={whatsappLink('Hi Autobacs India! I need help choosing a product.')}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => capture('contact_click', { channel: 'whatsapp', placement })}
+          className="sh-btn sh-btn-outline"
+        >
+          <WhatsAppGlyph className="h-4 w-4 text-[#128C7E]" /> WhatsApp
+        </a>
+        <a
+          href={`tel:${SUPPORT_PHONE_TEL}`}
+          onClick={() => capture('contact_click', { channel: 'call', placement })}
+          className="sh-btn sh-btn-ghost"
+          aria-label={`Call ${SUPPORT_PHONE_DISPLAY}`}
+        >
+          <Phone className="h-4 w-4" /> Call us
+        </a>
+        <Link href="/consultation" className="sh-btn sh-btn-ghost">
+          <CalendarCheck className="h-4 w-4" /> Book a consultation
+        </Link>
+      </div>
+    </div>
   );
 }

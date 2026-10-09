@@ -91,8 +91,22 @@ export const CROSS_RELATED_SLUG_MAP: Record<string, string[]> = {
   'kia': ['hyundai'],
 };
 
-function getVehicleImageUrl(slug: string): string {
-  return VEHICLE_IMAGE_MAP[slug] || `/images/vehicles/${slug}.jpg`;
+/**
+ * Slug-named photos that really exist in public/images/vehicles. The old fallback
+ * guessed `/images/vehicles/<slug>.jpg` for EVERY vehicle without an admin photo,
+ * so 49 of 80 cards on /vehicles requested a file that was never there and showed
+ * a broken image. `vehicleImages.test.ts` keeps this list in step with the folder.
+ */
+export const LOCAL_VEHICLE_PHOTOS: ReadonlySet<string> = new Set([
+  'audi', 'audi-q7', 'bmw', 'bmw-3-series', 'bmw-x5', 'ford-endeavour', 'ford-ranger',
+  'hyundai', 'hyundai-creta', 'isuzu-d-max', 'isuzu-dmax-v-cross', 'jeep-wrangler', 'kia',
+  'kia-seltos', 'land-rover-defender', 'mahindra-thar', 'maruti-jimny', 'mercedes-benz',
+  'mercedes-benz-g-class', 'toyota-fortuner', 'toyota-hilux', 'volkswagen-polo',
+]);
+
+/** A photo we actually have for this vehicle, or undefined (the card then shows a placeholder). */
+export function getVehicleImageUrl(slug: string): string | undefined {
+  return VEHICLE_IMAGE_MAP[slug] || (LOCAL_VEHICLE_PHOTOS.has(slug) ? `/images/vehicles/${slug}.jpg` : undefined);
 }
 
 export const vehicleService = {
@@ -109,10 +123,7 @@ export const vehicleService = {
           return {
             ...vehicle,
             name: vehicle.make + ' ' + vehicle.model,
-            image: {
-              url: imageUrl,
-              alt: imageAlt
-            }
+            image: imageUrl ? { url: imageUrl, alt: imageAlt } : undefined
           };
         });
       }
@@ -161,10 +172,7 @@ export const vehicleService = {
         return {
           ...vehicle,
           name: vehicle.make + ' ' + vehicle.model,
-          image: {
-            url: imageUrl,
-            alt: imageAlt
-          }
+          image: imageUrl ? { url: imageUrl, alt: imageAlt } : undefined
         };
       }
       return null;

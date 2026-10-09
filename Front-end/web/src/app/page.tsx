@@ -1,6 +1,7 @@
 import StoreHome from '@/components/home/store/StoreHome';
 import { getStoreHomeData } from '@/components/home/store/storeData';
 import { getActivePromoBanner } from '@/lib/promoBanner';
+import { getNavCategories } from '@/lib/navCategories';
 
 /**
  * Home page — the light, Amazon-style store (components/home/store).
@@ -21,6 +22,7 @@ export const revalidate = 300;
 
 export default async function Home() {
   // Independent reads — the promo strip never waits on the heavier shelves.
-  const [data, promoBanner] = await Promise.all([getStoreHomeData(), getActivePromoBanner()]);
-  return <StoreHome data={data} promoBanner={promoBanner} />;
+  // The header uses the same curated department list as every other page.
+  const [data, promoBanner, nav] = await Promise.all([getStoreHomeData(), getActivePromoBanner(), getNavCategories()]);
+  return <StoreHome data={data} promoBanner={promoBanner} nav={nav.map((c) => ({ name: c.label, href: c.href }))} />;
 }

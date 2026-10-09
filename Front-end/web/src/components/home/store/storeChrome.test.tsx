@@ -72,6 +72,24 @@ describe('StoreHeader mobile menu', () => {
   });
 });
 
+describe('StoreHeader department bar', () => {
+  it('underlines the department you are in and links Track Order', () => {
+    pathname = '/categories/lighting';
+    render(<StoreHeader categories={cats} />);
+    const bar = screen.getByRole('navigation', { name: 'Shop departments' });
+    expect(within(bar).getByRole('link', { name: 'Lighting' })).toHaveAttribute('aria-current', 'page');
+    expect(within(bar).getByRole('link', { name: "Today's Deals" })).not.toHaveAttribute('aria-current');
+    expect(within(bar).getByRole('link', { name: /Track Order/ })).toHaveAttribute('href', '/track');
+  });
+
+  it('the Go button submits the search', () => {
+    render(<StoreHeader categories={cats} />);
+    fireEvent.change(screen.getByLabelText('Search products'), { target: { value: 'winch' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    expect(push).toHaveBeenCalledWith('/products/search?q=winch');
+  });
+});
+
 describe('Back to top', () => {
   it('the global header carries the #top anchor the footer links to', () => {
     const { container } = render(<><ConditionalHeader navCategories={[]} /><StoreFooter /></>);
@@ -117,7 +135,7 @@ describe('Need-help tab never covers the sticky header on desktop', () => {
     setWidth(1440);
     localStorage.setItem('help-widget-top-ratio', '0');
     render(<HelpWidget />);
-    expect(topOf()).toBeGreaterThanOrEqual(116);
+    expect(topOf()).toBeGreaterThanOrEqual(134);
   });
 
   it('dragging up stops below the header', () => {
@@ -130,13 +148,13 @@ describe('Need-help tab never covers the sticky header on desktop', () => {
       fireEvent.pointerMove(tab, { clientY: -500, pointerId: 1 });
       fireEvent.pointerUp(tab, { clientY: -500, pointerId: 1 });
     });
-    expect(topOf()).toBeGreaterThanOrEqual(116);
+    expect(topOf()).toBeGreaterThanOrEqual(134);
   });
 
   it('on phones (header not sticky) it may still sit near the top edge', () => {
     setWidth(375);
     localStorage.setItem('help-widget-top-ratio', '0');
     render(<HelpWidget />);
-    expect(topOf()).toBeLessThan(116);
+    expect(topOf()).toBeLessThan(134);
   });
 });

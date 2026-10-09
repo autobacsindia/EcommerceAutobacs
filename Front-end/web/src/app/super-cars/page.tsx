@@ -89,7 +89,7 @@ export default function SuperCarsPage() {
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-linear-to-r from-white via-[#bfe3cd] to-white bg-clip-text text-transparent">
               DISCOVER A NEW IMMERSIVE EXPERIENCE
               <br />
-              <span className="text-2xl md:text-4xl lg:text-5xl font-light text-white/75 mt-2 block">
+              <span className="text-2xl md:text-4xl lg:text-5xl font-bold text-white/75 mt-2 block">
                 BUILT AROUND YOUR SUPERCAR
               </span>
             </h1>
@@ -144,11 +144,11 @@ export default function SuperCarsPage() {
                 </h3>
                 <div className="space-y-4">
                   <div>
-                    <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Purpose</span>
+                    <span className="text-[12px] font-semibold text-ink-muted uppercase tracking-[0.12em]">Purpose</span>
                     <p className="text-ink/70 mt-1">{upgrade.purpose}</p>
                   </div>
                   <div>
-                    <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Features</span>
+                    <span className="text-[12px] font-semibold text-ink-muted uppercase tracking-[0.12em]">Features</span>
                     <p className="text-ink-muted mt-1 text-sm">{upgrade.features}</p>
                   </div>
                 </div>

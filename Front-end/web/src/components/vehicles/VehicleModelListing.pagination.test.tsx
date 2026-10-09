@@ -34,6 +34,7 @@ jest.mock('@/services/vehicleService', () => ({
   __esModule: true,
   VEHICLE_IMAGE_MAP: {},
   CROSS_RELATED_SLUG_MAP: {},
+  getVehicleImageUrl: () => undefined,
   vehicleService: { getVehicleProducts: jest.fn() },
 }));
 

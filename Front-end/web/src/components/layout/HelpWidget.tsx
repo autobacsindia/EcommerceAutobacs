@@ -30,9 +30,9 @@ const MOBILE_BREAKPOINT = 768; // matches StickyCartBar's `md:hidden`
 // Reserve enough bottom clearance that the widget can never be dragged over it
 // (bar ≈72px + iOS home-indicator safe area). Desktop keeps the small margin.
 const MOBILE_BOTTOM_RESERVE = 96;
-// On desktop the store header is sticky (≈104px). Keep the tab below it so it can
+// On desktop the store header is sticky (≈122px). Keep the tab below it so it can
 // never be dragged over the Cart / Account links.
-const DESKTOP_TOP_RESERVE = 116;
+const DESKTOP_TOP_RESERVE = 134;
 
 /** Top clearance for the current viewport — the sticky header on desktop only. */
 function topMargin(): number {
@@ -221,7 +221,7 @@ export default function HelpWidget() {
         aria-hidden="true"
       />
       <span
-        className="font-display text-[10px] font-semibold uppercase leading-none tracking-[0.14em]"
+        className="font-display text-[12px] font-semibold uppercase leading-none tracking-[0.12em]"
         style={{ writingMode: 'vertical-rl' }}
       >
         Need help?

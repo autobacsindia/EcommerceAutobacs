@@ -54,13 +54,13 @@ export default function ConversionFallback({ orderId }: { orderId: string }) {
         <div className="bg-green-500/10 border border-green-500/30 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
           <CheckCircle className="h-12 w-12 text-green-700" />
         </div>
-        <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-3">
+        <h1 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-3">
           Thank you for your order
         </h1>
         <p className="text-ink/70 font-display mb-8">Your order is confirmed and being processed.</p>
         <Link
           href={`/orders/${orderId}`}
-          className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
+          className="bg-gold hover:opacity-90 text-white font-display font-bold px-6 py-3 rounded-full transition-colors"
         >
           View Order Details
         </Link>

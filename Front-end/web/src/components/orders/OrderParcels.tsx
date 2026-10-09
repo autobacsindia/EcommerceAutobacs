@@ -119,11 +119,11 @@ export default function OrderParcels({ orderId, itemNames, rewardName, cardClass
   return (
     <div className={cardClass}>
       <div className="flex flex-wrap items-center gap-3 mb-6">
-        <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">
+        <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">
           Your parcels
         </h3>
         {summary && (
-          <span className="text-xs font-display text-gold uppercase tracking-widest">
+          <span className="text-[12px] font-display text-gold uppercase tracking-[0.12em] font-semibold">
             {summary.label}
           </span>
         )}
@@ -144,12 +144,12 @@ export default function OrderParcels({ orderId, itemNames, rewardName, cardClass
           */
           const position = i + 1;
           return (
-            <div key={shipment._id} className="border border-hairline rounded-sm p-4">
+            <div key={shipment._id} className="border border-hairline rounded-lg p-4">
               <div className="flex flex-wrap items-center gap-3">
-                <span className="font-display font-bold text-ink text-sm uppercase tracking-widest">
+                <span className="font-display font-bold text-ink text-sm uppercase tracking-[0.12em]">
                   Parcel {position} of {visible.length}
                 </span>
-                <span className={`flex items-center gap-1 text-xs font-display font-bold uppercase tracking-widest ${copy.className}`}>
+                <span className={`flex items-center gap-1 text-[12px] font-display font-bold uppercase tracking-[0.12em] ${copy.className}`}>
                   {shipment.status === 'delivered' ? <CheckCircle2 className="h-3.5 w-3.5" />
                     : shipment.status === 'shipped' ? <Truck className="h-3.5 w-3.5" />
                     : <Clock className="h-3.5 w-3.5" />}
@@ -195,8 +195,8 @@ export default function OrderParcels({ orderId, itemNames, rewardName, cardClass
           finds an item missing from all of them, and contacts support.
         */}
         {stillComing.length > 0 && (
-          <div className="border border-dashed border-hairline rounded-sm p-4">
-            <p className="font-display font-bold text-ink-muted text-xs uppercase tracking-widest mb-2">
+          <div className="border border-dashed border-hairline rounded-lg p-4">
+            <p className="font-display font-bold text-ink-muted text-[12px] uppercase tracking-[0.12em] mb-2">
               Not shipped yet
             </p>
             <ul className="space-y-0.5">

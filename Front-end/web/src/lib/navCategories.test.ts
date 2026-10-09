@@ -16,7 +16,7 @@ describe('resolveNavCategories', () => {
     expect(byLabel['Accessories']).toBe('/categories/accessories');
     expect(byLabel['Body Kits']).toBe('/categories/body-kits');
     expect(byLabel['Audio']).toBe('/categories/speaker');   // matched via alias
-    expect(byLabel['Lights']).toBe('/categories/lighting'); // matched via alias
+    expect(byLabel['Lighting']).toBe('/categories/lighting'); // matched via alias
   });
 
   it('drops curated items with no matching live category (no broken links)', () => {

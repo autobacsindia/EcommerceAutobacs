@@ -73,7 +73,7 @@ export default function HeaderInteractiveBar({ navCategories }: { navCategories:
                 </Link>
                 <Link
                   href="/register"
-                  className="text-sm bg-gold text-obsidian px-4 py-2 rounded-md hover:bg-gold transition-colors font-medium font-display tracking-wider uppercase"
+                  className="text-[15px] bg-gold text-white px-4 py-2 rounded-md hover:bg-gold transition-colors font-display font-semibold"
                 >
                   Sign Up
                 </Link>

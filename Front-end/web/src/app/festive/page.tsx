@@ -153,7 +153,7 @@ export default function FestivePage() {
 
         {/* ── Hero ─────────────────────────────────────────────────────────── */}
         <div className="text-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-4 py-1.5 text-xs font-medium uppercase tracking-widest text-gold">
+          <span className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-4 py-1.5 text-[15px] text-gold font-semibold">
             <Gift size={13} /> Scan &amp; save
           </span>
 

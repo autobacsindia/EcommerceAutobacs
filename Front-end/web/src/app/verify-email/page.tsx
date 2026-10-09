@@ -60,21 +60,21 @@ function VerifyEmailPageInner() {
         {status === 'verifying' && (
           <div className="flex flex-col items-center">
             <Loader2 className="h-12 w-12 text-gold animate-spin mb-4" />
-            <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em]">Verifying your email...</h2>
+            <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em]">Verifying your email...</h2>
             <p className="mt-2 text-ink/70 font-display text-sm">Please wait while we confirm your email address.</p>
           </div>
         )}
 
         {status === 'success' && (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-sm p-8">
+          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-8">
             <CheckCircle className="h-12 w-12 text-green-700 mx-auto mb-4" />
-            <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-2">Email Verified!</h3>
+            <h3 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-2">Email Verified!</h3>
             <p className="text-ink/70 font-display text-sm mb-6">
               Your email has been verified. Redirecting you now...
             </p>
             <Link
               href="/"
-              className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
+              className="inline-block bg-gold hover:opacity-90 text-white font-display font-bold px-8 py-3 rounded-full transition-colors"
             >
               Continue Shopping
             </Link>
@@ -82,9 +82,9 @@ function VerifyEmailPageInner() {
         )}
 
         {status === 'error' && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8">
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-8">
             <XCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
-            <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-2">Verification Failed</h3>
+            <h3 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-2">Verification Failed</h3>
             <p className="text-ink/70 font-display text-sm mb-6">{message}</p>
 
             {resendSent ? (
@@ -93,26 +93,26 @@ function VerifyEmailPageInner() {
               </p>
             ) : (
               <form onSubmit={handleResend} className="mt-4 text-left space-y-3">
-                <p className="text-xs text-ink/70 font-display uppercase tracking-widest">Resend verification link</p>
+                <p className="text-[12px] text-ink/70 font-display uppercase tracking-[0.12em] font-semibold">Resend verification link</p>
                 <input
                   type="email"
                   required
                   placeholder="your@email.com"
                   value={resendEmail}
                   onChange={e => setResendEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-obsidian-raised text-ink border border-hairline rounded-sm focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold transition-colors font-display placeholder:text-ink-muted text-sm"
+                  className="w-full px-3 py-2 bg-obsidian-raised text-ink border border-hairline rounded-lg focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold transition-colors font-display placeholder:text-ink-muted text-sm"
                 />
                 <button
                   type="submit"
                   disabled={resendLoading}
-                  className="w-full bg-gold hover:opacity-90 disabled:opacity-50 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-2 rounded-sm transition-colors text-sm flex items-center justify-center gap-2"
+                  className="w-full bg-gold hover:opacity-90 disabled:opacity-50 text-white font-display font-bold px-6 py-2 rounded-full transition-colors text-[15px] flex items-center justify-center gap-2"
                 >
                   {resendLoading && <Loader2 className="w-4 h-4 animate-spin" />}
                   Send New Link
                 </button>
                 <Link
                   href="/login"
-                  className="block text-center font-display font-bold text-gold hover:text-ink uppercase tracking-widest text-xs transition-colors mt-2"
+                  className="block text-center font-display font-bold text-gold hover:text-ink uppercase tracking-[0.12em] text-[12px] transition-colors mt-2"
                 >
                   Return to Login
                 </Link>

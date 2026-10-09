@@ -21,7 +21,7 @@ export default function OfferStrip({ offer }: { offer: string | null | undefined
   return (
     <div
       data-testid="offer-strip"
-      className="mb-6 flex items-center gap-3 rounded-sm border border-gold/40 bg-gold-soft px-4 py-3"
+      className="mb-6 flex items-center gap-3 rounded-lg border border-gold/40 bg-gold-soft px-4 py-3"
     >
       <Gift className="w-5 h-5 shrink-0 text-gold" aria-hidden="true" />
       <p className="text-sm font-display text-ink">{resolved.stripText}</p>

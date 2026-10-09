@@ -99,7 +99,7 @@ function GalleryContent() {
               <button
                 key={a}
                 onClick={() => updateParam('album', a)}
-                className={`px-4 py-1.5 text-sm rounded-full border transition-colors capitalize ${album === a ? 'bg-gold text-obsidian border-transparent' : 'border-hairline text-ink-muted hover:border-hairline'}`}
+                className={`px-4 py-1.5 text-sm rounded-full border transition-colors capitalize ${album === a ? 'bg-gold text-white border-transparent' : 'border-hairline text-ink-muted hover:border-hairline'}`}
               >
                 {a === 'all' ? 'All Albums' : a}
               </button>
@@ -148,7 +148,7 @@ function GalleryContent() {
               <button
                 key={i}
                 onClick={() => updateParam('page', String(i + 1))}
-                className={`w-9 h-9 rounded-lg text-sm font-medium border transition-colors ${page === i + 1 ? 'bg-gold text-obsidian border-transparent' : 'border-hairline text-ink-muted hover:bg-obsidian-deep'}`}
+                className={`w-9 h-9 rounded-lg text-sm font-medium border transition-colors ${page === i + 1 ? 'bg-gold text-white border-transparent' : 'border-hairline text-ink-muted hover:bg-obsidian-deep'}`}
               >
                 {i + 1}
               </button>

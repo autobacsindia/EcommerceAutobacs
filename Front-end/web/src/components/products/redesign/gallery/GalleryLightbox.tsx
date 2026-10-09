@@ -187,7 +187,7 @@ function LightboxContent({ images, index, onIndexChange, onClose }: LightboxCont
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-hairline px-4 py-3 sm:px-6">
-        <span className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">
+        <span className="text-[12px] uppercase tracking-[0.12em] text-ink-muted font-semibold">
           {index + 1} / {count}
         </span>
         <button

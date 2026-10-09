@@ -1,61 +1,80 @@
 'use client';
 
+import Link from 'next/link';
 import { Category } from '@/lib/types';
 import CategoryCard from '@/components/categories/CategoryCard';
-import { CATEGORY_HIERARCHY, findCategoryFlexible, findSubcategories } from '@/lib/categoryMapping';
+
+/** Chips per department before "+N more" — some departments have 40+ sub-categories. */
+const SUB_LIMIT = 12;
 
 interface OrganizedCategoryGridProps {
   categories: Category[];
 }
 
+/**
+ * Every department as a picture tile in one grid (the way the home page shows
+ * them), then each department's sub-categories as quick chips — so a shopper sees
+ * the whole store at a glance instead of scrolling past one tile per section.
+ */
 export default function OrganizedCategoryGrid({ categories }: OrganizedCategoryGridProps) {
+  // Departments = live top-level categories (same source as the home page), so a
+  // department added in admin shows up here without a code change. The old fixed
+  // hierarchy only matched 4 of the 14 live departments.
+  const parentId = (c: Category) =>
+    typeof c.parent === 'string' ? c.parent : c.parent && typeof c.parent === 'object' ? c.parent._id : undefined;
+  const isActive = (c: Category) => (c as { isActive?: boolean }).isActive !== false;
+  const departments = categories
+    .filter((c) => isActive(c) && !parentId(c))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((category) => ({
+      category,
+      subcategories: categories
+        .filter((c) => isActive(c) && parentId(c) === category._id)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+
+  const withSubs = departments.filter((d) => d.subcategories.length > 0);
+
   return (
-    <div className="space-y-12">
-      {CATEGORY_HIERARCHY.map((mainCategory) => {
-        const category = findCategoryFlexible(mainCategory.slug, categories);
-        
-        // If main category doesn't exist, skip it
-        if (!category) return null;
-        
-        // Get subcategories
-        const subcategories = mainCategory.subcategories 
-          ? mainCategory.subcategories
-              .map(sub => findCategoryFlexible(sub.slug, categories))
-              .filter((sub): sub is Category => sub !== null)
-          : findSubcategories(category._id, categories);
-        
-        return (
-          <div key={category._id} className="space-y-6">
-            {/* Main Category */}
-            <div className="border-b border-hairline pb-4">
-              <h2 className="text-2xl font-bold text-ink">{mainCategory.name}</h2>
-              {mainCategory.description && (
-                <p className="text-ink-muted mt-1">{mainCategory.description}</p>
-              )}
-            </div>
-            
-            {/* Category Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Main Category Card */}
-              <div className="sm:col-span-1 lg:col-span-1">
-                <CategoryCard category={category} />
-              </div>
-              
-              {/* Subcategories */}
-              {subcategories.length > 0 && (
-                <div className="sm:col-span-1 lg:col-span-2">
-                  <h3 className="text-lg font-semibold text-ink mb-4">Subcategories</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {subcategories.map((subCategory) => (
-                      <CategoryCard key={subCategory._id} category={subCategory} />
-                    ))}
-                  </div>
+    <>
+      <section className="sp-section" aria-labelledby="departments-title">
+        <div className="sp-section-head">
+          <h2 id="departments-title" className="sp-h2">All departments</h2>
+          <Link href="/products" className="st-link">Shop all products ›</Link>
+        </div>
+        <div className="sp-tiles">
+          {departments.map(({ category }) => (
+            <CategoryCard key={category._id} category={category} />
+          ))}
+        </div>
+      </section>
+
+      {withSubs.length > 0 && (
+        <section className="sp-section sp-card" aria-labelledby="subcats-title">
+          <h2 id="subcats-title" className="sp-h2 mb-4">Browse by sub-category</h2>
+          <div className="space-y-5">
+            {withSubs.map(({ category, subcategories }) => (
+              <div key={category._id}>
+                <Link href={`/categories/${category.slug}`} className="text-[15px] font-bold text-ink hover:text-gold">
+                  {category.name} ›
+                </Link>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {subcategories.slice(0, SUB_LIMIT).map((sub) => (
+                    <Link key={sub._id} href={`/categories/${sub.slug}`} className="sp-chip">
+                      {sub.name}
+                    </Link>
+                  ))}
+                  {subcategories.length > SUB_LIMIT && (
+                    <Link href={`/categories/${category.slug}`} className="sp-chip is-on">
+                      +{subcategories.length - SUB_LIMIT} more
+                    </Link>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            ))}
           </div>
-        );
-      })}
-    </div>
+        </section>
+      )}
+    </>
   );
 }

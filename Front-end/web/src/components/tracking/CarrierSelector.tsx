@@ -120,7 +120,7 @@ export function CarrierSelector({ onCarrierSelect, selectedCarrier }: CarrierSel
             onClick={() => setFilterBy('all')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               filterBy === 'all'
-                ? 'bg-gold text-obsidian'
+                ? 'bg-gold text-white'
                 : 'bg-obsidian-raised text-ink/80 hover:bg-obsidian-raised'
             }`}
           >
@@ -130,7 +130,7 @@ export function CarrierSelector({ onCarrierSelect, selectedCarrier }: CarrierSel
             onClick={() => setFilterBy('fastest')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               filterBy === 'fastest'
-                ? 'bg-gold text-obsidian'
+                ? 'bg-gold text-white'
                 : 'bg-obsidian-raised text-ink/80 hover:bg-obsidian-raised'
             }`}
           >
@@ -140,7 +140,7 @@ export function CarrierSelector({ onCarrierSelect, selectedCarrier }: CarrierSel
             onClick={() => setFilterBy('international')}
             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
               filterBy === 'international'
-                ? 'bg-gold text-obsidian'
+                ? 'bg-gold text-white'
                 : 'bg-obsidian-raised text-ink/80 hover:bg-obsidian-raised'
             }`}
           >

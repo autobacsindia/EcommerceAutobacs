@@ -117,13 +117,13 @@ export default function SupportPage() {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center px-4">
         <div className="text-center max-w-md">
-          <h1 className="text-2xl font-display font-light text-ink mb-3">Your support requests</h1>
+          <h1 className="text-2xl font-display font-bold text-ink mb-3">Your support requests</h1>
           <p className="text-ink/70 font-display text-sm mb-6">
             Sign in to see your requests and replies.
           </p>
           <Link
             href="/login?redirect=/support"
-            className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-opacity"
+            className="inline-block bg-gold hover:opacity-90 text-white font-display font-bold px-6 py-3 rounded-full transition-opacity"
           >
             Sign in
           </Link>
@@ -136,8 +136,8 @@ export default function SupportPage() {
     <div className="min-h-screen bg-obsidian-deep">
       <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Support</p>
-          <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-3">
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Support</p>
+          <h1 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-3">
             Your requests
           </h1>
           <p className="text-ink/70 font-display text-sm">{SUPPORT_HOURS_LABEL}</p>
@@ -151,11 +151,11 @@ export default function SupportPage() {
           )}
 
           {tickets.length === 0 ? (
-            <div className="bg-obsidian border border-hairline rounded-sm p-8 text-center">
+            <div className="bg-obsidian border border-hairline rounded-lg p-8 text-center">
               <p className="text-ink/70 font-display mb-5">You haven&apos;t contacted us yet.</p>
               <Link
                 href="/contact"
-                className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-opacity"
+                className="inline-block bg-gold hover:opacity-90 text-white font-display font-bold px-6 py-3 rounded-full transition-opacity"
               >
                 Contact support
               </Link>
@@ -163,7 +163,7 @@ export default function SupportPage() {
           ) : (
             <ul className="space-y-3">
               {tickets.map((t) => (
-                <li key={t.reference} className="bg-obsidian border border-hairline rounded-sm overflow-hidden">
+                <li key={t.reference} className="bg-obsidian border border-hairline rounded-lg overflow-hidden">
                   <button
                     onClick={() => openTicket(t.reference)}
                     className="w-full text-left p-5 hover:bg-obsidian-raised transition-colors"
@@ -192,7 +192,7 @@ export default function SupportPage() {
                               : 'bg-gold/5 border border-gold/20'
                           }`}
                         >
-                          <p className="text-[10px] font-display uppercase tracking-widest text-ink-muted mb-2">
+                          <p className="text-[12px] font-display uppercase tracking-[0.12em] text-ink-muted mb-2 font-semibold">
                             {m.author.isAgent ? (m.author.name || 'Autobacs Support') : 'You'}
                             {' · '}
                             {formatDateTimeIST(m.createdAt)}
@@ -215,13 +215,13 @@ export default function SupportPage() {
                             onChange={(e) => setReply(e.target.value)}
                             rows={4}
                             placeholder="Add a reply…"
-                            className="w-full bg-obsidian-raised border border-hairline focus:border-gold rounded-sm px-4 py-3 text-ink font-display text-sm outline-none transition-colors"
+                            className="w-full bg-obsidian-raised border border-hairline focus:border-gold rounded-lg px-4 py-3 text-ink font-display text-sm outline-none transition-colors"
                           />
                           <div className="flex justify-end mt-2">
                             <button
                               onClick={sendReply}
                               disabled={busy || !reply.trim()}
-                              className="bg-gold hover:opacity-90 disabled:opacity-40 text-obsidian font-display font-bold uppercase tracking-widest text-xs px-5 py-2.5 rounded-sm transition-opacity"
+                              className="bg-gold hover:opacity-90 disabled:opacity-40 text-white font-display font-bold text-[15px] px-5 py-2.5 rounded-full transition-opacity"
                             >
                               {busy ? 'Sending…' : 'Send reply'}
                             </button>

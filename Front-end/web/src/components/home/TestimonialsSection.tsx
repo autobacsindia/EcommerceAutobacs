@@ -39,7 +39,7 @@ export default function TestimonialsSection() {
     <section className="bg-obsidian-deep py-16 border-t border-hairline">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-10">
-          <p className="text-xs font-display font-bold tracking-[0.2em] uppercase text-gold mb-3">
+          <p className="text-[12px] font-display font-bold tracking-[0.12em] uppercase text-gold mb-3">
             What Drivers Say
           </p>
           <h2 className="text-4xl font-display font-bold text-ink uppercase">Trusted by Builders</h2>
@@ -47,7 +47,7 @@ export default function TestimonialsSection() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {items.map((t) => (
-            <div key={t.id} className="relative bg-obsidian border border-hairline rounded-sm p-6 flex flex-col">
+            <div key={t.id} className="relative bg-obsidian border border-hairline rounded-lg p-6 flex flex-col">
               <Quote className="absolute top-5 right-5 h-7 w-7 text-ink-muted/50" />
 
               <div className="flex items-center gap-1 mb-3">

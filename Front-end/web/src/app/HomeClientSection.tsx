@@ -31,7 +31,7 @@ export function VehicleSelectorSection() {
         <div className="mt-6 text-center">
           <Link
             href={`/model/${generateVehicleSlug(selectedVehicle.make, selectedVehicle.model)}`}
-            className="inline-block bg-gold text-obsidian px-6 py-3 rounded-lg font-semibold hover:bg-gold transition-colors"
+            className="inline-block bg-gold text-white px-6 py-3 rounded-lg font-semibold hover:bg-gold transition-colors"
           >
             View {selectedVehicle.make} {selectedVehicle.model} Parts
           </Link>

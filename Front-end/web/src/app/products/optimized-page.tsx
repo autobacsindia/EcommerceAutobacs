@@ -345,7 +345,7 @@ export default function OptimizedProductsPageClient() {
             </div>
             <button 
               onClick={toggleDataSource}
-              className="text-sm bg-gold text-obsidian px-3 py-1 rounded hover:bg-gold transition-colors"
+              className="text-sm bg-gold text-white px-3 py-1 rounded hover:bg-gold transition-colors"
             >
               Switch to {useStaticData ? 'API' : 'Static'} Data
             </button>
@@ -491,7 +491,7 @@ export default function OptimizedProductsPageClient() {
                 <div className="mt-6">
                   <button
                     onClick={() => router.push('/products')}
-                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-obsidian bg-gold hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-gold hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold"
                   >
                     View All Products
                   </button>

@@ -117,17 +117,17 @@ function RegisterPageInner() {
         <div className="bg-obsidian border border-hairline rounded-lg p-6 sm:p-8">
           <OfferStrip offer={offerKey} />
 
-          <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-6">Create Account</h1>
+          <h1 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-6">Create Account</h1>
 
           {registered && (
-            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/40 rounded-sm flex items-start gap-2">
+            <div className="mb-4 p-3 bg-green-500/10 border border-green-500/40 rounded-lg flex items-start gap-2">
               <CheckCircle className="w-5 h-5 text-green-700 shrink-0 mt-0.5" />
               <p className="text-sm text-green-700 font-display">Account created! Check your email to verify your account.</p>
             </div>
           )}
 
           {(error || (timeUntilRetry !== null && timeUntilRetry > 0)) && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/40 rounded-sm flex items-start gap-2">
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/40 rounded-lg flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
               <div className="text-sm text-red-600 font-display">
                 {timeUntilRetry !== null && timeUntilRetry > 0
@@ -139,7 +139,7 @@ function RegisterPageInner() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="name" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-widest mb-1">
+              <label htmlFor="name" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-[0.12em] mb-1">
                 Your name
               </label>
               <input
@@ -159,7 +159,7 @@ function RegisterPageInner() {
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-widest mb-1">
+              <label htmlFor="email" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-[0.12em] mb-1">
                 Email
               </label>
               <input
@@ -178,7 +178,7 @@ function RegisterPageInner() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-widest mb-1">
+              <label htmlFor="password" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-[0.12em] mb-1">
                 Password
               </label>
               <input
@@ -200,7 +200,7 @@ function RegisterPageInner() {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-widest mb-1">
+              <label htmlFor="confirmPassword" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-[0.12em] mb-1">
                 Re-enter password
               </label>
               <input
@@ -221,7 +221,7 @@ function RegisterPageInner() {
             <button
               type="submit"
               disabled={isLoading || (timeUntilRetry !== null && timeUntilRetry > 0)}
-              className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-2.5 px-4 rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              className="w-full bg-gold hover:opacity-90 text-white font-display font-bold py-2.5 px-4 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Continue'}
             </button>
@@ -254,7 +254,7 @@ function RegisterPageInner() {
               <button
                 type="button"
                 onClick={() => handleSocialLogin('google')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-obsidian-raised border border-hairline rounded-sm hover:border-gold text-sm font-display font-bold text-ink/70 hover:text-ink transition-all"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-obsidian-raised border border-hairline rounded-lg hover:border-gold text-sm font-display font-bold text-ink/70 hover:text-ink transition-all"
               >
                 <FcGoogle className="w-5 h-5" />
                 <span>Google</span>
@@ -262,7 +262,7 @@ function RegisterPageInner() {
               <button
                 type="button"
                 onClick={() => handleSocialLogin('facebook')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-obsidian-raised border border-hairline rounded-sm hover:border-gold text-sm font-display font-bold text-ink/70 hover:text-ink transition-all"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-obsidian-raised border border-hairline rounded-lg hover:border-gold text-sm font-display font-bold text-ink/70 hover:text-ink transition-all"
               >
                 <FaFacebook className="w-5 h-5 text-gold" />
                 <span>Facebook</span>
@@ -283,7 +283,7 @@ function RegisterPageInner() {
             <div className="mt-4">
               <Link
                 href={loginHref}
-                className="block w-full bg-obsidian-raised hover:bg-obsidian-raised border border-hairline hover:border-gold text-ink font-display font-bold uppercase tracking-widest text-sm py-2.5 px-4 rounded-sm transition-all text-center"
+                className="block w-full bg-obsidian-raised hover:bg-obsidian-raised border border-hairline hover:border-gold text-ink font-display font-bold text-[15px] py-2.5 px-4 rounded-full transition-all text-center"
               >
                 Sign In
               </Link>

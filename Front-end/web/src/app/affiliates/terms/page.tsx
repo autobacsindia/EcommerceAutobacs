@@ -26,8 +26,8 @@ export const generateMetadata = (): Promise<Metadata> =>
 
 // Storefront tokens, not the admin light palette — this prose sat in `text-gray-700`
 // over a body hard-set to #080808. See the note in app/account/affiliate/page.tsx.
-const h2 = 'text-xl font-display font-light text-ink tracking-[-0.01em] mt-10 mb-3';
-const h3 = 'text-base font-display font-bold text-gold uppercase tracking-widest mt-6 mb-2';
+const h2 = 'text-xl font-display font-bold text-ink tracking-[-0.01em] mt-10 mb-3';
+const h3 = 'text-base font-display font-bold text-gold uppercase tracking-[0.12em] mt-6 mb-2';
 const p = 'text-ink-muted font-display leading-relaxed mb-4';
 const ul = 'list-disc pl-6 space-y-2 text-ink-muted font-display mb-4';
 
@@ -42,8 +42,8 @@ export default function AffiliateTermsPage() {
     <main className="min-h-screen bg-obsidian-deep">
       <div className="max-w-3xl mx-auto px-4 py-12 md:py-16">
       <header className="mb-8 pb-6 border-b border-hairline">
-        <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Legal</p>
-        <h1 className="mt-4 text-3xl font-display font-light text-ink tracking-[-0.01em]">
+        <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">Legal</p>
+        <h1 className="mt-4 text-3xl font-display font-bold text-ink tracking-[-0.01em]">
           Affiliate Programme Terms
         </h1>
         <p className="mt-2 text-sm text-ink-muted font-display">
@@ -151,7 +151,7 @@ export default function AffiliateTermsPage() {
         to join. Where PAN is not available, a higher rate of deduction applies by law. We
         will provide the certificate of deduction you need to claim credit.
       </p>
-      <p className="text-sm text-ink-muted font-display bg-obsidian-raised border border-hairline rounded-sm px-4 py-3 mb-4">
+      <p className="text-sm text-ink-muted font-display bg-obsidian-raised border border-hairline rounded-lg px-4 py-3 mb-4">
         <strong>Note.</strong> The section, rate and threshold above reflect our present
         understanding and are being confirmed with our chartered accountant. They may be
         corrected. We will apply the rate our accountant advises, and will tell you the

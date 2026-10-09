@@ -161,7 +161,7 @@ export default function CuratedCollectionCarousel({
   };
 
   const getBadgeStyles = () => {
-    const baseClasses = "px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider";
+    const baseClasses = "px-3 py-1 rounded-full text-[12px] font-bold uppercase tracking-[0.12em]";
     
     switch (collection.badgeColor) {
       case 'red':
@@ -169,7 +169,7 @@ export default function CuratedCollectionCarousel({
       case 'orange':
         return `${baseClasses} bg-orange-600 text-white`;
       case 'blue':
-        return `${baseClasses} bg-gold text-obsidian`;
+        return `${baseClasses} bg-gold text-white`;
       case 'green':
         return `${baseClasses} bg-green-600 text-white`;
       default:
@@ -232,7 +232,7 @@ export default function CuratedCollectionCarousel({
           {canScrollLeft && (
             <button
               onClick={() => scroll('left')}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-obsidian shadow-lg rounded-sm p-3 opacity-90 hover:opacity-100 transition-opacity"
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-obsidian shadow-lg rounded-lg p-3 opacity-90 hover:opacity-100 transition-opacity"
               style={{ marginLeft: '-12px' }}
               aria-label="Scroll left"
             >
@@ -284,7 +284,7 @@ export default function CuratedCollectionCarousel({
                     
                     {/* Sale Badge */}
                     {product.originalPrice && product.originalPrice > product.price && (
-                      <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded-sm text-xs font-bold">
+                      <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded-lg text-xs font-bold">
                         {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% off
                       </div>
                     )}
@@ -314,7 +314,7 @@ export default function CuratedCollectionCarousel({
                       {product.productType === 'variable' ? (
                         <p className="text-lg font-bold text-ink">
                           {(product.priceMax ?? product.price) > (product.priceMin ?? product.price) && (
-                            <span className="text-xs uppercase tracking-[0.14em] text-ink-muted mr-1">From</span>
+                            <span className="text-[12px] uppercase tracking-[0.12em] text-ink-muted mr-1 font-semibold">From</span>
                           )}
                           {formatPrice(product.priceMin ?? product.price)}
                         </p>
@@ -376,7 +376,7 @@ export default function CuratedCollectionCarousel({
           {canScrollRight && (
             <button
               onClick={() => scroll('right')}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-obsidian shadow-lg rounded-sm p-3 opacity-90 hover:opacity-100 transition-opacity"
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-obsidian shadow-lg rounded-lg p-3 opacity-90 hover:opacity-100 transition-opacity"
               style={{ marginRight: '-12px' }}
               aria-label="Scroll right"
             >

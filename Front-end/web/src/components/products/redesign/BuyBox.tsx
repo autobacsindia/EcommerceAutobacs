@@ -186,23 +186,23 @@ export default function BuyBox({
   const rounded = Math.round(product.averageRating);
 
   return (
-    <div className="font-display">
+    <div>
       {categoryName && <Eyebrow>{categoryName}</Eyebrow>}
 
-      <h1 className="mt-4 text-[clamp(30px,3.6vw,48px)] font-light leading-[1.05] tracking-[-0.01em] text-ink">
+      <h1 className="mt-2 font-display text-[clamp(22px,2.4vw,30px)] font-bold leading-[1.25] text-ink">
         {product.name}
       </h1>
 
       {/* Rating */}
       {product.averageRating > 0 && (
         <div className="mt-4 flex items-center gap-2.5">
-          <span className="text-[15px] tracking-[2px] text-gold" aria-hidden>
+          <span className="text-[16px] tracking-[2px] text-[#f2a516]" aria-hidden>
             {'★'.repeat(rounded)}
-            <span className="text-ink-muted/50">{'★'.repeat(5 - rounded)}</span>
+            <span className="text-[#d5d9d9]">{'★'.repeat(5 - rounded)}</span>
           </span>
-          <span className="text-[13px] text-ink">{product.averageRating.toFixed(1)}</span>
+          <span className="text-[14px] font-semibold text-ink">{product.averageRating.toFixed(1)}</span>
           {product.totalReviews > 0 && (
-            <a href="#reviews" className="text-[12px] text-ink-muted underline-offset-4 hover:text-gold hover:underline">
+            <a href="#reviews" className="text-[14px] text-[#0b6b9a] underline-offset-4 hover:text-gold hover:underline">
               ({product.totalReviews} {product.totalReviews === 1 ? 'review' : 'reviews'})
             </a>
           )}
@@ -210,24 +210,24 @@ export default function BuyBox({
       )}
 
       {/* Price — a range until a model is picked, then the exact variant price */}
-      <div className="mt-7 flex flex-wrap items-baseline gap-3">
+      <div className="mt-5 flex flex-wrap items-baseline gap-3 border-t border-hairline pt-5">
         {needsSelection ? (
-          <span className="text-[40px] font-light leading-none text-ink">
+          <span className="text-[32px] font-bold leading-none text-ink">
             {priceMin === priceMax ? formatPrice(priceMin) : `${formatPrice(priceMin)} – ${formatPrice(priceMax)}`}
           </span>
         ) : (
-          <span className="text-[40px] font-light leading-none text-ink">{formatPrice(activePrice)}</span>
+          <span className="text-[32px] font-bold leading-none text-ink">{formatPrice(activePrice)}</span>
         )}
         {onSale && (
           <>
-            <span className="text-[16px] text-ink-muted line-through">{formatPrice(activeOriginal!)}</span>
-            <span className="bg-gold px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-obsidian">
+            <span className="text-[15px] text-ink-muted">M.R.P.: <span className="line-through">{formatPrice(activeOriginal!)}</span></span>
+            <span className="rounded-md bg-[#cc0c39] px-2.5 py-1 text-[13px] font-bold text-white">
               -{discount}%
             </span>
           </>
         )}
       </div>
-      <p className="mt-2 text-[12px] text-ink-muted">
+      <p className="mt-2 text-[13px] text-ink-muted">
         {needsSelection ? 'Select a model to see its price · ' : ''}Inclusive of all taxes · shipping at checkout
       </p>
 
@@ -247,14 +247,14 @@ export default function BuyBox({
       {/* Variant (model) selector — variable products only */}
       {isVariable && (
         <div className="mt-7">
-          <label htmlFor="variant-select" className="block text-[10px] uppercase tracking-[0.24em] text-ink-muted">
+          <label htmlFor="variant-select" className="block text-[14px] font-semibold text-ink">
             Select model
           </label>
           <select
             id="variant-select"
             value={selectedVariant?._id ?? ''}
             onChange={(e) => onSelectVariant?.(e.target.value)}
-            className="mt-3 w-full appearance-none border border-hairline bg-obsidian-deep px-4 py-3.5 text-[14px] text-ink outline-none transition-colors focus:border-gold"
+            className="mt-2 w-full rounded-lg border border-[#c9cfcd] bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors focus:border-gold focus:ring-2 focus:ring-gold/20"
           >
             <option value="" disabled>
               Choose a model…
@@ -272,17 +272,17 @@ export default function BuyBox({
       )}
 
       {product.shortDescription && (
-        <p className="mt-6 max-w-prose text-[14px] font-light leading-[1.8] text-ink-muted">
+        <p className="mt-5 max-w-prose text-[15px] leading-[1.7] text-ink/80">
           {product.shortDescription}
         </p>
       )}
 
       {/* Quantity — hidden for enquiry-only (backorder) and sold-out items */}
-      <div className="mt-8 flex items-center gap-5">
+      <div className="mt-6 flex flex-wrap items-center gap-4">
         {!backorder && !outOfStock && (
           <>
-            <span className="text-[10px] uppercase tracking-[0.24em] text-ink-muted">Quantity</span>
-            <div className="flex items-center border border-hairline">
+            <span className="text-[14px] font-semibold text-ink">Quantity</span>
+            <div className="flex items-center overflow-hidden rounded-full border border-[#c9cfcd] bg-white">
               <button
                 onClick={() => setQty((q) => Math.max(1, q - 1))}
                 disabled={qty <= 1}
@@ -291,7 +291,7 @@ export default function BuyBox({
               >
                 −
               </button>
-              <span className="grid h-11 w-12 place-items-center border-x border-hairline text-[14px] text-ink">{qty}</span>
+              <span className="grid h-11 w-12 place-items-center border-x border-hairline text-[15px] font-semibold text-ink">{qty}</span>
               <button
                 onClick={() => setQty((q) => Math.min(MAX_QTY, q + 1))}
                 disabled={qty >= MAX_QTY}
@@ -304,13 +304,13 @@ export default function BuyBox({
           </>
         )}
         {activeStock === 'low' && (
-          <span className="text-[11px] uppercase tracking-[0.16em] text-gold">Low stock</span>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-[13px] font-semibold text-amber-800">Only a few left</span>
         )}
         {backorder && (
-          <span className="text-[11px] uppercase tracking-[0.16em] text-gold">On backorder — join the waiting list</span>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-[13px] font-semibold text-amber-800">On backorder — join the waiting list</span>
         )}
         {outOfStock && (
-          <span className="text-[11px] uppercase tracking-[0.16em] text-ink-muted">Sold out</span>
+          <span className="rounded-full bg-ink/10 px-3 py-1 text-[13px] font-semibold text-ink">Sold out</span>
         )}
       </div>
 
@@ -320,7 +320,7 @@ export default function BuyBox({
       {!backorder && !needsSelection && !outOfStock && <EmiOptions price={activePrice} className="mt-7" />}
 
       {/* CTAs */}
-      <div className="mt-7 flex flex-col gap-3">
+      <div className="mt-6 flex flex-col gap-3">
         {backorder ? (
           <div className="flex gap-3">
             <JoinWaitlistButton
@@ -331,9 +331,9 @@ export default function BuyBox({
             <button
               onClick={toggleWish}
               aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
-              className="grid w-14 place-items-center border border-hairline transition-colors hover:border-gold"
+              className="grid w-14 place-items-center rounded-full border border-[#c9cfcd] bg-white transition-colors hover:border-gold"
             >
-              <Heart className={`h-4 w-4 ${wished ? 'fill-gold text-gold' : 'text-ink-muted'}`} />
+              <Heart className={`h-5 w-5 ${wished ? 'fill-[#cc0c39] text-[#cc0c39]' : 'text-ink-muted'}`} />
             </button>
           </div>
         ) : outOfStock ? (
@@ -348,20 +348,20 @@ export default function BuyBox({
             <button
               onClick={toggleWish}
               aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
-              className="grid w-14 place-items-center border border-hairline transition-colors hover:border-gold"
+              className="grid w-14 place-items-center rounded-full border border-[#c9cfcd] bg-white transition-colors hover:border-gold"
             >
-              <Heart className={`h-4 w-4 ${wished ? 'fill-gold text-gold' : 'text-ink-muted'}`} />
+              <Heart className={`h-5 w-5 ${wished ? 'fill-[#cc0c39] text-[#cc0c39]' : 'text-ink-muted'}`} />
             </button>
           </div>
         ) : (
           <>
             {needsSelection && (
-              <p className="text-[11px] uppercase tracking-[0.16em] text-gold">Select a model to continue</p>
+              <p className="text-[14px] font-semibold text-gold">Select a model to continue</p>
             )}
             <button
               onClick={add}
               disabled={needsSelection || outOfStock || adding}
-              className="flex items-center justify-center gap-3 bg-gold py-4 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-obsidian transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex items-center justify-center gap-2.5 rounded-full bg-gold py-3.5 text-[16px] font-bold text-white shadow-sm transition-colors hover:bg-[#0b6b3c] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ShoppingBag className="h-4 w-4" />
               {adding ? 'Adding…' : 'Add to cart'}
@@ -370,7 +370,7 @@ export default function BuyBox({
               <button
                 onClick={buyNow}
                 disabled={needsSelection || outOfStock || buying}
-                className="flex flex-1 items-center justify-center gap-2.5 border border-gold py-4 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-gold transition-colors hover:bg-gold hover:text-obsidian disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex flex-1 items-center justify-center gap-2.5 rounded-full bg-[#121414] py-3.5 text-[16px] font-bold text-white transition-colors hover:bg-[#2a2f2f] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Zap className="h-4 w-4" />
                 {buying ? 'Processing…' : 'Buy now'}
@@ -378,9 +378,9 @@ export default function BuyBox({
               <button
                 onClick={toggleWish}
                 aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
-                className="grid w-14 place-items-center border border-hairline transition-colors hover:border-gold"
+                className="grid w-14 place-items-center rounded-full border border-[#c9cfcd] bg-white transition-colors hover:border-gold"
               >
-                <Heart className={`h-4 w-4 ${wished ? 'fill-gold text-gold' : 'text-ink-muted'}`} />
+                <Heart className={`h-5 w-5 ${wished ? 'fill-[#cc0c39] text-[#cc0c39]' : 'text-ink-muted'}`} />
               </button>
             </div>
           </>
@@ -388,20 +388,20 @@ export default function BuyBox({
       </div>
 
       {/* Trust badges */}
-      <div className="mt-9 grid grid-cols-3 gap-4 border-t border-hairline pt-7">
+      <div className="mt-7 grid grid-cols-3 gap-3 rounded-xl bg-[#f2f8f4] p-4">
         {TRUST_BADGES.map(({ icon, label }) => {
           const Icon = TRUST_ICONS[icon];
           return (
-            <div key={label} className="flex flex-col items-center gap-2.5 text-center">
-              <Icon className="h-5 w-5 text-gold" />
-              <span className="text-[10px] uppercase tracking-[0.14em] text-ink-muted">{label}</span>
+            <div key={label} className="flex flex-col items-center gap-2 text-center">
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-white text-gold shadow-sm"><Icon className="h-5 w-5" /></span>
+              <span className="text-[12px] font-medium leading-snug text-ink/80">{label}</span>
             </div>
           );
         })}
       </div>
 
       {product.sku && (
-        <p className="mt-6 text-[11px] uppercase tracking-[0.18em] text-ink-muted">SKU · {product.sku}</p>
+        <p className="mt-5 text-[13px] text-ink-muted">SKU: {product.sku}</p>
       )}
     </div>
   );

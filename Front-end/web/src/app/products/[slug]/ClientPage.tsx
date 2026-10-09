@@ -75,8 +75,9 @@ interface Product {
   priceMax?: number;
 }
 
-const sectionCls = 'border-t border-hairline py-16';
-const headingCls = 'text-[clamp(26px,3vw,40px)] font-light leading-tight text-ink';
+// Each section is a white card on the grey canvas, like the home page.
+const sectionCls = 'mt-6 rounded-xl bg-white p-5 shadow-sm sm:p-8';
+const headingCls = 'font-display text-[22px] font-bold leading-tight text-ink sm:text-[24px]';
 
 export function ProductDetailPageClient({ product }: { product: Product | null }) {
   const { isAuthenticated, user } = useAuth();
@@ -216,11 +217,13 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   };
 
   return (
-    <div className="min-h-screen bg-obsidian font-display text-ink">
-      <div className="mx-auto max-w-[1340px] px-5 py-10 sm:px-8">
+    <div className="sp sh-theme">
+      <div className="mx-auto max-w-[1400px] px-3 py-4 sm:px-6 sm:py-6">
         {/* Breadcrumb */}
-        <nav className="mb-8 flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-ink-muted">
-          <Link href="/products" className="hover:text-gold">Products</Link>
+        <nav className="sp-crumbs" aria-label="Breadcrumb">
+          <Link href="/">Home</Link>
+          <ChevronRight className="h-3 w-3" />
+          <Link href="/products">Products</Link>
           {categoryName && (
             <>
               <ChevronRight className="h-3 w-3" />
@@ -230,11 +233,11 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
             </>
           )}
           <ChevronRight className="h-3 w-3" />
-          <span className="text-ink/70 normal-case tracking-normal">{product.name}</span>
+          <span className="line-clamp-1 font-semibold text-ink/80">{product.name}</span>
         </nav>
 
         {/* Gallery + Buy box */}
-        <div className="grid gap-10 lg:grid-cols-2 lg:gap-16">
+        <div className="grid gap-6 rounded-xl bg-white p-4 shadow-sm sm:p-6 lg:grid-cols-2 lg:gap-12 lg:p-8">
           <Reveal y={20}>
             <Gallery images={displayImages} name={product.name} onSale={onSale} jumpTo={variantSlide} />
           </Reveal>
@@ -249,13 +252,13 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
 
         {/* Consult a specialist */}
         <Reveal y={20}>
-          <ConsultSpecialistBanner productSlug={product.slug} className="mt-12" />
+          <ConsultSpecialistBanner productSlug={product.slug} className="mt-6" />
         </Reveal>
 
         {/* Vehicle compatibility */}
         {product.compatibleVehicles && product.compatibleVehicles.length > 0 && (
-          <section className={`${sectionCls} mt-16`}>
-            <Eyebrow className="mb-4">Fitment</Eyebrow>
+          <section className={sectionCls}>
+            <Eyebrow className="mb-1">Fitment</Eyebrow>
             <h2 className={`${headingCls} mb-8`}>Vehicle Compatibility</h2>
             <VehicleCards vehicles={product.compatibleVehicles} isDark />
           </section>
@@ -264,9 +267,9 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         {/* Description */}
         {cleanDescription && (
           <section className={sectionCls}>
-            <Eyebrow className="mb-4">Overview</Eyebrow>
+            <Eyebrow className="mb-1">Overview</Eyebrow>
             <h2 className={`${headingCls} mb-6`}>Product Description</h2>
-            <div className="max-w-3xl whitespace-pre-line text-[15px] font-light leading-[1.85] text-ink-muted">
+            <div className="max-w-3xl whitespace-pre-line text-[15px] leading-[1.8] text-ink/85">
               {cleanDescription}
             </div>
           </section>
@@ -275,9 +278,9 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         {/* Package contents — bulleted "pointers", not a paragraph */}
         {packageContents.length > 0 && (
           <section className={sectionCls}>
-            <Eyebrow className="mb-4">In the box</Eyebrow>
+            <Eyebrow className="mb-1">In the box</Eyebrow>
             <h2 className={`${headingCls} mb-6`}>Package Includes</h2>
-            <ul className="max-w-3xl list-disc space-y-3 pl-6 text-[15px] font-light leading-relaxed text-ink-muted marker:text-gold">
+            <ul className="max-w-3xl list-disc space-y-3 pl-6 text-[15px] leading-relaxed text-ink/85 marker:text-gold">
               {packageContents.map((item, i) => (
                 <li key={i} className="pl-1">{item}</li>
               ))}
@@ -288,9 +291,9 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         {/* Features */}
         {features.length > 0 && (
           <section className={sectionCls}>
-            <Eyebrow className="mb-4">Highlights</Eyebrow>
+            <Eyebrow className="mb-1">Highlights</Eyebrow>
             <h2 className={`${headingCls} mb-6`}>Key Features</h2>
-            <ol className="max-w-3xl list-decimal space-y-4 pl-6 text-[15px] font-light text-ink-muted marker:text-gold">
+            <ol className="max-w-3xl list-decimal space-y-4 pl-6 text-[15px] text-ink/85 marker:text-gold">
               {features.map(renderTitledItem)}
             </ol>
           </section>
@@ -299,9 +302,9 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         {/* Why choose */}
         {whyChoose.length > 0 && (
           <section className={sectionCls}>
-            <Eyebrow className="mb-4">Why Choose</Eyebrow>
+            <Eyebrow className="mb-1">Why Choose</Eyebrow>
             <h2 className={`${headingCls} mb-6`}>Why {product.name}?</h2>
-            <ol className="max-w-3xl list-decimal space-y-4 pl-6 text-[15px] font-light text-ink-muted marker:text-gold">
+            <ol className="max-w-3xl list-decimal space-y-4 pl-6 text-[15px] text-ink/85 marker:text-gold">
               {whyChoose.map(renderTitledItem)}
             </ol>
           </section>
@@ -310,7 +313,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         {/* Specifications */}
         {specifications.length > 0 && (
           <section className={sectionCls}>
-            <Eyebrow className="mb-4">Details</Eyebrow>
+            <Eyebrow className="mb-1">Details</Eyebrow>
             <h2 className={`${headingCls} mb-6`}>Technical Specifications</h2>
             <div className="grid max-w-4xl grid-cols-1 gap-x-12 sm:grid-cols-2">
               {specifications.map((spec, i) => (
@@ -325,7 +328,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
 
         {/* Reviews */}
         <section id="reviews" className={sectionCls}>
-          <Eyebrow className="mb-4">Verified buyers</Eyebrow>
+          <Eyebrow className="mb-1">Verified buyers</Eyebrow>
           <h2 className={`${headingCls} mb-8`}>Customer Reviews</h2>
           <Reviews productId={product._id} isAuthenticated={isAuthenticated} />
         </section>
@@ -334,7 +337,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         <section className={sectionCls}>
           <SimilarProductsSection productId={product._id} />
         </section>
-        <section className="py-16">
+        <section className="mt-6">
           <ComplementaryProductsSection productId={product._id} />
         </section>
       </div>
@@ -397,15 +400,15 @@ function ClientPageInner({ slug, initialProduct }: { slug: string; initialProduc
     return (
       <div className="flex min-h-screen items-center justify-center bg-obsidian">
         <div className="max-w-md px-4 text-center">
-          <h2 className="mb-3 font-display text-[28px] font-light text-ink">We couldn&apos;t load this product</h2>
-          <p className="mb-8 font-display text-[14px] font-light text-ink-muted">
+          <h2 className="mb-3 font-display text-[28px] font-bold text-ink">We couldn&apos;t load this product</h2>
+          <p className="mb-8 font-display text-[14px] text-ink-muted">
             Please check your connection and try again.
           </p>
           <button
             type="button"
             onClick={() => refetch()}
             disabled={isFetching}
-            className="rounded-sm bg-gold px-6 py-3 font-display text-[12px] font-bold uppercase tracking-widest text-obsidian transition-opacity hover:opacity-90 disabled:opacity-60"
+            className="rounded-full bg-gold px-6 py-3 font-display text-[15px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {isFetching ? 'Trying…' : 'Try again'}
           </button>
@@ -418,15 +421,15 @@ function ClientPageInner({ slug, initialProduct }: { slug: string; initialProduc
     return (
       <div className="flex min-h-screen items-center justify-center bg-obsidian">
         <div className="max-w-md px-4 text-center">
-          <h2 className="mb-3 font-display text-[28px] font-light text-ink">Product not found</h2>
-          <p className="mb-8 font-display text-[14px] font-light text-ink-muted">
+          <h2 className="mb-3 font-display text-[28px] font-bold text-ink">Product not found</h2>
+          <p className="mb-8 font-display text-[14px] text-ink-muted">
             The product you&apos;re looking for doesn&apos;t exist or has been removed.
           </p>
           <div className="flex justify-center gap-3">
-            <Link href="/products" className="bg-gold px-7 py-3.5 font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-obsidian hover:opacity-90">
+            <Link href="/products" className="bg-gold px-7 py-3.5 font-display text-[15px] font-semibold text-white hover:opacity-90 rounded-full">
               Browse products
             </Link>
-            <Link href="/" className="border border-hairline px-7 py-3.5 font-display text-[10px] font-semibold uppercase tracking-[0.18em] text-ink hover:border-gold hover:text-gold">
+            <Link href="/" className="border border-hairline px-7 py-3.5 font-display text-[15px] font-semibold text-ink hover:border-gold hover:text-gold rounded-full">
               Go home
             </Link>
           </div>

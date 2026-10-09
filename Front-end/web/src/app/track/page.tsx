@@ -100,32 +100,34 @@ function TrackOrderPageInner() {
   };
 
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Header */}
-      <header className="bg-obsidian shadow-sm border-b border-hairline" role="banner">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center" aria-label="Autobacs Home">
-            <span className="text-2xl font-bold text-red-600">AUTOBACS</span>
-          </Link>
+    <div className="sp sh-theme">
+      {/* Breadcrumb + "track another" — the site header above already carries the
+          brand; this page used to repeat an old red AUTOBACS bar of its own. */}
+      <div className="sp-head">
+        <div className="sp-head-in flex flex-wrap items-center justify-between gap-3 !pb-4">
+          <nav className="sp-crumbs !mb-0" aria-label="Breadcrumb">
+            <Link href="/">Home</Link>
+            <span className="sp-crumb"><span aria-hidden="true">›</span><span aria-current="page">Track order</span></span>
+          </nav>
           {trackingData && (
             <button
               onClick={resetTracking}
-              className="text-sm text-gold hover:text-gold font-medium focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 rounded px-2 py-1"
+              className="sh-btn sh-btn-outline"
               aria-label="Track another order"
             >
-              Track Another Order
+              Track another order
             </button>
           )}
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" role="main">
         {!trackingData ? (
           /* Tracking Input Section */
           <section className="max-w-2xl mx-auto" aria-labelledby="track-heading">
-            <div className="bg-obsidian rounded-lg shadow-md p-8">
-              <h1 id="track-heading" className="text-3xl font-bold text-ink mb-2 text-center">
+            <div className="rounded-xl bg-white p-6 shadow-sm sm:p-8">
+              <h1 id="track-heading" className="mb-2 text-center font-display text-3xl font-bold text-ink">
                 Track Your Order
               </h1>
               <p className="text-ink-muted mb-6 text-center">
@@ -154,7 +156,7 @@ function TrackOrderPageInner() {
                     <button
                       onClick={() => handleTrackingSubmit()}
                       disabled={loading || !trackingNumber.trim()}
-                      className="px-6 py-3 bg-gold text-obsidian font-medium rounded-lg hover:bg-gold disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2"
+                      className="px-6 py-3 bg-gold text-white font-medium rounded-lg hover:bg-gold disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2"
                       aria-label="Track order"
                     >
                       {loading ? 'Tracking...' : 'Track'}

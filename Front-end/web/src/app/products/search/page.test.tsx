@@ -94,7 +94,7 @@ describe('SearchPage', () => {
     
     await waitFor(() => {
       expect(screen.getByText(/Results for/i)).toBeInTheDocument();
-      expect(screen.getByText(/Found 0 results/i)).toBeInTheDocument();
+      expect(screen.getByText('0 results')).toBeInTheDocument();
     });
   });
 
@@ -178,7 +178,8 @@ describe('SearchPage', () => {
     render(<SearchPage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Showing 1 result/)).toBeInTheDocument();
+      // The count is split across elements (the number is bold), so read the toolbar's text.
+      expect(screen.getByText((_, el) => el?.tagName === 'P' && /^Showing 1 result$/.test(el.textContent ?? ''))).toBeInTheDocument();
     });
     
     // "Did you mean?" should not be present

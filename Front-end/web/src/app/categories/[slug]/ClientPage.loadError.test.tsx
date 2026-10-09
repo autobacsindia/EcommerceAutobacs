@@ -65,7 +65,7 @@ it('offers a retry — not "no products" — when the products could not be load
   renderPage();
 
   expect(await screen.findByText(/couldn.t load products right now/i)).toBeInTheDocument();
-  expect(screen.queryByText('No products found in this category')).not.toBeInTheDocument();
+  expect(screen.queryByText('No products in this category yet')).not.toBeInTheDocument();
 
   productsResponse = products('Subwoofer', 'Amplifier');
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
@@ -75,6 +75,6 @@ it('offers a retry — not "no products" — when the products could not be load
 it('still says the category is empty when the API answers 404', async () => {
   productsResponse = () => Promise.reject(Object.assign(new Error('Not found'), { status: 404 }));
   renderPage();
-  expect(await screen.findByText('No products found in this category')).toBeInTheDocument();
+  expect(await screen.findByText('No products in this category yet')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
 });

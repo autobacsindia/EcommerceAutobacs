@@ -39,7 +39,7 @@ export default function SuperCarsBanner() {
           <div className="flex flex-col justify-center h-full py-16">
             {/* Small Label with Slide-in Animation */}
             <div className="mb-4 animate-slide-in-left">
-              <span className="inline-block px-4 py-2 bg-obsidian/10 backdrop-blur-sm border border-hairline/20 rounded-full text-ink text-xs md:text-sm font-medium uppercase tracking-wider">
+              <span className="inline-block px-4 py-2 bg-obsidian/10 backdrop-blur-sm border border-hairline/20 rounded-full text-ink text-[15px] md:text-sm font-semibold">
                 Complete Solution
               </span>
             </div>
@@ -56,7 +56,7 @@ export default function SuperCarsBanner() {
               </span>
             </p>
 
-            <p className="text-xl md:text-2xl lg:text-4xl font-light text-ink/90 mb-12 animate-slide-in-left animation-delay-300">
+            <p className="text-xl md:text-2xl lg:text-4xl font-bold text-ink/90 mb-12 animate-slide-in-left animation-delay-300">
               For Your Super Cars
             </p>
 

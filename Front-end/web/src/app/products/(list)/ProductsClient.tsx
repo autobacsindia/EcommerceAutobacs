@@ -13,8 +13,8 @@ import { normalizeParams } from '@/hooks/queries/keys';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import { resolveTerm, type ProductsData } from '@/lib/productQuery';
-import Eyebrow from '@/components/ui/Eyebrow';
 import ShopContactHero from '@/components/products/ShopContactHero';
+import StorePageHeader from '@/components/store/StorePageHeader';
 import Reveal from '@/components/ui/Reveal';
 import StoreProductCard from '@/components/products/redesign/StoreProductCard';
 import CategoryChips from '@/components/products/redesign/CategoryChips';
@@ -89,39 +89,35 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
     router.replace(`/products?${p.toString()}`, { scroll: false });
   };
 
-  const eyebrow = isFeatured ? 'Curated Picks' : isFastMoving ? 'Top Sellers' : 'Catalogue';
-  const title = isFeatured ? 'Featured' : isFastMoving ? 'Fast Moving' : 'All Products';
+  const title = isFeatured ? 'Featured picks' : isFastMoving ? 'Best sellers' : 'All products';
+  const subtitle = isFeatured
+    ? 'Hand-picked by our team — popular upgrades our customers love.'
+    : isFastMoving
+      ? 'What other drivers are buying most right now.'
+      : 'Genuine parts and accessories, with fitment help from our specialists.';
   const total = data.pagination?.total;
+  const countLabel = loading
+    ? 'Loading…'
+    : data.products.length
+      ? `${(total ?? data.products.length).toLocaleString('en-IN')} ${(total ?? data.products.length) === 1 ? 'result' : 'results'}`
+      : 'No results';
 
   return (
-    <div className="min-h-screen bg-obsidian font-display text-ink">
-      {/* Header: the full catalogue opens with a "talk to us" block; the curated
-          Featured / Fast Moving lists keep their title, which says what is shown. */}
-      {isFeatured || isFastMoving ? (
-        <header className="border-b border-hairline bg-obsidian-deep px-5 py-12 sm:px-8">
-          <div className="mx-auto max-w-[1400px]">
-            <Reveal>
-              <Eyebrow>{eyebrow}</Eyebrow>
-              <h1 className="mt-4 text-[clamp(38px,6vw,72px)] font-light leading-[0.95] tracking-[-0.01em]">
-                {title}
-              </h1>
-            </Reveal>
-          </div>
-        </header>
-      ) : (
-        <ShopContactHero />
-      )}
+    <div className="sp sh-theme">
+      <StorePageHeader crumbs={[{ label: title }]} title={title} subtitle={subtitle} aside={countLabel} />
 
-      <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
-        {/* Sticky category chips */}
-        <div className="sticky top-[var(--store-header-h)] z-30 -mx-5 border-b border-hairline bg-obsidian/90 px-5 py-4 backdrop-blur sm:-mx-8 sm:px-8">
+      {/* Sticky category chips */}
+      <div className="sticky top-[var(--store-header-h)] z-30 border-b border-hairline bg-white/95 backdrop-blur">
+        <div className="sp-wrap py-3">
           <CategoryChips />
         </div>
+      </div>
 
-        <div className="flex gap-10 py-8">
+      <div className="sp-wrap">
+        <div className="flex gap-6 pt-6">
           {/* Sidebar */}
-          <aside className="hidden w-72 shrink-0 lg:block">
-            <div className="sticky top-[calc(var(--store-header-h)+74px)]">
+          <aside className="hidden w-64 shrink-0 lg:block">
+            <div className="sticky top-[calc(var(--store-header-h)+80px)] max-h-[calc(100vh-var(--store-header-h)-100px)] overflow-y-auto rounded-xl bg-white p-5 shadow-sm">
               <Filters />
             </div>
           </aside>
@@ -129,41 +125,44 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
           {/* Main */}
           <div className="min-w-0 flex-1">
             {/* Toolbar */}
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-              <p className="font-display text-[13px] tracking-[0.04em] text-ink-muted">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
+              <p className="text-[14px] text-ink-muted">
                 {loading ? 'Loading…' : data.products.length
-                  ? <><span className="text-ink">{total ?? data.products.length}</span> {(total ?? data.products.length) === 1 ? 'result' : 'results'}</>
+                  ? <><span className="font-semibold text-ink">{(total ?? data.products.length).toLocaleString('en-IN')}</span> {(total ?? data.products.length) === 1 ? 'result' : 'results'}</>
                   : 'No results'}
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => setDrawerOpen(true)}
-                  className="inline-flex items-center gap-2 border border-hairline px-4 py-2.5 font-display text-[11px] uppercase tracking-[0.16em] text-ink-muted transition-colors hover:border-gold/50 hover:text-ink lg:hidden"
+                  className="inline-flex items-center gap-2 rounded-full border border-hairline bg-white px-4 py-2 text-[14px] font-semibold text-ink transition-colors hover:border-gold hover:text-gold lg:hidden"
                 >
-                  <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
+                  <SlidersHorizontal className="h-4 w-4" /> Filters
                 </button>
-                <select
-                  value={currentSort}
-                  onChange={(e) => setSort(e.target.value)}
-                  disabled={loading}
-                  className="appearance-none border border-hairline bg-obsidian-raised px-4 py-2.5 font-display text-[12px] tracking-[0.04em] text-ink outline-none focus:border-gold/55"
-                  aria-label="Sort products"
-                >
-                  <option value="createdAt_desc">Newest</option>
-                  {/* Backed by the time-decayed trailing-sales score
-                      (services/salesScoreService.js) — the commercial signal that
-                      replaced the dead isFastMoving flag. */}
-                  <option value="sales_desc">Best Selling</option>
-                  <option value="price_asc">Price · Low to High</option>
-                  <option value="price_desc">Price · High to Low</option>
-                  <option value="name_asc">Name · A–Z</option>
-                  <option value="rating_desc">Top rated</option>
-                </select>
+                <label className="flex items-center gap-2 text-[14px] text-ink-muted">
+                  <span className="hidden sm:inline">Sort by</span>
+                  <select
+                    value={currentSort}
+                    onChange={(e) => setSort(e.target.value)}
+                    disabled={loading}
+                    className="rounded-full border border-hairline bg-white px-4 py-2 text-[14px] font-medium text-ink outline-none focus:border-gold"
+                    aria-label="Sort products"
+                  >
+                    <option value="createdAt_desc">Newest</option>
+                    {/* Backed by the time-decayed trailing-sales score
+                        (services/salesScoreService.js) — the commercial signal that
+                        replaced the dead isFastMoving flag. */}
+                    <option value="sales_desc">Best Selling</option>
+                    <option value="price_asc">Price: Low to High</option>
+                    <option value="price_desc">Price: High to Low</option>
+                    <option value="name_asc">Name: A–Z</option>
+                    <option value="rating_desc">Top rated</option>
+                  </select>
+                </label>
               </div>
             </div>
 
             {/* Active filter chips */}
-            <div className="mb-6 empty:hidden">
+            <div className="mb-4 empty:hidden">
               <ActiveFilters />
             </div>
 
@@ -172,14 +171,13 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
 
             {/* Loading */}
             {loading && (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-6">
-                {Array.from({ length: 9 }).map((_, i) => (
-                  <div key={i} className="border border-hairline bg-obsidian">
-                    <div className="aspect-[4/5] animate-pulse bg-obsidian-raised" />
-                    <div className="space-y-3 p-5">
-                      <div className="h-3 w-1/3 animate-pulse bg-obsidian-raised" />
-                      <div className="h-4 w-3/4 animate-pulse bg-obsidian-raised" />
-                      <div className="h-5 w-1/2 animate-pulse bg-obsidian-raised" />
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="overflow-hidden rounded-xl border border-hairline bg-white">
+                    <div className="aspect-square animate-pulse bg-obsidian-deep" />
+                    <div className="space-y-3 p-4">
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-obsidian-deep" />
+                      <div className="h-5 w-1/2 animate-pulse rounded bg-obsidian-deep" />
                     </div>
                   </div>
                 ))}
@@ -189,7 +187,7 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
             {/* Grid */}
             {!loading && !isError && data.products.length > 0 && (
               <>
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-6">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
                   {data.products.map((p, i) => (
                     <Reveal key={p._id} delay={Math.min(i, 8) * 0.04}>
                       <StoreProductCard
@@ -201,7 +199,7 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
                   ))}
                 </div>
                 {!showAll && data.pagination && (
-                  <div className="mt-12">
+                  <div className="mt-10">
                     <Pagination
                       pagination={data.pagination}
                       currentPage={data.pagination.currentPage || 1}
@@ -215,30 +213,28 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
 
             {/* Empty */}
             {!loading && !isError && data.products.length === 0 && (
-              <div className="border border-hairline py-20 text-center">
-                <p className="mb-4 font-display text-[15px] font-light text-ink-muted">
-                  No products match your filters.
-                </p>
-                <Link
-                  href="/products"
-                  className="font-display text-[11px] uppercase tracking-[0.2em] text-gold hover:opacity-80"
-                >
-                  Clear all filters
-                </Link>
+              <div className="sp-card sp-empty">
+                <p className="sp-empty-title">No products match your filters</p>
+                <p>Try removing a filter, or ask us — we can often source the part.</p>
+                <Link href="/products" className="sh-btn sh-btn-primary">Clear all filters</Link>
               </div>
             )}
+
+            <div className="mt-10">
+              <ShopContactHero />
+            </div>
           </div>
         </div>
       </div>
 
       {/* Mobile filter drawer */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-obsidian-deep/70" onClick={() => setDrawerOpen(false)} aria-hidden />
-          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-obsidian-deep">
+        <div className="fixed inset-0 z-[100] lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} aria-hidden />
+          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
-              <Eyebrow as="span">Filters</Eyebrow>
-              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="text-ink-muted hover:text-ink">
+              <span className="text-[17px] font-bold text-ink">Filters</span>
+              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-obsidian-deep hover:text-ink">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -253,7 +249,7 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
-                className="w-full bg-gold px-4 py-3 font-display text-[12px] uppercase tracking-[0.16em] text-obsidian-deep"
+                className="w-full rounded-full bg-gold px-4 py-3 text-[15px] font-bold text-white"
               >
                 {typeof total === 'number' ? `Show ${total} ${total === 1 ? 'result' : 'results'}` : 'Show results'}
               </button>
@@ -267,7 +263,7 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
 
 export default function ProductsClient(props: ProductsClientProps) {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-obsidian" />}>
+    <Suspense fallback={<div className="sp sh-theme" />}>
       <ProductsPageInner {...props} />
     </Suspense>
   );

@@ -7,7 +7,7 @@ import { Suspense } from 'react';
 import { SlidersHorizontal, X } from 'lucide-react';
 import ProductGrid from '@/components/products/ProductGrid';
 import Filters from '@/components/products/redesign/Filters';
-import Eyebrow from '@/components/ui/Eyebrow';
+import StorePageHeader from '@/components/store/StorePageHeader';
 import apiClient from '@/lib/api';
 import { trackViewItemList } from '@/lib/analytics';
 
@@ -201,62 +201,52 @@ function SearchPageInner() {
   const remaining = Math.max(0, total - products.length);
 
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Hero Section */}
-      <div className="bg-obsidian border-b border-hairline py-14">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Search</p>
-          <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">
-            {searchTerm ? <>Results for <em className="not-italic text-gold">“{searchTerm}”</em></> : 'Search Results'}
-          </h1>
-          <p className="mt-3 font-display text-[13px] font-light tracking-[0.04em] text-ink-muted">
-            {loading
-              ? searchTerm ? `Searching for "${searchTerm}"…` : 'Search our product catalog'
-              : searchTerm
-                ? `Found ${total} result${total !== 1 ? 's' : ''}`
-                : 'Search our product catalog'}
-          </p>
-        </div>
-      </div>
+    <div className="sp sh-theme">
+      <StorePageHeader
+        crumbs={[{ label: 'Search' }]}
+        title={searchTerm ? <>Results for <span className="text-gold">“{searchTerm}”</span></> : 'Search results'}
+        aside={
+          loading
+            ? searchTerm ? 'Searching…' : undefined
+            : searchTerm
+              ? `${total.toLocaleString('en-IN')} result${total !== 1 ? 's' : ''}`
+              : undefined
+        }
+      />
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="lg:grid lg:grid-cols-4 lg:gap-8">
+      <div className="sp-wrap">
+        <div className="flex gap-6 pt-6">
           {/* Filters Sidebar */}
-          <aside className="hidden lg:block">
-            <div className="sticky top-[calc(var(--store-header-h)+20px)]">
+          <aside className="hidden w-64 shrink-0 lg:block">
+            <div className="sticky top-[calc(var(--store-header-h)+20px)] max-h-[calc(100vh-var(--store-header-h)-40px)] overflow-y-auto rounded-xl bg-white p-5 shadow-sm">
               <Filters basePath="/products/search" />
             </div>
           </aside>
 
           {/* Products Grid */}
-          <div className="lg:col-span-3">
+          <div className="min-w-0 flex-1">
             {/* Relaxed-recall notice. Only meaningful when the widened search
                 actually returned something — with zero results the empty state
                 already says there are none. */}
             {relaxed && !loading && products.length > 0 && (
-              <div
-                className="mb-6 border border-hairline bg-obsidian-raised px-4 py-3"
-                role="status"
-              >
-                <p className="font-display text-[13px] font-light tracking-[0.02em] text-ink-muted">
-                  No exact matches for{' '}
-                  <em className="not-italic text-ink">“{searchTerm}”</em> — showing related results.
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" role="status">
+                <p className="text-[14px] text-amber-900">
+                  No exact matches for <strong>“{searchTerm}”</strong> — showing related results.
                 </p>
               </div>
             )}
 
             {/* "Did you mean?" suggestions */}
             {corrections.length > 0 && (
-              <div className="mb-6 p-4 bg-gold/10 rounded-md">
-                <p className="text-gold font-medium">
+              <div className="mb-4 rounded-xl bg-gold/10 px-4 py-3">
+                <p className="text-[15px] text-ink">
                   Did you mean:
                   {corrections.map((correction, index) => (
                     <span key={index}>
                       {index > 0 && ', '}
                       <button
                         onClick={() => handleCorrectionClick(correction.suggested)}
-                        className="underline text-gold hover:text-gold ml-1"
+                        className="ml-1 font-semibold text-gold underline hover:text-[#0b6b3c]"
                       >
                         {correction.suggested}
                       </button>
@@ -267,36 +257,35 @@ function SearchPageInner() {
             )}
 
             {/* Results Header */}
-            <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <p className="text-ink-muted">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
+              <p className="text-[14px] text-ink-muted">
                 {loading ? (
-                  'Loading products...'
+                  'Loading products…'
                 ) : products.length > 0 ? (
                   <>
-                    Showing {products.length}
-                    {total > products.length ? ` of ${total}` : ''}
+                    Showing <span className="font-semibold text-ink">{products.length}</span>
+                    {total > products.length ? <> of <span className="font-semibold text-ink">{total}</span></> : ''}
                     {' '}result{products.length !== 1 ? 's' : ''}
-                    {searchTerm && ` for "${searchTerm}"`}
                   </>
                 ) : (
                   'No products found'
                 )}
               </p>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => setDrawerOpen(true)}
-                  className="inline-flex items-center gap-2 border border-hairline px-4 py-2 font-display text-[11px] uppercase tracking-[0.16em] text-ink-muted transition-colors hover:border-gold/50 hover:text-ink lg:hidden"
+                  className="inline-flex items-center gap-2 rounded-full border border-hairline bg-white px-4 py-2 text-[14px] font-semibold text-ink transition-colors hover:border-gold hover:text-gold lg:hidden"
                 >
-                  <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
+                  <SlidersHorizontal className="h-4 w-4" /> Filters
                 </button>
 
                 {/* Sort Dropdown */}
-                <div className="flex items-center gap-2">
-                  <label htmlFor="sort" className="text-sm text-ink-muted">Sort by:</label>
+                <label htmlFor="sort" className="flex items-center gap-2 text-[14px] text-ink-muted">
+                  <span className="hidden sm:inline">Sort by</span>
                   <select
                     id="sort"
-                    className="border border-hairline rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gold"
+                    className="rounded-full border border-hairline bg-white px-4 py-2 text-[14px] font-medium text-ink outline-none focus:border-gold"
                     value={currentSort}
                     onChange={handleSortChange}
                     disabled={loading}
@@ -306,27 +295,22 @@ function SearchPageInner() {
                     <option value="createdAt_desc">Newest</option>
                     <option value="price_asc">Price: Low to High</option>
                     <option value="price_desc">Price: High to Low</option>
-                    <option value="name_asc">Name: A to Z</option>
-                    <option value="rating_desc">Highest Rated</option>
+                    <option value="name_asc">Name: A–Z</option>
+                    <option value="rating_desc">Top rated</option>
                   </select>
-                </div>
+                </label>
               </div>
             </div>
 
             {/* Loading skeleton */}
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, index) => (
-                  <div key={index} className="bg-obsidian rounded-lg shadow-md overflow-hidden animate-pulse">
-                    <div className="h-48 bg-obsidian-raised"></div>
-                    <div className="p-4">
-                      <div className="h-4 bg-obsidian-raised rounded mb-2"></div>
-                      <div className="h-4 bg-obsidian-raised rounded w-2/3 mb-4"></div>
-                      <div className="h-6 bg-obsidian-raised rounded w-1/3 mb-4"></div>
-                      <div className="flex justify-between">
-                        <div className="h-10 bg-obsidian-raised rounded w-24"></div>
-                        <div className="h-10 bg-obsidian-raised rounded w-24"></div>
-                      </div>
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+                {[...Array(8)].map((_, index) => (
+                  <div key={index} className="overflow-hidden rounded-xl border border-hairline bg-white">
+                    <div className="aspect-square animate-pulse bg-obsidian-deep" />
+                    <div className="space-y-3 p-4">
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-obsidian-deep" />
+                      <div className="h-5 w-1/2 animate-pulse rounded bg-obsidian-deep" />
                     </div>
                   </div>
                 ))}
@@ -341,35 +325,37 @@ function SearchPageInner() {
                     <button
                       onClick={handleLoadMore}
                       disabled={loadingMore}
-                      className="flex items-center gap-2 px-6 py-3 bg-gold text-obsidian rounded-md hover:bg-gold disabled:opacity-70 disabled:cursor-not-allowed transition-colors font-medium"
+                      className="sh-btn sh-btn-primary sh-btn-lg disabled:cursor-not-allowed disabled:opacity-70"
                     >
                       {loadingMore ? (
                         <>
-                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                           </svg>
                           Loading…
                         </>
                       ) : (
-                        `Load More (${remaining} more product${remaining !== 1 ? 's' : ''})`
+                        `Load more (${remaining} more product${remaining !== 1 ? 's' : ''})`
                       )}
                     </button>
                   </div>
                 )}
 
                 {!hasNext && firstPageSize > 0 && total > firstPageSize && (
-                  <p className="mt-8 text-center text-ink-muted text-sm">
+                  <p className="mt-8 text-center text-sm text-ink-muted">
                     All {total} products loaded
                   </p>
                 )}
               </>
             ) : (
-              <div className="text-center py-12">
-                <p className="text-ink-muted text-lg mb-4">No products found matching your criteria</p>
-                <Link href="/products" className="text-gold hover:text-gold font-medium">
-                  Browse all products
-                </Link>
+              <div className="sp-card sp-empty">
+                <p className="sp-empty-title">No products found matching your criteria</p>
+                <p>Check the spelling, try a shorter term, or ask us — we can often source the part.</p>
+                <div className="flex flex-wrap justify-center gap-3">
+                  <Link href="/products" className="sh-btn sh-btn-outline">Browse all products</Link>
+                  <Link href="/consultation" className="sh-btn sh-btn-primary">Ask a specialist</Link>
+                </div>
               </div>
             )}
           </div>
@@ -378,12 +364,12 @@ function SearchPageInner() {
 
       {/* Mobile filter drawer */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-obsidian-deep/70" onClick={() => setDrawerOpen(false)} aria-hidden />
-          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-obsidian-deep">
+        <div className="fixed inset-0 z-[100] lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} aria-hidden />
+          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
-              <Eyebrow as="span">Filters</Eyebrow>
-              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="text-ink-muted hover:text-ink">
+              <span className="text-[17px] font-bold text-ink">Filters</span>
+              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-obsidian-deep hover:text-ink">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -398,7 +384,7 @@ function SearchPageInner() {
               <button
                 type="button"
                 onClick={() => setDrawerOpen(false)}
-                className="w-full bg-gold px-4 py-3 font-display text-[12px] uppercase tracking-[0.16em] text-obsidian-deep"
+                className="w-full rounded-full bg-gold px-4 py-3 text-[15px] font-bold text-white"
               >
                 {typeof total === 'number' ? `Show ${total} ${total === 1 ? 'result' : 'results'}` : 'Show results'}
               </button>
@@ -412,7 +398,7 @@ function SearchPageInner() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen" />}>
+    <Suspense fallback={<div className="sp sh-theme" />}>
       <SearchPageInner />
     </Suspense>
   );

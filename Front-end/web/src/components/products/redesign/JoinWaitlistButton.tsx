@@ -109,14 +109,14 @@ export default function JoinWaitlistButton({
   if (joined) {
     return (
       <div className={`flex flex-col gap-1.5 ${className}`}>
-        <div className="flex items-center justify-center gap-2.5 border border-gold/50 bg-gold/10 py-4 font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">
+        <div className="flex items-center justify-center gap-2.5 border border-gold/50 bg-gold/10 py-4 font-display text-[15px] font-semibold text-gold rounded-full">
           <Check className="h-4 w-4" />
           You&apos;re on the waiting list
         </div>
         <button
           onClick={leave}
           disabled={loading}
-          className="self-center text-[11px] uppercase tracking-[0.14em] text-ink-muted underline-offset-4 transition-colors hover:text-gold hover:underline disabled:opacity-40"
+          className="self-center text-[12px] uppercase tracking-[0.12em] text-ink-muted underline-offset-4 transition-colors hover:text-gold hover:underline disabled:opacity-40 font-semibold"
         >
           {loading ? 'Updating…' : 'Leave the list'}
         </button>
@@ -128,7 +128,7 @@ export default function JoinWaitlistButton({
     <button
       onClick={join}
       disabled={loading}
-      className={`flex items-center justify-center gap-3 bg-gold py-4 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-obsidian transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      className={`flex items-center justify-center gap-3 bg-gold py-4 font-display text-[15px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 ${className} rounded-full`}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardList className="h-4 w-4" />}
       {loading ? 'One moment…' : 'Join the waiting list'}

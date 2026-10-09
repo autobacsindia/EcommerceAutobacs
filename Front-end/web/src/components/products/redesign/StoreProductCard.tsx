@@ -19,7 +19,7 @@ import {
 } from '@/hooks/queries/useCampaignProductRates';
 
 /**
- * Storefront product card (obsidian + gold). Self-contained client island —
+ * Storefront product card — white tile in the home page's style. Self-contained client island —
  * owns wishlist + add-to-cart directly so the whole card is on-theme. Adopts the
  * MLC reference pattern (favourite heart, status badge, price + gold add button)
  * reskinned to the home design's hover vocabulary (image scale, gold accents).
@@ -153,50 +153,50 @@ export default function StoreProductCard({
 
   const CardInner = (
     <>
-      {/* Image */}
-      <div className="relative aspect-[4/5] overflow-hidden bg-obsidian-raised">
+      {/* Image — the whole product on a light plate, the way the home page shows it. */}
+      <div className="relative aspect-square overflow-hidden bg-[#f6f7f7]">
         {firstImage ? (
           <ProductImage
             src={firstImage}
             alt={product.name}
-            className="h-full w-full object-cover brightness-[0.92] transition-transform duration-[900ms] ease-lux group-hover:scale-[1.06]"
+            className="h-full w-full object-contain mix-blend-multiply transition-transform duration-500 ease-lux group-hover:scale-[1.04]"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-[11px] uppercase tracking-[0.2em] text-ink-muted">
+          <div className="flex h-full w-full items-center justify-center text-[13px] text-ink-muted">
             No image
           </div>
         )}
 
         {/* Badges */}
-        <div className="absolute left-4 top-4 flex flex-col items-start gap-1.5">
+        <div className="absolute left-2.5 top-2.5 flex flex-col items-start gap-1.5">
           {fitmentBadge && (
-            <span className="bg-emerald-500 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-obsidian">
+            <span className="rounded-md bg-emerald-600 px-2 py-1 text-[11px] font-bold text-white">
               ✓ Fits {fitmentBadge}
             </span>
           )}
           {outOfStock && (
-            <span className="bg-obsidian-deep/85 px-2.5 py-1 text-[9px] uppercase tracking-[0.22em] text-ink-muted backdrop-blur">
+            <span className="rounded-md bg-ink/80 px-2 py-1 text-[11px] font-semibold text-white">
               Sold out
             </span>
           )}
           {product.stock === 'backorder' && (
-            <span className="bg-obsidian-deep/85 px-2.5 py-1 text-[9px] uppercase tracking-[0.22em] text-gold backdrop-blur">
+            <span className="rounded-md bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white">
               Backorder
             </span>
           )}
           {onSale && !outOfStock && (
-            <span className="bg-gold px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-obsidian">
+            <span className="rounded-md bg-[#cc0c39] px-2 py-1 text-[11px] font-bold text-white">
               -{discount}%
             </span>
           )}
           {featured && !onSale && !outOfStock && (
-            <span className="bg-gold px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-obsidian">
+            <span className="rounded-md bg-gold px-2 py-1 text-[11px] font-bold text-white">
               ★ Top pick
             </span>
           )}
           {campaignSaving && (
-            <span className="flex items-center gap-1 border border-gold/50 bg-obsidian-deep/85 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-gold backdrop-blur">
-              <Gift size={10} className="shrink-0" aria-hidden />
+            <span className="flex items-center gap-1 rounded-md border border-gold/40 bg-white/95 px-2 py-1 text-[11px] font-bold text-gold">
+              <Gift size={12} className="shrink-0" aria-hidden />
               {campaignSaving}
             </span>
           )}
@@ -206,31 +206,31 @@ export default function StoreProductCard({
         <button
           onClick={toggleWish}
           aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
-          className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-obsidian-deep/70 backdrop-blur transition-colors hover:bg-obsidian-deep"
+          className="absolute right-2.5 top-2.5 grid h-9 w-9 place-items-center rounded-full bg-white shadow-sm transition-transform hover:scale-105"
         >
-          <Heart className={cn('h-4 w-4 transition-colors', wished ? 'fill-gold text-gold' : 'text-ink-muted')} />
+          <Heart className={cn('h-4 w-4 transition-colors', wished ? 'fill-[#cc0c39] text-[#cc0c39]' : 'text-ink-muted')} />
         </button>
       </div>
 
       {/* Body */}
       {/* Padding steps down on phones. In a 2-up grid a card is ~165px wide, so
-          `p-5` spends a quarter of it on whitespace — width the price and the
-          add button then have to fight over. */}
-      <div className="flex flex-1 flex-col p-4 sm:p-5">
+          generous padding spends a quarter of it on whitespace — width the price
+          and the add button then have to fight over. */}
+      <div className="flex flex-1 flex-col p-3 sm:p-4">
         {categoryName && (
-          <p className="mb-2 font-display text-[9px] uppercase tracking-[0.26em] text-gold">{categoryName}</p>
+          <p className="mb-1 text-[12px] font-semibold text-gold">{categoryName}</p>
         )}
-        <h3 className="mb-2 line-clamp-2 font-display text-[15px] font-normal leading-snug text-ink transition-colors group-hover:text-gold">
+        <h3 className="mb-1.5 line-clamp-2 text-[14px] font-medium leading-snug text-ink transition-colors group-hover:text-gold sm:text-[15px]">
           {product.name}
         </h3>
 
         {product.averageRating > 0 && (
-          <div className="mb-3 flex items-center gap-1.5">
-            <span className="text-[12px] tracking-[1px] text-gold" aria-hidden>
+          <div className="mb-2 flex items-center gap-1.5">
+            <span className="text-[13px] tracking-[1px] text-[#f2a516]" aria-hidden>
               {'★'.repeat(Math.round(product.averageRating))}
-              <span className="text-ink-muted/50">{'★'.repeat(5 - Math.round(product.averageRating))}</span>
+              <span className="text-[#d5d9d9]">{'★'.repeat(5 - Math.round(product.averageRating))}</span>
             </span>
-            <span className="font-display text-[11px] text-ink-muted">{product.averageRating.toFixed(1)}</span>
+            <span className="text-[12px] text-[#0b6b9a]">{product.averageRating.toFixed(1)}</span>
           </div>
         )}
 
@@ -263,13 +263,13 @@ export default function StoreProductCard({
         <div className="mt-auto flex items-end justify-between gap-2 pt-2">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
             {showsRange && (
-              <span className="font-display text-[10px] uppercase tracking-[0.14em] text-ink-muted">From</span>
+              <span className="text-[12px] text-ink-muted">From</span>
             )}
-            <span className="font-display text-[16px] font-medium text-ink sm:text-[18px]">
+            <span className="text-[16px] font-bold text-ink sm:text-[18px]">
               {formatPrice(isVariable ? priceMin : product.price)}
             </span>
             {onSale && (
-              <span className="font-display text-[11px] text-ink-muted line-through sm:text-[12px]">
+              <span className="text-[11px] text-ink-muted line-through sm:text-[12px]">
                 {formatPrice(product.originalPrice!)}
               </span>
             )}
@@ -283,7 +283,7 @@ export default function StoreProductCard({
               'grid h-10 w-10 shrink-0 place-items-center rounded-full transition-all duration-300',
               outOfStock
                 ? 'cursor-not-allowed border border-hairline text-ink-muted'
-                : 'bg-gold text-obsidian hover:scale-105'
+                : 'bg-gold text-white shadow-sm hover:scale-105 hover:bg-[#0b6b3c]'
             )}
           >
             {isVariable ? <SlidersHorizontal className="h-4 w-4" /> : backorder ? <HeadphonesIcon className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
@@ -294,7 +294,7 @@ export default function StoreProductCard({
   );
 
   const shell = cn(
-    'group relative flex flex-col overflow-hidden border border-hairline bg-obsidian font-display transition-colors duration-300 hover:border-gold/40',
+    'group relative flex h-full flex-col overflow-hidden rounded-xl border border-hairline bg-white shadow-sm transition-[box-shadow,border-color,transform] duration-300 hover:-translate-y-0.5 hover:border-gold/30 hover:shadow-[0_10px_24px_rgba(10,92,51,0.12)]',
     className
   );
 

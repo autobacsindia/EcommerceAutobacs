@@ -112,7 +112,7 @@ describe('OffersPage', () => {
     renderWithClient(<OffersPage />);
 
     // Check header
-    expect(screen.getByText('Offers')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent("Today's Deals");
 
     // Wait for products to load
     await waitFor(() => {
@@ -134,7 +134,7 @@ describe('OffersPage', () => {
     renderWithClient(<OffersPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('No offers available right now. Please check back later.')).toBeInTheDocument();
+      expect(screen.getByText('No deals running right now')).toBeInTheDocument();
     });
   });
 
@@ -144,7 +144,7 @@ describe('OffersPage', () => {
     renderWithClient(<OffersPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load offers')).toBeInTheDocument();
+      expect(screen.getByText("We couldn't load today's deals")).toBeInTheDocument();
     });
   });
 

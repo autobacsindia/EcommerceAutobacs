@@ -34,7 +34,7 @@ export default function EmiPaymentNotice({
     <div
       className={
         isDark
-          ? 'rounded-sm border border-gold/30 bg-gold/5 p-3'
+          ? 'rounded-lg border border-gold/30 bg-gold/5 p-3'
           : 'rounded-lg border border-amber-200 bg-amber-50 p-3'
       }
     >

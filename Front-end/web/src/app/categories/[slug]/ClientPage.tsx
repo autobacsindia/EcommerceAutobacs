@@ -9,10 +9,9 @@ import apiClient from '@/lib/api';
 import ProductGrid from '@/components/products/ProductGrid';
 import Filters from '@/components/products/redesign/Filters';
 import CategoryChips from '@/components/products/redesign/CategoryChips';
-import Eyebrow from '@/components/ui/Eyebrow';
 import ShopContactHero from '@/components/products/ShopContactHero';
 import Pagination from '@/components/layout/Pagination';
-import Breadcrumb from '@/components/layout/Breadcrumb';
+import StorePageHeader from '@/components/store/StorePageHeader';
 import { trackViewItemList } from '@/lib/analytics';
 import { getMainCategory } from '@/lib/categoryMapping';
 import { resolveCategoryScope } from '@/lib/categoryScope';
@@ -351,135 +350,121 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
 
   if (error && (error === 'Category not found' || error === 'Invalid category')) {
     return (
-      <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8 max-w-md mx-4 text-center">
-          <svg className="w-14 h-14 mx-auto text-red-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-2">Category Not Available</h2>
-          <p className="text-ink/70 font-display mb-6">{error === 'Invalid category' ? 'Invalid category URL.' : "The category you're looking for doesn't exist or has been removed."}</p>
-          <Link href="/categories" className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
-            Browse All Categories
-          </Link>
+      <div className="sp sh-theme">
+        <div className="sp-wrap">
+          <div className="sp-section sp-card sp-empty mx-auto max-w-lg">
+            <p className="sp-empty-title">Category not available</p>
+            <p>{error === 'Invalid category' ? 'That category link is not valid.' : "This category doesn't exist or has been removed."}</p>
+            <Link href="/categories" className="sh-btn sh-btn-primary">Browse all categories</Link>
+          </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Breadcrumb */}
-      <Breadcrumb
-        items={[
-          { label: 'Home', href: '/' },
-          { label: 'Categories', href: '/categories' },
-          { label: category?.name || 'Category', href: '#' }
-        ]}
-      />
+  const total = getPaginationTotal(data.pagination);
+  const countLabel = loading
+    ? 'Loading…'
+    : data.products.length
+      ? `${(total || data.products.length).toLocaleString('en-IN')} ${(total || data.products.length) === 1 ? 'product' : 'products'}`
+      : 'No products';
 
-      {/* Hero: the shared contact header, titled with the category name. */}
-      <ShopContactHero
-        eyebrow="Category"
+  return (
+    <div className="sp sh-theme">
+      <StorePageHeader
+        crumbs={[{ label: 'Categories', href: '/categories' }, { label: category?.name || 'Category' }]}
         title={category?.name || 'Products'}
-        description={category?.description || undefined}
-        contactLine={`Not sure which ${category?.name ? category.name.toLowerCase() : 'parts'} fit your car? Our specialists will help you choose.`}
-        placement="category_hero"
+        subtitle={category?.description || `Shop ${category?.name ? category.name.toLowerCase() : 'parts'} for your car — genuine products with fitment help.`}
+        aside={countLabel}
       />
 
       {/* Category strip — the same control as /products. Without it, arriving here
           from a chip was a one-way door: no way to reach a sibling hub but Back. */}
-      <div className="sticky top-[var(--store-header-h)] z-30 border-b border-hairline bg-obsidian/90 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+      <div className="sticky top-[var(--store-header-h)] z-30 border-b border-hairline bg-white/95 backdrop-blur">
+        <div className="sp-wrap py-3">
           <CategoryChips />
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="lg:grid lg:grid-cols-4 lg:gap-8">
+      <div className="sp-wrap">
+        <div className="flex gap-6 pt-6">
           {/* Filters Sidebar */}
-          <aside className="hidden lg:block">
+          <aside className="hidden w-64 shrink-0 lg:block">
             {/* Clears the sticky category strip above, same offset /products uses. */}
-            <div className="sticky top-[calc(var(--store-header-h)+74px)]">
+            <div className="sticky top-[calc(var(--store-header-h)+80px)] max-h-[calc(100vh-var(--store-header-h)-100px)] overflow-y-auto rounded-xl bg-white p-5 shadow-sm">
               <Filters basePath={`/categories/${slug}`} scopeCategoryId={category?._id} />
             </div>
           </aside>
 
           {/* Products Grid */}
-          <div className="lg:col-span-3">
+          <div className="min-w-0 flex-1">
             {/* Results Header */}
-            <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <p className="text-ink-muted font-display text-sm">
-                {loading ? 'Loading products...' : data.products.length > 0 ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
+              <p className="text-[14px] text-ink-muted">
+                {loading ? 'Loading products…' : data.products.length > 0 ? (
                   showAll
-                    ? `Showing all ${data.products.length} product${data.products.length !== 1 ? 's' : ''}`
-                    : <>Showing {data.products.length} product{data.products.length !== 1 ? 's' : ''}{getPaginationTotal(data.pagination) && ` of ${getPaginationTotal(data.pagination)}`}</>
+                    ? <>Showing all <span className="font-semibold text-ink">{data.products.length}</span> products</>
+                    : <>Showing <span className="font-semibold text-ink">{data.products.length}</span>{total ? <> of <span className="font-semibold text-ink">{total}</span></> : null} products</>
                 ) : 'No products found'}
               </p>
 
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   onClick={() => setDrawerOpen(true)}
-                  className="inline-flex items-center gap-2 border border-hairline px-4 py-2 font-display text-[11px] uppercase tracking-[0.16em] text-ink-muted transition-colors hover:border-gold/50 hover:text-ink lg:hidden"
+                  className="inline-flex items-center gap-2 rounded-full border border-hairline bg-white px-4 py-2 text-[14px] font-semibold text-ink transition-colors hover:border-gold hover:text-gold lg:hidden"
                 >
-                  <SlidersHorizontal className="h-3.5 w-3.5" /> Filters
+                  <SlidersHorizontal className="h-4 w-4" /> Filters
                 </button>
-                <div className="flex items-center gap-2">
+                <label htmlFor="showAll" className="flex cursor-pointer items-center gap-2 text-[14px] text-ink/80">
                   <input
                     type="checkbox"
                     id="showAll"
                     checked={showAll}
                     onChange={handleShowAllToggle}
-                    className="h-4 w-4 accent-gold rounded border-hairline bg-obsidian-raised"
+                    className="h-4 w-4 accent-gold"
                   />
-                  <label htmlFor="showAll" className={`text-sm font-display ${showAll ? 'text-gold' : 'text-ink/70'}`}>
-                    Show All{showAll && ' (Active)'}
-                  </label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="sort" className="text-sm text-ink-muted font-display">Sort:</label>
+                  Show all
+                </label>
+                <label htmlFor="sort" className="flex items-center gap-2 text-[14px] text-ink-muted">
+                  <span className="hidden sm:inline">Sort by</span>
                   <select
                     id="sort"
-                    className="bg-obsidian-raised border border-hairline text-ink/70 rounded-sm px-3 py-1.5 text-sm focus:outline-none focus:border-gold font-display"
+                    className="rounded-full border border-hairline bg-white px-4 py-2 text-[14px] font-medium text-ink outline-none focus:border-gold"
                     value={currentSort}
                     onChange={handleSortChange}
                     disabled={loading}
                   >
-                    <option value="createdAt_desc">Newest First</option>
+                    <option value="createdAt_desc">Newest</option>
                     <option value="price_asc">Price: Low to High</option>
                     <option value="price_desc">Price: High to Low</option>
-                    <option value="name_asc">Name: A to Z</option>
-                    <option value="rating_desc">Highest Rated</option>
+                    <option value="name_asc">Name: A–Z</option>
+                    <option value="rating_desc">Top rated</option>
                   </select>
-                </div>
+                </label>
               </div>
             </div>
 
             {/* Loading skeletons */}
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, index) => (
-                  <div key={index} className="bg-obsidian border border-hairline rounded-sm overflow-hidden animate-pulse">
-                    <div className="h-48 bg-obsidian-raised" />
-                    <div className="p-4">
-                      <div className="h-4 bg-obsidian-raised rounded-sm mb-2" />
-                      <div className="h-4 bg-obsidian-raised rounded-sm w-2/3 mb-4" />
-                      <div className="h-6 bg-obsidian-raised rounded-sm w-1/3 mb-4" />
-                      <div className="flex justify-between gap-2">
-                        <div className="h-9 bg-obsidian-raised rounded-sm flex-1" />
-                        <div className="h-9 bg-obsidian-raised rounded-sm flex-1" />
-                      </div>
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+                {[...Array(8)].map((_, index) => (
+                  <div key={index} className="overflow-hidden rounded-xl border border-hairline bg-white">
+                    <div className="aspect-square animate-pulse bg-obsidian-deep" />
+                    <div className="space-y-3 p-4">
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-obsidian-deep" />
+                      <div className="h-5 w-1/2 animate-pulse rounded bg-obsidian-deep" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : error === LOAD_FAILED ? (
-              <div className="text-center py-12" role="alert">
-                <p className="text-ink-muted font-display mb-4">{LOAD_FAILED}</p>
+              <div className="sp-card sp-empty" role="alert">
+                <p className="sp-empty-title">Something went wrong</p>
+                <p>{LOAD_FAILED}</p>
                 <button
                   type="button"
                   onClick={() => setReloadKey((k) => k + 1)}
-                  className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm"
+                  className="sh-btn sh-btn-primary"
                 >
                   Try again
                 </button>
@@ -487,34 +472,42 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
             ) : data.products.length > 0 ? (
               <ProductGrid products={data.products} />
             ) : (
-              <div className="text-center py-12">
-                <p className="text-ink-muted font-display mb-4">No products found in this category</p>
-                <Link href="/categories" className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors text-sm">
-                  Browse Other Categories
-                </Link>
+              <div className="sp-card sp-empty">
+                <p className="sp-empty-title">No products in this category yet</p>
+                <p>Try another category, or ask us — we can often source the part.</p>
+                <Link href="/categories" className="sh-btn sh-btn-primary">Browse other categories</Link>
               </div>
             )}
 
             {!loading && !showAll && (
-              <Pagination
-                pagination={data.pagination}
-                currentPage={currentPage}
-                basePath={`/categories/${slug}`}
-                searchParams={searchParams}
-              />
+              <div className="mt-10">
+                <Pagination
+                  pagination={data.pagination}
+                  currentPage={currentPage}
+                  basePath={`/categories/${slug}`}
+                  searchParams={searchParams}
+                />
+              </div>
             )}
+
+            <div className="mt-10">
+              <ShopContactHero
+                title={`Not sure which ${category?.name ? category.name.toLowerCase() : 'parts'} fit your car?`}
+                placement="category_hero"
+              />
+            </div>
           </div>
         </div>
       </div>
 
       {/* Mobile filter drawer */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-obsidian-deep/70" onClick={() => setDrawerOpen(false)} aria-hidden />
-          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-obsidian-deep">
+        <div className="fixed inset-0 z-[100] lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} aria-hidden />
+          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
-              <Eyebrow as="span">Filters</Eyebrow>
-              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="text-ink-muted hover:text-ink">
+              <span className="text-[17px] font-bold text-ink">Filters</span>
+              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-obsidian-deep hover:text-ink">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -543,7 +536,7 @@ type ClientPageProps = Parameters<typeof ClientPageInner>[0];
 
 export default function ClientPage({ slug, initialCategory }: ClientPageProps) {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-obsidian-deep" />}>
+    <Suspense fallback={<div className="sp sh-theme" />}>
       <ClientPageInner slug={slug} initialCategory={initialCategory} />
     </Suspense>
   );

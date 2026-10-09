@@ -6,10 +6,11 @@ import Link from 'next/link';
 import { Filter, X } from 'lucide-react';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import apiClient from '@/lib/api';
-import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP } from '@/services/vehicleService';
+import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP, getVehicleImageUrl } from '@/services/vehicleService';
 import type { Product } from '@/lib/types';
 import StoreProductCard from '@/components/products/redesign/StoreProductCard';
-import { cloudinarySrcSet, CARD_WIDTHS, swapImageToFallback } from '@/lib/cloudinarySrcSet';
+import StorePageHeader from '@/components/store/StorePageHeader';
+import VehicleImage from '@/components/vehicles/VehicleImage';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 
@@ -117,6 +118,8 @@ export default function VehicleModelListing({
 
   const vehicleName = slug ? decodeURIComponent(slug) : '';
   const displayName = vehicleName ? formatVehicleName(vehicleName) : 'Vehicle';
+  // A photo we really have for this model (local or mapped); otherwise the placeholder.
+  const heroImage = getVehicleImageUrl(slug) ?? null;
 
   // One batched request for the whole visible page rather than one per card.
   const { data: campaignData } = useCampaignProductRates(products.map((p) => p._id || (p as { id?: string }).id).filter((id): id is string => !!id));
@@ -278,15 +281,15 @@ export default function VehicleModelListing({
   // Category filter list — shared by the desktop sidebar and the mobile drawer.
   const categoryFilters = (
     <>
-      <p className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-3">Categories</p>
+      <p className="mb-3 text-[15px] font-bold text-ink">Categories</p>
       <ul className="space-y-1">
         <li>
           <button
             onClick={() => handleCategoryChange('')}
-            className={`text-left w-full px-3 py-2 rounded-sm text-sm transition-colors ${
+            className={`w-full rounded-lg px-3 py-2 text-left text-[14px] transition-colors ${
               selectedCategory === ''
-                ? 'bg-gold/10 text-gold font-display font-bold border border-gold/30'
-                : 'text-ink/70 font-display hover:bg-obsidian-raised'
+                ? 'bg-gold font-semibold text-white'
+                : 'text-ink/80 hover:bg-gold/10 hover:text-gold'
             }`}
           >
             All Categories
@@ -302,10 +305,10 @@ export default function VehicleModelListing({
             <li key={String(category._id || category.id)}>
               <button
                 onClick={() => handleCategoryChange(category.slug)}
-                className={`text-left w-full px-3 py-2 rounded-sm text-sm transition-colors ${
+                className={`w-full rounded-lg px-3 py-2 text-left text-[14px] transition-colors ${
                   selectedCategory === category.slug
-                    ? 'bg-gold/10 text-gold font-display font-bold border border-gold/30'
-                    : 'text-ink/70 font-display hover:bg-obsidian-raised'
+                    ? 'bg-gold font-semibold text-white'
+                    : 'text-ink/80 hover:bg-gold/10 hover:text-gold'
                 }`}
               >
                 {category.name} ({count})
@@ -318,77 +321,47 @@ export default function VehicleModelListing({
   );
 
   const paginationBtnBase =
-    'inline-flex items-center px-4 py-2 rounded-sm border font-display font-bold text-sm uppercase tracking-widest transition-colors';
-  const paginationBtnActive = `${paginationBtnBase} bg-gold text-obsidian border-gold`;
-  const paginationBtnEnabled = `${paginationBtnBase} bg-obsidian-raised text-ink/70 border-hairline hover:border-gold hover:text-ink`;
-  const paginationBtnDisabled = `${paginationBtnBase} bg-obsidian-raised text-ink-muted border-hairline cursor-not-allowed`;
+    'inline-flex min-w-[40px] items-center justify-center rounded-lg border px-3 py-2 text-sm font-semibold transition-colors';
+  const paginationBtnActive = `${paginationBtnBase} bg-gold text-white border-gold`;
+  const paginationBtnEnabled = `${paginationBtnBase} bg-white text-ink border-hairline hover:border-gold hover:text-gold`;
+  const paginationBtnDisabled = `${paginationBtnBase} bg-white text-ink-muted/50 border-hairline cursor-not-allowed`;
 
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Hero */}
-      <div className="bg-obsidian border-b border-hairline py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Vehicles</p>
-          <h1 className="text-5xl font-display font-light text-ink tracking-[-0.01em] mb-4">
-            {displayName} Parts &amp; Accessories
-          </h1>
-          <p className="text-ink/70 font-display max-w-3xl mx-auto">
-            Find the perfect parts and accessories for your {displayName}
-          </p>
-
-          {vehicle && (
-            <div className="mt-6 flex flex-wrap justify-center gap-6 text-sm text-ink/70 font-display">
-              <div className="flex items-center gap-2">
-                <span className="font-display font-bold text-ink-muted uppercase tracking-widest">Make</span>
-                <span>{vehicle.make}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-display font-bold text-ink-muted uppercase tracking-widest">Model</span>
-                <span>{vehicle.model}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Breadcrumb */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <nav className="text-sm font-display">
-          <Link href="/" className="text-ink-muted hover:text-gold transition-colors">Home</Link>
-          <span className="mx-2 text-ink-muted/50">/</span>
-          <Link href="/vehicles" className="text-ink-muted hover:text-gold transition-colors">Vehicles</Link>
-          <span className="mx-2 text-ink-muted/50">/</span>
-          {currentPage > 1 ? (
-            <>
-              <Link href={`/model/${slug}`} className="text-ink-muted hover:text-gold transition-colors">{displayName}</Link>
-              <span className="mx-2 text-ink-muted/50">/</span>
-              <span className="text-ink/70">Page {currentPage}</span>
-            </>
-          ) : (
-            <span className="text-ink/70">{displayName}</span>
-          )}
-        </nav>
-      </div>
+    <div className="sp sh-theme">
+      <StorePageHeader
+        crumbs={[
+          { label: 'Shop by vehicle', href: '/vehicles' },
+          ...(vehicle?.make ? [{ label: vehicle.make, href: `/vehicles/${encodeURIComponent(vehicle.make)}` }] : []),
+          currentPage > 1 ? { label: displayName, href: `/model/${slug}` } : { label: displayName },
+          ...(currentPage > 1 ? [{ label: `Page ${currentPage}` }] : []),
+        ]}
+        title={
+          <span className="flex items-center gap-4">
+            <span className="hidden h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-hairline sm:block">
+              <VehicleImage src={heroImage} alt={displayName} make={vehicle?.make} sizes="96px" className="h-full w-full object-cover" />
+            </span>
+            <span>{displayName} parts &amp; accessories</span>
+          </span>
+        }
+        subtitle={`Every part here is listed as fitting your ${displayName}.`}
+        aside={!loading && !error ? `${safeTotal.toLocaleString('en-IN')} product${safeTotal !== 1 ? 's' : ''}` : undefined}
+      />
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="lg:grid lg:grid-cols-4 lg:gap-8">
+      <div className="sp-wrap">
+        <div className="flex gap-6 pt-6">
           {/* Sidebar */}
-          <aside className="hidden lg:block">
-            <div className="bg-obsidian border border-hairline rounded-sm p-6 sticky top-[calc(var(--store-header-h)+20px)]">
-              <h2 className="font-display font-light text-ink tracking-[-0.01em] mb-5 flex items-center gap-2">
-                <Filter className="h-4 w-4 text-gold shrink-0" />
-                Category Filters
-              </h2>
+          <aside className="hidden w-64 shrink-0 lg:block">
+            <div className="sticky top-[calc(var(--store-header-h)+20px)] max-h-[calc(100vh-var(--store-header-h)-40px)] overflow-y-auto rounded-xl bg-white p-5 shadow-sm">
               {categoryFilters}
             </div>
           </aside>
 
           {/* Products */}
-          <div className="lg:col-span-3">
+          <div className="min-w-0 flex-1">
             {/* Results Header */}
-            <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <p className="text-ink/70 font-display">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
+              <p className="text-[14px] text-ink-muted">
                 {loading ? (
                   'Loading products...'
                 ) : products.length > 0 ? (
@@ -406,7 +379,7 @@ export default function VehicleModelListing({
                 {/* Mobile Filter Button */}
                 <button
                   onClick={() => setDrawerOpen(true)}
-                  className="lg:hidden flex items-center gap-2 text-sm font-display font-bold text-ink/70 uppercase tracking-widest bg-obsidian-raised px-4 py-2 rounded-sm border border-hairline hover:border-gold transition-colors"
+                  className="inline-flex items-center gap-2 rounded-full border border-hairline bg-white px-4 py-2 text-[14px] font-semibold text-ink transition-colors hover:border-gold hover:text-gold lg:hidden"
                 >
                   <Filter className="h-4 w-4" />
                   Filters
@@ -414,10 +387,10 @@ export default function VehicleModelListing({
 
                 {/* Sort */}
                 <div className="flex items-center gap-2">
-                  <label htmlFor="sort" className="text-sm text-ink-muted font-display">Sort:</label>
+                  <label htmlFor="sort" className="hidden text-[14px] text-ink-muted sm:inline">Sort by</label>
                   <select
                     id="sort"
-                    className="bg-obsidian-raised border border-hairline text-ink/70 rounded-sm px-3 py-2 text-sm focus:outline-none focus:border-gold font-display transition-colors"
+                    className="rounded-full border border-hairline bg-white px-4 py-2 text-[14px] font-medium text-ink outline-none focus:border-gold"
                     value={currentSort}
                     onChange={handleSortChange}
                     disabled={loading}
@@ -434,32 +407,28 @@ export default function VehicleModelListing({
 
             {/* Grid / states */}
             {loading ? (
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-6">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="bg-obsidian border border-hairline rounded-sm overflow-hidden animate-pulse">
-                    <div className="aspect-[4/5] bg-obsidian-raised" />
-                    <div className="p-5 space-y-3">
-                      <div className="h-4 bg-obsidian-raised rounded-sm" />
-                      <div className="h-4 bg-obsidian-raised rounded-sm w-2/3" />
-                      <div className="h-5 bg-obsidian-raised rounded-sm w-1/2" />
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="overflow-hidden rounded-xl border border-hairline bg-white">
+                    <div className="aspect-square animate-pulse bg-obsidian-deep" />
+                    <div className="space-y-3 p-4">
+                      <div className="h-4 w-3/4 animate-pulse rounded bg-obsidian-deep" />
+                      <div className="h-5 w-1/2 animate-pulse rounded bg-obsidian-deep" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : error ? (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8 text-center max-w-2xl mx-auto">
-                <h3 className="text-lg font-display font-bold text-red-600 uppercase tracking-wide mb-3">Error Loading Products</h3>
-                <p className="text-ink/70 font-display mb-5">{error}</p>
-                <button
-                  onClick={() => router.refresh()}
-                  className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
-                >
-                  Retry
+              <div className="sp-card sp-empty" role="alert">
+                <p className="sp-empty-title">We couldn&apos;t load the products</p>
+                <p>{error}</p>
+                <button onClick={() => router.refresh()} className="sh-btn sh-btn-primary">
+                  Try again
                 </button>
               </div>
             ) : products.length > 0 ? (
               <div>
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:gap-6">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
                   {products
                     .filter((p) => p && (p._id || (p as { id?: string }).id))
                     .map((product) => {
@@ -478,7 +447,7 @@ export default function VehicleModelListing({
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                  <div className="mt-12 flex items-center justify-center">
+                  <div className="mt-10 flex items-center justify-center">
                     {/* Real <a href> links, NOT router.push buttons. Pagination that
                         exists only as an onClick has no crawl path at all: pages 2..n of
                         every model listing were unreachable to a crawler and are absent
@@ -522,14 +491,13 @@ export default function VehicleModelListing({
                 )}
               </div>
             ) : (
-              <div className="text-center py-16">
-                <p className="text-ink-muted font-display text-lg mb-4">No products found for {displayName}</p>
-                <button
-                  onClick={() => handleCategoryChange('')}
-                  className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors"
-                >
-                  View all products
-                </button>
+              <div className="sp-card sp-empty">
+                <p className="sp-empty-title">No products listed for {displayName} yet</p>
+                <p>Our specialists can still find parts that fit — or try all categories.</p>
+                <div className="flex flex-wrap justify-center gap-3">
+                  <button onClick={() => handleCategoryChange('')} className="sh-btn sh-btn-outline">View all categories</button>
+                  <Link href="/consultation" className="sh-btn sh-btn-primary">Ask a specialist</Link>
+                </div>
               </div>
             )}
           </div>
@@ -537,50 +505,33 @@ export default function VehicleModelListing({
 
         {/* Related Vehicles */}
         {relatedVehicles.length > 0 && (
-          <section className="mt-16">
-            <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-8">
-              Related {vehicle?.make || 'Vehicles'}
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <section className="sp-section" aria-labelledby="related-title">
+            <div className="sp-section-head">
+              <h2 id="related-title" className="sp-h2">More {vehicle?.make || 'vehicles'}</h2>
+              <Link href="/vehicles" className="st-link">All vehicles ›</Link>
+            </div>
+            <div className="sp-tiles">
               {relatedVehicles
                 .filter((v) => v && v._id && v.slug)
                 .slice(0, RELATED_LIMIT)
-                .map((relatedVehicle) => {
-                  const imageUrl = resolveRelatedVehicleImage(relatedVehicle);
-                  return (
-                    <Link
-                      key={relatedVehicle._id}
-                      href={`/model/${encodeURIComponent(relatedVehicle.slug)}`}
-                      className="group block"
-                    >
-                      <div className="bg-obsidian border border-hairline rounded-sm overflow-hidden hover:border-gold transition-colors">
-                        <div className="aspect-square bg-obsidian-raised flex items-center justify-center overflow-hidden">
-                          {imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={imageUrl}
-                              srcSet={cloudinarySrcSet(imageUrl, CARD_WIDTHS)}
-                              sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                              alt={relatedVehicle.name || `${relatedVehicle.make} ${relatedVehicle.model}`}
-                              className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
-                              onError={(e) => swapImageToFallback(e.currentTarget)}
-                              loading="lazy"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <span className="text-ink-muted font-display text-xs">No image</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="p-3 text-center bg-obsidian-raised border-t border-hairline">
-                          <h3 className="text-sm font-display font-bold text-ink/70 group-hover:text-gold uppercase tracking-wide transition-colors">
-                            {relatedVehicle.model}
-                          </h3>
-                        </div>
+                .map((relatedVehicle) => (
+                  <Link key={relatedVehicle._id} href={`/model/${encodeURIComponent(relatedVehicle.slug)}`} className="sp-tile">
+                    <div className="sp-tile-media">
+                      <VehicleImage
+                        src={resolveRelatedVehicleImage(relatedVehicle)}
+                        alt={relatedVehicle.name || `${relatedVehicle.make} ${relatedVehicle.model}`}
+                        make={relatedVehicle.make}
+                      />
+                    </div>
+                    <div className="sp-tile-body">
+                      <div>
+                        <p className="sp-tile-name">{relatedVehicle.model}</p>
+                        <p className="sp-tile-sub">{relatedVehicle.make}</p>
                       </div>
-                    </Link>
-                  );
-                })}
+                      <span className="sp-tile-go" aria-hidden="true">›</span>
+                    </div>
+                  </Link>
+                ))}
             </div>
           </section>
         )}
@@ -588,15 +539,15 @@ export default function VehicleModelListing({
 
       {/* Mobile filter drawer */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-obsidian-deep/70" onClick={() => setDrawerOpen(false)} aria-hidden />
-          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-obsidian-deep">
+        <div className="fixed inset-0 z-[100] lg:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} aria-hidden />
+          <div className="absolute inset-y-0 left-0 flex w-[86vw] max-w-sm flex-col bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
-              <h2 className="font-display font-light text-ink tracking-[-0.01em] flex items-center gap-2">
-                <Filter className="h-4 w-4 text-gold shrink-0" />
-                Category Filters
+              <h2 className="flex items-center gap-2 text-[17px] font-bold text-ink">
+                <Filter className="h-4 w-4 shrink-0 text-gold" />
+                Filters
               </h2>
-              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="text-ink-muted hover:text-ink">
+              <button onClick={() => setDrawerOpen(false)} aria-label="Close filters" className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-obsidian-deep hover:text-ink">
                 <X className="h-5 w-5" />
               </button>
             </div>

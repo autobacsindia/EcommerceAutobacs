@@ -85,17 +85,17 @@ export default function ActiveFilters() {
         <button
           key={c.key}
           onClick={c.remove}
-          className="group inline-flex items-center gap-2 border border-gold/40 px-3 py-1.5 font-display text-[11px] tracking-[0.04em] text-ink transition-colors hover:bg-gold hover:text-obsidian"
+          className="group inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 text-[13px] font-medium text-ink transition-colors hover:bg-gold hover:text-white"
         >
           {c.label}
-          <X className="h-3 w-3 text-gold transition-colors group-hover:text-obsidian" />
+          <X className="h-3.5 w-3.5 text-gold transition-colors group-hover:text-white" />
         </button>
       ))}
       <button
         onClick={() => replaceParams((p) => {
           ['category', 'brand', 'rating', 'minPrice', 'maxPrice', 'inStock', 'vehicleMake', 'vehicleModel'].forEach((k) => p.delete(k));
         })}
-        className="font-display text-[10px] uppercase tracking-[0.2em] text-ink-muted underline-offset-4 hover:text-gold hover:underline"
+        className="text-[13px] font-semibold text-[#0b6b9a] underline-offset-4 hover:text-gold hover:underline"
       >
         Clear all
       </button>

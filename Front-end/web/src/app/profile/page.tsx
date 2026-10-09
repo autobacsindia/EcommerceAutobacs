@@ -15,8 +15,8 @@ import KarmaBadge from '@/components/profile/KarmaBadge';
 import RecentOrdersCard from '@/components/profile/RecentOrdersCard';
 import AffiliateCard from '@/components/profile/AffiliateCard';
 
-const inputClass = 'mt-1 block w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm p-2 focus:outline-none focus:border-gold font-display text-sm';
-const labelClass = 'block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1';
+const inputClass = 'mt-1 block w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg p-2 focus:outline-none focus:border-gold font-display text-sm';
+const labelClass = 'block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1';
 
 export default function ProfilePage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -174,8 +174,8 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="mb-10">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Account</p>
-          <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">My Profile</h1>
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">Account</p>
+          <h1 className="mt-4 text-[clamp(24px,3vw,36px)] font-bold leading-[0.95] tracking-[-0.01em] text-ink">My Profile</h1>
         </div>
 
         {/* Identity header — name, karma, email, verification */}
@@ -187,7 +187,7 @@ export default function ProfilePage() {
                 <User className="h-10 w-10 text-gold" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">
+                <h2 className="text-2xl font-display font-bold text-ink tracking-[-0.01em]">
                   {editing ? (
                     <input
                       type="text"
@@ -231,7 +231,7 @@ export default function ProfilePage() {
 
           {/* Email verification banner — unverified */}
           {verificationStatus && !verificationStatus.isVerified && (
-            <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 rounded-sm p-4">
+            <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <svg className="h-5 w-5 text-yellow-700 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -249,7 +249,7 @@ export default function ProfilePage() {
                   <button
                     onClick={handleResendVerification}
                     disabled={isResendingVerification}
-                    className="mt-3 inline-flex items-center px-3 py-1.5 border border-yellow-500/40 text-sm font-display font-bold uppercase tracking-widest rounded-sm text-yellow-700 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="mt-3 inline-flex items-center px-3 py-1.5 border border-yellow-500/40 text-[15px] font-display font-bold rounded-full text-yellow-700 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {isResendingVerification ? 'Sending...' : 'Resend Verification Email'}
                   </button>
@@ -270,9 +270,9 @@ export default function ProfilePage() {
           {/* Addresses */}
           {editing ? (
             <div className="mb-6">
-              <h3 className="text-sm font-display font-bold text-ink-muted uppercase tracking-widest mb-4">Addresses</h3>
+              <h3 className="text-sm font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-4">Addresses</h3>
               {formData.addresses.map((address, index) => (
-                <div key={index} className="border border-hairline rounded-sm p-4 mb-4 bg-obsidian-raised">
+                <div key={index} className="border border-hairline rounded-lg p-4 mb-4 bg-obsidian-raised">
                   <div className="flex justify-between items-start">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 grow">
                       {(['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country'] as const).map((field) => (
@@ -295,8 +295,8 @@ export default function ProfilePage() {
               ))}
 
               {showAddAddress ? (
-                <div className="border border-gold/30 rounded-sm p-4 mb-4 bg-obsidian-raised">
-                  <h4 className="text-sm font-display font-bold text-gold uppercase tracking-widest mb-4">Add New Address</h4>
+                <div className="border border-gold/30 rounded-lg p-4 mb-4 bg-obsidian-raised">
+                  <h4 className="text-sm font-display font-bold text-gold uppercase tracking-[0.12em] mb-4">Add New Address</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {(['fullName', 'phone', 'addressLine1', 'addressLine2', 'city', 'state', 'postalCode', 'country'] as const).map((field) => (
                       <div key={field}>
@@ -311,16 +311,16 @@ export default function ProfilePage() {
                     ))}
                   </div>
                   <div className="mt-4 flex gap-3">
-                    <button onClick={addNewAddress} className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                    <button onClick={addNewAddress} className="bg-gold hover:opacity-90 text-white font-display font-bold px-4 py-2 rounded-full transition-colors text-[15px]">
                       Add Address
                     </button>
-                    <button onClick={() => setShowAddAddress(false)} className="bg-obsidian-raised hover:bg-obsidian-raised text-ink/70 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                    <button onClick={() => setShowAddAddress(false)} className="bg-obsidian-raised hover:bg-obsidian-raised text-ink/70 font-display font-bold uppercase tracking-[0.12em] px-4 py-2 rounded-lg transition-colors text-sm">
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
-                <button onClick={() => setShowAddAddress(true)} className="flex items-center gap-2 text-gold hover:text-ink font-display font-bold uppercase tracking-widest text-sm transition-colors mb-4">
+                <button onClick={() => setShowAddAddress(true)} className="flex items-center gap-2 text-gold hover:text-ink font-display font-bold uppercase tracking-[0.12em] text-sm transition-colors mb-4">
                   <Plus className="h-4 w-4" />
                   Add Address
                 </button>
@@ -328,22 +328,22 @@ export default function ProfilePage() {
             </div>
           ) : (
             <div className="mb-6">
-              <h3 className="text-sm font-display font-bold text-ink-muted uppercase tracking-widest mb-4">Addresses</h3>
+              <h3 className="text-sm font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-4">Addresses</h3>
               {profile?.addresses && profile.addresses.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {profile.addresses.map((address, index) => (
-                    <div key={index} className="border border-hairline rounded-sm p-4 bg-obsidian-raised">
+                    <div key={index} className="border border-hairline rounded-lg p-4 bg-obsidian-raised">
                       <div className="flex items-start gap-3">
                         <MapPin className="h-5 w-5 text-gold mt-0.5 shrink-0" />
                         <div className="font-display text-sm">
-                          <p className="font-display font-light text-ink tracking-[-0.01em] mb-1">{address.fullName}</p>
+                          <p className="font-display text-ink tracking-[-0.01em] mb-1">{address.fullName}</p>
                           <p className="text-ink/70">{address.addressLine1}</p>
                           {address.addressLine2 && <p className="text-ink/70">{address.addressLine2}</p>}
                           <p className="text-ink/70">{address.city}, {address.state} {address.postalCode}</p>
                           <p className="text-ink/70">{address.country}</p>
                           <p className="text-ink-muted">Phone: {address.phone}</p>
                           {address.isDefault && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-display font-bold uppercase tracking-widest bg-gold/10 text-gold border border-gold/30 mt-2">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[15px] font-display font-bold bg-gold/10 text-gold border border-gold/30 mt-2">
                               Default
                             </span>
                           )}
@@ -362,32 +362,32 @@ export default function ProfilePage() {
           <div className="flex flex-wrap gap-3 pt-4 border-t border-hairline">
             {editing ? (
               <>
-                <button onClick={handleSave} className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                <button onClick={handleSave} className="bg-gold hover:opacity-90 text-white font-display font-bold px-4 py-2 rounded-full transition-colors text-[15px]">
                   Save Changes
                 </button>
-                <button onClick={handleCancelEdit} className="bg-obsidian-raised hover:bg-obsidian-raised text-ink/70 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+                <button onClick={handleCancelEdit} className="bg-obsidian-raised hover:bg-obsidian-raised text-ink/70 font-display font-bold uppercase tracking-[0.12em] px-4 py-2 rounded-lg transition-colors text-sm">
                   Cancel
                 </button>
               </>
             ) : (
-              <button onClick={handleEdit} className="flex items-center gap-2 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+              <button onClick={handleEdit} className="flex items-center gap-2 bg-gold hover:opacity-90 text-white font-display font-bold px-4 py-2 rounded-full transition-colors text-[15px]">
                 <Edit className="h-4 w-4" />
                 Edit Profile
               </button>
             )}
             {user?.role === 'admin' && (
-              <Link href="/admin/dashboard" className="flex items-center gap-2 bg-obsidian-raised hover:bg-gold text-ink/70 hover:text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+              <Link href="/admin/dashboard" className="flex items-center gap-2 bg-obsidian-raised hover:bg-gold text-ink/70 hover:text-obsidian font-display font-bold uppercase tracking-[0.12em] px-4 py-2 rounded-lg transition-colors text-sm">
                 <Shield className="h-4 w-4" />
                 Admin Dashboard
               </Link>
             )}
             {user?.role === 'staff' && (
-              <Link href="/team" className="flex items-center gap-2 bg-obsidian-raised hover:bg-gold text-ink/70 hover:text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+              <Link href="/team" className="flex items-center gap-2 bg-obsidian-raised hover:bg-gold text-ink/70 hover:text-obsidian font-display font-bold uppercase tracking-[0.12em] px-4 py-2 rounded-lg transition-colors text-sm">
                 <Shield className="h-4 w-4" />
                 Team Panel
               </Link>
             )}
-            <button onClick={handleLogout} className="bg-obsidian-raised hover:bg-red-500/20 text-red-600 hover:text-red-600 border border-hairline hover:border-red-500/30 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+            <button onClick={handleLogout} className="bg-obsidian-raised hover:bg-red-500/20 text-red-600 hover:text-red-600 border border-hairline hover:border-red-500/30 font-display font-bold px-4 py-2 rounded-full transition-colors text-[15px]">
               Logout
             </button>
           </div>

@@ -1,20 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { vehicleService, Vehicle } from '@/services/vehicleService';
-import { cloudinarySrcSet, CARD_WIDTHS, swapImageToFallback } from '@/lib/cloudinarySrcSet';
+import StorePageHeader from '@/components/store/StorePageHeader';
+import VehicleImage from '@/components/vehicles/VehicleImage';
 
 /**
- * "Browse by Vehicle" grid. Sourced from the backend `/vehicles` API (the single
- * source of truth used across the vehicle flow), NOT a hardcoded list — so every
- * card shows a real make + model, links to a slug that actually resolves, and the
- * set stays in sync as vehicles are added/removed in admin.
+ * "Shop by Vehicle". Sourced from the backend `/vehicles` API (the single source of
+ * truth used across the vehicle flow), NOT a hardcoded list — so every card shows a
+ * real make + model, links to a slug that actually resolves, and the set stays in
+ * sync as vehicles are added/removed in admin.
+ *
+ * Grouped by make with make chips and a quick filter, so a shopper with 80 cards in
+ * front of them can get to their car in one tap or a few keystrokes.
  */
 export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [make, setMake] = useState<string>('');
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -35,84 +41,123 @@ export default function VehiclesPage() {
     };
   }, []);
 
+  const makes = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const v of vehicles) counts.set(v.make, (counts.get(v.make) || 0) + 1);
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [vehicles]);
+
+  const groups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const shown = vehicles.filter(
+      (v) => (!make || v.make === make) && (!q || `${v.make} ${v.model}`.toLowerCase().includes(q)),
+    );
+    const byMake = new Map<string, Vehicle[]>();
+    for (const v of shown) byMake.set(v.make, [...(byMake.get(v.make) || []), v]);
+    return [...byMake.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([m, list]) => [m, list.sort((a, b) => a.model.localeCompare(b.model))] as const);
+  }, [vehicles, make, query]);
+
+  const shownCount = groups.reduce((n, [, list]) => n + list.length, 0);
+
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Hero */}
-      <div className="bg-obsidian border-b border-hairline py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-3">Browse by Vehicle</p>
-          <h1 className="text-5xl font-display font-light text-ink tracking-[-0.01em] mb-4">Explore by Vehicle</h1>
-          <p className="text-ink/70 font-display text-lg max-w-3xl mx-auto">
-            Find the perfect parts and accessories for your vehicle
-          </p>
-        </div>
-      </div>
+    <div className="sp sh-theme">
+      <StorePageHeader
+        crumbs={[{ label: 'Shop by vehicle' }]}
+        title="Shop by vehicle"
+        subtitle="Pick your car to see only the parts and accessories that fit it."
+        aside={!loading && !error ? `${vehicles.length} vehicles · ${makes.length} makes` : undefined}
+      >
+        {/* Rendered from the first paint (disabled while loading) so the grid below
+            does not jump down when the list arrives — that shift measured CLS 0.097. */}
+        {!error && (
+          <div className="mt-4 flex flex-col gap-3">
+            <input
+              disabled={loading}
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Type your car, e.g. Fortuner or City"
+              aria-label="Find your vehicle"
+              className="h-11 w-full max-w-md rounded-full border border-[#c9cfcd] bg-white px-5 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
+            />
+            <div className="sp-chips min-h-[40px]" role="group" aria-label="Filter by make">
+              <button type="button" className="sp-chip" aria-pressed={!make} onClick={() => setMake('')}>
+                All makes
+              </button>
+              {makes.map(([m, n]) => (
+                <button key={m} type="button" className="sp-chip" aria-pressed={make === m} onClick={() => setMake(make === m ? '' : m)}>
+                  {m} <span className="sp-chip-n">{n}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </StorePageHeader>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-2">All Vehicles</h2>
-          <p className="text-ink/70 font-display max-w-2xl mx-auto">
-            Select your vehicle to browse compatible parts and accessories
-          </p>
-        </div>
-
+      <div className="sp-wrap">
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {[...Array(10)].map((_, index) => (
-              <div key={index} className="bg-obsidian border border-hairline rounded-lg overflow-hidden animate-pulse">
-                <div className="aspect-square bg-obsidian-raised" />
-                <div className="p-3 bg-obsidian">
-                  <div className="h-4 bg-obsidian-raised rounded w-3/4 mx-auto" />
-                </div>
+          <div className="sp-section sp-tiles" aria-busy="true">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="sp-tile">
+                <div className="sp-tile-media animate-pulse" />
+                <div className="sp-tile-body"><div className="h-4 w-2/3 animate-pulse rounded bg-obsidian-deep" /></div>
               </div>
             ))}
           </div>
         ) : error ? (
-          <div className="text-center py-16">
-            <h3 className="text-2xl font-display font-bold text-red-600 uppercase mb-4">Error Loading Vehicles</h3>
-            <p className="text-ink/70 font-display mb-6">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"
-            >
-              Retry
+          <div className="sp-section sp-card sp-empty">
+            <p className="sp-empty-title">We couldn&apos;t load the vehicles</p>
+            <p>Please check your connection and try again.</p>
+            <button type="button" onClick={() => window.location.reload()} className="sh-btn sh-btn-primary">
+              Try again
             </button>
           </div>
-        ) : vehicles.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-ink-muted font-display text-lg">No vehicles found.</p>
+        ) : shownCount === 0 ? (
+          <div className="sp-section sp-card sp-empty">
+            <p className="sp-empty-title">{vehicles.length ? 'No vehicle matches that' : 'No vehicles yet'}</p>
+            <p>Can&apos;t find your car? Our specialists can still help you find parts that fit.</p>
+            <div className="flex flex-wrap justify-center gap-3">
+              {vehicles.length > 0 && (
+                <button type="button" className="sh-btn sh-btn-outline" onClick={() => { setQuery(''); setMake(''); }}>
+                  Show all vehicles
+                </button>
+              )}
+              <Link href="/consultation" className="sh-btn sh-btn-primary">Ask a specialist</Link>
+            </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {vehicles.map((vehicle) => (
-              <Link
-                key={vehicle._id}
-                href={`/model/${encodeURIComponent(vehicle.slug)}`}
-                className="group block"
-              >
-                <div className="bg-obsidian border border-hairline rounded-lg overflow-hidden hover:border-gold transition-all duration-300">
-                  <div className="aspect-square bg-obsidian-raised flex items-center justify-center overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={vehicle.image?.url || '/images/fallback-product.png'}
-                      srcSet={cloudinarySrcSet(vehicle.image?.url || '', CARD_WIDTHS)}
-                      sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
-                      alt={vehicle.image?.alt || `${vehicle.make} ${vehicle.model}`}
-                      className="object-cover w-full h-full scale-110 group-hover:scale-125 transition-transform duration-500"
-                      onError={(e) => swapImageToFallback(e.currentTarget)}
-                      loading="lazy"
-                    />
-                  </div>
-                  <div className="p-3 text-center bg-obsidian border-t border-hairline">
-                    <h3 className="text-sm font-display font-light text-ink tracking-[-0.01em] group-hover:text-gold transition-colors">
-                      {vehicle.make} {vehicle.model}
-                    </h3>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+          groups.map(([m, list]) => (
+            <section key={m} className="sp-section" aria-labelledby={`make-${m}`}>
+              <div className="sp-section-head">
+                <h2 id={`make-${m}`} className="sp-h2">{m}</h2>
+                <Link href={`/products?${new URLSearchParams({ vehicleMake: m }).toString()}`} className="st-link">
+                  All {m} parts ›
+                </Link>
+              </div>
+              <div className="sp-tiles">
+                {list.map((vehicle) => (
+                  <Link key={vehicle._id} href={`/model/${encodeURIComponent(vehicle.slug)}`} className="sp-tile">
+                    <div className="sp-tile-media">
+                      <VehicleImage
+                        src={vehicle.image?.url}
+                        alt={vehicle.image?.alt || `${vehicle.make} ${vehicle.model}`}
+                        make={vehicle.make}
+                      />
+                    </div>
+                    <div className="sp-tile-body">
+                      <div>
+                        <p className="sp-tile-name">{vehicle.model}</p>
+                        <p className="sp-tile-sub">{vehicle.make}</p>
+                      </div>
+                      <span className="sp-tile-go" aria-hidden="true">›</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          ))
         )}
       </div>
     </div>

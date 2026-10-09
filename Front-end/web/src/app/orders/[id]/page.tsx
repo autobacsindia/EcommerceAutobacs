@@ -188,7 +188,7 @@ function ItemFulfilmentChip({
 
   return (
     <span
-      className={`inline-block mt-1.5 px-2 py-0.5 border rounded-sm font-display font-bold uppercase tracking-widest text-[10px] ${className}`}
+      className={`inline-block mt-1.5 px-2 py-0.5 border rounded-full font-display font-bold text-[15px] ${className}`}
     >
       {label}
     </span>
@@ -433,9 +433,9 @@ export default function OrderDetailPage() {
   if (error || !order) {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center max-w-md mx-4">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 text-center max-w-md mx-4">
           <p className="text-red-600 font-display mb-4">{error || 'Order not found'}</p>
-          <button onClick={() => router.push('/orders')} className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+          <button onClick={() => router.push('/orders')} className="bg-gold hover:opacity-90 text-white font-display font-bold px-4 py-2 rounded-full transition-colors text-[15px]">
             Back to Orders
           </button>
         </div>
@@ -443,7 +443,7 @@ export default function OrderDetailPage() {
     );
   }
 
-  const cardClass = 'bg-obsidian border border-hairline rounded-sm p-6 mb-6';
+  const cardClass = 'bg-obsidian border border-hairline rounded-lg p-6 mb-6';
 
   // The won goodie as a display line (0 or 1). `audience: 'customer'` hides a VOIDED
   // reward: once the order is cancelled or refunded the gift is withdrawn, and showing
@@ -454,7 +454,7 @@ export default function OrderDetailPage() {
     <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* Back */}
-        <Link href="/orders" className="inline-flex items-center gap-2 text-gold hover:text-ink font-display font-bold uppercase tracking-widest text-sm transition-colors mb-6">
+        <Link href="/orders" className="inline-flex items-center gap-2 text-gold hover:text-ink font-display font-bold uppercase tracking-[0.12em] text-sm transition-colors mb-6">
           <ArrowLeft className="h-4 w-4" />
           Back to Orders
         </Link>
@@ -463,15 +463,15 @@ export default function OrderDetailPage() {
         <div className={cardClass}>
           <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
             <div>
-              <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-1">Order</p>
-              <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-2">
+              <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-1 font-semibold">Order</p>
+              <h1 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-2">
                 #{order._id.slice(-8).toUpperCase()}
               </h1>
               <p className="text-ink-muted font-display text-sm">
                 Placed on {formatLongDateTimeIST(order.createdAt)}
               </p>
             </div>
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-sm border text-sm font-display font-bold uppercase tracking-widest ${getStatusColor(order.status)}`}>
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-[15px] font-display font-bold ${getStatusColor(order.status)}`}>
               {getStatusIcon(order.status)}
               {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
             </div>
@@ -483,7 +483,7 @@ export default function OrderDetailPage() {
 
         {/* Payment confirmation banner (shown while polling for the confirmed state) */}
         {isConfirmingPayment && (
-          <div className="bg-gold/10 border border-gold/30 rounded-sm p-4 mb-6 flex items-center gap-3">
+          <div className="bg-gold/10 border border-gold/30 rounded-lg p-4 mb-6 flex items-center gap-3">
             <div className="w-4 h-4 border-2 border-gold border-t-transparent rounded-full animate-spin shrink-0" />
             <p className="text-sm text-ink/80 font-display">
               Payment received — we’re confirming your order. This page updates automatically.
@@ -493,10 +493,10 @@ export default function OrderDetailPage() {
 
         {/* Actions */}
         <div className={cardClass}>
-          <h2 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-4">Available Actions</h2>
+          <h2 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-4">Available Actions</h2>
           <div className="flex flex-wrap gap-3">
             {canRetryPayment(order) && (
-              <button onClick={handleRetryPayment} disabled={isPaymentProcessing} className="flex items-center gap-2 px-4 py-2 bg-gold hover:opacity-90 text-obsidian rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              <button onClick={handleRetryPayment} disabled={isPaymentProcessing} className="flex items-center gap-2 px-4 py-2 bg-gold hover:opacity-90 text-white rounded-full font-display font-bold text-[15px] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {isPaymentProcessing ? <div className="w-4 h-4 border-2 border-hairline border-t-transparent rounded-full animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
                 Retry Payment
               </button>
@@ -507,7 +507,7 @@ export default function OrderDetailPage() {
                 title={cancelScope === 'partial'
                   ? `Part of this order has already shipped. Cancelling now covers the ${cancellableUnits} item(s) that have not left yet.`
                   : undefined}
-                className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-600 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors"
+                className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-600 hover:bg-red-500/10 rounded-full font-display font-bold text-[15px] transition-colors"
               >
                 <XCircle className="h-4 w-4" />
                 {/* Naming the scope is the point: "Cancel Order" on a part-shipped order
@@ -521,7 +521,7 @@ export default function OrderDetailPage() {
               <button
                 disabled
                 title="Every item on this order has shipped. Once it arrives you can raise a return."
-                className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink-muted rounded-sm font-display font-bold uppercase tracking-widest text-sm cursor-not-allowed opacity-60"
+                className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink-muted rounded-full font-display font-bold text-[15px] cursor-not-allowed opacity-60"
               >
                 <XCircle className="h-4 w-4" />
                 Already Shipped — Can’t Cancel
@@ -531,29 +531,29 @@ export default function OrderDetailPage() {
                 courier has none, and the old /orders/[id]/tracking fallback is
                 not a route (404). The number + carrier still show below. */}
             {!isSplitOrder && order.trackingNumber && order.carrier?.trackingUrl && (
-              <Link href={order.carrier.trackingUrl} target="_blank" className="flex items-center gap-2 px-4 py-2 bg-gold hover:opacity-90 text-obsidian rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+              <Link href={order.carrier.trackingUrl} target="_blank" className="flex items-center gap-2 px-4 py-2 bg-gold hover:opacity-90 text-white rounded-full font-display font-bold text-[15px] transition-colors">
                 <Truck className="h-4 w-4" />
                 Track Package
               </Link>
             )}
             {canReturnOrder(order) && !hasReturnRequest(order) && (
-              <button onClick={() => setShowReturnDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-orange-500/40 text-orange-700 hover:bg-orange-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+              <button onClick={() => setShowReturnDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-orange-500/40 text-orange-700 hover:bg-orange-500/10 rounded-full font-display font-bold text-[15px] transition-colors">
                 <RotateCcw className="h-4 w-4" />
                 Return / Exchange
               </button>
             )}
             {canDeleteOrder(order.status) && (
-              <button onClick={handleDeleteOrder} className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-600 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+              <button onClick={handleDeleteOrder} className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-600 hover:bg-red-500/10 rounded-full font-display font-bold text-[15px] transition-colors">
                 <Trash2 className="h-4 w-4" />
                 Delete Order
               </button>
             )}
-            <Link href={`/contact?orderId=${order.orderNumber || order._id}`} className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink/70 hover:text-ink hover:border-gold rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+            <Link href={`/contact?orderId=${order.orderNumber || order._id}`} className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink/70 hover:text-ink hover:border-gold rounded-full font-display font-bold text-[15px] transition-colors">
               <HelpCircle className="h-4 w-4" />
               Need Help?
             </Link>
             {['paid', 'refunded'].includes((order as { paymentStatus?: string }).paymentStatus || '') && (
-              <a href={`/api/v1/orders/${order._id}/invoice`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink/70 hover:text-ink hover:border-gold rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+              <a href={`/api/v1/orders/${order._id}/invoice`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 border border-hairline text-ink/70 hover:text-ink hover:border-gold rounded-full font-display font-bold text-[15px] transition-colors">
                 <Download className="h-4 w-4" />
                 Download Invoice
               </a>
@@ -578,7 +578,7 @@ export default function OrderDetailPage() {
         */}
         {!isSplitOrder && order.trackingNumber && (
           <div className={cardClass}>
-            <h2 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-4">Tracking Information</h2>
+            <h2 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-4">Tracking Information</h2>
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-ink-muted font-display mb-1">Tracking Number</p>
@@ -608,7 +608,7 @@ export default function OrderDetailPage() {
 
         {/* Return Request — only when a return was actually raised */}
         {hasReturnRequest(order) && order.returnRequest && (
-          <div className="bg-orange-500/10 border border-orange-500/30 rounded-sm p-6 mb-6">
+          <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-6 mb-6">
             <h2 className="font-display font-bold text-orange-700 uppercase tracking-wide mb-4">Return Request</h2>
             <div className="grid md:grid-cols-2 gap-4">
               <div><p className="text-xs text-orange-700/70 font-display mb-1">Status</p><p className="text-orange-700 font-display font-bold">{(order.returnRequest.status || 'pending').toUpperCase()}</p></div>
@@ -622,7 +622,7 @@ export default function OrderDetailPage() {
 
         {/* Refund Info — only when a refund was actually initiated */}
         {hasRefund(order) && order.refundDetails && (
-          <div className="bg-gold/10 border border-gold/30 rounded-sm p-6 mb-6">
+          <div className="bg-gold/10 border border-gold/30 rounded-lg p-6 mb-6">
             <h2 className="font-display font-bold text-gold uppercase tracking-wide mb-4">Refund Information</h2>
             <div className="grid md:grid-cols-3 gap-4">
               <div><p className="text-xs text-gold/70 font-display mb-1">Refund Amount</p><p className="text-xl font-display font-bold text-gold">₹{(order.refundDetails.amount || 0).toFixed(2)}</p></div>
@@ -635,13 +635,13 @@ export default function OrderDetailPage() {
         {/* Info Cards */}
         <div className="grid md:grid-cols-3 gap-6 mb-6">
           {/* Shipping */}
-          <div className="bg-obsidian border border-hairline rounded-sm p-6">
+          <div className="bg-obsidian border border-hairline rounded-lg p-6">
             <div className="flex items-center gap-2 mb-4">
               <MapPin className="h-4 w-4 text-gold" />
-              <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Shipping Address</h3>
+              <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Shipping Address</h3>
             </div>
             <div className="font-display text-sm space-y-1">
-              <p className="font-display font-light text-ink tracking-[-0.01em]">{order.shippingAddress.fullName}</p>
+              <p className="font-display text-ink tracking-[-0.01em]">{order.shippingAddress.fullName}</p>
               <p className="text-ink/70">{order.shippingAddress.addressLine1}</p>
               {order.shippingAddress.addressLine2 && <p className="text-ink/70">{order.shippingAddress.addressLine2}</p>}
               <p className="text-ink/70">{order.shippingAddress.city}, {order.shippingAddress.state}</p>
@@ -655,13 +655,13 @@ export default function OrderDetailPage() {
               matching the order against their accounts, so the GSTIN is
               monospaced and the registered name is shown exactly as billed. */}
           {order.buyer?.type === 'enterprise' && (
-            <div className="bg-obsidian border border-hairline rounded-sm p-6">
+            <div className="bg-obsidian border border-hairline rounded-lg p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Building2 className="h-4 w-4 text-gold" />
-                <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Billed To</h3>
+                <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Billed To</h3>
               </div>
               <div className="font-display text-sm space-y-1">
-                <p className="font-display font-light text-ink tracking-[-0.01em]">{order.buyer.legalName}</p>
+                <p className="font-display text-ink tracking-[-0.01em]">{order.buyer.legalName}</p>
                 {order.buyer.gstin && (
                   <p className="text-ink/70 font-mono text-xs tracking-wide">GSTIN {order.buyer.gstin}</p>
                 )}
@@ -682,10 +682,10 @@ export default function OrderDetailPage() {
           )}
 
           {/* Payment */}
-          <div className="bg-obsidian border border-hairline rounded-sm p-6">
+          <div className="bg-obsidian border border-hairline rounded-lg p-6">
             <div className="flex items-center gap-2 mb-4">
               <CreditCard className="h-4 w-4 text-gold" />
-              <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Payment Details</h3>
+              <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Payment Details</h3>
             </div>
             <div className="font-display text-sm space-y-3">
               {order.payment ? (
@@ -705,7 +705,7 @@ export default function OrderDetailPage() {
                     </p>
                   </div>
                   {(order.payment as any)?.status === 'failed' && (
-                    <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded-sm text-sm">
+                    <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded-lg text-sm">
                       <div className="flex items-start gap-2 text-red-600">
                         <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                         <span className="font-display text-xs">Payment failed. Please verify your transaction or retry.</span>
@@ -736,10 +736,10 @@ export default function OrderDetailPage() {
           </div>
 
           {/* Order Summary */}
-          <div className="bg-obsidian border border-hairline rounded-sm p-6">
+          <div className="bg-obsidian border border-hairline rounded-lg p-6">
             <div className="flex items-center gap-2 mb-4">
               <Package className="h-4 w-4 text-gold" />
-              <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Order Summary</h3>
+              <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Order Summary</h3>
             </div>
             <div className="font-display text-sm space-y-2">
               <div className="flex justify-between"><span className="text-ink-muted">Subtotal</span><span className="text-ink/70">₹{(order.subtotal || 0).toFixed(2)}</span></div>
@@ -749,7 +749,7 @@ export default function OrderDetailPage() {
                 <div className="flex justify-between"><span className="text-ink-muted">Discount</span><span className="text-green-700">-₹{(order.discount || 0).toFixed(2)}</span></div>
               )}
               <div className="flex justify-between border-t border-hairline pt-3 mt-3">
-                <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
+                <span className="font-display text-ink tracking-[-0.01em]">Total</span>
                 <span className="text-xl font-display font-bold text-gold">₹{(order.totalAmount || 0).toFixed(2)}</span>
               </div>
             </div>
@@ -792,7 +792,7 @@ export default function OrderDetailPage() {
         */}
         {hasCancellations(order) && (
           <div className={cardClass}>
-            <h2 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-4">
+            <h2 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-4">
               Cancelled Items
             </h2>
             <div className="space-y-4">
@@ -878,7 +878,7 @@ export default function OrderDetailPage() {
             VOIDED reward — withdrawn when an order is cancelled or refunded — is
             dropped entirely for customers rather than dangled.
           */}
-          <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-6">
+          <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-6">
             Order Items ({giftLines.length + order.items.length})
           </h3>
           <div className="space-y-4">
@@ -888,7 +888,7 @@ export default function OrderDetailPage() {
               const productImage = product?.images?.[0]?.url || item.image;
               return (
                 <div key={item._id || index} className="flex gap-4 border-b border-hairline pb-4 last:border-b-0">
-                  <div className="w-20 h-20 bg-obsidian-raised border border-hairline rounded-sm overflow-hidden shrink-0">
+                  <div className="w-20 h-20 bg-obsidian-raised border border-hairline rounded-lg overflow-hidden shrink-0">
                     {productImage ? (
                       <img src={productImage} alt={productName} className="w-full h-full object-cover" />
                     ) : (
@@ -899,11 +899,11 @@ export default function OrderDetailPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     {product?._id ? (
-                      <Link href={productUrl(product, '/products') || '/products'} className="font-display font-light text-ink tracking-[-0.01em] hover:text-gold transition-colors line-clamp-2">
+                      <Link href={productUrl(product, '/products') || '/products'} className="font-display text-ink tracking-[-0.01em] hover:text-gold transition-colors line-clamp-2">
                         {productName}
                       </Link>
                     ) : (
-                      <p className="font-display font-light text-ink tracking-[-0.01em]">{productName}</p>
+                      <p className="font-display text-ink tracking-[-0.01em]">{productName}</p>
                     )}
                     {/*
                       WHICH MODEL they bought. Styled exactly as on /cart and
@@ -913,7 +913,7 @@ export default function OrderDetailPage() {
                       variant rename rewrite a historical order.
                     */}
                     {item.variantLabel && (
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-gold mt-1">{item.variantLabel}</p>
+                      <p className="text-[12px] uppercase tracking-[0.12em] text-gold mt-1 font-semibold">{item.variantLabel}</p>
                     )}
                     <p className="text-ink-muted font-display text-xs mt-1">Qty: {item.quantity}</p>
                     <p className="text-ink-muted font-display text-xs">₹{(item.price || 0).toFixed(2)} each</p>
@@ -931,7 +931,7 @@ export default function OrderDetailPage() {
                       if (!cancelled) return null;
                       const whole = cancelled >= (item.quantity || 0);
                       return (
-                        <span className="mt-1.5 inline-block px-2 py-0.5 border border-red-500/40 text-red-600 rounded-sm font-display font-bold uppercase tracking-widest text-[10px]">
+                        <span className="mt-1.5 inline-block px-2 py-0.5 border border-red-500/40 text-red-600 rounded-full font-display font-bold text-[15px]">
                           {whole ? 'Cancelled' : `${cancelled} of ${item.quantity} cancelled`}
                         </span>
                       );
@@ -952,7 +952,7 @@ export default function OrderDetailPage() {
                   <div className="text-right flex flex-col items-end gap-2 shrink-0">
                     <p className="font-display font-bold text-gold">₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}</p>
                     {product?._id && (
-                      <button onClick={() => handleBuyAgain(item)} disabled={addingToCart === item._id} className="flex items-center gap-1 text-xs text-gold hover:text-obsidian hover:bg-gold border border-gold/30 px-2 py-1 rounded-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-display font-bold uppercase tracking-widest">
+                      <button onClick={() => handleBuyAgain(item)} disabled={addingToCart === item._id} className="flex items-center gap-1 text-[15px] text-gold hover:text-obsidian hover:bg-gold border border-gold/30 px-2 py-1 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-display font-bold">
                         {addingToCart === item._id ? <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> : <ShoppingCart className="h-3 w-3" />}
                         Buy Again
                       </button>
@@ -981,7 +981,7 @@ export default function OrderDetailPage() {
                         ? ['delivered', 'returned'].includes(order.status)
                         : state === 'delivered';
                     })() && product?._id && (
-                      <button onClick={() => handleWriteReview(item)} className="flex items-center gap-1 text-xs text-gold hover:text-obsidian hover:bg-gold border border-gold/30 px-2 py-1 rounded-sm transition-colors font-display font-bold uppercase tracking-widest">
+                      <button onClick={() => handleWriteReview(item)} className="flex items-center gap-1 text-[15px] text-gold hover:text-obsidian hover:bg-gold border border-gold/30 px-2 py-1 rounded-full transition-colors font-display font-bold">
                         <Star className="h-3 w-3" />
                         Review
                       </button>
@@ -999,7 +999,7 @@ export default function OrderDetailPage() {
             */}
             {giftLines.map((line) => (
               <div key="spin-reward" className="flex gap-4 border-b border-hairline pb-4 last:border-b-0">
-                <div className="w-20 h-20 bg-gold/10 border border-gold/30 rounded-sm overflow-hidden shrink-0">
+                <div className="w-20 h-20 bg-gold/10 border border-gold/30 rounded-lg overflow-hidden shrink-0">
                   {line.image ? (
                     <img src={line.image} alt={line.name ?? 'Free gift'} className="w-full h-full object-cover" />
                   ) : (
@@ -1007,15 +1007,15 @@ export default function OrderDetailPage() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-display font-light text-ink tracking-[-0.01em]">{line.name}</p>
-                  <span className="inline-block mt-1 px-2 py-0.5 bg-gold/20 border border-gold/40 text-gold font-display font-bold uppercase tracking-widest text-[10px] rounded-sm">
+                  <p className="font-display text-ink tracking-[-0.01em]">{line.name}</p>
+                  <span className="inline-block mt-1 px-2 py-0.5 bg-gold/20 border border-gold/40 text-gold font-display font-bold text-[15px] rounded-full">
                     🎁 Goodie — free gift
                   </span>
                   <p className="text-ink-muted font-display text-xs mt-1">Qty: {line.quantity}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="font-display font-bold text-gold">FREE</p>
-                  <p className="text-ink-muted font-display text-[10px] uppercase tracking-widest mt-1">You won this</p>
+                  <p className="text-ink-muted font-display text-[12px] uppercase tracking-[0.12em] mt-1 font-semibold">You won this</p>
                 </div>
               </div>
             ))}
@@ -1031,7 +1031,7 @@ export default function OrderDetailPage() {
               aria-expanded={showTimeline}
               className="w-full flex items-center justify-between gap-2 group"
             >
-              <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">
+              <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">
                 Order Timeline
                 <span className="ml-2 text-ink/40 normal-case tracking-normal">({order.statusHistory.length})</span>
               </h3>
@@ -1049,7 +1049,7 @@ export default function OrderDetailPage() {
                     )}
                   </div>
                   <div className="flex-1 pb-6">
-                    <p className="font-display font-light text-ink tracking-[-0.01em] text-sm">
+                    <p className="font-display text-ink tracking-[-0.01em] text-sm">
                       {history.status.charAt(0).toUpperCase() + history.status.slice(1)}
                     </p>
                     <p className="text-xs text-ink-muted font-display mt-0.5">

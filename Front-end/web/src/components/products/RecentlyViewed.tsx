@@ -48,12 +48,12 @@ const RecentlyViewed = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-1">Your History</p>
-            <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">Recently Viewed</h2>
+            <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-1 font-semibold">Your History</p>
+            <h2 className="text-2xl font-display font-bold text-ink tracking-[-0.01em]">Recently Viewed</h2>
           </div>
           <button
             onClick={clearHistory}
-            className="text-sm text-ink/70 hover:text-red-600 font-display px-3 py-1 rounded-sm hover:bg-obsidian-raised transition-colors"
+            className="text-sm text-ink/70 hover:text-red-600 font-display px-3 py-1 rounded-lg hover:bg-obsidian-raised transition-colors"
           >
             Clear History
           </button>

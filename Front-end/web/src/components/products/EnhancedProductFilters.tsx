@@ -407,7 +407,7 @@ export default function EnhancedProductFilters() {
           <div className="flex gap-2">
             <button 
               onClick={applyFilters}
-              className="flex-1 bg-gold text-obsidian px-4 py-2 rounded-md hover:bg-gold transition-colors"
+              className="flex-1 bg-gold text-white px-4 py-2 rounded-md hover:bg-gold transition-colors"
             >
               Apply
             </button>

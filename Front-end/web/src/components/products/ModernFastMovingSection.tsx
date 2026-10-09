@@ -150,8 +150,8 @@ export default function ModernFastMovingSection({
       <section className={`py-16 bg-obsidian-deep ${className}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Top Sellers</p>
-            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-2">Fast-Moving Products</h2>
+            <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Top Sellers</p>
+            <h2 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-2">Fast-Moving Products</h2>
             <p className="text-ink/70 font-display">Top picks flying off the shelves</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -171,8 +171,8 @@ export default function ModernFastMovingSection({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
           <div className="animate-in slide-in-from-bottom duration-700 fade-in">
-            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Top Sellers</p>
-            <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-2">Fast-Moving Products</h2>
+            <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Top Sellers</p>
+            <h2 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-2">Fast-Moving Products</h2>
             <p className="text-ink/70 font-display mb-4">Top picks flying off the shelves</p>
             <Link
               href="/products?isFastMoving=true"
@@ -249,11 +249,11 @@ export default function ModernFastMovingSection({
 
               {/* Product Info */}
               <div className="p-4 grow flex flex-col">
-                <div className="text-xs text-gold font-display font-bold mb-2 uppercase tracking-widest">
+                <div className="text-[12px] text-gold font-display font-bold mb-2 uppercase tracking-[0.12em]">
                   {typeof product.category === 'string' ? 'Auto Parts' : product.category?.name}
                 </div>
                 <Link href={url} className="block mb-2">
-                  <h3 className="font-display font-light text-ink tracking-[-0.01em] line-clamp-2 group-hover:text-gold transition-colors">
+                  <h3 className="font-display text-ink tracking-[-0.01em] line-clamp-2 group-hover:text-gold transition-colors">
                     {product.name}
                   </h3>
                 </Link>
@@ -282,14 +282,14 @@ export default function ModernFastMovingSection({
           {/* "See More" Card */}
            <Link
             href="/products?isFastMoving=true"
-            className="group bg-gold hover:opacity-90 rounded-lg transition-all duration-300 overflow-hidden flex flex-col items-center justify-center p-8 text-center text-obsidian h-full min-h-100"
+            className="group bg-gold hover:opacity-90 rounded-lg transition-all duration-300 overflow-hidden flex flex-col items-center justify-center p-8 text-center text-white h-full min-h-100"
           >
             <div className="w-16 h-16 bg-obsidian/20 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
               <ArrowRight className="w-8 h-8 text-ink" />
             </div>
             <h3 className="text-2xl font-display font-bold uppercase tracking-wide mb-2">View All Collection</h3>
             <p className="text-gold font-display mb-6">Discover our complete range of fast-moving products</p>
-            <span className="inline-block px-6 py-2 border-2 border-hairline/30 rounded-sm font-display font-bold uppercase tracking-widest group-hover:bg-obsidian group-hover:text-gold transition-all duration-300">
+            <span className="inline-block px-6 py-2 border-2 border-hairline/30 rounded-lg font-display font-bold uppercase tracking-[0.12em] group-hover:bg-obsidian group-hover:text-gold transition-all duration-300">
               Browse Now
             </span>
           </Link>

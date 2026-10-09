@@ -38,8 +38,8 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex items-center justify-center bg-obsidian-deep py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Account</p>
-          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em]">
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Account</p>
+          <h2 className="text-3xl font-display font-bold text-ink tracking-[-0.01em]">
             {migrated ? 'Set Your Password' : 'Forgot Password'}
           </h2>
           <p className="mt-2 text-sm text-ink/70 font-display">
@@ -50,7 +50,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         {status === 'success' ? (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-sm p-5">
+          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-5">
             <div className="flex gap-3">
               <Mail className="h-5 w-5 text-green-700 shrink-0 mt-0.5" />
               <div>
@@ -59,7 +59,7 @@ export default function ForgotPasswordPage() {
                   If an account exists for {email}, we have sent a password reset link to it.
                   Please check your inbox and spam folder.
                 </p>
-                <Link href="/login" className="mt-4 inline-flex items-center gap-1 text-sm font-display font-bold text-green-700 hover:text-ink transition-colors uppercase tracking-widest">
+                <Link href="/login" className="mt-4 inline-flex items-center gap-1 text-sm font-display font-bold text-green-700 hover:text-ink transition-colors uppercase tracking-[0.12em]">
                   <ArrowLeft className="h-4 w-4" />
                   Back to Login
                 </Link>
@@ -69,13 +69,13 @@ export default function ForgotPasswordPage() {
         ) : (
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             {status === 'error' && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-4">
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
                 <p className="text-sm text-red-600 font-display">{errorMessage}</p>
               </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">
+              <label htmlFor="email" className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">
                 Email Address
               </label>
               <input
@@ -86,7 +86,7 @@ export default function ForgotPasswordPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-4 py-2.5 focus:outline-none focus:border-gold font-display text-sm transition-colors"
+                className="w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg px-4 py-2.5 focus:outline-none focus:border-gold font-display text-sm transition-colors"
                 placeholder="you@example.com"
               />
             </div>
@@ -94,7 +94,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={status === 'loading'}
-              className="w-full flex justify-center items-center py-3 px-4 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex justify-center items-center py-3 px-4 bg-gold hover:opacity-90 text-white font-display font-bold rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {status === 'loading' ? (
                 <><Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />Sending...</>
@@ -104,7 +104,7 @@ export default function ForgotPasswordPage() {
             </button>
 
             <div className="flex items-center justify-center">
-              <Link href="/login" className="inline-flex items-center gap-1 font-display font-bold text-gold hover:text-ink text-sm uppercase tracking-widest transition-colors">
+              <Link href="/login" className="inline-flex items-center gap-1 font-display font-bold text-gold hover:text-ink text-sm uppercase tracking-[0.12em] transition-colors">
                 <ArrowLeft className="h-4 w-4" />
                 Back to Login
               </Link>

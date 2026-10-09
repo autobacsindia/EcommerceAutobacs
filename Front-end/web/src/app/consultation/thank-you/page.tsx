@@ -43,8 +43,8 @@ export default function ConsultationThankYouPage() {
           <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border border-green-500/40 bg-green-500/15">
             <CheckCircle2 className="h-10 w-10 text-green-700" />
           </div>
-          <p className="mb-3 font-display text-[11px] uppercase tracking-[0.28em] text-gold">Request received</p>
-          <h1 className="mb-4 font-display text-4xl font-light tracking-[-0.01em] md:text-5xl">
+          <p className="mb-3 font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">Request received</p>
+          <h1 className="mb-4 font-display text-4xl font-bold tracking-[-0.01em] md:text-5xl">
             Thank you!
           </h1>
           <p className="mx-auto max-w-xl font-display text-base leading-relaxed text-ink/75 md:text-lg">
@@ -53,12 +53,12 @@ export default function ConsultationThankYouPage() {
           </p>
         </div>
 
-        <div className="mt-12 rounded-sm border border-hairline bg-obsidian p-6 sm:p-8">
-          <h2 className="mb-6 font-display text-sm font-bold uppercase tracking-widest text-ink/70">What happens next</h2>
+        <div className="mt-12 rounded-lg border border-hairline bg-obsidian p-6 sm:p-8">
+          <h2 className="mb-6 font-display text-sm font-bold uppercase tracking-[0.12em] text-ink/70">What happens next</h2>
           <ol className="grid gap-6 sm:grid-cols-3">
             {NEXT_STEPS.map(({ icon: Icon, title, desc }, i) => (
               <li key={title} className="flex gap-4 sm:flex-col sm:gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-sm bg-gold/10">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gold/10">
                   <Icon className="h-5 w-5 text-gold" />
                 </div>
                 <div>
@@ -75,13 +75,13 @@ export default function ConsultationThankYouPage() {
         <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href="/"
-            className="flex w-full items-center justify-center gap-2 rounded-sm bg-gold px-8 py-3.5 font-display text-sm font-bold uppercase tracking-widest text-obsidian transition-opacity hover:opacity-90 sm:w-auto"
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-gold px-8 py-3.5 font-display text-[15px] font-bold text-white transition-opacity hover:opacity-90 sm:w-auto"
           >
             <Home className="h-4 w-4" /> Back to home
           </Link>
           <Link
             href="/products"
-            className="flex w-full items-center justify-center gap-2 rounded-sm border border-hairline px-8 py-3.5 font-display text-sm font-bold uppercase tracking-widest text-ink transition-colors hover:border-gold sm:w-auto"
+            className="flex w-full items-center justify-center gap-2 rounded-full border border-hairline px-8 py-3.5 font-display text-[15px] font-bold text-ink transition-colors hover:border-gold sm:w-auto"
           >
             <ShoppingBag className="h-4 w-4" /> Browse products
           </Link>

@@ -13,7 +13,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const baseStyles = "inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background";
     
     const variants = {
-      primary: "bg-gold text-obsidian hover:bg-gold",
+      primary: "bg-gold text-white hover:bg-gold",
       secondary: "bg-obsidian-raised text-ink hover:bg-obsidian-raised",
       outline: "border border-input hover:bg-accent hover:text-accent-foreground",
       ghost: "hover:bg-accent hover:text-accent-foreground",

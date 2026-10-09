@@ -28,7 +28,7 @@ export default function RecentOrdersCard() {
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
           <Package className="h-4 w-4 text-gold" />
-          <h2 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">
+          <h2 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">
             Recent Orders
           </h2>
         </div>
@@ -47,7 +47,7 @@ export default function RecentOrdersCard() {
           <p className="text-sm text-ink-muted font-display mb-4">You haven&apos;t placed any orders yet.</p>
           <Link
             href="/products"
-            className="inline-block bg-gold text-obsidian px-5 py-2.5 rounded-sm text-sm font-display font-bold hover:bg-gold/90 transition"
+            className="inline-block bg-gold text-white px-5 py-2.5 rounded-lg text-sm font-display font-bold hover:bg-gold/90 transition"
           >
             Start shopping
           </Link>

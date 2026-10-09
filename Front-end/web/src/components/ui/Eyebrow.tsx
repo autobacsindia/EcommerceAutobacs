@@ -1,7 +1,8 @@
 import { cn } from '@/lib/utils';
 
 /**
- * Uppercase gold micro-label — the redesign's signature eyebrow/tag.
+ * Small green section label (kickers, category tags, field labels) — readable at a
+ * glance on the light store; it used to be a 10px hairline-tracked gold whisper.
  * (e.g. section kickers, category tags, field labels.)
  */
 export default function Eyebrow({
@@ -16,7 +17,7 @@ export default function Eyebrow({
   return (
     <Tag
       className={cn(
-        'font-display text-[10px] uppercase tracking-[0.28em] text-gold',
+        'font-display text-[12px] font-semibold uppercase tracking-[0.12em] text-gold',
         className
       )}
     >

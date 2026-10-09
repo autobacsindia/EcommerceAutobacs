@@ -7,6 +7,7 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { RefreshCw } from 'lucide-react';
 import ProductGrid from '@/components/products/ProductGrid';
+import StorePageHeader from '@/components/store/StorePageHeader';
 import Pagination from '@/components/layout/Pagination';
 import apiClient from '@/lib/api';
 
@@ -68,6 +69,7 @@ function BrandPageInner({ slug, initialBrand }: { slug: string; initialBrand: an
   const router = useRouter();
   const searchParams = useSearchParams();
   const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
+  const [logoFailed, setLogoFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Seeded from the server fetch — see page.tsx. The brand is guaranteed to exist
@@ -99,74 +101,50 @@ function BrandPageInner({ slug, initialBrand }: { slug: string; initialBrand: an
     router.push(`/brands/${slug}?${p.toString()}`);
   };
 
+  const total = data.pagination?.total || 0;
+
   return (
-    <div className="min-h-screen bg-obsidian-deep">
-      {/* Brand Header */}
-      <div className="bg-obsidian border-b border-hairline py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center gap-8">
-            <div className="bg-obsidian-raised border border-hairline rounded-lg p-4 w-32 h-32 flex items-center justify-center shrink-0">
-              {brand.logo ? (
-                <img
-                  src={brand.logo}
-                  alt={brand.name}
-                  className="max-w-full max-h-full object-contain"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
+    <div className="sp sh-theme">
+      <StorePageHeader
+        crumbs={[{ label: 'Brands', href: '/brands' }, { label: brand.name }]}
+        title={
+          <span className="flex items-center gap-4">
+            <span className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl border border-hairline bg-white p-2">
+              {brand.logo && !logoFailed ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={brand.logo} alt="" className="max-h-full max-w-full object-contain" onError={() => setLogoFailed(true)} />
               ) : (
-                <span className="text-3xl font-display font-bold text-gold">{brand.name?.charAt(0)}</span>
+                <span className="font-display text-2xl font-bold text-gold">{brand.name?.charAt(0)}</span>
               )}
-            </div>
-            <div className="text-center md:text-left">
-              <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Brand</p>
-              <h1 className="mt-3 text-[clamp(38px,5.5vw,72px)] font-light leading-[0.95] tracking-[-0.01em] text-ink mb-3">{brand.name}</h1>
-              {brand.description && (
-                <p className="mb-5 max-w-2xl font-display text-[14px] font-light leading-relaxed text-ink-muted">{brand.description}</p>
-              )}
-              <span className="inline-block bg-gold/10 border border-gold/30 text-gold font-display text-[11px] uppercase tracking-[0.2em] px-3.5 py-1.5">
-                {data.pagination?.total || 0} Products
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+            </span>
+            {brand.name}
+          </span>
+        }
+        subtitle={brand.description || `Genuine ${brand.name} parts and accessories.`}
+        aside={loading ? 'Loading…' : `${total.toLocaleString('en-IN')} ${total === 1 ? 'product' : 'products'}`}
+      />
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Results count */}
-        <div className="mb-6">
-          <p className="text-ink/70 font-display text-sm">
-            {loading ? 'Loading products...' : data.products.length > 0
-              ? `Showing ${data.products.length} product${data.products.length !== 1 ? 's' : ''}${data.pagination?.total ? ` of ${data.pagination.total}` : ''}`
-              : 'No products found'}
-          </p>
-        </div>
-
+      <div className="sp-wrap pt-6">
         {/* Error */}
         {error && !loading && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center mb-6">
-            <h3 className="text-lg font-display font-bold text-red-600 uppercase mb-2">Error Loading Products</h3>
-            <p className="text-ink/70 font-display mb-4">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center px-4 py-2 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest rounded-sm transition-colors"
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Retry
+          <div className="sp-card sp-empty mb-6" role="alert">
+            <p className="sp-empty-title">We couldn&apos;t load the products</p>
+            <p>{error}</p>
+            <button onClick={() => window.location.reload()} className="sh-btn sh-btn-primary">
+              <RefreshCw className="h-4 w-4" /> Try again
             </button>
           </div>
         )}
 
         {/* Loading skeletons */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-obsidian border border-hairline rounded-lg overflow-hidden animate-pulse">
-                <div className="h-48 bg-obsidian-raised" />
-                <div className="p-4 space-y-2">
-                  <div className="h-4 bg-obsidian-raised rounded w-3/4" />
-                  <div className="h-4 bg-obsidian-raised rounded w-1/2" />
-                  <div className="h-6 bg-obsidian-raised rounded w-1/3" />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="overflow-hidden rounded-xl border border-hairline bg-white">
+                <div className="aspect-square animate-pulse bg-obsidian-deep" />
+                <div className="space-y-3 p-4">
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-obsidian-deep" />
+                  <div className="h-5 w-1/2 animate-pulse rounded bg-obsidian-deep" />
                 </div>
               </div>
             ))}
@@ -174,21 +152,23 @@ function BrandPageInner({ slug, initialBrand }: { slug: string; initialBrand: an
         ) : !error && data.products.length > 0 ? (
           <>
             <ProductGrid products={data.products} />
-            {!loading && !error && (
+            <div className="mt-10">
               <Pagination
                 pagination={data.pagination}
                 currentPage={currentPage}
                 basePath={`/brands/${slug}`}
                 searchParams={searchParams}
               />
-            )}
+            </div>
           </>
         ) : !error ? (
-          <div className="text-center py-12">
-            <p className="text-ink-muted font-display text-lg mb-4">No products found for this brand</p>
-            <Link href="/products" className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors">
-              Browse all products
-            </Link>
+          <div className="sp-card sp-empty">
+            <p className="sp-empty-title">No {brand.name} products right now</p>
+            <p>Ask us — we can often source {brand.name} parts on request.</p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <Link href="/products" className="sh-btn sh-btn-outline">Browse all products</Link>
+              <Link href="/consultation" className="sh-btn sh-btn-primary">Ask a specialist</Link>
+            </div>
           </div>
         ) : null}
       </div>
@@ -203,7 +183,7 @@ function BrandPageInner({ slug, initialBrand }: { slug: string; initialBrand: an
 // would move the boundary above that await and put the soft 404 straight back.
 export default function BrandPageClient({ slug, initialBrand }: { slug: string; initialBrand: any }) {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-obsidian-deep" />}>
+    <Suspense fallback={<div className="sp sh-theme" />}>
       <BrandPageInner slug={slug} initialBrand={initialBrand} />
     </Suspense>
   );

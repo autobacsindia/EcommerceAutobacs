@@ -63,12 +63,12 @@ function Counter({ stat, start }: { stat: Stat; start: boolean }) {
       */}
       <div
         aria-hidden
-        className="font-display text-4xl md:text-5xl font-light text-gold tabular-nums tracking-[-0.02em]"
+        className="font-display text-4xl md:text-5xl font-bold text-gold tabular-nums tracking-[-0.02em]"
       >
         {format(n)}
         {stat.suffix}
       </div>
-      <div className="mt-2 font-display text-[11px] uppercase tracking-[0.22em] text-ink/60">
+      <div className="mt-2 font-display text-[12px] uppercase tracking-[0.12em] text-ink/60 font-semibold">
         <span className="sr-only">{`${format(stat.value)}${stat.suffix ?? ''} `}</span>
         {stat.label}
       </div>
