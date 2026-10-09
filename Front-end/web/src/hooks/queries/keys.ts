@@ -43,6 +43,12 @@ export const categoryKeys = {
     [...categoryKeys.all, 'products', slug, normalizeParams(params)] as const,
 };
 
+export const brandKeys = {
+  all: ['brands'] as const,
+  /** `/products/brands` — every brand with its product count. */
+  list: () => [...brandKeys.all, 'list'] as const,
+};
+
 export const suggestionKeys = {
   all: ['suggestions'] as const,
   query: (q: string) => [...suggestionKeys.all, q] as const,

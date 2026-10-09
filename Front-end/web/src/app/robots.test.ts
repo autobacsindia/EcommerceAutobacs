@@ -77,4 +77,11 @@ describe('robots.txt', () => {
       expect(disallow).toContain(path)
     }
   })
+
+  it('keeps crawlers off internal search results', () => {
+    const disallow = rules().find((r) => r.userAgent === '*')!.disallow as string[]
+    for (const p of ['/products/search', '/*?search=', '/*?s=']) expect(disallow).toContain(p)
+    // The real catalogue stays crawlable.
+    for (const live of ['/products', '/categories', '/brands']) expect(disallow).not.toContain(live)
+  })
 })

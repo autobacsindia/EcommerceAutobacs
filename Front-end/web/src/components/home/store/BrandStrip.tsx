@@ -6,7 +6,7 @@ import Img from '../redesign/Img';
 import type { StoreBrand } from './storeData';
 
 /**
- * Every brand logo (most products first) in two rows that scroll sideways — arrows
+ * Every brand (most products first; logo, or the name when there is none) in two rows that scroll sideways — arrows
  * on desktop, swipe on phones — so the whole range is one gesture away without a
  * separate "see all" page.
  */
@@ -37,7 +37,11 @@ export default function BrandStrip({ brands }: { brands: StoreBrand[] }) {
         <div className="sh-brands" ref={track} onScroll={update}>
           {brands.map((b) => (
             <Link key={b.href} href={b.href} className="sh-brand" aria-label={b.name}>
-              <Img src={b.logo} alt={b.name} className="sh-brand-img" sizes="160px" />
+              {b.logo ? (
+                <Img src={b.logo} alt={b.name} className="sh-brand-img" sizes="160px" />
+              ) : (
+                <span className="sh-brand-name">{b.name}</span>
+              )}
             </Link>
           ))}
         </div>

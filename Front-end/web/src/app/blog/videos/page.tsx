@@ -73,13 +73,13 @@ function VideosContent() {
   return (
     <div>
       {/* Header */}
-      <div className="bg-linear-to-r from-red-700 to-red-900 text-white py-14 px-4">
+      <div className="bg-linear-to-r from-[#0a5c33] to-[#0b4a2b] text-white py-14 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
             <Video className="h-8 w-8 opacity-80" />
             <h1 className="text-4xl font-bold">Videos</h1>
           </div>
-          <p className="text-ink/80 text-lg">Tutorials, promotions and behind-the-scenes content</p>
+          <p className="text-white/85 text-lg">Tutorials, promotions and behind-the-scenes content</p>
         </div>
       </div>
 
@@ -91,7 +91,7 @@ function VideosContent() {
               <button
                 key={c}
                 onClick={() => updateParam('category', c)}
-                className={`px-4 py-1.5 text-sm rounded-full border transition-colors capitalize ${category === c ? 'bg-red-600 text-white border-transparent' : 'border-hairline text-ink-muted hover:border-hairline'}`}
+                className={`px-4 py-1.5 text-sm rounded-full border transition-colors capitalize ${category === c ? 'bg-gold text-white border-transparent' : 'border-hairline text-ink-muted hover:border-hairline'}`}
               >
                 {c === 'all' ? 'All Videos' : c}
               </button>
@@ -123,7 +123,7 @@ function VideosContent() {
               <button
                 key={video._id}
                 onClick={() => setActiveVideo(video)}
-                className="group text-left bg-obsidian rounded-xl border border-hairline overflow-hidden hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="group text-left bg-obsidian rounded-xl border border-hairline overflow-hidden hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-gold"
               >
                 <div className="relative h-48 bg-obsidian-raised overflow-hidden">
                   {video.thumbnail ? (
@@ -136,7 +136,7 @@ function VideosContent() {
                   {/* Play overlay */}
                   <div className="absolute inset-0 flex items-center justify-center bg-obsidian-deep/20 group-hover:bg-obsidian-deep/40 transition-colors">
                     <div className="w-14 h-14 bg-obsidian/90 group-hover:bg-obsidian rounded-full flex items-center justify-center shadow-lg transition-colors">
-                      <Play className="h-6 w-6 text-red-600 ml-1" />
+                      <Play className="h-6 w-6 text-gold ml-1" />
                     </div>
                   </div>
                   {video.duration && (
@@ -146,8 +146,8 @@ function VideosContent() {
                   )}
                 </div>
                 <div className="p-4">
-                  <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{video.category}</span>
-                  <h3 className="font-semibold text-ink mt-2 text-sm line-clamp-2 group-hover:text-red-600 transition-colors">
+                  <span className="text-xs font-medium text-gold bg-gold/10 px-2 py-0.5 rounded-full">{video.category}</span>
+                  <h3 className="font-semibold text-ink mt-2 text-sm line-clamp-2 group-hover:text-gold transition-colors">
                     {video.title}
                   </h3>
                   {video.description && (
@@ -166,7 +166,7 @@ function VideosContent() {
               <button
                 key={i}
                 onClick={() => updateParam('page', String(i + 1))}
-                className={`w-9 h-9 rounded-lg text-sm font-medium border transition-colors ${page === i + 1 ? 'bg-red-600 text-white border-transparent' : 'border-hairline text-ink-muted hover:bg-obsidian-deep'}`}
+                className={`w-9 h-9 rounded-lg text-sm font-medium border transition-colors ${page === i + 1 ? 'bg-gold text-white border-transparent' : 'border-hairline text-ink-muted hover:bg-obsidian-deep'}`}
               >
                 {i + 1}
               </button>
@@ -215,7 +215,7 @@ function VideosContent() {
 
 export default function VideosPage() {
   return (
-    <Suspense fallback={<div className="h-96 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-red-600 border-t-transparent rounded-full" /></div>}>
+    <Suspense fallback={<div className="h-96 flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-gold border-t-transparent rounded-full" /></div>}>
       <VideosContent />
     </Suspense>
   );

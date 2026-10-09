@@ -110,6 +110,22 @@
 .sh-search input::-webkit-search-cancel-button { cursor: pointer; }
 .sh-go { flex-shrink: 0; height: 40px; padding: 0 22px; border: none; border-radius: 999px; background: var(--g); color: #fff; font-size: 15px; font-weight: 700; font-family: inherit; cursor: pointer; transition: background 0.2s; }
 .sh-go:hover { background: var(--g-600); }
+/* Search suggestions dropdown */
+.sh-search { position: relative; }
+.sh-sugg { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 60; background: #fff; color: var(--ink); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25); padding: 6px 0; max-height: min(70vh, 480px); overflow-y: auto; text-align: left; }
+.sh-sugg-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.sh-sugg-clear { background: none; border: none; color: #0b6b9a; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.sh-sugg-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 16px; background: none; border: none; cursor: pointer; text-align: left; font-family: inherit; color: var(--ink); }
+.sh-sugg-row:hover, .sh-sugg-row.is-active { background: var(--g-50); }
+.sh-sugg-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: contain; background: #f6f7f7; flex-shrink: 0; }
+.sh-sugg-ico { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 8px; background: var(--g-100); color: var(--g); flex-shrink: 0; font-size: 16px; }
+.sh-sugg-ico .sh-search-ico { color: var(--g); }
+.sh-sugg-text { display: flex; flex-direction: column; min-width: 0; }
+.sh-sugg-name { font-size: 15px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sh-sugg-meta { font-size: 12px; color: var(--muted); }
+.sh-sugg-all { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; }
+.sh-sugg-all .sh-sugg-name { font-weight: 600; color: var(--g); }
+.sh-sugg-empty { padding: 12px 16px; font-size: 14px; color: var(--muted); }
 
 /* Cart: bright green circle with a count badge */
 .sh-cart { position: relative; flex-shrink: 0; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: #4fd283; color: #0b1a10; transition: transform 0.2s, background 0.2s; }
@@ -261,6 +277,7 @@
 .sh-brand { scroll-snap-align: start; aspect-ratio: 3 / 2; border: 1px solid var(--line); border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 12px; background: #fff; transition: border-color 0.2s, box-shadow 0.2s; }
 .sh-brand:hover { border-color: var(--g); box-shadow: 0 4px 14px rgba(10, 92, 51, 0.12); }
 .sh-brand-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.sh-brand-name { font-family: var(--font-montserrat), sans-serif; font-size: 15px; font-weight: 700; color: var(--ink); text-align: center; line-height: 1.2; }
 
 /* Reviews */
 .sh-reviews { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }

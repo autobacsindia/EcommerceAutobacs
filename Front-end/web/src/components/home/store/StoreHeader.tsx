@@ -11,6 +11,7 @@ import { useCart } from '@/context/CartContext';
 import { loginHref } from '@/lib/utils';
 import { SUPPORT_PHONE_TEL, whatsappLink } from '@/lib/contactInfo';
 import VehiclePicker from './VehiclePicker';
+import StoreSearch from './StoreSearch';
 import './store.css';
 
 /** A department link: the home page passes StoreCategory, other pages the nav list. */
@@ -26,7 +27,6 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
   const pathname = usePathname() || '/';
   const { isAuthenticated, user } = useAuth();
   const { itemCount } = useCart();
-  const [q, setQ] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -41,11 +41,6 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
     };
   }, [menuOpen]);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const term = q.trim();
-    if (term) router.push(`/products/search?q=${encodeURIComponent(term)}`);
-  };
 
   const firstName = (user?.name || '').trim().split(/\s+/)[0];
   const accountHref = isAuthenticated ? '/profile' : loginHref('/profile');
@@ -78,17 +73,7 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
           <span className="sh-small">Returns</span>
           <span className="sh-big">&amp; Orders</span>
         </Link>
-        <form className="sh-search" role="search" onSubmit={submit}>
-          <svg className="sh-search-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search parts, brands or your car model"
-            aria-label="Search products"
-          />
-          <button type="submit" className="sh-go" aria-label="Search">Go</button>
-        </form>
+        <StoreSearch />
         <Link href="/cart" className="sh-cart" aria-label={cartLabel}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L21 8H6.2" /><circle cx="9.5" cy="19.5" r="1.4" /><circle cx="17" cy="19.5" r="1.4" /></svg>
           <span className="sh-cart-count" aria-hidden="true">{itemCount > 99 ? '99+' : itemCount}</span>
