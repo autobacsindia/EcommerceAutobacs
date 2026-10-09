@@ -159,12 +159,12 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
   const brandsP = safe(async () => {
     const res = await serverFetch<{ brands?: { name: string; slug?: string; logo?: string | null; productCount?: number }[] }>(
       `/products/brands?limit=200`, { next: { revalidate: REVALIDATE, tags: [TAGS.products] } });
-    // Brands with a logo, most products first — the ones a shopper recognises.
+    // EVERY brand, most products first — logos where we have them, the name
+    // otherwise. The strip scrolls sideways in two rows, so none is left out.
     return (res.brands ?? [])
-      .filter((b) => b.name && b.slug && b.logo)
+      .filter((b) => b.name && b.slug)
       .sort((a, b) => (b.productCount ?? 0) - (a.productCount ?? 0))
-      // Every brand with a logo — the strip scrolls sideways in two rows.
-      .map((b) => ({ name: b.name, href: `/brands/${b.slug}`, logo: b.logo! }));
+      .map((b) => ({ name: b.name, href: `/brands/${b.slug}`, logo: b.logo || '' }));
   }, [] as StoreBrand[]);
 
   const reviewsP = safe(async () => {

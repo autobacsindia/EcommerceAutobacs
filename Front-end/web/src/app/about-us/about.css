@@ -1,16 +1,13 @@
 /*
- * Display typography for /about-us.
- *
- * Same treatment as the careers hero: Bebas Neue, condensed all-caps, tight
- * leading. The face is self-hosted by next/font on the page root (CSP blocks
- * fonts.gstatic.com — never reintroduce a Google Fonts <link>), and exposed as
- * --font-bebas. Sizes stay on the elements as Tailwind utilities so each
- * heading can set its own scale.
+ * Display typography for /about-us — the store's heading face (Montserrat bold),
+ * same as every other page since the 2026-10 restyle. It used to be condensed
+ * Bebas Neue from the old dark design. Sizes stay on the elements as Tailwind
+ * utilities so each heading can set its own scale.
  */
 .about-display {
-  font-family: var(--font-bebas), sans-serif;
-  font-weight: 400;
+  font-family: var(--font-montserrat), sans-serif;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  line-height: 0.92;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
 }

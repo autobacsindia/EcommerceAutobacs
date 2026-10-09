@@ -83,7 +83,7 @@ export default function SuperCarsPage() {
 
         <div className="relative container mx-auto px-4 py-20 text-center z-10">
           <div className="animate-slide-up-enter">
-            <span className="inline-block px-4 py-1 mb-6 border border-red-500/50 rounded-full bg-red-500/10 text-red-200 text-sm font-tracking-wider uppercase">
+            <span className="inline-block px-4 py-1 mb-6 border border-[#6fdc9c]/50 rounded-full bg-[#0a5c33]/40 text-[#cfe9d9] text-sm font-tracking-wider uppercase">
               ROAVION - Powered by AutoBacs India
             </span>
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 bg-linear-to-r from-white via-[#bfe3cd] to-white bg-clip-text text-transparent">
@@ -105,7 +105,7 @@ export default function SuperCarsPage() {
             <div className="animation-delay-300 animate-slide-up-enter opacity-0">
               <Link 
                 href="/contact" 
-                className="inline-flex items-center gap-2 px-8 py-4 bg-linear-to-r from-red-600 to-red-800 rounded-full text-white font-semibold tracking-wide hover:shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all duration-300 hover:scale-105"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-linear-to-r from-[#0a5c33] to-[#0b6b3c] rounded-full text-white font-semibold tracking-wide hover:shadow-[0_0_20px_rgba(10,92,51,0.5)] transition-all duration-300 hover:scale-105"
               >
                 Start Your Journey
                 <ArrowRight className="w-5 h-5" />
@@ -122,7 +122,7 @@ export default function SuperCarsPage() {
             <h2 className="text-3xl md:text-5xl font-bold mb-6 text-ink">
               Redefining Speed
             </h2>
-            <p className="text-xl text-red-500 font-medium mb-4">
+            <p className="text-xl text-gold font-semibold mb-4">
               Essential Upgrades for Supercar Enthusiasts
             </p>
             <p className="text-ink-muted max-w-3xl mx-auto">
@@ -134,12 +134,12 @@ export default function SuperCarsPage() {
             {upgrades.map((upgrade, index) => (
               <div
                 key={index}
-                className="group bg-obsidian-raised/50 border border-hairline/50 p-8 rounded-2xl hover:bg-obsidian-raised hover:border-red-500/30 transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
+                className="group bg-obsidian-raised/50 border border-hairline/50 p-8 rounded-2xl hover:bg-obsidian-raised hover:border-gold/30 transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
               >
-                <div className="mb-6 inline-flex p-3 rounded-lg bg-red-500/10 text-red-500 group-hover:bg-red-500 group-hover:text-white transition-colors duration-300">
+                <div className="mb-6 inline-flex p-3 rounded-lg bg-gold/10 text-gold group-hover:bg-gold group-hover:text-white transition-colors duration-300">
                   <upgrade.icon className="w-8 h-8" />
                 </div>
-                <h3 className="text-xl font-bold text-ink mb-4 group-hover:text-red-400 transition-colors">
+                <h3 className="text-xl font-bold text-ink mb-4 group-hover:text-gold transition-colors">
                   {upgrade.title}
                 </h3>
                 <div className="space-y-4">

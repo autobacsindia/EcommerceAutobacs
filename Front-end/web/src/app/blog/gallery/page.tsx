@@ -87,7 +87,7 @@ function GalleryContent() {
             <ImageIcon className="h-8 w-8 opacity-80" />
             <h1 className="text-4xl font-bold">Photo Gallery</h1>
           </div>
-          <p className="text-ink/80 text-lg">Events, products and behind-the-scenes moments</p>
+          <p className="text-white/85 text-lg">Events, products and behind-the-scenes moments</p>
         </div>
       </div>
 

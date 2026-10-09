@@ -47,6 +47,14 @@ const DISALLOW = [
   '/dev',
   '/integration-tests',
   '/_next/static/',
+  // Internal site-search results. Every typed term makes a new URL; they are thin,
+  // duplicate listings Google should neither crawl nor index (the page also sends
+  // `noindex` — app/products/search/layout.tsx). `?search=` is the legacy alias
+  // the listing still accepts; WordPress used `?s=`.
+  '/products/search',
+  '/*?search=',
+  '/*&search=',
+  '/*?s=',
   // Legacy WooCommerce action parameters. Google still holds hundreds of old URLs
   // carrying these (Search Console, Sep 2026: 616 of 911 "crawled – not indexed"
   // had add-to-cart). This site never emits them, so blocking them only stops the

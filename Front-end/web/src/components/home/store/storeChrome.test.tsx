@@ -2,7 +2,8 @@
  * The light store header/footer/finder now dress every customer page, so the
  * behaviours a customer relies on to reach products are pinned here.
  */
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { render as rtlRender, act, fireEvent, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import StoreHeader from './StoreHeader';
 import StoreFooter from './StoreFooter';
 import ShopByVehicleCard from './ShopByVehicleCard';
@@ -11,6 +12,12 @@ import HelpWidget from '@/components/layout/HelpWidget';
 
 const push = jest.fn();
 let pathname = '/products';
+// The header search reads cached brands/categories through TanStack Query.
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, { wrapper: ({ children }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider> });
+jest.mock('@/hooks/queries/useBrands', () => ({ useBrands: () => ({ data: [] }) }));
+jest.mock('@/hooks/queries/useCategories', () => ({ useCategories: () => ({ data: [] }) }));
+
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push }), usePathname: () => pathname }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: null, isAuthenticated: false }) }));
 jest.mock('@/context/CartContext', () => ({ useCart: () => ({ itemCount: 0 }) }));

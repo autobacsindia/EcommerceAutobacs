@@ -4,13 +4,20 @@
  * set and checks what a shopper sees.
  */
 import React from 'react';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, within, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ConditionalHeader from '@/components/layout/ConditionalHeader';
 import ConditionalFooter from '@/components/layout/ConditionalFooter';
 import StoreHome from '@/components/home/store/StoreHome';
 import type { StoreHomeData, StoreProduct } from '@/components/home/store/storeData';
 
 const push = jest.fn();
+// The header search reads cached brands/categories through TanStack Query.
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, { wrapper: ({ children }) => <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider> });
+jest.mock('@/hooks/queries/useBrands', () => ({ useBrands: () => ({ data: [] }) }));
+jest.mock('@/hooks/queries/useCategories', () => ({ useCategories: () => ({ data: [] }) }));
+
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push }), usePathname: () => '/' }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: null, isAuthenticated: false }) }));
 jest.mock('@/context/CartContext', () => ({ useCart: () => ({ itemCount: 2 }) }));
