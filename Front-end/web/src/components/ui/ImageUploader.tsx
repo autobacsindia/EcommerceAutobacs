@@ -375,7 +375,7 @@ export default function ImageUploader({
       >
         <Upload className="h-8 w-8 text-gray-500" />
         <p className="text-sm text-gray-500">
-          Drag &amp; drop or <span className="text-red-400 font-medium">browse</span>
+          Drag &amp; drop or <span className="text-red-600 font-medium">browse</span>
         </p>
         <p className="text-xs text-gray-500">
           JPG, PNG, WebP · max {maxFileSizeMB} MB each{enforceTotal ? ` · ${maxTotalSizeMB} MB total` : ''} · {Math.max(remaining, 0)} slot{remaining !== 1 ? 's' : ''} remaining

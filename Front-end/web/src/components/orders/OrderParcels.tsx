@@ -62,8 +62,8 @@ interface Props {
 const STATUS_COPY: Record<Shipment['status'], { label: string; className: string }> = {
   packed:    { label: 'Getting ready',  className: 'text-ink-muted' },
   shipped:   { label: 'On its way',     className: 'text-gold' },
-  delivered: { label: 'Delivered',      className: 'text-green-400' },
-  lost:      { label: 'Delayed',        className: 'text-red-400' },
+  delivered: { label: 'Delivered',      className: 'text-green-700' },
+  lost:      { label: 'Delayed',        className: 'text-red-600' },
 };
 
 export default function OrderParcels({ orderId, itemNames, rewardName, cardClass }: Props) {
@@ -181,7 +181,7 @@ export default function OrderParcels({ orderId, itemNames, rewardName, cardClass
                   </span>
                 )}
                 {shipment.deliveredAt
-                  ? <span className="text-green-400">Delivered {formatLongDateIST(shipment.deliveredAt)}</span>
+                  ? <span className="text-green-700">Delivered {formatLongDateIST(shipment.deliveredAt)}</span>
                   : shipment.estimatedDelivery
                     ? <span>Expected {formatLongDateIST(shipment.estimatedDelivery)}</span>
                     : null}

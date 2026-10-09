@@ -113,8 +113,8 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
                         {passed
                           ? <CheckCircle className="h-3.5 w-3.5 text-green-500" />
                           : partial
-                            ? <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
-                            : <XCircle className="h-3.5 w-3.5 text-red-400" />
+                            ? <AlertCircle className="h-3.5 w-3.5 text-amber-700" />
+                            : <XCircle className="h-3.5 w-3.5 text-red-600" />
                         }
                       </span>
                       <div className="flex-1 min-w-0">
@@ -124,7 +124,7 @@ export default function SeoScorePanel({ data }: { data: SeoData }) {
                         )}
                       </div>
                       <span className={`text-[10px] font-medium shrink-0
-                        ${passed ? 'text-green-600' : partial ? 'text-amber-500' : 'text-red-400'}`}
+                        ${passed ? 'text-green-600' : partial ? 'text-amber-500' : 'text-red-600'}`}
                       >
                         {check.earned}/{check.possible}
                       </span>

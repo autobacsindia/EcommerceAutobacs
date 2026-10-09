@@ -60,7 +60,7 @@ export default function ShopContactHero({
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => capture('contact_click', { channel: 'whatsapp', placement })}
-            className={`${button} bg-[#25D366] text-white hover:brightness-110`}
+            className={`${button} bg-[#128C7E] text-white hover:bg-[#0f7a6d]`}
           >
             <WhatsAppGlyph className="h-4 w-4" /> WhatsApp us
           </a>

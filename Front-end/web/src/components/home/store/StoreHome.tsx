@@ -60,7 +60,7 @@ function buildSlides(data: StoreHomeData): BannerSlide[] {
  */
 export default function StoreHome({ data, promoBanner = null }: { data: StoreHomeData; promoBanner?: PromoBannerData | null }) {
   return (
-    <div className="sh" id="top">
+    <div className="sh sh-theme" id="top">
       <StoreHeader categories={data.categories} />
       {/* The admin promo strip, whenever one is active (Admin → Promo Banners). */}
       {promoBanner && <PromoBanner banner={promoBanner} />}

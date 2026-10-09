@@ -9,7 +9,9 @@
    Red is used for discounts and nothing else.
    ══════════════════════════════════════════════════════════════════════════ */
 
-.sh, .sf {
+/* Theme tokens + base, on any wrapper that uses the store look: the home page
+   (.sh), the footer (.sf) and the site-wide header on every other page. */
+.sh-theme {
   --g: #0a5c33;          /* brand green */
   --g-700: #084a29;
   --g-600: #0b6b3c;
@@ -31,33 +33,36 @@
   color: var(--ink);
 }
 .sh { background: var(--bg); min-height: 100vh; }
-.sh *, .sf * { box-sizing: border-box; }
-.sh a, .sf a { color: inherit; text-decoration: none; }
-.sh h1, .sh h2, .sh h3, .sh p, .sf h3, .sf p { margin: 0; }
-.sh button { font-family: inherit; }
+.sh-theme * { box-sizing: border-box; }
+.sh-theme a { color: inherit; text-decoration: none; }
+.sh-theme h1, .sh-theme h2, .sh-theme h3, .sh-theme p { margin: 0; }
+.sh-theme button { font-family: inherit; }
 /* The shared image helper paints a dark swatch when a photo is missing. */
-.sh div[role='img'][aria-label], .sf div[role='img'][aria-label] { background: #f1f3f3 !important; }
+.sh-theme div[role='img'][aria-label] { background: #f1f3f3 !important; }
 
-.sh .sh-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.sh-theme .sh-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* ── buttons & small parts ─────────────────────────────────────────────── */
-.sh .sh-btn, .sf .sh-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 999px; padding: 11px 20px; font-size: 14px; font-weight: 600; border: 1px solid transparent; cursor: pointer; transition: background 0.2s, border-color 0.2s, transform 0.2s; }
-.sh .sh-btn-primary { background: var(--g); color: #fff; }
-.sh .sh-btn-primary:hover:not(:disabled) { background: var(--g-600); }
-.sh .sh-btn-primary:disabled { background: #b8c4bd; cursor: not-allowed; }
-.sh .sh-btn-lg { padding: 14px 28px; font-size: 15px; }
-.sh .sh-btn-outline { background: #fff; color: var(--ink); border-color: var(--line); }
-.sh .sh-btn-wa { background: #25d366; color: #0b1a10; }
-.sh :focus-visible, .sf :focus-visible { outline: 3px solid #e6a817; outline-offset: 2px; }
-.sh .sh-chip { display: inline-flex; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 13px; color: var(--ink-2); transition: border-color 0.2s, color 0.2s; }
-.sh .sh-chip:hover { border-color: var(--g); color: var(--g); }
-.sh .sh-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
-.sh .sh-field select { width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid #c9cfcd; background: #fff; font-size: 14px; color: var(--ink); font-family: inherit; }
-.sh .sh-field select:focus { outline: none; border-color: var(--g); box-shadow: 0 0 0 3px rgba(10, 92, 51, 0.15); }
-.sh .sh-field select:disabled { background: #f4f6f5; color: #9aa09e; }
+.sh-theme .sh-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 999px; padding: 11px 20px; font-size: 14px; font-weight: 600; border: 1px solid transparent; cursor: pointer; transition: background 0.2s, border-color 0.2s, transform 0.2s; }
+.sh-theme .sh-btn-primary { background: var(--g); color: #fff; }
+.sh-theme .sh-btn-primary:hover:not(:disabled) { background: var(--g-600); }
+.sh-theme .sh-btn-primary:disabled { background: #b8c4bd; cursor: not-allowed; }
+.sh-theme .sh-btn-lg { padding: 14px 28px; font-size: 15px; }
+.sh-theme .sh-btn-outline { background: #fff; color: var(--ink); border-color: var(--line); }
+.sh-theme .sh-btn-wa { background: #25d366; color: #0b1a10; }
+.sh-theme :focus-visible { outline: 3px solid #e6a817; outline-offset: 2px; }
+.sh-theme .sh-chip { display: inline-flex; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 13px; color: var(--ink-2); transition: border-color 0.2s, color 0.2s; }
+.sh-theme .sh-chip:hover { border-color: var(--g); color: var(--g); }
+.sh-theme .sh-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.sh-theme .sh-field select { width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid #c9cfcd; background: #fff; font-size: 14px; color: var(--ink); font-family: inherit; }
+.sh-theme .sh-field select:focus { outline: none; border-color: var(--g); box-shadow: 0 0 0 3px rgba(10, 92, 51, 0.15); }
+.sh-theme .sh-field select:disabled { background: #f4f6f5; color: #9aa09e; }
 
 /* ── HEADER (dark, for the white logo) ─────────────────────────────────── */
 .sh-header { position: sticky; top: 0; z-index: 40; }
+/* On non-home pages the header sits inside a wrapper, so the wrapper sticks. */
+.sh-chrome { position: sticky; top: 0; z-index: 40; }
+.sh-chrome .sh-header { position: static; }
 .sh-top { display: flex; align-items: center; gap: 14px; height: 64px; padding: 0 16px; background: var(--hdr); color: #fff; }
 .sh-logo { flex-shrink: 0; display: flex; align-items: center; padding: 6px; border-radius: 6px; }
 .sh-logo:hover { outline: 1px solid rgba(255, 255, 255, 0.6); }
@@ -98,7 +103,7 @@
 .sh-bar-burger { display: inline-flex; flex-direction: column; gap: 3px; width: 16px; }
 
 /* Drawer (All / phone menu) */
-.sh-drawer-wrap { position: fixed; inset: 0; z-index: 100; }
+.sh-drawer-wrap { position: fixed; inset: 0; z-index: 100; }  /* above the floating contact buttons (z 40-60) */
 .sh-drawer-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); border: none; cursor: pointer; }
 .sh-drawer { position: absolute; top: 0; left: 0; bottom: 0; width: min(340px, 86vw); background: #fff; display: flex; flex-direction: column; box-shadow: 8px 0 30px rgba(0, 0, 0, 0.3); animation: sh-slide-in 0.22s ease-out; }
 @keyframes sh-slide-in { from { transform: translateX(-100%); } to { transform: none; } }
@@ -163,9 +168,21 @@
 .sh-quad-tile:hover .sh-quad-img { transform: scale(1.05); }
 .sh-quad-label { font-size: 13px; color: var(--ink-2); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .sh-quad-tile:hover .sh-quad-label { color: var(--g); }
-.sh-vcard { gap: 10px; }
-.sh-vcard .st-h3 { margin-bottom: 0; }
+/* The car finder is the fastest route to a part that fits, so it is the loudest card. */
+.sh-vcard { padding: 0; overflow: hidden; border: 2px solid var(--g); box-shadow: 0 8px 24px rgba(10, 92, 51, 0.18); }
+.sh-vcard-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; background: linear-gradient(135deg, var(--g) 0%, var(--g-600) 100%); color: #fff; }
+.sh-vcard-icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 255, 255, 0.16); }
+.sh-theme .sh-vcard-head .st-h3 { margin-bottom: 0; color: #fff; }
+.sh-theme .sh-vcard-head .st-sub { color: rgba(255, 255, 255, 0.88); }
+.sh-vcard-body { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px 18px; background: var(--g-50); flex: 1; }
+.sh-theme .sh-vcard .sh-field { color: var(--ink-2); }
+.sh-theme .sh-vcard .sh-field select { border-color: #9fbfae; }
+.sh-theme .sh-vcard-go { padding-top: 12px; padding-bottom: 12px; font-size: 15px; box-shadow: 0 4px 12px rgba(10, 92, 51, 0.25); }
+/* Before a make is picked it is still clearly THE action — faded green, not grey. */
+.sh-theme .sh-vcard-go:disabled { background: var(--g); opacity: 0.5; box-shadow: none; }
 .sh-vchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.sh-theme .sh-vcard .sh-chip { border-color: #b9d4c4; color: var(--g); background: #fff; }
+.sh-theme .sh-vcard .sh-chip:hover { background: var(--g); border-color: var(--g); color: #fff; }
 
 /* Product shelves */
 .st-row-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
@@ -275,7 +292,7 @@
   .sh-vehicle-bar .sh-vehicle-pop { width: calc(100vw - 20px); }
   .sh-bar { height: 42px; }
   .sh-bar-all { display: none; }
-  .sh-header { position: static; }
+  .sh-header, .sh-chrome { position: static; }
 
   .sh-hero { height: auto; }
   .sh-slide { grid-template-columns: 1fr; padding: 22px 18px 110px; gap: 16px; }

@@ -247,7 +247,7 @@ export default function ProductCollectionsRow({
 
                             {/* Sale Badge - Smaller */}
                             {product.originalPrice && product.originalPrice > product.price && (
-                              <div className="absolute top-2 left-2 bg-red-500 text-ink px-2 py-0.5 rounded-full text-xs font-bold">
+                              <div className="absolute top-2 left-2 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-bold">
                                 SALE
                               </div>
                             )}
@@ -296,7 +296,7 @@ export default function ProductCollectionsRow({
                             <button
                               onClick={(e) => handleAddToCart(product, e)}
                               disabled={product.stock === 'out'}
-                              className="w-full mt-3 flex items-center justify-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed text-sm font-medium"
+                              className="w-full mt-3 flex items-center justify-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed text-sm font-medium"
                             >
                               {product.productType === 'variable' ? <SlidersHorizontal className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
                               <span>{product.stock === 'out' ? 'Out of Stock' : product.productType === 'variable' ? 'Select model' : 'Add to Cart'}</span>

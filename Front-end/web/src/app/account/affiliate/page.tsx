@@ -44,27 +44,27 @@ const rupees = (paise: number) =>
 const STATUS_COPY: Record<string, { label: string; style: string; hint: string }> = {
   pending: {
     label: 'Pending',
-    style: 'bg-amber-500/15 text-amber-300 border border-amber-500/30',
+    style: 'bg-amber-500/15 text-amber-700 border border-amber-500/30',
     hint: 'Confirmed once the order has been delivered and the return window has closed.',
   },
   approved: {
     label: 'Ready to pay',
-    style: 'bg-sky-500/15 text-sky-300 border border-sky-500/30',
+    style: 'bg-sky-500/15 text-sky-700 border border-sky-500/30',
     hint: 'Included in your next payout.',
   },
   paid: {
     label: 'Paid',
-    style: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30',
+    style: 'bg-emerald-500/15 text-emerald-700 border border-emerald-500/30',
     hint: 'Transferred to your account.',
   },
   reversed: {
     label: 'Reversed',
-    style: 'bg-white/5 text-ink-muted border border-hairline',
+    style: 'bg-obsidian text-ink-muted border border-hairline',
     hint: 'The order was cancelled or returned.',
   },
   void: {
     label: 'Void',
-    style: 'bg-white/5 text-ink-muted border border-hairline',
+    style: 'bg-obsidian text-ink-muted border border-hairline',
     hint: 'Cancelled by our team.',
   },
 };
@@ -350,7 +350,7 @@ export default function AffiliateDashboardPage() {
             )}
 
             {requestWentStale && (
-              <p className="text-sm text-amber-200 font-display">
+              <p className="text-sm text-amber-700 font-display">
                 You requested a payout on {formatDateIST(data!.payoutRequestedAt!)}
                 {data?.payoutRequestedBalancePaise != null
                   && <> for {rupees(data.payoutRequestedBalancePaise)}</>}
@@ -362,7 +362,7 @@ export default function AffiliateDashboardPage() {
             )}
 
             {requestPayout.isError && (
-              <p role="alert" className="mt-2 text-sm font-display text-red-300">
+              <p role="alert" className="mt-2 text-sm font-display text-red-600">
                 {requestPayout.error instanceof Error
                   ? requestPayout.error.message
                   : 'Could not request a payout. Please try again.'}
@@ -372,7 +372,7 @@ export default function AffiliateDashboardPage() {
         )}
 
         {(data?.payableBalancePaise ?? 0) < 0 && (
-            <p className="mt-4 rounded-sm border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 font-display">
+            <p className="mt-4 rounded-sm border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 font-display">
               An order you referred was refunded after it had been paid out, so this amount
               is carried against your next earnings. Nothing is owed by you directly.
             </p>
@@ -416,7 +416,7 @@ export default function AffiliateDashboardPage() {
                       <td className="py-3 text-ink-muted">
                         {c.order ? `₹${c.order.totalAmount.toLocaleString('en-IN')}` : '—'}
                       </td>
-                      <td className={`py-3 text-right font-medium ${c.amountPaise < 0 ? 'text-red-400' : 'text-ink'}`}>
+                      <td className={`py-3 text-right font-medium ${c.amountPaise < 0 ? 'text-red-600' : 'text-ink'}`}>
                         {rupees(c.amountPaise)}
                       </td>
                       <td className="py-3">

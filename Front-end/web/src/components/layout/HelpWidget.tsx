@@ -30,6 +30,14 @@ const MOBILE_BREAKPOINT = 768; // matches StickyCartBar's `md:hidden`
 // Reserve enough bottom clearance that the widget can never be dragged over it
 // (bar ≈72px + iOS home-indicator safe area). Desktop keeps the small margin.
 const MOBILE_BOTTOM_RESERVE = 96;
+// On desktop the store header is sticky (≈104px). Keep the tab below it so it can
+// never be dragged over the Cart / Account links.
+const DESKTOP_TOP_RESERVE = 116;
+
+/** Top clearance for the current viewport — the sticky header on desktop only. */
+function topMargin(): number {
+  return window.innerWidth < MOBILE_BREAKPOINT ? EDGE_MARGIN : DESKTOP_TOP_RESERVE;
+}
 
 /** Bottom clearance for the current viewport, incl. the iOS safe-area inset. */
 function bottomMargin(): number {
@@ -70,9 +78,9 @@ function isSuppressed(pathname: string | null): boolean {
  * metrics — never measured here — so this stays cheap enough to call on every
  * pointermove without forcing a layout reflow.
  */
-function clampTop(top: number, height: number, bottom: number): number {
+function clampTop(top: number, height: number, bottom: number, min = EDGE_MARGIN): number {
   const max = window.innerHeight - height - bottom;
-  return Math.min(Math.max(top, EDGE_MARGIN), Math.max(EDGE_MARGIN, max));
+  return Math.min(Math.max(top, min), Math.max(min, max));
 }
 
 export default function HelpWidget() {
@@ -92,10 +100,11 @@ export default function HelpWidget() {
   // Cached layout metrics — the tab height and bottom clearance only change on
   // mount/resize, so we measure them there (safeAreaBottom() touches the DOM)
   // and read the cache during drag to avoid a reflow on every pointermove.
-  const metrics = useRef({ height: 120, bottom: EDGE_MARGIN });
+  const metrics = useRef({ height: 120, bottom: EDGE_MARGIN, top: EDGE_MARGIN });
   const measure = useCallback(() => {
     metrics.current.height = ref.current?.offsetHeight ?? 120;
     metrics.current.bottom = bottomMargin();
+    metrics.current.top = topMargin();
   }, []);
 
   // The usable travel range denominator, so save/restore round-trip exactly.
@@ -107,7 +116,7 @@ export default function HelpWidget() {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
     const ratio = raw != null ? parseFloat(raw) : DEFAULT_RATIO;
     const safeRatio = Number.isFinite(ratio) ? Math.min(Math.max(ratio, 0), 1) : DEFAULT_RATIO;
-    setTop(clampTop(travel() * safeRatio, metrics.current.height, metrics.current.bottom));
+    setTop(clampTop(travel() * safeRatio, metrics.current.height, metrics.current.bottom, metrics.current.top));
     setMounted(true);
   }, [measure, travel]);
 
@@ -116,7 +125,7 @@ export default function HelpWidget() {
     if (!mounted) return;
     const onResize = () => {
       measure();
-      setTop((t) => clampTop(t, metrics.current.height, metrics.current.bottom));
+      setTop((t) => clampTop(t, metrics.current.height, metrics.current.bottom, metrics.current.top));
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -157,7 +166,7 @@ export default function HelpWidget() {
       setDragging(true);
     }
     if (drag.current.moved) {
-      const next = clampTop(drag.current.startTop + dy, metrics.current.height, metrics.current.bottom);
+      const next = clampTop(drag.current.startTop + dy, metrics.current.height, metrics.current.bottom, metrics.current.top);
       drag.current.lastTop = next;
       setTop(next);
     }
@@ -200,11 +209,11 @@ export default function HelpWidget() {
       }}
       style={{ top: `${top}px`, touchAction: 'none' }}
       className={`group fixed right-0 z-[60] flex select-none flex-col items-center gap-1.5
-        rounded-l-xl border border-r-0 border-gold/30 bg-obsidian-raised/95 px-2 py-3 sm:px-2.5 sm:py-3.5
-        text-gold shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur
+        rounded-l-xl border border-r-0 border-white/20 bg-gold px-2 py-3 sm:px-2.5 sm:py-3.5
+        text-white shadow-[0_8px_22px_rgba(10,92,51,0.35)]
         transition-[background-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
-        hover:bg-obsidian-raised hover:shadow-[0_10px_28px_rgba(0,0,0,0.6)]
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-gold/60
+        hover:bg-[#0b6b3c] hover:shadow-[0_10px_26px_rgba(10,92,51,0.45)]
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-[#e6a817]
         ${dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
     >
       <LifeBuoy

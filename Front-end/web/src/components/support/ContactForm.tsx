@@ -181,7 +181,7 @@ export default function ContactForm({ defaultSubject = '', orderId = null }: Pro
       </div>
 
       {status === 'error' && (
-        <p role="alert" className="text-red-400 font-display text-sm">
+        <p role="alert" className="text-red-600 font-display text-sm">
           {error}
         </p>
       )}

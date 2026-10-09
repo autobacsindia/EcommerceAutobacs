@@ -619,7 +619,7 @@ function CheckoutPageContent() {
       <div className="min-h-screen bg-obsidian-deep py-16">
         <div className="max-w-2xl mx-auto px-4 text-center">
           <div className="bg-green-500/10 border border-green-500/30 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
-            <Check className="h-12 w-12 text-green-400" />
+            <Check className="h-12 w-12 text-green-700" />
           </div>
           <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Success</p>
           <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Order Placed!</h1>
@@ -635,10 +635,10 @@ function CheckoutPageContent() {
                 We&apos;ve sent a magic link to your email. Click the link to:
               </p>
               <ul className="text-ink/70 font-display mb-6 space-y-2 text-sm">
-                <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Track your order in real-time</li>
-                <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Get shipping updates</li>
-                <li className="flex items-center gap-2"><span className="text-green-400">✓</span> View order history</li>
-                <li className="flex items-center gap-2"><span className="text-green-400">✓</span> Easy returns &amp; support</li>
+                <li className="flex items-center gap-2"><span className="text-green-700">✓</span> Track your order in real-time</li>
+                <li className="flex items-center gap-2"><span className="text-green-700">✓</span> Get shipping updates</li>
+                <li className="flex items-center gap-2"><span className="text-green-700">✓</span> View order history</li>
+                <li className="flex items-center gap-2"><span className="text-green-700">✓</span> Easy returns &amp; support</li>
               </ul>
               <a href={`/claim-order?orderId=${orderId}`} className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors">
                 Claim My Account
@@ -702,10 +702,10 @@ function CheckoutPageContent() {
             return (
               <div key={step.id} className="flex items-center">
                 <div className="flex flex-col items-center">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-gold text-obsidian' : isCompleted ? 'bg-green-500/20 border border-green-500/50 text-green-400' : 'bg-obsidian-raised border border-hairline text-ink-muted'}`}>
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-gold text-obsidian' : isCompleted ? 'bg-green-500/20 border border-green-500/50 text-green-700' : 'bg-obsidian-raised border border-hairline text-ink-muted'}`}>
                     <Icon className="h-5 w-5" />
                   </div>
-                  <span className={`text-xs mt-2 font-display font-bold uppercase tracking-widest ${isActive ? 'text-gold' : isCompleted ? 'text-green-400' : 'text-ink-muted'}`}>{step.label}</span>
+                  <span className={`text-xs mt-2 font-display font-bold uppercase tracking-widest ${isActive ? 'text-gold' : isCompleted ? 'text-green-700' : 'text-ink-muted'}`}>{step.label}</span>
                 </div>
                 {index < steps.length - 1 && (
                   <div className={`w-16 sm:w-24 h-px mx-2 sm:mx-4 ${isCompleted ? 'bg-green-500/50' : 'bg-obsidian-raised'}`} />
@@ -722,19 +722,19 @@ function CheckoutPageContent() {
 
             {stockValidationErrors.length > 0 && (
               <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-sm p-4">
-                <h3 className="font-display font-bold text-red-400 uppercase tracking-wide mb-2 flex items-center gap-2">
+                <h3 className="font-display font-bold text-red-600 uppercase tracking-wide mb-2 flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5" />
                   Stock Availability Issues
                 </h3>
                 <ul className="space-y-2">
                   {stockValidationErrors.map((error, idx) => (
-                    <li key={idx} className="text-red-300 text-sm font-display flex items-start gap-2">
-                      <span className="text-red-400 mt-1">·</span>
+                    <li key={idx} className="text-red-600 text-sm font-display flex items-start gap-2">
+                      <span className="text-red-600 mt-1">·</span>
                       <span>
                         {error.name ? <strong>{error.name}:</strong> : null}{' '}
                         {error.message}
                         {error.availableStock !== undefined && (
-                          <span className="block text-xs mt-1 text-red-400">Available: {error.availableStock} | In cart: {error.requestedQuantity}</span>
+                          <span className="block text-xs mt-1 text-red-600">Available: {error.availableStock} | In cart: {error.requestedQuantity}</span>
                         )}
                       </span>
                     </li>
@@ -801,7 +801,7 @@ function CheckoutPageContent() {
             <button
               onClick={() => setCurrentStep('address')}
               disabled={stockValidationErrors.length > 0}
-              className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
             >
               Continue to Shipping
             </button>
@@ -918,9 +918,9 @@ function CheckoutPageContent() {
                       {!business.gstin ? (
                         <span className="text-ink-muted">Your 15-character GST identification number.</span>
                       ) : gstinCheck.valid ? (
-                        <span className="text-green-400">Valid · registered in {gstinCheck.state}</span>
+                        <span className="text-green-700">Valid · registered in {gstinCheck.state}</span>
                       ) : (
-                        <span className="text-yellow-400">{gstinCheck.message}</span>
+                        <span className="text-yellow-700">{gstinCheck.message}</span>
                       )}
                     </p>
                   </div>
@@ -991,7 +991,7 @@ function CheckoutPageContent() {
                               toast.success('Address deleted');
                             } catch { toast.error('Failed to delete address'); }
                           }}
-                          className="text-ink-muted hover:text-red-400 p-1 transition-colors"
+                          className="text-ink-muted hover:text-red-600 p-1 transition-colors"
                           title="Delete address"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -1017,7 +1017,7 @@ function CheckoutPageContent() {
                 <button
                   onClick={handleAddressSubmit}
                   disabled={selectedAddressIndex === null}
-                  className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
+                  className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
                 >
                   Deliver to This Address
                 </button>
@@ -1077,9 +1077,9 @@ function CheckoutPageContent() {
             {priceConfirmationPending && serverValidation && (
               <div className="mb-6 bg-yellow-500/10 border border-yellow-500/40 rounded-sm p-5">
                 <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-yellow-400 shrink-0 mt-0.5" />
+                  <AlertTriangle className="h-5 w-5 text-yellow-700 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <h3 className="font-display font-bold text-yellow-400 uppercase tracking-wide mb-1">Prices Updated</h3>
+                    <h3 className="font-display font-bold text-yellow-700 uppercase tracking-wide mb-1">Prices Updated</h3>
                     <p className="text-ink/70 font-display text-sm mb-4">
                       One or more item prices changed since you loaded this page. Please confirm the updated total before paying.
                     </p>
@@ -1107,7 +1107,7 @@ function CheckoutPageContent() {
                       <button
                         onClick={() => placeOrderWithValidation(serverValidation)}
                         disabled={loading || isRazorpayProcessing || !acceptedTerms}
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-ink font-display font-bold uppercase tracking-widest py-2.5 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-display font-bold uppercase tracking-widest py-2.5 rounded-sm disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
                       >
                         {loading || isRazorpayProcessing ? (
                           <><Loader2 className="h-4 w-4 animate-spin" /><span>Processing...</span></>
@@ -1201,7 +1201,7 @@ function CheckoutPageContent() {
               <button
                 onClick={handlePlaceOrder}
                 disabled={loading || isRazorpayProcessing || !acceptedTerms}
-                className="w-full bg-green-600 hover:bg-green-700 text-ink font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
               >
                 {loading || isRazorpayProcessing ? (
                   <><Loader2 className="h-5 w-5 animate-spin" /><span>Processing...</span></>

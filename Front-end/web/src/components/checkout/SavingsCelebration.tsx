@@ -109,26 +109,26 @@ export default function SavingsCelebration({ quote, reducedMotionOverride }: Pro
       <button
         type="button"
         aria-label="Dismiss"
-        className="absolute inset-0 bg-black/70"
+        className="absolute inset-0 bg-black/50"
         onClick={() => setShown(false)}
       />
 
       <div
-        className="relative w-full max-w-md rounded-xl border border-gold/30 bg-zinc-900 p-6 shadow-2xl"
+        className="relative w-full max-w-md rounded-xl border border-gold/30 bg-white p-6 shadow-2xl"
         style={reduced ? undefined : { animation: 'abSavingsPop 320ms cubic-bezier(0.16,1,0.3,1)' }}
       >
         <button
           type="button"
           onClick={() => setShown(false)}
           aria-label="Close"
-          className="absolute right-3 top-3 text-zinc-500 hover:text-white"
+          className="absolute right-3 top-3 text-ink-muted hover:text-ink"
         >
           <X size={18} />
         </button>
 
         <div className="text-center">
           <PartyPopper size={30} className={`mx-auto mb-3 text-gold ${reduced ? '' : 'animate-bounce'}`} />
-          <h2 id="savings-title" className="text-lg font-semibold text-white">
+          <h2 id="savings-title" className="text-lg font-semibold text-ink">
             Nice one — you&apos;re saving {formatPrice(savings.total)}
           </h2>
         </div>
@@ -137,24 +137,24 @@ export default function SavingsCelebration({ quote, reducedMotionOverride }: Pro
           {savings.catalog > 0 && (
             // Named separately so the coupon is never credited with a saving the
             // catalogue was already giving them.
-            <div className="flex justify-between text-zinc-300">
+            <div className="flex justify-between text-ink-muted">
               <dt>Already off list price</dt>
               <dd>{formatPrice(savings.catalog)}</dd>
             </div>
           )}
           {savings.coupon > 0 && (
-            <div className="flex justify-between text-emerald-300">
+            <div className="flex justify-between text-emerald-700">
               <dt>Coupon {frozen.appliedCoupon?.code}</dt>
               <dd>{formatPrice(savings.coupon)}</dd>
             </div>
           )}
           {savings.karma > 0 && (
-            <div className="flex justify-between text-zinc-300">
+            <div className="flex justify-between text-ink-muted">
               <dt>Karma points</dt>
               <dd>{formatPrice(savings.karma)}</dd>
             </div>
           )}
-          <div className="flex justify-between border-t border-zinc-800 pt-2 font-semibold text-white">
+          <div className="flex justify-between border-t border-hairline pt-2 font-semibold text-ink">
             <dt>Total saved</dt>
             <dd>{formatPrice(savings.total)}</dd>
           </div>
@@ -165,7 +165,7 @@ export default function SavingsCelebration({ quote, reducedMotionOverride }: Pro
              number. These items were already discounted, so the coupon adds a reduced
              rate on top — stating it is the difference between a good deal and a
              suspected short-change. */
-          <p className="mt-4 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          <p className="mt-4 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
             {capped.length === 1
               ? `${capped[0].name} is already on offer, so the coupon adds ${formatPrice(cappedTotal, { exact: true })} on top rather than its full rate.`
               : `${capped.length} items in your cart are already on offer, so the coupon adds ${formatPrice(cappedTotal, { exact: true })} on top of those rather than its full rate.`}
@@ -175,7 +175,7 @@ export default function SavingsCelebration({ quote, reducedMotionOverride }: Pro
         <button
           type="button"
           onClick={() => setShown(false)}
-          className="mt-5 w-full rounded bg-gold py-2.5 text-sm font-medium text-black hover:bg-gold/90"
+          className="mt-5 w-full rounded bg-gold py-2.5 text-sm font-medium text-white hover:bg-gold/90"
         >
           Continue
         </button>

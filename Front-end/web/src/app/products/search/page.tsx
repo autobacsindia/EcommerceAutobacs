@@ -224,7 +224,7 @@ function SearchPageInner() {
         <div className="lg:grid lg:grid-cols-4 lg:gap-8">
           {/* Filters Sidebar */}
           <aside className="hidden lg:block">
-            <div className="sticky top-24">
+            <div className="sticky top-[calc(var(--store-header-h)+20px)]">
               <Filters basePath="/products/search" />
             </div>
           </aside>

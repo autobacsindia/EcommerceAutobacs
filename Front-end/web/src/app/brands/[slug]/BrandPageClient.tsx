@@ -145,7 +145,7 @@ function BrandPageInner({ slug, initialBrand }: { slug: string; initialBrand: an
         {/* Error */}
         {error && !loading && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center mb-6">
-            <h3 className="text-lg font-display font-bold text-red-400 uppercase mb-2">Error Loading Products</h3>
+            <h3 className="text-lg font-display font-bold text-red-600 uppercase mb-2">Error Loading Products</h3>
             <p className="text-ink/70 font-display mb-4">{error}</p>
             <button
               onClick={() => window.location.reload()}

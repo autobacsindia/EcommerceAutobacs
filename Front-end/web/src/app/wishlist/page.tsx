@@ -82,7 +82,7 @@ export default function WishlistPage() {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center max-w-md mx-4">
-          <Heart className="mx-auto h-12 w-12 text-red-400 mb-4" />
+          <Heart className="mx-auto h-12 w-12 text-red-600 mb-4" />
           <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-2">Error Loading Wishlist</h2>
           <p className="text-ink/70 font-display mb-4">{error}</p>
           <button
@@ -100,7 +100,7 @@ export default function WishlistPage() {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center py-12 px-6">
-          <Heart className="mx-auto h-16 w-16 text-hairline mb-8" strokeWidth={1} />
+          <Heart className="mx-auto h-16 w-16 text-ink-muted/50 mb-8" strokeWidth={1} />
           <Eyebrow className="mb-4">Saved Items</Eyebrow>
           <h2 className="text-[clamp(32px,5vw,52px)] font-light leading-tight text-ink mb-4">Your wishlist is empty</h2>
           <p className="text-ink-muted font-display font-light mb-8">Save products you love to find them here later.</p>
@@ -142,7 +142,7 @@ export default function WishlistPage() {
                 </Link>
                 <button
                   onClick={() => handleRemoveFromWishlist(item.product._id)}
-                  className="absolute top-2 right-2 p-2 bg-obsidian-raised rounded-full shadow-md hover:bg-red-500/20 hover:text-red-400 transition-colors z-10"
+                  className="absolute top-2 right-2 p-2 bg-obsidian-raised rounded-full shadow-md hover:bg-red-500/20 hover:text-red-600 transition-colors z-10"
                   aria-label="Remove from wishlist"
                 >
                   <Trash2 className="h-4 w-4 text-ink/70" />
@@ -157,7 +157,7 @@ export default function WishlistPage() {
                 {item.product?.averageRating > 0 && (
                   <div className="flex items-center gap-1 mb-2">
                     {[1, 2, 3, 4, 5].map((star) => (
-                      <svg key={star} className={`h-4 w-4 ${star <= item.product?.averageRating ? 'text-gold' : 'text-hairline'}`} fill="currentColor" viewBox="0 0 20 20">
+                      <svg key={star} className={`h-4 w-4 ${star <= item.product?.averageRating ? 'text-gold' : 'text-ink-muted/50'}`} fill="currentColor" viewBox="0 0 20 20">
                         <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                       </svg>
                     ))}
@@ -172,7 +172,7 @@ export default function WishlistPage() {
                 <button
                   onClick={() => handleAddToCart(item.product)}
                   disabled={item.product?.stock === 'out'}
-                  className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm disabled:bg-obsidian-raised disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+                  className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
                 >
                   <ShoppingCart className="h-4 w-4" />
                   {item.product?.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}

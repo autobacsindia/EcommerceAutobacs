@@ -109,14 +109,15 @@ function LoginPageInner() {
     <div className="min-h-screen bg-obsidian-deep flex flex-col items-center">
       {/* Logo */}
       <div className="py-8">
-        <Link href="/" className="block mx-auto">
+        {/* The wordmark is white, so it sits on the header's dark plate on this light page. */}
+        <Link href="/" className="block mx-auto rounded-2xl bg-[#121414] px-7 py-3 shadow-sm">
           <Image
             src={brand.logo}
             alt="Roavion"
             width={960}
             height={255}
             priority
-            className="object-contain h-20 w-auto mx-auto"
+            className="object-contain h-14 w-auto mx-auto"
           />
         </Link>
       </div>
@@ -130,15 +131,15 @@ function LoginPageInner() {
 
           {reasonBanner && (
             <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/40 rounded-sm flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
-              <div className="text-sm text-yellow-400 font-display">{reasonBanner}</div>
+              <AlertCircle className="w-5 h-5 text-yellow-700 shrink-0 mt-0.5" />
+              <div className="text-sm text-yellow-700 font-display">{reasonBanner}</div>
             </div>
           )}
 
           {(error || (timeUntilRetry !== null && timeUntilRetry > 0)) && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/40 rounded-sm flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-              <div className="text-sm text-red-400 font-display">
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <div className="text-sm text-red-600 font-display">
                 {timeUntilRetry !== null && timeUntilRetry > 0
                   ? `Too many attempts. Please try again in ${Math.ceil(timeUntilRetry / 1000)} seconds.`
                   : error}
@@ -161,7 +162,7 @@ function LoginPageInner() {
                   ${validationErrors.email ? 'border-red-500' : 'border-hairline'}`}
               />
               {validationErrors.email && (
-                <p className="mt-1 text-xs text-red-400 font-display flex items-center gap-1">
+                <p className="mt-1 text-xs text-red-600 font-display flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" /> {validationErrors.email}
                 </p>
               )}
@@ -189,7 +190,7 @@ function LoginPageInner() {
                   ${validationErrors.password ? 'border-red-500' : 'border-hairline'}`}
               />
               {validationErrors.password && (
-                <p className="mt-1 text-xs text-red-400 font-display flex items-center gap-1">
+                <p className="mt-1 text-xs text-red-600 font-display flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" /> {validationErrors.password}
                 </p>
               )}

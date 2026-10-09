@@ -136,7 +136,7 @@ export default function WriteReviewModal({
                     <Star
                       className={`h-8 w-8 ${
                         star <= (hoverRating || rating)
-                          ? 'fill-yellow-400 text-yellow-400'
+                          ? 'fill-yellow-400 text-yellow-700'
                           : 'text-ink/70'
                       }`}
                     />

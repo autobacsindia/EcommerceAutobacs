@@ -228,7 +228,7 @@ export default function StoreProductCard({
           <div className="mb-3 flex items-center gap-1.5">
             <span className="text-[12px] tracking-[1px] text-gold" aria-hidden>
               {'★'.repeat(Math.round(product.averageRating))}
-              <span className="text-hairline">{'★'.repeat(5 - Math.round(product.averageRating))}</span>
+              <span className="text-ink-muted/50">{'★'.repeat(5 - Math.round(product.averageRating))}</span>
             </span>
             <span className="font-display text-[11px] text-ink-muted">{product.averageRating.toFixed(1)}</span>
           </div>

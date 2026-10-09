@@ -67,7 +67,7 @@ function VerifyEmailPageInner() {
 
         {status === 'success' && (
           <div className="bg-green-500/10 border border-green-500/30 rounded-sm p-8">
-            <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-4" />
+            <CheckCircle className="h-12 w-12 text-green-700 mx-auto mb-4" />
             <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-2">Email Verified!</h3>
             <p className="text-ink/70 font-display text-sm mb-6">
               Your email has been verified. Redirecting you now...
@@ -83,12 +83,12 @@ function VerifyEmailPageInner() {
 
         {status === 'error' && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8">
-            <XCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+            <XCircle className="h-12 w-12 text-red-600 mx-auto mb-4" />
             <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-2">Verification Failed</h3>
             <p className="text-ink/70 font-display text-sm mb-6">{message}</p>
 
             {resendSent ? (
-              <p className="text-sm text-green-400 font-display">
+              <p className="text-sm text-green-700 font-display">
                 If that email exists and is unverified, a new link has been sent. Check your inbox.
               </p>
             ) : (

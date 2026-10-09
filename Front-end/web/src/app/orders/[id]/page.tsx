@@ -176,7 +176,7 @@ function ItemFulfilmentChip({
   const copy: Record<ItemFulfilmentState, { label: string; className: string }> = {
     delivered: {
       label: deliveredAt ? `Delivered ${formatLongDateIST(deliveredAt.toISOString())}` : 'Delivered',
-      className: 'border-green-500/40 text-green-400',
+      className: 'border-green-500/40 text-green-700',
     },
     shipped: { label: 'On its way', className: 'border-gold/40 text-gold' },
     packed: { label: 'Getting ready', className: 'border-hairline text-ink-muted' },
@@ -326,13 +326,13 @@ export default function OrderDetailPage() {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      awaiting_payment: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-      pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+      awaiting_payment: 'bg-yellow-500/10 text-yellow-700 border-yellow-500/30',
+      pending: 'bg-yellow-500/10 text-yellow-700 border-yellow-500/30',
       confirmed: 'bg-gold/10 text-gold border-gold/30',
       processing: 'bg-gold/10 text-gold border-gold/40/30',
-      shipped: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
-      delivered: 'bg-green-500/10 text-green-400 border-green-500/30',
-      cancelled: 'bg-red-500/10 text-red-400 border-red-500/30',
+      shipped: 'bg-orange-500/10 text-orange-700 border-orange-500/30',
+      delivered: 'bg-green-500/10 text-green-700 border-green-500/30',
+      cancelled: 'bg-red-500/10 text-red-600 border-red-500/30',
       returned: 'bg-obsidian-raised text-ink/70 border-hairline',
       refunded: 'bg-obsidian-raised text-ink/70 border-hairline',
     };
@@ -434,7 +434,7 @@ export default function OrderDetailPage() {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center max-w-md mx-4">
-          <p className="text-red-400 font-display mb-4">{error || 'Order not found'}</p>
+          <p className="text-red-600 font-display mb-4">{error || 'Order not found'}</p>
           <button onClick={() => router.push('/orders')} className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
             Back to Orders
           </button>
@@ -507,7 +507,7 @@ export default function OrderDetailPage() {
                 title={cancelScope === 'partial'
                   ? `Part of this order has already shipped. Cancelling now covers the ${cancellableUnits} item(s) that have not left yet.`
                   : undefined}
-                className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors"
+                className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-600 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors"
               >
                 <XCircle className="h-4 w-4" />
                 {/* Naming the scope is the point: "Cancel Order" on a part-shipped order
@@ -537,13 +537,13 @@ export default function OrderDetailPage() {
               </Link>
             )}
             {canReturnOrder(order) && !hasReturnRequest(order) && (
-              <button onClick={() => setShowReturnDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-orange-500/40 text-orange-400 hover:bg-orange-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+              <button onClick={() => setShowReturnDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-orange-500/40 text-orange-700 hover:bg-orange-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <RotateCcw className="h-4 w-4" />
                 Return / Exchange
               </button>
             )}
             {canDeleteOrder(order.status) && (
-              <button onClick={handleDeleteOrder} className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-400 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
+              <button onClick={handleDeleteOrder} className="flex items-center gap-2 px-4 py-2 border border-red-500/40 text-red-600 hover:bg-red-500/10 rounded-sm font-display font-bold uppercase tracking-widest text-sm transition-colors">
                 <Trash2 className="h-4 w-4" />
                 Delete Order
               </button>
@@ -599,7 +599,7 @@ export default function OrderDetailPage() {
               {order.deliveredAt && (
                 <div>
                   <p className="text-xs text-ink-muted font-display mb-1">Delivered On</p>
-                  <p className="text-green-400 font-display font-bold">{formatLongDateIST(order.deliveredAt)}</p>
+                  <p className="text-green-700 font-display font-bold">{formatLongDateIST(order.deliveredAt)}</p>
                 </div>
               )}
             </div>
@@ -609,13 +609,13 @@ export default function OrderDetailPage() {
         {/* Return Request — only when a return was actually raised */}
         {hasReturnRequest(order) && order.returnRequest && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-sm p-6 mb-6">
-            <h2 className="font-display font-bold text-orange-400 uppercase tracking-wide mb-4">Return Request</h2>
+            <h2 className="font-display font-bold text-orange-700 uppercase tracking-wide mb-4">Return Request</h2>
             <div className="grid md:grid-cols-2 gap-4">
-              <div><p className="text-xs text-orange-400/70 font-display mb-1">Status</p><p className="text-orange-300 font-display font-bold">{(order.returnRequest.status || 'pending').toUpperCase()}</p></div>
+              <div><p className="text-xs text-orange-700/70 font-display mb-1">Status</p><p className="text-orange-700 font-display font-bold">{(order.returnRequest.status || 'pending').toUpperCase()}</p></div>
               {order.returnRequest.reason && (
-                <div><p className="text-xs text-orange-400/70 font-display mb-1">Reason</p><p className="text-orange-300 font-display text-sm">{order.returnRequest.reason}</p></div>
+                <div><p className="text-xs text-orange-700/70 font-display mb-1">Reason</p><p className="text-orange-700 font-display text-sm">{order.returnRequest.reason}</p></div>
               )}
-              <div><p className="text-xs text-orange-400/70 font-display mb-1">Requested On</p><p className="text-orange-300 font-display text-sm">{formatDate(order.returnRequest.requestedAt)}</p></div>
+              <div><p className="text-xs text-orange-700/70 font-display mb-1">Requested On</p><p className="text-orange-700 font-display text-sm">{formatDate(order.returnRequest.requestedAt)}</p></div>
             </div>
           </div>
         )}
@@ -698,20 +698,20 @@ export default function OrderDetailPage() {
                     <p className="text-xs text-ink-muted mb-0.5">Status</p>
                     <p className={`font-display font-bold ${
                       !(order.payment as any)?.status ? 'text-ink-muted' :
-                      ['completed', 'success', 'paid'].includes((order.payment as any)?.status) ? 'text-green-400' :
-                      (order.payment as any)?.status === 'pending' ? 'text-yellow-400' : 'text-red-400'
+                      ['completed', 'success', 'paid'].includes((order.payment as any)?.status) ? 'text-green-700' :
+                      (order.payment as any)?.status === 'pending' ? 'text-yellow-700' : 'text-red-600'
                     }`}>
                       {((order.payment as any)?.status || 'Unknown').charAt(0).toUpperCase() + ((order.payment as any)?.status || 'Unknown').slice(1)}
                     </p>
                   </div>
                   {(order.payment as any)?.status === 'failed' && (
                     <div className="mt-2 p-2 bg-red-500/10 border border-red-500/30 rounded-sm text-sm">
-                      <div className="flex items-start gap-2 text-red-400">
+                      <div className="flex items-start gap-2 text-red-600">
                         <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                         <span className="font-display text-xs">Payment failed. Please verify your transaction or retry.</span>
                       </div>
                       {canRetryPayment(order) && (
-                        <button onClick={handleRetryPayment} disabled={isPaymentProcessing} className="text-xs font-display font-bold text-red-400 hover:text-red-300 disabled:opacity-50 mt-2 ml-6 underline">
+                        <button onClick={handleRetryPayment} disabled={isPaymentProcessing} className="text-xs font-display font-bold text-red-600 hover:text-red-600 disabled:opacity-50 mt-2 ml-6 underline">
                           {isPaymentProcessing ? 'Processing...' : 'Retry Payment Now'}
                         </button>
                       )}
@@ -746,7 +746,7 @@ export default function OrderDetailPage() {
               <div className="flex justify-between"><span className="text-ink-muted">Shipping</span><span className="text-ink/70">{(order.shippingCost || 0) > 0 ? `₹${order.shippingCost.toFixed(2)}` : 'Calculated at delivery'}</span></div>
               <div className="flex justify-between"><span className="text-ink-muted">Tax</span><span className="text-ink/70">₹{(order.tax || 0).toFixed(2)}</span></div>
               {(order.discount || 0) > 0 && (
-                <div className="flex justify-between"><span className="text-ink-muted">Discount</span><span className="text-green-400">-₹{(order.discount || 0).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-ink-muted">Discount</span><span className="text-green-700">-₹{(order.discount || 0).toFixed(2)}</span></div>
               )}
               <div className="flex justify-between border-t border-hairline pt-3 mt-3">
                 <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
@@ -829,7 +829,7 @@ export default function OrderDetailPage() {
                         if (!paise || status === 'not_applicable') return null;
                         if (status === 'completed') {
                           return (
-                            <span className="text-green-400 font-bold">
+                            <span className="text-green-700 font-bold">
                               ₹{(paise / 100).toFixed(2)} refunded
                             </span>
                           );
@@ -838,7 +838,7 @@ export default function OrderDetailPage() {
                           // Say it plainly rather than silently: the customer is owed
                           // this and needs to know it has not arrived.
                           return (
-                            <span className="text-red-400 font-bold">
+                            <span className="text-red-600 font-bold">
                               ₹{(paise / 100).toFixed(2)} refund failed — our team is on it
                             </span>
                           );
@@ -931,7 +931,7 @@ export default function OrderDetailPage() {
                       if (!cancelled) return null;
                       const whole = cancelled >= (item.quantity || 0);
                       return (
-                        <span className="mt-1.5 inline-block px-2 py-0.5 border border-red-500/40 text-red-400 rounded-sm font-display font-bold uppercase tracking-widest text-[10px]">
+                        <span className="mt-1.5 inline-block px-2 py-0.5 border border-red-500/40 text-red-600 rounded-sm font-display font-bold uppercase tracking-widest text-[10px]">
                           {whole ? 'Cancelled' : `${cancelled} of ${item.quantity} cancelled`}
                         </span>
                       );

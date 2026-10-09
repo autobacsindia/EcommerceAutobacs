@@ -118,14 +118,14 @@ export default function OrdersPage() {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      pending: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+      pending: 'bg-yellow-500/10 text-yellow-700 border-yellow-500/30',
       confirmed: 'bg-gold/10 text-gold border-gold/30',
       processing: 'bg-gold/10 text-gold border-gold/40/30',
-      shipped: 'bg-orange-500/10 text-orange-400 border-orange-500/30',
-      delivered: 'bg-green-500/10 text-green-400 border-green-500/30',
-      cancelled: 'bg-red-500/10 text-red-400 border-red-500/30',
+      shipped: 'bg-orange-500/10 text-orange-700 border-orange-500/30',
+      delivered: 'bg-green-500/10 text-green-700 border-green-500/30',
+      cancelled: 'bg-red-500/10 text-red-600 border-red-500/30',
       refunded: 'bg-obsidian-raised text-ink/70 border-hairline',
-      failed: 'bg-red-500/10 text-red-400 border-red-500/30',
+      failed: 'bg-red-500/10 text-red-600 border-red-500/30',
     };
     return colors[status.toLowerCase()] || 'bg-obsidian-raised text-ink/70 border-hairline';
   };
@@ -151,7 +151,7 @@ export default function OrdersPage() {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center max-w-md mx-4">
-          <Package className="mx-auto h-12 w-12 text-red-400 mb-4" />
+          <Package className="mx-auto h-12 w-12 text-red-600 mb-4" />
           <p className="text-ink/70 font-display mb-4">{error}</p>
           <button
             onClick={fetchOrders}
@@ -168,7 +168,7 @@ export default function OrdersPage() {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center max-w-md mx-auto py-16 px-4">
-          <Package className="mx-auto h-20 w-20 text-hairline mb-6" />
+          <Package className="mx-auto h-20 w-20 text-ink-muted/50 mb-6" />
           <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-3">No Orders Yet</h2>
           <p className="text-ink/70 font-display mb-8">Start shopping to place your first order and track it here</p>
           <button
@@ -307,7 +307,7 @@ export default function OrdersPage() {
                       order already reads `Cancelled` in the status chip above.
                     */}
                     {hasCancellations(order) && order.status.toLowerCase() !== 'cancelled' && (
-                      <span className="px-2 py-0.5 rounded-sm text-[10px] font-display font-bold uppercase tracking-widest border border-red-500/30 text-red-400">
+                      <span className="px-2 py-0.5 rounded-sm text-[10px] font-display font-bold uppercase tracking-widest border border-red-500/30 text-red-600">
                         Part cancelled
                       </span>
                     )}

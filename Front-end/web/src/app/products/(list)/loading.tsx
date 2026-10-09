@@ -27,7 +27,7 @@ export default function ProductsLoading() {
 
       <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
         {/* Sticky category chips */}
-        <div className="sticky top-16 z-30 -mx-5 border-b border-hairline bg-obsidian/90 px-5 py-4 backdrop-blur sm:-mx-8 sm:px-8 md:top-[76px]">
+        <div className="sticky top-[var(--store-header-h)] z-30 -mx-5 border-b border-hairline bg-obsidian/90 px-5 py-4 backdrop-blur sm:-mx-8 sm:px-8">
           <div className="flex gap-3 overflow-hidden">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="h-8 w-24 shrink-0 animate-pulse bg-obsidian-raised" />
@@ -38,7 +38,7 @@ export default function ProductsLoading() {
         <div className="flex gap-10 py-8">
           {/* Sidebar */}
           <aside className="hidden w-72 shrink-0 lg:block">
-            <div className="sticky top-[150px] space-y-6">
+            <div className="sticky top-[calc(var(--store-header-h)+74px)] space-y-6">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="space-y-3">
                   <div className="h-3 w-24 animate-pulse bg-obsidian-raised" />

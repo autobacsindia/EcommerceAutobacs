@@ -214,7 +214,7 @@ export default function ProfilePage() {
                       <span className="truncate">{profile?.email}</span>
                       {verificationStatus?.isVerified && (
                         <span
-                          className="inline-flex shrink-0 text-green-400"
+                          className="inline-flex shrink-0 text-green-700"
                           title={verificationStatus.verifiedAt ? `Email verified on ${new Date(verificationStatus.verifiedAt).toLocaleDateString()}` : 'Email verified'}
                           aria-label="Email verified"
                         >
@@ -233,23 +233,23 @@ export default function ProfilePage() {
           {verificationStatus && !verificationStatus.isVerified && (
             <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 rounded-sm p-4">
               <div className="flex items-start gap-3">
-                <svg className="h-5 w-5 text-yellow-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="h-5 w-5 text-yellow-700 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
                 <div className="flex-1">
-                  <h3 className="text-sm font-display font-bold text-yellow-400 uppercase tracking-wide">Email Not Verified</h3>
-                  <p className="mt-1 text-sm text-yellow-300/80 font-display">
+                  <h3 className="text-sm font-display font-bold text-yellow-700 uppercase tracking-wide">Email Not Verified</h3>
+                  <p className="mt-1 text-sm text-yellow-700/80 font-display">
                     Please verify your email address to access all features. Check your inbox for the verification email.
                   </p>
                   {resendMessage && (
-                    <p className={`mt-2 text-sm font-display ${resendMessage.includes('sent') ? 'text-green-400' : 'text-red-400'}`}>
+                    <p className={`mt-2 text-sm font-display ${resendMessage.includes('sent') ? 'text-green-700' : 'text-red-600'}`}>
                       {resendMessage}
                     </p>
                   )}
                   <button
                     onClick={handleResendVerification}
                     disabled={isResendingVerification}
-                    className="mt-3 inline-flex items-center px-3 py-1.5 border border-yellow-500/40 text-sm font-display font-bold uppercase tracking-widest rounded-sm text-yellow-400 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="mt-3 inline-flex items-center px-3 py-1.5 border border-yellow-500/40 text-sm font-display font-bold uppercase tracking-widest rounded-sm text-yellow-700 hover:bg-yellow-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {isResendingVerification ? 'Sending...' : 'Resend Verification Email'}
                   </button>
@@ -287,7 +287,7 @@ export default function ProfilePage() {
                         </div>
                       ))}
                     </div>
-                    <button onClick={() => removeAddress(index)} className="ml-4 text-red-400 hover:text-red-300 transition-colors">
+                    <button onClick={() => removeAddress(index)} className="ml-4 text-red-600 hover:text-red-600 transition-colors">
                       <X className="h-5 w-5" />
                     </button>
                   </div>
@@ -387,7 +387,7 @@ export default function ProfilePage() {
                 Team Panel
               </Link>
             )}
-            <button onClick={handleLogout} className="bg-obsidian-raised hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-hairline hover:border-red-500/30 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
+            <button onClick={handleLogout} className="bg-obsidian-raised hover:bg-red-500/20 text-red-600 hover:text-red-600 border border-hairline hover:border-red-500/30 font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm">
               Logout
             </button>
           </div>

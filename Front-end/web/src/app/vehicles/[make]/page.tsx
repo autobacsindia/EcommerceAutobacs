@@ -55,9 +55,9 @@ export default function VehicleMakePage({ params }: { params: Promise<{ make: st
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <nav className="text-sm font-display">
           <Link href="/" className="text-ink-muted hover:text-gold transition-colors">Home</Link>
-          <span className="mx-2 text-hairline">/</span>
+          <span className="mx-2 text-ink-muted/50">/</span>
           <Link href="/vehicles" className="text-ink-muted hover:text-gold transition-colors">Vehicles</Link>
-          <span className="mx-2 text-hairline">/</span>
+          <span className="mx-2 text-ink-muted/50">/</span>
           <span className="text-ink/70">{vehicleMake}</span>
         </nav>
       </div>
@@ -80,7 +80,7 @@ export default function VehicleMakePage({ params }: { params: Promise<{ make: st
           </div>
         ) : error ? (
           <div className="text-center py-16">
-            <p className="text-red-400 font-display text-lg mb-4">{error}</p>
+            <p className="text-red-600 font-display text-lg mb-4">{error}</p>
             <button
               onClick={() => window.location.reload()}
               className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors"

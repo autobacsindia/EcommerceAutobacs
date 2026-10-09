@@ -404,20 +404,20 @@ export default async function RootLayout({
                         position="top-right"
                         toastOptions={{
                           style: {
-                            background: "#181a1a",
-                            color: "#f0ede7",
-                            border: "1px solid #252525",
+                            background: "#ffffff",
+                            color: "#0f1111",
+                            border: "1px solid #dfe3e2",
                             fontFamily: "var(--font-montserrat), system-ui, sans-serif",
                             fontSize: "0.875rem",
                             fontWeight: 500,
                             borderRadius: "0.5rem",
-                            boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
                           },
                           success: {
-                            iconTheme: { primary: "#c9a870", secondary: "#181a1a" },
+                            iconTheme: { primary: "#0a5c33", secondary: "#ffffff" },
                           },
                           error: {
-                            iconTheme: { primary: "#dc2626", secondary: "#f0ede7" },
+                            iconTheme: { primary: "#dc2626", secondary: "#ffffff" },
                           },
                         }}
                       />

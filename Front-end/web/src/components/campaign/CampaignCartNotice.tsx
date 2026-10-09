@@ -39,9 +39,9 @@ export default function CampaignCartNotice({
   if (applied && discount > 0) {
     return (
       <div className="mb-4 flex items-start gap-2 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5">
-        <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-400" />
+        <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-700" />
         <p className="text-[13px] text-ink">
-          <span className="font-semibold text-emerald-400">Offer applied</span> — you
+          <span className="font-semibold text-emerald-700">Offer applied</span> — you
           are saving <span className="font-semibold">{formatPrice(discount, { exact: true })}</span> on this bag.
         </p>
       </div>
@@ -113,12 +113,12 @@ export default function CampaignCartNotice({
   if (campaign.reasonCode === 'unverified') {
     return (
       <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
-        <Gift size={15} className="shrink-0 text-amber-400" />
+        <Gift size={15} className="shrink-0 text-amber-700" />
         <p className="text-[13px] text-ink">
-          <span className="font-semibold text-amber-300">Offer — {headline}</span> is
+          <span className="font-semibold text-amber-700">Offer — {headline}</span> is
           waiting on your account.
         </p>
-        <Link href="/verify-email" className="text-[13px] font-semibold text-amber-300 underline underline-offset-2">
+        <Link href="/verify-email" className="text-[13px] font-semibold text-amber-700 underline underline-offset-2">
           Confirm your email to apply it
         </Link>
       </div>

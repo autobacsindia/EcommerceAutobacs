@@ -238,7 +238,7 @@ export default function ImageUploader({
                       e.stopPropagation();
                       removeImage(index);
                     }}
-                    className="absolute top-2 right-2 p-1.5 bg-red-600 text-ink rounded-full hover:bg-red-700 transition shadow-lg"
+                    className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full hover:bg-red-700 transition shadow-lg"
                     title="Remove image"
                   >
                     <X className="h-4 w-4" />

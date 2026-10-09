@@ -71,7 +71,7 @@ export default function BrandsPage() {
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center max-w-md mx-auto px-4">
           <div className="bg-red-500/10 border border-red-500/30 rounded-full p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-            <Tag className="h-8 w-8 text-red-400" />
+            <Tag className="h-8 w-8 text-red-600" />
           </div>
           <h1 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-4">Error Loading Brands</h1>
           <p className="text-ink/70 font-display mb-6">{error}</p>

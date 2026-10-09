@@ -122,7 +122,7 @@ export default async function OrderSuccessPage({
         {/* Header */}
         <div className="text-center mb-10">
           <div className="bg-green-500/10 border border-green-500/30 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="h-12 w-12 text-green-400" />
+            <CheckCircle className="h-12 w-12 text-green-700" />
           </div>
           <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Confirmed</p>
           <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-3">

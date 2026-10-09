@@ -136,7 +136,7 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-obsidian-raised hover:text-red-300 transition-colors w-full font-display font-bold uppercase tracking-wide text-sm"
+                  className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-obsidian-raised hover:text-red-600 transition-colors w-full font-display font-bold uppercase tracking-wide text-sm"
                 >
                   <LogOut className="h-5 w-5" />
                   <span>Logout</span>

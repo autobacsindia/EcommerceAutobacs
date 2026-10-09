@@ -331,7 +331,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
       </div>
 
       <div className="p-6">
-        {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6"><p className="text-sm text-red-400">{error}</p></div>}
+        {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6"><p className="text-sm text-red-600">{error}</p></div>}
 
         {/* Step 1 — Items */}
         {currentStep === 1 && (
@@ -459,7 +459,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
                   {photos.map((p, i) => (
                     <li key={p.publicId} className="flex items-center justify-between text-sm bg-obsidian-deep rounded px-3 py-2">
                       <span className="truncate">{p.fileName}</span>
-                      <button onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))} className="text-ink-muted hover:text-red-400"><X className="h-4 w-4" /></button>
+                      <button onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))} className="text-ink-muted hover:text-red-600"><X className="h-4 w-4" /></button>
                     </li>
                   ))}
                 </ul>
@@ -542,7 +542,7 @@ function UploadRow({
         {uploaded ? (
           <div className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-green-500" />
-            <button onClick={onRemove} className="text-ink-muted hover:text-red-400"><X className="h-4 w-4" /></button>
+            <button onClick={onRemove} className="text-ink-muted hover:text-red-600"><X className="h-4 w-4" /></button>
           </div>
         ) : busy !== null ? (
           <span className="text-xs text-gold">{busy}%</span>

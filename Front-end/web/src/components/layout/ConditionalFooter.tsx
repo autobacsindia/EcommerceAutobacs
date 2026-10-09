@@ -1,13 +1,12 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import RedesignFooter from '@/components/home/redesign/RedesignFooter';
-import '@/components/home/redesign/home-redesign.css';
+import StoreFooter from '@/components/home/store/StoreFooter';
 
 /**
- * Global storefront footer — the redesigned obsidian+gold footer (wrapped in the
- * `.hr` scope its styles need). Suppressed on `/` (HomeRedesign ships its own),
- * the auth pages, and `/admin/*`.
+ * Global storefront footer — the light store footer with the green band, the same
+ * one the home page renders. Suppressed on `/` (the home page ships its own), the
+ * auth pages, careers, `/admin/*` and the team panel.
  */
 export default function ConditionalFooter() {
   const pathname = usePathname();
@@ -26,9 +25,5 @@ export default function ConditionalFooter() {
 
   if (hide) return null;
 
-  return (
-    <div className="hr">
-      <RedesignFooter />
-    </div>
-  );
+  return <StoreFooter />;
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Img from '../redesign/Img';
@@ -10,14 +11,17 @@ import { useCart } from '@/context/CartContext';
 import { loginHref } from '@/lib/utils';
 import { SUPPORT_PHONE_TEL, whatsappLink } from '@/lib/contactInfo';
 import VehiclePicker from './VehiclePicker';
-import type { StoreCategory } from './storeData';
+import './store.css';
+
+/** A department link: the home page passes StoreCategory, other pages the nav list. */
+export type HeaderCategory = { name: string; href: string; slug?: string };
 
 /**
  * Dark top bar (the white ROAVION logo needs it), Amazon-style: logo · vehicle ·
  * big search · account & orders · cart. Under it, the green category bar. On phones:
  * menu · logo · account · cart, then a full-width search, then the vehicle chip.
  */
-export default function StoreHeader({ categories }: { categories: StoreCategory[] }) {
+export default function StoreHeader({ categories }: { categories: HeaderCategory[] }) {
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
   const { itemCount } = useCart();
@@ -104,8 +108,10 @@ export default function StoreHeader({ categories }: { categories: StoreCategory[
         ))}
       </nav>
 
-      {menuOpen && (
-        <div className="sh-drawer-wrap" role="dialog" aria-modal="true" aria-label="Menu">
+      {/* Portalled to <body>: the sticky header is its own stacking context, which would
+          otherwise cap the drawer under the floating WhatsApp / call / Need-help buttons. */}
+      {menuOpen && createPortal(
+        <div className="sh-theme sh-drawer-wrap" role="dialog" aria-modal="true" aria-label="Menu">
           <button type="button" className="sh-drawer-scrim" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
           <div className="sh-drawer">
             <div className="sh-drawer-head">
@@ -117,7 +123,7 @@ export default function StoreHeader({ categories }: { categories: StoreCategory[
             <div className="sh-drawer-body">
               <p className="sh-drawer-title">Shop by category</p>
               {categories.map((c) => (
-                <Link key={c.slug} href={c.href} onClick={() => setMenuOpen(false)}>{c.name}</Link>
+                <Link key={c.slug || c.href} href={c.href} onClick={() => setMenuOpen(false)}>{c.name}</Link>
               ))}
               <p className="sh-drawer-title">Help &amp; offers</p>
               <Link href="/offers" onClick={() => setMenuOpen(false)}>Today&apos;s Deals</Link>
@@ -132,7 +138,8 @@ export default function StoreHeader({ categories }: { categories: StoreCategory[
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </header>
   );

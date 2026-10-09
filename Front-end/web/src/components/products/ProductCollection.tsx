@@ -277,7 +277,7 @@ export default function ProductCollection({
 
                   {/* Sale Badge */}
                   {product.originalPrice && product.originalPrice > product.price && (
-                    <div className="absolute top-4 left-4 bg-red-500 text-ink px-3 py-1 rounded-full text-sm font-bold">
+                    <div className="absolute top-4 left-4 bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold">
                       SALE
                     </div>
                   )}
@@ -342,7 +342,7 @@ export default function ProductCollection({
                     <button
                       onClick={(e) => handleAddToCart(product, e)}
                       disabled={product.stock === 'out'}
-                      className="w-full flex items-center justify-center gap-2 bg-gold text-obsidian px-6 py-3 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed font-medium"
+                      className="w-full flex items-center justify-center gap-2 bg-gold text-obsidian px-6 py-3 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed font-medium"
                     >
                       {product.productType === 'variable' ? <SlidersHorizontal className="h-5 w-5" /> : <ShoppingCart className="h-5 w-5" />}
                       <span>{product.stock === 'out' ? 'Out of Stock' : product.productType === 'variable' ? 'Select model' : 'Add to Cart'}</span>

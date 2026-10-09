@@ -70,7 +70,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ make: s
           <p className="text-ink-muted mb-6">{error}</p>
           <Link
             href="/vehicles"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-ink rounded-lg hover:bg-green-700 transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Vehicles
@@ -112,7 +112,7 @@ export default function VehicleModelPage({ params }: { params: Promise<{ make: s
             </p>
             <Link
               href="/products"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-ink rounded-lg hover:bg-green-700 transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               Browse All Products
             </Link>

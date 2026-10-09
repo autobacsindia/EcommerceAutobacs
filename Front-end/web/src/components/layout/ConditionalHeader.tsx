@@ -1,25 +1,23 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import RedesignNav from '@/components/home/redesign/RedesignNav';
-import '@/components/home/redesign/home-redesign.css';
+import StoreHeader from '@/components/home/store/StoreHeader';
 import type { NavCategory } from '@/lib/navCategories';
 
 /**
- * Global storefront nav. Renders the redesigned obsidian+gold nav (wrapped in the
- * `.hr` scope its styles need) on every storefront page, plus a spacer that
- * offsets content below the fixed 76px bar (64px on mobile).
+ * Global storefront header — the light store's dark header + green department bar
+ * (components/home/store/StoreHeader), the same one the home page renders.
  *
  * Suppressed on:
- *  - `/`                → the home page ships its own nav inside HomeRedesign
+ *  - `/`                → the home page ships its own header
  *  - `/careers`         → standalone recruiting landing ships its own header
  *  - `/login`, `/register` → minimal auth chrome
  *  - `/admin/*`         → admin has its own light-theme shell
  *
- * `navCategories` is accepted for API compatibility with the previous Header
- * (the redesign nav sources its vehicle menu independently).
+ * `navCategories` (the live category hubs, from the root layout) feed the green
+ * department bar and the "All" menu.
  */
-export default function ConditionalHeader({ navCategories: _navCategories }: { navCategories: NavCategory[] }) {
+export default function ConditionalHeader({ navCategories }: { navCategories: NavCategory[] }) {
   const pathname = usePathname();
   // Normalise a trailing slash before matching. `next.config.ts` sets
   // `skipTrailingSlashRedirect`, so `/careers/` is served verbatim and
@@ -39,11 +37,14 @@ export default function ConditionalHeader({ navCategories: _navCategories }: { n
 
   return (
     <>
-      <div className="hr">
-        <RedesignNav />
+      {/* The same dark header + green department bar as the home page. It sits in
+          normal flow (sticky on desktop), so no spacer is needed. */}
+      {/* Target of the footer's "Back to top". Not on the header itself: the header is
+          sticky, so the browser treats it as already in view and would not scroll. */}
+      <span id="top" aria-hidden="true" />
+      <div className="sh-theme sh-chrome">
+        <StoreHeader categories={navCategories.map((c) => ({ name: c.label, href: c.href }))} />
       </div>
-      {/* Spacer: the nav is position:fixed, so reserve its height in flow. */}
-      <div className="h-16 md:h-[76px] shrink-0" aria-hidden />
     </>
   );
 }

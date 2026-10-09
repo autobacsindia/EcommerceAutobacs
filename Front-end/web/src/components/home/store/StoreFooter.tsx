@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import './store.css';
 import Img from '../redesign/Img';
 import { brand, footer } from '../redesign/homeContent';
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL, SUPPORT_EMAIL, whatsappLink } from '@/lib/contactInfo';
@@ -10,7 +11,7 @@ import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL, SUPPORT_EMAIL, whatsappLink }
  */
 export default function StoreFooter() {
   return (
-    <footer className="sf">
+    <footer className="sf sh-theme">
       <a href="#top" className="sf-top">Back to top</a>
       <div className="sf-band">
         <a href={`tel:${SUPPORT_PHONE_TEL}`}><strong>Call us</strong><span>{SUPPORT_PHONE_DISPLAY}</span></a>

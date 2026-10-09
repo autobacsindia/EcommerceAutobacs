@@ -165,13 +165,13 @@ export default function CuratedCollectionCarousel({
     
     switch (collection.badgeColor) {
       case 'red':
-        return `${baseClasses} bg-red-600 text-ink`;
+        return `${baseClasses} bg-red-600 text-white`;
       case 'orange':
-        return `${baseClasses} bg-orange-600 text-ink`;
+        return `${baseClasses} bg-orange-600 text-white`;
       case 'blue':
         return `${baseClasses} bg-gold text-obsidian`;
       case 'green':
-        return `${baseClasses} bg-green-600 text-ink`;
+        return `${baseClasses} bg-green-600 text-white`;
       default:
         return `${baseClasses} bg-obsidian-deep text-ink`;
     }
@@ -284,7 +284,7 @@ export default function CuratedCollectionCarousel({
                     
                     {/* Sale Badge */}
                     {product.originalPrice && product.originalPrice > product.price && (
-                      <div className="absolute top-2 left-2 bg-red-600 text-ink px-2 py-1 rounded-sm text-xs font-bold">
+                      <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded-sm text-xs font-bold">
                         {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% off
                       </div>
                     )}
@@ -347,7 +347,7 @@ export default function CuratedCollectionCarousel({
                     <button
                       onClick={(e) => handleAddToCart(product, e)}
                       disabled={product.stock === 'out'}
-                      className="w-full flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-ink px-3 py-2 rounded-lg transition-colors disabled:bg-obsidian-raised disabled:cursor-not-allowed text-sm font-medium shadow-sm"
+                      className="w-full flex items-center justify-center gap-2 bg-yellow-400 hover:bg-yellow-500 text-ink px-3 py-2 rounded-lg transition-colors disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed text-sm font-medium shadow-sm"
                     >
                       {product.productType === 'variable' && product.stock !== 'out' && <SlidersHorizontal className="h-4 w-4" />}
                       {product.stock === 'out' ? 'Out of Stock' : product.productType === 'variable' ? 'Select model' : 'Add to Cart'}

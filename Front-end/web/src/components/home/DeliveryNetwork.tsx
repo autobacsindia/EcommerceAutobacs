@@ -14,7 +14,7 @@ interface PublicWarehouse {
 const TYPE_META: Record<string, { label: string; Icon: LucideIcon; color: string }> = {
   warehouse: { label: 'Warehouse', Icon: Warehouse, color: 'text-gold' },
   hub:       { label: 'Hub',       Icon: Network,   color: 'text-gold' },
-  store:     { label: 'Store',     Icon: Store,     color: 'text-emerald-400' },
+  store:     { label: 'Store',     Icon: Store,     color: 'text-emerald-700' },
 };
 
 async function fetchActiveWarehouses(): Promise<PublicWarehouse[]> {

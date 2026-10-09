@@ -353,7 +353,7 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center py-12">
         <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-8 max-w-md mx-4 text-center">
-          <svg className="w-14 h-14 mx-auto text-red-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-14 h-14 mx-auto text-red-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-2">Category Not Available</h2>
@@ -388,7 +388,7 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
 
       {/* Category strip — the same control as /products. Without it, arriving here
           from a chip was a one-way door: no way to reach a sibling hub but Back. */}
-      <div className="sticky top-16 z-30 border-b border-hairline bg-obsidian/90 backdrop-blur md:top-[76px]">
+      <div className="sticky top-[var(--store-header-h)] z-30 border-b border-hairline bg-obsidian/90 backdrop-blur">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <CategoryChips />
         </div>
@@ -400,7 +400,7 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
           {/* Filters Sidebar */}
           <aside className="hidden lg:block">
             {/* Clears the sticky category strip above, same offset /products uses. */}
-            <div className="sticky top-[150px]">
+            <div className="sticky top-[calc(var(--store-header-h)+74px)]">
               <Filters basePath={`/categories/${slug}`} scopeCategoryId={category?._id} />
             </div>
           </aside>

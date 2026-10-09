@@ -61,7 +61,7 @@ export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsPr
               <div className={`absolute inset-0 ${isDark ? 'bg-linear-to-t from-obsidian' : 'bg-linear-to-t from-obsidian'} to-transparent`} />
               
               {/* Compatibility Badge */}
-              <div className="absolute top-4 right-4 bg-green-500/90 backdrop-blur-sm text-ink px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+              <div className="absolute top-4 right-4 bg-green-500/90 backdrop-blur-sm text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
                 <Check className="w-3 h-3" />
                 Compatible
               </div>
@@ -75,7 +75,7 @@ export default function VehicleCards({ vehicles, isDark = true }: VehicleCardsPr
 
               <Link
                 href={vehicleHref(vehicle)}
-                className={`block w-full mt-4 text-center ${isDark ? 'bg-obsidian-raised hover:bg-orange-500' : 'bg-obsidian-raised hover:bg-orange-500 hover:text-ink'} text-ink font-semibold py-2 px-4 rounded-lg transition-colors text-sm`}
+                className={`block w-full mt-4 text-center ${isDark ? 'bg-obsidian-raised hover:bg-orange-500 hover:text-white' : 'bg-obsidian-raised hover:bg-orange-500 hover:text-white'} text-ink font-semibold py-2 px-4 rounded-lg transition-colors text-sm`}
               >
                 Shop Parts for This Vehicle
               </Link>
