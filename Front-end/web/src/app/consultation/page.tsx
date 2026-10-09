@@ -66,8 +66,8 @@ function enquiryFromUrl(): string {
   return item ? item.replace(/-/g, ' ') : '';
 }
 
-const inputClass = 'w-full bg-white border border-[#c9cfcd] text-ink placeholder:text-ink-muted rounded-sm px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/25 font-display text-sm transition-colors';
-const labelClass = 'block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1.5';
+const inputClass = 'w-full bg-white border border-[#c9cfcd] text-ink placeholder:text-ink-muted rounded-lg px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/25 font-display text-sm transition-colors';
+const labelClass = 'block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1.5';
 
 export default function ConsultationPage() {
   const router = useRouter();
@@ -150,8 +150,8 @@ export default function ConsultationPage() {
 
         <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:px-6 md:py-20 lg:grid-cols-2 lg:gap-16 lg:px-8">
           <div>
-            <p className="mb-4 font-display text-[11px] uppercase tracking-[0.28em] text-gold">Free expert consultation</p>
-            <h1 className="mb-5 font-display text-4xl font-light leading-[1.05] tracking-[-0.01em] md:text-6xl">
+            <p className="mb-4 font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">Free expert consultation</p>
+            <h1 className="mb-5 font-display text-4xl font-bold leading-[1.05] tracking-[-0.01em] md:text-5xl">
               Build it right.
               <span className="block text-gold italic">Drive it better.</span>
             </h1>
@@ -187,10 +187,10 @@ export default function ConsultationPage() {
           >
             {/* Gold accent strip — draws the eye to the form against the photo. */}
             <div aria-hidden="true" className="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-gold/40 via-gold to-gold/40" />
-            <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 font-display text-[10px] font-bold uppercase tracking-[0.2em] text-gold">
+            <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 font-display text-[15px] font-bold text-gold">
               <Check className="h-3 w-3" /> Free · No obligation
             </span>
-            <h2 className="mb-1 font-display text-3xl font-light tracking-[-0.01em]">Book your consultation</h2>
+            <h2 className="mb-1 font-display text-3xl font-bold tracking-[-0.01em]">Book your consultation</h2>
             <p className="mb-6 font-display text-sm text-ink/65">Takes less than a minute — a specialist replies within one working day.</p>
 
             <div className="space-y-4">
@@ -240,7 +240,7 @@ export default function ConsultationPage() {
             </div>
 
             {error && (
-              <p role="alert" className="mt-4 flex items-start gap-2 rounded-sm border border-red-500/40 bg-red-500/10 p-3 font-display text-sm text-red-600">
+              <p role="alert" className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/40 bg-red-500/10 p-3 font-display text-sm text-red-600">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {error}
               </p>
             )}
@@ -248,7 +248,7 @@ export default function ConsultationPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="group mt-6 flex w-full items-center justify-center gap-2 rounded-sm bg-gold py-4 font-display text-sm font-bold uppercase tracking-widest text-obsidian shadow-[0_10px_30px_-8px_rgba(201,168,112,0.6)] transition hover:brightness-110 disabled:opacity-60"
+              className="group mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-gold py-4 font-display text-[15px] font-bold text-white shadow-[0_10px_30px_-8px_rgba(201,168,112,0.6)] transition hover:brightness-110 disabled:opacity-60"
             >
               {submitting
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</>
@@ -264,16 +264,16 @@ export default function ConsultationPage() {
       {/* Trust Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto">
         <div className="text-center mb-14">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Why Autobacs</p>
-          <h2 className="text-3xl md:text-4xl font-display font-light text-ink tracking-[-0.01em]">Built for Enthusiasts. Trusted by Owners.</h2>
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Why Autobacs</p>
+          <h2 className="text-3xl md:text-4xl font-display font-bold text-ink tracking-[-0.01em]">Built for Enthusiasts. Trusted by Owners.</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {TRUST_ITEMS.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="bg-obsidian border border-hairline rounded-sm p-6 hover:border-gold/40 transition-colors group">
-              <div className="w-12 h-12 bg-gold/10 rounded-sm flex items-center justify-center mb-4 group-hover:bg-gold/20 transition-colors">
+            <div key={title} className="bg-obsidian border border-hairline rounded-lg p-6 hover:border-gold/40 transition-colors group">
+              <div className="w-12 h-12 bg-gold/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-gold/20 transition-colors">
                 <Icon className="h-6 w-6 text-gold" />
               </div>
-              <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-2">{title}</h3>
+              <h3 className="font-display text-ink tracking-[-0.01em] text-sm mb-2">{title}</h3>
               <p className="text-ink/70 font-display text-sm leading-relaxed">{desc}</p>
             </div>
           ))}
@@ -288,7 +288,7 @@ export default function ConsultationPage() {
             { emoji: '⭐', stat: '4.9/5', label: 'Customer Rating', sub: 'Based on 200+ reviews' },
             { emoji: '🔧', stat: '15+', label: 'Years Experience', sub: 'In automotive upgrades' },
           ].map(({ emoji, stat, label, sub }) => (
-            <div key={label} className="bg-obsidian border border-hairline rounded-sm p-6 text-center hover:border-gold/30 transition-colors">
+            <div key={label} className="bg-obsidian border border-hairline rounded-lg p-6 text-center hover:border-gold/30 transition-colors">
               <div className="text-4xl mb-3">{emoji}</div>
               <div className="text-3xl font-display font-bold text-ink mb-1">{stat}</div>
               <div className="font-display font-bold text-ink/70 uppercase tracking-wide text-sm">{label}</div>

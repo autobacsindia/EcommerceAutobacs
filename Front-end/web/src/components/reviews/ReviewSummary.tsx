@@ -28,7 +28,7 @@ const ReviewSummary: React.FC<ReviewSummaryProps> = ({
       {/* Overall */}
       <div className="flex flex-col items-center gap-2 sm:min-w-[140px]">
         <div className="flex items-baseline gap-1">
-          <span className="text-5xl font-light text-ink">{averageRating.toFixed(1)}</span>
+          <span className="text-4xl font-bold text-ink">{averageRating.toFixed(1)}</span>
           <span className="text-lg text-ink-muted">/5</span>
         </div>
         <StarRating rating={averageRating} size="medium" />

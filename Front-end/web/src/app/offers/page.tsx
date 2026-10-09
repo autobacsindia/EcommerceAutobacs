@@ -2,7 +2,9 @@
 
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import ProductGrid from '@/components/products/ProductGrid';
+import StorePageHeader from '@/components/store/StorePageHeader';
 import Pagination from '@/components/layout/Pagination';
 import { useOfferProducts } from '@/hooks/queries/useOfferProducts';
 
@@ -14,26 +16,26 @@ function OffersPageInner() {
   const products = data?.products ?? [];
   const pagination = data?.pagination ?? {};
 
-  return (
-    <div className="min-h-screen bg-obsidian-deep">
-      <div className="bg-obsidian border-b border-hairline py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Limited Time</p>
-          <h1 className="text-4xl font-display font-light text-ink tracking-[-0.01em] mb-3">Offers</h1>
-          <p className="text-ink/70 font-display">Your Dream Upgrades, Now More Affordable!</p>
-        </div>
-      </div>
+  const total = (pagination as { total?: number }).total;
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+  return (
+    <div className="sp sh-theme">
+      <StorePageHeader
+        crumbs={[{ label: "Today's Deals" }]}
+        title={<>Today&apos;s Deals <span className="ml-2 inline-block rounded-md bg-[#cc0c39] px-2 py-0.5 align-middle text-[13px] font-bold text-white">Limited time</span></>}
+        subtitle="Genuine price drops on parts and accessories — the M.R.P. is shown on every deal."
+        aside={!isPending && !isError && typeof total === 'number' ? `${total.toLocaleString('en-IN')} deals` : undefined}
+      />
+
+      <div className="sp-wrap pt-6">
         {isPending && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-obsidian border border-hairline rounded-sm overflow-hidden animate-pulse">
-                <div className="h-48 bg-obsidian-raised" />
-                <div className="p-4">
-                  <div className="h-4 bg-obsidian-raised rounded-sm mb-2" />
-                  <div className="h-4 bg-obsidian-raised rounded-sm w-2/3 mb-4" />
-                  <div className="h-6 bg-obsidian-raised rounded-sm w-1/3" />
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="overflow-hidden rounded-xl border border-hairline bg-white">
+                <div className="aspect-square animate-pulse bg-obsidian-deep" />
+                <div className="space-y-3 p-4">
+                  <div className="h-4 w-3/4 animate-pulse rounded bg-obsidian-deep" />
+                  <div className="h-5 w-1/2 animate-pulse rounded bg-obsidian-deep" />
                 </div>
               </div>
             ))}
@@ -41,26 +43,32 @@ function OffersPageInner() {
         )}
 
         {!isPending && isError && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center">
-            <p className="text-red-600 font-display">Failed to load offers</p>
+          <div className="sp-card sp-empty" role="alert">
+            <p className="sp-empty-title">We couldn&apos;t load today&apos;s deals</p>
+            <p>Please check your connection and try again.</p>
+            <button type="button" onClick={() => window.location.reload()} className="sh-btn sh-btn-primary">Try again</button>
           </div>
         )}
 
         {!isPending && !isError && products.length > 0 && (
           <>
             <ProductGrid products={products} />
-            <Pagination
-              pagination={pagination}
-              currentPage={currentPage}
-              basePath="/offers"
-              searchParams={new URLSearchParams(searchParams.toString())}
-            />
+            <div className="mt-10">
+              <Pagination
+                pagination={pagination}
+                currentPage={currentPage}
+                basePath="/offers"
+                searchParams={new URLSearchParams(searchParams.toString())}
+              />
+            </div>
           </>
         )}
 
         {!isPending && !isError && products.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-ink-muted font-display">No offers available right now. Please check back later.</p>
+          <div className="sp-card sp-empty">
+            <p className="sp-empty-title">No deals running right now</p>
+            <p>New deals go live regularly — meanwhile, browse the full catalogue.</p>
+            <Link href="/products" className="sh-btn sh-btn-primary">Browse all products</Link>
           </div>
         )}
       </div>
@@ -70,7 +78,7 @@ function OffersPageInner() {
 
 export default function OffersPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-obsidian-deep" />}>
+    <Suspense fallback={<div className="sp sh-theme" />}>
       <OffersPageInner />
     </Suspense>
   );

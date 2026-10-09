@@ -199,7 +199,7 @@ export default function GalleryZoom({ image, priority, onSale, onOpen }: Gallery
       </div>
 
       {onSale && (
-        <div className="pointer-events-none absolute left-5 top-5 grid h-16 w-16 place-items-center rounded-full bg-gold text-[10px] font-semibold uppercase tracking-[0.16em] text-obsidian">
+        <div className="pointer-events-none absolute left-5 top-5 grid h-16 w-16 place-items-center rounded-full bg-gold text-[12px] font-semibold uppercase tracking-[0.12em] text-white">
           Sale
         </div>
       )}
@@ -209,7 +209,7 @@ export default function GalleryZoom({ image, priority, onSale, onOpen }: Gallery
           aria-hidden="true"
           className={cn(
             'pointer-events-none absolute bottom-4 right-4 flex items-center gap-2 border border-hairline bg-obsidian/80 px-3 py-1.5',
-            'text-[10px] uppercase tracking-[0.16em] text-ink-muted backdrop-blur-sm',
+            'text-[12px] uppercase tracking-[0.12em] text-ink-muted backdrop-blur-sm font-semibold',
             !reduceMotion && 'transition-opacity duration-200',
             zooming ? 'opacity-0' : 'opacity-100'
           )}

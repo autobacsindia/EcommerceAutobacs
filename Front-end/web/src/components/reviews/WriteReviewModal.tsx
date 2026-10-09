@@ -202,7 +202,7 @@ export default function WriteReviewModal({
               <button
                 type="submit"
                 disabled={isSubmitting || rating === 0 || comment.trim().length < 10}
-                className="px-4 py-2 text-sm font-medium text-obsidian bg-gold rounded-lg hover:bg-gold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 text-sm font-medium text-white bg-gold rounded-lg hover:bg-gold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {isSubmitting ? (
                   <>

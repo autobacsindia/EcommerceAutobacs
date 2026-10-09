@@ -51,14 +51,14 @@ export default function KarmaCard() {
             <Sparkles className="h-6 w-6 text-gold" />
           </div>
           <div>
-            <p className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Karma Points</p>
+            <p className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Karma Points</p>
             <p className="text-2xl font-display font-bold text-ink">{balance}</p>
             <p className="text-xs text-ink-muted font-display">≈ ₹{(balance * pointValue).toFixed(2)} value</p>
           </div>
         </div>
         <button
           onClick={loadHistory}
-          className="text-gold hover:text-ink font-display font-bold uppercase tracking-widest text-xs flex items-center gap-1 transition-colors"
+          className="text-gold hover:text-ink font-display font-bold uppercase tracking-[0.12em] text-[12px] flex items-center gap-1 transition-colors"
         >
           History {showHistory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
         </button>

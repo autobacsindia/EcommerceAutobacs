@@ -70,9 +70,9 @@ const STATUS_COPY: Record<string, { label: string; style: string; hint: string }
 };
 
 const card = 'bg-obsidian border border-hairline rounded-lg p-6';
-const cardTitle = 'text-xs font-display font-bold text-ink-muted uppercase tracking-widest';
+const cardTitle = 'text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]';
 const primaryBtn =
-  'inline-flex items-center justify-center gap-2 px-5 py-3 rounded-sm bg-gold text-obsidian font-display font-bold uppercase tracking-widest text-sm hover:opacity-90 transition';
+  'inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-gold text-white font-display font-bold text-[15px] hover:opacity-90 transition';
 
 /** Full-page states (loading, not-an-affiliate, not-active) share this shell. */
 function Shell({ children }: { children: React.ReactNode }) {
@@ -139,7 +139,7 @@ export default function AffiliateDashboardPage() {
   if (isError) {
     return (
       <Shell>
-        <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em]">
+        <h1 className="text-3xl font-display font-bold text-ink tracking-[-0.01em]">
           We couldn&apos;t load your dashboard
         </h1>
         <p className="mt-3 text-ink-muted font-display">
@@ -157,10 +157,10 @@ export default function AffiliateDashboardPage() {
   if (!affiliate) {
     return (
       <Shell>
-        <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">
+        <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">
           Affiliate Programme
         </p>
-        <h1 className="mt-4 text-3xl font-display font-light text-ink tracking-[-0.01em]">
+        <h1 className="mt-4 text-3xl font-display font-bold text-ink tracking-[-0.01em]">
           You&apos;re not an affiliate yet
         </h1>
         <p className="mt-3 text-ink-muted font-display">
@@ -176,10 +176,10 @@ export default function AffiliateDashboardPage() {
   if (affiliate.status !== 'active') {
     return (
       <Shell>
-        <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">
+        <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">
           Affiliate Programme
         </p>
-        <h1 className="mt-4 text-3xl font-display font-light text-ink tracking-[-0.01em]">
+        <h1 className="mt-4 text-3xl font-display font-bold text-ink tracking-[-0.01em]">
           {affiliate.status === 'pending' ? 'Application under review' : 'Your account is paused'}
         </h1>
         <p className="mt-3 text-ink-muted font-display">
@@ -231,8 +231,8 @@ export default function AffiliateDashboardPage() {
     <main className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-4xl mx-auto px-4 space-y-6">
         <header className="mb-10">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Account</p>
-          <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-display font-light leading-[0.95] tracking-[-0.01em] text-ink">
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">Account</p>
+          <h1 className="mt-4 text-[clamp(24px,3vw,36px)] font-display font-bold leading-[0.95] tracking-[-0.01em] text-ink">
             Affiliate Dashboard
           </h1>
           <p className="mt-4 text-ink-muted font-display">
@@ -250,12 +250,12 @@ export default function AffiliateDashboardPage() {
               readOnly
               value={link}
               onFocus={(e) => e.currentTarget.select()}
-              className="flex-1 min-w-64 bg-obsidian-raised border border-hairline text-ink rounded-sm px-3 py-2 font-mono text-sm focus:outline-none focus:border-gold"
+              className="flex-1 min-w-64 bg-obsidian-raised border border-hairline text-ink rounded-lg px-3 py-2 font-mono text-sm focus:outline-none focus:border-gold"
               aria-label="Your affiliate link"
             />
             <button
               onClick={copy}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-sm bg-gold text-obsidian font-display font-bold uppercase tracking-widest text-xs hover:opacity-90 transition"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gold text-white font-display font-bold text-[15px] hover:opacity-90 transition"
             >
               {copied ? <Check className="w-4 h-4" aria-hidden /> : <Copy className="w-4 h-4" aria-hidden />}
               {copied ? 'Copied' : 'Copy'}
@@ -289,14 +289,14 @@ export default function AffiliateDashboardPage() {
           <h2 className={cardTitle}>Earnings</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-4">
             <div>
-              <p className="text-xs font-display text-ink-muted uppercase tracking-widest">Ready to pay</p>
-              <p className="mt-1 text-2xl font-display font-light text-gold tracking-[-0.01em]">
+              <p className="text-[12px] font-display text-ink-muted uppercase tracking-[0.12em] font-semibold">Ready to pay</p>
+              <p className="mt-1 text-2xl font-display font-bold text-gold tracking-[-0.01em]">
                 {rupees(data?.payableBalancePaise ?? 0)}
               </p>
             </div>
             {(['pending', 'approved', 'paid'] as const).map((key) => (
               <div key={key}>
-                <p className="text-xs font-display text-ink-muted uppercase tracking-widest">
+                <p className="text-[12px] font-display text-ink-muted uppercase tracking-[0.12em] font-semibold">
                   {STATUS_COPY[key].label}
                 </p>
                 <p className="mt-1 text-lg font-display text-ink">{rupees(summary[key]?.netPaise ?? 0)}</p>
@@ -316,7 +316,7 @@ export default function AffiliateDashboardPage() {
           optimistic: payout state is money state, so the UI waits for the server.
         */}
         {minPayoutPaise > 0 && (
-          <div className="mt-4 rounded-sm border border-hairline bg-obsidian-raised px-4 py-3">
+          <div className="mt-4 rounded-lg border border-hairline bg-obsidian-raised px-4 py-3">
             {!canRequest && !alreadyRequested && (
               <p className="text-sm text-ink-muted font-display">
                 We transfer once your confirmed balance reaches{' '}
@@ -334,7 +334,7 @@ export default function AffiliateDashboardPage() {
                 <button
                   onClick={() => requestPayout.mutate()}
                   disabled={requestPayout.isPending}
-                  className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-sm bg-gold text-obsidian font-display font-bold uppercase tracking-widest text-xs hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gold text-white font-display font-bold text-[15px] hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {requestPayout.isPending ? 'Requesting…' : 'Request payout'}
                 </button>
@@ -372,7 +372,7 @@ export default function AffiliateDashboardPage() {
         )}
 
         {(data?.payableBalancePaise ?? 0) < 0 && (
-            <p className="mt-4 rounded-sm border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 font-display">
+            <p className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 font-display">
               An order you referred was refunded after it had been paid out, so this amount
               is carried against your next earnings. Nothing is owed by you directly.
             </p>
@@ -392,7 +392,7 @@ export default function AffiliateDashboardPage() {
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm font-display">
               <thead className="text-left">
-                <tr className="text-[10px] uppercase tracking-widest text-ink-muted">
+                <tr className="text-[12px] uppercase tracking-[0.12em] text-ink-muted font-semibold">
                   <th className="py-2 font-bold">Date</th>
                   <th className="py-2 font-bold">Order value</th>
                   <th className="py-2 font-bold text-right">Your commission</th>
@@ -421,7 +421,7 @@ export default function AffiliateDashboardPage() {
                       </td>
                       <td className="py-3">
                         <span
-                          className={`inline-block px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${copyFor.style}`}
+                          className={`inline-block px-2 py-1 rounded-full text-[12px] font-bold uppercase tracking-[0.12em] ${copyFor.style}`}
                           title={copyFor.hint}
                         >
                           {copyFor.label}
@@ -443,7 +443,7 @@ export default function AffiliateDashboardPage() {
             {cursor && (
               <button
                 onClick={() => setCursor(null)}
-                className="px-4 py-2 border border-hairline text-ink-muted hover:text-ink hover:border-gold rounded-sm text-xs font-display font-bold uppercase tracking-widest transition"
+                className="px-4 py-2 border border-hairline text-ink-muted hover:text-ink hover:border-gold rounded-full text-[15px] font-display font-bold transition"
               >
                 Back to start
               </button>
@@ -451,7 +451,7 @@ export default function AffiliateDashboardPage() {
             <button
               onClick={() => setCursor(ledger?.nextCursor ?? null)}
               disabled={!ledger?.nextCursor}
-              className="px-4 py-2 border border-hairline text-ink-muted hover:text-ink hover:border-gold rounded-sm text-xs font-display font-bold uppercase tracking-widest transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-muted disabled:hover:border-hairline"
+              className="px-4 py-2 border border-hairline text-ink-muted hover:text-ink hover:border-gold rounded-full text-[15px] font-display font-bold transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-muted disabled:hover:border-hairline"
             >
               Older
             </button>

@@ -97,7 +97,7 @@ function ArticleListContent({ type }: ArticleListPageProps) {
   const colorClasses = {
     badge: 'bg-gold/10 text-gold',
     btn: 'bg-gold hover:opacity-90',
-    active: 'bg-gold text-obsidian',
+    active: 'bg-gold text-white',
     hover: 'hover:text-gold',
   };
 

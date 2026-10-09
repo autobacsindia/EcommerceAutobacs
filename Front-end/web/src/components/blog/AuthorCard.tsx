@@ -28,7 +28,7 @@ export default function AuthorCard({ name, type }: Props) {
         {abbr}
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs uppercase tracking-widest text-ink-muted font-medium mb-0.5">Written by</p>
+        <p className="text-[12px] uppercase tracking-[0.12em] text-ink-muted font-medium mb-0.5">Written by</p>
         <p className="font-bold text-ink text-base leading-snug">{displayName}</p>
         <Link
           href={tagHref(type, displayName)}

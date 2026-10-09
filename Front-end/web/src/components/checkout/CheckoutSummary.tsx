@@ -69,12 +69,12 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
       {/* ── Coupon (applied on the cart page; read-only here) ────────────────── */}
       {appliedCode && (
         <div>
-          <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-2 flex items-center gap-2">
+          <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-2 flex items-center gap-2">
             <Tag className="h-3.5 w-3.5" /> Coupon
           </h3>
 
           {quote?.appliedCoupon ? (
-            <div className="bg-green-500/10 border border-green-500/30 rounded-sm px-3 py-2">
+            <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-2">
               <span className="text-green-700 font-display font-bold text-sm uppercase tracking-wide">
                 {quote.appliedCoupon.code} applied
               </span>
@@ -91,7 +91,7 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
               fail when it is not. That is how you lose a completed checkout to a
               cosmetic warning.
             */
-            <div className="bg-obsidian border border-hairline rounded-sm px-3 py-2">
+            <div className="bg-obsidian border border-hairline rounded-lg px-3 py-2">
               <p className="text-ink-muted text-xs font-display">
                 <span className="font-bold uppercase tracking-wide">{appliedCode}</span>
                 {' '}— no discount on this order, but it still credits whoever referred you.
@@ -100,7 +100,7 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
           ) : quote?.couponError ? (
             // Valid when applied on the cart, no longer valid now. Order creation would
             // hard-fail, so say so here and send them back rather than fail at payment.
-            <div className="bg-red-500/10 border border-red-500/30 rounded-sm px-3 py-2">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
               <p className="text-red-600 text-xs font-display">{quote.couponError}</p>
               <Link href="/cart" className="text-gold text-xs font-display font-bold uppercase tracking-wide hover:underline">
                 Edit coupon in cart →
@@ -113,7 +113,7 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
       {/* ── Karma points ────────────────────────────────────────────────────── */}
       {karmaEnabled && (
         <div className="border-t border-hairline pt-4">
-          <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-2 flex items-center gap-2">
+          <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-2 flex items-center gap-2">
             <Sparkles className="h-3.5 w-3.5" /> Karma Points
           </h3>
           <p className="text-ink/70 font-display text-sm mb-2">
@@ -128,11 +128,11 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
                 max={maxRedeem}
                 value={redeemPoints}
                 onChange={(e) => setRedeemPoints(Math.max(0, Math.min(maxRedeem, parseInt(e.target.value, 10) || 0)))}
-                className="w-28 bg-obsidian-raised border border-hairline text-ink rounded-sm px-3 py-2 text-sm font-display focus:outline-none focus:border-gold transition-colors"
+                className="w-28 bg-obsidian-raised border border-hairline text-ink rounded-lg px-3 py-2 text-sm font-display focus:outline-none focus:border-gold transition-colors"
               />
               <button
                 onClick={() => setRedeemPoints(maxRedeem)}
-                className="px-3 py-2 text-xs font-display font-bold uppercase tracking-widest text-gold border border-gold/30 hover:border-gold rounded-sm transition-colors"
+                className="px-3 py-2 text-[15px] font-display font-bold text-gold border border-gold/30 hover:border-gold rounded-full transition-colors"
               >
                 Use max ({maxRedeem})
               </button>
@@ -147,7 +147,7 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
 
       {/* ── Breakdown ───────────────────────────────────────────────────────── */}
       <div className="border-t border-hairline pt-4">
-        <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+        <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-3 flex items-center gap-2">
           Order Summary {loading && <Loader2 className="h-3 w-3 animate-spin text-gold" />}
         </h3>
         <div className="space-y-2">
@@ -162,7 +162,7 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
           <Row label="GST (18% included)" value={money(quote?.tax ?? 0)} muted />
         </div>
         <div className="flex justify-between border-t border-hairline pt-3 mt-3">
-          <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
+          <span className="font-display text-ink tracking-[-0.01em]">Total</span>
           <span className="text-xl font-display font-bold text-gold">{money(quote?.totalAmount ?? 0)}</span>
         </div>
       </div>

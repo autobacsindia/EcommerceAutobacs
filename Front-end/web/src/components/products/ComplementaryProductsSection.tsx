@@ -289,7 +289,7 @@ export default function ComplementaryProductsSection({ productId }: Complementar
                     
                     <div className="flex items-baseline gap-2 mb-2">
                       {showsFrom && (
-                        <span className="text-[10px] uppercase tracking-wider text-ink-muted">From</span>
+                        <span className="text-[12px] uppercase tracking-[0.12em] text-ink-muted font-semibold">From</span>
                       )}
                       {/* Through CurrencyContext, so this rail cannot drift from
                           the buy box above it — in grouping or in currency. */}
@@ -332,7 +332,7 @@ export default function ComplementaryProductsSection({ productId }: Complementar
                   {isVariable ? (
                     <Link
                       href={`/products/${product.slug}`}
-                      className="flex items-center justify-center gap-2 w-full bg-gold text-obsidian px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-semibold text-sm"
+                      className="flex items-center justify-center gap-2 w-full bg-gold text-white px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-semibold text-sm"
                     >
                       <SlidersHorizontal className="h-4 w-4" />
                       Select options
@@ -342,7 +342,7 @@ export default function ComplementaryProductsSection({ productId }: Complementar
                       type="button"
                       onClick={(e) => handleAddToCart(e, product)}
                       disabled={isOut || addingId === product._id}
-                      className="flex items-center justify-center gap-2 w-full bg-gold text-obsidian px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center justify-center gap-2 w-full bg-gold text-white px-4 py-2 rounded-md hover:opacity-90 transition-opacity font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <ShoppingCart className="h-4 w-4" />
                       {isOut ? 'Out of stock' : addingId === product._id ? 'Adding…' : 'Add to cart'}
@@ -357,7 +357,7 @@ export default function ComplementaryProductsSection({ productId }: Complementar
         <div className="mt-8 text-center">
           <Link 
             href="/products"
-            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-obsidian bg-gold hover:opacity-90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold"
+            className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-gold hover:opacity-90 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gold"
           >
             Browse All Products
           </Link>

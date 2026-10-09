@@ -89,14 +89,14 @@ const STEPS = [
   and hints were not, so the form asked strangers for a PAN and a bank account in text
   they could barely read. Mirrors the pairing in app/profile/page.tsx.
 */
-const label = 'block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1';
+const label = 'block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1';
 const input =
-  'w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-3 py-2 focus:outline-none focus:border-gold font-display text-sm';
+  'w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg px-3 py-2 focus:outline-none focus:border-gold font-display text-sm';
 const hint = 'mt-1 text-xs text-ink-muted font-display';
 const section = 'mt-10';
-const sectionTitle = 'text-sm font-display font-bold text-gold uppercase tracking-widest';
+const sectionTitle = 'text-sm font-display font-bold text-gold uppercase tracking-[0.12em]';
 const primaryBtn =
-  'inline-flex items-center justify-center gap-2 px-5 py-3 rounded-sm bg-gold text-obsidian font-display font-bold uppercase tracking-widest text-sm hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed';
+  'inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-gold text-white font-display font-bold text-[15px] hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed';
 
 export default function AffiliatesPage() {
   /*
@@ -189,7 +189,7 @@ export default function AffiliatesPage() {
       <main className="min-h-screen bg-obsidian-deep px-4 py-20">
         <div className="max-w-2xl mx-auto text-center">
           <CheckCircle className="w-14 h-14 mx-auto text-gold" aria-hidden />
-          <h1 className="mt-6 text-3xl font-display font-light text-ink tracking-[-0.01em]">
+          <h1 className="mt-6 text-3xl font-display font-bold text-ink tracking-[-0.01em]">
             Application received
           </h1>
           <p className="mt-3 text-ink-muted font-display">
@@ -244,10 +244,10 @@ export default function AffiliatesPage() {
     return (
       <main className="min-h-screen bg-obsidian-deep px-4 py-20">
         <div className="max-w-2xl mx-auto text-center">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">
             Affiliate Programme
           </p>
-          <h1 className="mt-4 text-3xl font-display font-light text-ink tracking-[-0.01em]">
+          <h1 className="mt-4 text-3xl font-display font-bold text-ink tracking-[-0.01em]">
             {affiliate.status === 'active' && 'You are already an affiliate'}
             {affiliate.status === 'suspended' && 'Your affiliate account is paused'}
             {affiliate.status === 'pending' && 'Your application is under review'}
@@ -289,8 +289,8 @@ export default function AffiliatesPage() {
     <main className="min-h-screen bg-obsidian-deep">
       <div className="max-w-5xl mx-auto px-4 py-12 md:py-16">
       <header className="max-w-2xl">
-        <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Affiliate Programme</p>
-        <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-display font-light leading-[0.95] tracking-[-0.01em] text-ink">
+        <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">Affiliate Programme</p>
+        <h1 className="mt-4 text-[clamp(24px,3vw,36px)] font-display font-bold leading-[0.95] tracking-[-0.01em] text-ink">
           Get paid for what you already recommend
         </h1>
         <p className="mt-6 text-lg text-ink-muted font-display">
@@ -303,14 +303,14 @@ export default function AffiliatesPage() {
         {STEPS.map(({ icon: Icon, title, body }) => (
           <div key={title} className="bg-obsidian border border-hairline rounded-lg p-6">
             <Icon className="w-6 h-6 text-gold" aria-hidden />
-            <h2 className="mt-4 font-display font-light text-ink tracking-[-0.01em]">{title}</h2>
+            <h2 className="mt-4 font-display text-ink tracking-[-0.01em]">{title}</h2>
             <p className="mt-2 text-sm leading-relaxed text-ink-muted font-display">{body}</p>
           </div>
         ))}
       </section>
 
       <section className="mt-14 max-w-xl" aria-label="Application form">
-        <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">Apply</h2>
+        <h2 className="text-2xl font-display font-bold text-ink tracking-[-0.01em]">Apply</h2>
 
         {/*
           Encourage, never require. Signing in first is the only route that CANNOT go
@@ -318,7 +318,7 @@ export default function AffiliatesPage() {
           for — creators who have never shopped with us and have no account yet.
         */}
         {!isAuthenticated && (
-          <p className="mt-4 rounded-sm border border-gold/30 bg-gold/5 px-4 py-3 text-sm text-ink-muted font-display">
+          <p className="mt-4 rounded-lg border border-gold/30 bg-gold/5 px-4 py-3 text-sm text-ink-muted font-display">
             <strong className="text-ink">Already have an account?</strong>{' '}
             <Link href={`/login?redirect=${encodeURIComponent('/affiliates')}`} className="text-gold hover:text-gold/80 underline">
               Sign in first
@@ -394,7 +394,7 @@ export default function AffiliatesPage() {
               from someone who has not been accepted yet reads like phishing unless the
               reason and the handling are stated plainly, right next to the fields.
             */}
-            <p className="rounded-sm bg-obsidian-raised border border-hairline px-4 py-3 text-sm text-ink-muted font-display">
+            <p className="rounded-lg bg-obsidian-raised border border-hairline px-4 py-3 text-sm text-ink-muted font-display">
               We ask for these now so we can pay you without chasing paperwork later.
               Your PAN and account number are <strong>encrypted</strong> the moment they
               reach us, are never shown back in full, and are <strong className="text-ink">deleted if your
@@ -506,7 +506,7 @@ export default function AffiliatesPage() {
           </div>
 
           {error && (
-            <p role="alert" className="mt-6 text-sm font-display text-red-600 bg-red-500/10 border border-red-500/30 rounded-sm px-3 py-2">
+            <p role="alert" className="mt-6 text-sm font-display text-red-600 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
               {error}
             </p>
           )}

@@ -42,7 +42,7 @@ export default async function DeliveryNetwork() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Heading */}
         <div className="text-center mb-12">
-          <p className="text-xs font-display font-bold tracking-[0.2em] uppercase text-gold mb-2">
+          <p className="text-[12px] font-display font-bold tracking-[0.12em] uppercase text-gold mb-2">
             Pan-India Coverage
           </p>
           <h2 className="text-3xl font-display font-bold text-ink uppercase mb-3">
@@ -72,10 +72,10 @@ export default async function DeliveryNetwork() {
                 {/* Info */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h3 className="text-sm font-display font-light text-ink tracking-[-0.01em] truncate">
+                    <h3 className="text-sm font-display text-ink tracking-[-0.01em] truncate">
                       {w.city}
                     </h3>
-                    <span className={`text-xs font-display font-bold uppercase tracking-wider ${meta.color}`}>
+                    <span className={`text-[12px] font-display font-bold uppercase tracking-[0.12em] ${meta.color}`}>
                       {meta.label}
                     </span>
                   </div>
@@ -109,7 +109,7 @@ export default async function DeliveryNetwork() {
           ].map(({ value, label }) => (
             <div key={label} className="py-4 text-center bg-obsidian">
               <p className="text-2xl font-display font-bold text-gold">{value}</p>
-              <p className="text-xs text-[#888] font-display uppercase tracking-wider mt-0.5">{label}</p>
+              <p className="text-[12px] text-[#888] font-display uppercase tracking-[0.12em] mt-0.5 font-semibold">{label}</p>
             </div>
           ))}
         </div>

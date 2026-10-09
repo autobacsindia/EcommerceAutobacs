@@ -81,13 +81,13 @@ export default function WishlistPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center max-w-md mx-4">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 text-center max-w-md mx-4">
           <Heart className="mx-auto h-12 w-12 text-red-600 mb-4" />
-          <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-2">Error Loading Wishlist</h2>
+          <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-2">Error Loading Wishlist</h2>
           <p className="text-ink/70 font-display mb-4">{error}</p>
           <button
             onClick={fetchWishlistWrapper}
-            className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors"
+            className="bg-gold hover:opacity-90 text-white font-display font-bold px-4 py-2 rounded-full transition-colors"
           >
             Try Again
           </button>
@@ -102,11 +102,11 @@ export default function WishlistPage() {
         <div className="text-center py-12 px-6">
           <Heart className="mx-auto h-16 w-16 text-ink-muted/50 mb-8" strokeWidth={1} />
           <Eyebrow className="mb-4">Saved Items</Eyebrow>
-          <h2 className="text-[clamp(32px,5vw,52px)] font-light leading-tight text-ink mb-4">Your wishlist is empty</h2>
-          <p className="text-ink-muted font-display font-light mb-8">Save products you love to find them here later.</p>
+          <h2 className="text-[clamp(24px,3vw,36px)] font-bold leading-tight text-ink mb-4">Your wishlist is empty</h2>
+          <p className="text-ink-muted font-display mb-8">Save products you love to find them here later.</p>
           <button
             onClick={() => router.push('/products')}
-            className="inline-flex items-center gap-2.5 bg-gold text-obsidian font-display text-[10px] font-semibold uppercase tracking-[0.2em] px-7 py-4 transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-2.5 bg-gold text-white font-display text-[15px] font-semibold px-7 py-4 transition-opacity hover:opacity-90 rounded-full"
           >
             Browse Products
           </button>
@@ -121,7 +121,7 @@ export default function WishlistPage() {
         <Reveal className="flex flex-wrap items-end justify-between gap-4 mb-10">
           <div>
             <Eyebrow>Saved Items</Eyebrow>
-            <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">My Wishlist</h1>
+            <h1 className="mt-4 text-[clamp(24px,3vw,36px)] font-bold leading-[0.95] tracking-[-0.01em] text-ink">My Wishlist</h1>
           </div>
           <span className="font-display text-[13px] tracking-[0.04em] text-ink-muted"><span className="text-ink">{wishlistItems.length}</span> item{wishlistItems.length !== 1 ? 's' : ''}</span>
         </Reveal>
@@ -151,7 +151,7 @@ export default function WishlistPage() {
 
               <div className="p-4 flex flex-col">
                 <Link href={productUrl(item.product, '/products') || '/products'} className="hover:text-gold transition-colors">
-                  <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-1 line-clamp-2">{item.product?.name || 'Product'}</h3>
+                  <h3 className="font-display text-ink tracking-[-0.01em] mb-1 line-clamp-2">{item.product?.name || 'Product'}</h3>
                 </Link>
 
                 {item.product?.averageRating > 0 && (
@@ -172,7 +172,7 @@ export default function WishlistPage() {
                 <button
                   onClick={() => handleAddToCart(item.product)}
                   disabled={item.product?.stock === 'out'}
-                  className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+                  className="w-full bg-gold hover:opacity-90 text-white font-display font-bold px-4 py-2 rounded-full disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-[15px]"
                 >
                   <ShoppingCart className="h-4 w-4" />
                   {item.product?.stock === 'out' ? 'Out of Stock' : 'Add to Cart'}

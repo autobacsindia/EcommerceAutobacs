@@ -67,15 +67,15 @@ export default function PriceHistogram({
       >
         <defs>
           <linearGradient id={`${id}-fill`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(201,168,112,0.35)" />
-            <stop offset="100%" stopColor="rgba(201,168,112,0.02)" />
+            <stop offset="0%" stopColor="rgba(10,92,51,0.35)" />
+            <stop offset="100%" stopColor="rgba(10,92,51,0.03)" />
           </linearGradient>
           {/* Only the selected [lo,hi] slice is fully lit. */}
           <clipPath id={`${id}-clip`} clipPathUnits="objectBoundingBox">
             <rect x={loPct / 100} y="0" width={(hiPct - loPct) / 100} height="1" />
           </clipPath>
         </defs>
-        <path d={path} fill="rgba(201,168,112,0.06)" />
+        <path d={path} fill="rgba(10,92,51,0.07)" />
         <path d={path} fill={`url(#${id}-fill)`} clipPath={`url(#${id}-clip)`} />
       </svg>
 

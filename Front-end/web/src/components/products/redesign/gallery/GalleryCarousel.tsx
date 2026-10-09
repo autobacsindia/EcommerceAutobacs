@@ -99,7 +99,7 @@ export default function GalleryCarousel({
         </div>
 
         {onSale && (
-          <div className="pointer-events-none absolute left-4 top-4 grid h-14 w-14 place-items-center rounded-full bg-gold text-[9px] font-semibold uppercase tracking-[0.16em] text-obsidian">
+          <div className="pointer-events-none absolute left-4 top-4 grid h-14 w-14 place-items-center rounded-full bg-gold text-[12px] font-semibold uppercase tracking-[0.12em] text-white">
             Sale
           </div>
         )}
@@ -112,7 +112,7 @@ export default function GalleryCarousel({
 
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-4 right-4 flex items-center gap-2 border border-hairline bg-obsidian/80 px-3 py-1.5 text-[10px] uppercase tracking-[0.16em] text-ink-muted backdrop-blur-sm"
+          className="pointer-events-none absolute bottom-4 right-4 flex items-center gap-2 border border-hairline bg-obsidian/80 px-3 py-1.5 text-[12px] uppercase tracking-[0.12em] text-ink-muted backdrop-blur-sm font-semibold"
         >
           <Expand className="h-3 w-3" />
           Tap to zoom

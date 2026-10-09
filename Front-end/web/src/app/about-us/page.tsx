@@ -219,7 +219,7 @@ export default function AboutUsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
             <Reveal>
               <article className="h-full border-l border-hairline pl-6 md:pl-8">
-                <p className="font-display text-gold text-sm uppercase tracking-[0.22em] mb-4">
+                <p className="font-display text-gold text-sm uppercase tracking-[0.12em] mb-4 font-semibold">
                   2015 · Bangkok
                 </p>
                 <p className={`${body} mb-4`}>
@@ -236,7 +236,7 @@ export default function AboutUsPage() {
 
             <Reveal delay={0.08}>
               <article className="h-full border-l border-hairline pl-6 md:pl-8">
-                <p className="font-display text-gold text-sm uppercase tracking-[0.22em] mb-4">
+                <p className="font-display text-gold text-sm uppercase tracking-[0.12em] mb-4 font-semibold">
                   2016 · Kollam, Kerala
                 </p>
                 <p className={body}>
@@ -274,7 +274,7 @@ export default function AboutUsPage() {
 
           <Reveal delay={0.08}>
             <blockquote className="border-l-2 border-gold pl-6 md:pl-8">
-              <p className="font-display text-xl md:text-2xl font-light text-ink tracking-[-0.01em] leading-snug">
+              <p className="font-display text-xl md:text-2xl font-bold text-ink tracking-[-0.01em] leading-snug">
                 That build is the reason a large part of this industry now exists in India.
               </p>
             </blockquote>
@@ -323,9 +323,9 @@ export default function AboutUsPage() {
             {whatWeDo.map((item, i) => {
               const Icon = item.icon;
               const card = (
-                <div className="h-full bg-obsidian border border-hairline rounded-sm p-7 transition-colors hover:border-gold">
+                <div className="h-full bg-obsidian border border-hairline rounded-lg p-7 transition-colors hover:border-gold">
                   <Icon className="h-6 w-6 text-gold mb-5" aria-hidden />
-                  <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-2">
+                  <h3 className="font-display text-ink tracking-[-0.01em] mb-2">
                     {item.title}
                   </h3>
                   <p className={`${body} text-sm`}>{item.body}</p>
@@ -387,8 +387,8 @@ export default function AboutUsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {whyAutobacs.map((item, i) => (
               <Reveal key={item.title} delay={i * 0.05} className="h-full">
-                <div className="h-full bg-obsidian-raised border border-hairline rounded-sm p-7">
-                  <h3 className="font-display font-light text-gold tracking-[-0.01em] mb-3">
+                <div className="h-full bg-obsidian-raised border border-hairline rounded-lg p-7">
+                  <h3 className="font-display text-gold tracking-[-0.01em] mb-3">
                     {item.title}
                   </h3>
                   <p className={`${body} text-sm`}>{item.body}</p>
@@ -443,7 +443,7 @@ export default function AboutUsPage() {
           </ul>
 
           <Reveal>
-            <p className="font-display text-lg font-light text-ink tracking-[-0.01em]">
+            <p className="font-display text-lg text-ink tracking-[-0.01em]">
               If a job shouldn’t be done, we’ll tell you — even when it costs us the sale.
             </p>
           </Reveal>
@@ -462,7 +462,7 @@ export default function AboutUsPage() {
             {locations.map((loc, i) => (
               <Reveal key={loc.label} delay={i * 0.05}>
                 <div className="border-t border-hairline pt-5">
-                  <dt className="font-display text-[10px] uppercase tracking-[0.22em] text-gold mb-2">
+                  <dt className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">
                     {loc.label}
                   </dt>
                   <dd className={`${body} text-sm`}>{loc.value}</dd>
@@ -502,8 +502,8 @@ export default function AboutUsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {closingCtas.map((item, i) => (
               <Reveal key={item.title} delay={i * 0.05} className="h-full">
-                <div className="h-full flex flex-col bg-obsidian border border-hairline rounded-sm p-7">
-                  <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-2">
+                <div className="h-full flex flex-col bg-obsidian border border-hairline rounded-lg p-7">
+                  <h3 className="font-display text-ink tracking-[-0.01em] mb-2">
                     {item.title}
                   </h3>
                   <p className={`${body} text-sm mb-6`}>{item.body}</p>

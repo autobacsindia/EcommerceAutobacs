@@ -185,7 +185,7 @@ export default function SearchSuggestions() {
 
   return (
     <div ref={containerRef} className="relative w-full">
-      <div className="flex rounded-sm overflow-hidden border border-hairline focus-within:border-gold transition-colors">
+      <div className="flex rounded-lg overflow-hidden border border-hairline focus-within:border-gold transition-colors">
         <input
           ref={inputRef}
           type="text"
@@ -202,14 +202,14 @@ export default function SearchSuggestions() {
           type="button"
           onClick={() => handleSearch()}
           aria-label="Search"
-          className="bg-gold hover:opacity-90 text-obsidian px-4 py-2 transition-colors"
+          className="bg-gold hover:opacity-90 text-white px-4 py-2 transition-colors"
         >
           <Search className="h-5 w-5" />
         </button>
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-obsidian border border-hairline rounded-sm shadow-2xl">
+        <div className="absolute z-50 w-full mt-1 bg-obsidian border border-hairline rounded-lg shadow-2xl">
           {isLoading ? (
             <div className="px-4 py-3 text-ink/70 font-display flex items-center gap-3">
               <svg className="animate-spin h-5 w-5 text-gold" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -224,7 +224,7 @@ export default function SearchSuggestions() {
               {query.length === 0 && history.length > 0 && (
                 <div>
                   <div className="px-4 py-2 flex justify-between items-center border-b border-hairline">
-                    <span className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Recent Searches</span>
+                    <span className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Recent Searches</span>
                     <button onClick={clearHistory} className="text-xs text-gold hover:text-ink transition-colors font-display">Clear all</button>
                   </div>
                   <ul>
@@ -254,7 +254,7 @@ export default function SearchSuggestions() {
               {suggestions.length > 0 && (
                 <div>
                   <div className="px-4 py-2 border-b border-hairline">
-                    <span className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Suggestions</span>
+                    <span className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Suggestions</span>
                   </div>
                   <ul>
                     {suggestions.map((suggestion, index) => {
@@ -270,7 +270,7 @@ export default function SearchSuggestions() {
                             }`}
                           >
                             {suggestion.imageUrl && (
-                              <div className="shrink-0 w-10 h-10 bg-obsidian-raised rounded-sm overflow-hidden relative">
+                              <div className="shrink-0 w-10 h-10 bg-obsidian-raised rounded-lg overflow-hidden relative">
                                 <EnhancedImage
                                   src={suggestion.imageUrl}
                                   alt={suggestion.text}

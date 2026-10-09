@@ -54,7 +54,7 @@ export default function ProductCardPriceActions({
     <div className="flex items-center justify-between mt-4">
       <div>
         {showsRange && (
-          <p className="text-[10px] uppercase tracking-[0.16em] text-ink-muted mb-0.5">From</p>
+          <p className="text-[12px] uppercase tracking-[0.12em] text-ink-muted mb-0.5 font-semibold">From</p>
         )}
         {!isVariable && originalPrice && originalPrice > price ? (
           <div className="flex items-baseline gap-2">
@@ -71,7 +71,7 @@ export default function ProductCardPriceActions({
         // quick-adding (which the server would reject without a selected variant).
         <Link
           href={href || `/products`}
-          className="flex items-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-sm hover:opacity-90 transition-opacity font-display font-bold text-sm tracking-wider uppercase"
+          className="flex items-center gap-2 bg-gold text-white px-4 py-2 rounded-full hover:opacity-90 transition-opacity font-display font-bold text-[15px]"
         >
           <SlidersHorizontal className="h-4 w-4" />
           <span className="text-sm font-medium">Select</span>
@@ -80,7 +80,7 @@ export default function ProductCardPriceActions({
         <button
           onClick={handleAddToCart}
           disabled={stock === 'out'}
-          className="flex items-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-sm hover:bg-gold transition-colors disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed font-display font-bold text-sm tracking-wider uppercase"
+          className="flex items-center gap-2 bg-gold text-white px-4 py-2 rounded-full hover:bg-gold transition-colors disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed font-display font-bold text-[15px]"
         >
           <ShoppingCart className="h-4 w-4" />
           <span className="text-sm font-medium">Add</span>

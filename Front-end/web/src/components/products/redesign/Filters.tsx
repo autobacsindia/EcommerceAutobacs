@@ -6,7 +6,7 @@ import { ChevronDown } from 'lucide-react';
 import apiClient from '@/lib/api';
 import productService from '@/lib/services/productService';
 import { useCurrency } from '@/context/CurrencyContext';
-import Eyebrow from '@/components/ui/Eyebrow';
+
 import PriceHistogram from '@/components/ui/PriceHistogram';
 import './redesign.css';
 
@@ -70,14 +70,14 @@ function Group({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-hairline py-5 first:border-t-0 first:pt-0">
+    <div className="border-t border-hairline py-4 first:border-t-0 first:pt-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between text-left"
         aria-expanded={open}
       >
-        <Eyebrow as="span">{title}</Eyebrow>
+        <span className="text-[15px] font-bold text-ink">{title}</span>
         <ChevronDown
           className={`h-3.5 w-3.5 text-ink-muted transition-transform duration-300 ${open ? 'rotate-180' : ''}`}
         />
@@ -121,13 +121,13 @@ function CheckRow({
         onChange={onChange}
       />
       <span
-        className={`flex-1 font-display text-[13px] tracking-[0.02em] transition-colors ${
-          checked ? 'text-ink' : 'text-ink-muted group-hover:text-ink'
+        className={`flex-1 text-[14px] transition-colors ${
+          checked ? 'font-semibold text-ink' : 'text-ink/80 group-hover:text-gold'
         }`}
       >
         {label}
       </span>
-      {count != null && <span className="font-display text-[11px] text-ink-muted">{count}</span>}
+      {count != null && <span className="text-[12px] text-ink-muted">{count}</span>}
     </label>
   );
 }
@@ -376,14 +376,14 @@ export default function Filters({
 
       {/* Nothing matches — name the way out rather than leaving a dead panel. */}
       {total === 0 && (
-        <div className="mb-4 border border-hairline bg-obsidian-raised px-3.5 py-3">
-          <p className="font-display text-[12px] font-light text-ink-muted">
+        <div className="mb-4 rounded-lg border border-hairline bg-obsidian px-3.5 py-3">
+          <p className="text-[13px] text-ink-muted">
             No products match every filter.
           </p>
           <button
             type="button"
             onClick={() => router.push(basePath, { scroll: false })}
-            className="mt-2 font-display text-[10px] uppercase tracking-[0.2em] text-gold hover:opacity-80"
+            className="mt-2 text-[13px] font-semibold text-[#0b6b9a] hover:text-gold hover:underline"
           >
             Clear all filters
           </button>
@@ -397,7 +397,7 @@ export default function Filters({
             <select
               value={make}
               onChange={(e) => commit({ make: e.target.value, model: '' })}
-              className="w-full appearance-none border border-hairline bg-obsidian-raised px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-gold/55"
+              className="w-full rounded-lg border border-[#c9cfcd] bg-white px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-gold"
               aria-label="Vehicle make"
             >
               <option value="">All makes</option>
@@ -411,7 +411,7 @@ export default function Filters({
               value={model}
               disabled={!make || models.length === 0}
               onChange={(e) => commit({ model: e.target.value })}
-              className="w-full appearance-none border border-hairline bg-obsidian-raised px-3.5 py-2.5 text-[13px] text-ink outline-none focus:border-gold/55 disabled:opacity-50"
+              className="w-full rounded-lg border border-[#c9cfcd] bg-white px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-gold disabled:opacity-50"
               aria-label="Vehicle model"
             >
               <option value="">{make ? 'All models' : 'Select a make first'}</option>
@@ -507,7 +507,7 @@ export default function Filters({
                 onChange={(e) => setBrandQuery(e.target.value)}
                 placeholder="Search brands"
                 aria-label="Search brands"
-                className="mb-2 w-full border border-hairline bg-obsidian-raised px-3 py-2 text-[12px] text-ink outline-none focus:border-gold/55"
+                className="mb-2 w-full rounded-lg border border-[#c9cfcd] bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-gold"
               />
             )}
             {(brandsExpanded || brandQuery ? visibleBrandList : visibleBrandList.slice(0, 8)).map((b) => (
@@ -524,7 +524,7 @@ export default function Filters({
               <button
                 type="button"
                 onClick={() => setBrandsExpanded((v) => !v)}
-                className="mt-2 font-display text-[10px] uppercase tracking-[0.2em] text-gold hover:opacity-80"
+                className="mt-2 text-[13px] font-semibold text-[#0b6b9a] hover:text-gold hover:underline"
               >
                 {brandsExpanded ? 'Show less' : `More brands (${visibleBrandList.length - 8})`}
               </button>
@@ -546,8 +546,8 @@ export default function Filters({
                 onChange={() => commit({ ratings: toggle(ratings, r.value) })}
                 label={
                   <span className="flex items-center gap-1.5">
-                    <span className="text-gold tracking-[2px]">
-                      {'★'.repeat(r.value)}<span className="text-ink-muted/50">{'★'.repeat(5 - r.value)}</span>
+                    <span className="text-[#f2a516] tracking-[2px]">
+                      {'★'.repeat(r.value)}<span className="text-[#d5d9d9]">{'★'.repeat(5 - r.value)}</span>
                     </span>
                     <span className="text-[11px]">&amp; up</span>
                   </span>

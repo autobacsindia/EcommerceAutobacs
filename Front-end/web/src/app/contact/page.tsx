@@ -66,8 +66,8 @@ function ContactPageInner() {
       {/* Hero */}
       <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Support</p>
-          <h1 className="text-4xl font-display font-light text-ink tracking-[-0.01em] mb-4">Contact Us</h1>
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Support</p>
+          <h1 className="text-4xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Contact Us</h1>
           <p className="text-ink/70 font-display max-w-2xl mx-auto">
             Have questions or need assistance? We&apos;re here to help you with all your automotive needs.
           </p>
@@ -80,7 +80,7 @@ function ContactPageInner() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             {/* Contact Info */}
             <div>
-              <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-4">Get In Touch</h2>
+              <h2 className="text-2xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Get In Touch</h2>
               <p className="text-ink/70 font-display mb-8">
                 We&apos;d love to hear from you! Whether you have a question about our products, need help with an order,
                 or want to explore partnership opportunities, our team is ready to assist you.
@@ -90,7 +90,7 @@ function ContactPageInner() {
                   <div key={index} className="flex gap-4">
                     <div className="shrink-0 mt-0.5">{item.icon}</div>
                     <div>
-                      <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-1">{item.title}</h3>
+                      <h3 className="font-display text-ink tracking-[-0.01em] text-sm mb-1">{item.title}</h3>
                       <ul className="space-y-0.5">
                         {item.details.map((detail, idx) => (
                           <li key={idx} className="text-ink/70 font-display text-sm">{detail}</li>
@@ -104,22 +104,22 @@ function ContactPageInner() {
 
             {/* Message form (creates a tracked support ticket) + direct channels */}
             <div>
-              <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-6">Talk to Support</h2>
+              <h2 className="text-2xl font-display font-bold text-ink tracking-[-0.01em] mb-6">Talk to Support</h2>
 
               <ContactForm defaultSubject={emailSubject} orderId={orderId} />
 
-              <p className="text-ink-muted font-display text-xs uppercase tracking-widest text-center my-6">
+              <p className="text-ink-muted font-display text-[12px] uppercase tracking-[0.12em] text-center my-6 font-semibold">
                 or reach us directly
               </p>
 
-              <div className="bg-obsidian border border-hairline rounded-sm p-6 sm:p-8 space-y-5">
+              <div className="bg-obsidian border border-hairline rounded-lg p-6 sm:p-8 space-y-5">
                 <a
                   href={mailtoHref}
-                  className="group flex items-center gap-4 bg-obsidian-raised border border-hairline hover:border-gold rounded-sm p-5 transition-colors"
+                  className="group flex items-center gap-4 bg-obsidian-raised border border-hairline hover:border-gold rounded-lg p-5 transition-colors"
                 >
                   <Mail className="h-6 w-6 text-gold shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[10px] font-display font-bold uppercase tracking-widest text-ink-muted mb-1">Email us</p>
+                    <p className="text-[12px] font-display font-bold uppercase tracking-[0.12em] text-ink-muted mb-1">Email us</p>
                     <p className="text-ink font-display text-sm truncate">{SUPPORT_EMAIL}</p>
                   </div>
                   <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-ink-muted transition-colors group-hover:text-gold" />
@@ -127,11 +127,11 @@ function ContactPageInner() {
 
                 <a
                   href={`tel:${SUPPORT_PHONE_TEL}`}
-                  className="group flex items-center gap-4 bg-obsidian-raised border border-hairline hover:border-gold rounded-sm p-5 transition-colors"
+                  className="group flex items-center gap-4 bg-obsidian-raised border border-hairline hover:border-gold rounded-lg p-5 transition-colors"
                 >
                   <Phone className="h-6 w-6 text-gold shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[10px] font-display font-bold uppercase tracking-widest text-ink-muted mb-1">Call us</p>
+                    <p className="text-[12px] font-display font-bold uppercase tracking-[0.12em] text-ink-muted mb-1">Call us</p>
                     <p className="text-ink font-display text-sm">{SUPPORT_PHONE_DISPLAY}</p>
                   </div>
                   <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-ink-muted transition-colors group-hover:text-gold" />
@@ -141,11 +141,11 @@ function ContactPageInner() {
                   href={SUPPORT_WHATSAPP}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group flex items-center gap-4 bg-obsidian-raised border border-hairline hover:border-gold rounded-sm p-5 transition-colors"
+                  className="group flex items-center gap-4 bg-obsidian-raised border border-hairline hover:border-gold rounded-lg p-5 transition-colors"
                 >
                   <WhatsAppIcon className="h-6 w-6 text-gold shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[10px] font-display font-bold uppercase tracking-widest text-ink-muted mb-1">WhatsApp</p>
+                    <p className="text-[12px] font-display font-bold uppercase tracking-[0.12em] text-ink-muted mb-1">WhatsApp</p>
                     <p className="text-ink font-display text-sm">{SUPPORT_PHONE_DISPLAY}</p>
                   </div>
                   <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-ink-muted transition-colors group-hover:text-gold" />
@@ -165,8 +165,8 @@ function ContactPageInner() {
       <section className="py-16 bg-obsidian border-t border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
-            <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Quick Answers</p>
-            <h2 className="text-2xl font-display font-light text-ink tracking-[-0.01em]">Frequently Asked Questions</h2>
+            <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Quick Answers</p>
+            <h2 className="text-2xl font-display font-bold text-ink tracking-[-0.01em]">Frequently Asked Questions</h2>
             <p className="text-ink/70 font-display mt-2">Find answers to common questions about our services</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -176,14 +176,14 @@ function ContactPageInner() {
               { q: 'Do you ship internationally?', a: 'Currently, we only ship within India. International shipping is planned for the future.' },
               { q: 'How can I track my order?', a: "Once your order ships, you'll receive a tracking number via email. You can also track your order in your account dashboard." },
             ].map((item, i) => (
-              <div key={i} className="bg-obsidian-raised border border-hairline rounded-sm p-6">
-                <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-2">{item.q}</h3>
+              <div key={i} className="bg-obsidian-raised border border-hairline rounded-lg p-6">
+                <h3 className="font-display text-ink tracking-[-0.01em] text-sm mb-2">{item.q}</h3>
                 <p className="text-ink/70 font-display text-sm">{item.a}</p>
               </div>
             ))}
           </div>
           <div className="text-center mt-10">
-            <Link href="/faq" className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors">
+            <Link href="/faq" className="inline-block bg-gold hover:opacity-90 text-white font-display font-bold px-6 py-3 rounded-full transition-colors">
               View All FAQs
             </Link>
           </div>

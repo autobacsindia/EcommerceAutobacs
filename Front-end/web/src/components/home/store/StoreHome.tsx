@@ -1,4 +1,4 @@
-import StoreHeader from './StoreHeader';
+import StoreHeader, { type HeaderCategory } from './StoreHeader';
 import HeroBanners, { type BannerSlide } from './HeroBanners';
 import CategoryCards from './CategoryCards';
 import ProductRow from './ProductRow';
@@ -58,10 +58,19 @@ function buildSlides(data: StoreHomeData): BannerSlide[] {
  * category bar, offers carousel with overlapping category cards, then product
  * shelves — every one from live data, empty shelves skipped.
  */
-export default function StoreHome({ data, promoBanner = null }: { data: StoreHomeData; promoBanner?: PromoBannerData | null }) {
+export default function StoreHome({
+  data,
+  promoBanner = null,
+  nav,
+}: {
+  data: StoreHomeData;
+  promoBanner?: PromoBannerData | null;
+  /** Curated header departments (same list as every other page); falls back to the home categories. */
+  nav?: HeaderCategory[];
+}) {
   return (
     <div className="sh sh-theme" id="top">
-      <StoreHeader categories={data.categories} />
+      <StoreHeader categories={nav?.length ? nav : data.categories} />
       {/* The admin promo strip, whenever one is active (Admin → Promo Banners). */}
       {promoBanner && <PromoBanner banner={promoBanner} />}
       <main className="sh-main">

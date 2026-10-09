@@ -63,11 +63,14 @@ export default function VehiclePicker({ variant = 'header' }: { variant?: 'heade
   return (
     <div className={`sh-vehicle sh-vehicle-${variant}`} ref={ref}>
       <button type="button" className="sh-vehicle-btn" aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen((v) => !v)}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M5 17h14M6 17l1.5-5h9L18 17M7.5 12 9 8h6l1.5 4" /><circle cx="8" cy="17" r="1.6" /><circle cx="16" cy="17" r="1.6" /></svg>
+        <span className="sh-vehicle-ico" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 17h14M6 17l1.5-5h9L18 17M7.5 12 9 8h6l1.5 4" /><circle cx="8" cy="17" r="1.6" /><circle cx="16" cy="17" r="1.6" /></svg>
+        </span>
         <span className="sh-vehicle-text">
           <span className="sh-vehicle-small">{saved ? 'Parts for' : 'Shop by'}</span>
           <span className="sh-vehicle-big">{saved ? `${saved.make} ${saved.model}` : 'Select your vehicle'}</span>
         </span>
+        <svg className="sh-vehicle-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
       </button>
       {open && (
         <div className="sh-vehicle-pop" role="dialog" aria-label="Select your vehicle">

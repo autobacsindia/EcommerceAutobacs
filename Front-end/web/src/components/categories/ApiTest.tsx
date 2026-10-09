@@ -43,7 +43,7 @@ export default function ApiTest() {
         <div className="flex gap-4 flex-wrap">
           <button 
             onClick={() => testCategoryApi('673d3f821234567890abcdef', 'Body Kits')}
-            className="px-4 py-2 bg-gold text-obsidian rounded hover:bg-gold disabled:opacity-50"
+            className="px-4 py-2 bg-gold text-white rounded hover:bg-gold disabled:opacity-50"
             disabled={loading}
           >
             Test Body Kits
@@ -51,7 +51,7 @@ export default function ApiTest() {
           
           <button 
             onClick={() => testCategoryApi('673d3f821234567890abc123', 'Audio')}
-            className="px-4 py-2 bg-gold text-obsidian rounded hover:bg-gold disabled:opacity-50"
+            className="px-4 py-2 bg-gold text-white rounded hover:bg-gold disabled:opacity-50"
             disabled={loading}
           >
             Test Audio
@@ -59,7 +59,7 @@ export default function ApiTest() {
           
           <button 
             onClick={() => testCategoryApi('673d3f821234567890abc456', 'Lights')}
-            className="px-4 py-2 bg-gold text-obsidian rounded hover:bg-gold disabled:opacity-50"
+            className="px-4 py-2 bg-gold text-white rounded hover:bg-gold disabled:opacity-50"
             disabled={loading}
           >
             Test Lights

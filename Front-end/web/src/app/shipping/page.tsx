@@ -11,8 +11,8 @@ export default function ShippingPage() {
       {/* Hero */}
       <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Policy</p>
-          <h1 className="text-4xl font-display font-light text-ink tracking-[-0.01em] mb-4">Shipping & Delivery</h1>
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Policy</p>
+          <h1 className="text-4xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Shipping & Delivery</h1>
           <p className="text-ink/70 font-display max-w-3xl mx-auto">
             Learn about our shipping options, delivery times, and policies to ensure your order arrives safely and on time.
           </p>
@@ -25,19 +25,19 @@ export default function ShippingPage() {
 
           {/* Feature highlights */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-obsidian border border-hairline rounded-sm p-6 flex items-start gap-4">
+            <div className="bg-obsidian border border-hairline rounded-lg p-6 flex items-start gap-4">
               <Truck className="h-8 w-8 text-gold shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-1">Nationwide Coverage</h3>
+                <h3 className="font-display text-ink tracking-[-0.01em] mb-1">Nationwide Coverage</h3>
                 <p className="text-ink/70 font-display text-sm leading-relaxed">
                   We ship to all major cities and towns across India, ensuring that automotive enthusiasts everywhere can access our premium parts.
                 </p>
               </div>
             </div>
-            <div className="bg-obsidian border border-hairline rounded-sm p-6 flex items-start gap-4">
+            <div className="bg-obsidian border border-hairline rounded-lg p-6 flex items-start gap-4">
               <Clock className="h-8 w-8 text-gold shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-1">Fast Delivery</h3>
+                <h3 className="font-display text-ink tracking-[-0.01em] mb-1">Fast Delivery</h3>
                 <p className="text-ink/70 font-display text-sm leading-relaxed">
                   Our standard delivery takes 3–5 business days, with express options available for urgent needs.
                 </p>
@@ -45,21 +45,21 @@ export default function ShippingPage() {
             </div>
           </div>
 
-          <div className="bg-obsidian border border-hairline rounded-sm p-8 mb-6">
+          <div className="bg-obsidian border border-hairline rounded-lg p-8 mb-6">
             <p className="text-ink-muted font-display text-sm mb-8">Last Updated: {lastUpdated}</p>
 
             <div className="space-y-10">
 
               {/* Shipping Options Table */}
               <div>
-                <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-4">Shipping Options</h2>
+                <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-4">Shipping Options</h2>
                 <div className="overflow-x-auto">
                   <table className="min-w-full">
                     <thead>
                       <tr className="border-b border-hairline">
-                        <th className="px-4 py-3 text-left text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Service</th>
-                        <th className="px-4 py-3 text-left text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Delivery Time</th>
-                        <th className="px-4 py-3 text-left text-xs font-display font-bold text-ink-muted uppercase tracking-widest">Cost</th>
+                        <th className="px-4 py-3 text-left text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Service</th>
+                        <th className="px-4 py-3 text-left text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Delivery Time</th>
+                        <th className="px-4 py-3 text-left text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Cost</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-hairline">
@@ -105,15 +105,15 @@ export default function ShippingPage() {
 
               {/* Delivery Areas */}
               <div>
-                <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">Delivery Areas</h2>
+                <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Delivery Areas</h2>
                 <p className="text-ink/70 font-display leading-relaxed mb-4">
                   We currently ship to all major metropolitan areas and towns across India. For remote locations,
                   delivery times may be extended by 1–2 business days.
                 </p>
-                <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-3">Major Metro Areas Covered</h3>
+                <h3 className="font-display text-ink tracking-[-0.01em] text-sm mb-3">Major Metro Areas Covered</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                   {['Delhi NCR', 'Mumbai', 'Bengaluru', 'Chennai', 'Kolkata', 'Hyderabad', 'Pune', 'Ahmedabad', 'Jaipur', 'Chandigarh'].map(city => (
-                    <div key={city} className="bg-obsidian-raised border border-hairline rounded-sm px-3 py-1.5 text-ink/70 font-display text-xs text-center">{city}</div>
+                    <div key={city} className="bg-obsidian-raised border border-hairline rounded-lg px-3 py-1.5 text-ink/70 font-display text-xs text-center">{city}</div>
                   ))}
                 </div>
               </div>
@@ -122,7 +122,7 @@ export default function ShippingPage() {
 
               {/* Order Processing */}
               <div>
-                <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">Order Processing</h2>
+                <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Order Processing</h2>
                 <p className="text-ink/70 font-display leading-relaxed mb-4">
                   Orders are typically processed within 1–2 business days. Orders placed after 2 PM will be
                   processed the next business day. Processing time does not include weekends or holidays.
@@ -140,7 +140,7 @@ export default function ShippingPage() {
 
               {/* Tracking */}
               <div>
-                <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">Tracking Your Order</h2>
+                <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Tracking Your Order</h2>
                 <p className="text-ink/70 font-display leading-relaxed">
                   Once your order ships, you&apos;ll receive a shipping confirmation email with tracking information.
                   You can also track your order status in your account dashboard under &quot;My Orders&quot;.
@@ -152,7 +152,7 @@ export default function ShippingPage() {
 
               {/* Delivery Process */}
               <div>
-                <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-4">Delivery Process</h2>
+                <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-4">Delivery Process</h2>
                 <ol className="space-y-3">
                   {[
                     { label: 'Order Confirmation', desc: 'Receive an email confirming your order' },
@@ -165,7 +165,7 @@ export default function ShippingPage() {
                     <li key={label} className="flex items-start gap-4">
                       <span className="shrink-0 w-7 h-7 rounded-full bg-gold/10 border border-gold/30 text-gold font-display font-bold text-xs flex items-center justify-center">{i + 1}</span>
                       <div>
-                        <span className="font-display font-light text-ink tracking-[-0.01em] text-sm">{label}: </span>
+                        <span className="font-display text-ink tracking-[-0.01em] text-sm">{label}: </span>
                         <span className="text-ink/70 font-display text-sm">{desc}</span>
                       </div>
                     </li>
@@ -177,7 +177,7 @@ export default function ShippingPage() {
 
               {/* Undelivered Packages */}
               <div>
-                <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">Undelivered Packages</h2>
+                <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Undelivered Packages</h2>
                 <p className="text-ink/70 font-display leading-relaxed mb-3">If a delivery attempt fails, our shipping partner will:</p>
                 <ol className="space-y-2">
                   {[
@@ -198,12 +198,12 @@ export default function ShippingPage() {
 
               {/* International / Restrictions */}
               <div>
-                <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">International Shipping</h2>
+                <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">International Shipping</h2>
                 <p className="text-ink/70 font-display leading-relaxed mb-6">
                   Currently, we only ship within India. We are working on expanding our services to international
                   destinations in the near future.
                 </p>
-                <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">Shipping Restrictions</h2>
+                <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Shipping Restrictions</h2>
                 <p className="text-ink/70 font-display leading-relaxed">
                   Some products may have shipping restrictions due to size, weight, or hazardous material
                   considerations. These restrictions will be noted on the product page.
@@ -214,7 +214,7 @@ export default function ShippingPage() {
 
               {/* Contact + related */}
               <div>
-                <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">Need Help?</h2>
+                <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Need Help?</h2>
                 <p className="text-ink/70 font-display leading-relaxed mb-2">
                   AutoBacs India Customer Service — Email:{' '}
                   <Link href="mailto:support@autobacsindia.com" className="text-gold hover:text-ink transition-colors">
@@ -227,8 +227,8 @@ export default function ShippingPage() {
           </div>
 
           {/* Related links */}
-          <div className="bg-gold/10 border border-gold/30 rounded-sm p-6">
-            <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm mb-3">Related Information</h3>
+          <div className="bg-gold/10 border border-gold/30 rounded-lg p-6">
+            <h3 className="font-display text-ink tracking-[-0.01em] text-sm mb-3">Related Information</h3>
             <p className="text-ink/70 font-display text-sm mb-2">
               For information about returns and exchanges, please see our{' '}
               <Link href="/returns" className="text-gold hover:text-ink transition-colors">Return Policy</Link>.

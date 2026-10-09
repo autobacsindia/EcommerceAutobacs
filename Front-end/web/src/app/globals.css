@@ -3,8 +3,8 @@
 :root {
   --background: #eef1f0;
   --foreground: #0f1111;
-  /* Height of the sticky store header (components/home/store/store.css: 64px top row
-     + 40px department bar, sticky above 768px, static below). Anything that sticks
+  /* Height of the sticky store header (components/home/store/store.css: 76px top row
+     + 46px department bar, sticky above 768px, static below). Anything that sticks
      under it offsets by this, so a header change is made in one place. */
   --store-header-h: 0px;
 
@@ -20,7 +20,7 @@
   --brand-white:      #FFFFFF;
 }
 @media (min-width: 769px) {
-  :root { --store-header-h: 104px; }
+  :root { --store-header-h: 122px; }
 }
 
 

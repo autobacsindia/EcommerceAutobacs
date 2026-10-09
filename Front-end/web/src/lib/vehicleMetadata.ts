@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { cache } from 'react';
-import { VEHICLE_IMAGE_MAP } from '@/services/vehicleService';
+import { getVehicleImageUrl } from '@/services/vehicleService';
 import { getServerApiBase } from '@/lib/server-api';
 
 /**
@@ -72,7 +72,10 @@ export async function buildVehicleMetadata(slug: string, page = 1): Promise<Meta
   }
   if (images.filter(Boolean).length === 0) {
     images.length = 0;
-    images.push(VEHICLE_IMAGE_MAP[slug] ?? `/images/vehicles/${slug}.jpg`);
+    // Only a photo that exists — a guessed path gave 49 vehicles a broken share
+    // image. With none, the site's default share image (same as the root layout's);
+    // an empty list would drop it, since openGraph replaces the parent object.
+    images.push(getVehicleImageUrl(slug) ?? '/og-image.jpg');
   }
 
   // Each paginated URL self-canonicalises so deep pages are indexable without

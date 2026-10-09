@@ -81,7 +81,7 @@ export default function Gallery({
 
   if (images.length === 0) {
     return (
-      <div className="flex aspect-square w-full items-center justify-center border border-hairline bg-obsidian-raised text-[11px] uppercase tracking-[0.2em] text-ink-muted">
+      <div className="flex aspect-square w-full items-center justify-center border border-hairline bg-obsidian-raised text-[12px] uppercase tracking-[0.12em] text-ink-muted font-semibold">
         No image
       </div>
     );

@@ -170,7 +170,7 @@ export function AddTrackingModal({ isOpen, onClose, orderId, onSuccess }: AddTra
               <button
                 type="submit"
                 disabled={loading || !selectedCarrier}
-                className="px-6 py-2 bg-gold text-obsidian rounded-lg hover:bg-gold disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors flex items-center"
+                className="px-6 py-2 bg-gold text-white rounded-lg hover:bg-gold disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors flex items-center"
               >
                 {loading ? (
                   <>

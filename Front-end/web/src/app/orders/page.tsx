@@ -150,12 +150,12 @@ export default function OrdersPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
-        <div className="bg-red-500/10 border border-red-500/30 rounded-sm p-6 text-center max-w-md mx-4">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6 text-center max-w-md mx-4">
           <Package className="mx-auto h-12 w-12 text-red-600 mb-4" />
           <p className="text-ink/70 font-display mb-4">{error}</p>
           <button
             onClick={fetchOrders}
-            className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-4 py-2 rounded-sm transition-colors text-sm"
+            className="bg-gold hover:opacity-90 text-white font-display font-bold px-4 py-2 rounded-full transition-colors text-[15px]"
           >
             Try Again
           </button>
@@ -169,11 +169,11 @@ export default function OrdersPage() {
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center">
         <div className="text-center max-w-md mx-auto py-16 px-4">
           <Package className="mx-auto h-20 w-20 text-ink-muted/50 mb-6" />
-          <h2 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-3">No Orders Yet</h2>
+          <h2 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-3">No Orders Yet</h2>
           <p className="text-ink/70 font-display mb-8">Start shopping to place your first order and track it here</p>
           <button
             onClick={() => router.push('/products')}
-            className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors"
+            className="bg-gold hover:opacity-90 text-white font-display font-bold px-8 py-3 rounded-full transition-colors"
           >
             Browse Products
           </button>
@@ -182,20 +182,20 @@ export default function OrdersPage() {
     );
   }
 
-  const selectClass = 'bg-obsidian-raised border border-hairline text-ink/70 rounded-sm px-4 py-2 text-sm focus:outline-none focus:border-gold font-display';
+  const selectClass = 'bg-obsidian-raised border border-hairline text-ink/70 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-gold font-display';
 
   return (
     <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-10">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Account</p>
-          <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">My Orders</h1>
-          <p className="mt-3 font-display text-[13px] font-light tracking-[0.04em] text-ink-muted">Track and manage your orders</p>
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">Account</p>
+          <h1 className="mt-4 text-[clamp(24px,3vw,36px)] font-bold leading-[0.95] tracking-[-0.01em] text-ink">My Orders</h1>
+          <p className="mt-3 font-display text-[13px] tracking-[0.04em] text-ink-muted">Track and manage your orders</p>
         </div>
 
         {/* Filters and Search */}
-        <div className="bg-obsidian border border-hairline rounded-sm p-4 mb-6">
+        <div className="bg-obsidian border border-hairline rounded-lg p-4 mb-6">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
@@ -205,7 +205,7 @@ export default function OrdersPage() {
                   placeholder="Search by order ID or product name..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm focus:outline-none focus:border-gold font-display text-sm"
+                  className="w-full pl-10 pr-4 py-2 bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg focus:outline-none focus:border-gold font-display text-sm"
                 />
               </div>
             </div>
@@ -232,12 +232,12 @@ export default function OrdersPage() {
             <div className="mt-3 flex items-center gap-2 text-sm">
               <span className="text-ink-muted font-display">Active filters:</span>
               {statusFilter !== 'all' && (
-                <span className="bg-gold/10 text-gold border border-gold/30 px-2 py-0.5 rounded-sm text-xs font-display font-bold uppercase tracking-widest">
+                <span className="bg-gold/10 text-gold border border-gold/30 px-2 py-0.5 rounded-full text-[15px] font-display font-bold">
                   {statusFilter}
                 </span>
               )}
               {searchQuery && (
-                <span className="bg-gold/10 text-gold border border-gold/30 px-2 py-0.5 rounded-sm text-xs font-display font-bold uppercase tracking-widest">
+                <span className="bg-gold/10 text-gold border border-gold/30 px-2 py-0.5 rounded-full text-[15px] font-display font-bold">
                   &ldquo;{searchQuery}&rdquo;
                 </span>
               )}
@@ -260,19 +260,19 @@ export default function OrdersPage() {
 
         {/* Orders list */}
         {filteredOrders.length === 0 ? (
-          <div className="text-center py-12 bg-obsidian border border-hairline rounded-sm">
+          <div className="text-center py-12 bg-obsidian border border-hairline rounded-lg">
             <p className="text-ink-muted font-display">No orders match your filters</p>
           </div>
         ) : (
           <div className="space-y-4">
             {filteredOrders.map((order) => (
-              <div key={order._id} className="bg-obsidian border border-hairline rounded-sm p-6 hover:border-gold/40 transition-colors">
+              <div key={order._id} className="bg-obsidian border border-hairline rounded-lg p-6 hover:border-gold/40 transition-colors">
                 <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <span className="text-xl">{getStatusIcon(order.status)}</span>
                       <div>
-                        <h3 className="font-display font-light text-ink tracking-[-0.01em]">
+                        <h3 className="font-display text-ink tracking-[-0.01em]">
                           Order #{order._id.slice(-8).toUpperCase()}
                         </h3>
                         <p className="text-ink-muted font-display text-sm">
@@ -287,7 +287,7 @@ export default function OrdersPage() {
                     )}
                   </div>
                   <div className="flex flex-col items-start md:items-end gap-1.5 shrink-0">
-                    <span className={`px-3 py-1 rounded-sm text-xs font-display font-bold uppercase tracking-widest border ${getStatusColor(order.status)}`}>
+                    <span className={`px-3 py-1 rounded-full text-[15px] font-display font-bold border ${getStatusColor(order.status)}`}>
                       {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                     </span>
                     {/*
@@ -298,7 +298,7 @@ export default function OrdersPage() {
                     */}
                     <ParcelProgressBadge
                       order={order}
-                      className="px-2 py-0.5 rounded-sm text-[10px] font-display font-bold uppercase tracking-widest border border-gold/30 text-gold/90"
+                      className="px-2 py-0.5 rounded-full text-[15px] font-display font-bold border border-gold/30 text-gold/90"
                     />
                     {/*
                       Partly cancelled orders keep a live fulfilment status (`processing`
@@ -307,7 +307,7 @@ export default function OrdersPage() {
                       order already reads `Cancelled` in the status chip above.
                     */}
                     {hasCancellations(order) && order.status.toLowerCase() !== 'cancelled' && (
-                      <span className="px-2 py-0.5 rounded-sm text-[10px] font-display font-bold uppercase tracking-widest border border-red-500/30 text-red-600">
+                      <span className="px-2 py-0.5 rounded-full text-[15px] font-display font-bold border border-red-500/30 text-red-600">
                         Part cancelled
                       </span>
                     )}
@@ -320,7 +320,7 @@ export default function OrdersPage() {
                     {order.buyer?.type === 'enterprise' && (
                       <span
                         title={order.buyer.gstin ? `GSTIN ${order.buyer.gstin}` : undefined}
-                        className="px-2 py-0.5 rounded-sm text-[10px] font-display font-bold uppercase tracking-widest border border-gold/30 text-gold/90"
+                        className="px-2 py-0.5 rounded-full text-[15px] font-display font-bold border border-gold/30 text-gold/90"
                       >
                         Business
                       </span>
@@ -329,7 +329,7 @@ export default function OrdersPage() {
                 </div>
 
                 <div className="border-t border-hairline pt-4 mb-4">
-                  <p className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-3">
+                  <p className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-3">
                     {order.items.length} item{order.items.length !== 1 ? 's' : ''}
                   </p>
                   <div className="space-y-2">
@@ -367,7 +367,7 @@ export default function OrdersPage() {
                   </div>
                   <Link
                     href={`/orders/${order._id}`}
-                    className="flex items-center justify-center gap-2 bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-2.5 rounded-sm transition-colors text-sm"
+                    className="flex items-center justify-center gap-2 bg-gold hover:opacity-90 text-white font-display font-bold px-6 py-2.5 rounded-full transition-colors text-[15px]"
                   >
                     <Eye className="h-4 w-4" />
                     View Details
@@ -384,17 +384,17 @@ export default function OrdersPage() {
             <button
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="px-4 py-2 bg-obsidian-raised border border-hairline text-ink/70 rounded-sm hover:bg-obsidian-raised hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed font-display font-bold uppercase tracking-widest text-sm transition-colors"
+              className="px-4 py-2 bg-obsidian-raised border border-hairline text-ink/70 rounded-full hover:bg-obsidian-raised hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed font-display font-bold text-[15px] transition-colors"
             >
               Previous
             </button>
-            <span className="px-4 py-2 bg-gold/10 border border-gold/30 text-gold rounded-sm font-display font-bold text-sm">
+            <span className="px-4 py-2 bg-gold/10 border border-gold/30 text-gold rounded-lg font-display font-bold text-sm">
               Page {currentPage} of {totalPages}
             </span>
             <button
               onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="px-4 py-2 bg-obsidian-raised border border-hairline text-ink/70 rounded-sm hover:bg-obsidian-raised hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed font-display font-bold uppercase tracking-widest text-sm transition-colors"
+              className="px-4 py-2 bg-obsidian-raised border border-hairline text-ink/70 rounded-full hover:bg-obsidian-raised hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed font-display font-bold text-[15px] transition-colors"
             >
               Next
             </button>

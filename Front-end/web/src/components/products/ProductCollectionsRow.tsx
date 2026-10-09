@@ -272,7 +272,7 @@ export default function ProductCollectionsRow({
                               {product.productType === 'variable' ? (
                                 <p className="text-lg font-bold text-ink">
                                   {(product.priceMax ?? product.price) > (product.priceMin ?? product.price) && (
-                                    <span className="text-xs uppercase tracking-[0.14em] text-ink-muted mr-1">From</span>
+                                    <span className="text-[12px] uppercase tracking-[0.12em] text-ink-muted mr-1 font-semibold">From</span>
                                   )}
                                   {formatPrice(product.priceMin ?? product.price)}
                                 </p>
@@ -296,7 +296,7 @@ export default function ProductCollectionsRow({
                             <button
                               onClick={(e) => handleAddToCart(product, e)}
                               disabled={product.stock === 'out'}
-                              className="w-full mt-3 flex items-center justify-center gap-2 bg-gold text-obsidian px-4 py-2 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed text-sm font-medium"
+                              className="w-full mt-3 flex items-center justify-center gap-2 bg-gold text-white px-4 py-2 rounded-lg hover:bg-gold transition-colors disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed text-sm font-medium"
                             >
                               {product.productType === 'variable' ? <SlidersHorizontal className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
                               <span>{product.stock === 'out' ? 'Out of Stock' : product.productType === 'variable' ? 'Select model' : 'Add to Cart'}</span>

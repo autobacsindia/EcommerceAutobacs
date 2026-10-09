@@ -579,32 +579,32 @@ function CheckoutPageContent() {
   if (isGuest) {
     return (
       <div className="min-h-screen bg-obsidian-deep flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-obsidian border border-hairline rounded-sm p-8 text-center">
+        <div className="max-w-md w-full bg-obsidian border border-hairline rounded-lg p-8 text-center">
           <div className="bg-gold/10 border border-gold/30 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6">
             <LogIn className="h-8 w-8 text-gold" />
           </div>
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Almost there</p>
-          <h1 className="text-2xl font-display font-light text-ink tracking-[-0.01em] mb-3">Sign in to check out</h1>
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Almost there</p>
+          <h1 className="text-2xl font-display font-bold text-ink tracking-[-0.01em] mb-3">Sign in to check out</h1>
           <p className="text-ink/70 font-display text-sm mb-8">
             Your cart is saved. Log in or create an account to complete your order — your items will be waiting.
           </p>
           <div className="space-y-3">
             <Link
               href="/login?redirect=/checkout"
-              className="block w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors"
+              className="block w-full bg-gold hover:opacity-90 text-white font-display font-bold py-3 rounded-full transition-colors"
             >
               Log In
             </Link>
             <Link
               href="/register?redirect=/checkout"
-              className="block w-full bg-obsidian-raised border border-hairline text-ink hover:border-gold/40 font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors"
+              className="block w-full bg-obsidian-raised border border-hairline text-ink hover:border-gold/40 font-display font-bold py-3 rounded-full transition-colors"
             >
               Create Account
             </Link>
           </div>
           <button
             onClick={() => router.push('/cart')}
-            className="mt-6 text-ink-muted hover:text-ink font-display text-xs uppercase tracking-widest transition-colors"
+            className="mt-6 text-ink-muted hover:text-ink font-display text-[12px] uppercase tracking-[0.12em] transition-colors font-semibold"
           >
             Back to cart
           </button>
@@ -621,14 +621,14 @@ function CheckoutPageContent() {
           <div className="bg-green-500/10 border border-green-500/30 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
             <Check className="h-12 w-12 text-green-700" />
           </div>
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Success</p>
-          <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-4">Order Placed!</h1>
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Success</p>
+          <h1 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Order Placed!</h1>
           <p className="text-ink/70 font-display mb-2">Thank you for your order</p>
           <p className="text-lg font-display font-bold text-gold mb-8">Order ID: #{orderId}</p>
 
           {isGuestOrder && (
-            <div className="bg-obsidian border border-gold/30 rounded-sm p-6 mb-8 text-left">
-              <h3 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">
+            <div className="bg-obsidian border border-gold/30 rounded-lg p-6 mb-8 text-left">
+              <h3 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">
                 Claim Your Account
               </h3>
               <p className="text-ink/70 font-display mb-4">
@@ -640,15 +640,15 @@ function CheckoutPageContent() {
                 <li className="flex items-center gap-2"><span className="text-green-700">✓</span> View order history</li>
                 <li className="flex items-center gap-2"><span className="text-green-700">✓</span> Easy returns &amp; support</li>
               </ul>
-              <a href={`/claim-order?orderId=${orderId}`} className="inline-block bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-8 py-3 rounded-sm transition-colors">
+              <a href={`/claim-order?orderId=${orderId}`} className="inline-block bg-gold hover:opacity-90 text-white font-display font-bold px-8 py-3 rounded-full transition-colors">
                 Claim My Account
               </a>
               <p className="text-xs text-ink-muted font-display mt-3">Or check your email for the magic link</p>
             </div>
           )}
 
-          <div className="bg-obsidian border border-hairline rounded-sm p-6 mb-8 max-w-md mx-auto text-left">
-            <h3 className="font-display font-bold text-ink uppercase tracking-widest text-sm mb-4">Payment Details</h3>
+          <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-8 max-w-md mx-auto text-left">
+            <h3 className="font-display font-bold text-ink uppercase tracking-[0.12em] text-sm mb-4">Payment Details</h3>
             <div className="flex justify-between mb-3 text-sm">
               <span className="text-ink-muted font-display">Method</span>
               <span className="text-ink/70 font-display font-bold">{PAYMENT_METHOD_LABELS[paymentMethod]}</span>
@@ -664,10 +664,10 @@ function CheckoutPageContent() {
           </div>
 
           <div className="flex gap-4 justify-center">
-            <button onClick={() => router.push(`/orders/${orderId}`)} className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors">
+            <button onClick={() => router.push(`/orders/${orderId}`)} className="bg-gold hover:opacity-90 text-white font-display font-bold px-6 py-3 rounded-full transition-colors">
               View Order Details
             </button>
-            <button onClick={() => { localStorage.removeItem('pendingClaim'); router.push('/products'); }} className="bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors">
+            <button onClick={() => { localStorage.removeItem('pendingClaim'); router.push('/products'); }} className="bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold px-6 py-3 rounded-full transition-colors">
               Continue Shopping
             </button>
           </div>
@@ -683,14 +683,14 @@ function CheckoutPageContent() {
     { id: 'review', label: 'Review', icon: Check },
   ];
 
-  const inputClass = 'w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-sm px-4 py-2.5 focus:outline-none focus:border-gold font-display text-sm transition-colors';
+  const inputClass = 'w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg px-4 py-2.5 focus:outline-none focus:border-gold font-display text-sm transition-colors';
 
   return (
     <div className="min-h-screen bg-obsidian-deep py-8">
       <div className="max-w-4xl mx-auto px-4">
         <div className="mb-10">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold">Secure</p>
-          <h1 className="mt-4 text-[clamp(34px,5vw,60px)] font-light leading-[0.95] tracking-[-0.01em] text-ink">Checkout</h1>
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold font-semibold">Secure</p>
+          <h1 className="mt-4 text-[clamp(24px,3vw,36px)] font-bold leading-[0.95] tracking-[-0.01em] text-ink">Checkout</h1>
         </div>
 
         {/* Progress Steps */}
@@ -702,7 +702,7 @@ function CheckoutPageContent() {
             return (
               <div key={step.id} className="flex items-center">
                 <div className="flex flex-col items-center">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-gold text-obsidian' : isCompleted ? 'bg-green-500/20 border border-green-500/50 text-green-700' : 'bg-obsidian-raised border border-hairline text-ink-muted'}`}>
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-gold text-white' : isCompleted ? 'bg-green-500/20 border border-green-500/50 text-green-700' : 'bg-obsidian-raised border border-hairline text-ink-muted'}`}>
                     <Icon className="h-5 w-5" />
                   </div>
                   <span className={`text-xs mt-2 font-display font-bold uppercase tracking-widest ${isActive ? 'text-gold' : isCompleted ? 'text-green-700' : 'text-ink-muted'}`}>{step.label}</span>
@@ -718,10 +718,10 @@ function CheckoutPageContent() {
         {/* Cart Review */}
         {currentStep === 'cart' && (
           <div>
-            <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-4">Review Your Cart</h2>
+            <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Review Your Cart</h2>
 
             {stockValidationErrors.length > 0 && (
-              <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-sm p-4">
+              <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-lg p-4">
                 <h3 className="font-display font-bold text-red-600 uppercase tracking-wide mb-2 flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5" />
                   Stock Availability Issues
@@ -746,12 +746,12 @@ function CheckoutPageContent() {
 
             <div className="space-y-3 mb-8">
               {cart?.items.map((item: any) => (
-                <div key={`${item.product._id}-${item.variantId ?? ''}`} className="flex items-center gap-4 bg-obsidian border border-hairline rounded-sm p-4">
-                  <div className="w-16 h-16 bg-obsidian-raised border border-hairline rounded-sm shrink-0" />
+                <div key={`${item.product._id}-${item.variantId ?? ''}`} className="flex items-center gap-4 bg-obsidian border border-hairline rounded-lg p-4">
+                  <div className="w-16 h-16 bg-obsidian-raised border border-hairline rounded-lg shrink-0" />
                   <div className="flex-1">
-                    <h3 className="font-display font-light text-ink tracking-[-0.01em] text-sm">{item.product.name}</h3>
+                    <h3 className="font-display text-ink tracking-[-0.01em] text-sm">{item.product.name}</h3>
                     {item.variantLabel && (
-                      <p className="text-[10px] uppercase tracking-[0.14em] text-gold mt-0.5">{item.variantLabel}</p>
+                      <p className="text-[12px] uppercase tracking-[0.12em] text-gold mt-0.5 font-semibold">{item.variantLabel}</p>
                     )}
                     <p className="text-ink-muted font-display text-xs mt-0.5">Qty: {item.quantity}</p>
                   </div>
@@ -760,7 +760,7 @@ function CheckoutPageContent() {
               ))}
             </div>
 
-            <div className="bg-obsidian border border-hairline rounded-sm p-6 mb-6">
+            <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
               <div className="space-y-3 mb-4 border-b border-hairline pb-4">
                 <div className="flex justify-between text-sm">
                   <span className="text-ink-muted font-display">Subtotal</span>
@@ -786,7 +786,7 @@ function CheckoutPageContent() {
                 </div>
               </div>
               <div className="flex justify-between">
-                <span className="font-display font-light text-ink tracking-[-0.01em]">Total</span>
+                <span className="font-display text-ink tracking-[-0.01em]">Total</span>
                 <span className="text-xl font-display font-bold text-gold">
                   {/* Never a confident figure before the server has given one. Printing the
                       undiscounted total while the quote is in flight is what made checkout
@@ -801,7 +801,7 @@ function CheckoutPageContent() {
             <button
               onClick={() => setCurrentStep('address')}
               disabled={stockValidationErrors.length > 0}
-              className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-gold hover:opacity-90 text-white font-display font-bold py-3 rounded-full disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
             >
               Continue to Shipping
             </button>
@@ -811,24 +811,24 @@ function CheckoutPageContent() {
         {/* Shipping Address */}
         {currentStep === 'address' && (
           <div>
-            <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-6">Shipping Address</h2>
+            <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-6">Shipping Address</h2>
 
             {!isAuthenticated && (
-              <div className="mb-6 bg-obsidian border border-hairline rounded-sm p-6">
-                <h3 className="font-display font-light text-ink tracking-[-0.01em] mb-4 flex items-center gap-2">
+              <div className="mb-6 bg-obsidian border border-hairline rounded-lg p-6">
+                <h3 className="font-display text-ink tracking-[-0.01em] mb-4 flex items-center gap-2">
                   <span className="text-xl">📧</span>
                   Contact Information
                 </h3>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">Email Address</label>
+                    <label className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">Email Address</label>
                     <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} placeholder="your@email.com" className={inputClass} required={!guestPhone} />
                   </div>
                   <div>
-                    <label className="block text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-1">Phone Number</label>
+                    <label className="block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1">Phone Number</label>
                     <input type="tel" value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} placeholder="+91 98765 43210" className={inputClass} required={!guestEmail} />
                   </div>
-                  <div className="bg-gold/10 border border-gold/30 rounded-sm p-4">
+                  <div className="bg-gold/10 border border-gold/30 rounded-lg p-4">
                     <p className="text-sm text-ink/70 font-display">
                       <span className="text-gold font-display font-bold">Quick Checkout:</span> No account needed! We&apos;ll send you a magic link to track your order.
                     </p>
@@ -850,8 +850,8 @@ function CheckoutPageContent() {
                 (enforced server-side in services/buyerService.js) so nobody
                 lands in the arbitration track just to get a GST number onto a
                 receipt. */}
-            <div className="bg-obsidian border border-hairline rounded-sm p-5 mb-6">
-              <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-3">
+            <div className="bg-obsidian border border-hairline rounded-lg p-5 mb-6">
+              <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-3">
                 Who is this purchase for?
               </h3>
               <div className="grid sm:grid-cols-2 gap-3">
@@ -972,7 +972,7 @@ function CheckoutPageContent() {
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <p className="font-display font-light text-ink tracking-[-0.01em] text-sm">{addr.fullName}</p>
+                        <p className="font-display text-ink tracking-[-0.01em] text-sm">{addr.fullName}</p>
                         <p className="text-ink/70 font-display text-sm mt-1">{addr.addressLine1}</p>
                         <p className="text-ink/70 font-display text-sm">{addr.city}, {addr.state} {addr.postalCode}</p>
                         <p className="text-ink-muted font-display text-sm">{addr.phone}</p>
@@ -997,7 +997,7 @@ function CheckoutPageContent() {
                           <Trash2 className="h-4 w-4" />
                         </button>
                         {selectedAddressIndex === index && (
-                          <div className="bg-gold text-obsidian p-1 rounded-full">
+                          <div className="bg-gold text-white p-1 rounded-full">
                             <Check className="h-4 w-4" />
                           </div>
                         )}
@@ -1008,7 +1008,7 @@ function CheckoutPageContent() {
 
                 <button
                   onClick={() => { setShowAddressForm(true); setSelectedAddressIndex(null); setAddress({ fullName: user?.name || '', street: '', city: '', state: '', postalCode: '', country: 'India', phone: '' }); }}
-                  className="w-full py-3 border-2 border-dashed border-hairline rounded-sm text-ink-muted hover:border-gold hover:text-gold flex items-center justify-center gap-2 transition-colors font-display font-bold uppercase tracking-widest text-sm"
+                  className="w-full py-3 border-2 border-dashed border-hairline rounded-full text-ink-muted hover:border-gold hover:text-gold flex items-center justify-center gap-2 transition-colors font-display font-bold text-[15px]"
                 >
                   <Plus className="h-4 w-4" />
                   Add New Address
@@ -1017,7 +1017,7 @@ function CheckoutPageContent() {
                 <button
                   onClick={handleAddressSubmit}
                   disabled={selectedAddressIndex === null}
-                  className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
+                  className="w-full bg-gold hover:opacity-90 text-white font-display font-bold py-3 rounded-full disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors"
                 >
                   Deliver to This Address
                 </button>
@@ -1027,7 +1027,7 @@ function CheckoutPageContent() {
             {showAddressForm && (
               <form onSubmit={handleAddressSubmit} className="space-y-4">
                 {savedAddresses.length > 0 && (
-                  <button type="button" onClick={() => setShowAddressForm(false)} className="text-sm text-gold hover:text-ink font-display font-bold uppercase tracking-widest transition-colors mb-2">
+                  <button type="button" onClick={() => setShowAddressForm(false)} className="text-sm text-gold hover:text-ink font-display font-bold uppercase tracking-[0.12em] transition-colors mb-2">
                     ← Back to Saved Addresses
                   </button>
                 )}
@@ -1047,7 +1047,7 @@ function CheckoutPageContent() {
                     <label htmlFor="saveAddress" className="text-sm text-ink/70 font-display">Save this address for future orders</label>
                   </div>
                 )}
-                <button type="submit" className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors mt-4">
+                <button type="submit" className="w-full bg-gold hover:opacity-90 text-white font-display font-bold py-3 rounded-full transition-colors mt-4">
                   Continue to Payment
                 </button>
               </form>
@@ -1058,11 +1058,11 @@ function CheckoutPageContent() {
         {/* Payment Method */}
         {currentStep === 'payment' && (
           <div>
-            <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-6">Payment Method</h2>
+            <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-6">Payment Method</h2>
             <div className="mb-8">
               <PaymentMethodSelector selectedMethod={paymentMethod} onSelect={setPaymentMethod} />
             </div>
-            <button onClick={() => { trackAddPaymentInfo({ method: paymentMethod, value: lastCartTotalRef.current }); setCurrentStep('review'); }} className="w-full bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest py-3 rounded-sm transition-colors">
+            <button onClick={() => { trackAddPaymentInfo({ method: paymentMethod, value: lastCartTotalRef.current }); setCurrentStep('review'); }} className="w-full bg-gold hover:opacity-90 text-white font-display font-bold py-3 rounded-full transition-colors">
               Continue to Review
             </button>
           </div>
@@ -1071,11 +1071,11 @@ function CheckoutPageContent() {
         {/* Review Order */}
         {currentStep === 'review' && (
           <div>
-            <h2 className="text-xl font-display font-light text-ink tracking-[-0.01em] mb-6">Review Your Order</h2>
+            <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-6">Review Your Order</h2>
 
             {/* Price-change confirmation banner — shown when server prices differ from CartContext */}
             {priceConfirmationPending && serverValidation && (
-              <div className="mb-6 bg-yellow-500/10 border border-yellow-500/40 rounded-sm p-5">
+              <div className="mb-6 bg-yellow-500/10 border border-yellow-500/40 rounded-lg p-5">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="h-5 w-5 text-yellow-700 shrink-0 mt-0.5" />
                   <div className="flex-1">
@@ -1083,7 +1083,7 @@ function CheckoutPageContent() {
                     <p className="text-ink/70 font-display text-sm mb-4">
                       One or more item prices changed since you loaded this page. Please confirm the updated total before paying.
                     </p>
-                    <div className="bg-obsidian border border-hairline rounded-sm p-4 mb-4 space-y-2">
+                    <div className="bg-obsidian border border-hairline rounded-lg p-4 mb-4 space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-ink-muted font-display">Previous total</span>
                         <span className="text-ink-muted font-display line-through">
@@ -1099,7 +1099,7 @@ function CheckoutPageContent() {
                         <span className="text-ink/70 font-display">₹{serverValidation.tax.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between border-t border-hairline pt-2">
-                        <span className="font-display font-light text-ink tracking-[-0.01em] text-sm">New Total</span>
+                        <span className="font-display text-ink tracking-[-0.01em] text-sm">New Total</span>
                         <span className="text-lg font-display font-bold text-gold">₹{serverValidation.total.toFixed(2)}</span>
                       </div>
                     </div>
@@ -1107,7 +1107,7 @@ function CheckoutPageContent() {
                       <button
                         onClick={() => placeOrderWithValidation(serverValidation)}
                         disabled={loading || isRazorpayProcessing || !acceptedTerms}
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-display font-bold uppercase tracking-widest py-2.5 rounded-sm disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-display font-bold uppercase tracking-[0.12em] py-2.5 rounded-lg disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors text-sm"
                       >
                         {loading || isRazorpayProcessing ? (
                           <><Loader2 className="h-4 w-4 animate-spin" /><span>Processing...</span></>
@@ -1117,7 +1117,7 @@ function CheckoutPageContent() {
                       </button>
                       <button
                         onClick={() => { setPriceConfirmationPending(false); router.push('/cart'); }}
-                        className="px-4 bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold uppercase tracking-widest py-2.5 rounded-sm transition-colors text-sm"
+                        className="px-4 bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold py-2.5 rounded-full transition-colors text-[15px]"
                       >
                         Back to Cart
                       </button>
@@ -1127,15 +1127,15 @@ function CheckoutPageContent() {
               </div>
             )}
 
-            <div className="bg-obsidian border border-hairline rounded-sm p-6 mb-6 space-y-5">
+            <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6 space-y-5">
               <div>
-                <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-2">Shipping Address</h3>
+                <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-2">Shipping Address</h3>
                 <p className="text-ink/70 font-display text-sm">{address.street}</p>
                 <p className="text-ink/70 font-display text-sm">{address.city}, {address.state} {address.postalCode}</p>
                 <p className="text-ink-muted font-display text-sm">{address.phone}</p>
               </div>
               <div className="border-t border-hairline pt-4">
-                <h3 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-2">Payment Method</h3>
+                <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-2">Payment Method</h3>
                 <p className="text-ink/70 font-display text-sm">{PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod}</p>
               </div>
               <div className="border-t border-hairline pt-4">
@@ -1158,7 +1158,7 @@ function CheckoutPageContent() {
                 Ernakulam — a buyer agreeing to that should not have to open the
                 terms to discover it. The version shown is the one the server
                 will record. */}
-            <div className="bg-obsidian border border-hairline rounded-sm p-5 mb-6">
+            <div className="bg-obsidian border border-hairline rounded-lg p-5 mb-6">
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1201,7 +1201,7 @@ function CheckoutPageContent() {
               <button
                 onClick={handlePlaceOrder}
                 disabled={loading || isRazorpayProcessing || !acceptedTerms}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-display font-bold uppercase tracking-widest py-3 rounded-sm disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-display font-bold uppercase tracking-[0.12em] py-3 rounded-lg disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
               >
                 {loading || isRazorpayProcessing ? (
                   <><Loader2 className="h-5 w-5 animate-spin" /><span>Processing...</span></>

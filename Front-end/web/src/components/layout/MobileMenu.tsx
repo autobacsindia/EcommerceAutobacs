@@ -72,10 +72,10 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-hairline">
-          <h2 className="text-lg font-display font-bold text-ink uppercase tracking-widest">Menu</h2>
+          <h2 className="text-lg font-display font-bold text-ink uppercase tracking-[0.12em]">Menu</h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-sm hover:bg-obsidian-raised transition-colors"
+            className="p-2 rounded-lg hover:bg-obsidian-raised transition-colors"
             aria-label="Close menu"
           >
             <X className="h-6 w-6 text-ink/70" />
@@ -103,7 +103,7 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
 
             {/* Vehicle Selector */}
             <li className="px-4 py-3 border-t border-b border-hairline my-2">
-              <div className="text-xs font-display font-bold text-gold uppercase tracking-widest mb-2">Select Your Vehicle</div>
+              <div className="text-[12px] font-display font-bold text-gold uppercase tracking-[0.12em] mb-2">Select Your Vehicle</div>
               <HeaderVehicleSelector />
             </li>
 
@@ -155,7 +155,7 @@ export default function MobileMenu({ isOpen, onClose, navCategories }: MobileMen
                   <Link
                     href="/register"
                     onClick={onClose}
-                    className="flex items-center justify-center gap-2 bg-gold hover:opacity-90 text-obsidian px-4 py-3 rounded-sm transition-colors font-display font-bold uppercase tracking-widest text-sm"
+                    className="flex items-center justify-center gap-2 bg-gold hover:opacity-90 text-white px-4 py-3 rounded-full transition-colors font-display font-bold text-[15px]"
                   >
                     Sign Up
                   </Link>

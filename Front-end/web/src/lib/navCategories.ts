@@ -20,14 +20,16 @@ interface ApiCategory {
  * no longer depends on the backend slug-translation hacks.
  */
 const CURATED_NAV: { label: string; aliases: string[] }[] = [
+  // Order and labels follow the 2026-10 header design (A–Z, then Suspension).
   { label: 'Accessories', aliases: ['accessories'] },
+  { label: 'Audio',       aliases: ['audio', 'speaker', 'speakers', 'sound-system', 'sound'] },
+  { label: 'Body Kits',   aliases: ['body-kits', 'bodykit', 'body-kit', 'bodykits'] },
+  { label: 'Brakes',      aliases: ['brakes', 'brake', 'braking'] },
   { label: 'Exterior',    aliases: ['exterior'] },
   { label: 'Interior',    aliases: ['interior'] },
-  { label: 'Body Kits',   aliases: ['body-kits', 'bodykit', 'body-kit', 'bodykits'] },
+  { label: 'Lighting',    aliases: ['lighting', 'lights', 'light'] },
   { label: 'Performance', aliases: ['performance'] },
   { label: 'Suspension',  aliases: ['suspension'] },
-  { label: 'Audio',       aliases: ['audio', 'speaker', 'speakers', 'sound-system', 'sound'] },
-  { label: 'Lights',      aliases: ['lights', 'lighting', 'light'] },
 ];
 
 /**
@@ -36,13 +38,14 @@ const CURATED_NAV: { label: string; aliases: string[] }[] = [
  */
 export const FALLBACK_NAV_CATEGORIES: NavCategory[] = [
   { label: 'Accessories', href: '/categories/accessories' },
+  { label: 'Audio',       href: '/categories/audio' },
+  { label: 'Body Kits',   href: '/categories/bodykit' },
+  { label: 'Brakes',      href: '/categories/brakes' },
   { label: 'Exterior',    href: '/categories/exterior' },
   { label: 'Interior',    href: '/categories/interior' },
-  { label: 'Body Kits',   href: '/categories/bodykit' },
+  { label: 'Lighting',    href: '/categories/lights' },
   { label: 'Performance', href: '/categories/performance' },
   { label: 'Suspension',  href: '/categories/suspension' },
-  { label: 'Audio',       href: '/categories/audio' },
-  { label: 'Lights',      href: '/categories/lights' },
 ];
 
 const normalize = (s: string) =>

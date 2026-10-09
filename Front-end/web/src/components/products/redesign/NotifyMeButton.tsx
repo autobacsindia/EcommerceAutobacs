@@ -114,14 +114,14 @@ export default function NotifyMeButton({
   if (subscribed) {
     return (
       <div className={`flex flex-col gap-1.5 ${className}`}>
-        <div className="flex items-center justify-center gap-2.5 border border-gold/50 bg-gold/10 py-4 font-display text-[11px] font-semibold uppercase tracking-[0.16em] text-gold">
+        <div className="flex items-center justify-center gap-2.5 border border-gold/50 bg-gold/10 py-4 font-display text-[15px] font-semibold text-gold rounded-full">
           <Check className="h-4 w-4" />
           You&apos;re on the list — we&apos;ll email you
         </div>
         <button
           onClick={unsubscribe}
           disabled={loading}
-          className="self-center text-[11px] uppercase tracking-[0.14em] text-ink-muted underline-offset-4 transition-colors hover:text-gold hover:underline disabled:opacity-40"
+          className="self-center text-[12px] uppercase tracking-[0.12em] text-ink-muted underline-offset-4 transition-colors hover:text-gold hover:underline disabled:opacity-40 font-semibold"
         >
           {loading ? 'Updating…' : 'Cancel alert'}
         </button>
@@ -133,7 +133,7 @@ export default function NotifyMeButton({
     <button
       onClick={subscribe}
       disabled={loading}
-      className={`flex items-center justify-center gap-3 border border-gold py-4 font-display text-[11px] font-semibold uppercase tracking-[0.2em] text-gold transition-colors hover:bg-gold hover:text-obsidian disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      className={`flex items-center justify-center gap-3 border border-gold py-4 font-display text-[15px] font-semibold text-gold transition-colors hover:bg-gold hover:text-obsidian disabled:cursor-not-allowed disabled:opacity-40 ${className} rounded-full`}
     >
       {loading ? <BellRing className="h-4 w-4 animate-pulse" /> : <Bell className="h-4 w-4" />}
       {loading ? 'One moment…' : 'Notify me when available'}

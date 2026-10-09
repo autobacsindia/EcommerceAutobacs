@@ -58,7 +58,7 @@ export default function PageLoader({ type = 'home' }: PageLoaderProps) {
           </section>
 
           {/* CTA Section Skeleton */}
-          <section className="bg-gold text-obsidian py-16">
+          <section className="bg-gold text-white py-16">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
               <div className="h-10 bg-gold rounded mb-4 mx-auto max-w-xl animate-pulse" />
               <div className="h-8 bg-gold rounded mb-8 mx-auto max-w-2xl animate-pulse" />

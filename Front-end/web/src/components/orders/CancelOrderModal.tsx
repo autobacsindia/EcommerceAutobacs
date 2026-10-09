@@ -147,7 +147,7 @@ export default function CancelOrderModal({
             <div className="flex flex-col gap-3">
               <button
                 onClick={handleClose}
-                className="w-full bg-gold text-obsidian px-4 py-3 rounded-lg hover:bg-gold font-medium transition"
+                className="w-full bg-gold text-white px-4 py-3 rounded-lg hover:bg-gold font-medium transition"
               >
                 View Order Details
               </button>

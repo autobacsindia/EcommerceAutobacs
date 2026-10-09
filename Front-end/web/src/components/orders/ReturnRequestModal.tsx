@@ -129,7 +129,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
           <p className="text-ink-muted text-center mb-6">
             Returns must be raised within {RETURN_WINDOW_DAYS} days of delivery. This order was delivered {daysSinceDelivery} days ago.
           </p>
-          <button onClick={onClose} className="w-full bg-gold text-obsidian px-4 py-3 rounded-lg font-medium">Close</button>
+          <button onClick={onClose} className="w-full bg-gold text-white px-4 py-3 rounded-lg font-medium">Close</button>
         </div>
       </Shell>
     );
@@ -158,7 +158,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
             already outside {excludedCount === 1 ? 'its' : 'their'} return window.
             Please contact support and we&apos;ll sort it out with you.
           </p>
-          <button onClick={onClose} className="w-full bg-gold text-obsidian px-4 py-3 rounded-lg font-medium">Close</button>
+          <button onClick={onClose} className="w-full bg-gold text-white px-4 py-3 rounded-lg font-medium">Close</button>
         </div>
       </Shell>
     );
@@ -298,7 +298,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
             <p>2. If approved, <strong>we arrange the return pickup</strong>.</p>
             <p>3. After the item reaches us and passes inspection, your refund is issued to your original payment method.</p>
           </div>
-          <button onClick={() => { onSuccess(); onClose(); }} className="w-full bg-gold text-obsidian px-4 py-3 rounded-lg font-medium">Done</button>
+          <button onClick={() => { onSuccess(); onClose(); }} className="w-full bg-gold text-white px-4 py-3 rounded-lg font-medium">Done</button>
         </div>
       </Shell>
     );
@@ -319,7 +319,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
           <div className="flex items-center justify-between mb-2">
             {[1, 2, 3, 4].map((step) => (
               <div key={step} className="flex items-center flex-1">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${step <= currentStep ? 'bg-gold text-obsidian' : 'bg-obsidian-raised text-ink-muted'}`}>{step}</div>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${step <= currentStep ? 'bg-gold text-white' : 'bg-obsidian-raised text-ink-muted'}`}>{step}</div>
                 {step < 4 && <div className={`flex-1 h-1 mx-2 ${step < currentStep ? 'bg-gold' : 'bg-obsidian-raised'}`} />}
               </div>
             ))}
@@ -372,7 +372,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
                       <button
                         type="button"
                         onClick={selectAllItems}
-                        className="rounded-lg bg-gold px-4 py-2 font-medium text-obsidian transition hover:opacity-90"
+                        className="rounded-lg bg-gold px-4 py-2 font-medium text-white transition hover:opacity-90"
                       >
                         Return all items
                       </button>
@@ -504,7 +504,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
           {currentStep > 1 && <ChevronLeft className="h-4 w-4" />}{currentStep === 1 ? 'Cancel' : 'Back'}
         </button>
         <button onClick={currentStep === totalSteps ? handleSubmit : handleNext} disabled={isSubmitting || !!uploading}
-          className="px-6 py-2 rounded-lg text-obsidian font-medium bg-gold hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50">
+          className="px-6 py-2 rounded-lg text-white font-medium bg-gold hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50">
           {isSubmitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</> : currentStep === totalSteps ? 'Submit request' : <>Next <ChevronRight className="h-4 w-4" /></>}
         </button>
       </div>

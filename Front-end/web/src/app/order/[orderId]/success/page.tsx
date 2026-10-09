@@ -124,8 +124,8 @@ export default async function OrderSuccessPage({
           <div className="bg-green-500/10 border border-green-500/30 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="h-12 w-12 text-green-700" />
           </div>
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Confirmed</p>
-          <h1 className="text-3xl font-display font-light text-ink tracking-[-0.01em] mb-3">
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Confirmed</p>
+          <h1 className="text-3xl font-display font-bold text-ink tracking-[-0.01em] mb-3">
             Thank you for your order
           </h1>
           <p className="text-ink/70 font-display">
@@ -134,17 +134,17 @@ export default async function OrderSuccessPage({
         </div>
 
         {/* Estimated delivery */}
-        <div className="bg-obsidian border border-hairline rounded-sm p-6 mb-6 flex items-center gap-3">
+        <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6 flex items-center gap-3">
           <Truck className="h-5 w-5 text-gold shrink-0" />
           <div>
-            <p className="text-xs text-ink-muted font-display uppercase tracking-widest mb-0.5">Estimated Delivery</p>
+            <p className="text-[12px] text-ink-muted font-display uppercase tracking-[0.12em] mb-0.5 font-semibold">Estimated Delivery</p>
             <p className="text-ink/80 font-display font-bold text-sm">{estimatedDelivery}</p>
           </div>
         </div>
 
         {/* Items */}
-        <div className="bg-obsidian border border-hairline rounded-sm p-6 mb-6">
-          <h2 className="text-xs font-display font-bold text-ink-muted uppercase tracking-widest mb-5">
+        <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
+          <h2 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-5">
             Items ({order.items.length})
           </h2>
           <div className="space-y-4">
@@ -157,7 +157,7 @@ export default async function OrderSuccessPage({
                   key={item._id || index}
                   className="flex gap-4 border-b border-hairline pb-4 last:border-b-0 last:pb-0"
                 >
-                  <div className="w-16 h-16 bg-obsidian-raised border border-hairline rounded-sm overflow-hidden shrink-0">
+                  <div className="w-16 h-16 bg-obsidian-raised border border-hairline rounded-lg overflow-hidden shrink-0">
                     {image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={image} alt={name} className="w-full h-full object-cover" />
@@ -168,7 +168,7 @@ export default async function OrderSuccessPage({
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-display font-light text-ink tracking-[-0.01em] line-clamp-2">{name}</p>
+                    <p className="font-display text-ink tracking-[-0.01em] line-clamp-2">{name}</p>
                     <p className="text-ink-muted font-display text-xs mt-1">Qty: {item.quantity}</p>
                   </div>
                   <p className="font-display font-bold text-gold shrink-0">{formatPriceINR(item.price * item.quantity)}</p>
@@ -178,7 +178,7 @@ export default async function OrderSuccessPage({
           </div>
 
           <div className="flex justify-between border-t border-hairline pt-4 mt-4">
-            <span className="font-display font-light text-ink tracking-[-0.01em]">Total Paid</span>
+            <span className="font-display text-ink tracking-[-0.01em]">Total Paid</span>
             <span className="text-xl font-display font-bold text-gold">{formatPriceINR(order.totalAmount)}</span>
           </div>
         </div>
@@ -201,13 +201,13 @@ export default async function OrderSuccessPage({
         <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
           <Link
             href={`/orders/${order._id}`}
-            className="bg-gold hover:opacity-90 text-obsidian font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors text-center"
+            className="bg-gold hover:opacity-90 text-white font-display font-bold px-6 py-3 rounded-full transition-colors text-center"
           >
             View Order Details
           </Link>
           <Link
             href="/products"
-            className="bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold uppercase tracking-widest px-6 py-3 rounded-sm transition-colors text-center"
+            className="bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold px-6 py-3 rounded-full transition-colors text-center"
           >
             Continue Shopping
           </Link>

@@ -17,8 +17,8 @@ export default function HelpPage() {
       {/* Hero */}
       <section className="bg-obsidian border-b border-hairline">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 text-center">
-          <p className="font-display text-[10px] uppercase tracking-[0.28em] text-gold mb-2">Support</p>
-          <h1 className="text-4xl font-display font-light text-ink tracking-[-0.01em] mb-4">Help Centre</h1>
+          <p className="font-display text-[12px] uppercase tracking-[0.12em] text-gold mb-2 font-semibold">Support</p>
+          <h1 className="text-4xl font-display font-bold text-ink tracking-[-0.01em] mb-4">Help Centre</h1>
           <p className="text-ink/70 font-display max-w-2xl mx-auto">
             Find answers to common questions below, or reach out to our team directly.
           </p>
@@ -42,14 +42,14 @@ export default function HelpPage() {
               body: 'Use the vehicle selector on any product page to filter parts that fit your specific make and model. Our catalogue is regularly updated to ensure accuracy.',
             },
           ].map((section) => (
-            <div key={section.title} className="bg-obsidian border border-hairline rounded-sm p-6">
-              <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">{section.title}</h2>
+            <div key={section.title} className="bg-obsidian border border-hairline rounded-lg p-6">
+              <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">{section.title}</h2>
               <p className="text-ink/70 font-display leading-relaxed">{section.body}</p>
             </div>
           ))}
 
-          <div className="bg-obsidian border border-hairline rounded-sm p-6">
-            <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">Shipping & Delivery</h2>
+          <div className="bg-obsidian border border-hairline rounded-lg p-6">
+            <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Shipping & Delivery</h2>
             <p className="text-ink/70 font-display leading-relaxed">
               Orders are typically dispatched within 1–2 business days. Delivery times vary by location.
               You can track your order from the{' '}
@@ -58,8 +58,8 @@ export default function HelpPage() {
             </p>
           </div>
 
-          <div className="bg-obsidian border border-hairline rounded-sm p-6">
-            <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">Returns & Refunds</h2>
+          <div className="bg-obsidian border border-hairline rounded-lg p-6">
+            <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Returns & Refunds</h2>
             <p className="text-ink/70 font-display leading-relaxed">
               Items can be returned within {RETURN_WINDOW_DAYS} days of delivery where the fault is ours — a wrong
               item, transit damage, or a manufacturing defect. A continuous unboxing video is required. Visit our{' '}
@@ -68,8 +68,8 @@ export default function HelpPage() {
             </p>
           </div>
 
-          <div className="bg-obsidian border border-hairline rounded-sm p-6">
-            <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">Account & Password</h2>
+          <div className="bg-obsidian border border-hairline rounded-lg p-6">
+            <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Account & Password</h2>
             <p className="text-ink/70 font-display leading-relaxed">
               If you have forgotten your password, use the{' '}
               <Link href="/forgot-password" className="text-gold hover:text-ink transition-colors">Forgot Password</Link>{' '}
@@ -78,8 +78,8 @@ export default function HelpPage() {
           </div>
 
           {/* Contact box */}
-          <div className="bg-gold/10 border border-gold/30 rounded-sm p-6">
-            <h2 className="font-display font-light text-ink tracking-[-0.01em] text-xl mb-3">Contact Support</h2>
+          <div className="bg-gold/10 border border-gold/30 rounded-lg p-6">
+            <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Contact Support</h2>
             <p className="text-ink/70 font-display mb-4">Our support team is available Monday – Saturday, 10 AM – 6 PM IST.</p>
             <ul className="space-y-2">
               <li className="text-ink/70 font-display">

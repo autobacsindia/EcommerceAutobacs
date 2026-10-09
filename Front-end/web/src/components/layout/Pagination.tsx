@@ -25,10 +25,10 @@ export default function Pagination({ pagination, currentPage, basePath, searchPa
 
   const pageNumbers = getPageNumbers(currentPage, totalPages);
 
-  const btnBase = 'px-3 py-2 rounded-sm border transition-colors font-display font-bold text-sm';
-  const btnActive = `${btnBase} bg-gold text-obsidian border-gold`;
-  const btnInactive = `${btnBase} bg-obsidian-raised text-ink/70 hover:bg-obsidian-raised hover:text-ink border-hairline`;
-  const btnDisabled = `${btnBase} bg-obsidian text-ink-muted border-hairline cursor-not-allowed`;
+  const btnBase = 'min-w-[40px] px-3 py-2 rounded-lg border transition-colors font-semibold text-sm text-center';
+  const btnActive = `${btnBase} bg-gold text-white border-gold`;
+  const btnInactive = `${btnBase} bg-white text-ink hover:border-gold hover:text-gold border-hairline`;
+  const btnDisabled = `${btnBase} bg-white text-ink-muted/50 border-hairline cursor-not-allowed`;
 
   return (
     <div className="mt-8 flex flex-col items-center gap-4">

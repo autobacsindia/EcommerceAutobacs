@@ -107,10 +107,10 @@ export default function CategoryChips() {
       href={to}
       aria-current={on ? 'page' : undefined}
       className={cn(
-        'whitespace-nowrap px-5 py-2.5 font-display text-[11px] uppercase tracking-[0.16em] transition-colors',
+        'whitespace-nowrap rounded-full px-4 py-2 text-[14px] font-medium transition-colors',
         on
-          ? 'bg-gold text-obsidian'
-          : 'border border-hairline text-ink-muted hover:border-gold/50 hover:text-ink'
+          ? 'bg-gold text-white'
+          : 'border border-hairline bg-white text-ink/80 hover:border-gold hover:text-gold'
       )}
     >
       {label}
@@ -134,7 +134,7 @@ export default function CategoryChips() {
     single working chip rather than an empty bar.
   */
   return (
-    <nav aria-label="Categories" className="sf-noscroll flex gap-2.5 overflow-x-auto">
+    <nav aria-label="Categories" className="sf-noscroll flex gap-2 overflow-x-auto">
       {chip('All categories', href('/products', true), !activeSlug && activeIds.size === 0)}
       {cats.map((c) =>
         chip(

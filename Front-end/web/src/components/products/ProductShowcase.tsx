@@ -64,7 +64,7 @@ const ProductCard = ({ product }: ProductCardProps) => {
         </div>
         <Link 
           href={url}
-          className="mt-3 inline-block w-full text-center bg-gold text-obsidian py-2 rounded-md hover:bg-gold transition-colors"
+          className="mt-3 inline-block w-full text-center bg-gold text-white py-2 rounded-md hover:bg-gold transition-colors"
         >
           View Details
         </Link>
