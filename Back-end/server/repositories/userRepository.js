@@ -166,6 +166,31 @@ class UserRepository extends BaseRepository {
       .lean();
   }
 
+  /** Who can use team chat: admins and active staff. */
+  static CHAT_USER_FILTER = { $or: [{ role: 'admin' }, { role: 'staff', 'staff.active': true }] };
+
+  /** Everyone who can chat, by name. A handful of rows (rides the role index). */
+  async findChatUsers() {
+    return User.find(UserRepository.CHAT_USER_FILTER).select('name role staff').sort({ name: 1 }).lean();
+  }
+
+  /** The chat-eligible subset of `ids`. */
+  async findChatUsersByIds(ids) {
+    if (!ids?.length) return [];
+    return User.find({ _id: { $in: ids }, ...UserRepository.CHAT_USER_FILTER }).select('name role staff').lean();
+  }
+
+  /** Names/roles for display (any account — e.g. a DM partner who has since left). */
+  async findDisplayByIds(ids) {
+    if (!ids?.length) return [];
+    return User.find({ _id: { $in: ids } }).select('name role staff').lean();
+  }
+
+  /** Fresh role/staff/session state for re-checking a long-lived chat stream. */
+  async findChatPrincipal(id) {
+    return User.findById(id).select('name role staff sessionVersion').lean();
+  }
+
   /**
    * Grant staff access to an existing account (an invite was redeemed). Bumps
    * sessionVersion so any session opened under the old role is re-issued.

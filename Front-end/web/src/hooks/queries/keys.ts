@@ -43,6 +43,16 @@ export const categoryKeys = {
     [...categoryKeys.all, 'products', slug, normalizeParams(params)] as const,
 };
 
+export const chatKeys = {
+  all: ['chat'] as const,
+  /** `/chat/channels` — spaces + DMs visible to me, with unread counts. */
+  channels: () => [...chatKeys.all, 'channels'] as const,
+  /** `/chat/channels/:id/messages` — infinite, newest page first. */
+  messages: (channelId: string) => [...chatKeys.all, 'messages', channelId] as const,
+  people: () => [...chatKeys.all, 'people'] as const,
+  me: () => [...chatKeys.all, 'me'] as const,
+};
+
 export const brandKeys = {
   all: ['brands'] as const,
   /** `/products/brands` — every brand with its product count. */

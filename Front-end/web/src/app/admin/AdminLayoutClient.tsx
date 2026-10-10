@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAdminStats } from '@/hooks/queries/useAdminStats';
 import { formatCurrency } from '@/lib/utils';
+import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 
 interface NavItem {
   href?: string;
@@ -18,6 +19,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'Main',
     items: [
       { href: '/admin', label: 'Dashboard', icon: '📊' },
+      { href: '/admin/chat', label: 'Team Chat', icon: '🗨️' },
       { href: '/admin/analytics', label: 'Analytics', icon: '📈' },
     ],
   },
@@ -119,6 +121,7 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
   );
   // Header counters. Polled + cached by TanStack Query (see useAdminStats).
   const { stats, isError: statsFailed } = useAdminStats();
+  const chatUnread = useChatUnreadTotal();
 
   // Deep-link each counter to the Orders view it summarises, carrying the exact
   // status group (and, for revenue, the exact date window) the backend counted —
@@ -239,6 +242,11 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
                         <span className="text-xl shrink-0">{item.icon}</span>
                         {sidebarOpen && (
                           <span className="ml-3 text-sm font-medium">{item.label}</span>
+                        )}
+                        {item.href === '/admin/chat' && chatUnread > 0 && (
+                          <span className="ml-auto rounded-full bg-emerald-500 px-1.5 text-xs font-bold leading-5 text-white" aria-label={`${chatUnread} unread`}>
+                            {chatUnread > 99 ? '99+' : chatUnread}
+                          </span>
                         )}
                       </Link>
                     ))}
