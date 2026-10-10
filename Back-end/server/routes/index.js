@@ -60,6 +60,7 @@ import analyticsRoutes from './analytics.js';
 import leadRoutes from './leads.js';
 import salesRepRoutes from './salesReps.js';
 import staffRoutes from './staff.js';
+import chatRoutes from './chat.js';
 import warehouseRoutes from './warehouses.js';
 import deliveryZoneRoutes from './deliveryZones.js';
 import mediaRoutes from './media.js';
@@ -165,6 +166,9 @@ apiRouter.use('/sales-reps', adminRouteRateLimit, salesRepRoutes);
 // Staff panel (/team): invite redemption is public; everything else is active staff
 // or admin, scoped per team inside staffService. Limiters are applied per route.
 apiRouter.use('/staff', staffRoutes);
+// Team chat: admins + active staff only (never customers). Rate limit is applied
+// inside the router so the long-lived /chat/stream SSE connection is not counted.
+apiRouter.use('/chat', chatRoutes);
 apiRouter.use('/warehouses', adminRouteRateLimit, warehouseRoutes);
 apiRouter.use('/delivery-zones', adminRouteRateLimit, deliveryZoneRoutes);
 apiRouter.use('/media', publicBrowsingRateLimit, mediaRoutes); // Public read access

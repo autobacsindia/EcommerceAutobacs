@@ -375,11 +375,11 @@ function CartPageContent() {
                   const unitPrice = item.price ?? item.product.price;
                   const uid = lineKey(item.product._id, item.variantId);
                   return (
-                  <div key={`${uid}-${index}`} className="p-6">
-                    <div className="flex gap-4">
+                  <div key={`${uid}-${index}`} className="p-4 sm:p-6">
+                    <div className="flex gap-3 sm:gap-4">
                       <Link
                         href={productUrl(item.product, '/products') || '/products'}
-                        className="shrink-0 w-24 h-24 bg-obsidian-raised border border-hairline rounded-lg overflow-hidden"
+                        className="shrink-0 w-20 h-20 sm:w-24 sm:h-24 bg-obsidian-raised border border-hairline rounded-lg overflow-hidden"
                       >
                         <EnhancedImage
                           src={getFirstImageUrl(item.product.images)}
@@ -391,12 +391,14 @@ function CartPageContent() {
                         />
                       </Link>
 
-                      <div className="flex-1">
-                        <div className="flex justify-between">
-                          <div>
+                      {/* min-w-0 lets long product names wrap instead of pushing the
+                          price and delete button off the right edge on phones. */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between gap-2">
+                          <div className="min-w-0">
                             <Link
                               href={productUrl(item.product, '/products') || '/products'}
-                              className="font-display text-ink tracking-[-0.01em] hover:text-gold transition-colors"
+                              className="font-display text-ink tracking-[-0.01em] hover:text-gold transition-colors break-words"
                             >
                               {item.product.name}
                             </Link>
@@ -412,14 +414,15 @@ function CartPageContent() {
                           </div>
                           <button
                             onClick={() => handleRemoveItem(item.product._id, item.variantId)}
-                            className="text-ink-muted hover:text-red-600 transition-colors"
+                            className="shrink-0 self-start -mr-1 p-1 text-ink-muted hover:text-red-600 transition-colors"
                             title="Remove item"
+                            aria-label="Remove item"
                           >
                             <Trash2 className="h-5 w-5" />
                           </button>
                         </div>
 
-                        <div className="mt-4 flex items-center justify-between">
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                           <div className="flex items-center border border-hairline rounded-lg">
                             <button
                               onClick={() => handleQuantityChange(item.product._id, item.quantity - 1, item.variantId)}
@@ -428,7 +431,7 @@ function CartPageContent() {
                             >
                               <Minus className="h-4 w-4" />
                             </button>
-                            <span className="px-4 py-2 min-w-12 text-center text-ink font-display font-bold">
+                            <span className="px-3 sm:px-4 py-2 min-w-10 sm:min-w-12 text-center text-ink font-display font-bold">
                               {item.quantity}
                             </span>
                             <button
@@ -439,7 +442,7 @@ function CartPageContent() {
                               <Plus className="h-4 w-4" />
                             </button>
                           </div>
-                          <p className="text-lg font-display font-bold text-gold">
+                          <p className="text-lg font-display font-bold text-gold whitespace-nowrap">
                             {formatPrice(unitPrice * item.quantity)}
                           </p>
                         </div>

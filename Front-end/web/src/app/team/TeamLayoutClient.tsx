@@ -3,15 +3,19 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, LogOut, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
 /** Links per team. The API enforces the same split; this only hides what would 403. */
 function navFor(team: string, isHead: boolean): NavItem[] {
-  const nav: NavItem[] = [{ href: '/team', label: 'Dashboard', icon: LayoutDashboard }];
+  const nav: NavItem[] = [
+    { href: '/team', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/team/chat', label: 'Team chat', icon: MessagesSquare },
+  ];
   const paid: NavItem = { href: '/team/orders', label: 'Paid orders', icon: BadgeCheck };
   if (team === 'sales') {
     nav.push(
@@ -45,6 +49,7 @@ export default function TeamLayoutClient({
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuth();
+  const unread = useChatUnreadTotal();
 
   const signOut = async () => {
     await logout();
@@ -62,6 +67,11 @@ export default function TeamLayoutClient({
         }`}
       >
         <Icon className="h-4 w-4 shrink-0" /> {label}
+        {href === '/team/chat' && unread > 0 && (
+          <span className="ml-auto rounded-full bg-emerald-500 px-1.5 text-xs font-bold leading-5 text-white" aria-label={`${unread} unread`}>
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
       </Link>
     );
   });
