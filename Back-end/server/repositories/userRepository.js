@@ -186,6 +186,12 @@ class UserRepository extends BaseRepository {
     return User.find({ _id: { $in: ids } }).select('name role staff').lean();
   }
 
+  /** Name + email for notifying people (chat mentions). Never sent to a browser. */
+  async findContactsByIds(ids) {
+    if (!ids?.length) return [];
+    return User.find({ _id: { $in: ids } }).select('name email').lean();
+  }
+
   /** Fresh role/staff/session state for re-checking a long-lived chat stream. */
   async findChatPrincipal(id) {
     return User.findById(id).select('name role staff sessionVersion').lean();

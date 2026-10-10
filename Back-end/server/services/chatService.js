@@ -18,6 +18,11 @@ import chatRepository from '../repositories/chatRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import { publishChatEvent } from './chatEvents.js';
+import { onlineAmong } from './chatPresence.js';
+import { uploadChatAttachments, MAX_ATTACHMENTS_PER_MESSAGE } from './chatAttachmentService.js';
+import orderRepository from '../repositories/orderRepository.js';
+import emailHandler from './emailHandler.js';
+import { orderNumber } from './invoiceService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -115,6 +120,13 @@ function shapeMessage(m, sender) {
     deleted,
     sender: m.kind === 'system' ? null : personOf(sender ?? m.sender),
     clientId: m.clientId ?? null,
+    // A deleted message takes its attachments and references with it.
+    attachments: deleted ? [] : (m.attachments || []).map((a) => ({
+      url: a.url, kind: a.kind, name: a.name, mime: a.mime, size: a.size,
+    })),
+    mentions: (m.mentions || []).map(idOf),
+    mentionTeams: m.mentionTeams || [],
+    refs: deleted ? [] : (m.refs || []).map((r) => ({ type: r.type, code: r.code, id: idOf(r.target) })),
     createdAt: m.createdAt,
   };
 }
@@ -234,6 +246,53 @@ export async function listMessages(user, channelId, { before, after, limit } = {
   };
 }
 
+/**
+ * Recent orders for the "attach an order" picker. Deliberately a bounded, newest-first
+ * read on an indexed field — never a text scan over a growing collection. `q` filters
+ * that page in memory, which is right for a picker: anything older is reached by
+ * opening the order itself.
+ */
+export async function listRecentOrders(q) {
+  const orders = await orderRepository.find(
+    { paymentStatus: 'paid' },
+    { sort: { createdAt: -1 }, limit: 40, select: '_id wpId totalAmount status createdAt shippingAddress.fullName' },
+  );
+  const term = String(q || '').trim().toLowerCase();
+  return (orders || [])
+    .map((o) => ({
+      id: idOf(o),
+      code: orderNumber(o),
+      customer: o.shippingAddress?.fullName || 'Customer',
+      total: o.totalAmount,
+      status: o.status,
+      placedAt: o.createdAt,
+    }))
+    .filter((o) => !term || o.code.toLowerCase().includes(term) || o.customer.toLowerCase().includes(term))
+    .slice(0, 20);
+}
+
+/** The channel's Files tab: newest shared photos and documents. */
+export async function listFiles(user, channelId, { before, limit } = {}) {
+  const channel = await loadAccessible(user, channelId);
+  const size = Math.min(Math.max(parseInt(limit, 10) || 30, 1), PAGE_SIZE_MAX);
+  const docs = await chatRepository.findMessagesWithFiles(channel._id, before, size);
+  const files = docs.flatMap((m) =>
+    (m.attachments || []).map((a, i) => ({
+      id: `${idOf(m)}-${i}`,
+      messageId: idOf(m),
+      seq: m.seq,
+      url: a.url,
+      kind: a.kind,
+      name: a.name,
+      mime: a.mime,
+      size: a.size,
+      sharedBy: personOf(m.sender),
+      sharedAt: m.createdAt,
+    })),
+  );
+  return { files, nextBefore: docs.length === size ? docs[docs.length - 1].createdAt : null };
+}
+
 // ── writes ───────────────────────────────────────────────────────────────────
 
 async function markRead(userId, channelId, seq) {
@@ -243,21 +302,93 @@ async function markRead(userId, channelId, seq) {
 }
 
 /** Post a message. Idempotent on (channel, sender, clientId). */
-export async function sendMessage(user, channelId, { text, clientId } = {}) {
+export async function sendMessage(user, channelId, { text, clientId, mentions, mentionTeams, orderIds, files } = {}) {
   const channel = await loadAccessible(user, channelId);
   const body = cleanText(text);
-  if (!body) throw fail('Message cannot be empty', 400);
+  const hasFiles = Array.isArray(files) && files.length > 0;
+  // A photo on its own is a perfectly good message; only an empty one is refused.
+  if (!body && !hasFiles) throw fail('Message cannot be empty', 400);
   if (body.length > MESSAGE_MAX_LENGTH) throw fail(`Message is too long (max ${MESSAGE_MAX_LENGTH} characters)`, 400);
+  if (hasFiles && files.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+    throw fail(`You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files at a time`, 400);
+  }
 
+  // Idempotency first: a retry must not upload the same photo twice.
   if (clientId) {
     const existing = await chatRepository.findByClientId(channel._id, user._id, clientId);
     if (existing) return { message: shapeMessage(existing), duplicate: true };
   }
 
-  return insertMessage(channel, { kind: 'user', sender: user, text: body, clientId });
+  const [people, teams] = await resolveMentions(channel, mentions, mentionTeams);
+  const refs = await resolveOrderRefs(orderIds);
+  const attachments = hasFiles ? await uploadChatAttachments(files, { channelId: idOf(channel) }) : [];
+
+  const result = await insertMessage(channel, {
+    kind: 'user', sender: user, text: body, clientId,
+    attachments, mentions: people, mentionTeams: teams, refs,
+  });
+  if (!result.duplicate) notifyMentions(channel, user, result.message, people, teams);
+  return result;
 }
 
-async function insertMessage(channel, { kind, sender, text, clientId }) {
+/**
+ * Keep only mentions the channel can actually see — mentioning someone must
+ * never tell them a private space exists, nor email them about it.
+ */
+async function resolveMentions(channel, mentions, mentionTeams) {
+  const ids = [...new Set((Array.isArray(mentions) ? mentions : []).filter((id) => mongoose.isValidObjectId(id)).map(String))].slice(0, 50);
+  const candidates = ids.length ? await userRepository.findChatUsersByIds(ids) : [];
+  const allowed = candidates.filter((u) => canAccess(u, channel)).map((u) => u._id);
+
+  const teams = [...new Set((Array.isArray(mentionTeams) ? mentionTeams : []).map(String))]
+    .filter((t) => STAFF_TEAM_VALUES.includes(t))
+    // Only meaningful where the whole team is present: their own space, or #company.
+    .filter(() => channel.audience === 'all' || channel.audience === 'team')
+    .slice(0, 5);
+
+  return [allowed, teams];
+}
+
+/** Orders referenced by id (picked in the UI). Looked up by _id, never scanned. */
+async function resolveOrderRefs(orderIds) {
+  const ids = [...new Set((Array.isArray(orderIds) ? orderIds : []).filter((id) => mongoose.isValidObjectId(id)).map(String))].slice(0, 5);
+  if (!ids.length) return [];
+  const orders = await orderRepository.find({ _id: { $in: ids } }, { select: '_id wpId', limit: ids.length });
+  return (orders || []).map((o) => ({ type: 'order', code: orderNumber(o), target: o._id }));
+}
+
+/**
+ * Email the people addressed who do NOT have chat open. Fire-and-forget: chat
+ * has already accepted the message, so a mail problem must not fail the send.
+ */
+function notifyMentions(channel, sender, message, people, teams) {
+  (async () => {
+    const direct = people.map(String);
+    const fromTeams = teams.length
+      ? (await userRepository.findChatUsers())
+          .filter((u) => u.role === 'staff' && teams.includes(u.staff?.team))
+          .map((u) => idOf(u))
+      : [];
+    const targets = [...new Set([...direct, ...fromTeams])].filter((id) => id !== idOf(sender));
+    if (!targets.length) return;
+
+    const online = await onlineAmong(targets);
+    const offline = targets.filter((id) => !online.has(id));
+    if (!offline.length) return;
+
+    const users = (await userRepository.findContactsByIds(offline)).filter((u) => u.email);
+    const where = channel.kind === 'dm' ? 'a direct message' : `#${channel.name}`;
+    const link = `${(process.env.FRONTEND_URL || '').replace(/\/$/, '')}/team/chat?c=${idOf(channel)}`;
+    const preview = message.text.slice(0, 300) || '(shared a file)';
+    await Promise.all(users.map((u) => emailHandler.sendEmail({
+      to: u.email,
+      subject: `${sender.name} mentioned you in ${where}`,
+      text: `${sender.name} mentioned you in ${where} on team chat:\n\n${preview}\n\nOpen team chat: ${link}`,
+    }).catch(() => {})));
+  })().catch((err) => console.error('[chat] mention notification failed:', err.message));
+}
+
+async function insertMessage(channel, { kind, sender, text, clientId, attachments = [], mentions = [], mentionTeams = [], refs = [] }) {
   const seq = await chatRepository.nextSeq(channel._id, new Date());
   if (seq == null) throw fail('Channel not found', 404);
 
@@ -269,13 +400,17 @@ async function insertMessage(channel, { kind, sender, text, clientId }) {
       kind,
       sender: sender?._id ?? null,
       text,
+      attachments,
+      mentions,
+      mentionTeams,
+      refs,
       ...(clientId ? { clientId } : {}),
     });
   } catch (err) {
     // Same clientId raced in from a parallel request: return the winner. The seq
     // we took stays unused — harmless, readers never assume seqs are contiguous.
     if (err?.code === 11000 && clientId) {
-      const existing = await chatRepository.findByClientId(channel._id, sender._id, clientId);
+      const existing = await chatRepository.findByClientId(channel._id, sender?._id ?? null, clientId);
       if (existing) return { message: shapeMessage(existing), duplicate: true };
     }
     throw err;
@@ -293,13 +428,23 @@ async function insertMessage(channel, { kind, sender, text, clientId }) {
  * Used by business events (new paid order, refund request…). Never throws: a chat
  * hiccup must not fail the business operation that triggered it.
  */
-export async function postSystemMessage(spaceKey, text) {
+export async function postSystemMessage(spaceKey, text, { key, orderIds } = {}) {
   try {
     await ensureDefaultSpaces();
     const channel = await chatRepository.findChannelByKey(spaceKey);
     const body = cleanText(text).slice(0, MESSAGE_MAX_LENGTH);
     if (!channel || !body) return null;
-    const { message } = await insertMessage(channel, { kind: 'system', sender: null, text: body });
+
+    // `key` makes the post idempotent: the queue retries a job, this posts once.
+    // System messages have sender null, so (channel, null, key) is the unique tuple.
+    if (key) {
+      const existing = await chatRepository.findByClientId(channel._id, null, key);
+      if (existing) return shapeMessage(existing);
+    }
+    const refs = await resolveOrderRefs(orderIds);
+    const { message } = await insertMessage(channel, {
+      kind: 'system', sender: null, text: body, clientId: key, refs,
+    });
     return message;
   } catch (err) {
     console.error(`[chat] system message to ${spaceKey} failed:`, err.message);

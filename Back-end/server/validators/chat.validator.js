@@ -17,8 +17,18 @@ export const validateMessagePage = [
 ];
 
 export const validateSendMessage = [
-  body('text').isString().withMessage('Message is required').isLength({ min: 1, max: 4000 }).withMessage('Message must be 1-4000 characters'),
+  // A message may be text, files, or both — the service rejects a truly empty one.
+  body('text').optional({ values: 'falsy' }).isString().isLength({ max: 4000 }).withMessage('Message must be 4000 characters or fewer'),
   body('clientId').optional().isString().matches(/^[A-Za-z0-9_-]{8,64}$/).withMessage('Invalid client id'),
+];
+
+export const validateFilePage = [
+  query('before').optional().isISO8601().withMessage('Invalid cursor'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be 1-100'),
+];
+
+export const validateOrderPick = [
+  query('q').optional().isString().isLength({ max: 80 }),
 ];
 
 export const validateMarkRead = [
