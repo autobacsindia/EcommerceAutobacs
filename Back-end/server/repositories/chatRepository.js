@@ -39,6 +39,18 @@ const chatRepository = {
     ChatMessage.find(before != null ? { channel, seq: { $lt: before } } : { channel })
       .sort({ seq: -1 }).limit(limit).populate('sender', SENDER_FIELDS).lean(),
   createMessage: async (doc) => (await ChatMessage.create(doc)).toObject(),
+  /** Newest messages carrying at least one attachment — the channel's Files tab. */
+  findMessagesWithFiles: (channel, before, limit) =>
+    ChatMessage.find({
+      channel,
+      deletedAt: null,
+      'attachments.0': { $exists: true },
+      ...(before ? { createdAt: { $lt: new Date(before) } } : {}),
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate('sender', SENDER_FIELDS)
+      .lean(),
   softDeleteMessage: (id, by, at = new Date()) =>
     ChatMessage.updateOne({ _id: id, deletedAt: null }, { $set: { deletedAt: at, deletedBy: by } }),
 

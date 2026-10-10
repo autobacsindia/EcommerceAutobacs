@@ -5,7 +5,8 @@ import type { InfiniteData } from '@tanstack/react-query';
 const msg = (over: Partial<ChatMessage>): ChatMessage => ({
   id: 'm1', channelId: 'c1', seq: 1, kind: 'user', text: 'hi', deleted: false,
   sender: { id: 'u1', name: 'Sam', role: 'staff', team: 'sales', teamLabel: 'Sales', isHead: false },
-  clientId: null, createdAt: '2026-10-10T10:00:00Z', ...over,
+  clientId: null, attachments: [], mentions: [], mentionTeams: [], refs: [],
+  createdAt: '2026-10-10T10:00:00Z', ...over,
 });
 
 const data = (messages: ChatMessage[]): InfiniteData<MessagePage, number> => ({
@@ -39,5 +40,20 @@ describe('upsertMessage (live chat cache merge)', () => {
 
   it('does nothing when the channel was never opened (no cache)', () => {
     expect(upsertMessage(undefined, msg({}))).toBeUndefined();
+  });
+
+  it('a confirmed message keeps its attachments and order references', () => {
+    const pending = msg({ id: 'pending-k3', clientId: 'k3', seq: Number.MAX_SAFE_INTEGER, pending: true, text: 'photo' });
+    const confirmed = msg({
+      id: 'real3', clientId: 'k3', seq: 7, text: 'photo',
+      attachments: [{ url: 'https://res.cloudinary.com/a.png', kind: 'image', name: 'a.png', mime: 'image/png', size: 10 }],
+      refs: [{ type: 'order', code: '#AB12CD34', id: 'o1' }],
+    });
+    const out = upsertMessage(data([pending]), confirmed);
+    expect(out!.pages[0].messages).toHaveLength(1);
+    const merged = out!.pages[0].messages[0];
+    expect(merged).toMatchObject({ id: 'real3', attachments: [expect.objectContaining({ name: 'a.png' })] });
+    expect(merged.refs[0].code).toBe('#AB12CD34');
+    expect(merged.pending).toBeUndefined(); // the optimistic copy is gone, not merged into
   });
 });

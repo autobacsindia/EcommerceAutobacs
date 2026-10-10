@@ -50,6 +50,10 @@ export const chatKeys = {
   /** `/chat/channels/:id/messages` — infinite, newest page first. */
   messages: (channelId: string) => [...chatKeys.all, 'messages', channelId] as const,
   people: () => [...chatKeys.all, 'people'] as const,
+  /** `/chat/channels/:id/files` — everything shared in one channel. */
+  files: (channelId: string) => [...chatKeys.all, 'files', channelId] as const,
+  /** `/chat/orders/recent` — the order picker. */
+  recentOrders: () => [...chatKeys.all, 'orders'] as const,
   me: () => [...chatKeys.all, 'me'] as const,
 };
 

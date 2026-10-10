@@ -35,6 +35,7 @@
  */
 
 import { Worker } from 'bullmq';
+import { hasChatUpdate, postBusinessUpdate } from '../../services/chatBusinessUpdates.js';
 import { createConnection } from '../connection.js';
 import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice } from '../../services/invoiceService.js';
@@ -291,7 +292,15 @@ export function startNotificationWorker() {
     async (job) => {
       const handler = handlers[job.name];
       if (!handler) throw new Error(`Unknown notification job: ${job.name}`);
-      return handler(job);
+      const result = await handler(job);
+      // Mirror a handful of these alerts into team chat. Deliberately AFTER the
+      // handler and never awaited into its result: the email is the contract,
+      // the chat line is a convenience, and it is idempotent per event so a job
+      // retry does not post twice.
+      if (hasChatUpdate(job.name)) {
+        postBusinessUpdate(job.name, job.data).catch(() => {});
+      }
+      return result;
     },
     {
       connection: createConnection(),

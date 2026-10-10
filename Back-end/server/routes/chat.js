@@ -6,6 +6,8 @@ import { authenticatedUserRateLimit } from '../middleware/rateLimitMiddleware.js
 import userRepository from '../repositories/userRepository.js';
 import {
   validateChannelIdParam,
+  validateFilePage,
+  validateOrderPick,
   validateMessageIdParam,
   validateMessagePage,
   validateSendMessage,
@@ -15,7 +17,9 @@ import {
 } from '../validators/chat.validator.js';
 import {
   listChannels,
+  listFiles,
   listMessages,
+  listRecentOrders,
   listPeople,
   sendMessage,
   markChannelRead,
@@ -27,6 +31,8 @@ import {
   isChatUser,
 } from '../services/chatService.js';
 import { onChatEvent } from '../services/chatEvents.js';
+import { markOnline, markOffline } from '../services/chatPresence.js';
+import { uploadChatFiles, handleChatUploadError } from '../services/chatAttachmentService.js';
 
 /**
  * Team chat API (/api/v1/chat) — admins and active staff only. Customers get 403
@@ -61,6 +67,7 @@ router.get('/stream', protect, staffOrAdmin, (req, res) => {
 
   let user = req.user;
   let closed = false;
+  markOnline(user._id); // "has chat open" — only used to decide on mention emails
   const send = (payload) => { if (!closed) res.write(`data: ${JSON.stringify(payload)}\n\n`); };
   send({ type: 'connected', timestamp: Date.now() });
 
@@ -81,6 +88,7 @@ router.get('/stream', protect, staffOrAdmin, (req, res) => {
         cleanup(); res.end(); return;
       }
       user = fresh;
+      markOnline(user._id); // refresh the presence TTL
       send({ type: 'heartbeat', timestamp: Date.now() });
     } catch { /* transient DB hiccup — keep the stream, try again next beat */ }
   }, HEARTBEAT_MS);
@@ -90,6 +98,7 @@ router.get('/stream', protect, staffOrAdmin, (req, res) => {
     closed = true;
     clearInterval(beat);
     unsubscribe();
+    markOffline(user._id);
     openStreams--;
   }
   req.on('close', cleanup);
@@ -133,12 +142,49 @@ router.get('/channels/:id/messages', validateChannelIdParam, validateMessagePage
     res.json({ success: true, ...page });
   }));
 
-// POST /chat/channels/:id/messages { text, clientId? }
-router.post('/channels/:id/messages', validateChannelIdParam, validateSendMessage, validateRequest,
+/**
+ * Multipart fields arrive as strings, so arrays come over as JSON text. Accept
+ * either shape and hand the service real arrays; anything unparseable is simply
+ * dropped (the service re-validates every id anyway).
+ */
+const asArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return value.split(',').map((v) => v.trim()).filter(Boolean);
+  }
+};
+
+// POST /chat/channels/:id/messages — JSON, or multipart when files are attached.
+// multer ignores non-multipart bodies, so one route serves both.
+router.post('/channels/:id/messages',
+  uploadChatFiles, handleChatUploadError,
+  validateChannelIdParam, validateSendMessage, validateRequest,
   asyncHandler(async (req, res) => {
-    const { message, duplicate } = await sendMessage(req.user, req.params.id, req.body);
+    const { message, duplicate } = await sendMessage(req.user, req.params.id, {
+      text: req.body.text ?? '',
+      clientId: req.body.clientId,
+      mentions: asArray(req.body.mentions),
+      mentionTeams: asArray(req.body.mentionTeams),
+      orderIds: asArray(req.body.orderIds),
+      files: req.files,
+    });
     res.status(duplicate ? 200 : 201).json({ success: true, message });
   }));
+
+// GET /chat/channels/:id/files — everything shared in this channel
+router.get('/channels/:id/files', validateChannelIdParam, validateFilePage, validateRequest,
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, ...(await listFiles(req.user, req.params.id, req.query)) });
+  }));
+
+// GET /chat/orders/recent?q= — the order picker (recent orders, bounded)
+router.get('/orders/recent', validateOrderPick, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, orders: await listRecentOrders(req.query.q) });
+}));
 
 // POST /chat/channels/:id/read { seq }
 router.post('/channels/:id/read', validateChannelIdParam, validateMarkRead, validateRequest,
