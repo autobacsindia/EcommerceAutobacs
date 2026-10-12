@@ -172,6 +172,65 @@ describe('admin list — kind filter + contacted join', () => {
     expect(row.count).toBe(2);
   });
 
+  test('snapshots the phone so the admin list is a call sheet, for BOTH kinds', async () => {
+    // The admin screen reads the number off the request, not just the account,
+    // so a row still shows a contact after the user record changes or goes.
+    for (const [stock, kind, call] of [
+      ['backorder', 'backorder', 'createWaitlistRequest'],
+      ['out', 'restock', 'createNotifyRequest'],
+    ]) {
+      const p = await simple(stock);
+      const u = user();
+      const res1 = mockRes();
+      await controller[call]({ params: { id: p._id.toString() }, body: {}, user: u }, res1);
+      expect(res1.statusCode).toBe(201);
+
+      const row = await StockNotificationRequest.findOne({ product: p._id, kind });
+      expect(row.phone).toBe(u.phone);
+      expect(row.email).toBe(u.email.toLowerCase());
+    }
+  });
+
+  test('a repeat signup never rewrites the original contact snapshot', async () => {
+    const p = await simple('backorder');
+    const u = user();
+    await controller.createWaitlistRequest({ params: { id: p._id.toString() }, body: {}, user: u }, mockRes());
+
+    // Same account, different number on the second press (e.g. profile edited).
+    const res2 = mockRes();
+    await controller.createWaitlistRequest(
+      { params: { id: p._id.toString() }, body: {}, user: { ...u, phone: '9000000000' } },
+      res2,
+    );
+    expect(res2.statusCode).toBe(200);
+
+    const rows = await StockNotificationRequest.find({ product: p._id, kind: 'backorder' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].phone).toBe(u.phone); // $setOnInsert — the first value stands
+  });
+
+  test('adminListRequesters returns the phone, and falls back to the live account', async () => {
+    const p = await simple('backorder');
+    const u = user();
+    await controller.createWaitlistRequest({ params: { id: p._id.toString() }, body: {}, user: u }, mockRes());
+
+    // A legacy row, written before the snapshot field existed.
+    const legacy = user();
+    await StockNotificationRequest.create({
+      product: p._id, variantId: null, user: legacy._id, email: legacy.email, kind: 'backorder',
+    });
+
+    const res = mockRes();
+    await controller.adminListRequesters({ query: { productId: p._id.toString(), kind: 'backorder' } }, res);
+
+    const fresh = res.body.requesters.find((r) => r.email === u.email.toLowerCase());
+    expect(fresh.phone).toBe(u.phone);
+
+    const old = res.body.requesters.find((r) => r.email === legacy.email.toLowerCase());
+    expect(old.phone).toBeUndefined();          // nothing snapshotted…
+    expect(old.user?.phone).toBeUndefined();    // …and no User row exists in this fixture
+  });
+
   test('adminListRequesters(kind=backorder) pairs each requester with its lead', async () => {
     const p = await simple('backorder');
     const u = user();

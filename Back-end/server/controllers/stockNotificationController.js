@@ -65,7 +65,10 @@ async function createInterestRequest(req, res, { kind, requiredStatus, notEligib
   const filter = { product: id, variantId: target.variantId, user: req.user._id, kind, status: 'pending' };
   let request, created;
   try {
-    ({ request, created } = await stockNotificationRequestRepository.upsertPending(filter, req.user.email));
+    ({ request, created } = await stockNotificationRequestRepository.upsertPending(filter, {
+      email: req.user.email,
+      phone: req.user.phone,
+    }));
   } catch (err) {
     if (err.code === 11000) {
       const existing = await stockNotificationRequestRepository.findPending(filter);

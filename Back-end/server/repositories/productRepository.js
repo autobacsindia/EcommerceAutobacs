@@ -327,11 +327,17 @@ class ProductRepository {
   }
 
   /**
-   * Get all active brands
+   * Get all active brands for the storefront "Shop by brand" list.
+   *
+   * Car makes (`type: 'make'` — Jeep, Toyota…) are excluded: they belong to the
+   * "shop by vehicle" journey, and listing one beside parts manufacturers tells a
+   * shopper that Jeep makes accessories. A make only ever surfaced here when a
+   * product carried its name as `brand` (the list hides zero-product rows), which
+   * is how "Jeep" appeared. The make row itself stays active for make-facing UIs.
    */
   async findAllBrands() {
     const { default: Brand } = await import('../models/Brand.js');
-    return Brand.find({ isActive: true }).sort({ name: 1 }).lean();
+    return Brand.find({ isActive: true, type: { $ne: 'make' } }).sort({ name: 1 }).lean();
   }
 
   /**

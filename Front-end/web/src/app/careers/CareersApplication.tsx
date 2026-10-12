@@ -3,8 +3,9 @@
 /*
  * Careers ("Roavion") standalone application page.
  *
- * Ported from the WordPress `roavion_careers` shortcode. The static shell (hero,
- * "Why Roavion" pillars, application form) is rendered verbatim
+ * Ported from the WordPress `roavion_careers` shortcode. The static shell (its
+ * own minimal top bar, the hero, the "Why Roavion" pillars and the application
+ * form) is rendered verbatim
  * (dangerouslySetInnerHTML) — it is author-controlled static HTML — and the
  * original imperative behaviour is re-attached in a client-only effect.
  *
@@ -13,6 +14,11 @@
  * /careers/postings and passed in), so a role is added/edited/withdrawn from the
  * admin without a code change. Dynamic values are HTML-escaped before injection.
  * Two placeholder tokens in the template mark where they go.
+ *
+ * Section order is deliberate: top bar → hero with its two CTAs → OPEN ROLES →
+ * "Why Roavion" → the form. Someone on a careers page is looking for a job, so
+ * the jobs come before the culture essay; the pillars still sell the company,
+ * just to a reader who has already found a role worth applying for.
  *
  * Submission is IN-HOUSE (no Google): the browser fetches upload credentials
  * from our backend, uploads each video/PDF directly to storage, then POSTs only
@@ -123,30 +129,28 @@ const MARKUP_TEMPLATE = `
 <div style="font-family:inherit;-webkit-font-smoothing:antialiased;overflow-x:hidden;background:#ffffff;color:#0f1111;margin:0;padding:0;">
 
 
-<section style="display:flex;flex-direction:column;justify-content:center;padding:4.5rem 2.5rem;position:relative;background:#ffffff;overflow:hidden;margin:0;">
-  <div style="position:relative;max-width:900px;">
-    <div style="display:inline-flex;align-items:center;gap:10px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;margin-bottom:2rem;font-family:inherit;"><span style="display:block;width:28px;height:1px;background:#0a5c33;"></span>Roavion Automotive Pvt Ltd</div>
-    <h1 class="rv-hero-h1" style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(32px,5vw,65px);line-height:0.92;color:#0f1111;margin:0 0 2rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">WE DON'T HIRE<br>FOR TITLES.<br>WE HIRE FOR <span style="color:#0a5c33;">IMPACT.</span></h1>
-    <p style="font-size:17px;font-weight:400;line-height:1.75;color:#5f6363;max-width:560px;margin:0 0 2.5rem 0;font-family:inherit;">Roavion isn't a place to fill a seat. It's a place to <strong style="color:#0f1111;font-weight:500;">own something.</strong> We're building a premium automotive ecosystem — and every role here demands more than execution.</p>
-  </div>
-</section>
+<header class="rv-topbar">
+  <a href="/" class="rv-topbar-logo" aria-label="Roavion home"><img src="/images/roavion-logo.png" alt="Roavion" width="960" height="255" /></a>
+  <a href="/" class="rv-topbar-home"><span aria-hidden="true">&larr;</span> Home</a>
+</header>
 
-<section class="rv-section-pad" style="background:#eef1f0;color:#0f1111;padding:6rem 2.5rem;margin:0;">
-  <div style="max-width:860px;margin:0 auto;">
-    <div style="margin-bottom:3rem;"><span style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;display:block;font-family:inherit;">Why Roavion</span></div>
-    <div class="rv-pillars-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #dfe3e2;">
-      <div class="rv-pillar" style="padding:2rem;border-right:1px solid #dfe3e2;border-bottom:1px solid #dfe3e2;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">01 — Ownership</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">YOU BUILD IT. YOU OWN IT.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">The people who treat this like it's theirs — who figure things out before anyone tells them to. We believe wealth should follow the people who create it.</p></div>
-      <div class="rv-pillar" style="padding:2rem;border-bottom:1px solid #dfe3e2;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">02 — Mission</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">THIS IS A ONCE-IN-A-DECADE SHIFT.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">Premium automotive culture in India is at an inflection point. You won't walk into a neatly packaged roadmap. You'll walk into a fast-moving, high-standards environment where the best people define the role as much as they fill it.</p></div>
-      <div class="rv-pillar" style="padding:2rem;border-right:1px solid #dfe3e2;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">03 — Growth</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">NO CEILING. NO HAND-HOLDING.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">Your background is a starting point — what matters more is how fast you learn, how clearly you think, and how much you care about doing things right. Roavion is in aggressive scale mode. The people here grow because the work demands it.</p></div>
-      <div class="rv-pillar" style="padding:2rem;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">04 — Culture</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">IF THAT SOUNDS LIKE PRESSURE — GOOD.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">We move fast, say what we mean, and hold each other to a high bar. No politics. No ego. Just people who care deeply about the work and the team around them. If it sounds like opportunity — you're our kind of person.</p></div>
+<section class="rv-hero">
+  <div style="position:relative;max-width:900px;">
+    <div style="display:inline-flex;align-items:center;gap:10px;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0a5c33;margin-bottom:1.25rem;font-family:inherit;"><span style="display:block;width:28px;height:1px;background:#0a5c33;"></span>Careers at Roavion Automotive</div>
+    <h1 class="rv-hero-h1" style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(30px,5vw,58px);line-height:0.95;color:#0f1111;margin:0 0 1rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">WE DON'T HIRE<br>FOR TITLES.<br>WE HIRE FOR <span style="color:#0a5c33;">IMPACT.</span></h1>
+    <p style="font-size:16px;font-weight:400;line-height:1.7;color:#5f6363;max-width:540px;margin:0 0 1.75rem 0;font-family:inherit;">Roavion isn't a place to fill a seat. It's a place to <strong style="color:#0f1111;font-weight:500;">own something.</strong> Browse the open roles below and apply in about 15 minutes.</p>
+    <div class="rv-hero-cta">
+      <a href="#rv-roles" class="rv-btn-primary">See open roles<!--ROLE_COUNT--></a>
+      <a href="#rv-form" class="rv-btn-ghost rv-apply-btn" data-role="Other / Open Application">Apply now</a>
     </div>
   </div>
 </section>
 
-<section id="rv-roles" class="rv-section-pad" style="background:#ffffff;color:#0f1111;padding:6rem 2.5rem;border-top:1px solid #dfe3e2;margin:0;">
+<section id="rv-roles" class="rv-section-pad rv-band" style="background:#ffffff;color:#0f1111;border-top:1px solid #dfe3e2;margin:0;">
   <div style="max-width:860px;margin:0 auto;">
-    <div style="margin-bottom:1rem;"><span style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;display:block;font-family:inherit;">Open Roles</span></div>
-    <h2 style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(26px,2.5vw,26px);line-height:1.0;color:#0f1111;margin:0 0 3rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">THE SEATS<br>WE'RE FILLING NOW.</h2>
+    <div style="margin-bottom:1rem;"><span style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0a5c33;display:block;font-family:inherit;">Open Roles</span></div>
+    <h2 style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(26px,2.5vw,30px);line-height:1.05;color:#0f1111;margin:0 0 0.75rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">THE SEATS WE'RE FILLING NOW.</h2>
+    <p style="font-size:15px;line-height:1.7;color:#5f6363;margin:0 0 2rem 0;max-width:520px;font-family:inherit;">Tap any role to read what it involves, then hit <strong style="color:#0f1111;font-weight:600;">Apply</strong> — it drops you straight into the form below with that role filled in.</p>
 <!--ROLE_CARDS-->
 
     <div style="margin-top:3rem;padding:2rem;border:1px solid #dfe3e2;border-radius:10px;background:#f7f9f8;">
@@ -156,148 +160,175 @@ const MARKUP_TEMPLATE = `
   </div>
 </section>
 
-<div class="rv-section-pad" style="background:#ffffff;padding:0 2.5rem;">
-  <div style="max-width:860px;margin:0 auto;padding:3rem 0 4rem;border-top:1px solid #dfe3e2;">
-    <div class="rv-sweep-rule" style="height:2px;background:#0a5c33;width:100%;margin-bottom:2rem;"></div>
-    <div style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#6b7070;font-family:inherit;">Stage 1 of 2 &nbsp;&middot;&nbsp; Takes 15 minutes &nbsp;&middot;&nbsp; We read every submission personally</div>
-  </div>
-</div>
-
-<section id="rv-form" class="rv-section-pad" style="background:#ffffff;padding:5rem 2.5rem 6rem;margin:0;">
+<section class="rv-section-pad rv-band" style="background:#eef1f0;color:#0f1111;margin:0;">
   <div style="max-width:860px;margin:0 auto;">
-    <div style="margin-bottom:3.5rem;">
-      <h2 style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(29px,3vw,32px);line-height:0.95;color:#0f1111;margin:0 0 1rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">TELL US<br>WHO YOU ARE.</h2>
-      <p style="font-size:15px;font-weight:400;line-height:1.7;color:#5f6363;max-width:500px;margin:0;font-family:inherit;">No job title. No template. Just tell us what you bring and what you want to build. We will read it carefully.</p>
+    <div style="margin-bottom:3rem;"><span style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#0a5c33;display:block;font-family:inherit;">Why Roavion</span></div>
+    <div class="rv-pillars-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #dfe3e2;">
+      <div class="rv-pillar" style="padding:2rem;border-right:1px solid #dfe3e2;border-bottom:1px solid #dfe3e2;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">01 — Ownership</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">YOU BUILD IT. YOU OWN IT.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">The people who treat this like it's theirs — who figure things out before anyone tells them to. We believe wealth should follow the people who create it.</p></div>
+      <div class="rv-pillar" style="padding:2rem;border-bottom:1px solid #dfe3e2;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">02 — Mission</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">THIS IS A ONCE-IN-A-DECADE SHIFT.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">Premium automotive culture in India is at an inflection point. You won't walk into a neatly packaged roadmap. You'll walk into a fast-moving, high-standards environment where the best people define the role as much as they fill it.</p></div>
+      <div class="rv-pillar" style="padding:2rem;border-right:1px solid #dfe3e2;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">03 — Growth</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">NO CEILING. NO HAND-HOLDING.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">Your background is a starting point — what matters more is how fast you learn, how clearly you think, and how much you care about doing things right. Roavion is in aggressive scale mode. The people here grow because the work demands it.</p></div>
+      <div class="rv-pillar" style="padding:2rem;"><div style="font-family:var(--font-montserrat),sans-serif;font-size:13px;letter-spacing:0.12em;color:#0a5c33;margin-bottom:0.75rem;font-weight:700;letter-spacing:-0.01em;">04 — Culture</div><div style="font-family:var(--font-montserrat),sans-serif;font-size:18px;color:#0f1111;margin-bottom:0.5rem;font-weight:700;letter-spacing:-0.01em;">IF THAT SOUNDS LIKE PRESSURE — GOOD.</div><p style="font-size:14px;font-weight:400;line-height:1.7;color:#4a4f4f;margin:0;font-family:inherit;">We move fast, say what we mean, and hold each other to a high bar. No politics. No ego. Just people who care deeply about the work and the team around them. If it sounds like opportunity — you're our kind of person.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="rv-form" class="rv-form-section rv-band">
+  <div class="rv-form-wrap">
+    <div class="rv-form-intro">
+      <span class="rv-eyebrow">Apply</span>
+      <h2 class="rv-h2">Tell us who you are.</h2>
+      <p class="rv-lead">No job title. No template. Just tell us what you bring and what you want to build. It takes about 15 minutes, and every submission is read personally.</p>
     </div>
 
-    <form id="rv-appForm" novalidate style="margin:0;">
+    <form id="rv-appForm" class="rv-form-card" novalidate>
 
-      <div style="margin-bottom:1.25rem;">
-        <label style="display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#5f6363;margin-bottom:8px;font-family:inherit;">Role you're applying for <span style="color:#0a5c33;">*</span></label>
-        <select id="rv-role-select" name="role" required style="width:100%;background:#f7f9f8;border:1px solid #dfe3e2;border-radius:10px;padding:13px 16px;font-family:inherit;font-size:15px;font-weight:400;color:#0f1111;outline:none;box-sizing:border-box;appearance:none;-webkit-appearance:none;cursor:pointer;">
-          <option value="">Select a role...</option>
+      <!-- Step 1 -->
+      <div class="rv-step">
+        <div class="rv-step-head"><span class="rv-step-num">1</span><div><h3 class="rv-step-title">Your details</h3><p class="rv-step-sub">Fields marked <span class="rv-req">*</span> are required.</p></div></div>
+
+        <div class="rv-field">
+          <label class="rv-label" for="rv-role-select">Role you're applying for <span class="rv-req">*</span></label>
+          <div class="rv-select-wrap">
+            <select id="rv-role-select" name="role" required class="rv-input rv-select">
+              <option value="">Select a role…</option>
 <!--ROLE_OPTIONS-->
-          <option value="Other / Open Application">Other / Open Application</option>
-        </select>
-      </div>
+              <option value="Other / Open Application">Other / Open Application</option>
+            </select>
+          </div>
+        </div>
 
-      <div class="rv-form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem;">
-        <div><label style="display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#5f6363;margin-bottom:8px;font-family:inherit;">Full name <span style="color:#0a5c33;">*</span></label><input class="rv-input" type="text" name="fullName" placeholder="Your full name" required style="width:100%;background:#f7f9f8;border:1px solid #dfe3e2;border-radius:10px;padding:13px 16px;font-family:inherit;font-size:15px;font-weight:400;color:#0f1111;outline:none;box-sizing:border-box;"></div>
-        <div><label style="display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#5f6363;margin-bottom:8px;font-family:inherit;">Current city <span style="color:#0a5c33;">*</span></label><input class="rv-input" type="text" name="city" placeholder="City, State" required style="width:100%;background:#f7f9f8;border:1px solid #dfe3e2;border-radius:10px;padding:13px 16px;font-family:inherit;font-size:15px;font-weight:400;color:#0f1111;outline:none;box-sizing:border-box;"></div>
-      </div>
+        <div class="rv-form-row">
+          <div class="rv-field"><label class="rv-label" for="rv-fullName">Full name <span class="rv-req">*</span></label><input id="rv-fullName" class="rv-input" type="text" name="fullName" placeholder="Your full name" autocomplete="name" required></div>
+          <div class="rv-field"><label class="rv-label" for="rv-city">Current city <span class="rv-req">*</span></label><input id="rv-city" class="rv-input" type="text" name="city" placeholder="City, State" autocomplete="address-level2" required></div>
+        </div>
 
-      <div class="rv-form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem;">
-        <div><label style="display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#5f6363;margin-bottom:8px;font-family:inherit;">Email <span style="color:#0a5c33;">*</span></label><input class="rv-input" type="email" name="email" placeholder="you@example.com" required style="width:100%;background:#f7f9f8;border:1px solid #dfe3e2;border-radius:10px;padding:13px 16px;font-family:inherit;font-size:15px;font-weight:400;color:#0f1111;outline:none;box-sizing:border-box;"></div>
-        <div><label style="display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#5f6363;margin-bottom:8px;font-family:inherit;">WhatsApp / Phone</label><input class="rv-input" type="tel" name="phone" placeholder="+91 98000 00000" style="width:100%;background:#f7f9f8;border:1px solid #dfe3e2;border-radius:10px;padding:13px 16px;font-family:inherit;font-size:15px;font-weight:400;color:#0f1111;outline:none;box-sizing:border-box;"></div>
-      </div>
+        <div class="rv-form-row">
+          <div class="rv-field"><label class="rv-label" for="rv-email">Email <span class="rv-req">*</span></label><input id="rv-email" class="rv-input" type="email" name="email" placeholder="you@example.com" autocomplete="email" required></div>
+          <div class="rv-field"><label class="rv-label" for="rv-phone">WhatsApp / phone <span class="rv-opt">(optional)</span></label><input id="rv-phone" class="rv-input" type="tel" name="phone" placeholder="10-digit mobile number" autocomplete="tel"></div>
+        </div>
 
-      <div style="margin-bottom:1.25rem;"><label style="display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#5f6363;margin-bottom:8px;font-family:inherit;">What do you bring? Tell us in your own words — no job title needed. <span style="color:#0a5c33;">*</span></label><textarea class="rv-input" name="whatYouBring" placeholder="What are you genuinely good at? What have you built, grown, or fixed that you are proud of? What kind of work do you want to be doing in three years?" required style="width:100%;background:#f7f9f8;border:1px solid #dfe3e2;border-radius:10px;padding:13px 16px;font-family:inherit;font-size:15px;font-weight:400;color:#0f1111;outline:none;box-sizing:border-box;resize:vertical;min-height:130px;line-height:1.65;"></textarea></div>
-
-      <div style="display:flex;align-items:center;gap:1rem;margin:3rem 0 2.5rem;"><div style="flex:1;height:1px;background:#dfe3e2;"></div><div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#5f6363;white-space:nowrap;font-family:inherit;">Two questions — answer honestly, not impressively</div></div>
-      <p style="font-size:14px;font-weight:400;color:#5f6363;line-height:1.75;margin:0 0 2.5rem 0;font-family:inherit;">Record a short video answer for each question below. There is no correct length — specific and honest beats long and polished every time. MP4, MOV, or WEBM, up to 30MB each.</p>
-
-      <!-- Video Q1 -->
-      <div style="margin-bottom:2.5rem;">
-        <div style="margin-bottom:1rem;"><div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;margin-bottom:6px;font-family:inherit;">Question One<span style="color:#0a5c33;font-weight:bold;">*</span></div><p style="font-size:16px;font-weight:400;line-height:1.65;color:#0f1111;font-style:italic;border-left:2px solid #0a5c33;padding-left:1rem;margin:0;font-family:inherit;">"Tell us about one system, process, or thing you built from scratch that still exists and works today — with or without you. It does not have to be related to work. Describe it in specific terms: what it was, what problem it solved, and what happened after you built it."</p></div>
-        <div id="q1-video">
-          <div class="rv-upload-zone" id="q1-zone" style="border:1px dashed #dfe3e2;border-radius:10px;padding:2rem 1.5rem;text-align:center;cursor:pointer;background:#f7f9f8;"><p style="font-size:13px;color:#5f6363;margin:6px 0 0 0;font-family:inherit;"><strong style="color:#0f1111;">Click to upload your video answer</strong> or drag here &nbsp;&middot;&nbsp; MP4, MOV, WEBM — max 30MB</p><input type="file" id="q1-file" accept="video/*" style="display:none;"></div>
-          <div class="rv-progress-wrap" id="q1-progress-wrap"><div class="rv-progress-bar" id="q1-progress-bar"></div></div>
-          <div class="rv-upload-status" id="q1-status"></div>
-          <div id="q1-chip" style="display:none;align-items:center;gap:8px;margin-top:10px;padding:10px 14px;background:rgba(10,92,51,0.12);border:1px solid rgba(10,92,51,0.3);border-radius:10px;font-size:13px;color:#0a5c33;font-family:inherit;"><span id="q1-fname"></span><span id="q1-remove" style="margin-left:auto;cursor:pointer;color:#6b7070;font-size:18px;line-height:1;">&times;</span></div>
+        <div class="rv-field">
+          <label class="rv-label" for="rv-whatYouBring">What do you bring? <span class="rv-req">*</span></label>
+          <p class="rv-hint">Tell us in your own words — no job title needed.</p>
+          <textarea id="rv-whatYouBring" class="rv-input rv-textarea" name="whatYouBring" placeholder="What are you genuinely good at? What have you built, grown, or fixed that you are proud of? What kind of work do you want to be doing in three years?" required></textarea>
         </div>
       </div>
 
-      <!-- Video Q2 -->
-      <div style="margin-bottom:2.5rem;">
-        <div style="margin-bottom:1rem;"><div style="font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;margin-bottom:6px;font-family:inherit;">Question Two<span style="color:#0a5c33;font-weight:bold;">*</span></div><p style="font-size:16px;font-weight:400;line-height:1.65;color:#0f1111;font-style:italic;border-left:2px solid #0a5c33;padding-left:1rem;margin:0;font-family:inherit;">"What is the most important thing you have given up in the last two years in order to move forward on something you believed in? Tell us what it was, what you gave up, and whether it was worth it."</p></div>
-        <div id="q2-video">
-          <div class="rv-upload-zone" id="q2-zone" style="border:1px dashed #dfe3e2;border-radius:10px;padding:2rem 1.5rem;text-align:center;cursor:pointer;background:#f7f9f8;"><p style="font-size:13px;color:#5f6363;margin:6px 0 0 0;font-family:inherit;"><strong style="color:#0f1111;">Click to upload your video answer</strong> or drag here &nbsp;&middot;&nbsp; MP4, MOV, WEBM — max 30MB</p><input type="file" id="q2-file" accept="video/*" style="display:none;"></div>
-          <div class="rv-progress-wrap" id="q2-progress-wrap"><div class="rv-progress-bar" id="q2-progress-bar"></div></div>
-          <div class="rv-upload-status" id="q2-status"></div>
-          <div id="q2-chip" style="display:none;align-items:center;gap:8px;margin-top:10px;padding:10px 14px;background:rgba(10,92,51,0.12);border:1px solid rgba(10,92,51,0.3);border-radius:10px;font-size:13px;color:#0a5c33;font-family:inherit;"><span id="q2-fname"></span><span id="q2-remove" style="margin-left:auto;cursor:pointer;color:#6b7070;font-size:18px;line-height:1;">&times;</span></div>
+      <!-- Step 2 -->
+      <div class="rv-step">
+        <div class="rv-step-head"><span class="rv-step-num">2</span><div><h3 class="rv-step-title">Two short video answers</h3><p class="rv-step-sub">Answer honestly, not impressively. Record on your phone — there is no correct length. MP4, MOV or WEBM, up to 30MB each.</p></div></div>
+
+        <!-- Video Q1 -->
+        <div class="rv-question">
+          <div class="rv-q-label">Question 1 <span class="rv-req">*</span></div>
+          <p class="rv-q-text">Tell us about one system, process, or thing you built from scratch that still exists and works today — with or without you. It does not have to be related to work. Describe it in specific terms: what it was, what problem it solved, and what happened after you built it.</p>
+          <div id="q1-video">
+            <div class="rv-upload-zone" id="q1-zone" role="button" tabindex="0">
+              <svg class="rv-zone-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0a5c33" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              <p class="rv-zone-main"><strong>Click to upload your video</strong> or drag it here</p>
+              <p class="rv-zone-sub">MP4, MOV, WEBM — max 30MB</p>
+              <input type="file" id="q1-file" accept="video/*" style="display:none;">
+            </div>
+            <div class="rv-progress-wrap" id="q1-progress-wrap"><div class="rv-progress-bar" id="q1-progress-bar"></div></div>
+            <div class="rv-upload-status" id="q1-status"></div>
+            <div id="q1-chip" class="rv-chip" style="display:none;"><span id="q1-fname" class="rv-chip-name"></span><span id="q1-remove" class="rv-chip-remove" role="button" aria-label="Remove file">&times;</span></div>
+          </div>
+        </div>
+
+        <!-- Video Q2 -->
+        <div class="rv-question">
+          <div class="rv-q-label">Question 2 <span class="rv-req">*</span></div>
+          <p class="rv-q-text">What is the most important thing you have given up in the last two years in order to move forward on something you believed in? Tell us what it was, what you gave up, and whether it was worth it.</p>
+          <div id="q2-video">
+            <div class="rv-upload-zone" id="q2-zone" role="button" tabindex="0">
+              <svg class="rv-zone-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0a5c33" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              <p class="rv-zone-main"><strong>Click to upload your video</strong> or drag it here</p>
+              <p class="rv-zone-sub">MP4, MOV, WEBM — max 30MB</p>
+              <input type="file" id="q2-file" accept="video/*" style="display:none;">
+            </div>
+            <div class="rv-progress-wrap" id="q2-progress-wrap"><div class="rv-progress-bar" id="q2-progress-bar"></div></div>
+            <div class="rv-upload-status" id="q2-status"></div>
+            <div id="q2-chip" class="rv-chip" style="display:none;"><span id="q2-fname" class="rv-chip-name"></span><span id="q2-remove" class="rv-chip-remove" role="button" aria-label="Remove file">&times;</span></div>
+          </div>
         </div>
       </div>
 
-      <!-- Documents -->
-      <div style="margin-top:3rem;padding-top:2.5rem;border-top:1px solid #dfe3e2;margin-bottom:2.5rem;">
-        <div style="margin-bottom:0.5rem;">
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;margin-bottom:6px;font-family:inherit;">Documents</div>
-          <p style="font-size:14px;font-weight:400;color:#5f6363;line-height:1.75;margin:0 0 1.75rem 0;font-family:inherit;">PDF only. Max 10MB per file. We need your resume — everything else is optional but welcome.</p>
-        </div>
-        <div class="rv-docs-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;">
+      <!-- Step 3 -->
+      <div class="rv-step">
+        <div class="rv-step-head"><span class="rv-step-num">3</span><div><h3 class="rv-step-title">Documents</h3><p class="rv-step-sub">PDF only, max 10MB per file. We need your resume — anything else is optional but welcome.</p></div></div>
+        <div class="rv-docs-grid">
           <!-- Resume -->
           <div>
-            <label style="display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#5f6363;margin-bottom:8px;font-family:inherit;">Resume / CV &nbsp;<span style="color:#0a5c33;">*</span></label>
-            <div class="rv-pdf-zone" id="resume-zone">
-              <svg class="rv-pdf-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0a5c33" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
-              <p style="font-size:13px;color:#5f6363;margin:0;font-family:inherit;"><strong style="color:#0f1111;">Click to upload</strong> or drag here</p>
-              <p style="font-size:11px;color:#6b7070;margin:4px 0 0;font-family:inherit;">PDF — max 10MB</p>
+            <div class="rv-label">Resume / CV <span class="rv-req">*</span></div>
+            <div class="rv-pdf-zone" id="resume-zone" role="button" tabindex="0">
+              <svg class="rv-zone-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0a5c33" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
+              <p class="rv-zone-main"><strong>Click to upload</strong> or drag here</p>
+              <p class="rv-zone-sub">PDF — max 10MB</p>
               <input type="file" id="resume-file" accept="application/pdf,.pdf" style="display:none;">
             </div>
             <div class="rv-progress-wrap" id="resume-progress-wrap"><div class="rv-progress-bar" id="resume-progress-bar"></div></div>
             <div class="rv-upload-status" id="resume-status"></div>
-            <div id="resume-chip" style="display:none;align-items:center;gap:8px;margin-top:10px;padding:10px 14px;background:rgba(10,92,51,0.12);border:1px solid rgba(10,92,51,0.3);border-radius:10px;font-size:13px;color:#0a5c33;font-family:inherit;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a5c33" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <span id="resume-fname" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-              <span id="resume-remove" style="cursor:pointer;color:#6b7070;font-size:18px;line-height:1;flex-shrink:0;">&times;</span>
+            <div id="resume-chip" class="rv-chip" style="display:none;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a5c33" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span id="resume-fname" class="rv-chip-name"></span>
+              <span id="resume-remove" class="rv-chip-remove" role="button" aria-label="Remove file">&times;</span>
             </div>
           </div>
           <!-- Supporting doc -->
           <div>
-            <label style="display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#5f6363;margin-bottom:8px;font-family:inherit;">Supporting Document &nbsp;<span style="color:#6b7070;font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
-            <div class="rv-pdf-zone" id="support-zone">
-              <svg class="rv-pdf-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6b7070" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
-              <p style="font-size:13px;color:#5f6363;margin:0;font-family:inherit;"><strong style="color:#0f1111;">Click to upload</strong> or drag here</p>
-              <p style="font-size:11px;color:#6b7070;margin:4px 0 0;font-family:inherit;">Portfolio · certificates · work samples — PDF, max 10MB</p>
+            <div class="rv-label">Supporting document <span class="rv-opt">(optional)</span></div>
+            <div class="rv-pdf-zone" id="support-zone" role="button" tabindex="0">
+              <svg class="rv-zone-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#5b6561" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
+              <p class="rv-zone-main"><strong>Click to upload</strong> or drag here</p>
+              <p class="rv-zone-sub">Portfolio, certificates, work samples — PDF, max 10MB</p>
               <input type="file" id="support-file" accept="application/pdf,.pdf" style="display:none;">
             </div>
             <div class="rv-progress-wrap" id="support-progress-wrap"><div class="rv-progress-bar" id="support-progress-bar"></div></div>
             <div class="rv-upload-status" id="support-status"></div>
-            <div id="support-chip" style="display:none;align-items:center;gap:8px;margin-top:10px;padding:10px 14px;background:rgba(10,92,51,0.12);border:1px solid rgba(10,92,51,0.3);border-radius:10px;font-size:13px;color:#0a5c33;font-family:inherit;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a5c33" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <span id="support-fname" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-              <span id="support-remove" style="cursor:pointer;color:#6b7070;font-size:18px;line-height:1;flex-shrink:0;">&times;</span>
+            <div id="support-chip" class="rv-chip" style="display:none;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0a5c33" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span id="support-fname" class="rv-chip-name"></span>
+              <span id="support-remove" class="rv-chip-remove" role="button" aria-label="Remove file">&times;</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- How found -->
-      <div style="margin-bottom:2rem;padding-top:2rem;border-top:1px solid #dfe3e2;">
-        <label style="display:block;font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#5f6363;margin-bottom:1rem;font-family:inherit;">How did you find us? <span style="color:#0a5c33;">*</span></label>
-        <div id="rv-how-found" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1rem;">
-          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="Through an Employee" style="display:inline-flex;align-items:center;padding:8px 16px;border-radius:10px;border:1px solid #dfe3e2;background:transparent;font-family:inherit;font-size:13px;font-weight:400;color:#5f6363;cursor:pointer;">Through an Employee</button>
-          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="LinkedIn" style="display:inline-flex;align-items:center;padding:8px 16px;border-radius:10px;border:1px solid #dfe3e2;background:transparent;font-family:inherit;font-size:13px;font-weight:400;color:#5f6363;cursor:pointer;">LinkedIn</button>
-          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="Instagram" style="display:inline-flex;align-items:center;padding:8px 16px;border-radius:10px;border:1px solid #dfe3e2;background:transparent;font-family:inherit;font-size:13px;font-weight:400;color:#5f6363;cursor:pointer;">Instagram</button>
-          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="Twitter / X" style="display:inline-flex;align-items:center;padding:8px 16px;border-radius:10px;border:1px solid #dfe3e2;background:transparent;font-family:inherit;font-size:13px;font-weight:400;color:#5f6363;cursor:pointer;">Twitter / X</button>
-          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="YouTube" style="display:inline-flex;align-items:center;padding:8px 16px;border-radius:10px;border:1px solid #dfe3e2;background:transparent;font-family:inherit;font-size:13px;font-weight:400;color:#5f6363;cursor:pointer;">YouTube</button>
-          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="Other" style="display:inline-flex;align-items:center;padding:8px 16px;border-radius:10px;border:1px solid #dfe3e2;background:transparent;font-family:inherit;font-size:13px;font-weight:400;color:#5f6363;cursor:pointer;">Other</button>
+      <!-- Step 4 -->
+      <div class="rv-step">
+        <div class="rv-step-head"><span class="rv-step-num">4</span><div><h3 class="rv-step-title">How did you find us? <span class="rv-req">*</span></h3><p class="rv-step-sub">Pick one.</p></div></div>
+        <div id="rv-how-found" class="rv-source-list">
+          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="Through an Employee">Through an Employee</button>
+          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="LinkedIn">LinkedIn</button>
+          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="Instagram">Instagram</button>
+          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="Twitter / X">Twitter / X</button>
+          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="YouTube">YouTube</button>
+          <button type="button" class="rv-fmt-btn rv-source-btn" data-value="Other">Other</button>
         </div>
-        <div id="rv-other-source" style="display:none;margin-top:8px;"><input class="rv-input" type="text" id="rv-other-text" placeholder="Tell us where you heard about us..." style="width:100%;background:#f7f9f8;border:1px solid #dfe3e2;border-radius:10px;padding:13px 16px;font-family:inherit;font-size:15px;font-weight:400;color:#0f1111;outline:none;box-sizing:border-box;"></div>
+        <div id="rv-other-source" style="display:none;margin-top:12px;"><input class="rv-input" type="text" id="rv-other-text" aria-label="Where did you hear about us?" placeholder="Tell us where you heard about us…"></div>
       </div>
 
       <!-- Submit -->
-      <div style="margin-top:3.5rem;padding-top:3rem;border-top:1px solid #dfe3e2;">
-        <p style="font-size:13px;font-weight:400;color:#5f6363;line-height:1.7;margin:0 0 2rem 0;max-width:480px;font-family:inherit;"><strong style="color:#0f1111;font-weight:500;">What happens next:</strong> Your submission is reviewed by our team personally within 5 business days. If there is a strong match, you will receive a direct invitation to speak with the founder. We do not use recruiters. We do not send automated rejections.</p>
-        <div id="rv-errMsg" style="display:none;font-size:13px;color:#0b6b3c;margin-bottom:1rem;font-family:inherit;"></div>
-        <!-- Overall upload progress (shown during submission) -->
-        <div id="rv-overall-wrap" style="display:none;margin-bottom:1.5rem;">
-          <div style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#5f6363;font-family:inherit;margin-bottom:6px;" id="rv-overall-label">Uploading files…</div>
-          <div style="background:#dfe3e2;border-radius:10px;height:4px;overflow:hidden;"><div id="rv-overall-bar" style="height:4px;background:#0a5c33;width:0%;transition:width 0.3s;"></div></div>
+      <div class="rv-submit-block">
+        <div class="rv-next-note"><strong>What happens next:</strong> our team reviews every submission personally within 5 business days. If there is a strong match, you will get a direct invitation to speak with the founder. No recruiters, no automated rejections.</div>
+        <div id="rv-errMsg" class="rv-err" role="alert" style="display:none;"></div>
+        <div id="rv-overall-wrap" style="display:none;margin-bottom:1.25rem;">
+          <div class="rv-overall-label" id="rv-overall-label">Uploading files…</div>
+          <div class="rv-overall-track"><div id="rv-overall-bar" class="rv-overall-bar"></div></div>
         </div>
-        <button type="submit" id="rv-submitBtn" class="rv-btn-submit" style="display:inline-flex;align-items:center;gap:10px;background:#0a5c33;color:#ffffff;font-family:inherit;font-size:13px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;padding:16px 36px;border-radius:10px;border:none;cursor:pointer;">Submit</button>
+        <button type="submit" id="rv-submitBtn" class="rv-btn-submit">Submit</button>
       </div>
 
     </form>
   </div>
 </section>
 
-<div id="rv-success" style="display:none;min-height:40vh;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4rem 2.5rem;background:#ffffff;">
-  <div style="width:52px;height:52px;border:1px solid #0a5c33;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 2rem;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a5c33" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg></div>
-  <h2 style="font-family:var(--font-montserrat),sans-serif;font-size:38px;color:#0f1111;margin:0 0 1rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">RECEIVED.</h2>
-  <p style="font-size:15px;font-weight:400;color:#5f6363;max-width:400px;margin:0 auto;line-height:1.75;font-family:inherit;">We have your submission. We will read it carefully and be in touch within 5 business days if there is a strong fit.</p>
+<div id="rv-success" class="rv-success" style="display:none;">
+  <div class="rv-success-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></div>
+  <h2 class="rv-h2">Application received.</h2>
+  <p class="rv-lead" style="margin:0 auto;">Thank you. We will read it carefully and be in touch within 5 business days if there is a strong fit.</p>
+  <a href="/" class="rv-btn-ghost" style="margin-top:1.75rem;">Back to home</a>
 </div>
-
 
 </div>
 `
@@ -305,45 +336,30 @@ const MARKUP_TEMPLATE = `
 
 const plural = (n: number) => (n === 1 ? '' : 's');
 
-/** A category CARD — the drill-down entry point in the roles browser grid. */
-function categoryCardHtml(cId: string, name: string, count: number) {
+/**
+ * The heading that introduces one department's roles.
+ *
+ * It replaces the old card → panel drill-down. That layout hid every job behind
+ * two taps and a scroll, which was the whole reason the page looked empty: a
+ * visitor saw eight grey boxes and no actual work.
+ */
+function categoryHeadHtml(name: string, count: number) {
   const label = name || 'More Roles';
   return `
-      <div class="rv-cat-card" data-cat-target="${cId}" role="button" tabindex="0" aria-label="${esc(label)}, ${count} open role${plural(count)}">
-        <div>
-          <div class="rv-cat-card-count">${count} Open Role${plural(count)}</div>
-          <div class="rv-cat-card-name">${esc(label)}</div>
-        </div>
-        <span class="rv-cat-card-cta">View roles <span aria-hidden="true">&rarr;</span></span>
-      </div>`;
-}
-
-/** A per-category PANEL (hidden until its card is clicked): back link + heading + role cards. */
-function categoryPanelHtml(cId: string, name: string, count: number, cardsHtml: string) {
-  const label = name || 'More Roles';
-  return `
-      <div class="rv-cat-panel" data-cat-panel="${cId}" style="display:none;">
-        <button type="button" class="rv-cat-back" data-cat-back><span aria-hidden="true">&larr;</span> All departments</button>
-        <div class="rv-cat-panel-head">
-          <span class="rv-cat-panel-name">${esc(label)}</span>
-          <span class="rv-cat-panel-count">${count} Open Role${plural(count)}</span>
-        </div>
-        <div style="border-top:1px solid #dfe3e2;">${cardsHtml}</div>
+      <div class="rv-cat-head">
+        <h3 class="rv-cat-head-name">${esc(label)}</h3>
+        <span class="rv-cat-head-count">${count} open role${plural(count)}</span>
       </div>`;
 }
 
 /**
  * Assemble the final markup: static template + data-driven roles + options.
  *
- * When any role has a `category`, the OPEN ROLES section becomes a two-level
- * browser: a grid of category CARDS (`.rv-cat-grid`), each opening a hidden
- * per-category PANEL (`.rv-cat-panel`) that holds that category's accordion
- * cards. The card→panel drill-down (and the "All departments" back link) is
- * wired imperatively in the effect. Category order follows the order roles
- * arrive in (the API pre-sorts by managed category order); the uncategorised
- * bucket, if any, is the last card ("More Roles"). With no categories at all it
- * falls back to the original single flat list. Card ids (`r1`, `r2`, …) stay
- * globally unique across panels so the accordion targeting never collides.
+ * Every role is rendered up front, grouped under a department heading, with its
+ * detail in a one-tap accordion. Category order follows the order roles arrive
+ * in (the API pre-sorts by managed category order); the uncategorised bucket, if
+ * any, comes last under "More Roles". Card ids (`r1`, `r2`, …) stay globally
+ * unique so the accordion targeting never collides.
  */
 function buildMarkup(postings: CareerPosting[]) {
   if (postings.length === 0) {
@@ -351,6 +367,7 @@ function buildMarkup(postings: CareerPosting[]) {
       `<div style="border-top:1px solid #dfe3e2;"><div style="padding:2rem 0;color:#5f6363;font-size:14px;font-family:${INTER};">` +
       `New roles are being finalised — check back shortly, or submit an open application below.</div></div>`;
     return MARKUP_TEMPLATE
+      .replace('<!--ROLE_COUNT-->', '')
       .replace('<!--ROLE_CARDS-->', fallback)
       .replace('<!--ROLE_OPTIONS-->', roleOptionsHtml(postings));
   }
@@ -375,20 +392,18 @@ function buildMarkup(postings: CareerPosting[]) {
       if (b[0] === '' && a[0] !== '') return -1;
       return 0; // stable sort preserves insertion order
     });
-    const cards: string[] = [];
-    const panels: string[] = [];
-    entries.forEach(([category, roles], i) => {
-      const cId = `cat${i + 1}`;
-      cards.push(categoryCardHtml(cId, category, roles.length));
-      // nextCard is only invoked here, so ids stay globally unique across panels.
-      panels.push(categoryPanelHtml(cId, category, roles.length, roles.map(nextCard).join('\n')));
-    });
-    cardsBlock =
-      `<div class="rv-cat-grid">${cards.join('\n')}</div>` +
-      `<div class="rv-cat-panels">${panels.join('\n')}</div>`;
+    cardsBlock = entries
+      .map(
+        ([category, roles]) =>
+          categoryHeadHtml(category, roles.length) +
+          // nextCard is only invoked here, so ids stay globally unique.
+          `<div class="rv-cat-roles">${roles.map(nextCard).join('\n')}</div>`,
+      )
+      .join('\n');
   }
 
   return MARKUP_TEMPLATE
+    .replace('<!--ROLE_COUNT-->', ` (${postings.length})`)
     .replace('<!--ROLE_CARDS-->', cardsBlock)
     .replace('<!--ROLE_OPTIONS-->', roleOptionsHtml(postings));
 }
@@ -431,42 +446,6 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
         if (!isOpen) { body.classList.add('open'); arr.classList.add('open'); }
       }, { signal });
     });
-
-    // ── Category drill-down: card grid ⇄ per-category role panels ─────────────
-    // Clicking a category card hides the grid and reveals only that category's
-    // panel; the "All departments" back link reverses it. No-op when the page
-    // rendered the flat list (no categories) — the grid/panels aren't present.
-    const catGrid = root.querySelector<HTMLElement>('.rv-cat-grid');
-    const catPanels = all('.rv-cat-panel');
-    if (catGrid && catPanels.length) {
-      const showGrid = () => {
-        catGrid.style.display = '';
-        catPanels.forEach((p) => { p.style.display = 'none'; });
-      };
-      const showPanel = (id: string | null) => {
-        if (!id) return;
-        catGrid.style.display = 'none';
-        catPanels.forEach((p) => {
-          const match = p.getAttribute('data-cat-panel') === id;
-          p.style.display = match ? 'block' : 'none';
-          if (match) p.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-      };
-      all('.rv-cat-card').forEach((card) => {
-        const open = () => showPanel(card.getAttribute('data-cat-target'));
-        card.addEventListener('click', open, { signal });
-        card.addEventListener('keydown', (e) => {
-          const k = (e as KeyboardEvent).key;
-          if (k === 'Enter' || k === ' ') { e.preventDefault(); open(); }
-        }, { signal });
-      });
-      all('[data-cat-back]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          showGrid();
-          root.querySelector('#rv-roles')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, { signal });
-      });
-    }
 
     // ── Apply button → auto-fill role dropdown ───────────────────────────────
     all('.rv-apply-btn').forEach((btn) => {
@@ -523,6 +502,10 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
       }
 
       zone.addEventListener('click', () => input.click(), { signal });
+      // The zone is a role="button" with tabindex, so keyboard users can open the picker too.
+      zone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+      }, { signal });
       zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag'); }, { signal });
       zone.addEventListener('dragleave', (e) => { e.preventDefault(); zone.classList.remove('drag'); }, { signal });
       zone.addEventListener('drop', (e) => {

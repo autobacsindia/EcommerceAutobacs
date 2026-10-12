@@ -31,8 +31,9 @@ interface ListResponse {
 
 interface Requester {
   _id: string;
-  user?: { name?: string; email?: string } | null;
+  user?: { name?: string; email?: string; phone?: string } | null;
   email?: string;
+  phone?: string;
   status: Status;
   createdAt: string;
   notifiedAt?: string | null;
@@ -274,6 +275,7 @@ export default function AdminStockRequestsPage() {
                                   <tr>
                                     <th className="text-left py-1 pr-4">Customer</th>
                                     <th className="text-left py-1 pr-4">Email</th>
+                                    <th className="text-left py-1 pr-4">Phone</th>
                                     <th className="text-left py-1 pr-4">Requested</th>
                                     {status === 'notified' && <th className="text-left py-1 pr-4">Notified</th>}
                                     {kind === 'backorder' && <th className="text-left py-1">Lead status</th>}
@@ -284,6 +286,20 @@ export default function AdminStockRequestsPage() {
                                     <tr key={req._id} className="border-t border-gray-200">
                                       <td className="py-1.5 pr-4">{req.user?.name || <span className="text-gray-400">Guest</span>}</td>
                                       <td className="py-1.5 pr-4">{req.user?.email || req.email || '—'}</td>
+                                      {/* Snapshot first, then the live account — a row written before
+                                          the snapshot existed still gives the team a number to call. */}
+                                      <td className="py-1.5 pr-4">
+                                        {req.phone || req.user?.phone ? (
+                                          <a
+                                            href={`tel:${(req.phone || req.user?.phone || '').replace(/\s+/g, '')}`}
+                                            className="text-blue-600 hover:underline"
+                                          >
+                                            {req.phone || req.user?.phone}
+                                          </a>
+                                        ) : (
+                                          '—'
+                                        )}
+                                      </td>
                                       <td className="py-1.5 pr-4 text-gray-600">{new Date(req.createdAt).toLocaleString()}</td>
                                       {status === 'notified' && (
                                         <td className="py-1.5 pr-4 text-gray-600">
