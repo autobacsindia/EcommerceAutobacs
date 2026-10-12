@@ -16,7 +16,8 @@ import { httpCache } from "../middleware/httpCache.js";
 import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
 import { normalizeSeo } from "../utils/seo.js";
-import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
+import { putPublicAsset } from "../services/storage/publicUploads.js";
+import { deleteHostedImages } from "../services/storage/publicImageDeletes.js";
 
 const router = express.Router();
 
@@ -191,8 +192,9 @@ router.post(
     let logoData = { url: req.body.logo || '', public_id: '' };
 
     if (req.file) {
-      const uploaded = await uploadToCloudinary(req.file.buffer, {
+      const uploaded = await putPublicAsset(req.file.buffer, {
         folder: 'autobacs/brands',
+        contentType: req.file.mimetype,
       });
       logoData = { url: uploaded.secure_url, public_id: uploaded.public_id };
     }
@@ -251,15 +253,27 @@ router.put(
       brand.slug = generateSlug(name);
     }
 
+    /*
+      The logo the save replaces, deleted only AFTER the save commits.
+
+      Two orderings matter here and they are different problems. Uploading
+      before deleting means a failed upload cannot leave the brand pointing at
+      a logo that is already gone. Deleting after the SAVE means a failed save
+      cannot destroy the old logo while the new one goes unrecorded — which
+      would show the admin a broken image with nothing to roll back to.
+    */
+    let supersededLogo = null;
+
     // Replace logo if a new file was uploaded
     if (req.file) {
-      // Upload the new asset FIRST, then delete the old one only after success —
-      // so a failed upload can never leave the brand pointing at a deleted logo.
-      const oldPublicId = brand.logo?.public_id;
-      const uploaded = await uploadToCloudinary(req.file.buffer, { folder: 'autobacs/brands' });
+      const old = brand.logo?.public_id ? { public_id: brand.logo.public_id, url: brand.logo.url } : null;
+      const uploaded = await putPublicAsset(req.file.buffer, {
+        folder: 'autobacs/brands',
+        contentType: req.file.mimetype,
+      });
       brand.logo = { url: uploaded.secure_url, public_id: uploaded.public_id };
-      if (oldPublicId && oldPublicId !== uploaded.public_id) {
-        await deleteFromCloudinary(oldPublicId);
+      if (old && old.public_id !== uploaded.public_id) {
+        supersededLogo = old;
       }
     } else if (typeof req.body.logo === 'string') {
       // Plain URL string passed (no file) — keep existing public_id if URL unchanged
@@ -271,6 +285,11 @@ router.put(
     if (req.body.seo !== undefined) brand.seo = normalizeSeo(req.body.seo);
 
     await brand.save();
+
+    // Routed by the OLD ref's own url, so a logo stored before the provider
+    // flip is deleted from the store that actually holds it.
+    if (supersededLogo) await deleteHostedImages([supersededLogo]);
+
     invalidateCache('brands', 'products');
     revalidateFrontendTags(['home:brands']);
 
@@ -296,9 +315,9 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
     brand: { $regex: new RegExp(`^${brand.name}$`, 'i') } 
   });
 
-  // Delete logo from Cloudinary
+  // Delete the logo from whichever store holds it (routed by its url).
   if (brand.logo?.public_id) {
-    await deleteFromCloudinary(brand.logo.public_id);
+    await deleteHostedImages([{ public_id: brand.logo.public_id, url: brand.logo.url }]);
   }
 
   // Hard delete

@@ -70,6 +70,17 @@ export const deleteHostedImages = async (refs = []) => {
   let variants = 0;
 
   if (r2Keys.length) {
+    /*
+      Two separate try blocks, deliberately.
+
+      These shared one, and the original delete sat at the END of it — so any
+      failure while sweeping derivatives (a listKeys error, a bad page of
+      results) jumped straight to the catch and the ORIGINAL was never deleted.
+      The document had already dropped its reference by then, which is the
+      permanent-orphan shape: an object nothing points at and no sweep can
+      attribute. The variant sweep is the optimisation; deleting the original
+      is the job, and it must not be hostage to the optimisation.
+    */
     try {
       // Derivatives first: if the original goes and this fails, the variants are
       // still findable by prefix. The reverse order would strand them nameless.
@@ -78,13 +89,18 @@ export const deleteHostedImages = async (refs = []) => {
         const prefix = variantPrefixFor(key);
         if (!prefix) continue;
         // eslint-disable-next-line no-await-in-loop
-        const found = await listKeys({ prefix, scope: 'public' });
+        const found = (await listKeys({ prefix, scope: 'public' })) || [];
         found.forEach((o) => variantKeys.push(o.key));
       }
       if (variantKeys.length) {
         const res = await deleteObjects({ keys: variantKeys, scope: 'public' });
-        variants = res.deleted;
+        variants = res?.deleted ?? 0;
       }
+    } catch (err) {
+      console.error(`[CLEANUP_REQUIRED][Storage] r2 variant sweep failed: ${err.message}`);
+    }
+
+    try {
       await Promise.all(r2Keys.map((key) => deleteObject({ key, scope: 'public' })));
     } catch (err) {
       console.error(`[CLEANUP_REQUIRED][Storage] r2 image cleanup failed: ${err.message}`);

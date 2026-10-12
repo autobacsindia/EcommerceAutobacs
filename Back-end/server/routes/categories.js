@@ -10,7 +10,8 @@ import { httpCache } from "../middleware/httpCache.js";
 import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
 import { cacheMiddleware } from "../middleware/cacheControl.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
-import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
+import { putPublicAsset } from "../services/storage/publicUploads.js";
+import { deleteHostedImages } from "../services/storage/publicImageDeletes.js";
 import categoryMappingService from "../services/categoryMappingService.js";
 import { normalizeSeo } from "../utils/seo.js";
 
@@ -247,10 +248,11 @@ router.post(
 
     let imageData = req.body.image || {};  // allow plain URL object from JSON
 
-    // If a file was uploaded, send it to Cloudinary
+    // If a file was uploaded, send it to the active store
     if (req.file) {
-      const uploaded = await uploadToCloudinary(req.file.buffer, {
+      const uploaded = await putPublicAsset(req.file.buffer, {
         folder: 'autobacs/categories',
+        contentType: req.file.mimetype,
       });
       imageData = {
         url:       uploaded.secure_url,
@@ -289,9 +291,11 @@ router.post(
       });
     } catch (err) {
       if (err?.code === 11000) {
-        // Avoid leaking an orphaned Cloudinary asset uploaded just above.
+        // Avoid leaking the orphaned asset uploaded just above.
         if (req.file && imageData.public_id) {
-          try { await deleteFromCloudinary(imageData.public_id); } catch { /* best-effort */ }
+          try {
+            await deleteHostedImages([{ public_id: imageData.public_id, url: imageData.url }]);
+          } catch { /* best-effort */ }
         }
         const field = Object.keys(err.keyPattern || err.keyValue || {})[0] || 'value';
         return res.status(409).json({
@@ -388,21 +392,36 @@ router.put(
       }
     }
 
-    // If a new file was uploaded, replace old Cloudinary image
-    if (req.file) {
-      // Delete old image if it has a public_id
-      if (category.image?.public_id) {
-        await deleteFromCloudinary(category.image.public_id);
-      }
+    /*
+      The image the update replaces, deleted only AFTER the write commits.
 
-      const uploaded = await uploadToCloudinary(req.file.buffer, {
+      This route used to delete the old image BEFORE uploading the new one, so
+      a failed upload left the category pointing at an image that no longer
+      existed. Upload-first fixes that; deleting after the write fixes the
+      other half, where a failed update would destroy the old image while the
+      new one went unrecorded.
+    */
+    let supersededImage = null;
+
+    // If a new file was uploaded, replace the old image.
+    if (req.file) {
+      const old = category.image?.public_id
+        ? { public_id: category.image.public_id, url: category.image.url }
+        : null;
+
+      const uploaded = await putPublicAsset(req.file.buffer, {
         folder: 'autobacs/categories',
+        contentType: req.file.mimetype,
       });
       updateData.image = {
         url:       uploaded.secure_url,
         public_id: uploaded.public_id,
         alt:       (req.body.imageAlt || updateData.name || category.name || '').trim(),
       };
+
+      if (old && old.public_id !== uploaded.public_id) {
+        supersededImage = old;
+      }
     }
 
     try {
@@ -411,6 +430,11 @@ router.put(
         updateData,
         { new: true, runValidators: true }
       );
+
+      // The write committed, so the replaced image is now safe to remove.
+      // Routed by the old ref's own url, so an image stored before the
+      // provider flip is deleted from the store that actually holds it.
+      if (supersededImage) await deleteHostedImages([supersededImage]);
 
       // Parent/name/active changes alter the hierarchy AND the rolled-up facet
       // counts, so bust the product/facet caches too.
@@ -423,7 +447,9 @@ router.put(
     } catch (err) {
       if (err?.code === 11000) {
         if (req.file && updateData.image?.public_id) {
-          try { await deleteFromCloudinary(updateData.image.public_id); } catch { /* best-effort */ }
+          try {
+            await deleteHostedImages([{ public_id: updateData.image.public_id, url: updateData.image.url }]);
+          } catch { /* best-effort */ }
         }
         const field = Object.keys(err.keyPattern || err.keyValue || {})[0] || 'value';
         return res.status(409).json({
