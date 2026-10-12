@@ -25,7 +25,7 @@
  * a native-driven value cannot be read in render, so its visibility comes from
  * a listener instead — one setState per crossing, not one per frame.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Animated } from 'react-native';
 
 /** How far down the customer must be before offering a way back to the top. */
@@ -47,7 +47,13 @@ export interface HeaderScroll {
  *        disables the collapse (a screen whose header is only the pinned bar).
  */
 export function useHeaderScroll(collapseHeight: number): HeaderScroll {
-  const scrollY = useRef(new Animated.Value(0)).current;
+  /*
+    Lazy useState, not useRef(...).current: the Animated.Value must be created
+    once and survive every render, but reading `.current` during render is what
+    the react-hooks/refs rule forbids — and rightly, since a ref read in render
+    is invisible to the compiler's memoisation. The initialiser runs once.
+  */
+  const [scrollY] = useState(() => new Animated.Value(0));
   const [showTop, setShowTop] = useState(false);
 
   const onScroll = useMemo(

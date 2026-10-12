@@ -4,7 +4,7 @@
  * This is the app's main advantage over the website: the choice is remembered
  * on the device, so every visit starts filtered to their vehicle.
  */
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +27,22 @@ export default function GarageScreen() {
     () => [...new Set((vehicles.data ?? []).map((v) => v.make))].sort((a, b) => a.localeCompare(b)),
     [vehicles.data],
   );
+  /*
+    Save the car and go straight to its parts. Saving without navigating is
+    what made the old flow feel broken: the customer picked their car, nothing
+    appeared to happen, and the way to the products was a separate button
+    further up the screen.
+  */
+  const shop = useCallback(
+    (pickedMake: string, model?: string) => {
+      saveGarage(model ? { make: pickedMake, model } : { make: pickedMake });
+      const qs = new URLSearchParams({ vehicleMake: pickedMake });
+      if (model) qs.set('vehicleModel', model);
+      router.push(`/search?${qs}`);
+    },
+    [saveGarage, router],
+  );
+
   const models = useMemo(
     () => (vehicles.data ?? []).filter((v) => v.make === make),
     [vehicles.data, make],
@@ -77,7 +93,7 @@ export default function GarageScreen() {
           />
         ) : (
           <>
-            <T kind="h3" style={{ marginBottom: spacing.md }}>{garage ? 'Change vehicle' : '1. Pick your make'}</T>
+            <T kind="h3" style={{ marginBottom: spacing.md }}>{garage ? 'Change vehicle' : 'Pick your make'}</T>
             <View style={s.grid}>
               {makes.map((m) => (
                 <Pressable
@@ -94,21 +110,36 @@ export default function GarageScreen() {
 
             {make && (
               <>
-                <T kind="h3" style={{ marginTop: spacing.xl, marginBottom: spacing.md }}>2. Pick your model</T>
+                {/*
+                  Picking a make is already enough to shop, and this button says
+                  so. Before, choosing "BMW" only revealed a model list headed
+                  "2. Pick your model", so the model read as required; the one
+                  way to shop a whole make was an "All BMW" chip sitting among
+                  the models, which merely saved the car and left the customer
+                  to find "Shop parts that fit" afterwards. Three steps, none
+                  of them obvious, for the app's primary journey.
+                */}
+                <Button
+                  label={`Show all ${make} parts`}
+                  onPress={() => shop(make)}
+                  icon="arrow-forward"
+                  style={{ marginTop: spacing.lg }}
+                />
+
+                <T kind="h3" style={{ marginTop: spacing.xl, marginBottom: spacing.xs }}>
+                  Or pick your model
+                </T>
+                <T kind="small" style={{ marginBottom: spacing.md }}>
+                  Optional — it narrows the results to parts that fit that model exactly.
+                </T>
                 <View style={s.grid}>
-                  <Pressable
-                    onPress={() => { saveGarage({ make }); }}
-                    style={[s.pill, garage?.make === make && !garage?.model && s.pillOn]}
-                    accessibilityRole="button"
-                  >
-                    <Text style={[s.pillText, garage?.make === make && !garage?.model && s.pillTextOn]}>All {make}</Text>
-                  </Pressable>
                   {models.map((v) => {
                     const on = garage?.make === make && garage?.model === v.model;
                     return (
                       <Pressable
                         key={`${v.make}-${v.model}`}
-                        onPress={() => saveGarage({ make, model: v.model })}
+                        // Saves AND goes, because picking a model IS the request.
+                        onPress={() => shop(make, v.model)}
                         style={[s.pill, on && s.pillOn]}
                         accessibilityRole="button"
                         accessibilityState={{ selected: on }}
@@ -120,7 +151,8 @@ export default function GarageScreen() {
                 </View>
                 {models.length === 0 && (
                   <T kind="small" style={{ marginTop: spacing.sm }}>
-                    No specific models listed for {make} — "All {make}" still filters the catalogue.
+                    No specific models listed for {make} yet — the button above still
+                    shows every {make} part we carry.
                   </T>
                 )}
               </>

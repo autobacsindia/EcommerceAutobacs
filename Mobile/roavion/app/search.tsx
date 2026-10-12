@@ -11,28 +11,31 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchProducts, fetchSuggestions } from '../src/api/catalogue';
+import { fetchFacets, fetchProducts, fetchSuggestions } from '../src/api/catalogue';
+import {
+  EMPTY_FILTERS,
+  FilterSheet,
+  ListingToolbar,
+  SortSheet,
+  type Filters,
+} from '../src/components/ListingControls';
 import ProductCard from '../src/components/ProductCard';
-import { Screenful, T } from '../src/components/ui';
+import { Screenful } from '../src/components/ui';
+import { useApp } from '../src/store';
 import { colors, font, radius, spacing } from '../src/theme';
-
-const SORTS = [
-  { key: '', label: 'Relevance' },
-  { key: 'price', label: 'Price: low to high' },
-  { key: '-price', label: 'Price: high to low' },
-  { key: '-createdAt', label: 'Newest' },
-  { key: '-averageRating', label: 'Top rated' },
-] as const;
 
 export default function SearchScreen() {
   const params = useLocalSearchParams<{ q?: string; brand?: string; vehicleMake?: string; vehicleModel?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { garage } = useApp();
 
   const [text, setText] = useState(params.q ?? '');
   const [query, setQuery] = useState(params.q ?? '');
-  const [sort, setSort] = useState<string>('');
-  const [showSort, setShowSort] = useState(false);
+  // The same controls the category screen uses: arriving here from the garage
+  // or from a department must not present two different filter menus.
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [sheet, setSheet] = useState<'none' | 'sort' | 'filter'>('none');
   const input = useRef<TextInput>(null);
 
   // A filtered listing (brand/vehicle) opens straight to results; a bare search
@@ -54,18 +57,39 @@ export default function SearchScreen() {
     enabled: !filtered && query.trim().length >= 2,
   });
 
+  /*
+    One query object feeding both the grid and the facet counts, so the numbers
+    in the filter always describe the results behind it. The route's own
+    brand/vehicle params are the floor: a filter can narrow within them, never
+    escape them — arriving from "all BMW parts" must keep showing BMW parts.
+  */
+  const query_ = useMemo(
+    () => ({
+      search: query.trim() || undefined,
+      brand: filters.brands.length ? filters.brands : params.brand,
+      vehicleMake: filters.fitsMyCar && garage ? garage.make : params.vehicleMake,
+      vehicleModel: filters.fitsMyCar && garage ? garage.model || undefined : params.vehicleModel,
+      sort: filters.sort || undefined,
+      rating: filters.ratings.length ? filters.ratings : undefined,
+      minPrice: filters.minPrice,
+      maxPrice: filters.maxPrice,
+      inStock: filters.inStock || undefined,
+    }),
+    [query, filters, params.brand, params.vehicleMake, params.vehicleModel, garage],
+  );
+
   const results = useQuery({
-    queryKey: ['search', query, params.brand, params.vehicleMake, params.vehicleModel, sort],
-    queryFn: () =>
-      fetchProducts({
-        search: query.trim() || undefined,
-        brand: params.brand,
-        vehicleMake: params.vehicleMake,
-        vehicleModel: params.vehicleModel,
-        sort: sort || undefined,
-        limit: 40,
-      }),
+    queryKey: ['search', query_],
+    queryFn: () => fetchProducts({ ...query_, limit: 40 }),
     enabled: filtered || query.trim().length >= 2,
+  });
+
+  // Only while the sheet is open — it is a second request per filter change.
+  const facets = useQuery({
+    queryKey: ['searchFacets', query_],
+    queryFn: () => fetchFacets(query_),
+    enabled: sheet === 'filter' && (filtered || query.trim().length >= 2),
+    staleTime: 60_000,
   });
 
   const title = useMemo(() => {
@@ -114,30 +138,31 @@ export default function SearchScreen() {
           </View>
         </View>
 
-        {/* Result count + sort */}
         {(filtered || query.trim().length >= 2) && !results.isLoading && (
-          <View style={s.toolbar}>
-            <T kind="small">{results.data?.total ?? products.length} results</T>
-            <Pressable onPress={() => setShowSort((v) => !v)} style={s.sortBtn} accessibilityRole="button">
-              <Ionicons name="swap-vertical" size={15} color={colors.ink2} />
-              <Text style={s.sortText}>{SORTS.find((x) => x.key === sort)?.label ?? 'Sort'}</Text>
-            </Pressable>
-          </View>
-        )}
-        {showSort && (
-          <View style={s.sortSheet}>
-            {SORTS.map((o) => (
-              <Pressable
-                key={o.key || 'relevance'}
-                onPress={() => { setSort(o.key); setShowSort(false); }}
-                style={s.sortOption}
-                accessibilityRole="button"
-              >
-                <Text style={[s.sortOptionText, sort === o.key && s.sortOptionOn]}>{o.label}</Text>
-                {sort === o.key && <Ionicons name="checkmark" size={16} color={colors.green} />}
-              </Pressable>
-            ))}
-          </View>
+          <>
+            <ListingToolbar
+              total={results.data?.total ?? products.length}
+              filters={filters}
+              onToggleSort={() => setSheet((v) => (v === 'sort' ? 'none' : 'sort'))}
+              onToggleFilter={() => setSheet((v) => (v === 'filter' ? 'none' : 'filter'))}
+            />
+            {sheet === 'sort' && (
+              <SortSheet
+                sort={filters.sort}
+                onPick={(key) => { setFilters((f) => ({ ...f, sort: key })); setSheet('none'); }}
+              />
+            )}
+            {sheet === 'filter' && (
+              <FilterSheet
+                filters={filters}
+                facets={facets.data ?? null}
+                carLabel={garage ? `${garage.make}${garage.model ? ` ${garage.model}` : ''}` : null}
+                onChange={setFilters}
+                onClear={() => setFilters(EMPTY_FILTERS)}
+                onClose={() => setSheet('none')}
+              />
+            )}
+          </>
         )}
 
         {showSuggestions ? (

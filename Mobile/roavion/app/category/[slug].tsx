@@ -195,7 +195,7 @@ export default function CategoryScreen() {
               listing.isFetchingNextPage ? (
                 <View style={s.footer}><ActivityIndicator color={colors.green} /></View>
               ) : products.length >= total && total > PAGE_SIZE ? (
-                <Text style={s.end}>That's all {total} products</Text>
+                <Text style={s.end}>That&apos;s all {total} products</Text>
               ) : null
             }
             renderItem={({ item }: { item: Product }) => (

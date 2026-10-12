@@ -12,13 +12,14 @@
  * alert, and it is hidden from the accessibility tree while invisible so a
  * screen reader does not announce a control nobody can see.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow } from '../theme';
 
 export default function ScrollTopButton({ visible, onPress }: { visible: boolean; onPress: () => void }) {
-  const anim = useRef(new Animated.Value(0)).current;
+  // Created once; see the note in useHeaderScroll on why this is not a ref.
+  const [anim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     Animated.timing(anim, {
