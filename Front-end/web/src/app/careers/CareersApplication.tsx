@@ -3,8 +3,9 @@
 /*
  * Careers ("Roavion") standalone application page.
  *
- * Ported from the WordPress `roavion_careers` shortcode. The static shell (hero,
- * "Why Roavion" pillars, application form) is rendered verbatim
+ * Ported from the WordPress `roavion_careers` shortcode. The static shell (its
+ * own minimal top bar, the hero, the "Why Roavion" pillars and the application
+ * form) is rendered verbatim
  * (dangerouslySetInnerHTML) — it is author-controlled static HTML — and the
  * original imperative behaviour is re-attached in a client-only effect.
  *
@@ -13,6 +14,11 @@
  * /careers/postings and passed in), so a role is added/edited/withdrawn from the
  * admin without a code change. Dynamic values are HTML-escaped before injection.
  * Two placeholder tokens in the template mark where they go.
+ *
+ * Section order is deliberate: top bar → hero with its two CTAs → OPEN ROLES →
+ * "Why Roavion" → the form. Someone on a careers page is looking for a job, so
+ * the jobs come before the culture essay; the pillars still sell the company,
+ * just to a reader who has already found a role worth applying for.
  *
  * Submission is IN-HOUSE (no Google): the browser fetches upload credentials
  * from our backend, uploads each video/PDF directly to storage, then POSTs only
@@ -123,15 +129,38 @@ const MARKUP_TEMPLATE = `
 <div style="font-family:inherit;-webkit-font-smoothing:antialiased;overflow-x:hidden;background:#ffffff;color:#0f1111;margin:0;padding:0;">
 
 
-<section style="display:flex;flex-direction:column;justify-content:center;padding:4.5rem 2.5rem;position:relative;background:#ffffff;overflow:hidden;margin:0;">
+<header class="rv-topbar">
+  <a href="/" class="rv-topbar-logo" aria-label="Roavion home"><img src="/images/roavion-logo.png" alt="Roavion" width="960" height="255" /></a>
+  <a href="/" class="rv-topbar-home"><span aria-hidden="true">&larr;</span> Home</a>
+</header>
+
+<section class="rv-hero">
   <div style="position:relative;max-width:900px;">
-    <div style="display:inline-flex;align-items:center;gap:10px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;margin-bottom:2rem;font-family:inherit;"><span style="display:block;width:28px;height:1px;background:#0a5c33;"></span>Roavion Automotive Pvt Ltd</div>
-    <h1 class="rv-hero-h1" style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(32px,5vw,65px);line-height:0.92;color:#0f1111;margin:0 0 2rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">WE DON'T HIRE<br>FOR TITLES.<br>WE HIRE FOR <span style="color:#0a5c33;">IMPACT.</span></h1>
-    <p style="font-size:17px;font-weight:400;line-height:1.75;color:#5f6363;max-width:560px;margin:0 0 2.5rem 0;font-family:inherit;">Roavion isn't a place to fill a seat. It's a place to <strong style="color:#0f1111;font-weight:500;">own something.</strong> We're building a premium automotive ecosystem — and every role here demands more than execution.</p>
+    <div style="display:inline-flex;align-items:center;gap:10px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;margin-bottom:1.25rem;font-family:inherit;"><span style="display:block;width:28px;height:1px;background:#0a5c33;"></span>Careers at Roavion Automotive</div>
+    <h1 class="rv-hero-h1" style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(30px,5vw,58px);line-height:0.95;color:#0f1111;margin:0 0 1rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">WE DON'T HIRE<br>FOR TITLES.<br>WE HIRE FOR <span style="color:#0a5c33;">IMPACT.</span></h1>
+    <p style="font-size:16px;font-weight:400;line-height:1.7;color:#5f6363;max-width:540px;margin:0 0 1.75rem 0;font-family:inherit;">Roavion isn't a place to fill a seat. It's a place to <strong style="color:#0f1111;font-weight:500;">own something.</strong> Browse the open roles below and apply in about 15 minutes.</p>
+    <div class="rv-hero-cta">
+      <a href="#rv-roles" class="rv-btn-primary">See open roles<!--ROLE_COUNT--></a>
+      <a href="#rv-form" class="rv-btn-ghost rv-apply-btn" data-role="Other / Open Application">Apply now</a>
+    </div>
   </div>
 </section>
 
-<section class="rv-section-pad" style="background:#eef1f0;color:#0f1111;padding:6rem 2.5rem;margin:0;">
+<section id="rv-roles" class="rv-section-pad rv-band" style="background:#ffffff;color:#0f1111;border-top:1px solid #dfe3e2;margin:0;">
+  <div style="max-width:860px;margin:0 auto;">
+    <div style="margin-bottom:1rem;"><span style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;display:block;font-family:inherit;">Open Roles</span></div>
+    <h2 style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(26px,2.5vw,30px);line-height:1.05;color:#0f1111;margin:0 0 0.75rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">THE SEATS WE'RE FILLING NOW.</h2>
+    <p style="font-size:15px;line-height:1.7;color:#5f6363;margin:0 0 2rem 0;max-width:520px;font-family:inherit;">Tap any role to read what it involves, then hit <strong style="color:#0f1111;font-weight:600;">Apply</strong> — it drops you straight into the form below with that role filled in.</p>
+<!--ROLE_CARDS-->
+
+    <div style="margin-top:3rem;padding:2rem;border:1px solid #dfe3e2;border-radius:10px;background:#f7f9f8;">
+      <p style="font-size:14px;font-weight:400;line-height:1.75;color:#5f6363;margin:0 0 1rem 0;font-family:inherit;">Don't see your role above? If you believe you belong here, tell us anyway.</p>
+      <a href="#rv-form" class="rv-apply-btn" data-role="Other / Open Application" style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#0a5c33;text-decoration:none;font-family:inherit;">Submit an open application &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<section class="rv-section-pad rv-band" style="background:#eef1f0;color:#0f1111;margin:0;">
   <div style="max-width:860px;margin:0 auto;">
     <div style="margin-bottom:3rem;"><span style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;display:block;font-family:inherit;">Why Roavion</span></div>
     <div class="rv-pillars-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #dfe3e2;">
@@ -143,19 +172,6 @@ const MARKUP_TEMPLATE = `
   </div>
 </section>
 
-<section id="rv-roles" class="rv-section-pad" style="background:#ffffff;color:#0f1111;padding:6rem 2.5rem;border-top:1px solid #dfe3e2;margin:0;">
-  <div style="max-width:860px;margin:0 auto;">
-    <div style="margin-bottom:1rem;"><span style="font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#0a5c33;display:block;font-family:inherit;">Open Roles</span></div>
-    <h2 style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(26px,2.5vw,26px);line-height:1.0;color:#0f1111;margin:0 0 3rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">THE SEATS<br>WE'RE FILLING NOW.</h2>
-<!--ROLE_CARDS-->
-
-    <div style="margin-top:3rem;padding:2rem;border:1px solid #dfe3e2;border-radius:10px;background:#f7f9f8;">
-      <p style="font-size:14px;font-weight:400;line-height:1.75;color:#5f6363;margin:0 0 1rem 0;font-family:inherit;">Don't see your role above? If you believe you belong here, tell us anyway.</p>
-      <a href="#rv-form" class="rv-apply-btn" data-role="Other / Open Application" style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#0a5c33;text-decoration:none;font-family:inherit;">Submit an open application &rarr;</a>
-    </div>
-  </div>
-</section>
-
 <div class="rv-section-pad" style="background:#ffffff;padding:0 2.5rem;">
   <div style="max-width:860px;margin:0 auto;padding:3rem 0 4rem;border-top:1px solid #dfe3e2;">
     <div class="rv-sweep-rule" style="height:2px;background:#0a5c33;width:100%;margin-bottom:2rem;"></div>
@@ -163,7 +179,7 @@ const MARKUP_TEMPLATE = `
   </div>
 </div>
 
-<section id="rv-form" class="rv-section-pad" style="background:#ffffff;padding:5rem 2.5rem 6rem;margin:0;">
+<section id="rv-form" class="rv-section-pad rv-band" style="background:#ffffff;margin:0;">
   <div style="max-width:860px;margin:0 auto;">
     <div style="margin-bottom:3.5rem;">
       <h2 style="font-family:var(--font-montserrat),sans-serif;font-size:clamp(29px,3vw,32px);line-height:0.95;color:#0f1111;margin:0 0 1rem 0;padding:0;border:none;background:none;font-weight:700;letter-spacing:-0.01em;">TELL US<br>WHO YOU ARE.</h2>
@@ -305,45 +321,30 @@ const MARKUP_TEMPLATE = `
 
 const plural = (n: number) => (n === 1 ? '' : 's');
 
-/** A category CARD — the drill-down entry point in the roles browser grid. */
-function categoryCardHtml(cId: string, name: string, count: number) {
+/**
+ * The heading that introduces one department's roles.
+ *
+ * It replaces the old card → panel drill-down. That layout hid every job behind
+ * two taps and a scroll, which was the whole reason the page looked empty: a
+ * visitor saw eight grey boxes and no actual work.
+ */
+function categoryHeadHtml(name: string, count: number) {
   const label = name || 'More Roles';
   return `
-      <div class="rv-cat-card" data-cat-target="${cId}" role="button" tabindex="0" aria-label="${esc(label)}, ${count} open role${plural(count)}">
-        <div>
-          <div class="rv-cat-card-count">${count} Open Role${plural(count)}</div>
-          <div class="rv-cat-card-name">${esc(label)}</div>
-        </div>
-        <span class="rv-cat-card-cta">View roles <span aria-hidden="true">&rarr;</span></span>
-      </div>`;
-}
-
-/** A per-category PANEL (hidden until its card is clicked): back link + heading + role cards. */
-function categoryPanelHtml(cId: string, name: string, count: number, cardsHtml: string) {
-  const label = name || 'More Roles';
-  return `
-      <div class="rv-cat-panel" data-cat-panel="${cId}" style="display:none;">
-        <button type="button" class="rv-cat-back" data-cat-back><span aria-hidden="true">&larr;</span> All departments</button>
-        <div class="rv-cat-panel-head">
-          <span class="rv-cat-panel-name">${esc(label)}</span>
-          <span class="rv-cat-panel-count">${count} Open Role${plural(count)}</span>
-        </div>
-        <div style="border-top:1px solid #dfe3e2;">${cardsHtml}</div>
+      <div class="rv-cat-head">
+        <h3 class="rv-cat-head-name">${esc(label)}</h3>
+        <span class="rv-cat-head-count">${count} open role${plural(count)}</span>
       </div>`;
 }
 
 /**
  * Assemble the final markup: static template + data-driven roles + options.
  *
- * When any role has a `category`, the OPEN ROLES section becomes a two-level
- * browser: a grid of category CARDS (`.rv-cat-grid`), each opening a hidden
- * per-category PANEL (`.rv-cat-panel`) that holds that category's accordion
- * cards. The card→panel drill-down (and the "All departments" back link) is
- * wired imperatively in the effect. Category order follows the order roles
- * arrive in (the API pre-sorts by managed category order); the uncategorised
- * bucket, if any, is the last card ("More Roles"). With no categories at all it
- * falls back to the original single flat list. Card ids (`r1`, `r2`, …) stay
- * globally unique across panels so the accordion targeting never collides.
+ * Every role is rendered up front, grouped under a department heading, with its
+ * detail in a one-tap accordion. Category order follows the order roles arrive
+ * in (the API pre-sorts by managed category order); the uncategorised bucket, if
+ * any, comes last under "More Roles". Card ids (`r1`, `r2`, …) stay globally
+ * unique so the accordion targeting never collides.
  */
 function buildMarkup(postings: CareerPosting[]) {
   if (postings.length === 0) {
@@ -351,6 +352,7 @@ function buildMarkup(postings: CareerPosting[]) {
       `<div style="border-top:1px solid #dfe3e2;"><div style="padding:2rem 0;color:#5f6363;font-size:14px;font-family:${INTER};">` +
       `New roles are being finalised — check back shortly, or submit an open application below.</div></div>`;
     return MARKUP_TEMPLATE
+      .replace('<!--ROLE_COUNT-->', '')
       .replace('<!--ROLE_CARDS-->', fallback)
       .replace('<!--ROLE_OPTIONS-->', roleOptionsHtml(postings));
   }
@@ -375,20 +377,18 @@ function buildMarkup(postings: CareerPosting[]) {
       if (b[0] === '' && a[0] !== '') return -1;
       return 0; // stable sort preserves insertion order
     });
-    const cards: string[] = [];
-    const panels: string[] = [];
-    entries.forEach(([category, roles], i) => {
-      const cId = `cat${i + 1}`;
-      cards.push(categoryCardHtml(cId, category, roles.length));
-      // nextCard is only invoked here, so ids stay globally unique across panels.
-      panels.push(categoryPanelHtml(cId, category, roles.length, roles.map(nextCard).join('\n')));
-    });
-    cardsBlock =
-      `<div class="rv-cat-grid">${cards.join('\n')}</div>` +
-      `<div class="rv-cat-panels">${panels.join('\n')}</div>`;
+    cardsBlock = entries
+      .map(
+        ([category, roles]) =>
+          categoryHeadHtml(category, roles.length) +
+          // nextCard is only invoked here, so ids stay globally unique.
+          `<div class="rv-cat-roles">${roles.map(nextCard).join('\n')}</div>`,
+      )
+      .join('\n');
   }
 
   return MARKUP_TEMPLATE
+    .replace('<!--ROLE_COUNT-->', ` (${postings.length})`)
     .replace('<!--ROLE_CARDS-->', cardsBlock)
     .replace('<!--ROLE_OPTIONS-->', roleOptionsHtml(postings));
 }
@@ -431,42 +431,6 @@ export default function CareersApplication({ postings = [] }: { postings?: Caree
         if (!isOpen) { body.classList.add('open'); arr.classList.add('open'); }
       }, { signal });
     });
-
-    // ── Category drill-down: card grid ⇄ per-category role panels ─────────────
-    // Clicking a category card hides the grid and reveals only that category's
-    // panel; the "All departments" back link reverses it. No-op when the page
-    // rendered the flat list (no categories) — the grid/panels aren't present.
-    const catGrid = root.querySelector<HTMLElement>('.rv-cat-grid');
-    const catPanels = all('.rv-cat-panel');
-    if (catGrid && catPanels.length) {
-      const showGrid = () => {
-        catGrid.style.display = '';
-        catPanels.forEach((p) => { p.style.display = 'none'; });
-      };
-      const showPanel = (id: string | null) => {
-        if (!id) return;
-        catGrid.style.display = 'none';
-        catPanels.forEach((p) => {
-          const match = p.getAttribute('data-cat-panel') === id;
-          p.style.display = match ? 'block' : 'none';
-          if (match) p.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-      };
-      all('.rv-cat-card').forEach((card) => {
-        const open = () => showPanel(card.getAttribute('data-cat-target'));
-        card.addEventListener('click', open, { signal });
-        card.addEventListener('keydown', (e) => {
-          const k = (e as KeyboardEvent).key;
-          if (k === 'Enter' || k === ' ') { e.preventDefault(); open(); }
-        }, { signal });
-      });
-      all('[data-cat-back]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          showGrid();
-          root.querySelector('#rv-roles')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, { signal });
-      });
-    }
 
     // ── Apply button → auto-fill role dropdown ───────────────────────────────
     all('.rv-apply-btn').forEach((btn) => {

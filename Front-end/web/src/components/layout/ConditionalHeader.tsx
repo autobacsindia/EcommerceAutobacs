@@ -11,6 +11,10 @@ import type { NavCategory } from '@/lib/navCategories';
  * Suppressed on:
  *  - `/login`, `/register` → minimal auth chrome
  *  - `/admin/*`         → admin has its own light-theme shell
+ *  - `/careers`         → the hiring page carries its own minimal bar (logo +
+ *                         Home). A job applicant is not shopping, and the store
+ *                         header's search, vehicle picker and department nav
+ *                         pushed the actual job listings below the fold.
  *
  * `navCategories` (the live category hubs, from the root layout) feed the green
  * department bar and the "All" menu.
@@ -26,6 +30,7 @@ export default function ConditionalHeader({ navCategories }: { navCategories: Na
   const hide =
     path === '/login' ||
     path === '/register' ||
+    path === '/careers' ||
     path.startsWith('/admin') ||
     path === '/team' || path.startsWith('/team/');
 

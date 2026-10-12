@@ -52,7 +52,7 @@
 
 .rv-careers-page .rv-role-card           { border-bottom: 1px solid #dfe3e2; cursor: pointer; transition: background 0.2s; }
 .rv-careers-page .rv-role-card:hover     { background: #f2f8f4; }
-.rv-careers-page .rv-role-header         { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 0; }
+.rv-careers-page .rv-role-header         { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.15rem 0; }
 .rv-careers-page .rv-role-arrow          { transition: transform 0.3s; color: #0a5c33; font-size: 20px; line-height: 1; }
 .rv-careers-page .rv-role-arrow.open     { transform: rotate(45deg); }
 .rv-careers-page .rv-role-body           { display: none; padding-bottom: 2rem; }
@@ -61,105 +61,88 @@
 
 .rv-careers-page .rv-mini-nav a:hover    { color: #0a5c33 !important; }
 
-/* ── Category drill-down: card grid ⇄ per-category role panels ──────────────
- * The OPEN ROLES section shows one card per category; clicking a card reveals
- * that category's roles (the accordion cards) and hides the grid. A back link
- * returns to the grid. Built in CareersApplication.tsx buildMarkup(). */
-.rv-careers-page #rv-roles          { scroll-margin-top: calc(var(--store-header-h) + 16px); }
-.rv-careers-page .rv-cat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-}
-.rv-careers-page .rv-cat-card {
+/* ── Minimal page chrome ────────────────────────────────────────────────────
+ * The storefront header is suppressed on /careers (ConditionalHeader), because
+ * search, a vehicle picker and a department nav are noise to someone looking
+ * for a job — and they pushed the listings far below the fold. What is left is
+ * the brand and the way back. */
+.rv-careers-page .rv-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: space-between;
-  gap: 2.5rem;
-  min-height: 168px;
-  padding: 1.75rem;
-  border: 1px solid #dfe3e2;
-  border-radius:10px;
-  background: #f2f8f4;
-  cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, transform 0.2s;
+  gap: 1rem;
+  padding: 0.75rem 2.5rem;
+  background: #121414;
 }
-.rv-careers-page .rv-cat-card:hover {
-  border-color: #0a5c33;
-  background: #f7f9f8;
-  transform: translateY(-2px);
-}
-.rv-careers-page .rv-cat-card:focus-visible {
-  outline: none;
-  border-color: #0a5c33;
-  box-shadow: 0 0 0 1px #0a5c33;
-}
-.rv-careers-page .rv-cat-card-count {
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #0a5c33;
-  margin-bottom: 0.75rem;
-}
-.rv-careers-page .rv-cat-card-name {
-  font-family: var(--font-montserrat), sans-serif;
-  font-size:24px;
-  
-  line-height: 1.05;
-  color: #0f1111;font-weight:700;letter-spacing:-0.01em;}
-.rv-careers-page .rv-cat-card-cta {
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #5f6363;
+.rv-careers-page .rv-topbar-logo img { display: block; width: 136px; height: auto; }
+.rv-careers-page .rv-topbar-home {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: color 0.2s, gap 0.2s;
+  padding: 9px 18px;
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  text-decoration: none;
+  transition: background 0.2s, border-color 0.2s;
 }
-.rv-careers-page .rv-cat-card:hover .rv-cat-card-cta { color: #0f1111; gap: 12px; }
+.rv-careers-page .rv-topbar-home:hover { background: #0a5c33; border-color: #0a5c33; }
 
-.rv-careers-page .rv-cat-panel      { scroll-margin-top: 72px; }
-.rv-careers-page .rv-cat-back {
+/* ── Hero actions — the page now states what to do, in two buttons ───────── */
+.rv-careers-page .rv-hero { padding: 3.5rem 2.5rem 3rem; background: #ffffff; }
+.rv-careers-page .rv-hero-cta { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.rv-careers-page .rv-btn-primary,
+.rv-careers-page .rv-btn-ghost {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  margin: 0.25rem 0 1.75rem;
-  padding: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
+  padding: 14px 28px;
+  border-radius: 999px;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #5f6363;
-  transition: color 0.2s, gap 0.2s;
+  text-decoration: none;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
-.rv-careers-page .rv-cat-back:hover { color: #0a5c33; gap: 12px; }
-.rv-careers-page .rv-cat-panel-head {
+.rv-careers-page .rv-btn-primary { background: #0a5c33; color: #ffffff; border: 1px solid #0a5c33; }
+.rv-careers-page .rv-btn-primary:hover { background: #084a29; border-color: #084a29; }
+.rv-careers-page .rv-btn-ghost { background: #ffffff; color: #0a5c33; border: 1px solid #0a5c33; }
+.rv-careers-page .rv-btn-ghost:hover { background: #f2f8f4; }
+
+/* ── Open roles: one visible list, grouped by department ─────────────────── */
+.rv-careers-page #rv-roles { scroll-margin-top: 72px; }
+.rv-careers-page .rv-cat-head {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 1rem;
+  margin: 2.25rem 0 0;
+  padding-bottom: 0.6rem;
+  border-bottom: 2px solid #0a5c33;
 }
-.rv-careers-page .rv-cat-panel-name {
+.rv-careers-page .rv-cat-head:first-child { margin-top: 0; }
+.rv-careers-page .rv-cat-head-name {
+  margin: 0;
   font-family: var(--font-montserrat), sans-serif;
-  font-size:21px;
-  
-  text-transform: uppercase;
-  color: #0f1111;font-weight:700;letter-spacing:-0.01em;}
-.rv-careers-page .rv-cat-panel-count {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #0f1111;
+}
+.rv-careers-page .rv-cat-head-count {
+  flex: none;
   font-family: inherit;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: #0a5c33;
 }
 
@@ -179,17 +162,23 @@
   .rv-careers-page .rv-pillars-grid { grid-template-columns: 1fr !important; }
   .rv-careers-page .rv-form-row     { grid-template-columns: 1fr !important; }
   .rv-careers-page .rv-docs-grid    { grid-template-columns: 1fr !important; }
-  .rv-careers-page .rv-cat-grid     { grid-template-columns: 1fr !important; }
+  .rv-careers-page .rv-topbar       { padding: 0.6rem 1.25rem; }
+  .rv-careers-page .rv-topbar-logo img { width: 112px; }
+  .rv-careers-page .rv-hero         { padding: 2rem 1.25rem 2.25rem; }
+  /* Full-width buttons: two half-width pills wrap awkwardly on a phone. */
+  .rv-careers-page .rv-hero-cta     { flex-direction: column; align-items: stretch; }
 }
 @media (max-width: 480px) {
-  .rv-careers-page .rv-hero-h1      { font-size: 52px !important; }
+  /* Was 52px !important, which cost four full lines of screen before any
+     content. The clamp() in the markup already sizes this sensibly. */
+  .rv-careers-page .rv-hero-h1      { font-size: 34px !important; }
   .rv-careers-page .rv-section-pad  { padding-left: 1.25rem !important; padding-right: 1.25rem !important; }
 }
 
 /* Spacing control — the standalone landing owns its own padding rhythm. */
 .rv-careers-page {
-  --rv-pad-top: 6rem;
-  --rv-pad-bottom: 6rem;
+  --rv-pad-top: 4rem;
+  --rv-pad-bottom: 4rem;
   --rv-pad-left: 2.5rem;
   --rv-pad-right: 2.5rem;
   --rv-content-width: 100%;
@@ -205,4 +194,13 @@
   max-width: var(--rv-content-width) !important;
   margin-left: auto !important;
   margin-right: auto !important;
+}
+
+/* On a phone the 4rem rhythm still adds ~10 screens of empty space across the
+   page, so tighten it rather than let the content sit that far apart. */
+@media (max-width: 640px) {
+  .rv-careers-page {
+    --rv-pad-top: 2.25rem;
+    --rv-pad-bottom: 2.25rem;
+  }
 }
