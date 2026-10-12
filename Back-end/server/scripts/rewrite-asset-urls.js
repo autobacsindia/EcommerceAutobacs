@@ -42,6 +42,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { pathToFileURL } from 'url';
 import mongoose from 'mongoose';
 import { listKeys } from '../services/storage/r2Provider.js';
 import { r2KeyFor, toObjectUrl } from '../services/storage/keys.js';
@@ -123,17 +124,43 @@ const isCloudinaryUrl = (v) =>
  * Returning '' is the signal to LEAVE THE DOCUMENT ALONE — never to guess.
  */
 const r2KeyForUrl = (url, present) => {
-  const id = publicIdFromUrl(url);
-  if (!id) return '';
-  const stem = id.replace(/\.[a-z0-9]{1,5}$/i, '');
-  const ext = (id.match(/\.([a-z0-9]{1,5})$/i) || [])[1] || '';
-  const candidates = [
-    id,
-    stem,
-    r2KeyFor({ publicId: stem, format: ext }) || '',
-    `${stem}.jpg`, `${stem}.jpeg`, `${stem}.png`, `${stem}.webp`, `${stem}.avif`, `${stem}.gif`,
-  ].filter(Boolean);
-  return candidates.find((c) => present.has(c)) || '';
+  const raw = publicIdFromUrl(url);
+  if (!raw) return '';
+
+  /*
+    A delivery URL is PERCENT-ENCODED; an R2 key is not. One folder in this
+    account has spaces in its name — `autobacs/vehicle and makes` — so its URLs
+    carry `%20` and no literal candidate could ever match the stored key. The
+    four vehicle images that survived the first production run were exactly
+    that: reported as "no R2 object" while the object sat there under a name
+    differing only by encoding, and they would have been the images still
+    pointing at Cloudinary on decommission day.
+
+    Both spellings are tried, decoded first, because the decoded form is what
+    R2 actually holds. decodeURIComponent throws on a malformed escape (a bare
+    `%` in a public_id is legal), so a failure falls back to the raw form
+    rather than taking the whole run down.
+  */
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw;
+  }
+
+  const spellings = decoded === raw ? [raw] : [decoded, raw];
+  const candidates = [];
+  for (const id of spellings) {
+    const stem = id.replace(/\.[a-z0-9]{1,5}$/i, '');
+    const ext = (id.match(/\.([a-z0-9]{1,5})$/i) || [])[1] || '';
+    candidates.push(
+      id,
+      stem,
+      r2KeyFor({ publicId: stem, format: ext }) || '',
+      `${stem}.jpg`, `${stem}.jpeg`, `${stem}.png`, `${stem}.webp`, `${stem}.avif`, `${stem}.gif`,
+    );
+  }
+  return candidates.filter(Boolean).find((c) => present.has(c)) || '';
 };
 
 /**
@@ -247,15 +274,46 @@ const runRollback = async (db, file) => {
 };
 
 const main = async () => {
-  // autoIndex:false — the local .env points at PROD; a bare connect() would
-  // build every declared index there.
-  await mongoose.connect(process.env.MONGODB_URI || process.env.MONGO_URI, { autoIndex: false });
+  /*
+    WHICH CLUSTER? Two variable names reach the same setting, and they disagree
+    far too easily: the server reads MONGO_URI (config/db.js) while this script
+    preferred MONGODB_URI. Under `railway run` the service supplies only
+    MONGO_URI, so dotenv filled MONGODB_URI from the developer's local .env —
+    and a production run silently planned 1,030 rewrites against the TEST
+    cluster instead. Nothing in the output said so.
+
+    So: refuse when both are set and point at different hosts, and print the
+    host either way. The operator should never have to infer which database
+    they are about to rewrite.
+  */
+  const uriHost = (u) =>
+    String(u || '')
+      .replace(/^mongodb(\+srv)?:\/\//, '')
+      .replace(/^.*@/, '')          // strip credentials — never printed
+      .split(/[/?]/)[0] || '(unknown)';
+
+  const { MONGODB_URI, MONGO_URI } = process.env;
+  if (MONGODB_URI && MONGO_URI && uriHost(MONGODB_URI) !== uriHost(MONGO_URI)) {
+    console.error('✋ ABORT: MONGODB_URI and MONGO_URI point at DIFFERENT clusters.');
+    console.error(`   MONGODB_URI → ${uriHost(MONGODB_URI)}`);
+    console.error(`   MONGO_URI   → ${uriHost(MONGO_URI)}`);
+    console.error('   Unset one, or run without dotenv so only the host env applies:');
+    console.error('     railway run node scripts/rewrite-asset-urls.js');
+    process.exit(1);
+  }
+
+  const uri = MONGODB_URI || MONGO_URI;
+  // autoIndex:false — this may point at PROD; a bare connect() would build
+  // every declared index there.
+  await mongoose.connect(uri, { autoIndex: false });
   const db = mongoose.connection.db;
 
   bar('═');
   console.log('REWRITE ASSET URLS — Cloudinary → R2');
   bar('═');
   console.log(`mode       : ${APPLY ? '*** APPLY (writing) ***' : 'DRY RUN (no writes)'}`);
+  console.log(`cluster    : ${uriHost(uri)}`);
+  console.log(`database   : ${db.databaseName}`);
   console.log(`collections: ${ONLY || Object.keys(TARGETS).join(', ')}`);
   if (LIMIT !== Infinity) console.log(`limit      : ${LIMIT} document(s) this run`);
   console.log(`delivery   : ${process.env.R2_PUBLIC_BASE_URL || '(UNSET — cannot run)'}`);
@@ -398,4 +456,18 @@ const main = async () => {
 
 const doc_id = (id) => new mongoose.Types.ObjectId(id);
 
-main().catch((e) => { console.error('[Rewrite] fatal:', e); process.exit(1); });
+/*
+  Only run when invoked as a command. Without this guard, importing the module
+  to unit-test the URL→key matcher would connect to whatever cluster the
+  environment points at and start a migration as a side effect — the same
+  reasoning as scripts/audit-index-drift.js.
+*/
+const invokedDirectly =
+  process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+
+if (invokedDirectly) {
+  main().catch((e) => { console.error('[Rewrite] fatal:', e); process.exit(1); });
+}
+
+// Exported for tests only; the CLI path above is unaffected.
+export { publicIdFromUrl, r2KeyForUrl };
