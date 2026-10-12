@@ -55,11 +55,15 @@ class StockNotificationRequestRepository extends BaseRepository {
    * `{ request, created }` — `created` is read straight off the write-result
    * metadata (updatedExisting), so the caller needs no separate pre-read to tell
    * a fresh insert from an existing match.
+   *
+   * `contact` ({ email, phone }) is snapshotted on INSERT only, via $setOnInsert
+   * — a repeat signup must not rewrite the original row.
    */
-  async upsertPending(filter, email) {
+  async upsertPending(filter, contact = {}) {
+    const { email, phone } = contact;
     const res = await this.model.findOneAndUpdate(
       filter,
-      { $setOnInsert: { ...filter, email, source: 'pdp' } },
+      { $setOnInsert: { ...filter, email, phone, source: 'pdp' } },
       { new: true, upsert: true, setDefaultsOnInsert: true, includeResultMetadata: true }
     );
     return { request: res.value, created: !res.lastErrorObject?.updatedExisting };
@@ -123,8 +127,10 @@ class StockNotificationRequestRepository extends BaseRepository {
   findRequesters(query) {
     return this.model
       .find(query)
-      .select('user email status createdAt notifiedAt')
-      .populate('user', 'name email')
+      .select('user email phone status createdAt notifiedAt')
+      // The live user is populated as well as the snapshot so a row written
+      // before `phone` existed still shows the customer's current number.
+      .populate('user', 'name email phone')
       .sort({ createdAt: 1 })
       .lean();
   }

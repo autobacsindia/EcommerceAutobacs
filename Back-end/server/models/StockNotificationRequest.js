@@ -53,6 +53,14 @@ const StockNotificationRequestSchema = new mongoose.Schema({
     trim: true,
     lowercase: true,
   },
+  // Phone snapshot, same purpose: the admin list is a call sheet, and reading it
+  // off the request means a row still shows a number after the account is
+  // deleted. Display only — it is never used to route a notification, so a blank
+  // one (legacy rows, written before this field existed) changes no behaviour.
+  phone: {
+    type: String,
+    trim: true,
+  },
   status: {
     type: String,
     enum: ['pending', 'notified', 'cancelled'],
