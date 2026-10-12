@@ -4,7 +4,8 @@ import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { validateProfileUpdate } from "../middleware/validationMiddleware.js";
 import { uploadSingle, handleMulterError } from "../middleware/uploadMiddleware.js";
-import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
+import { putPublicAsset } from "../services/storage/publicUploads.js";
+import { deleteHostedImages } from "../services/storage/publicImageDeletes.js";
 
 const router = express.Router();
 
@@ -104,17 +105,35 @@ router.post(
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Delete old avatar from Cloudinary if it exists
-    if (user.avatar?.public_id) {
-      await deleteFromCloudinary(user.avatar.public_id);
-    }
+    /*
+      Upload FIRST, delete the old avatar only once the new one is stored. The
+      reverse order leaves the user with no avatar at all whenever the upload
+      fails — and their old one is already unrecoverable.
+    */
+    const old = user.avatar?.public_id
+      ? { public_id: user.avatar.public_id, url: user.avatar.url }
+      : null;
 
-    const uploaded = await uploadToCloudinary(req.file.buffer, {
+    const uploaded = await putPublicAsset(req.file.buffer, {
       folder: 'autobacs/users',
+      contentType: req.file.mimetype,
     });
 
     user.avatar = { url: uploaded.secure_url, public_id: uploaded.public_id };
     await user.save();
+
+    /*
+      Deferred delete: the save commits FIRST, and only then is the old avatar
+      removed. Deleting before the write means a failed save leaves the user
+      with their old avatar destroyed and the new one unreferenced. Same order
+      productImageController already uses for product imagery.
+
+      Routed by the old ref's own url, so an avatar stored before the provider
+      flip is deleted from the store that actually holds it.
+    */
+    if (old && old.public_id !== uploaded.public_id) {
+      await deleteHostedImages([old]);
+    }
 
     res.json({
       success: true,
@@ -137,7 +156,7 @@ router.delete(
     }
 
     if (user.avatar?.public_id) {
-      await deleteFromCloudinary(user.avatar.public_id);
+      await deleteHostedImages([{ public_id: user.avatar.public_id, url: user.avatar.url }]);
     }
 
     user.avatar = { url: '', public_id: '' };

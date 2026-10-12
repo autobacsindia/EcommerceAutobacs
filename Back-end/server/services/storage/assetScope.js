@@ -49,6 +49,13 @@ export const PUBLIC_PREFIXES = [
   'autobacs/site',
   'autobacs/articles',
   'autobacs/homepage asset',
+  // Customer avatars. Public because that is what they already are: the avatar
+  // url is stored on the user and rendered straight from the delivery host, so
+  // classifying them private would break every profile picture rather than
+  // protect anything. No avatar exists in Cloudinary today — the folder is
+  // listed so the FIRST one uploaded after the provider flip is scoped rather
+  // than refused by the fail-closed default.
+  'autobacs/users',
   'press-coverage',
 ];
 

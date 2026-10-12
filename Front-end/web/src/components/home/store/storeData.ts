@@ -13,7 +13,15 @@
 import { serverFetch } from '@/lib/server-api';
 
 const REVALIDATE = 300;
-const TAGS = { products: 'home:products', categories: 'home:categories' };
+/*
+  `brands` is listed here because the backend has always emitted `home:brands`
+  on a brand create/update (routes/brands.js) — but the brand strip below was
+  tagged `home:products`, so that signal reached only the retired
+  components/home/redesign/homeData.ts. Nothing invalidated the live homepage,
+  and an edited logo stayed visible until the 300s window lapsed. Seen for real
+  when a brand logo was repointed off Cloudinary and the old one kept serving.
+*/
+const TAGS = { products: 'home:products', categories: 'home:categories', brands: 'home:brands' };
 
 export interface StoreProduct {
   id: string;
@@ -158,7 +166,9 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
 
   const brandsP = safe(async () => {
     const res = await serverFetch<{ brands?: { name: string; slug?: string; logo?: string | null; productCount?: number }[] }>(
-      `/products/brands?limit=200`, { next: { revalidate: REVALIDATE, tags: [TAGS.products] } });
+      // Both tags: a brand edit changes the name/logo, a product change alters
+      // the counts this strip sorts by.
+      `/products/brands?limit=200`, { next: { revalidate: REVALIDATE, tags: [TAGS.brands, TAGS.products] } });
     // EVERY brand, most products first — logos where we have them, the name
     // otherwise. The strip scrolls sideways in two rows, so none is left out.
     return (res.brands ?? [])

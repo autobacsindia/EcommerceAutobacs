@@ -17,7 +17,8 @@ import auditLogger from "../services/auditLogger.js";
 import { httpCache } from "../middleware/httpCache.js";
 import { PRIVATE_NO_STORE } from "../config/cacheProfiles.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles, concurrentUploadGuard } from "../middleware/uploadMiddleware.js";
-import { uploadToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelpers.js";
+import { putPublicAsset } from "../services/storage/publicUploads.js";
+import { deleteHostedImages } from "../services/storage/publicImageDeletes.js";
 
 const router = express.Router();
 
@@ -232,11 +233,14 @@ router.post(
       });
     }
 
-    // Image: prefer an uploaded file (→ Cloudinary); fall back to a pasted URL
-    // string for backward compatibility. Undefined when neither is provided.
+    // Image: prefer an uploaded file (→ the active store); fall back to a pasted
+    // URL string for backward compatibility. Undefined when neither is provided.
     let image;
     if (req.file) {
-      const uploaded = await uploadToCloudinary(req.file.buffer, { folder: 'autobacs/vehicle and makes' });
+      const uploaded = await putPublicAsset(req.file.buffer, {
+        folder: 'autobacs/vehicle and makes',
+        contentType: req.file.mimetype,
+      });
       image = { url: uploaded.secure_url, public_id: uploaded.public_id, alt: imageAlt || `${make} ${model}` };
     } else if (req.body.image) {
       image = { url: req.body.image, alt: imageAlt || `${make} ${model}` };
@@ -285,33 +289,47 @@ router.put(
     if (slug !== undefined)  vehicle.slug = slug;
     if (isActive !== undefined) vehicle.isActive = isActive === true || isActive === 'true';
 
+    /*
+      The image the save replaces, deleted only AFTER the save commits.
+
+      Upload-before-delete stops a failed upload leaving the vehicle pointing
+      at a deleted image; delete-after-save stops a failed save destroying the
+      old image while the new one goes unrecorded.
+    */
+    let supersededImage = null;
+
     if (req.file) {
-      // Upload the new asset FIRST, then delete the old one only after success —
-      // so a failed upload can never leave the vehicle pointing at a deleted image.
-      const oldPublicId = vehicle.image?.public_id;
-      const uploaded = await uploadToCloudinary(req.file.buffer, { folder: 'autobacs/vehicle and makes' });
+      const old = vehicle.image?.public_id
+        ? { public_id: vehicle.image.public_id, url: vehicle.image.url }
+        : null;
+      const uploaded = await putPublicAsset(req.file.buffer, {
+        folder: 'autobacs/vehicle and makes',
+        contentType: req.file.mimetype,
+      });
       vehicle.image = {
         url: uploaded.secure_url,
         public_id: uploaded.public_id,
         alt: imageAlt ?? vehicle.image?.alt ?? `${vehicle.make} ${vehicle.model}`,
       };
-      if (oldPublicId && oldPublicId !== uploaded.public_id) {
-        await deleteFromCloudinary(oldPublicId);
+      if (old && old.public_id !== uploaded.public_id) {
+        supersededImage = old;
       }
     } else if (typeof req.body.image === 'string') {
       // Pasted URL string (no file). Guard the type so a legacy JSON {url,alt}
       // object can't be coerced into image.url as "[object Object]".
       const newUrl = req.body.image;
       const sameUrl = newUrl === vehicle.image?.url;
-      const oldPublicId = vehicle.image?.public_id;
+      const old = vehicle.image?.public_id
+        ? { public_id: vehicle.image.public_id, url: vehicle.image.url }
+        : null;
       vehicle.image = {
         url: newUrl,
-        public_id: sameUrl ? oldPublicId : undefined,
+        public_id: sameUrl ? old?.public_id : undefined,
         alt: imageAlt ?? vehicle.image?.alt ?? `${vehicle.make} ${vehicle.model}`,
       };
-      // Different URL replacing an uploaded asset — delete the orphan.
-      if (!sameUrl && oldPublicId) {
-        await deleteFromCloudinary(oldPublicId);
+      // Different URL replacing an uploaded asset — drop the orphan after save.
+      if (!sameUrl && old) {
+        supersededImage = old;
       }
     } else if (imageAlt !== undefined && vehicle.image) {
       // Only the alt text changed.
@@ -319,6 +337,11 @@ router.put(
     }
 
     await vehicle.save();
+
+    // Routed by the OLD ref's own url, so an image stored before the provider
+    // flip is deleted from the store that actually holds it.
+    if (supersededImage) await deleteHostedImages([supersededImage]);
+
     invalidatePublicCache('vehicles');
 
     res.json({
@@ -392,12 +415,13 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
   await vehicleRepository.deleteById(vehicle._id);
 
   // Best effort from here on: the vehicle is gone, and neither a stranded
-  // Cloudinary asset nor a missed purge justifies failing a completed delete.
+  // asset nor a missed purge justifies failing a completed delete.
+  // deleteHostedImages never throws by contract; the try/catch stays as a belt.
   if (vehicle.image?.public_id) {
     try {
-      await deleteFromCloudinary(vehicle.image.public_id);
+      await deleteHostedImages([{ public_id: vehicle.image.public_id, url: vehicle.image.url }]);
     } catch (err) {
-      console.warn(`[vehicles] Cloudinary cleanup failed for ${vehicle.image.public_id}:`, err.message);
+      console.warn(`[vehicles] image cleanup failed for ${vehicle.image.public_id}:`, err.message);
     }
   }
 
