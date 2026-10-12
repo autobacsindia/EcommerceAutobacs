@@ -56,21 +56,37 @@ export const spacing = {
 } as const;
 
 /**
- * Montserrat, as on the website. Weight is chosen by FONT FAMILY, not
- * fontWeight: on Android fontWeight is ignored for custom fonts, so a "bold"
- * heading would silently render regular.
+ * TWO faces, exactly as the website ships them: DM Sans for body and UI text,
+ * Montserrat for headings only.
+ *
+ * The app used to set Montserrat on everything "as on the website", which was
+ * simply wrong — the site's `body` computes to DM Sans and only `h1`-`h3` to
+ * Montserrat. It is the single biggest reason the app did not read like the
+ * site: Montserrat is a display face, and at the 13-15px of a product card it
+ * sits heavier and more cramped than the DM Sans beside it on the web.
+ *
+ * Weight is chosen by FONT FAMILY, not fontWeight: on Android fontWeight is
+ * ignored for custom fonts, so a "bold" heading would silently render regular.
  */
 export const font = {
-  regular: 'Montserrat_400Regular',
-  medium: 'Montserrat_500Medium',
+  /** Body / UI — DM Sans. */
+  regular: 'DMSans_400Regular',
+  medium: 'DMSans_500Medium',
+  bold: 'DMSans_700Bold',
+  /** Headings — Montserrat. `semibold` stays Montserrat for section titles. */
   semibold: 'Montserrat_600SemiBold',
-  bold: 'Montserrat_700Bold',
+  heading: 'Montserrat_700Bold',
   extrabold: 'Montserrat_800ExtraBold',
 } as const;
 
+/**
+ * Sizes measured off the website at 375dp: its page h1 is Montserrat 700 at
+ * 23/27.6 with -0.23px tracking, body 16, a product title 14/19.25 at weight
+ * 500. Matching those is what makes a screenshot of the two sit side by side.
+ */
 export const type = {
-  h1: { fontFamily: font.bold, fontSize: 26, lineHeight: 32, color: colors.ink },
-  h2: { fontFamily: font.bold, fontSize: 20, lineHeight: 26, color: colors.ink },
+  h1: { fontFamily: font.heading, fontSize: 23, lineHeight: 28, letterSpacing: -0.23, color: colors.ink },
+  h2: { fontFamily: font.heading, fontSize: 20, lineHeight: 25, letterSpacing: -0.2, color: colors.ink },
   h3: { fontFamily: font.semibold, fontSize: 17, lineHeight: 23, color: colors.ink },
   body: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: colors.ink2 },
   small: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: colors.muted },
@@ -78,13 +94,19 @@ export const type = {
   price: { fontFamily: font.bold, fontSize: 18, color: colors.ink },
 } as const;
 
-/** Soft elevation that reads the same on both platforms. */
+/**
+ * Elevation matching the website's card shadow
+ * (`0 1px 3px rgba(0,0,0,.1), 0 1px 2px -1px rgba(0,0,0,.1)`) — much tighter
+ * than the soft 10px blur the app used, which read as a floating panel rather
+ * than a card sitting on the page. The site pairs it with a 1px #dfe3e2
+ * border; `cardBorder` below is that border, so the two always travel together.
+ */
 export const shadow = {
   card: {
-    shadowColor: '#0f1111',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
+    shadowColor: '#000000',
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
     elevation: 2,
   },
   raised: {
@@ -94,6 +116,14 @@ export const shadow = {
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
   },
+} as const;
+
+/** The website's card: 12px radius, hairline border, the shadow above. */
+export const cardSurface = {
+  backgroundColor: colors.card,
+  borderRadius: 12,
+  borderWidth: 1,
+  borderColor: colors.line,
 } as const;
 
 /** Indian rupee formatting, matching the website (₹1,68,550 — no decimals). */

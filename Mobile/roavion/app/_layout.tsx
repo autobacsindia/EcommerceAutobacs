@@ -1,7 +1,7 @@
 /**
  * App root: fonts, providers and the navigation stack.
  *
- * Nothing renders until Montserrat is loaded, so text never flashes in the
+ * Nothing renders until both fonts are loaded, so text never flashes in the
  * system font and then jump when the brand font arrives.
  */
 import { useEffect } from 'react';
@@ -18,6 +18,11 @@ import {
   Montserrat_700Bold,
   Montserrat_800ExtraBold,
 } from '@expo-google-fonts/montserrat';
+import {
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_700Bold,
+} from '@expo-google-fonts/dm-sans';
 import { AppProvider } from '../src/store';
 import { colors, font } from '../src/theme';
 
@@ -33,6 +38,14 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
+    // DM Sans for body text, Montserrat for headings — the website's exact
+    // pairing. The app previously set Montserrat on everything, which is the
+    // single biggest reason it did not read like the site: Montserrat is a
+    // display face, and at 13-15px in a product card it looks heavier and more
+    // cramped than the DM Sans the website actually ships.
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_700Bold,
     Montserrat_400Regular,
     Montserrat_500Medium,
     Montserrat_600SemiBold,

@@ -10,10 +10,14 @@
  * Everything shown is a value the server sent. The card never computes a
  * discount or a total of its own.
  */
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { colors, font, inr, radius, shadow, spacing } from '../theme';
 import type { Product } from '../api/catalogue';
+import { useApp } from '../store';
 import { Photo, Stars } from './ui';
 
 export const CARD_WIDTH = 172;
@@ -32,9 +36,33 @@ export default function ProductCard({
   rank?: number;
 }) {
   const router = useRouter();
+  const { addItem } = useApp();
+  const [adding, setAdding] = useState(false);
   const open = () => router.push(`/product/${product.slug}`);
   const soldOut = product.stock === 'out';
   const onSale = product.discountPercent > 0 && !!product.mrp;
+
+  /*
+    Quick add, as on the website's card.
+
+    The listing payload carries no variant field, so the card cannot tell
+    whether a product needs an option chosen. Rather than guess — adding the
+    wrong variant silently is the one failure a cart must never have — it asks
+    the server, and ON ANY REFUSAL opens the product page so the customer
+    finishes the choice there. The fast path stays one tap; the ambiguous one
+    lands exactly where it can be resolved.
+  */
+  const quickAdd = async () => {
+    setAdding(true);
+    try {
+      await addItem(product.id, 1);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch {
+      open();
+    } finally {
+      setAdding(false);
+    }
+  };
 
   if (variant === 'row') {
     return (
@@ -60,16 +88,31 @@ export default function ProductCard({
     );
   }
 
+  /*
+    The root is a View, not a Pressable. The quick-add button has to sit beside
+    the card's own tap target, not inside it: a button nested in a button is
+    invalid on web (React logs it, and the DOM reparents the markup) and
+    ambiguous on native, where the outer press can swallow the inner one. So
+    the card's tap target wraps only the image and the text, and the add button
+    is its sibling.
+  */
   return (
-    <Pressable
-      onPress={open}
-      accessibilityRole="button"
-      accessibilityLabel={product.name}
-      android_ripple={{ color: 'rgba(10,92,51,0.07)' }}
-      style={({ pressed }) => [s.tile, { width }, pressed && s.pressed]}
-    >
+    <View style={[s.tile, { width }]}>
+      <Pressable
+        onPress={open}
+        accessibilityRole="button"
+        accessibilityLabel={product.name}
+        android_ripple={{ color: 'rgba(10,92,51,0.07)' }}
+        style={({ pressed }) => pressed && s.pressed}
+      >
       <View style={s.tileImageWrap}>
-        <Photo uri={product.image} style={[s.tileImage, { height: width * 0.86 }]} />
+        <Photo uri={product.image} style={[s.tileImage, { height: width * 0.98 }]} />
+        {/* Discount sits ON the image, top-left, as on the website. */}
+        {onSale && (
+          <View style={s.badge}>
+            <Text style={s.badgeText}>-{product.discountPercent}%</Text>
+          </View>
+        )}
         {rank ? (
           <View style={s.rank}>
             <Text style={s.rankText}>#{rank} Best seller</Text>
@@ -83,23 +126,34 @@ export default function ProductCard({
       </View>
 
       <View style={s.tileBody}>
-        {onSale && (
-          <View style={s.dealRow}>
-            <View style={s.dealPill}>
-              <Text style={s.dealPillText}>-{product.discountPercent}%</Text>
-            </View>
-            <Text style={s.dealWord}>Deal</Text>
-          </View>
-        )}
         <Text style={s.name} numberOfLines={2}>{product.name}</Text>
         <Stars rating={product.rating} reviews={product.reviews} />
-        <View style={s.priceLine}>
-          <Text style={s.price}>{inr(product.price)}</Text>
-          {onSale ? <Text style={s.mrp}>M.R.P.: {inr(product.mrp!)}</Text> : null}
-        </View>
-        {!!product.brand && <Text style={s.by} numberOfLines={1}>by {product.brand}</Text>}
       </View>
-    </Pressable>
+      </Pressable>
+
+      <View style={[s.tileBody, s.tileFootWrap]}>
+        <View style={s.tileFoot}>
+          <View style={s.tilePrices}>
+            <Text style={s.price}>{inr(product.price)}</Text>
+            {onSale ? <Text style={s.mrp}>{inr(product.mrp!)}</Text> : null}
+          </View>
+          {!soldOut && (
+            <Pressable
+              onPress={quickAdd}
+              disabled={adding}
+              hitSlop={6}
+              style={s.add}
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${product.name} to cart`}
+            >
+              {adding
+                ? <ActivityIndicator size="small" color={colors.white} />
+                : <Ionicons name="bag-handle" size={18} color={colors.white} />}
+            </Pressable>
+          )}
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -108,7 +162,7 @@ const s = StyleSheet.create({
 
   tile: {
     backgroundColor: colors.card,
-    borderRadius: radius.md,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.line,
     overflow: 'hidden',
@@ -116,7 +170,8 @@ const s = StyleSheet.create({
   },
   tileImageWrap: { backgroundColor: colors.white },
   tileImage: { width: '100%' },
-  tileBody: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: 3 },
+  tileBody: { paddingHorizontal: spacing.md, paddingTop: spacing.sm, gap: 3 },
+  tileFootWrap: { paddingTop: 0, paddingBottom: spacing.md },
 
   rank: {
     position: 'absolute',
@@ -141,10 +196,29 @@ const s = StyleSheet.create({
   },
   soldOverlayText: { fontFamily: font.bold, fontSize: 12, color: colors.red },
 
-  dealRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 1 },
-  dealPill: { backgroundColor: colors.red, paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 4 },
-  dealPillText: { fontFamily: font.bold, fontSize: 11, color: colors.white },
-  dealWord: { fontFamily: font.semibold, fontSize: 11.5, color: colors.ink2 },
+  /* Measured off the website: #cc0c39, 11px bold, radius 6, padding 4x8. */
+  badge: {
+    position: 'absolute',
+    top: spacing.sm,
+    left: spacing.sm,
+    backgroundColor: colors.red,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  badgeText: { fontFamily: font.bold, fontSize: 11, color: colors.white },
+
+  tileFoot: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.sm },
+  tilePrices: { flex: 1 },
+  /* The site's green circle, 40x40, bottom-right of the card. */
+  add: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    backgroundColor: colors.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   row: {
     flexDirection: 'row',
@@ -159,10 +233,10 @@ const s = StyleSheet.create({
   rowImage: { width: 92, height: 92, borderRadius: radius.sm },
   rowBody: { flex: 1, gap: 3, justifyContent: 'center' },
 
-  name: { fontFamily: font.medium, fontSize: 13.5, lineHeight: 18, color: colors.ink },
+  name: { fontFamily: font.medium, fontSize: 14, lineHeight: 19.25, color: colors.ink },
   priceLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2, flexWrap: 'wrap' },
-  price: { fontFamily: font.extrabold, fontSize: 17, color: colors.ink },
-  mrp: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted, textDecorationLine: 'line-through' },
+  price: { fontFamily: font.bold, fontSize: 18, color: colors.ink },
+  mrp: { fontFamily: font.regular, fontSize: 12, color: colors.muted, textDecorationLine: 'line-through' },
   by: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted },
   soldOut: { fontFamily: font.semibold, fontSize: 11.5, color: colors.red },
 });

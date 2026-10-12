@@ -58,6 +58,8 @@ export interface Category {
   slug: string;
   image: string;
   parentId: string | null;
+  /** The one-line blurb the website prints under a department heading. */
+  description: string;
 }
 
 export interface Brand {
@@ -160,7 +162,10 @@ export async function fetchOffers(limit = 20, signal?: AbortSignal): Promise<Pro
 
 export async function fetchCategories(signal?: AbortSignal): Promise<Category[]> {
   const res = await api.get<{
-    categories?: { _id: string; name: string; slug?: string; image?: { url?: string }; parent?: unknown }[];
+    categories?: {
+      _id: string; name: string; slug?: string; description?: string;
+      image?: { url?: string }; parent?: unknown;
+    }[];
   }>('/categories?limit=200&v=2', signal);
   return (res.categories ?? [])
     .filter((c) => !!c.name && !!c.slug)
@@ -169,6 +174,7 @@ export async function fetchCategories(signal?: AbortSignal): Promise<Category[]>
       name: c.name,
       slug: c.slug as string,
       image: c.image?.url ?? '',
+      description: c.description ?? '',
       parentId: c.parent ? String(typeof c.parent === 'string' ? c.parent : (c.parent as { _id: string })._id) : null,
     }));
 }
