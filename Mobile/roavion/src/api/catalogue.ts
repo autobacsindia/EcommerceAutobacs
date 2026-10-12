@@ -104,12 +104,17 @@ const listable = (p: Product) => !!p.name && p.price > 0 && !!p.image;
 export interface ProductQuery {
   search?: string;
   category?: string;
-  brand?: string;
+  /** One or more brand NAMES. The API repeats the param for a multi-select. */
+  brand?: string | string[];
   vehicleMake?: string;
   vehicleModel?: string;
   sort?: string;
   minPrice?: number;
   maxPrice?: number;
+  /** Minimum star ratings to include, e.g. [4] for "4 stars and up". */
+  rating?: number[];
+  /** Hide anything the admin has marked out of stock. */
+  inStock?: boolean;
   page?: number;
   limit?: number;
 }
@@ -120,12 +125,16 @@ export async function fetchProducts(q: ProductQuery = {}, signal?: AbortSignal) 
   if (q.page && q.page > 1) params.set('page', String(q.page));
   if (q.search) params.set('search', q.search);
   if (q.category) params.set('category', q.category);
-  if (q.brand) params.set('brand', q.brand);
+  // Repeated rather than comma-joined: the API reads brand as a list, and a
+  // brand whose own name contains a comma would otherwise split into two.
+  for (const b of Array.isArray(q.brand) ? q.brand : q.brand ? [q.brand] : []) params.append('brand', b);
   if (q.vehicleMake) params.set('vehicleMake', q.vehicleMake);
   if (q.vehicleModel) params.set('vehicleModel', q.vehicleModel);
   if (q.sort) params.set('sort', q.sort);
   if (q.minPrice != null) params.set('minPrice', String(q.minPrice));
   if (q.maxPrice != null) params.set('maxPrice', String(q.maxPrice));
+  for (const r of q.rating ?? []) params.append('rating', String(r));
+  if (q.inStock) params.set('inStock', 'true');
 
   const res = await api.get<{ products?: RawProduct[]; total?: number; pages?: number }>(
     `/products?${params}`,
@@ -248,4 +257,83 @@ export async function fetchTestimonials(limit = 8, signal?: AbortSignal): Promis
       verified: !!t.isVerifiedPurchase,
       productName: t.product?.name,
     }));
+}
+
+// ── Facets ───────────────────────────────────────────────────────────────────
+/**
+ * The filter options that actually exist for a given query, with counts.
+ *
+ * `/products/facets` takes the SAME parameters as `/products`, so the options
+ * it returns describe the result set the customer is looking at — not the
+ * whole catalogue. That is what makes a count trustworthy: "Bushranger 14"
+ * means fourteen here, and a brand with nothing in this department never
+ * appears at all, so no filter can lead to an empty grid.
+ */
+export interface Facets {
+  total: number;
+  brands: { value: string; count: number }[];
+  vehicleMakes: { value: string; count: number }[];
+  vehicleModels: { value: string; make: string; count: number }[];
+  ratings: { value: number; count: number }[];
+  availability: { value: string; label: string; count: number }[];
+  price: { min: number; max: number } | null;
+}
+
+export async function fetchFacets(q: ProductQuery = {}, signal?: AbortSignal): Promise<Facets> {
+  const params = new URLSearchParams();
+  if (q.search) params.set('search', q.search);
+  if (q.category) params.set('category', q.category);
+  for (const b of Array.isArray(q.brand) ? q.brand : q.brand ? [q.brand] : []) params.append('brand', b);
+  if (q.vehicleMake) params.set('vehicleMake', q.vehicleMake);
+  if (q.vehicleModel) params.set('vehicleModel', q.vehicleModel);
+  if (q.minPrice != null) params.set('minPrice', String(q.minPrice));
+  if (q.maxPrice != null) params.set('maxPrice', String(q.maxPrice));
+  for (const r of q.rating ?? []) params.append('rating', String(r));
+  if (q.inStock) params.set('inStock', 'true');
+
+  /*
+    The payload is enveloped: { success, facets: { ... } }. Reading the fields
+    off the top level silently yields an empty filter with "Show 0 results" —
+    a 200 response that looks like a working request and an empty catalogue.
+    `?? envelope` keeps this working if the envelope is ever dropped.
+  */
+  type FacetBody = {
+    total?: number;
+    brands?: { value?: string; name?: string; count?: number }[];
+    vehicleMakes?: { value?: string; count?: number }[];
+    vehicleModels?: { value?: string; make?: string; count?: number }[];
+    ratings?: { value?: number; count?: number }[];
+    availability?: { value?: string; label?: string; count?: number }[];
+    price?: { min?: number; max?: number };
+  };
+  const envelope = await api.get<{ facets?: FacetBody } & FacetBody>(
+    `/products/facets?${params}`,
+    signal,
+  );
+  const res: FacetBody = envelope.facets ?? envelope;
+
+  const list = <T,>(v: T[] | undefined) => (Array.isArray(v) ? v : []);
+  return {
+    total: res.total ?? 0,
+    brands: list(res.brands)
+      .map((b) => ({ value: String(b.value ?? b.name ?? ''), count: Number(b.count ?? 0) }))
+      .filter((b) => b.value),
+    vehicleMakes: list(res.vehicleMakes)
+      .map((m) => ({ value: String(m.value ?? ''), count: Number(m.count ?? 0) }))
+      .filter((m) => m.value),
+    vehicleModels: list(res.vehicleModels)
+      .map((m) => ({ value: String(m.value ?? ''), make: String(m.make ?? ''), count: Number(m.count ?? 0) }))
+      .filter((m) => m.value),
+    ratings: list(res.ratings)
+      .map((r) => ({ value: Number(r.value ?? 0), count: Number(r.count ?? 0) }))
+      .filter((r) => r.value > 0),
+    availability: list(res.availability)
+      .map((a) => ({ value: String(a.value ?? ''), label: String(a.label ?? a.value ?? ''), count: Number(a.count ?? 0) }))
+      .filter((a) => a.value),
+    // A single-product result has min === max, which is not a range worth drawing.
+    price:
+      res.price && Number.isFinite(res.price.min) && Number.isFinite(res.price.max) && res.price.max! > res.price.min!
+        ? { min: Math.floor(res.price.min!), max: Math.ceil(res.price.max!) }
+        : null,
+  };
 }
