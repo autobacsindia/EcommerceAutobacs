@@ -16,6 +16,7 @@ import RichTextEditor from '@/components/ui/RichTextEditor';
 import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
 import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } from '@/components/admin/VariantsEditor';
 import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
+import SlugField from '@/components/admin/SlugField';
 
 type Category = CategoryOption;
 
@@ -58,6 +59,7 @@ export default function CreateProductPage() {
 
   const [formData, setFormData] = useState({
     name: '',
+    slug: '',
     description: '',
     shortDescription: '',
     price: '',
@@ -198,6 +200,7 @@ export default function CreateProductPage() {
 
       // ── Scalar fields ──────────────────────────────────────────────────
       fd.append('name',             formData.name);
+      if (formData.slug)             fd.append('slug',             formData.slug);
       fd.append('description',      formData.description);
       fd.append('productType',      productType);
       fd.append('isActive',         String(formData.isActive));
@@ -339,7 +342,13 @@ export default function CreateProductPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            
+
+            <SlugField
+              title={formData.name}
+              value={formData.slug}
+              onChange={(slug) => setFormData((f) => ({ ...f, slug }))}
+            />
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Short Description

@@ -133,7 +133,13 @@ const nextConfig: NextConfig = {
     //   • Products & categories had different WooCommerce bases → permanent redirect.
     //   • The new blog detail path forwards to the canonical root URL (no duplicate content).
     return [
-      { source: '/product/:slug', destination: '/products/:slug', permanent: true },
+      // Every /product* path, not just a single-segment one. `:slug` alone
+      // missed the bare `/product` (404) and anything nested such as
+      // `/product/winch/bushranger`, which WooCommerce and old ad landing pages
+      // both produced. `:slug*` matches zero or more segments, so one rule now
+      // covers the lot.
+      { source: '/product', destination: '/products', permanent: true },
+      { source: '/product/:slug*', destination: '/products/:slug*', permanent: true },
       { source: '/product-category/:slug*', destination: '/categories/:slug*', permanent: true },
       { source: '/media/blogs/:slug', destination: '/:slug', permanent: true },
       // Blog (+ gallery/videos) moved out of /media into its own /blog section.

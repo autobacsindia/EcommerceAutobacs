@@ -4,12 +4,43 @@ import ProductRow from './ProductRow';
 import BrandStrip from './BrandStrip';
 import TrustStrip from './TrustStrip';
 import ReviewStrip from './ReviewStrip';
-import { discountPct, type StoreHomeData } from './storeData';
+import { discountPct, type StoreHomeData, type StoreProduct } from './storeData';
 import './store.css';
 
-/** Banner slides composed from live catalogue content (see HeroBanners). */
-function buildSlides(data: StoreHomeData): BannerSlide[] {
+/**
+ * Banner slides, composed from live catalogue content (see HeroBanners).
+ *
+ * Each slide's three photographs come from `pickPhotos`: the admin's featured
+ * products first, then the slide's own ranked list. See `storeData.featured`
+ * for why — in short, the ranking that is factually correct ("the biggest
+ * discount") is not the same as the one that sells, and only a person can tell
+ * the difference.
+ */
+export function buildSlides(data: StoreHomeData): BannerSlide[] {
   const slides: BannerSlide[] = [];
+
+  /**
+   * Three images for a banner: the admin's featured picks first, topped up from
+   * the banner's own list, de-duplicated so one photo never appears twice.
+   *
+   * `onlyFrom` restricts the featured picks to products that are already in
+   * that list. The deals banner needs it: a banner headlined "Up to 58% off"
+   * must never illustrate itself with a product that carries no discount,
+   * however good the photograph is. Ticking Featured promotes a product WITHIN
+   * a banner; it does not smuggle it into one it does not belong in.
+   */
+  const pickPhotos = (pool: StoreProduct[], onlyFrom = false): string[] => {
+    const picks = onlyFrom
+      ? data.featured.filter((f) => pool.some((p) => p.id === f.id))
+      : data.featured;
+    const chosen: StoreProduct[] = [...picks];
+    for (const p of pool) {
+      if (chosen.length >= 3) break;
+      if (!chosen.some((c) => c.id === p.id)) chosen.push(p);
+    }
+    return chosen.slice(0, 3).map((p) => p.image);
+  };
+
   const maxOff = data.deals.reduce((m, p) => Math.max(m, discountPct(p)), 0);
   if (data.deals.length >= 3 && maxOff > 0) {
     slides.push({
@@ -19,11 +50,11 @@ function buildSlides(data: StoreHomeData): BannerSlide[] {
       subtitle: `${data.dealsTotal} products on sale now — suspension, body kits, lighting and more.`,
       cta: 'Shop the deals',
       href: '/offers',
-      images: data.deals.slice(0, 3).map((p) => p.image),
+      images: pickPhotos(data.deals, true),
       tone: 'green',
     });
   }
-  const fitImages = (data.bestSellers.length >= 3 ? data.bestSellers : data.newArrivals).slice(0, 3).map((p) => p.image);
+
   slides.push({
     id: 'vehicle',
     eyebrow: 'Shop by vehicle',
@@ -31,18 +62,19 @@ function buildSlides(data: StoreHomeData): BannerSlide[] {
     subtitle: 'Choose your make and model — see only the upgrades that fit it.',
     cta: 'Find my parts',
     href: '/vehicles',
-    images: fitImages,
+    images: pickPhotos(data.bestSellers.length >= 3 ? data.bestSellers : data.newArrivals),
     tone: 'mint',
   });
+
   if (data.newArrivals.length >= 3) {
     slides.push({
       id: 'new',
       eyebrow: 'Just landed',
       title: 'New arrivals this week',
       subtitle: 'Fresh additions to the catalogue, from brands you trust.',
-      cta: 'See what’s new',
+      cta: 'See what\u2019s new',
       href: '/products',
-      images: data.newArrivals.slice(0, 3).map((p) => p.image),
+      images: pickPhotos(data.newArrivals),
       tone: 'sand',
     });
   }
