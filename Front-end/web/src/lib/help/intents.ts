@@ -174,7 +174,7 @@ export const INTENTS: Intent[] = [
     id: 'contact',
     keywords: ['talk to a person', 'human', 'agent', 'call', 'phone', 'whatsapp', 'email', 'contact', 'speak to', 'support'],
     answer: () => ({
-      text: 'Happy to put you through to the team — they answer on WhatsApp fastest.',
+      text: 'Happy to put you through to the team — WhatsApp is fastest, and the buttons below reach them directly.',
       actions: [{ label: 'Contact us', href: '/contact' }],
       followUps: ['Find a part for my car', 'Where is my order?'],
     }),

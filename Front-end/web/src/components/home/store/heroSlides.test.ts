@@ -18,7 +18,7 @@ const base: StoreHomeData = {
   reviews: [],
 } as unknown as StoreHomeData;
 
-const imagesOf = (data: StoreHomeData) => buildSlides(data).map((s) => s.images);
+const imagesOf = (data: StoreHomeData) => buildSlides(data).map((s) => s.images.map((i) => i.src));
 
 describe('which photographs the hero banners use', () => {
   it('prefers the admin-featured products on the non-price banners', () => {
@@ -32,8 +32,8 @@ describe('which photographs the hero banners use', () => {
       ...base,
       featured: [prod('f1'), prod('f2'), prod('f3')],
     });
-    expect(vehicle.images).toEqual(['/if1.jpg', '/if2.jpg', '/if3.jpg']);
-    expect(arrivals.images).toEqual(['/if1.jpg', '/if2.jpg', '/if3.jpg']);
+    expect(vehicle.images.map((i) => i.src)).toEqual(['/if1.jpg', '/if2.jpg', '/if3.jpg']);
+    expect(arrivals.images.map((i) => i.src)).toEqual(['/if1.jpg', '/if2.jpg', '/if3.jpg']);
   });
 
   it('NEVER puts a product that is not on offer into the discount banner', () => {
@@ -46,9 +46,9 @@ describe('which photographs the hero banners use', () => {
       ...base,
       featured: [prod('f1'), prod('f2'), prod('f3')], // none of these are deals
     });
-    expect(deals.images).toEqual(['/id1.jpg', '/id2.jpg', '/id3.jpg']);
+    expect(deals.images.map((i) => i.src)).toEqual(['/id1.jpg', '/id2.jpg', '/id3.jpg']);
     for (const img of deals.images) {
-      expect(base.deals.some((d) => d.image === img)).toBe(true);
+      expect(base.deals.some((d) => d.image === img.src)).toBe(true);
     }
   });
 
@@ -56,18 +56,18 @@ describe('which photographs the hero banners use', () => {
     // Featured orders products inside a banner; it does not add them to one.
     const onOffer = base.deals[2];
     const [deals] = buildSlides({ ...base, featured: [prod('f1'), onOffer] });
-    expect(deals.images[0]).toBe(onOffer.image); // promoted to the front
-    expect(deals.images).not.toContain('/if1.jpg'); // the non-offer pick stays out
+    expect(deals.images[0].src).toBe(onOffer.image); // promoted to the front
+    expect(deals.images.map((i) => i.src)).not.toContain('/if1.jpg'); // non-offer pick stays out
     for (const img of deals.images) {
-      expect(base.deals.some((d) => d.image === img)).toBe(true);
+      expect(base.deals.some((d) => d.image === img.src)).toBe(true);
     }
   });
 
   it('tops up from the banner’s own list when fewer than three are featured', () => {
     const [, vehicle] = buildSlides({ ...base, featured: [prod('f1')] });
-    expect(vehicle.images[0]).toBe('/if1.jpg');  // the pick leads
+    expect(vehicle.images[0].src).toBe('/if1.jpg');  // the pick leads
     expect(vehicle.images).toHaveLength(3);
-    expect(vehicle.images.slice(1)).toEqual(['/ib1.jpg', '/ib2.jpg']); // then best sellers
+    expect(vehicle.images.slice(1).map((i) => i.src)).toEqual(['/ib1.jpg', '/ib2.jpg']);
   });
 
   it('falls back entirely to the ranked lists when nothing is featured', () => {
@@ -81,6 +81,19 @@ describe('which photographs the hero banners use', () => {
     const sets = imagesOf({ ...base, featured: [base.deals[0]] });
     for (const images of sets) {
       expect(new Set(images).size).toBe(images.length);
+    }
+  });
+
+  it('links every photograph to its own product page', () => {
+    // A decorative photo of something you sell is a dead end: people tap the
+    // picture that caught their eye, not the slide's CTA.
+    const slides = buildSlides({ ...base, featured: [] });
+    for (const slide of slides) {
+      expect(slide.images.length).toBeGreaterThan(0);
+      for (const img of slide.images) {
+        expect(img.href).toMatch(/^\/products\//);
+        expect(img.name).toBeTruthy();
+      }
     }
   });
 

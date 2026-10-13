@@ -29,7 +29,7 @@ export function buildSlides(data: StoreHomeData): BannerSlide[] {
    * however good the photograph is. Ticking Featured promotes a product WITHIN
    * a banner; it does not smuggle it into one it does not belong in.
    */
-  const pickPhotos = (pool: StoreProduct[], onlyFrom = false): string[] => {
+  const pickPhotos = (pool: StoreProduct[], onlyFrom = false) => {
     const picks = onlyFrom
       ? data.featured.filter((f) => pool.some((p) => p.id === f.id))
       : data.featured;
@@ -38,7 +38,7 @@ export function buildSlides(data: StoreHomeData): BannerSlide[] {
       if (chosen.length >= 3) break;
       if (!chosen.some((c) => c.id === p.id)) chosen.push(p);
     }
-    return chosen.slice(0, 3).map((p) => p.image);
+    return chosen.slice(0, 3).map((p) => ({ src: p.image, href: p.href, name: p.name }));
   };
 
   const maxOff = data.deals.reduce((m, p) => Math.max(m, discountPct(p)), 0);
