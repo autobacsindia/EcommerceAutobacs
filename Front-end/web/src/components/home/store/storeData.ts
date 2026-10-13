@@ -71,6 +71,8 @@ export interface StoreHomeData {
   dealsTotal: number;
   bestSellers: StoreProduct[];
   newArrivals: StoreProduct[];
+  /** Admin-picked products. The hero banners prefer these for their photos. */
+  featured: StoreProduct[];
   categoryRows: StoreCategoryRow[];
   brands: StoreBrand[];
   reviews: StoreReview[];
@@ -164,6 +166,24 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
   const newP = safe(async () => (await productList('sortBy=createdAt&sortOrder=desc&limit=16'))
     .filter(usable).map(toStoreProduct), [] as StoreProduct[]);
 
+  /*
+    Products the admin has ticked "Featured".
+
+    The hero's three photographs used to be whatever the algorithm put first —
+    the biggest discount, the top seller, the newest row. That is correct and
+    frequently unattractive: the deepest discount on the catalogue was a set of
+    key cases, so the "Up to 58% off" banner advertised key cases. No ranking
+    rule fixes that, because "interesting" is a judgement.
+
+    So the banners prefer featured products and fall back to the ranked lists
+    when fewer than three are marked. Ticking the box on the product form is now
+    the whole mechanism — no new field, no migration.
+  */
+  const featuredP = safe(
+    async () => (await productList('isFeatured=true&limit=12')).filter(usable).map(toStoreProduct),
+    [] as StoreProduct[],
+  );
+
   const brandsP = safe(async () => {
     const res = await serverFetch<{ brands?: { name: string; slug?: string; logo?: string | null; productCount?: number }[] }>(
       // Both tags: a brand edit changes the name/logo, a product change alters
@@ -200,13 +220,16 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
       .filter(usable).map(toStoreProduct),
   }), { category: c, products: [] as StoreProduct[] })));
 
-  const [deals, bestSellers, newArrivals, brands, reviews, rows] = await Promise.all([dealsP, bestP, newP, brandsP, reviewsP, rowsP]);
+  const [deals, bestSellers, newArrivals, featured, brands, reviews, rows] = await Promise.all([
+    dealsP, bestP, newP, featuredP, brandsP, reviewsP, rowsP,
+  ]);
   return {
     categories,
     deals: deals.list,
     dealsTotal: deals.total,
     bestSellers,
     newArrivals,
+    featured,
     categoryRows: rows.filter((r) => r.products.length >= 4).slice(0, MAX_CATEGORY_ROWS),
     brands,
     reviews,

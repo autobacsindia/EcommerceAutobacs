@@ -48,7 +48,7 @@ export default function ContactFab() {
 
   return (
     <div
-      className={`fixed right-4 z-40 flex flex-col gap-3 md:bottom-6 ${onProduct ? 'bottom-24' : 'bottom-5'}`}
+      className={`fixed right-4 z-40 flex flex-col gap-3 md:bottom-28 ${onProduct ? 'bottom-44' : 'bottom-24'}`}
     >
       <a
         href={whatsappLink(message)}
