@@ -247,6 +247,110 @@ export async function listMessages(user, channelId, { before, after, limit } = {
 }
 
 /**
+ * Search message text across every channel the caller may see.
+ *
+ * ── Why the channel list is resolved first ──────────────────────────────────
+ * Search is the one place where a mistake leaks the WHOLE history rather than
+ * one message: a query that forgot to scope by channel would happily return
+ * another team's space or somebody else's DM. So the accessible channels are
+ * resolved from the same `accessFilter` the channel list uses, and the ids are
+ * handed to the query — there is no code path here that searches without them.
+ *
+ * ── Pagination ──────────────────────────────────────────────────────────────
+ * Keyset on `createdAt`, newest first, bounded. Chat history only grows, and
+ * `skip` over it degrades linearly while duplicating rows whenever someone
+ * posts mid-scroll. Mongo cannot use an index to sort a $text match, so the
+ * sort happens in memory over the matches — hence the hard page ceiling and
+ * the two-character minimum, which together keep that set small.
+ *
+ * @param {object} user
+ * @param {object} opts
+ * @param {string} opts.q         what to search for
+ * @param {string} [opts.channelId] restrict to one channel
+ * @param {string} [opts.before]  ISO date cursor — results older than this
+ * @param {number} [opts.limit]
+ */
+export async function searchMessages(user, { q, channelId, before, limit } = {}) {
+  const term = String(q || '').trim();
+  // Two characters matches most of the history and helps nobody; the client
+  // should not fire until then either, but the server does not rely on that.
+  if (term.length < 2) return { messages: [], nextBefore: null };
+
+  const size = Math.min(Math.max(parseInt(limit, 10) || 25, 1), 50);
+
+  let channelIds;
+  if (channelId) {
+    // Reuses the single-channel access check, so a search scoped to a channel
+    // the caller cannot see 404s exactly as reading it would.
+    const channel = await loadAccessible(user, channelId);
+    channelIds = [channel._id];
+  } else {
+    const channels = await chatRepository.findChannels(accessFilter(user), '_id name kind');
+    channelIds = channels.map((c) => c._id);
+  }
+  if (!channelIds.length) return { messages: [], nextBefore: null };
+
+  const cursor = before ? new Date(before) : null;
+  let docs;
+  try {
+    docs = await chatRepository.searchMessages(
+      channelIds,
+      term,
+      { before: cursor && !Number.isNaN(cursor.getTime()) ? cursor : null, limit: size },
+    );
+  } catch (err) {
+    // Production runs autoIndex: false, so between a deploy and the index-drift
+    // run the text index does not exist yet and Mongo refuses $text outright.
+    // That window should read as "search isn't ready", not as a crash.
+    if (err?.code === 27 || /text index required/i.test(err?.message || '')) {
+      throw fail('Search is still being set up. Please try again shortly.', 503);
+    }
+    throw err;
+  }
+
+  // The channel name travels with each hit: a result list spans channels, and
+  // "which conversation was this in?" is the first thing a reader asks.
+  //
+  // A DM has no name of its own — it is named after whoever else is in it, so
+  // the label differs per viewer, exactly as in listChannels(). Resolving it
+  // here keeps a DM hit from arriving with a blank label, and only the partners
+  // of channels that actually produced a hit are looked up.
+  const hitChannels = new Set(docs.map((m) => String(m.channel)));
+  const found = (await chatRepository.findChannels(
+    { _id: { $in: channelIds.filter((id) => hitChannels.has(String(id))) } },
+    '_id name kind members',
+  ));
+
+  const uid = idOf(user);
+  const partnerIds = new Set();
+  for (const c of found) {
+    if (c.kind === 'dm') for (const m of c.members || []) if (idOf(m) !== uid) partnerIds.add(idOf(m));
+  }
+  const partnerById = new Map(
+    (await userRepository.findDisplayByIds([...partnerIds])).map((p) => [idOf(p), p]),
+  );
+
+  const names = new Map(
+    found.map((c) => {
+      if (c.kind !== 'dm') return [String(c._id), { name: c.name, kind: c.kind }];
+      const partner = partnerById.get((c.members || []).map(idOf).find((m) => m !== uid) ?? '');
+      return [String(c._id), { name: partner?.name ?? 'Former member', kind: 'dm' }];
+    }),
+  );
+
+  return {
+    messages: docs.map((m) => ({
+      ...shapeMessage(m),
+      channel: String(m.channel),
+      channelName: names.get(String(m.channel))?.name ?? '',
+      channelKind: names.get(String(m.channel))?.kind ?? 'space',
+    })),
+    // Null when the page came back short — there is nothing older to ask for.
+    nextBefore: docs.length === size ? docs[docs.length - 1].createdAt : null,
+  };
+}
+
+/**
  * Recent orders for the "attach an order" picker. Deliberately a bounded, newest-first
  * read on an indexed field — never a text scan over a growing collection. `q` filters
  * that page in memory, which is right for a picker: anything older is reached by

@@ -39,6 +39,26 @@ const chatRepository = {
     ChatMessage.find(before != null ? { channel, seq: { $lt: before } } : { channel })
       .sort({ seq: -1 }).limit(limit).populate('sender', SENDER_FIELDS).lean(),
   createMessage: async (doc) => (await ChatMessage.create(doc)).toObject(),
+  /**
+   * Search message text across a set of channels, newest first.
+   *
+   * `channels` is resolved by the service from the caller's access rules and
+   * passed in already narrowed — this layer never decides who may see what.
+   * Deleted messages are excluded here rather than filtered afterwards: their
+   * text is withheld by the API, so a hit the reader cannot be shown is a hit
+   * that should never have been counted toward the page.
+   */
+  searchMessages: (channels, q, { before, limit }) =>
+    ChatMessage.find({
+      channel: { $in: channels },
+      deletedAt: null,
+      $text: { $search: q },
+      ...(before ? { createdAt: { $lt: before } } : {}),
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate('sender', SENDER_FIELDS)
+      .lean(),
   /** Newest messages carrying at least one attachment — the channel's Files tab. */
   findMessagesWithFiles: (channel, before, limit) =>
     ChatMessage.find({

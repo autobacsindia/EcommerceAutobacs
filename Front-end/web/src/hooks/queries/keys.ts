@@ -52,6 +52,13 @@ export const chatKeys = {
   people: () => [...chatKeys.all, 'people'] as const,
   /** `/chat/channels/:id/files` — everything shared in one channel. */
   files: (channelId: string) => [...chatKeys.all, 'files', channelId] as const,
+  /**
+   * `/chat/search` — message text across every channel I may see.
+   * The channel is part of the key: narrowing to one channel is a different
+   * result set, not a filter over the all-channels one.
+   */
+  search: (q: string, channelId?: string | null) =>
+    [...chatKeys.all, 'search', q, channelId ?? 'all'] as const,
   /** `/chat/orders/recent` — the order picker. */
   recentOrders: () => [...chatKeys.all, 'orders'] as const,
   me: () => [...chatKeys.all, 'me'] as const,

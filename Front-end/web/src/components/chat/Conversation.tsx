@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, Download, Users } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Download, Search, Users } from 'lucide-react';
 import { chatKeys } from '@/hooks/queries/keys';
 import {
   upsertMessage,
@@ -100,6 +100,7 @@ export default function Conversation({
   people,
   orderHref,
   onBack,
+  onSearch,
 }: {
   channel: ChatChannel;
   meId: string;
@@ -108,6 +109,8 @@ export default function Conversation({
   people: ChatPerson[];
   orderHref: (id: string) => string;
   onBack: () => void;
+  /** Opens search already narrowed to this channel. */
+  onSearch?: () => void;
 }) {
   const qc = useQueryClient();
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } =
@@ -240,11 +243,24 @@ export default function Conversation({
             <h2 className="truncate text-base font-semibold text-gray-900">{title}</h2>
             {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}
           </div>
-          {channel.kind === 'space' && channel.memberCount != null && (
-            <span className="ml-auto inline-flex items-center gap-1 text-xs text-gray-500">
-              <Users className="h-4 w-4" /> {channel.memberCount}
-            </span>
-          )}
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {channel.kind === 'space' && channel.memberCount != null && (
+              <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                <Users className="h-4 w-4" /> {channel.memberCount}
+              </span>
+            )}
+            {onSearch && (
+              <button
+                type="button"
+                onClick={onSearch}
+                className="rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+                aria-label={`Search in ${title}`}
+                title={`Search in ${title}`}
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
         <div className="mt-2 flex gap-4" role="tablist" aria-label="Conversation sections">
           {(['messages', 'files'] as const).map((key) => (
