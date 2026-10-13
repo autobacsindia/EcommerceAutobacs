@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Roavion",
+    "slug": "roavion",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "roavion",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a5c33"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.roavion.shop"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#0a5c33"
+      },
+      "package": "com.roavion.shop",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiUrl": "https://api.autobacsindia.com/api/v1",
+      "siteUrl": "https://www.autobacsindia.com",
+      "supportPhone": "+919895257905",
+      "supportWhatsapp": "+919895257905"
+    }
+  }
+}

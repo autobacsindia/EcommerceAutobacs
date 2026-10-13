@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingBag, Zap, Heart, Shield, Truck, RotateCcw, CreditCard } from 'lucide-react';
+import { ShoppingBag, Zap, Heart, Shield, Truck, RotateCcw, CreditCard, Star } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { StockStatus } from '@/lib/stock';
 import { useCart } from '@/context/CartContext';
@@ -72,10 +72,17 @@ export default function BuyBox({
   product,
   selectedVariantId,
   onSelectVariant,
+  onWriteReview,
 }: {
   product: BuyBoxProduct;
   selectedVariantId?: string | null;
   onSelectVariant?: (variantId: string) => void;
+  /**
+   * Opens the write-review form further down the page. Raised to the page so
+   * the form's own state stays inside <Reviews>; a plain anchor to #reviews
+   * would only scroll, leaving the customer to hunt for the button again.
+   */
+  onWriteReview?: () => void;
 }) {
   const router = useRouter();
   const { addToCart } = useCart();
@@ -399,6 +406,23 @@ export default function BuyBox({
           );
         })}
       </div>
+
+      {/*
+        Reviews are asked for HERE, where the customer has just decided — not
+        only at the bottom of the page. Most people never scroll past the buy
+        box, which is a large part of why 923 products carry 5 reviews between
+        them.
+      */}
+      {onWriteReview && (
+        <button
+          type="button"
+          onClick={onWriteReview}
+          className="mt-5 inline-flex items-center gap-2 text-[13px] font-medium text-gold underline-offset-4 hover:underline"
+        >
+          <Star className="h-4 w-4" aria-hidden />
+          Write a review for this product
+        </button>
+      )}
 
       {product.sku && (
         <p className="mt-5 text-[13px] text-ink-muted">SKU: {product.sku}</p>

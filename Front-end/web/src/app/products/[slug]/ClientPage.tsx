@@ -85,6 +85,12 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   // Selected variant is lifted here so BuyBox and the mobile StickyCartBar stay in
   // sync (both must add the SAME chosen model). Simple products never set it.
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  /*
+    A counter, not a boolean: the customer may close the form and ask for it
+    again, and a boolean that is already `true` would fire no effect the second
+    time. Each click increments, so every click is a distinct signal.
+  */
+  const [writeReviewSignal, setWriteReviewSignal] = useState(0);
   const searchParams = useSearchParams();
 
   // Deep-link preselect: the back-in-stock email links to ?variant=<id> so the
@@ -246,6 +252,7 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
               product={product}
               selectedVariantId={selectedVariantId}
               onSelectVariant={setSelectedVariantId}
+              onWriteReview={() => setWriteReviewSignal((n) => n + 1)}
             />
           </Reveal>
         </div>
@@ -334,7 +341,11 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
         <section id="reviews" className={sectionCls}>
           <Eyebrow className="mb-1">Verified buyers</Eyebrow>
           <h2 className={`${headingCls} mb-8`}>Customer Reviews</h2>
-          <Reviews productId={product._id} isAuthenticated={isAuthenticated} />
+          <Reviews
+            productId={product._id}
+            isAuthenticated={isAuthenticated}
+            openFormSignal={writeReviewSignal}
+          />
         </section>
 
         {/* Similar + complementary */}

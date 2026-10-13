@@ -18,9 +18,11 @@ import { ReviewSummary as ReviewSummaryType, Review } from '../../lib/types';
 interface ReviewsProps {
   productId: string;
   isAuthenticated: boolean;
+  /** Increments when something elsewhere on the page asks to open the form. */
+  openFormSignal?: number;
 }
 
-const Reviews: React.FC<ReviewsProps> = ({ productId, isAuthenticated }) => {
+const Reviews: React.FC<ReviewsProps> = ({ productId, isAuthenticated, openFormSignal = 0 }) => {
   const router = useRouter();
   const pathname = usePathname();
   const [reviewSummary, setReviewSummary] = useState<ReviewSummaryType | null>(null);
@@ -64,6 +66,23 @@ const Reviews: React.FC<ReviewsProps> = ({ productId, isAuthenticated }) => {
     document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (isAuthenticated) setShowForm(true);
   }, [loading, isAuthenticated]);
+
+  /*
+    Opened from the buy box. Scrolls here AND opens the form — a plain anchor
+    would only scroll, leaving the customer to find the button a second time.
+    Skips the first render so the form does not spring open on page load.
+  */
+  const openSignalSeen = useRef(openFormSignal);
+  useEffect(() => {
+    if (openFormSignal === openSignalSeen.current) return;
+    openSignalSeen.current = openFormSignal;
+    document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (isAuthenticated) setShowForm(true);
+    else {
+      const returnUrl = `${pathname}?review=1#reviews`;
+      router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
+    }
+  }, [openFormSignal, isAuthenticated, pathname, router]);
 
   // Show the CTA to everyone; logged-out users are sent to login and returned
   // to this product's review section afterwards.

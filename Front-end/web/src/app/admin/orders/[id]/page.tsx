@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
+import ReviewLinkButton from '@/components/admin/ReviewLinkButton';
 import toast from 'react-hot-toast';
 import OfflineRefundDialog, { type OfflineRefundSubmission } from '@/components/admin/OfflineRefundDialog';
 import { offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
@@ -582,6 +583,24 @@ function AdminOrderDetailPageInner() {
                         </p>
                       )}
                       <p className="text-gray-500 text-sm">Qty: {line.quantity}</p>
+
+                      {/*
+                        A review link, offered only once the goods are actually with
+                        the customer and only for a line they still have. A goodie has
+                        no product to review, and a fully cancelled line was never
+                        received — asking for a review of either is the kind of mail
+                        that loses a customer rather than earning a review.
+                      */}
+                      {!isReward
+                        && !fullyCancelled
+                        && ['delivered', 'returned'].includes(order.status || '')
+                        && reviewableProductId(line) && (
+                        <ReviewLinkButton
+                          orderId={orderId}
+                          productId={reviewableProductId(line) as string}
+                          productName={line.name ?? 'this product'}
+                        />
+                      )}
                       {cancelledQty > 0 && (
                         <p className="mt-0.5 text-sm font-medium text-red-700">
                           {fullyCancelled
@@ -1135,6 +1154,20 @@ function AdminOrderDetailPageInner() {
   client-side bailout during prerender, and Next 15 fails the BUILD unless the reading
   component sits under a Suspense boundary. Same wrapper the orders list already uses.
 */
+/**
+ * The product id on an order line, or null when there is nothing to review.
+ *
+ * `product` is either a populated object or a raw id string depending on how
+ * the order was fetched, and it is NULL on a line whose product was deleted —
+ * which is exactly when a review link would 404 in front of the customer.
+ */
+function reviewableProductId(line: { product?: { _id?: string } | string | null }): string | null {
+  const p = line.product;
+  if (!p) return null;
+  if (typeof p === 'string') return p || null;
+  return p._id || null;
+}
+
 export default function AdminOrderDetailPage() {
   return (
     <Suspense fallback={<div className="min-h-screen" />}>
