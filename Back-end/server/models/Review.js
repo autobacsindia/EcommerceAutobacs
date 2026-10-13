@@ -15,6 +15,13 @@ const ReviewSchema = new mongoose.Schema({
   },
   // WooCommerce migration linkage (ADR-005) + guest reviewer identity.
   wpId: { type: Number, index: { unique: true, sparse: true } },
+  // The order a signed review link was minted for. Present only on reviews
+  // written through such a link; it is both the provenance of the verified
+  // badge and, via the unique index below, what makes a link single-use.
+  order: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Order",
+  },
   guestName: { type: String, trim: true },
   guestEmail: { type: String, trim: true, lowercase: true },
   rating: {
@@ -66,6 +73,17 @@ const ReviewSchema = new mongoose.Schema({
 ReviewSchema.index(
   { product: 1, user: 1 },
   { unique: true, partialFilterExpression: { user: { $exists: true } } }
+);
+/*
+  One review per order line, which is what makes a signed review link
+  single-use. Enforced HERE rather than by a read-then-write in the route: the
+  same WhatsApp link opened twice in quick succession would pass both checks
+  and insert twice. Partial so the millions of reviews with no order (customer,
+  imported, admin-authored) do not collide on a null.
+*/
+ReviewSchema.index(
+  { order: 1, product: 1 },
+  { unique: true, partialFilterExpression: { order: { $exists: true } } }
 );
 ReviewSchema.index({ product: 1, isApproved: 1 });
 // Homepage testimonials feed (approved + flagged).

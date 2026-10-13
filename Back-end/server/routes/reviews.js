@@ -17,6 +17,7 @@ import { enqueueNotification } from "../queue/queues.js";
 import { httpCache } from "../middleware/httpCache.js";
 import { invalidateCache } from "../middleware/cacheMiddleware.js";
 import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
+import { mintReviewToken, readReviewToken, reviewLinkUrl, LINK_TTL_DAYS } from "../services/reviewLinkService.js";
 
 const router = express.Router();
 
@@ -685,6 +686,167 @@ router.delete("/:reviewId/admin", protect, admin, validateReviewIdParam, asyncHa
     success: true,
     message: "Review deleted successfully"
   });
+}));
+
+// ── Signed review links ──────────────────────────────────────────────────────
+/*
+  Lets a real buyer review without an account. Most sales here start on a phone
+  call or WhatsApp and check out as a guest; posting a review requires a login
+  and the request email skips guest orders, so those customers were never asked
+  and could not have answered. Admin mints a link for one order + product, the
+  salesperson sends it, the customer writes the review.
+
+  The token carries the proof of purchase (see services/reviewLinkService.js),
+  so these publish immediately: an admin approving a review whose purchase the
+  server already verified adds a delay and no safety.
+*/
+
+// @route   POST /reviews/admin/review-link
+// @desc    Mint a shareable review link for one product on one order
+// @access  Private/Admin
+router.post("/admin/review-link", protect, admin, asyncHandler(async (req, res) => {
+  const { orderId, productId } = req.body || {};
+  if (!orderId || !productId) {
+    return res.status(400).json({ success: false, message: "orderId and productId are required" });
+  }
+
+  // The order must exist, must contain the product, and must have been
+  // delivered — a link minted before delivery would invite a review of
+  // something the customer has not received.
+  const order = await Order.findById(orderId).select("items status shippingAddress user");
+  if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+
+  const onOrder = (order.items || []).some((i) => String(i.product) === String(productId));
+  if (!onOrder) {
+    return res.status(400).json({ success: false, message: "That product is not on this order" });
+  }
+  if (!["delivered", "returned"].includes(order.status)) {
+    return res.status(400).json({
+      success: false,
+      message: `Order is ${order.status} — a review link is only issued after delivery`,
+    });
+  }
+
+  // Already reviewed through a link? Say so rather than minting a token that
+  // can only fail at the far end, in front of the customer.
+  const existing = await reviewRepository.findOne({ order: orderId, product: productId });
+  if (existing) {
+    return res.status(409).json({ success: false, message: "This order line already has a review" });
+  }
+
+  const { token, expiresAt } = mintReviewToken(orderId, productId, LINK_TTL_DAYS);
+  res.json({
+    success: true,
+    url: reviewLinkUrl(token),
+    expiresAt,
+    expiresInDays: LINK_TTL_DAYS,
+  });
+}));
+
+// @route   GET /reviews/link/:token
+// @desc    What a review link points at, for the public review page
+// @access  Public
+router.get("/link/:token", reviewSubmitRateLimit, asyncHandler(async (req, res) => {
+  const read = readReviewToken(req.params.token);
+  if (!read.ok) {
+    return res.status(read.reason === "expired" ? 410 : 400).json({
+      success: false,
+      code: read.reason,
+      message: read.reason === "expired"
+        ? "This review link has expired. Ask us for a fresh one."
+        : "This review link is not valid.",
+    });
+  }
+
+  const [product, order, already] = await Promise.all([
+    Product.findById(read.productId).select("name slug images"),
+    Order.findById(read.orderId).select("shippingAddress user"),
+    reviewRepository.findOne({ order: read.orderId, product: read.productId }),
+  ]);
+  if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+  if (already) {
+    return res.status(409).json({
+      success: false,
+      code: "already-used",
+      message: "A review has already been submitted using this link. Thank you!",
+    });
+  }
+
+  res.json({
+    success: true,
+    product: {
+      id: product._id,
+      name: product.name,
+      slug: product.slug,
+      image: product.images?.[0]?.url || product.images?.[0] || "",
+    },
+    // Prefilled, and editable on the page: the name on the order is usually
+    // right, but it is the customer's review and their name to choose.
+    suggestedName: order?.shippingAddress?.fullName || order?.shippingAddress?.name || "",
+    expiresAt: read.expiresAt,
+  });
+}));
+
+// @route   POST /reviews/link/:token
+// @desc    Submit a review through a signed link, without signing in
+// @access  Public (the token is the authorisation)
+router.post("/link/:token", reviewSubmitRateLimit, asyncHandler(async (req, res) => {
+  const read = readReviewToken(req.params.token);
+  if (!read.ok) {
+    return res.status(read.reason === "expired" ? 410 : 400).json({
+      success: false,
+      code: read.reason,
+      message: read.reason === "expired"
+        ? "This review link has expired. Ask us for a fresh one."
+        : "This review link is not valid.",
+    });
+  }
+
+  const ratingNum = parseInt(req.body?.rating, 10);
+  const name = String(req.body?.name || "").trim();
+  const comment = String(req.body?.comment || "").trim();
+  if (!(ratingNum >= 1 && ratingNum <= 5) || !name || !comment) {
+    return res.status(400).json({
+      success: false,
+      message: "A rating of 1-5, your name and a comment are required",
+    });
+  }
+
+  const product = await Product.findById(read.productId).select("_id");
+  if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+
+  const review = reviewRepository.build({
+    product: read.productId,
+    order: read.orderId,
+    guestName: name.slice(0, 80),
+    rating: ratingNum,
+    title: cleanHTML(String(req.body?.title || "")),
+    comment: cleanHTML(comment),
+    // The token names a delivered order holding this product. That IS the
+    // verification, and it is stronger than the logged-in path's lookup.
+    isVerifiedPurchase: true,
+    isApproved: true,
+  });
+
+  try {
+    await review.save();
+  } catch (err) {
+    // The unique (order, product) index is what makes a link single-use, and
+    // it is the only check that holds when the same link is opened twice at
+    // once. 11000 here means the other tap won.
+    if (err?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        code: "already-used",
+        message: "A review has already been submitted using this link. Thank you!",
+      });
+    }
+    throw err;
+  }
+
+  await updateProductRatingStats(read.productId);
+
+  res.status(201).json({ success: true, message: "Thank you — your review is live." });
 }));
 
 export default router;
