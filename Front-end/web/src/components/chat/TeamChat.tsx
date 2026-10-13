@@ -20,6 +20,7 @@ import {
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage } from '@/hooks/queries/useTeamChat';
 import { Avatar, ChannelIcon, Dialog, GREEN } from './chatUi';
 import Conversation from './Conversation';
+import MessageSearch from './MessageSearch';
 
 type Pages = InfiniteData<MessagePage, number>;
 
@@ -185,6 +186,8 @@ export default function TeamChat() {
   const { data: people = [] } = useChatPeople();
   const [dialog, setDialog] = useState<'space' | 'dm' | null>(null);
   const [filter, setFilter] = useState('');
+  // null = closed. 'all' = every channel I can see; otherwise one channel id.
+  const [searching, setSearching] = useState<string | null>(null);
 
   const meId = me?.userId ?? '';
   const meName = user?.name ?? 'You';
@@ -296,7 +299,7 @@ export default function TeamChat() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-140px)] min-h-[480px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div className="relative flex h-[calc(100dvh-140px)] min-h-[480px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
       <aside
         className={`w-full shrink-0 flex-col border-r border-gray-200 bg-gray-50 md:flex md:w-72 ${selected ? 'hidden' : 'flex'}`}
         aria-label="Chat channels"
@@ -307,15 +310,26 @@ export default function TeamChat() {
               Team chat
               {totalUnread > 0 && <span className="ml-2 align-middle text-xs font-semibold text-emerald-700">{totalUnread} new</span>}
             </h1>
-            <button
-              type="button"
-              onClick={() => setDialog('dm')}
-              className="rounded-lg p-2 text-gray-600 hover:bg-gray-200"
-              aria-label="New message"
-              title="New message"
-            >
-              <MessageSquarePlus className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => setSearching('all')}
+                className="rounded-lg p-2 text-gray-600 hover:bg-gray-200"
+                aria-label="Search all messages"
+                title="Search all messages"
+              >
+                <Search className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDialog('dm')}
+                className="rounded-lg p-2 text-gray-600 hover:bg-gray-200"
+                aria-label="New message"
+                title="New message"
+              >
+                <MessageSquarePlus className="h-5 w-5" />
+              </button>
+            </div>
           </div>
           <div className="relative mt-2">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
@@ -377,11 +391,21 @@ export default function TeamChat() {
           people={people}
           orderHref={orderHref}
           onBack={() => select(null)}
+          onSearch={() => setSearching(selected.id)}
         />
       ) : (
         <div className="hidden flex-1 items-center justify-center text-gray-500 md:flex">
           Pick a space or person to start chatting
         </div>
+      )}
+
+      {searching && (
+        <MessageSearch
+          channels={channels}
+          scopeTo={searching === 'all' ? null : channels.find((c) => c.id === searching) ?? null}
+          onPick={(id) => { setSearching(null); select(id); }}
+          onClose={() => setSearching(null)}
+        />
       )}
 
       {dialog === 'dm' && (

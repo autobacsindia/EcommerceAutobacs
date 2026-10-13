@@ -19,6 +19,7 @@ import {
   listChannels,
   listFiles,
   listMessages,
+  searchMessages,
   listRecentOrders,
   listPeople,
   sendMessage,
@@ -133,6 +134,18 @@ router.post('/channels', validateCreateSpace, validateRequest, asyncHandler(asyn
 router.post('/dm', validateOpenDm, validateRequest, asyncHandler(async (req, res) => {
   const channel = await openDirectMessage(req.user, req.body.userId);
   res.json({ success: true, channel });
+}));
+
+/*
+  GET /chat/search?q=&channelId=&before=&limit=
+
+  Above the per-channel routes because it spans channels: the service resolves
+  which ones the caller may see, so there is no channel id in the path to check
+  here. Same auth as everything else on this router (staff only).
+*/
+router.get('/search', asyncHandler(async (req, res) => {
+  const page = await searchMessages(req.user, req.query);
+  res.json({ success: true, ...page });
 }));
 
 // GET /chat/channels/:id/messages?before=&after=&limit=

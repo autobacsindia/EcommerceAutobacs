@@ -78,4 +78,28 @@ ChatMessageSchema.index(
 // "Mentions of me", newest first.
 ChatMessageSchema.index({ mentions: 1, createdAt: -1 });
 
+/*
+  Message search.
+
+  A text index rather than a regex: `text` grows without bound, and a regex
+  over a chat history is a full collection scan per keystroke — the shape this
+  repo already learned the hard way with catalogue search. Mongo's text index
+  also gives stemming and quoted phrases, which is what people expect when they
+  search "winch order" and mean the conversation, not the literal substring.
+
+  Scoped to `text` alone: attachment file names and order codes are matched
+  elsewhere (the Files tab, the order picker), and widening the index would
+  make every file upload rewrite it.
+*/
+/*
+  No companion { channel: 1, createdAt: -1 } index for the search sort. Two
+  reasons, and the first alone settles it: Mongo cannot use a second index to
+  sort the output of a $text match, so such an index would never be read on
+  this query — it would only add write cost to every message. (It would also
+  collide by name with the partial index above, which the index-drift test
+  catches.) Search therefore sorts its matches in memory, which is why the page
+  is bounded and the term has a minimum length.
+*/
+ChatMessageSchema.index({ text: 'text' });
+
 export default mongoose.models.ChatMessage || mongoose.model('ChatMessage', ChatMessageSchema);

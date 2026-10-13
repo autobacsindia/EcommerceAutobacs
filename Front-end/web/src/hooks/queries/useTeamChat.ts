@@ -287,3 +287,43 @@ export function useOpenDm() {
     onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.channels() }),
   });
 }
+
+// ── search ───────────────────────────────────────────────────────────────────
+/** A search hit: a message plus the channel it was found in. */
+export interface ChatSearchHit extends ChatMessage {
+  channel: string;
+  channelName: string;
+  channelKind: 'space' | 'dm';
+}
+
+interface SearchPage {
+  messages: ChatSearchHit[];
+  nextBefore: string | null;
+}
+
+/**
+ * Search message text across every channel the signed-in person may see.
+ *
+ * `enabled` on a two-character minimum rather than debouncing in the caller:
+ * a one-letter query matches most of the history, and the server refuses it
+ * anyway, so the request is simply not worth making. Pages are keyset on
+ * createdAt — chat history only grows, and `skip` over it both slows down and
+ * duplicates rows when someone posts mid-scroll.
+ */
+export function useChatSearch(term: string, channelId?: string | null) {
+  const q = term.trim();
+  return useInfiniteQuery({
+    queryKey: chatKeys.search(q, channelId),
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams({ q, limit: '25' });
+      if (channelId) params.set('channelId', channelId);
+      if (pageParam) params.set('before', String(pageParam));
+      const res = await apiClient.get<SearchPage>(`/chat/search?${params}`);
+      return { messages: res.messages ?? [], nextBefore: res.nextBefore ?? null };
+    },
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextBefore ?? undefined,
+    enabled: q.length >= 2,
+    staleTime: 30_000,
+  });
+}
