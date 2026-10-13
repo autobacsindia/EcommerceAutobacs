@@ -26,6 +26,8 @@
  *   node scripts/audit-index-drift.js                 # report (exit 1 on drift)
  *   node scripts/audit-index-drift.js --json          # machine-readable
  *   node scripts/audit-index-drift.js --apply         # create missing indexes
+ *   node scripts/audit-index-drift.js --apply --only ChatMessage,Review
+ *                                                     # ...only for these models
  *   node scripts/audit-index-drift.js --apply --allow-drop
  *                                                     # also drop EXTRA indexes
  *
@@ -41,8 +43,34 @@ import path from 'path';
 
 dotenv.config();
 
-const ARGS = new Set(process.argv.slice(2));
+const ARGV = process.argv.slice(2);
+const ARGS = new Set(ARGV);
 const APPLY = ARGS.has('--apply');
+
+/*
+  --only <Model|collection>[,…] narrows the audit to named models.
+
+  Why it exists: production can be missing indexes from several unrelated
+  features at once, so a blanket `--apply` run to enable ONE feature also builds
+  indexes nobody reviewed — on this repo's live database that meant three index
+  builds on `orders` as a side effect of turning on chat search. An index build
+  on the money path is a deliberate decision, not a side effect. Narrowing keeps
+  "apply what this change needs" separate from "fix all historical drift", which
+  is the same separation the repo already insists on for optimization passes.
+*/
+const ONLY = (() => {
+  const i = ARGV.indexOf('--only');
+  if (i === -1) return null;
+  const raw = ARGV[i + 1];
+  if (!raw || raw.startsWith('--')) {
+    throw new Error('--only needs a value, e.g. --only ChatMessage,Review');
+  }
+  return new Set(raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+})();
+
+/** Does this model fall inside --only? Matches the model OR collection name. */
+const selected = (modelName, collName) =>
+  !ONLY || ONLY.has(modelName.toLowerCase()) || ONLY.has(collName.toLowerCase());
 const ALLOW_DROP = ARGS.has('--allow-drop');
 const AS_JSON = ARGS.has('--json');
 
@@ -131,9 +159,42 @@ export function behaviouralOptions(opts = {}) {
 
 const sameOptions = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+/** Host of a connection string, with the credentials stripped. */
+const uriHost = (u) =>
+  String(u || '').replace(/^mongodb(\+srv)?:\/\//, '').replace(/^.*@/, '').split(/[/?]/)[0] || '(unknown)';
+
 async function main() {
-  const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
+  /*
+    WHICH DATABASE? This script builds indexes on whatever it connects to, so
+    naming the cluster out loud is not decoration.
+
+    The trap: this prefers MONGODB_URI, Railway sets MONGO_URI, and dotenv does
+    NOT override a variable already in the environment. So `railway run` on a
+    machine whose local .env has MONGODB_URI quietly points at the LOCAL target
+    while looking like it is running against production. That exact confusion
+    nearly rewrote 1,030 staging records earlier in this repo's life. Disagreeing
+    hosts are therefore a hard stop, not a warning.
+  */
+  const { MONGODB_URI, MONGO_URI } = process.env;
+  if (MONGODB_URI && MONGO_URI && uriHost(MONGODB_URI) !== uriHost(MONGO_URI)) {
+    throw new Error(
+      `MONGODB_URI and MONGO_URI point at different clusters — refusing to guess.\n` +
+      `  MONGODB_URI → ${uriHost(MONGODB_URI)}\n` +
+      `  MONGO_URI   → ${uriHost(MONGO_URI)}\n` +
+      `Unset one, or run with the one you mean: MONGODB_URI="$MONGO_URI" node scripts/audit-index-drift.js`,
+    );
+  }
+
+  const uri = MONGODB_URI || MONGO_URI;
   if (!uri) throw new Error('MONGODB_URI (or MONGO_URI) not set');
+
+  if (!AS_JSON) {
+    const dbName = uri.replace(/^[^/]*\/\/[^/]*\//, '').replace(/\?.*$/, '') || '(default)';
+    console.log(
+      `Cluster: ${uriHost(uri)}   database: ${dbName}   mode: ${APPLY ? 'APPLY' : 'report only'}` +
+      (ONLY ? `   scope: ${[...ONLY].join(', ')}` : '   scope: every model'),
+    );
+  }
 
   await loadModels();
   // autoIndex MUST be false. It defaults to true, and this script imports every
@@ -152,6 +213,8 @@ async function main() {
   for (const modelName of Object.keys(mongoose.models)) {
     const model = mongoose.models[modelName];
     const collName = model.collection.collectionName;
+
+    if (!selected(modelName, collName)) continue;
 
     if (!existingCollections.has(collName)) {
       report.skipped.push({ model: modelName, collection: collName, reason: 'collection does not exist yet' });
@@ -207,6 +270,19 @@ async function main() {
         report.extra.push({ collection: collName, name: have.name, key: have.key, options: have.options });
       }
     }
+  }
+
+  /*
+    A --only that matched nothing must not read as success. Otherwise a typo
+    ("--only ChatMessages") prints "✓ No drift" over zero collections and the
+    operator believes the migration ran — the silent-no-op failure mode this
+    repo has already paid for more than once.
+  */
+  if (ONLY && report.checked === 0 && report.skipped.length === 0) {
+    throw new Error(
+      `--only matched no model: ${[...ONLY].join(', ')}. ` +
+      'Use a model name (ChatMessage) or a collection name (chatmessages).',
+    );
   }
 
   const driftCount = report.missing.length + report.extra.length + report.mismatched.length;
