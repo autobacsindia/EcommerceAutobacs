@@ -11,7 +11,7 @@ export default function MarkerDot({ n, label, active }: { n: number; label: stri
         <span className={`absolute inline-flex h-full w-full rounded-full bg-gold ${active ? 'animate-ping opacity-70' : 'opacity-25'}`} />
         <span
           className={`relative inline-flex h-6 w-6 items-center justify-center rounded-full border-2 text-[10px] font-bold md:h-7 md:w-7 md:text-[11px] shadow-[0_4px_14px_rgba(0,0,0,0.6)] transition-transform ${
-            active ? 'scale-110 border-white bg-gold text-[#111212]' : 'border-white/90 bg-[#111212]/85 text-gold group-hover/mk:scale-110 group-hover/mk:bg-gold group-hover/mk:text-[#111212]'
+            active ? 'scale-110 border-white bg-gold text-ink' : 'border-white/90 bg-[#111212]/85 text-gold group-hover/mk:scale-110 group-hover/mk:bg-gold group-hover/mk:text-ink'
           }`}
         >
           {n}

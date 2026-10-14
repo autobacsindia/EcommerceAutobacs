@@ -25,7 +25,7 @@ function MessageText({ text, mentionNames, meName }: { text: string; mentionName
       {parts.map((part, i) => {
         if (/^https?:\/\//.test(part)) {
           return (
-            <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="break-all text-[#0b6b9a] underline">
+            <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="break-all text-link underline">
               {part}
             </a>
           );

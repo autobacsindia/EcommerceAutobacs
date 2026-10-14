@@ -72,7 +72,9 @@
   margin-top: 14px;
   font-size: 12px;
   letter-spacing: 0.04em;
-  color: #333838;
+  /* The price-slider end labels. A literal mid-grey reads at 1.6:1 once the
+     page behind it inverts; the token carries the same colour in light. */
+  color: var(--color-ink-muted);
 }
 
 /* ── Gold native checkboxes (filter rows) ── */

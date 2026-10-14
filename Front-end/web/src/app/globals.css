@@ -89,6 +89,12 @@
   --color-gold:            #0a5c33;
   --color-gold-soft:       rgba(10, 92, 51, 0.10);
   --color-hairline:        #dfe3e2;
+  /* Two colours that are only ever TEXT, which is why they need a dark twin
+     while the brand green, the star gold and the badge red do not: a surface
+     colour carries white and keeps working on either theme, but text has to
+     stay readable against a surface that inverted underneath it. */
+  --color-link:            #0b6b9a;   /* 5.9:1 on white */
+  --color-danger:          #cc0c39;   /* the same red the discount badge uses */
 
   --font-display: var(--font-montserrat), system-ui, sans-serif;
 
@@ -424,9 +430,15 @@ textarea::placeholder {
   --color-ink-muted:       #94a09d;   /* 5.4:1 on --color-obsidian */
   /* Brand green, one step lighter so it still clears contrast on a dark
      surface. Same hue: this is the logo colour, not a theme colour. */
-  --color-gold:            #2f9c66;
+  /* 4.9:1 on --color-obsidian-raised. #2f9c66 measured 4.45:1 there — under AA
+     by a hair, which is exactly the kind of miss a screenshot never shows. */
+  --color-gold:            #32a46b;
   --color-gold-soft:       rgba(47, 156, 102, 0.14);
   --color-hairline:        #2a3233;
+  /* As text on #171d1e the light values measure 2.91:1 and 2.99:1 — both
+     unreadable. These are the same two hues, lifted until they clear AA. */
+  --color-link:            #5ab4e0;   /* 7.2:1 on a dark card */
+  --color-danger:          #ff6b7e;   /* 6.1:1, still unmistakably red */
 
   /* Neutral ramp, inverted. */
   --color-white: oklch(16% 0.004 265);
@@ -510,6 +522,15 @@ textarea::placeholder {
   --product-text-muted: #94a09d;
   --product-border: #2a3233;
   --product-card-bg: #171d1e;
+}
+
+/* Set for one frame while the theme attribute changes — see applyTheme().
+   A transitioned property that reads a custom property does not re-resolve
+   when that property changes, so the old colour sticks until the next style
+   invalidation. Suppressing transitions across the swap avoids that, and
+   removes the 300ms colour crossfade the switch had as a side effect. */
+.theme-switching, .theme-switching *, .theme-switching *::before, .theme-switching *::after {
+  transition: none !important;
 }
 
 /* Photography is shot on white. Left as-is, a product cut-out sits in a bright

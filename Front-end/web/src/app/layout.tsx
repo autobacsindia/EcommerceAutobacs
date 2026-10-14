@@ -20,6 +20,7 @@ import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from "@/lib/constants";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import ThemeScript from "@/components/theme/ThemeScript";
+import ThemeSync from "@/components/theme/ThemeSync";
 import ContactFab from "@/components/layout/ContactFab";
 import HelpBot from "@/components/help/HelpBot";
 import { SITE_URL } from "@/lib/siteUrl";
@@ -207,8 +208,14 @@ export default async function RootLayout({
   // campaign is scheduled, which is the normal state for most of the year.
   const promoBanner = await getActivePromoBanner();
 
+  /*
+    `data-theme` is deliberately NOT set here. ThemeScript owns it before first
+    paint and ThemeSync re-applies it after hydration. Naming it in this JSX
+    made React hold "light" and reset the DOM on a client re-render — which is
+    why /cart rendered light while localStorage said dark.
+  */
   return (
-    <html lang="en" data-theme="light" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* FIRST in <head>: it sets data-theme before the browser paints, so a
             dark-theme visitor never sees a white flash between navigations. */}
@@ -402,6 +409,7 @@ export default async function RootLayout({
                       <main className="flex-1 flex flex-col min-h-screen">{children}</main>
                       <ConditionalFooter />
                       <SessionExpiredPrompt />
+                      <ThemeSync />
                       <ContactFab />
                       <HelpBot />
                       <Toaster

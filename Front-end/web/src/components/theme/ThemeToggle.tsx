@@ -23,10 +23,47 @@ function current(): Theme {
   return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
 }
 
+/**
+ * Class that kills every transition for one frame. See applyTheme.
+ *
+ * The rule itself lives in globals.css, because a style element injected here
+ * would arrive after first paint and miss the very switch it exists to cover.
+ */
+const NO_TRANSITION = 'theme-switching';
+
 export function applyTheme(theme: Theme): void {
-  document.documentElement.setAttribute('data-theme', theme);
+  const root = document.documentElement;
+
+  /*
+    Transitions are suppressed for the duration of the swap, and this is NOT
+    cosmetic.
+
+    A `transition` on a property whose value is `var(--token)` does not
+    re-resolve when the TOKEN changes in Chromium: the element keeps painting
+    the old colour until something else invalidates its style. On /about-us that
+    left `text-gold` sitting at the dark green and `text-ink` at the dark ink
+    after switching to light — correct again only after a reload. Every element
+    with `transition-colors` was affected, which is most of the buttons and
+    links on the site.
+
+    Removing the transition for the frame in which the attribute changes makes
+    the new value resolve immediately. The reflow between the two writes is what
+    forces the browser to apply the class before the attribute moves; without it
+    the two changes are batched into one style pass and the fix does nothing.
+  */
+  root.classList.add(NO_TRANSITION);
+  void root.offsetHeight;
+
+  root.setAttribute('data-theme', theme);
   // Keeps scrollbars, form controls and the mobile address bar in step.
-  document.documentElement.style.colorScheme = theme;
+  root.style.colorScheme = theme;
+
+  // Next frame: the new colours are painted, so transitions can come back for
+  // ordinary hover and focus work.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => root.classList.remove(NO_TRANSITION));
+  });
+
   try {
     localStorage.setItem(THEME_KEY, theme);
   } catch {

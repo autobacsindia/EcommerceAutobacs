@@ -24,7 +24,9 @@
   --bg: #eef1f0;
   --card: #ffffff;
   --line: #dfe3e2;
-  --red: #cc0c39;
+  --red: #cc0c39;        /* a surface: the discount badge, white text on it */
+  --red-ink: #cc0c39;    /* the same red used AS TEXT — see the dark twin */
+  --link: #0b6b9a;       /* the catalogue link blue */
   --star: #f2a516;
   --hdr: #121414;
   --hdr-2: #1d2121;
@@ -39,7 +41,16 @@
    Only the surfaces and the ink invert. The green lightens one step so it
    still clears contrast against a dark surface — the same hue, not a new one. */
 [data-theme='dark'] .sh-theme {
-  --g: #2f9c66;
+  /*
+    A MIDDLE green, not a light one.
+
+    `--g` is both a surface (buttons, the department bar, the Go button — all
+    carrying white text) and, elsewhere, a text colour on dark. Lightening it to
+    #2f9c66 helped the text case and broke the surface case: white on it
+    measured 3.46:1, worse than the 5.9:1 it has in the light theme. This value
+    holds white at ~5.4:1 while still reading as green against a dark card.
+  */
+  --g: #0d6b3e;
   --g-700: #228a57;
   --g-600: #37b074;
   --g-100: #142b20;
@@ -53,6 +64,8 @@
   --line: #2a3233;
   --hdr: #0b0e0e;
   --hdr-2: #141919;
+  --red-ink: #ff6b7e;    /* 6.1:1 on --card, still unmistakably red */
+  --link: #5ab4e0;       /* 7.2:1 on --card */
   color: var(--ink);
 }
 .sh { background: var(--bg); min-height: 100vh; }
@@ -79,7 +92,7 @@
 .sh-theme .sh-btn-primary:hover:not(:disabled) { background: var(--g-600); }
 .sh-theme .sh-btn-primary:disabled { background: #b8c4bd; cursor: not-allowed; }
 .sh-theme .sh-btn-lg { padding: 14px 28px; font-size: 15px; }
-.sh-theme .sh-btn-outline { background: #fff; color: var(--ink); border-color: var(--line); }
+.sh-theme .sh-btn-outline { background: var(--card); color: var(--ink); border-color: var(--line); }
 .sh-theme .sh-btn-wa { background: #25d366; color: #0b1a10; }
 /* Keyboard focus ring for buttons and links, in the brand green. Text fields are
    excluded: a field counts as :focus-visible even on a mouse click, so this rule
@@ -87,7 +100,7 @@
    show focus with their own green border/ring (.sh-search:focus-within etc.). */
 .sh-theme :focus-visible:not(input, textarea, select) { outline: 2px solid #12753f; outline-offset: 2px; }
 .sh-theme :is(input, textarea, select):focus-visible { outline: none; }
-.sh-theme .sh-chip { display: inline-flex; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 13px; color: var(--ink-2); transition: border-color 0.2s, color 0.2s; }
+.sh-theme .sh-chip { display: inline-flex; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 13px; color: var(--ink-2); transition: border-color 0.2s, color 0.2s; }
 .sh-theme .sh-chip:hover { border-color: var(--g); color: var(--g); }
 .sh-theme .sh-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .sh-theme .sh-field select { width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid #c9cfcd; background: #fff; font-size: 14px; color: var(--ink); font-family: inherit; }
@@ -115,7 +128,7 @@
 .sh-vehicle-text { display: flex; flex-direction: column; line-height: 1.15; }
 .sh-vehicle-small { font-size: 12px; color: #c9cccc; }
 .sh-vehicle-big { font-size: 15px; font-weight: 700; white-space: nowrap; max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
-.sh-vehicle-pop { position: absolute; top: calc(100% + 10px); left: 0; z-index: 50; width: 300px; background: #fff; color: var(--ink); border-radius: 12px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28); padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.sh-vehicle-pop { position: absolute; top: calc(100% + 10px); left: 0; z-index: 50; width: 300px; background: var(--card); color: var(--ink); border-radius: 12px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28); padding: 18px; display: flex; flex-direction: column; gap: 12px; }
 .sh-pop-title { font-size: 16px; font-weight: 700; }
 
 /* Account & orders */
@@ -135,9 +148,9 @@
 .sh-go:hover { background: var(--g-600); }
 /* Search suggestions dropdown */
 .sh-search { position: relative; }
-.sh-sugg { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 60; background: #fff; color: var(--ink); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25); padding: 6px 0; max-height: min(70vh, 480px); overflow-y: auto; text-align: left; }
+.sh-sugg { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 60; background: var(--card); color: var(--ink); border-radius: 14px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.25); padding: 6px 0; max-height: min(70vh, 480px); overflow-y: auto; text-align: left; }
 .sh-sugg-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 4px; font-size: 12px; font-weight: 700; color: var(--muted); }
-.sh-sugg-clear { background: none; border: none; color: #0b6b9a; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.sh-sugg-clear { background: none; border: none; color: var(--link); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .sh-sugg-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 16px; background: none; border: none; cursor: pointer; text-align: left; font-family: inherit; color: var(--ink); }
 .sh-sugg-row:hover, .sh-sugg-row.is-active { background: var(--g-50); }
 .sh-sugg-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: contain; background: #f6f7f7; flex-shrink: 0; }
@@ -173,7 +186,7 @@
 /* Drawer (All / phone menu) */
 .sh-drawer-wrap { position: fixed; inset: 0; z-index: 100; }  /* above the floating contact buttons (z 40-60) */
 .sh-drawer-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); border: none; cursor: pointer; }
-.sh-drawer { position: absolute; top: 0; left: 0; bottom: 0; width: min(340px, 86vw); background: #fff; display: flex; flex-direction: column; box-shadow: 8px 0 30px rgba(0, 0, 0, 0.3); animation: sh-slide-in 0.22s ease-out; }
+.sh-drawer { position: absolute; top: 0; left: 0; bottom: 0; width: min(340px, 86vw); background: var(--card); display: flex; flex-direction: column; box-shadow: 8px 0 30px rgba(0, 0, 0, 0.3); animation: sh-slide-in 0.22s ease-out; }
 @keyframes sh-slide-in { from { transform: translateX(-100%); } to { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .sh-drawer { animation: none; } }
 .sh-drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; background: var(--hdr-2); color: #fff; font-size: 18px; font-weight: 700; }
@@ -229,8 +242,8 @@
 .st-h2 { font-family: var(--font-montserrat), sans-serif; font-size: 21px; font-weight: 700; color: var(--ink); }
 .st-h3 { font-family: var(--font-montserrat), sans-serif; font-size: 19px; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
 .st-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
-.st-link { font-size: 14px; font-weight: 600; color: #0b6b9a; white-space: nowrap; }
-.st-link:hover { color: var(--red); text-decoration: underline; }
+.st-link { font-size: 14px; font-weight: 600; color: var(--link); white-space: nowrap; }
+.st-link:hover { color: var(--red-ink); text-decoration: underline; }
 
 /* 4-up cards overlapping the banner */
 .sh-quads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; margin-top: -110px; }
@@ -256,7 +269,7 @@
 /* Before a make is picked it is still clearly THE action — faded green, not grey. */
 .sh-theme .sh-vcard-go:disabled { background: var(--g); opacity: 0.5; box-shadow: none; }
 .sh-vchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.sh-theme .sh-vcard .sh-chip { border-color: #b9d4c4; color: var(--g); background: #fff; }
+.sh-theme .sh-vcard .sh-chip { border-color: #b9d4c4; color: var(--g); background: var(--card); }
 .sh-theme .sh-vcard .sh-chip:hover { background: var(--g); border-color: var(--g); color: #fff; }
 
 /* Product shelves */
@@ -265,14 +278,14 @@
 .st-track { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; padding-bottom: 4px; }
 .st-track::-webkit-scrollbar { display: none; }
 .st-track-item { flex: 0 0 200px; scroll-snap-align: start; display: flex; }
-.st-arrow { position: absolute; top: 70px; z-index: 2; width: 40px; height: 84px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.96); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); font-size: 30px; color: var(--ink); cursor: pointer; transition: opacity 0.2s; }
+.st-arrow { position: absolute; top: 70px; z-index: 2; width: 40px; height: 84px; border: 1px solid var(--line); background: color-mix(in srgb, var(--card) 96%, transparent); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); font-size: 30px; color: var(--ink); cursor: pointer; transition: opacity 0.2s; }
 .st-arrow-l { left: -6px; border-radius: 0 8px 8px 0; }
 .st-arrow-r { right: -6px; border-radius: 8px 0 0 8px; }
 .st-arrow:disabled { opacity: 0; pointer-events: none; }
 
 /* Product tile */
 .st-tile { display: flex; flex-direction: column; width: 100%; border-radius: 10px; transition: transform 0.2s; }
-.st-tile:hover .st-name { color: var(--red); }
+.st-tile:hover .st-name { color: var(--red-ink); }
 .st-tile-media { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #f6f7f7; display: flex; align-items: center; justify-content: center; }
 .st-tile-img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; transition: transform 0.35s; }
 .st-tile:hover .st-tile-img { transform: scale(1.04); }
@@ -280,9 +293,9 @@
 .st-tile-body { display: flex; flex-direction: column; gap: 5px; padding: 10px 2px 0; }
 .st-deal-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .st-off { display: inline-flex; padding: 3px 8px; border-radius: 4px; background: var(--red); color: #fff; font-size: 12px; font-weight: 700; }
-.st-deal-label { font-size: 12px; font-weight: 700; color: var(--red); }
+.st-deal-label { font-size: 12px; font-weight: 700; color: var(--red-ink); }
 .st-name { font-size: 14px; line-height: 1.4; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8em; transition: color 0.2s; }
-.st-rating { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #0b6b9a; }
+.st-rating { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--link); }
 .st-stars { letter-spacing: 1px; line-height: 1; }
 .st-stars .on { color: var(--star); }
 .st-stars .half { background: linear-gradient(90deg, var(--star) 50%, #d6d9d8 50%); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -306,7 +319,7 @@
 .sh-brand { scroll-snap-align: start; aspect-ratio: 3 / 2; border: 1px solid var(--line); border-radius: 10px; display: flex; align-items: center; justify-content: center; padding: 12px; background: #fff; transition: border-color 0.2s, box-shadow 0.2s; }
 .sh-brand:hover { border-color: var(--g); box-shadow: 0 4px 14px rgba(10, 92, 51, 0.12); }
 .sh-brand-img { max-width: 100%; max-height: 100%; object-fit: contain; }
-.sh-brand-name { font-family: var(--font-montserrat), sans-serif; font-size: 15px; font-weight: 700; color: var(--ink); text-align: center; line-height: 1.2; }
+.sh-brand-name { font-family: var(--font-montserrat), sans-serif; font-size: 15px; font-weight: 700; color: #0f1111; text-align: center; line-height: 1.2; }
 
 /* Reviews */
 .sh-reviews { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
@@ -316,11 +329,11 @@
 .sh-review-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--g); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .sh-review-name { display: block; font-size: 14px; font-weight: 700; }
 .sh-review-verified { display: block; font-size: 12px; color: #c45500; font-weight: 600; }
-.sh-review-product { font-size: 13px; color: #0b6b9a; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
-.sh-review-product:hover { color: var(--red); text-decoration: underline; }
+.sh-review-product { font-size: 13px; color: var(--link); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.sh-review-product:hover { color: var(--red-ink); text-decoration: underline; }
 
 /* ── FOOTER (light, green band) ────────────────────────────────────────── */
-.sf { background: #fff; color: var(--ink-2); font-size: 14px; }
+.sf { background: var(--card); color: var(--ink-2); font-size: 14px; }
 .sf-top { display: block; text-align: center; padding: 14px; background: var(--g-600); color: #fff !important; font-size: 13px; font-weight: 600; }
 .sf-top:hover { background: #0e7a45; }
 .sf-band { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--g); color: #fff; }
@@ -349,10 +362,10 @@
    Montserrat titles, green actions. A page root carries `sp sh-theme`. */
 .sp { background: var(--bg); min-height: 70vh; color: var(--ink); padding-bottom: 48px; }
 .sp-wrap { max-width: 1500px; margin: 0 auto; padding: 0 20px; }
-.sp-head { background: #fff; border-bottom: 1px solid var(--line); }
+.sp-head { background: var(--card); border-bottom: 1px solid var(--line); }
 .sp-head-in { max-width: 1500px; margin: 0 auto; padding: 16px 20px 22px; }
 .sp-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
-.sp-crumbs a { color: #0b6b9a; }
+.sp-crumbs a { color: var(--link); }
 .sp-crumbs a:hover { color: var(--g); text-decoration: underline; }
 .sp-crumb { display: inline-flex; align-items: center; gap: 6px; }
 .sp-crumb [aria-current] { color: var(--ink-2); font-weight: 600; }
@@ -367,7 +380,7 @@
 
 /* Picture tiles (vehicles, brands, categories) */
 .sp-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
-.sp-tile { display: flex; flex-direction: column; background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
+.sp-tile { display: flex; flex-direction: column; background: var(--card); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
 .sp-tile:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(10, 92, 51, 0.14); border-color: rgba(10, 92, 51, 0.35); }
 .sp-tile-media { position: relative; aspect-ratio: 4 / 3; background: #f4f6f5; overflow: hidden; }
 .sp-tile-media img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s; }
@@ -386,7 +399,7 @@
 /* Filter chips (letters, makes, segments) */
 .sp-chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
 .sp-chips::-webkit-scrollbar { display: none; }
-.sp-chip { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 14px; font-weight: 500; color: var(--ink-2); cursor: pointer; transition: border-color 0.2s, color 0.2s, background 0.2s; font-family: inherit; }
+.sp-chip { flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 14px; font-weight: 500; color: var(--ink-2); cursor: pointer; transition: border-color 0.2s, color 0.2s, background 0.2s; font-family: inherit; }
 .sp-chip:hover { border-color: var(--g); color: var(--g); }
 .sp-chip[aria-pressed='true'], .sp-chip[aria-current='page'], .sp-chip.is-on { background: var(--g); border-color: var(--g); color: #fff; }
 .sp-chip-n { font-size: 12px; opacity: 0.75; }
@@ -571,3 +584,30 @@
 }
 [data-theme='dark'] .sh-theme .sh-vcard .sh-field select { border-color: #2f5a44; }
 [data-theme='dark'] .sh-search input::placeholder { color: var(--muted); }
+
+/* The cart badge: `color` followed --ink (which inverts to near-white) while
+   its background stayed a literal white — white on white. It is a count on a
+   white pill, so it takes the dark ink explicitly in both themes. */
+[data-theme='dark'] .sh-cart-count { color: #0f1212; }
+
+/* The "Back to top" band carries white text. In light it sits on --g-600
+   (#0b6b3c, 6.5:1); the dark twin lightens --g-600 to #37b074 for use as TEXT,
+   which drops white on it to 2.75:1. The band takes the mid green instead. */
+[data-theme='dark'] .sf-top { background: var(--g); }
+[data-theme='dark'] .sf-top:hover { background: var(--g-700); }
+
+/* The vehicle-picker chips print the brand green as TEXT on a card. The dark
+   --g is a surface green (it has to hold white), so as text on --card it is
+   1.9:1. These chips take the lighter step, which is the text one. */
+[data-theme='dark'] .sh-theme .sh-vcard .sh-chip { color: var(--g-600); border-color: #2f5a44; }
+
+/* The "shop this" chevron sits on the soft green chip. In dark, --g is the
+   SURFACE green (dark enough to hold white), so green-on-green measured
+   2.28:1; the lighter step is the one meant to be read as text. */
+[data-theme='dark'] .sp-tile-go { color: var(--g-600); }
+
+/* The vehicle photo placeholder keeps its light mint gradient in both themes —
+   it stands in for a photograph, and photos are not inverted. Its two labels
+   therefore cannot use the inverting ink or the surface green. */
+[data-theme='dark'] .sp-vph-note { color: #5f6b65; }
+[data-theme='dark'] .sp-vph-make { color: #0a5c33; }

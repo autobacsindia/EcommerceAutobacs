@@ -95,7 +95,7 @@ export default function ActiveFilters() {
         onClick={() => replaceParams((p) => {
           ['category', 'brand', 'rating', 'minPrice', 'maxPrice', 'inStock', 'vehicleMake', 'vehicleModel'].forEach((k) => p.delete(k));
         })}
-        className="text-[13px] font-semibold text-[#0b6b9a] underline-offset-4 hover:text-gold hover:underline"
+        className="text-[13px] font-semibold text-link underline-offset-4 hover:text-gold hover:underline"
       >
         Clear all
       </button>

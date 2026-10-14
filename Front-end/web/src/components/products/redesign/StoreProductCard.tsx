@@ -154,7 +154,7 @@ export default function StoreProductCard({
   const CardInner = (
     <>
       {/* Image — the whole product on a light plate, the way the home page shows it. */}
-      <div className="relative aspect-square overflow-hidden bg-[#f6f7f7]">
+      <div className="relative aspect-square overflow-hidden bg-obsidian">
         {firstImage ? (
           <ProductImage
             src={firstImage}
@@ -208,7 +208,7 @@ export default function StoreProductCard({
           aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
           className="absolute right-2.5 top-2.5 grid h-9 w-9 place-items-center rounded-full bg-white shadow-sm transition-transform hover:scale-105"
         >
-          <Heart className={cn('h-4 w-4 transition-colors', wished ? 'fill-[#cc0c39] text-[#cc0c39]' : 'text-ink-muted')} />
+          <Heart className={cn('h-4 w-4 transition-colors', wished ? 'fill-[#cc0c39] text-danger' : 'text-ink-muted')} />
         </button>
       </div>
 
@@ -230,7 +230,7 @@ export default function StoreProductCard({
               {'★'.repeat(Math.round(product.averageRating))}
               <span className="text-[#d5d9d9]">{'★'.repeat(5 - Math.round(product.averageRating))}</span>
             </span>
-            <span className="text-[12px] text-[#0b6b9a]">{product.averageRating.toFixed(1)}</span>
+            <span className="text-[12px] text-link">{product.averageRating.toFixed(1)}</span>
           </div>
         )}
 
