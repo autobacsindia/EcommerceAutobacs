@@ -58,7 +58,16 @@ export default function AdminLeadsPage() {
   const [rep, setRep] = useState('');
   const [reopened, setReopened] = useState(false);
   const [neverContacted, setNeverContacted] = useState(false);
-  const [sort, setSort] = useState<LeadSort>('score');
+  /*
+    Date order, not score order.
+
+    Score ranks by computed priority, which is right for working a backlog but
+    wrong for the question reps actually open this screen with: "who came in
+    since I last looked?" A lead from July sitting above one from this morning
+    because it scores two points higher makes the list read as unordered.
+    Score is still one dropdown away.
+  */
+  const [sort, setSort] = useState<LeadSort>('newest');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [reps, setReps] = useState<SalesRep[]>([]);

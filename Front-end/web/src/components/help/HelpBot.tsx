@@ -195,7 +195,7 @@ export default function HelpBot() {
         aria-expanded={open}
         aria-controls="help-bot-panel"
         aria-label={open ? 'Close help' : 'Open help'}
-        className={`fixed ${launcherBottom} right-4 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-[#0a5c33] text-white shadow-lg ring-4 ring-white/70 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
+        className={`fixed ${launcherBottom} right-4 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-[#0a5c33] text-white shadow-lg ring-[3px] ring-white shadow-xl shadow-black/30 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
@@ -214,8 +214,8 @@ export default function HelpBot() {
               <MessageCircle className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">Roavion Help</p>
-              <p className="truncate text-[11px] text-white/60">Answers from our own pages</p>
+              <p className="truncate font-display text-[15px] font-bold tracking-[-0.01em]">Roavion Help</p>
+              <p className="truncate text-[11.5px] text-white/70">Real answers, from our own pages</p>
             </div>
             <button
               type="button"
@@ -227,14 +227,14 @@ export default function HelpBot() {
             </button>
           </header>
 
-          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+          <div className="flex-1 space-y-3.5 overflow-y-auto bg-[#f2f8f4] px-4 py-4">
             {turns.map((t) => (
               <div key={t.id} className={t.from === 'you' ? 'flex justify-end' : ''}>
                 <div
                   className={
                     t.from === 'you'
-                      ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-[#0a5c33] px-3.5 py-2 text-[13.5px] leading-5 text-white'
-                      : 'max-w-[92%] rounded-2xl rounded-bl-sm bg-[#f2f8f4] px-3.5 py-2.5 text-[13.5px] leading-[1.5] text-[#0f1111]'
+                      ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-[#0a5c33] px-4 py-2.5 text-[14.5px] leading-[1.45] text-white shadow-sm'
+                      : 'max-w-[92%] rounded-2xl rounded-bl-sm border border-[#dfe3e2] bg-white px-4 py-3 text-[14.5px] leading-[1.55] text-[#0f1111] shadow-sm'
                   }
                 >
                   {t.text}
@@ -252,9 +252,9 @@ export default function HelpBot() {
                           <Link
                             href={`/products/${p.slug}`}
                             onClick={() => setOpen(false)}
-                            className="flex items-center gap-2 rounded-lg border border-[#dfe3e2] bg-white px-2.5 py-2 transition hover:border-[#0a5c33]"
+                            className="flex items-center gap-2 rounded-xl border border-[#dfe3e2] bg-[#f7f9f8] px-3 py-2.5 transition hover:border-[#0a5c33] hover:bg-white"
                           >
-                            <span className="line-clamp-2 flex-1 text-[12.5px] leading-4 text-[#0f1111]">{p.text}</span>
+                            <span className="line-clamp-2 flex-1 text-[13px] leading-[1.35] text-[#0f1111]">{p.text}</span>
                             <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[#0a5c33]" />
                           </Link>
                         </li>
@@ -271,7 +271,7 @@ export default function HelpBot() {
                             href={a.href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-full bg-[#0a5c33] px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-[#084a29]"
+                            className="inline-flex items-center gap-1 rounded-full bg-[#0a5c33] px-3.5 py-2 text-[12.5px] font-semibold text-white transition hover:bg-[#084a29]"
                           >
                             {a.label} <ExternalLink className="h-3 w-3" />
                           </a>
@@ -280,7 +280,7 @@ export default function HelpBot() {
                             key={a.label}
                             href={a.href}
                             onClick={() => setOpen(false)}
-                            className="inline-flex items-center gap-1 rounded-full border border-[#0a5c33] px-3 py-1.5 text-[12px] font-semibold text-[#0a5c33] transition hover:bg-[#0a5c33] hover:text-white"
+                            className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#0a5c33] px-3.5 py-2 text-[12.5px] font-semibold text-[#0a5c33] transition hover:bg-[#0a5c33] hover:text-white"
                           >
                             {a.label}
                           </Link>
@@ -315,7 +315,7 @@ export default function HelpBot() {
                     key={s}
                     type="button"
                     onClick={() => ask(s)}
-                    className="rounded-full border border-[#dfe3e2] bg-white px-3 py-1.5 text-[12px] text-[#333838] transition hover:border-[#0a5c33] hover:text-[#0a5c33]"
+                    className="rounded-full border border-[#dfe3e2] bg-white px-3.5 py-2 text-[13px] font-medium text-[#333838] shadow-sm transition hover:border-[#0a5c33] hover:bg-[#f2f8f4] hover:text-[#0a5c33]"
                   >
                     {s}
                   </button>
@@ -339,7 +339,7 @@ export default function HelpBot() {
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Ask about a part, order or delivery"
               aria-label="Ask a question"
-              className="min-w-0 flex-1 rounded-full bg-[#eef1f0] px-3.5 py-2 text-[13px] text-[#0f1111] placeholder:text-[#5f6363] focus:outline-none focus:ring-2 focus:ring-[#0a5c33]/30"
+              className="min-w-0 flex-1 rounded-full border border-[#dfe3e2] bg-[#f7f9f8] px-4 py-2.5 text-[14px] text-[#0f1111] placeholder:text-[#5f6363] focus:border-[#0a5c33] focus:outline-none focus:ring-2 focus:ring-[#0a5c33]/20"
             />
             <button
               type="submit"

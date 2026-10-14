@@ -1,4 +1,5 @@
 import express from "express";
+import { ADMIN_COMMENT_MAX, CUSTOMER_COMMENT_MAX } from '../config/reviewLimits.js';
 import reviewRepository from "../repositories/reviewRepository.js";
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
@@ -524,6 +525,14 @@ router.post("/admin", protect, admin, asyncHandler(async (req, res) => {
     });
   }
 
+  if (comment.trim().length > ADMIN_COMMENT_MAX) {
+    // A clear sentence beats a Mongoose validation error surfacing as a 500.
+    return res.status(400).json({
+      success: false,
+      message: `Comment is ${comment.trim().length} characters — the maximum is ${ADMIN_COMMENT_MAX}.`,
+    });
+  }
+
   const product = await Product.findById(productId).select("_id");
   if (!product) {
     return res.status(404).json({ success: false, message: "Product not found" });
@@ -805,6 +814,12 @@ router.post("/link/:token", reviewSubmitRateLimit, asyncHandler(async (req, res)
   const ratingNum = parseInt(req.body?.rating, 10);
   const name = String(req.body?.name || "").trim();
   const comment = String(req.body?.comment || "").trim();
+  if (comment.length > CUSTOMER_COMMENT_MAX) {
+    return res.status(400).json({
+      success: false,
+      message: `Your review must be under ${CUSTOMER_COMMENT_MAX} characters.`,
+    });
+  }
   if (!(ratingNum >= 1 && ratingNum <= 5) || !name || !comment) {
     return res.status(400).json({
       success: false,

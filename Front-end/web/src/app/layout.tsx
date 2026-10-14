@@ -19,6 +19,7 @@ import { getActivePromoBanner } from "@/lib/promoBanner";
 import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from "@/lib/constants";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
+import ContactFab from "@/components/layout/ContactFab";
 import HelpBot from "@/components/help/HelpBot";
 import { SITE_URL } from "@/lib/siteUrl";
 import { isGoogleAdsEnabled } from "@/lib/googleAds";
@@ -397,6 +398,7 @@ export default async function RootLayout({
                       <main className="flex-1 flex flex-col min-h-screen">{children}</main>
                       <ConditionalFooter />
                       <SessionExpiredPrompt />
+                      <ContactFab />
                       <HelpBot />
                       <Toaster
                         position="top-right"

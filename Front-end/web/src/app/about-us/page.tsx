@@ -16,6 +16,7 @@ import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import StoreButton from '@/components/ui/StoreButton';
 import { buildPageMetadata } from '@/lib/pageSeo';
+import { ORGANISATION, serializeJsonLd } from '@/lib/jsonLd';
 
 import StatCounters, { type Stat } from './StatCounters';
 import './about.css';
@@ -165,9 +166,28 @@ const closingCtas = [
 const sectionHeading = 'about-display text-[clamp(1.6rem,3vw,2.4rem)] text-ink';
 const body = 'text-ink/70 font-display leading-relaxed';
 
+/**
+ * Structured data for the About page.
+ *
+ * `mainEntity` is the Organization rather than a separate node, because this
+ * page IS the company's description — that is what an AboutPage means to a
+ * crawler, and it is how Google associates the legal name, logo and social
+ * profiles with the brand in search results.
+ */
+const ABOUT_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@type': 'AboutPage',
+  url: 'https://www.autobacsindia.com/about-us',
+  mainEntity: ORGANISATION,
+};
+
 export default function AboutUsPage() {
   return (
     <div className="min-h-screen bg-obsidian-deep">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(ABOUT_SCHEMA) }}
+      />
       {/* ── Hero ───────────────────────────────────────────────────────── */}
       <section className="relative bg-obsidian-deep">
         <div className="absolute inset-0">

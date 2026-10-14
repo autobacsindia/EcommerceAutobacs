@@ -38,6 +38,16 @@ interface Pagination {
   hasPrev: boolean;
 }
 
+/**
+ * Mirrors ADMIN_COMMENT_MAX in Back-end/server/config/reviewLimits.js.
+ *
+ * Higher than the 1000 a customer may submit, because the real use of this
+ * form is bringing a customer's existing Google review across, and those run
+ * long. Trimming someone's words to fit a field is how a genuine review turns
+ * into a misleading one.
+ */
+const COMMENT_MAX = 2000;
+
 export default function AdminReviewsPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -219,6 +229,15 @@ export default function AdminReviewsPage() {
       alert('Pick a product and fill reviewer name + comment');
       return;
     }
+    // The server caps the comment at 1000 characters. Catch it here so a long
+    // pasted review fails with a useful number rather than a round trip.
+    if (form.comment.trim().length > COMMENT_MAX) {
+      alert(
+        `That comment is ${form.comment.trim().length} characters — the limit is ${COMMENT_MAX}.\n\n` +
+          'Trim it, or paste the part the customer actually wrote about this product.',
+      );
+      return;
+    }
     try {
       setSubmitting(true);
       await apiClient.post('/reviews/admin', {
@@ -236,7 +255,16 @@ export default function AdminReviewsPage() {
       fetchReviews();
       revalidateHome('home:testimonials');
     } catch (err) {
-      alert('Failed to create review');
+      /*
+        Show WHAT failed, not that something did.
+
+        The server explains itself — "comment is longer than the maximum
+        allowed length (1000)" is the common one when pasting a long review
+        from Google — and this used to discard that and say "Failed to create
+        review", leaving no way to tell a validation problem from an outage.
+      */
+      const message = err instanceof Error && err.message ? err.message : 'Please try again.';
+      alert(`Could not save the review.\n\n${message}`);
       console.error(err);
     } finally {
       setSubmitting(false);
@@ -605,9 +633,24 @@ export default function AdminReviewsPage() {
             </div>
 
             <div className="mb-3">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Comment</label>
-              <textarea value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} rows={3}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="mb-1 flex items-baseline justify-between">
+                <label className="block text-sm font-medium text-gray-700">Comment</label>
+                {/* A live count, because a review pasted from Google is the
+                    one that overruns and you cannot tell by looking. */}
+                <span
+                  className={`text-xs ${
+                    form.comment.length > COMMENT_MAX ? 'font-semibold text-red-600' : 'text-gray-400'
+                  }`}
+                >
+                  {form.comment.length} / {COMMENT_MAX}
+                </span>
+              </div>
+              <textarea value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} rows={5}
+                className={`w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 ${
+                  form.comment.length > COMMENT_MAX
+                    ? 'border-red-400 focus:ring-red-500'
+                    : 'border-gray-300 focus:ring-blue-500'
+                }`} />
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-4">

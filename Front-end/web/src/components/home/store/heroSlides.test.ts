@@ -21,19 +21,33 @@ const base: StoreHomeData = {
 const imagesOf = (data: StoreHomeData) => buildSlides(data).map((s) => s.images.map((i) => i.src));
 
 describe('which photographs the hero banners use', () => {
-  it('prefers the admin-featured products on the non-price banners', () => {
+  it('uses the admin-featured products, spread across banners rather than repeated', () => {
     /*
       The point of the change. Before, the banners could only illustrate
       themselves with whatever the ranking put first — and the deepest discount
       on the catalogue was a set of key cases. Ranking cannot fix that; only a
       person choosing can.
+
+      And the featured picks are handed out ACROSS banners: giving each banner
+      the same top three made the carousel look like it was not moving.
     */
     const [, vehicle, arrivals] = buildSlides({
       ...base,
-      featured: [prod('f1'), prod('f2'), prod('f3')],
+      featured: [prod('f1'), prod('f2'), prod('f3'), prod('f4'), prod('f5'), prod('f6')],
     });
     expect(vehicle.images.map((i) => i.src)).toEqual(['/if1.jpg', '/if2.jpg', '/if3.jpg']);
-    expect(arrivals.images.map((i) => i.src)).toEqual(['/if1.jpg', '/if2.jpg', '/if3.jpg']);
+    expect(arrivals.images.map((i) => i.src)).toEqual(['/if4.jpg', '/if5.jpg', '/if6.jpg']);
+  });
+
+  it('never shows the same photo on two banners', () => {
+    // The reported bug: three featured products meant three identical banners.
+    const slides = buildSlides({ ...base, featured: [prod('f1'), prod('f2'), prod('f3')] });
+    const seen = new Map<string, number>();
+    for (const s of slides) {
+      for (const img of s.images) seen.set(img.src, (seen.get(img.src) ?? 0) + 1);
+    }
+    const repeated = [...seen.entries()].filter(([, n]) => n > 1).map(([src]) => src);
+    expect(repeated).toEqual([]);
   });
 
   it('NEVER puts a product that is not on offer into the discount banner', () => {

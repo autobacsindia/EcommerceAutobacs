@@ -29,15 +29,41 @@ export function buildSlides(data: StoreHomeData): BannerSlide[] {
    * however good the photograph is. Ticking Featured promotes a product WITHIN
    * a banner; it does not smuggle it into one it does not belong in.
    */
+  /*
+    Featured products are handed out ACROSS the banners, not repeated on each.
+
+    The first version gave every banner `data.featured` from the top, so with
+    three or more ticked, all three banners showed the same three photographs —
+    a carousel that appears not to move. `used` is shared across the calls, so
+    a product promoted onto one banner is not offered to the next.
+  */
+  const used = new Set<string>();
+
   const pickPhotos = (pool: StoreProduct[], onlyFrom = false) => {
-    const picks = onlyFrom
+    const eligible = onlyFrom
       ? data.featured.filter((f) => pool.some((p) => p.id === f.id))
       : data.featured;
-    const chosen: StoreProduct[] = [...picks];
-    for (const p of pool) {
-      if (chosen.length >= 3) break;
-      if (!chosen.some((c) => c.id === p.id)) chosen.push(p);
-    }
+
+    const chosen: StoreProduct[] = [];
+    const take = (p: StoreProduct) => {
+      if (chosen.length >= 3) return;
+      if (chosen.some((c) => c.id === p.id)) return;
+      chosen.push(p);
+      used.add(p.id);
+    };
+
+    // Featured picks this banner has not already spent elsewhere.
+    for (const p of eligible) if (!used.has(p.id)) take(p);
+    // Then the banner's own list, still skipping anything already on screen.
+    for (const p of pool) if (!used.has(p.id)) take(p);
+    /*
+      Last resort: if everything in this banner's pool is already shown
+      elsewhere, repeat rather than render a short or empty banner. A banner
+      with two photos where the layout expects three looks broken; a repeated
+      photo merely looks unlucky, and only happens on a very small catalogue.
+    */
+    for (const p of pool) take(p);
+
     return chosen.slice(0, 3).map((p) => ({ src: p.image, href: p.href, name: p.name }));
   };
 
