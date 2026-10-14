@@ -6,6 +6,7 @@ import { validateProfileUpdate } from "../middleware/validationMiddleware.js";
 import { uploadSingle, handleMulterError } from "../middleware/uploadMiddleware.js";
 import { putPublicAsset } from "../services/storage/publicUploads.js";
 import { deleteHostedImages } from "../services/storage/publicImageDeletes.js";
+import { AddressBookError, normaliseAddressBook } from "../utils/addressBook.js";
 
 const router = express.Router();
 
@@ -26,6 +27,40 @@ router.get("/", protect, asyncHandler(async (req, res) => {
     success: true,
     user
   });
+}));
+
+// @route   GET /profile/addresses
+// @desc    The signed-in customer's saved delivery addresses (lean read for checkout)
+// @access  Private
+router.get("/addresses", protect, asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id).select("addresses").lean();
+  if (!user) return res.status(404).json({ success: false, message: "User not found" });
+  res.json({ success: true, addresses: user.addresses ?? [] });
+}));
+
+// @route   PUT /profile/addresses
+// @desc    Replace the saved address list. Touches NOTHING else on the user —
+//          see utils/addressBook.js for why this is not PUT /profile.
+// @access  Private
+router.put("/addresses", protect, asyncHandler(async (req, res) => {
+  let addresses;
+  try {
+    addresses = normaliseAddressBook(req.body?.addresses);
+  } catch (err) {
+    // Answered here, not thrown: the error middleware replaces messages it has
+    // not whitelisted with a generic one, and "PIN code must be 6 digits" is
+    // exactly the sentence the customer needs to see.
+    if (err instanceof AddressBookError) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    throw err;
+  }
+  const user = await User.findById(req.user.id);
+  if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+  user.addresses = addresses;
+  await user.save();
+  res.json({ success: true, addresses: user.addresses });
 }));
 
 // @route   PUT /profile
