@@ -322,9 +322,21 @@
 .sh-brand-name { font-family: var(--font-montserrat), sans-serif; font-size: 15px; font-weight: 700; color: #0f1111; text-align: center; line-height: 1.2; }
 
 /* Reviews */
-.sh-reviews { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.sh-review { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; }
-.sh-review-quote { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-2); flex: 1; }
+/* A scroll-snap track rather than a grid: it holds every testimonial, advances
+   itself, and is swipeable on touch without any of that being code. The
+   scrollbar is hidden because the movement already says it scrolls. */
+.sh-reviews { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.sh-reviews::-webkit-scrollbar { display: none; }
+/* Three across on a desktop, and a FIXED height — one long review used to make
+   its card four times the height of the others and shove the page down. */
+.sh-review { flex: 0 0 calc((100% - 28px) / 3); scroll-snap-align: start; display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; height: 260px; }
+/* Six lines, then the "View full review" button. The clamp is what keeps every
+   slide the same size; without it the snapping looks broken. */
+.sh-review-quote { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.sh-review-more { align-self: flex-start; margin-top: -2px; padding: 0; background: none; border: none; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--link); cursor: pointer; }
+.sh-review-more:hover { color: var(--red-ink); text-decoration: underline; }
+/* Pushes the name and product to the bottom, so the cards line up. */
+.sh-review .sh-review-who { margin-top: auto; }
 .sh-review-who { display: flex; align-items: center; gap: 10px; }
 .sh-review-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--g); color: #fff; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .sh-review-name { display: block; font-size: 14px; font-weight: 700; }
@@ -447,7 +459,7 @@
   .sh-vehicle-small { display: none; }
   .sh-vehicle-big { max-width: 120px; font-size: 14px; }
   .sh-trust { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sh-reviews { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sh-review { flex-basis: calc((100% - 14px) / 2); }
   .sf-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 768px) {
@@ -502,8 +514,7 @@
   .sh-trust-text { font-size: 12px; }
   .sh-brands { grid-auto-columns: 132px; gap: 10px; }
   .sh-brand-arrow { display: none; }
-  .sh-reviews { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
-  .sh-review { flex: 0 0 82%; scroll-snap-align: start; }
+  .sh-review { flex: 0 0 82%; }
 
   .sf-band { grid-template-columns: 1fr 1fr; }
   .sf-band a { padding: 14px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.14); }
@@ -611,3 +622,12 @@
    therefore cannot use the inverting ink or the surface green. */
 [data-theme='dark'] .sp-vph-note { color: #5f6b65; }
 [data-theme='dark'] .sp-vph-make { color: #0a5c33; }
+
+/* ── Full review dialog ─────────────────────────────────────────────────────
+   A card shows six lines; the rest opens here rather than expanding in place,
+   which would change one slide's height and break the snapping. */
+.sh-rev-backdrop { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, 0.5); }
+.sh-rev-dismiss { position: absolute; inset: 0; background: none; border: none; cursor: default; }
+.sh-rev-modal { position: relative; width: min(560px, 100%); max-height: 80vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 22px; border-radius: 14px; background: var(--card); color: var(--ink); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35); }
+.sh-rev-full { margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink-2); white-space: pre-wrap; }
+.sh-rev-close { align-self: flex-start; }
