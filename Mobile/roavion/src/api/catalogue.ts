@@ -13,6 +13,18 @@ export interface ApiImage {
   alt?: string;
 }
 
+export interface RawSpec { key?: string; value?: string }
+
+export interface RawVariant {
+  _id?: string;
+  label?: string;
+  attributes?: { name?: string; option?: string }[];
+  price?: number;
+  originalPrice?: number | null;
+  saleEndsAt?: string | null;
+  stock?: 'in' | 'low' | 'out';
+}
+
 export interface RawProduct {
   _id: string;
   name: string;
@@ -27,13 +39,40 @@ export interface RawProduct {
   totalReviews?: number;
   images?: ApiImage[];
   stock?: 'in' | 'low' | 'out';
+  productType?: 'simple' | 'variable';
+  variants?: RawVariant[];
+  priceMin?: number;
+  priceMax?: number;
   description?: string;
+  shortDescription?: string;
   features?: string[];
+  whyChoose?: string[];
   packageContents?: string[];
-  categories?: string[];
+  specifications?: RawSpec[];
+  returnPolicy?: { returnable?: boolean; cancellable?: boolean } | null;
+  categories?: ({ _id?: string; name?: string; slug?: string } | string)[];
+  complementaryProducts?: RawProduct[];
 }
 
 /** What every product card and detail screen in the app uses. */
+/**
+ * One buyable option of a `variable` product — a colour, a vehicle, a kit size.
+ *
+ * Every variant carries its OWN price and stock, which is why the product page
+ * cannot show a single price until one is chosen: on the Hard Lid the two
+ * options are ₹1,59,990 and ₹2,23,980.
+ */
+export interface Variant {
+  id: string;
+  label: string;
+  /** The attribute this option belongs to, e.g. "Colour", "vehicle". */
+  attribute: string;
+  price: number;
+  mrp: number | null;
+  discountPercent: number;
+  stock: 'in' | 'low' | 'out';
+}
+
 export interface Product {
   id: string;
   slug: string;
@@ -48,8 +87,27 @@ export interface Product {
   image: string;
   images: string[];
   stock: 'in' | 'low' | 'out';
+  /**
+   * `variable` means the customer MUST choose a variant before this can be
+   * added to a cart — the API rejects an add without one ("Please select a
+   * variant before adding to cart").
+   */
+  productType: 'simple' | 'variable';
+  variants: Variant[];
+  /** Cheapest and dearest variant, for the "from ₹X" on a listing card. */
+  priceFrom: number;
+  priceTo: number;
   description: string;
+  /** One-paragraph summary, shown under the price as on the website. */
+  summary: string;
   features: string[];
+  whyChoose: string[];
+  packageContents: string[];
+  /** The website's "Technical Specifications" table, in the order admin set. */
+  specs: { key: string; value: string }[];
+  returnable: boolean;
+  /** Primary category — the breadcrumb and the "more in this category" link. */
+  category: { name: string; slug: string } | null;
 }
 
 export interface Category {
@@ -76,6 +134,32 @@ const imageUrls = (images?: ApiImage[]): string[] => {
   return ordered.map((i) => i.url!) as string[];
 };
 
+/** A sale whose window has closed is not a sale, even if the fields linger. */
+function saleOf(price: number, originalPrice?: number | null, endsAt?: string | null) {
+  const live = endsAt ? new Date(endsAt).getTime() > Date.now() : true;
+  const on = typeof originalPrice === 'number' && originalPrice > price && live;
+  return {
+    mrp: on ? (originalPrice as number) : null,
+    discountPercent: on ? Math.round((1 - price / (originalPrice as number)) * 100) : 0,
+  };
+}
+
+function toVariant(v: RawVariant): Variant {
+  const price = v.price ?? 0;
+  const sale = saleOf(price, v.originalPrice, v.saleEndsAt);
+  return {
+    id: String(v._id ?? ''),
+    // Every variant in this catalogue carries a human label; the attribute
+    // option is the fallback for one that does not.
+    label: v.label || v.attributes?.[0]?.option || 'Option',
+    attribute: v.attributes?.[0]?.name || 'Option',
+    price,
+    mrp: sale.mrp,
+    discountPercent: sale.discountPercent,
+    stock: v.stock ?? 'in',
+  };
+}
+
 export function toProduct(p: RawProduct): Product {
   const pics = imageUrls(p.images);
   const ends = p.saleEndsAt ?? p.offerEndDate ?? null;
@@ -95,9 +179,38 @@ export function toProduct(p: RawProduct): Product {
     image: pics[0] ?? '',
     images: pics,
     stock: p.stock ?? 'in',
+    productType: p.productType === 'variable' ? 'variable' : 'simple',
+    variants: (p.variants ?? []).map(toVariant).filter((v) => !!v.id),
+    priceFrom: p.priceMin ?? p.price,
+    priceTo: p.priceMax ?? p.price,
     description: p.description ?? '',
+    summary: p.shortDescription ?? '',
     features: p.features ?? [],
+    whyChoose: p.whyChoose ?? [],
+    packageContents: p.packageContents ?? [],
+    specs: (p.specifications ?? [])
+      .filter((s) => !!s?.key && !!s?.value)
+      .map((s) => ({ key: s.key as string, value: s.value as string })),
+    // Absent means the default policy applies, which is returnable.
+    returnable: p.returnPolicy?.returnable !== false,
+    category: firstCategory(p.categories),
   };
+}
+
+/**
+ * The product's primary category as { name, slug }.
+ *
+ * The listing endpoint sends categories as plain id strings while the detail
+ * endpoint sends populated objects, so this accepts both and simply yields null
+ * for the id-only shape — a card has no use for a breadcrumb anyway.
+ */
+function firstCategory(
+  cats?: ({ _id?: string; name?: string; slug?: string } | string)[],
+): { name: string; slug: string } | null {
+  const first = (cats ?? []).find((c) => typeof c === 'object' && !!c?.name && !!c?.slug);
+  return first && typeof first === 'object'
+    ? { name: first.name as string, slug: first.slug as string }
+    : null;
 }
 
 /** Products only make sense in a list once they have a name, a price and a photo. */
@@ -252,9 +365,14 @@ export async function fetchTestimonials(limit = 8, signal?: AbortSignal): Promis
       id?: string; name?: string; rating?: number; comment?: string;
       isVerifiedPurchase?: boolean; product?: { name?: string } | null;
     }[];
-  }>(`/reviews/testimonials?limit=${limit}`, signal);
+  }>(// No `?limit`: the API is cached at Cloudflare's edge keyed on the full
+    // url and purged by exact match, so a query string here would leave the
+    // app showing testimonials the website had already replaced. The endpoint
+    // returns 12; the app slices what it needs.
+    `/reviews/testimonials`, signal);
   return (res.testimonials ?? [])
     .filter((t) => !!t.comment && !!t.name)
+    .slice(0, limit)
     .map((t, i) => ({
       id: t.id ?? String(i),
       name: t.name as string,
@@ -283,6 +401,8 @@ export interface Facets {
   ratings: { value: number; count: number }[];
   availability: { value: string; label: string; count: number }[];
   price: { min: number; max: number } | null;
+  /** Price bands with counts, straight from the API — drives the band list. */
+  priceBands: { from: number; to: number; count: number }[];
 }
 
 export async function fetchFacets(q: ProductQuery = {}, signal?: AbortSignal): Promise<Facets> {
@@ -310,7 +430,7 @@ export async function fetchFacets(q: ProductQuery = {}, signal?: AbortSignal): P
     vehicleModels?: { value?: string; make?: string; count?: number }[];
     ratings?: { value?: number; count?: number }[];
     availability?: { value?: string; label?: string; count?: number }[];
-    price?: { min?: number; max?: number };
+    price?: { min?: number; max?: number; histogram?: { from?: number; to?: number; count?: number }[] };
   };
   const envelope = await api.get<{ facets?: FacetBody } & FacetBody>(
     `/products/facets?${params}`,
@@ -341,5 +461,93 @@ export async function fetchFacets(q: ProductQuery = {}, signal?: AbortSignal): P
       res.price && Number.isFinite(res.price.min) && Number.isFinite(res.price.max) && res.price.max! > res.price.min!
         ? { min: Math.floor(res.price.min!), max: Math.ceil(res.price.max!) }
         : null,
+    priceBands: list(res.price?.histogram)
+      .map((h) => ({ from: Number(h.from ?? 0), to: Number(h.to ?? 0), count: Number(h.count ?? 0) }))
+      .filter((h) => h.count > 0 && h.to > h.from),
   };
+}
+
+// ── reviews ──────────────────────────────────────────────────────────────────
+
+export interface Review {
+  id: string;
+  name: string;
+  rating: number;
+  title: string;
+  comment: string;
+  verified: boolean;
+  createdAt: string;
+}
+
+export interface ReviewSummary {
+  average: number;
+  total: number;
+  /** Count per star, 1-5. Drives the distribution bars on the product page. */
+  distribution: Record<1 | 2 | 3 | 4 | 5, number>;
+}
+
+/**
+ * The rating breakdown shown above the review list.
+ *
+ * Kept separate from the list because the website shows the bars before any
+ * review has loaded, and a product with hundreds of reviews should not have to
+ * ship them all to draw five bars.
+ */
+export async function fetchReviewSummary(productId: string, signal?: AbortSignal): Promise<ReviewSummary> {
+  const res = await api.get<{
+    summary?: {
+      averageRating?: number;
+      totalReviews?: number;
+      ratingDistribution?: Record<string, number>;
+    };
+  }>(`/reviews/products/${productId}/summary`, signal);
+  const d = res.summary?.ratingDistribution ?? {};
+  return {
+    average: res.summary?.averageRating ?? 0,
+    total: res.summary?.totalReviews ?? 0,
+    distribution: {
+      1: d['1'] ?? 0,
+      2: d['2'] ?? 0,
+      3: d['3'] ?? 0,
+      4: d['4'] ?? 0,
+      5: d['5'] ?? 0,
+    },
+  };
+}
+
+/** The most recent reviews for one product. */
+export async function fetchReviews(productId: string, limit = 5, signal?: AbortSignal): Promise<Review[]> {
+  const res = await api.get<{
+    reviews?: {
+      _id?: string; id?: string; rating?: number; title?: string; comment?: string;
+      isVerifiedPurchase?: boolean; createdAt?: string;
+      user?: { name?: string } | null; name?: string;
+    }[];
+  }>(`/reviews/products/${productId}?limit=${limit}`, signal);
+  return (res.reviews ?? [])
+    .filter((r) => !!r.comment)
+    .map((r, i) => ({
+      id: r._id ?? r.id ?? String(i),
+      name: r.user?.name ?? r.name ?? 'Verified buyer',
+      rating: r.rating ?? 5,
+      title: r.title ?? '',
+      comment: r.comment as string,
+      verified: !!r.isVerifiedPurchase,
+      createdAt: r.createdAt ?? '',
+    }));
+}
+
+/**
+ * "Frequently bought together" — the admin-curated complementary products.
+ *
+ * They ride along on the product document, so this re-reads the detail payload
+ * rather than adding an endpoint the backend does not have.
+ */
+export async function fetchComplementary(slug: string, signal?: AbortSignal): Promise<Product[]> {
+  const res = await api.get<{ product?: RawProduct } & RawProduct>(
+    `/products/slug/${encodeURIComponent(slug)}`,
+    signal,
+  );
+  const raw = (res.product ?? res) as RawProduct;
+  return (raw.complementaryProducts ?? []).map(toProduct).filter(listable);
 }

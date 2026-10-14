@@ -238,7 +238,8 @@ async function fetchCategories(): Promise<CategoryItem[]> {
 
 async function fetchTestimonials(): Promise<TestimonialItem[]> {
   const res = await serverFetch<{ testimonials?: ApiTestimonial[] }>(
-    `/reviews/testimonials?limit=${LIMITS.testimonials}`,
+    // No `?limit`: Cloudflare keys its cache on the FULL url and purges by exact match, so a query string makes this endpoint unpurgeable (see config/cdnPurgeUrls.js). The endpoint defaults to 12, more than any caller shows.
+    `/reviews/testimonials`,
     { next: { revalidate: REVALIDATE, tags: ['home:testimonials'] } }
   );
   return (res.testimonials ?? []).map(mapTestimonial).filter((t) => t.quote);
