@@ -11,13 +11,15 @@
  * server then verifies. A native SDK can replace this later without any change
  * to the backend.
  */
-import { useMemo, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../src/api/client';
+import { addAddress, addressKey, fetchAddresses, type SavedAddress } from '../src/api/addresses';
 import { Button, Card, Screenful, T } from '../src/components/ui';
 import { colors, font, inr, radius, spacing } from '../src/theme';
 import { useApp } from '../src/store';
@@ -79,6 +81,46 @@ export default function CheckoutScreen() {
     fullName: customer?.name ?? '',
     phone: customer?.phone ?? '',
   });
+  /*
+    Saved addresses.
+
+    A returning customer used to retype their whole address on every order —
+    on a phone keyboard, the single biggest reason a mobile checkout is
+    abandoned. Now the default saved address is pre-selected and the order is
+    one tap away; a new address can still be typed, and is saved for next time
+    unless the customer switches that off.
+  */
+  const queryClient = useQueryClient();
+  const saved = useQuery({
+    queryKey: ['addresses'],
+    queryFn: ({ signal }) => fetchAddresses(signal),
+    enabled: !!customer,
+  });
+  const savedList = saved.data ?? [];
+  const [mode, setMode] = useState<'saved' | 'new'>('new');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [saveNew, setSaveNew] = useState(true);
+
+  // Once the list arrives, start on the default — but never override a choice
+  // the customer has already made on this screen.
+  useEffect(() => {
+    if (!savedList.length || selectedId) return;
+    const def = savedList.find((a) => a.isDefault) ?? savedList[0];
+    setSelectedId(addressKey(def));
+    setMode('saved');
+  }, [savedList, selectedId]);
+
+  const chosen: SavedAddress | undefined =
+    mode === 'saved' ? savedList.find((a) => addressKey(a) === selectedId) : undefined;
+
+  /** The address the order will actually ship to. */
+  const shipTo: Address = chosen
+    ? {
+        fullName: chosen.fullName, phone: chosen.phone, addressLine1: chosen.addressLine1,
+        addressLine2: chosen.addressLine2, city: chosen.city, state: chosen.state, postalCode: chosen.postalCode,
+      }
+    : address;
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pay, setPay] = useState<{ html: string; orderId: string } | null>(null);
@@ -88,8 +130,8 @@ export default function CheckoutScreen() {
 
   const missing = useMemo(() => {
     const required: (keyof Address)[] = ['fullName', 'phone', 'addressLine1', 'city', 'state', 'postalCode'];
-    return required.filter((k) => !address[k].trim());
-  }, [address]);
+    return required.filter((k) => !shipTo[k].trim());
+  }, [shipTo]);
 
   /**
    * 1. create the order (server prices it) → 2. create the Razorpay order →
@@ -99,7 +141,7 @@ export default function CheckoutScreen() {
   const placeOrder = async () => {
     setError('');
     if (missing.length) return setError('Please fill in every delivery field.');
-    if (!/^\d{10}$/.test(address.phone.replace(/\D/g, '').slice(-10))) {
+    if (!/^\d{10}$/.test(shipTo.phone.replace(/\D/g, '').slice(-10))) {
       return setError('Enter a valid 10-digit mobile number.');
     }
 
@@ -108,13 +150,13 @@ export default function CheckoutScreen() {
       const created = await api.post<{ order?: { _id: string; totalAmount: number } }>('/orders', {
         items: cart.items.map((i) => ({ product: i.productId, quantity: i.quantity, ...(i.variantId ? { variantId: i.variantId } : {}) })),
         shippingAddress: {
-          fullName: address.fullName.trim(),
-          phone: address.phone.trim(),
-          addressLine1: address.addressLine1.trim(),
-          addressLine2: address.addressLine2.trim(),
-          city: address.city.trim(),
-          state: address.state.trim(),
-          postalCode: address.postalCode.trim(),
+          fullName: shipTo.fullName.trim(),
+          phone: shipTo.phone.trim(),
+          addressLine1: shipTo.addressLine1.trim(),
+          addressLine2: shipTo.addressLine2.trim(),
+          city: shipTo.city.trim(),
+          state: shipTo.state.trim(),
+          postalCode: shipTo.postalCode.trim(),
           country: 'India',
         },
         acceptTerms: true,
@@ -122,6 +164,15 @@ export default function CheckoutScreen() {
 
       const orderId = created.order?._id;
       if (!orderId) throw new Error('We could not create your order. Please try again.');
+
+      // Remember a newly typed address for next time. Best-effort and NOT
+      // awaited: a failure to save an address must never stand between the
+      // customer and paying for the order they just placed.
+      if (mode === 'new' && saveNew && customer) {
+        addAddress({ ...shipTo, isDefault: false })
+          .then((list) => queryClient.setQueryData(['addresses'], list))
+          .catch(() => {});
+      }
 
       const rp = await api.post<{ data?: { orderId: string; amount: number; keyId: string } }>('/razorpay/create-order', {
         orderId,
@@ -136,9 +187,9 @@ export default function CheckoutScreen() {
           key: d.keyId,
           orderId: d.orderId,
           amount: d.amount,
-          name: address.fullName,
+          name: shipTo.fullName,
           email: customer?.email ?? '',
-          phone: address.phone,
+          phone: shipTo.phone,
         }),
       });
     } catch (err) {
@@ -214,6 +265,50 @@ export default function CheckoutScreen() {
         <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: 200 }} keyboardShouldPersistTaps="handled">
           <Card>
             <T kind="h3">Delivery address</T>
+
+            {savedList.length > 0 && (
+              <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+                {savedList.map((a) => {
+                  const k = addressKey(a);
+                  const on = mode === 'saved' && k === selectedId;
+                  return (
+                    <Pressable
+                      key={k}
+                      onPress={() => { setSelectedId(k); setMode('saved'); }}
+                      style={[s.addr, on && s.addrOn]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: on }}
+                      accessibilityLabel={`${a.fullName}, ${a.addressLine1}, ${a.city} ${a.postalCode}`}
+                    >
+                      <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? colors.green : colors.muted} />
+                      <View style={{ flex: 1 }}>
+                        <View style={s.addrHead}>
+                          <Text style={s.addrName} numberOfLines={1}>{a.fullName}</Text>
+                          {a.isDefault && <Text style={s.addrBadge}>Default</Text>}
+                        </View>
+                        <Text style={s.addrLine} numberOfLines={2}>
+                          {[a.addressLine1, a.addressLine2].filter(Boolean).join(', ')}
+                        </Text>
+                        <Text style={s.addrLine}>{a.city}, {a.state} {a.postalCode}</Text>
+                        <Text style={s.addrPhone}>{a.phone}</Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+
+                <Pressable
+                  onPress={() => setMode('new')}
+                  style={[s.addr, mode === 'new' && s.addrOn]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: mode === 'new' }}
+                >
+                  <Ionicons name={mode === 'new' ? 'radio-button-on' : 'add-circle-outline'} size={20} color={mode === 'new' ? colors.green : colors.muted} />
+                  <Text style={s.addrName}>Deliver to a new address</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {mode === 'new' && (
             <View style={{ marginTop: spacing.md }}>
               {([
                 ['fullName', 'Full name', 'e.g. Rahul Sharma'],
@@ -238,7 +333,24 @@ export default function CheckoutScreen() {
                   />
                 </View>
               ))}
+
+              {!!customer && (
+                <View style={s.saveRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.saveTitle}>Save this address</Text>
+                    <Text style={s.saveBody}>So next time it is one tap.</Text>
+                  </View>
+                  <Switch
+                    value={saveNew}
+                    onValueChange={setSaveNew}
+                    trackColor={{ true: colors.green, false: colors.line }}
+                    thumbColor={colors.white}
+                    accessibilityLabel="Save this address for next time"
+                  />
+                </View>
+              )}
             </View>
+            )}
           </Card>
 
           <Card style={{ marginTop: spacing.lg }}>
@@ -303,6 +415,25 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.md, height: 46, fontFamily: font.regular, fontSize: 14,
     color: colors.ink, marginBottom: spacing.md,
   },
+  addr: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, padding: spacing.md,
+    borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.line, backgroundColor: colors.card,
+  },
+  addrOn: { borderColor: colors.green, backgroundColor: colors.greenFaint },
+  addrHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  addrName: { flexShrink: 1, fontFamily: font.bold, fontSize: 14, color: colors.ink },
+  addrBadge: {
+    fontFamily: font.bold, fontSize: 10.5, color: colors.green, backgroundColor: colors.greenSoft,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden',
+  },
+  addrLine: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: colors.ink2, marginTop: 2 },
+  addrPhone: { fontFamily: font.medium, fontSize: 12.5, color: colors.muted, marginTop: 3 },
+  saveRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: spacing.sm,
+    borderTopWidth: 1, borderTopColor: colors.line,
+  },
+  saveTitle: { fontFamily: font.semibold, fontSize: 14, color: colors.ink },
+  saveBody: { fontFamily: font.regular, fontSize: 12, color: colors.muted, marginTop: 1 },
   sumRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.sm },
   sumName: { flex: 1, fontFamily: font.regular, fontSize: 13, color: colors.ink2 },
   sumValue: { fontFamily: font.medium, fontSize: 13, color: colors.ink },
