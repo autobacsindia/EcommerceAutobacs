@@ -170,7 +170,11 @@ router.get("/products/:productId/summary", validateRouteProductId, httpCache('RE
 // @desc    Approved reviews flagged as testimonials, for the homepage (across all products)
 // @access  Public
 router.get("/testimonials", httpCache('TESTIMONIALS'), asyncHandler(async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 12, 50);
+  // The home page shows every testimonial in a slider now, so the default is
+  // what an admin can reasonably flag rather than what fitted in a 3-up grid.
+  // Still bounded: this is a public, edge-cached endpoint, and the callers pass
+  // no query string so that Cloudflare can purge it by exact url.
+  const limit = Math.min(parseInt(req.query.limit) || 24, 50);
 
   const reviews = await reviewRepository.find({ isTestimonial: true, isApproved: true })
     .populate("user", "name")
