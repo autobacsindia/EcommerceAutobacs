@@ -26,10 +26,14 @@ const DEFAULT_RATIO = 0.62; // lower-middle of the viewport by default
 const DRAG_THRESHOLD = 6; // px of travel before a gesture becomes a drag
 const EDGE_MARGIN = 12; // keep the tab clear of the very top/bottom edges
 const MOBILE_BREAKPOINT = 768; // matches StickyCartBar's `md:hidden`
-// On mobile PDPs a full-width sticky Add-to-Cart bar (z-50) hugs bottom-0.
-// Reserve enough bottom clearance that the widget can never be dragged over it
-// (bar ≈72px + iOS home-indicator safe area). Desktop keeps the small margin.
-const MOBILE_BOTTOM_RESERVE = 96;
+// The bottom-right corner holds the WhatsApp + Call stack (ContactFab) and the
+// help-bot launcher, both flush against the same right edge as this tab. Keep
+// the tab above them so it can never be dropped on top of a button:
+//   desktop: launcher bottom-6 (24) + 56, FABs bottom-28 (112) + 2×56 + 12 → 236
+//   mobile:  on a PDP the FABs sit at bottom-44 (176) + 2×48 + 12 → 284, which
+//            also clears the full-width sticky Add-to-Cart bar.
+const MOBILE_BOTTOM_RESERVE = 300;
+const DESKTOP_BOTTOM_RESERVE = 252;
 // On desktop the store header is sticky (≈122px). Keep the tab below it so it can
 // never be dragged over the Cart / Account links.
 const DESKTOP_TOP_RESERVE = 134;
@@ -41,7 +45,7 @@ function topMargin(): number {
 
 /** Bottom clearance for the current viewport, incl. the iOS safe-area inset. */
 function bottomMargin(): number {
-  const base = window.innerWidth < MOBILE_BREAKPOINT ? MOBILE_BOTTOM_RESERVE : EDGE_MARGIN;
+  const base = window.innerWidth < MOBILE_BREAKPOINT ? MOBILE_BOTTOM_RESERVE : DESKTOP_BOTTOM_RESERVE;
   return base + safeAreaBottom();
 }
 

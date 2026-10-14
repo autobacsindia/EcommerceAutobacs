@@ -363,6 +363,16 @@
 .sf-social a:hover { background: var(--g); color: #fff; transform: translateY(-2px); }
 .sf-band-ico { flex-shrink: 0; opacity: 0.9; }
 .sf-band-txt { display: flex; flex-direction: column; min-width: 0; }
+/* "Consult a specialist" is the only cell that books something, so it is the
+   one call to action in the band rather than a fourth identical tile. Literal
+   colours, not tokens: the tile is white in both themes, and the dark --g is a
+   surface green that would fail as text on it. */
+.sf-band a.sf-band-cta { background: #fff; color: #0a5c33; box-shadow: inset 0 0 0 3px #f5b82e; }
+.sf-band a.sf-band-cta:hover { background: #e7f3ec; }
+.sf-band-cta .sf-band-ico { opacity: 1; }
+.sf-band-cta .sf-band-txt > span { opacity: 1; color: #3d4a43; }
+.sf-band-go { margin-left: auto; flex-shrink: 0; padding: 7px 14px; border-radius: 999px; background: #0a5c33; color: #fff; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.sf-band-cta:hover .sf-band-go { background: #084a29; }
 .sf-col h3 { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
 .sf-col ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
 .sf-col a { color: var(--muted); }
@@ -518,6 +528,7 @@
 
   .sf-band { grid-template-columns: 1fr 1fr; }
   .sf-band a { padding: 14px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.14); }
+  .sf-band-go { display: none; }
   .sf-main { grid-template-columns: 1fr 1fr; gap: 24px; padding: 28px 16px 20px; }
   /* Room for the fixed WhatsApp / call bubbles at the very bottom. */
   .sf-bottom { flex-direction: column; padding: 16px 16px 110px; }

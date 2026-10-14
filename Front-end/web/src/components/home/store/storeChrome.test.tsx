@@ -165,3 +165,47 @@ describe('Need-help tab never covers the sticky header on desktop', () => {
     expect(topOf()).toBeLessThan(134);
   });
 });
+
+describe('Need-help tab never covers the bottom-right buttons', () => {
+  // WhatsApp, Call and the help-bot launcher are stacked flush against the same
+  // right edge. Wherever the tab was saved or dragged, it stays above them.
+  const setViewport = (w: number, h: number) => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: w });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: h });
+  };
+  const tab = () => screen.getByRole('button', { name: /Need help/ });
+
+  it.each([
+    ['desktop', 1440, 900, 252],
+    ['phone', 375, 812, 300],
+  ])('%s: a saved position at the very bottom is lifted above the stack', (_, w, h, reserve) => {
+    setViewport(w, h);
+    localStorage.setItem('help-widget-top-ratio', '1');
+    render(<HelpWidget />);
+    expect(parseFloat(tab().style.top) + tab().offsetHeight).toBeLessThanOrEqual(h - reserve);
+  });
+
+  it('dragging down stops above the stack', () => {
+    setViewport(1440, 900);
+    localStorage.removeItem('help-widget-top-ratio');
+    render(<HelpWidget />);
+    const start = parseFloat(tab().style.top);
+    act(() => {
+      fireEvent.pointerDown(tab(), { clientY: start + 10, pointerId: 1 });
+      fireEvent.pointerMove(tab(), { clientY: 5000, pointerId: 1 });
+      fireEvent.pointerUp(tab(), { clientY: 5000, pointerId: 1 });
+    });
+    expect(parseFloat(tab().style.top)).toBeLessThanOrEqual(900 - 252);
+    expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe('footer band', () => {
+  it('"Consult a specialist" is the highlighted call to action', () => {
+    render(<StoreFooter />);
+    const consult = screen.getByRole('link', { name: /Consult a specialist/ });
+    expect(consult).toHaveAttribute('href', '/consultation');
+    expect(consult).toHaveClass('sf-band-cta');
+    expect(screen.getByRole('link', { name: /Call us/ })).not.toHaveClass('sf-band-cta');
+  });
+});
