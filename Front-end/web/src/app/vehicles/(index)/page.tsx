@@ -80,7 +80,7 @@ export default function VehiclesPage() {
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Type your car, e.g. Fortuner or City"
               aria-label="Find your vehicle"
-              className="h-11 w-full max-w-md rounded-full border border-[#c9cfcd] bg-white px-5 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
+              className="h-11 w-full max-w-md rounded-full border border-hairline bg-white px-5 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
             />
             <div className="sp-chips min-h-[40px]" role="group" aria-label="Filter by make">
               <button type="button" className="sp-chip" aria-pressed={!make} onClick={() => setMake('')}>

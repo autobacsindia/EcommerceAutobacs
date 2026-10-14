@@ -22,7 +22,10 @@ export default function TestimonialsSection() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiClient.get('/reviews/testimonials?limit=9') as any;
+        // No `?limit`: Cloudflare keys its cache on the FULL url and purges by
+        // exact match, so a query string makes this endpoint unpurgeable (see
+        // config/cdnPurgeUrls.js). The endpoint defaults to 12.
+        const data = await apiClient.get('/reviews/testimonials') as any;
         setItems(data.testimonials || []);
       } catch {
         setItems([]);

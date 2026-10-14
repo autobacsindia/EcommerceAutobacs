@@ -20,7 +20,7 @@ export default function ConsultSpecialistBanner({ productSlug, className = '' }:
 
   return (
     <div
-      className={`flex flex-col gap-5 rounded-xl border border-gold/20 bg-[#f2f8f4] p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:p-6 ${className}`}
+      className={`flex flex-col gap-5 rounded-xl border border-gold/20 bg-gold-soft p-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:p-6 ${className}`}
     >
       <div className="flex items-start gap-4">
         <Headphones className="mt-0.5 h-6 w-6 shrink-0 text-gold" aria-hidden="true" />

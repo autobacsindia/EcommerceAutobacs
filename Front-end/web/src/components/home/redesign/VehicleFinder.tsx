@@ -134,7 +134,7 @@ export default function VehicleFinder() {
                   <span
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors ${
                       st === 'done'
-                        ? 'border-[#c9a870] bg-[#c9a870] text-[#111212]'
+                        ? 'border-[#c9a870] bg-[#c9a870] text-ink'
                         : st === 'current'
                           ? 'border-[#c9a870] text-[#c9a870] shadow-[0_0_0_4px_rgba(201,168,112,0.15)]'
                           : 'border-white/20 text-[#f0ede7]/50'
@@ -224,13 +224,13 @@ export default function VehicleFinder() {
                     onClick={() => setCategorySlug(active ? '' : c.slug!)}
                     className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.1em] transition-all sm:px-5 sm:py-2.5 ${
                       active
-                        ? 'border-[#c9a870] bg-[#c9a870] text-[#111212] shadow-[0_8px_22px_-10px_rgba(201,168,112,0.8)]'
+                        ? 'border-[#c9a870] bg-[#c9a870] text-ink shadow-[0_8px_22px_-10px_rgba(201,168,112,0.8)]'
                         : 'border-white/15 bg-white/[0.04] text-[#f0ede7]/90 hover:-translate-y-0.5 hover:border-[#c9a870]/70 hover:text-[#f0ede7]'
                     }`}
                   >
                     {c.name}
                     {count !== undefined && (
-                      <span className={`ml-1.5 ${active ? 'text-[#111212]/70' : 'text-[#c9a870]'}`}>{count}</span>
+                      <span className={`ml-1.5 ${active ? 'text-ink/70' : 'text-[#c9a870]'}`}>{count}</span>
                     )}
                   </button>
                 );
@@ -247,7 +247,7 @@ export default function VehicleFinder() {
               aria-disabled={!ready}
               className={`flex w-full max-w-md items-center justify-center gap-2.5 rounded-full py-4 text-sm font-bold uppercase tracking-[0.18em] transition-all ${
                 ready
-                  ? 'bg-[#c9a870] text-[#111212] shadow-[0_14px_36px_-10px_rgba(201,168,112,0.8)] hover:-translate-y-0.5 hover:brightness-110'
+                  ? 'bg-[#c9a870] text-ink shadow-[0_14px_36px_-10px_rgba(201,168,112,0.8)] hover:-translate-y-0.5 hover:brightness-110'
                   : 'cursor-not-allowed border border-white/12 bg-white/[0.04] text-[#f0ede7]/40'
               }`}
             >

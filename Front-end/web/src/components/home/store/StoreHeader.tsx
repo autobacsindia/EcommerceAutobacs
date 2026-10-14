@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import ThemeToggle from '@/components/theme/ThemeToggle';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -74,6 +75,9 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
           <span className="sh-big">&amp; Orders</span>
         </Link>
         <StoreSearch />
+        {/* Beside the cart: the last thing in the bar, where a preference
+            control belongs — not competing with search or account. */}
+        <ThemeToggle className="sh-theme-toggle" />
         <Link href="/cart" className="sh-cart" aria-label={cartLabel}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L21 8H6.2" /><circle cx="9.5" cy="19.5" r="1.4" /><circle cx="17" cy="19.5" r="1.4" /></svg>
           <span className="sh-cart-count" aria-hidden="true">{itemCount > 99 ? '99+' : itemCount}</span>

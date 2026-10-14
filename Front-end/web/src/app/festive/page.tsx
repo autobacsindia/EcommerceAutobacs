@@ -201,7 +201,7 @@ export default function FestivePage() {
             </p>
             <Link
               href="/products"
-              className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#c9cfcd] px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
+              className="mt-6 inline-flex items-center gap-2 rounded-lg border border-hairline px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
             >
               Browse the catalogue <ArrowRight size={16} />
             </Link>
@@ -288,7 +288,7 @@ function Blocked({ reasonCode, signedIn, onRetry }: {
           </Link>
           <Link
             href={`/register?redirect=${encodeURIComponent('/festive')}`}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#c9cfcd] px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
+            className="inline-flex items-center gap-2 rounded-lg border border-hairline px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
           >
             Create an account
           </Link>
@@ -356,7 +356,7 @@ function Blocked({ reasonCode, signedIn, onRetry }: {
         </p>
         <Link
           href="/products"
-          className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#c9cfcd] px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
+          className="mt-6 inline-flex items-center gap-2 rounded-lg border border-hairline px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
         >
           Browse the catalogue <ArrowRight size={16} />
         </Link>
@@ -385,7 +385,7 @@ function Blocked({ reasonCode, signedIn, onRetry }: {
       </p>
       <Link
         href="/products"
-        className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[#c9cfcd] px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
+        className="mt-6 inline-flex items-center gap-2 rounded-lg border border-hairline px-6 py-3 font-semibold transition hover:border-gold hover:text-gold"
       >
         Browse the catalogue <ArrowRight size={16} />
       </Link>

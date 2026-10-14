@@ -383,7 +383,7 @@ export default function Filters({
           <button
             type="button"
             onClick={() => router.push(basePath, { scroll: false })}
-            className="mt-2 text-[13px] font-semibold text-[#0b6b9a] hover:text-gold hover:underline"
+            className="mt-2 text-[13px] font-semibold text-link hover:text-gold hover:underline"
           >
             Clear all filters
           </button>
@@ -397,7 +397,7 @@ export default function Filters({
             <select
               value={make}
               onChange={(e) => commit({ make: e.target.value, model: '' })}
-              className="w-full rounded-lg border border-[#c9cfcd] bg-white px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-gold"
+              className="w-full rounded-lg border border-hairline bg-white px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-gold"
               aria-label="Vehicle make"
             >
               <option value="">All makes</option>
@@ -411,7 +411,7 @@ export default function Filters({
               value={model}
               disabled={!make || models.length === 0}
               onChange={(e) => commit({ model: e.target.value })}
-              className="w-full rounded-lg border border-[#c9cfcd] bg-white px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-gold disabled:opacity-50"
+              className="w-full rounded-lg border border-hairline bg-white px-3.5 py-2.5 text-[14px] text-ink outline-none focus:border-gold disabled:opacity-50"
               aria-label="Vehicle model"
             >
               <option value="">{make ? 'All models' : 'Select a make first'}</option>
@@ -507,7 +507,7 @@ export default function Filters({
                 onChange={(e) => setBrandQuery(e.target.value)}
                 placeholder="Search brands"
                 aria-label="Search brands"
-                className="mb-2 w-full rounded-lg border border-[#c9cfcd] bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-gold"
+                className="mb-2 w-full rounded-lg border border-hairline bg-white px-3 py-2 text-[13px] text-ink outline-none focus:border-gold"
               />
             )}
             {(brandsExpanded || brandQuery ? visibleBrandList : visibleBrandList.slice(0, 8)).map((b) => (
@@ -524,7 +524,7 @@ export default function Filters({
               <button
                 type="button"
                 onClick={() => setBrandsExpanded((v) => !v)}
-                className="mt-2 text-[13px] font-semibold text-[#0b6b9a] hover:text-gold hover:underline"
+                className="mt-2 text-[13px] font-semibold text-link hover:text-gold hover:underline"
               >
                 {brandsExpanded ? 'Show less' : `More brands (${visibleBrandList.length - 8})`}
               </button>

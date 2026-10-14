@@ -221,7 +221,7 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
       <div
         className={
           widgetPainted
-            ? 'overflow-hidden rounded-lg border border-hairline bg-[#f4f2ee] px-3 py-1 opacity-100 transition-opacity duration-300'
+            ? 'overflow-hidden rounded-lg border border-hairline bg-obsidian px-3 py-1 opacity-100 transition-opacity duration-300'
             : 'pointer-events-none h-0 overflow-hidden rounded-lg border border-transparent px-3 opacity-0'
         }
       >

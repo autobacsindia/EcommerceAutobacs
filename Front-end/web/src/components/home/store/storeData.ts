@@ -199,7 +199,8 @@ export async function getStoreHomeData(): Promise<StoreHomeData> {
 
   const reviewsP = safe(async () => {
     const res = await serverFetch<{ testimonials?: Array<{ name?: string; title?: string; comment?: string; rating?: number; isVerifiedPurchase?: boolean; product?: { name?: string; slug?: string; image?: string | null } | null }> }>(
-      `/reviews/testimonials?limit=8`, { next: { revalidate: REVALIDATE, tags: ['home:testimonials'] } });
+      // No `?limit`: Cloudflare keys its cache on the FULL url and purges by exact match, so a query string makes this endpoint unpurgeable (see config/cdnPurgeUrls.js). The endpoint defaults to 12, more than any caller shows.
+      `/reviews/testimonials`, { next: { revalidate: REVALIDATE, tags: ['home:testimonials'] } });
     return (res.testimonials ?? []).filter((t) => t.comment || t.title).map((t) => ({
       quote: (t.comment || t.title)!,
       name: t.name || 'Customer',

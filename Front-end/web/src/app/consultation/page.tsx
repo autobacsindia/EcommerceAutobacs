@@ -66,7 +66,7 @@ function enquiryFromUrl(): string {
   return item ? item.replace(/-/g, ' ') : '';
 }
 
-const inputClass = 'w-full bg-white border border-[#c9cfcd] text-ink placeholder:text-ink-muted rounded-lg px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/25 font-display text-sm transition-colors';
+const inputClass = 'w-full bg-white border border-hairline text-ink placeholder:text-ink-muted rounded-lg px-4 py-3 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold/25 font-display text-sm transition-colors';
 const labelClass = 'block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1.5';
 
 export default function ConsultationPage() {

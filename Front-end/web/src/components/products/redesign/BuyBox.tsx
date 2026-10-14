@@ -209,7 +209,7 @@ export default function BuyBox({
           </span>
           <span className="text-[14px] font-semibold text-ink">{product.averageRating.toFixed(1)}</span>
           {product.totalReviews > 0 && (
-            <a href="#reviews" className="text-[14px] text-[#0b6b9a] underline-offset-4 hover:text-gold hover:underline">
+            <a href="#reviews" className="text-[14px] text-link underline-offset-4 hover:text-gold hover:underline">
               ({product.totalReviews} {product.totalReviews === 1 ? 'review' : 'reviews'})
             </a>
           )}
@@ -261,7 +261,7 @@ export default function BuyBox({
             id="variant-select"
             value={selectedVariant?._id ?? ''}
             onChange={(e) => onSelectVariant?.(e.target.value)}
-            className="mt-2 w-full rounded-lg border border-[#c9cfcd] bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors focus:border-gold focus:ring-2 focus:ring-gold/20"
+            className="mt-2 w-full rounded-lg border border-hairline bg-white px-4 py-3 text-[15px] text-ink outline-none transition-colors focus:border-gold focus:ring-2 focus:ring-gold/20"
           >
             <option value="" disabled>
               Choose a model…
@@ -289,7 +289,7 @@ export default function BuyBox({
         {!backorder && !outOfStock && (
           <>
             <span className="text-[14px] font-semibold text-ink">Quantity</span>
-            <div className="flex items-center overflow-hidden rounded-full border border-[#c9cfcd] bg-white">
+            <div className="flex items-center overflow-hidden rounded-full border border-hairline bg-white">
               <button
                 onClick={() => setQty((q) => Math.max(1, q - 1))}
                 disabled={qty <= 1}
@@ -338,9 +338,9 @@ export default function BuyBox({
             <button
               onClick={toggleWish}
               aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
-              className="grid w-14 place-items-center rounded-full border border-[#c9cfcd] bg-white transition-colors hover:border-gold"
+              className="grid w-14 place-items-center rounded-full border border-hairline bg-obsidian-raised transition-colors hover:border-gold"
             >
-              <Heart className={`h-5 w-5 ${wished ? 'fill-[#cc0c39] text-[#cc0c39]' : 'text-ink-muted'}`} />
+              <Heart className={`h-5 w-5 ${wished ? 'fill-[#cc0c39] text-danger' : 'text-ink-muted'}`} />
             </button>
           </div>
         ) : outOfStock ? (
@@ -355,9 +355,9 @@ export default function BuyBox({
             <button
               onClick={toggleWish}
               aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
-              className="grid w-14 place-items-center rounded-full border border-[#c9cfcd] bg-white transition-colors hover:border-gold"
+              className="grid w-14 place-items-center rounded-full border border-hairline bg-obsidian-raised transition-colors hover:border-gold"
             >
-              <Heart className={`h-5 w-5 ${wished ? 'fill-[#cc0c39] text-[#cc0c39]' : 'text-ink-muted'}`} />
+              <Heart className={`h-5 w-5 ${wished ? 'fill-[#cc0c39] text-danger' : 'text-ink-muted'}`} />
             </button>
           </div>
         ) : (
@@ -377,7 +377,7 @@ export default function BuyBox({
               <button
                 onClick={buyNow}
                 disabled={needsSelection || outOfStock || buying}
-                className="flex flex-1 items-center justify-center gap-2.5 rounded-full bg-[#121414] py-3.5 text-[16px] font-bold text-white transition-colors hover:bg-[#2a2f2f] disabled:cursor-not-allowed disabled:opacity-40"
+                className="flex flex-1 items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[16px] font-bold text-obsidian transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Zap className="h-4 w-4" />
                 {buying ? 'Processing…' : 'Buy now'}
@@ -385,9 +385,9 @@ export default function BuyBox({
               <button
                 onClick={toggleWish}
                 aria-label={wished ? 'Remove from wishlist' : 'Add to wishlist'}
-                className="grid w-14 place-items-center rounded-full border border-[#c9cfcd] bg-white transition-colors hover:border-gold"
+                className="grid w-14 place-items-center rounded-full border border-hairline bg-obsidian-raised transition-colors hover:border-gold"
               >
-                <Heart className={`h-5 w-5 ${wished ? 'fill-[#cc0c39] text-[#cc0c39]' : 'text-ink-muted'}`} />
+                <Heart className={`h-5 w-5 ${wished ? 'fill-[#cc0c39] text-danger' : 'text-ink-muted'}`} />
               </button>
             </div>
           </>
@@ -395,7 +395,7 @@ export default function BuyBox({
       </div>
 
       {/* Trust badges */}
-      <div className="mt-7 grid grid-cols-3 gap-3 rounded-xl bg-[#f2f8f4] p-4">
+      <div className="mt-7 grid grid-cols-3 gap-3 rounded-xl bg-gold-soft p-4">
         {TRUST_BADGES.map(({ icon, label }) => {
           const Icon = TRUST_ICONS[icon];
           return (

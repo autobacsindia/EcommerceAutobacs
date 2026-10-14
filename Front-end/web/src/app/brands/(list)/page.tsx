@@ -88,7 +88,7 @@ export default function BrandsPage() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Find a brand"
             aria-label="Find a brand"
-            className="mt-4 h-11 w-full max-w-md rounded-full border border-[#c9cfcd] bg-white px-5 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
+            className="mt-4 h-11 w-full max-w-md rounded-full border border-hairline bg-white px-5 text-[15px] text-ink outline-none focus:border-gold focus:ring-2 focus:ring-gold/20"
           />
         )}
       </StorePageHeader>

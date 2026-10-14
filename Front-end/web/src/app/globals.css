@@ -89,6 +89,12 @@
   --color-gold:            #0a5c33;
   --color-gold-soft:       rgba(10, 92, 51, 0.10);
   --color-hairline:        #dfe3e2;
+  /* Two colours that are only ever TEXT, which is why they need a dark twin
+     while the brand green, the star gold and the badge red do not: a surface
+     colour carries white and keeps working on either theme, but text has to
+     stay readable against a surface that inverted underneath it. */
+  --color-link:            #0b6b9a;   /* 5.9:1 on white */
+  --color-danger:          #cc0c39;   /* the same red the discount badge uses */
 
   --font-display: var(--font-montserrat), system-ui, sans-serif;
 
@@ -101,8 +107,10 @@
  */
 
 body {
-  background: #eef1f0;
-  color: #0f1111;
+  /* Tokens, not literals: these two are what the dark theme overrides, and a
+     hardcoded hex here silently wins over it. */
+  background: var(--background);
+  color: var(--foreground);
   font-family: var(--font-dm-sans), Arial, Helvetica, sans-serif;
   -webkit-text-size-adjust: 100%;
 }
@@ -111,41 +119,44 @@ body {
 input,
 textarea,
 select {
-  color: #0f1111;
-  background-color: #ffffff;
-  border-color: #c9cfcd;
+  color: var(--color-ink);
+  background-color: var(--color-obsidian-raised);
+  border-color: var(--color-hairline);
 }
 
 input::placeholder,
 textarea::placeholder {
-  color: #8a8f8d;
+  color: var(--color-ink-muted);
   opacity: 1;
 }
 
-/* ── Admin panel: reset to light theme ── */
+/* ── Admin panel ──
+   It inherits the theme like everything else: these use the Tailwind ramp,
+   which the dark block inverts, so an admin on a dark screen gets dark forms
+   with light text rather than a white rectangle in a dark shell. */
 .admin-panel {
-  color: #111827;
+  color: var(--color-gray-900);
 }
 
 .admin-panel input,
 .admin-panel textarea,
 .admin-panel select {
-  color: #111827;
-  background-color: #ffffff;
-  border-color: #d1d5db;
+  color: var(--color-gray-900);
+  background-color: var(--color-white);
+  border-color: var(--color-gray-300);
 }
 
 .admin-panel input::placeholder,
 .admin-panel textarea::placeholder {
-  color: #9ca3af;
+  color: var(--color-gray-400);
   opacity: 1;
 }
 
 /* ── Mobile reinforcement ── */
 @media (max-width: 768px) {
   body {
-    color: #0f1111;
-    background-color: #eef1f0;
+    color: var(--foreground);
+    background-color: var(--background);
   }
 
   input,
@@ -383,3 +394,150 @@ textarea::placeholder {
 .rte-content.rte-light .ProseMirror blockquote { border-left-color: #d1d5db; color: #6b7280; }
 .rte-content.rte-light .ProseMirror a { color: #2563eb; }
 .rte-content.rte-light .ProseMirror p.is-editor-empty:first-child::before { color: #9ca3af; }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   DARK THEME
+   ───────────────────────────────────────────────────────────────────────────
+   Tailwind v4 compiles every colour utility to a CSS variable — `bg-white`
+   becomes `background-color: var(--color-white)`. So redefining the palette
+   here re-themes roughly 3,800 utility classes across the app at once, with no
+   class edits and nothing to keep in sync.
+
+   The greys are INVERTED rather than replaced: `gray-50` (the lightest) becomes
+   the darkest surface and `gray-900` the lightest text. Every component that
+   reads "light background, dark text" keeps its intent and simply reads the
+   other way round. Contrast relationships survive because the ramp survives.
+
+   What is deliberately NOT inverted:
+     • the brand green — it is the logo, and it means the same in both themes
+     • red, amber and the star gold — status colours, learnt meanings
+     • product photography, which is shot on white
+
+   Values are oklch so the steps stay perceptually even, matching the scale
+   Tailwind ships.
+   ──────────────────────────────────────────────────────────────────────── */
+[data-theme='dark'] {
+  /* ── The site's OWN semantic tokens ──────────────────────────────────────
+     These matter more than the Tailwind ramp: `bg-obsidian`, `text-ink`,
+     `border-hairline` and `text-gold` are what this codebase actually writes,
+     so they carry most of the page. Names kept, meanings kept — "obsidian" is
+     the card surface in both themes, it is simply dark here and the ink is
+     light. Nothing in any component changes. */
+  --color-obsidian:        #171d1e;   /* cards & panels */
+  --color-obsidian-deep:   #0f1212;   /* the page behind them */
+  --color-obsidian-raised: #1f2627;   /* the layer above a card */
+  --color-ink:             #f2f5f4;
+  --color-ink-muted:       #94a09d;   /* 5.4:1 on --color-obsidian */
+  /* Brand green, one step lighter so it still clears contrast on a dark
+     surface. Same hue: this is the logo colour, not a theme colour. */
+  /* 4.9:1 on --color-obsidian-raised. #2f9c66 measured 4.45:1 there — under AA
+     by a hair, which is exactly the kind of miss a screenshot never shows. */
+  --color-gold:            #32a46b;
+  --color-gold-soft:       rgba(47, 156, 102, 0.14);
+  --color-hairline:        #2a3233;
+  /* As text on #171d1e the light values measure 2.91:1 and 2.99:1 — both
+     unreadable. These are the same two hues, lifted until they clear AA. */
+  --color-link:            #5ab4e0;   /* 7.2:1 on a dark card */
+  --color-danger:          #ff6b7e;   /* 6.1:1, still unmistakably red */
+
+  /* Neutral ramp, inverted. */
+  --color-white: oklch(16% 0.004 265);
+  --color-black: oklch(99% 0 0);
+
+  --color-gray-50:  oklch(19% 0.005 265);
+  --color-gray-100: oklch(23% 0.006 265);
+  --color-gray-200: oklch(28% 0.007 265);
+  --color-gray-300: oklch(36% 0.008 265);
+  --color-gray-400: oklch(52% 0.010 265);
+  --color-gray-500: oklch(64% 0.011 265);
+  --color-gray-600: oklch(74% 0.011 265);
+  --color-gray-700: oklch(83% 0.009 265);
+  --color-gray-800: oklch(90% 0.006 265);
+  --color-gray-900: oklch(96% 0.003 265);
+  --color-gray-950: oklch(99% 0.001 265);
+
+  /* Tailwind's slate/zinc/neutral are used interchangeably with gray in this
+     codebase, so they follow the same ramp — otherwise a `bg-slate-50` panel
+     stays white beside a dark `bg-gray-50` one. */
+  --color-slate-50:  oklch(19% 0.006 265);
+  --color-slate-100: oklch(23% 0.007 265);
+  --color-slate-200: oklch(28% 0.008 265);
+  --color-slate-300: oklch(36% 0.009 265);
+  --color-slate-400: oklch(52% 0.011 265);
+  --color-slate-500: oklch(64% 0.012 265);
+  --color-slate-600: oklch(74% 0.012 265);
+  --color-slate-700: oklch(83% 0.010 265);
+  --color-slate-800: oklch(90% 0.007 265);
+  --color-slate-900: oklch(96% 0.004 265);
+  --color-slate-950: oklch(99% 0.002 265);
+
+  --color-zinc-50:  oklch(19% 0 0);
+  --color-zinc-100: oklch(23% 0 0);
+  --color-zinc-200: oklch(28% 0 0);
+  --color-zinc-300: oklch(36% 0 0);
+  --color-zinc-400: oklch(52% 0 0);
+  --color-zinc-500: oklch(64% 0 0);
+  --color-zinc-600: oklch(74% 0 0);
+  --color-zinc-700: oklch(83% 0 0);
+  --color-zinc-800: oklch(90% 0 0);
+  --color-zinc-900: oklch(96% 0 0);
+  --color-zinc-950: oklch(99% 0 0);
+
+  --color-neutral-50:  oklch(19% 0 0);
+  --color-neutral-100: oklch(23% 0 0);
+  --color-neutral-200: oklch(28% 0 0);
+  --color-neutral-300: oklch(36% 0 0);
+  --color-neutral-400: oklch(52% 0 0);
+  --color-neutral-500: oklch(64% 0 0);
+  --color-neutral-600: oklch(74% 0 0);
+  --color-neutral-700: oklch(83% 0 0);
+  --color-neutral-800: oklch(90% 0 0);
+  --color-neutral-900: oklch(96% 0 0);
+  --color-neutral-950: oklch(99% 0 0);
+
+  /* Page-level tokens declared at the top of this file. */
+  --background: #0f1212;
+  --foreground: #f2f5f4;
+
+  /* Product-page tokens: the `.light` block above has a dark twin here so the
+     product detail pages follow without touching their markup. */
+  --product-bg: #14191a;
+  --product-bg-secondary: #0f1212;
+  --product-bg-tertiary: #1b2122;
+  --product-text: #f2f5f4;
+  --product-text-secondary: #c3cac8;
+  --product-text-muted: #94a09d;
+  --product-border: #2a3233;
+  --product-card-bg: #171d1e;
+}
+
+/* The product pages opt in with `.light`; in dark mode that class must not win
+   over the theme. Scoping it keeps the light values for the light theme only. */
+[data-theme='dark'] .light {
+  --product-bg: #14191a;
+  --product-bg-secondary: #0f1212;
+  --product-bg-tertiary: #1b2122;
+  --product-text: #f2f5f4;
+  --product-text-secondary: #c3cac8;
+  --product-text-muted: #94a09d;
+  --product-border: #2a3233;
+  --product-card-bg: #171d1e;
+}
+
+/* Set for one frame while the theme attribute changes — see applyTheme().
+   A transitioned property that reads a custom property does not re-resolve
+   when that property changes, so the old colour sticks until the next style
+   invalidation. Suppressing transitions across the swap avoids that, and
+   removes the 300ms colour crossfade the switch had as a side effect. */
+.theme-switching, .theme-switching *, .theme-switching *::before, .theme-switching *::after {
+  transition: none !important;
+}
+
+/* Photography is shot on white. Left as-is, a product cut-out sits in a bright
+   rectangle on a dark page; this keeps the tile white so the product still
+   reads, which is what every large retailer does in dark mode. */
+[data-theme='dark'] img:not([src$='.svg']) {
+  /* No filter — altering product colour would misrepresent the goods. The tile
+     behind the image is handled per-component instead. */
+  background-color: transparent;
+}

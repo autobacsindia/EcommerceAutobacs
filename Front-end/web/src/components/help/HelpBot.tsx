@@ -207,7 +207,7 @@ export default function HelpBot() {
           role="dialog"
           aria-modal="false"
           aria-label="Help"
-          className={`fixed inset-x-3 ${panelBottom} z-[60] flex max-h-[min(34rem,calc(100dvh-9rem))] flex-col overflow-hidden rounded-2xl border border-[#dfe3e2] bg-white shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[23rem]`}
+          className={`fixed inset-x-3 ${panelBottom} z-[60] flex max-h-[min(34rem,calc(100dvh-9rem))] flex-col overflow-hidden rounded-2xl border border-hairline bg-white shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[23rem]`}
         >
           <header className="flex items-center gap-3 bg-[#121414] px-4 py-3 text-white">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0a5c33]">
@@ -227,20 +227,20 @@ export default function HelpBot() {
             </button>
           </header>
 
-          <div className="flex-1 space-y-3.5 overflow-y-auto bg-[#f2f8f4] px-4 py-4">
+          <div className="flex-1 space-y-3.5 overflow-y-auto bg-gold-soft px-4 py-4">
             {turns.map((t) => (
               <div key={t.id} className={t.from === 'you' ? 'flex justify-end' : ''}>
                 <div
                   className={
                     t.from === 'you'
                       ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-[#0a5c33] px-4 py-2.5 text-[14.5px] leading-[1.45] text-white shadow-sm'
-                      : 'max-w-[92%] rounded-2xl rounded-bl-sm border border-[#dfe3e2] bg-white px-4 py-3 text-[14.5px] leading-[1.55] text-[#0f1111] shadow-sm'
+                      : 'max-w-[92%] rounded-2xl rounded-bl-sm border border-hairline bg-white px-4 py-3 text-[14.5px] leading-[1.55] text-ink shadow-sm'
                   }
                 >
                   {t.text}
 
                   {t.searching && (
-                    <p className="mt-2 flex items-center gap-2 text-[12px] text-[#5f6363]">
+                    <p className="mt-2 flex items-center gap-2 text-[12px] text-ink-muted">
                       <Search className="h-3.5 w-3.5 animate-pulse" /> Searching the catalogue…
                     </p>
                   )}
@@ -252,10 +252,10 @@ export default function HelpBot() {
                           <Link
                             href={`/products/${p.slug}`}
                             onClick={() => setOpen(false)}
-                            className="flex items-center gap-2 rounded-xl border border-[#dfe3e2] bg-[#f7f9f8] px-3 py-2.5 transition hover:border-[#0a5c33] hover:bg-white"
+                            className="flex items-center gap-2 rounded-xl border border-hairline bg-obsidian px-3 py-2.5 transition hover:border-[#0a5c33] hover:bg-white"
                           >
-                            <span className="line-clamp-2 flex-1 text-[13px] leading-[1.35] text-[#0f1111]">{p.text}</span>
-                            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[#0a5c33]" />
+                            <span className="line-clamp-2 flex-1 text-[13px] leading-[1.35] text-ink">{p.text}</span>
+                            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-gold" />
                           </Link>
                         </li>
                       ))}
@@ -280,7 +280,7 @@ export default function HelpBot() {
                             key={a.label}
                             href={a.href}
                             onClick={() => setOpen(false)}
-                            className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#0a5c33] px-3.5 py-2 text-[12.5px] font-semibold text-[#0a5c33] transition hover:bg-[#0a5c33] hover:text-white"
+                            className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#0a5c33] px-3.5 py-2 text-[12.5px] font-semibold text-gold transition hover:bg-[#0a5c33] hover:text-white"
                           >
                             {a.label}
                           </Link>
@@ -296,7 +296,7 @@ export default function HelpBot() {
                           key={f}
                           type="button"
                           onClick={() => ask(f)}
-                          className="rounded-full bg-white px-2.5 py-1 text-[11.5px] text-[#5f6363] ring-1 ring-[#dfe3e2] transition hover:text-[#0a5c33] hover:ring-[#0a5c33]"
+                          className="rounded-full bg-white px-2.5 py-1 text-[11.5px] text-ink-muted ring-1 ring-[#dfe3e2] transition hover:text-gold hover:ring-[#0a5c33]"
                         >
                           {f}
                         </button>
@@ -315,7 +315,7 @@ export default function HelpBot() {
                     key={s}
                     type="button"
                     onClick={() => ask(s)}
-                    className="rounded-full border border-[#dfe3e2] bg-white px-3.5 py-2 text-[13px] font-medium text-[#333838] shadow-sm transition hover:border-[#0a5c33] hover:bg-[#f2f8f4] hover:text-[#0a5c33]"
+                    className="rounded-full border border-hairline bg-white px-3.5 py-2 text-[13px] font-medium text-[#333838] shadow-sm transition hover:border-[#0a5c33] hover:bg-gold-soft hover:text-gold"
                   >
                     {s}
                   </button>
@@ -331,7 +331,7 @@ export default function HelpBot() {
               e.preventDefault();
               ask(draft);
             }}
-            className="flex items-center gap-2 border-t border-[#dfe3e2] px-3 py-2.5"
+            className="flex items-center gap-2 border-t border-hairline px-3 py-2.5"
           >
             <input
               ref={inputRef}
@@ -339,7 +339,7 @@ export default function HelpBot() {
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Ask about a part, order or delivery"
               aria-label="Ask a question"
-              className="min-w-0 flex-1 rounded-full border border-[#dfe3e2] bg-[#f7f9f8] px-4 py-2.5 text-[14px] text-[#0f1111] placeholder:text-[#5f6363] focus:border-[#0a5c33] focus:outline-none focus:ring-2 focus:ring-[#0a5c33]/20"
+              className="min-w-0 flex-1 rounded-full border border-hairline bg-obsidian px-4 py-2.5 text-[14px] text-ink placeholder:text-ink-muted focus:border-[#0a5c33] focus:outline-none focus:ring-2 focus:ring-[#0a5c33]/20"
             />
             <button
               type="submit"
@@ -353,28 +353,28 @@ export default function HelpBot() {
 
           {/* The launcher is now the only floating button, so the three human
               channels live here as real targets rather than a caption. */}
-          <div className="grid grid-cols-3 gap-px border-t border-[#dfe3e2] bg-[#dfe3e2]">
+          <div className="grid grid-cols-3 gap-px border-t border-hairline bg-[#dfe3e2]">
             <a
               href={whatsappLink()}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex flex-col items-center gap-0.5 bg-[#f7f9f8] py-2 text-[11px] font-semibold text-[#0f1111] transition hover:bg-[#e7f3ec] hover:text-[#0a5c33]"
+              className="flex flex-col items-center gap-0.5 bg-obsidian py-2 text-[11px] font-semibold text-ink transition hover:bg-gold-soft hover:text-gold"
             >
               <WhatsAppIcon className="h-4 w-4 text-[#25D366]" />
               WhatsApp
             </a>
             <a
               href={`tel:${SUPPORT_PHONE_TEL}`}
-              className="flex flex-col items-center gap-0.5 bg-[#f7f9f8] py-2 text-[11px] font-semibold text-[#0f1111] transition hover:bg-[#e7f3ec] hover:text-[#0a5c33]"
+              className="flex flex-col items-center gap-0.5 bg-obsidian py-2 text-[11px] font-semibold text-ink transition hover:bg-gold-soft hover:text-gold"
             >
-              <Phone className="h-4 w-4 text-[#0a5c33]" />
+              <Phone className="h-4 w-4 text-gold" />
               <span className="sr-only">Call </span>{SUPPORT_PHONE_DISPLAY}
             </a>
             <a
               href={`mailto:${SUPPORT_EMAIL}`}
-              className="flex flex-col items-center gap-0.5 bg-[#f7f9f8] py-2 text-[11px] font-semibold text-[#0f1111] transition hover:bg-[#e7f3ec] hover:text-[#0a5c33]"
+              className="flex flex-col items-center gap-0.5 bg-obsidian py-2 text-[11px] font-semibold text-ink transition hover:bg-gold-soft hover:text-gold"
             >
-              <Mail className="h-4 w-4 text-[#0a5c33]" />
+              <Mail className="h-4 w-4 text-gold" />
               Email
             </a>
           </div>

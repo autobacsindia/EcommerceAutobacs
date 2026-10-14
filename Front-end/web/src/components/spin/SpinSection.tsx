@@ -248,7 +248,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
         also carries the coupon code itself, because that code is the thing the customer
         actually needs and the dialog is transient.
       */}
-      <section className="mt-8 overflow-hidden rounded-2xl border border-gold/30 bg-gradient-to-b from-white to-[#f2f8f4] p-5 text-ink shadow-lg">
+      <section className="mt-8 overflow-hidden rounded-2xl border border-gold/30 bg-gradient-to-b from-white to-gold-soft p-5 text-ink shadow-lg">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="min-w-0">
             <h3 className="text-lg font-bold tracking-tight text-gold">
@@ -292,7 +292,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
       </section>
 
       <SpinModal open={open} onClose={() => setOpen(false)} labelledBy="spin-modal-title">
-        <section className="overflow-hidden rounded-2xl border border-gold/30 bg-gradient-to-b from-white to-[#f2f8f4] p-6 text-ink shadow-xl">
+        <section className="overflow-hidden rounded-2xl border border-gold/30 bg-gradient-to-b from-white to-gold-soft p-6 text-ink shadow-xl">
       <div className="mb-4 text-center">
         <h2 id="spin-modal-title" className="text-xl font-bold tracking-tight text-gold">
           {phase === 'revealed' ? 'You won!' : 'Rev it up — you’ve earned a spin'}
