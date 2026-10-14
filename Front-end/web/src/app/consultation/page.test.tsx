@@ -6,6 +6,8 @@ const push = jest.fn();
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 jest.mock('next/image', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/lib/analytics', () => ({ capture: jest.fn() }));
+const pushToGtm = jest.fn();
+jest.mock('@/lib/gtm', () => ({ pushToGtm: (...a: unknown[]) => pushToGtm(...a) }));
 
 const post = jest.fn();
 jest.mock('@/lib/api', () => ({ __esModule: true, default: { post: (...a: unknown[]) => post(...a) } }));
@@ -23,7 +25,7 @@ function fillValid() {
 }
 
 describe('Consultation page (single-step form)', () => {
-  beforeEach(() => { push.mockReset(); post.mockReset(); });
+  beforeEach(() => { push.mockReset(); post.mockReset(); pushToGtm.mockReset(); });
 
   it('shows the form in the hero with no multi-step wizard', () => {
     render(<ConsultationPage />);
@@ -67,5 +69,27 @@ describe('Consultation page (single-step form)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/valid email address/i);
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('pushes one generate_lead to GTM after the server accepts, before the redirect', async () => {
+    post.mockResolvedValue({ success: true });
+    render(<ConsultationPage />);
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: /book my consultation/i }));
+
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(pushToGtm).toHaveBeenCalledTimes(1);
+    expect(pushToGtm).toHaveBeenCalledWith({ event: 'generate_lead', form_name: 'consultation' });
+    expect(pushToGtm.mock.invocationCallOrder[0]).toBeLessThan(push.mock.invocationCallOrder[0]);
+  });
+
+  it('counts no lead when the request fails or is invalid', async () => {
+    post.mockRejectedValue({ rawData: { message: 'nope' } });
+    render(<ConsultationPage />);
+    fireEvent.click(screen.getByRole('button', { name: /book my consultation/i }));
+    fillValid();
+    fireEvent.click(screen.getByRole('button', { name: /book my consultation/i }));
+    await screen.findByRole('alert');
+    expect(pushToGtm).not.toHaveBeenCalled();
   });
 });

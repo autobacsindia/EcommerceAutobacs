@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { capture } from '@/lib/analytics';
+import { pushToGtm } from '@/lib/gtm';
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL, whatsappLink } from '@/lib/contactInfo';
 
 /**
@@ -120,6 +121,13 @@ export default function ConsultationPage() {
       });
       if (!data.success) throw new Error(data.message || 'Submission failed');
       capture('consultation_submitted', { hasNotes: !!form.notes.trim() });
+      // The GTM lead conversion. Fired here, after the server accepted the
+      // request and before the redirect, rather than on a /thank-you page view:
+      // App Router navigation is client-side, so GTM sees no Page View for the
+      // thank-you URL, and a reload or revisit of that URL would count again.
+      // No site-side gtag conversion exists for consultations, so this is the
+      // only one (a second would double-count in Google Ads).
+      pushToGtm({ event: 'generate_lead', form_name: 'consultation' });
       router.push('/consultation/thank-you');
     } catch (err: unknown) {
       const msg = (err as { rawData?: { message?: string } })?.rawData?.message
