@@ -147,6 +147,19 @@ LeadSchema.index({ phone: 1 }, { sparse: true });
 LeadSchema.index({ assignedRep: 1, status: 1 }); // rep queue, pool
 LeadSchema.index({ assignedTo: 1, status: 1 }); // audit-side queries
 LeadSchema.index({ status: 1, createdAt: -1 }); // list default sort within a status
+/*
+  "Recently active" sort.
+
+  `createdAt` answers "who is new"; it does NOT answer "who just did something
+  again". A lead created in August who abandons checkout again today gets a new
+  source appended — which bumps `updatedAt` but leaves `createdAt` untouched, so
+  under a newest-first sort they stay buried while being one of the hottest
+  people on the list.
+
+  Paired with `status` because the list is almost always scoped to a status
+  bucket, matching the createdAt index above.
+*/
+LeadSchema.index({ status: 1, updatedAt: -1 });
 // Serves the default worklist sort: a pool/rep queue (assignedRep equality) ranked by
 // { leadScore, createdAt }. The sort keys follow assignedRep directly — the common
 // list view sends NO status filter, so status must NOT sit between them or it would

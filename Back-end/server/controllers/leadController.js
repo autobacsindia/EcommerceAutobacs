@@ -53,9 +53,14 @@ function manualTransitionError(from, to) {
 // Whitelisted sort orders (label → Mongo sort). Prevents arbitrary sort injection.
 // `score` is the default: it ranks by computed priority so strong leads outrank the
 // low-intent flood, with createdAt as a stable tiebreak. See utils/leadScore.js.
-const SORT_OPTIONS = {
+export const SORT_OPTIONS = {
   score: { leadScore: -1, createdAt: -1 },
   newest: { createdAt: -1 },
+  // Last activity, not first contact: a returning lead's new signal bumps
+  // `updatedAt`, so this surfaces people who just acted again. Note it also
+  // moves when a REP edits the lead, so it reads as "last touched", not
+  // "last customer action".
+  updated: { updatedAt: -1 },
   oldest: { createdAt: 1 },
   recent_contact: { lastContactedAt: -1 },
   follow_up: { nextFollowUpAt: 1 },

@@ -18,7 +18,7 @@ type Assignment = 'all' | 'unassigned';
 // never-purchased "Nurture" pool so strong leads aren't buried; `nurture` shows
 // only it; `all` drops the split. Mirrors the backend `bucket` query param.
 type Bucket = 'active' | 'nurture' | 'all';
-type LeadSort = 'score' | 'newest' | 'oldest' | 'recent_contact' | 'follow_up';
+type LeadSort = 'score' | 'newest' | 'updated' | 'oldest' | 'recent_contact' | 'follow_up';
 
 interface LeadsResponse {
   success: boolean;
@@ -327,6 +327,9 @@ export default function AdminLeadsPage() {
         <select value={sort} onChange={(e) => setSort(e.target.value as LeadSort)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
           <option value="score">Best leads (score)</option>
           <option value="newest">Newest first</option>
+          {/* Last activity, not first contact — a lead who abandons checkout
+              again today rises, where "Newest" would leave them buried. */}
+          <option value="updated">Recently active</option>
           <option value="oldest">Oldest first</option>
           <option value="recent_contact">Recently contacted</option>
           <option value="follow_up">Follow-up date</option>
