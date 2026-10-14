@@ -75,9 +75,11 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
           <span className="sh-big">&amp; Orders</span>
         </Link>
         <StoreSearch />
-        {/* Beside the cart: the last thing in the bar, where a preference
-            control belongs — not competing with search or account. */}
-        <ThemeToggle className="sh-theme-toggle" />
+        {/* Desktop only. On a 360px phone the top row is logo + account +
+            toggle + cart, and the toggle pushed the cart onto a second line —
+            a preference control must never cost the cart its place. Phones get
+            it in the drawer instead. */}
+        <ThemeToggle className="sh-theme-toggle sh-only-desktop" />
         <Link href="/cart" className="sh-cart" aria-label={cartLabel}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 4h2l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.6a1.5 1.5 0 0 0 1.5-1.1L21 8H6.2" /><circle cx="9.5" cy="19.5" r="1.4" /><circle cx="17" cy="19.5" r="1.4" /></svg>
           <span className="sh-cart-count" aria-hidden="true">{itemCount > 99 ? '99+' : itemCount}</span>
@@ -127,6 +129,11 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
               <Link href="/orders" onClick={() => setMenuOpen(false)}>Returns &amp; Orders</Link>
               <Link href="/wishlist" onClick={() => setMenuOpen(false)}>Wishlist</Link>
               <Link href="/consultation" onClick={() => setMenuOpen(false)}>Consult a specialist</Link>
+              <p className="sh-drawer-title">Appearance</p>
+              <div className="sh-drawer-theme">
+                <span>Dark theme</span>
+                <ThemeToggle className="sh-drawer-theme-btn" />
+              </div>
               <div className="sh-drawer-contact">
                 <a href={`tel:${SUPPORT_PHONE_TEL}`} className="sh-btn sh-btn-outline">Call us</a>
                 <a href={whatsappLink('Hi, I need help choosing a part.')} className="sh-btn sh-btn-wa" target="_blank" rel="noopener noreferrer">WhatsApp</a>
