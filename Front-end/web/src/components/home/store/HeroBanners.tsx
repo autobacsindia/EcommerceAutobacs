@@ -11,8 +11,12 @@ export interface BannerSlide {
   subtitle: string;
   cta: string;
   href: string;
-  /** Product photos shown on the right of the slide. */
-  images: string[];
+  /**
+   * Product photos on the right of the slide. Each links to its own product —
+   * customers tap the photograph that caught their eye, not the slide's CTA,
+   * and a decorative photo of a product you sell is a dead end.
+   */
+  images: { src: string; href: string; name: string }[];
   /** Visual theme of the slide background. */
   tone: 'green' | 'mint' | 'sand';
 }
@@ -106,11 +110,25 @@ export default function HeroBanners({ slides }: { slides: BannerSlide[] }) {
               <p className="sh-slide-sub">{s.subtitle}</p>
               <Link href={s.href} className="sh-btn sh-btn-primary sh-btn-lg">{s.cta}</Link>
             </div>
-            <div className={`sh-slide-art sh-slide-art-${Math.min(s.images.length, 3)}`} aria-hidden="true">
-              {s.images.slice(0, 3).map((src, k) => (
-                <div className="sh-slide-pic" key={k}>
-                  <Img src={src} alt="" className="sh-slide-img" sizes="(max-width: 768px) 40vw, 300px" priority={n === 0 && k === 0} />
-                </div>
+            <div className={`sh-slide-art sh-slide-art-${Math.min(s.images.length, 3)}`}>
+              {s.images.slice(0, 3).map((img, k) => (
+                <Link
+                  href={img.href}
+                  className="sh-slide-pic"
+                  key={`${img.href}-${k}`}
+                  // The slide off-screen is inert, so only the visible one is
+                  // reachable by keyboard — otherwise tabbing walks through
+                  // three hidden slides' worth of links.
+                  tabIndex={n === i ? undefined : -1}
+                >
+                  <Img
+                    src={img.src}
+                    alt={img.name}
+                    className="sh-slide-img"
+                    sizes="(max-width: 768px) 40vw, 300px"
+                    priority={n === 0 && k === 0}
+                  />
+                </Link>
               ))}
             </div>
           </div>

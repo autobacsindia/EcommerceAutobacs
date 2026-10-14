@@ -21,13 +21,30 @@ jest.mock('next/navigation', () => ({
 }));
 
 // Mock icons
-jest.mock('lucide-react', () => ({
-  ArrowLeft: () => <span data-testid="icon-arrow-left">ArrowLeft</span>,
-  Upload: () => <span data-testid="icon-upload">Upload</span>,
-  Plus: () => <span data-testid="icon-plus">Plus</span>,
-  Minus: () => <span data-testid="icon-minus">Minus</span>,
-  X: () => <span data-testid="icon-x">X</span>,
-}));
+/*
+  Stub EVERY lucide icon, not a hand-listed five.
+
+  The old mock named only the icons this page imports directly, so the first
+  child component to use a sixth — CategoryMultiSelect wants ChevronDown and
+  Search — received `undefined` and React threw "Element type is invalid". The
+  suite had been failing 6/6 for that reason alone.
+
+  A Proxy means adding an icon anywhere in the tree can never break this again.
+*/
+jest.mock('lucide-react', () => {
+  const React = jest.requireActual('react');
+  return new Proxy(
+    {},
+    {
+      get: (_target, name: string) => {
+        if (name === '__esModule') return true;
+        const Icon = () => React.createElement('span', { 'data-testid': `icon-${String(name)}` }, String(name));
+        Icon.displayName = String(name);
+        return Icon;
+      },
+    },
+  );
+});
 
 // Mock URL.createObjectURL
 global.URL.createObjectURL = jest.fn(() => 'blob:mock-url');

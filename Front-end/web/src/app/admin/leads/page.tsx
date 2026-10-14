@@ -9,7 +9,7 @@ import apiClient from '@/lib/api';
 import OfflineOrderForm from '@/components/admin/OfflineOrderForm';
 import {
   Lead, LeadStatus, LeadSourceType, LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_STATUS_COLORS,
-  LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep, cancelAttribution, scoreBadge,
+  LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep, cancelAttribution, scoreBadge, sourceBadges,
 } from '@/lib/leads';
 import { formatDateIST, formatDateTimeIST, toIsoAttr } from '@/lib/datetime';
 
@@ -455,11 +455,26 @@ export default function AdminLeadsPage() {
                     })()}
                   </td>
                   <td className="px-4 py-3">
-                    {lead.primarySource && (
-                      <span className={`rounded px-2 py-0.5 text-xs font-medium ${LEAD_SOURCE_COLORS[lead.primarySource]}`}>
-                        {LEAD_SOURCE_LABELS[lead.primarySource]}
-                      </span>
-                    )}
+                    {(() => {
+                      const badges = sourceBadges(lead, source);
+                      return (
+                        <>
+                          {badges.lead && (
+                            <span className={`rounded px-2 py-0.5 text-xs font-medium ${LEAD_SOURCE_COLORS[badges.lead]}`}>
+                              {LEAD_SOURCE_LABELS[badges.lead]}
+                            </span>
+                          )}
+                          {badges.also && (
+                            <span
+                              className="ml-1 rounded border border-gray-200 px-1.5 py-0.5 text-[11px] text-gray-500"
+                              title="Strongest signal for this person"
+                            >
+                              {LEAD_SOURCE_LABELS[badges.also]}
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                     {/* Who cancelled — reads the order_cancelled signal's snapshot so admin vs
                         customer is legible at a glance, not just inside the lead. */}
                     {lead.primarySource === 'order_cancelled' && (() => {
@@ -467,7 +482,10 @@ export default function AdminLeadsPage() {
                       const attr = cancelAttribution(src?.snapshot as { cancelledBy?: string | null; wasPaid?: boolean } | undefined);
                       return attr?.by ? <span className="ml-1 text-xs text-gray-500">{attr.by}</span> : null;
                     })()}
-                    {lead.sources.length > 1 && <span className="ml-1 text-xs text-gray-400">+{lead.sources.length - 1}</span>}
+                    {(() => {
+                      const { extra } = sourceBadges(lead, source);
+                      return extra > 0 ? <span className="ml-1 text-xs text-gray-400">+{extra}</span> : null;
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${LEAD_STATUS_COLORS[lead.status]}`}>

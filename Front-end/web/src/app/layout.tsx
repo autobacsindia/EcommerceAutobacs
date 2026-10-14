@@ -20,7 +20,6 @@ import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from "@/lib/constants";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import HelpBot from "@/components/help/HelpBot";
-import ContactFab from "@/components/layout/ContactFab";
 import { SITE_URL } from "@/lib/siteUrl";
 import { isGoogleAdsEnabled } from "@/lib/googleAds";
 import { isMetaPixelEnabled } from "@/lib/metaPixel";
@@ -399,7 +398,6 @@ export default async function RootLayout({
                       <ConditionalFooter />
                       <SessionExpiredPrompt />
                       <HelpBot />
-                      <ContactFab />
                       <Toaster
                         position="top-right"
                         toastOptions={{

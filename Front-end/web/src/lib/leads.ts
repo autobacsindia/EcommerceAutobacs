@@ -201,3 +201,31 @@ export function customerBadge(
   if (lead.hasPurchased) return { label: 'Customer', className: 'bg-green-100 text-green-800' };
   return null;
 }
+
+/**
+ * Which source badges a row shows, given the active source filter.
+ *
+ * The list filter matches ANY signal a person carries, while the badge used to
+ * show only their strongest. Filtering to "Left at checkout" therefore listed
+ * rows badged "Payment failed": the row was right and the label looked wrong.
+ *
+ * So the badge leads with the signal that was asked for. The strongest signal
+ * still appears beside it when it differs — it is what drives the score, and
+ * hiding it would trade one confusion for another. `extra` counts only the
+ * signals not already named, so nothing is double-counted.
+ */
+export function sourceBadges(
+  lead: { sources: { type: LeadSourceType }[]; primarySource?: LeadSourceType | null },
+  activeFilter: LeadSourceType | '',
+): { lead: LeadSourceType | null; also: LeadSourceType | null; extra: number } {
+  const matched =
+    activeFilter && lead.sources.some((s) => s.type === activeFilter) ? activeFilter : null;
+  const primary = lead.primarySource ?? null;
+  const leadBadge = matched ?? primary;
+  const also = matched && primary && primary !== matched ? primary : null;
+
+  const shown = new Set<string>();
+  if (leadBadge) shown.add(leadBadge);
+  if (also) shown.add(also);
+  return { lead: leadBadge, also, extra: lead.sources.filter((s) => !shown.has(s.type)).length };
+}
