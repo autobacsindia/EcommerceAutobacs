@@ -4,39 +4,30 @@
  * Status wording mirrors the website so an email, the site and the app never
  * describe the same parcel three different ways.
  */
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchOrders, type Order } from '../src/api/account';
+import { statusOf, TONES } from '../src/lib/orderStatus';
+import { Ionicons } from '@expo/vector-icons';
 import { Photo, Screenful, T } from '../src/components/ui';
 import { colors, font, inr, radius, shadow, spacing } from '../src/theme';
 import { useApp } from '../src/store';
 
-const STATUS: Record<string, { label: string; tone: 'green' | 'amber' | 'grey' | 'red' }> = {
-  awaiting_payment: { label: 'Awaiting payment', tone: 'amber' },
-  processing: { label: 'Processing', tone: 'amber' },
-  shipped: { label: 'Shipped', tone: 'green' },
-  delivered: { label: 'Delivered', tone: 'green' },
-  returned: { label: 'Returned', tone: 'grey' },
-  cancelled: { label: 'Cancelled', tone: 'red' },
-};
-
-const TONES = {
-  green: { bg: colors.greenSoft, fg: colors.green },
-  amber: { bg: '#fdf3e2', fg: '#9a6700' },
-  grey: { bg: '#eceeed', fg: colors.muted },
-  red: { bg: '#fdeaee', fg: colors.red },
-};
-
-function OrderCard({ order }: { order: Order }) {
-  const status = STATUS[order.status] ?? { label: order.status, tone: 'grey' as const };
+function OrderCard({ order, onPress }: { order: Order; onPress: () => void }) {
+  const status = statusOf(order.status);
   const tone = TONES[status.tone];
   const when = order.placedAt
     ? new Date(order.placedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : '';
 
   return (
-    <View style={s.card}>
+    <Pressable
+      style={({ pressed }) => [s.card, pressed && s.cardPressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Order ${order.code}, ${status.label}. Open for details.`}
+    >
       <View style={s.head}>
         <View>
           <Text style={s.code}>{order.code}</Text>
@@ -62,7 +53,14 @@ function OrderCard({ order }: { order: Order }) {
         <T kind="small">Total paid</T>
         <Text style={s.total}>{inr(order.total)}</Text>
       </View>
-    </View>
+
+      {/* Says out loud that the card opens something — a card that is tappable
+          without looking tappable is a feature nobody finds. */}
+      <View style={s.openRow}>
+        <Text style={s.openText}>View order</Text>
+        <Ionicons name="chevron-forward" size={15} color={colors.green} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -112,7 +110,7 @@ export default function OrdersScreen() {
       showsVerticalScrollIndicator={false}
       refreshing={orders.isFetching}
       onRefresh={() => orders.refetch()}
-      renderItem={({ item }) => <OrderCard order={item} />}
+      renderItem={({ item }) => <OrderCard order={item} onPress={() => router.push(`/order/${item.id}`)} />}
     />
   );
 }
@@ -124,6 +122,9 @@ const s = StyleSheet.create({
   when: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted },
   pill: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.pill },
   pillText: { fontFamily: font.semibold, fontSize: 11.5 },
+  cardPressed: { opacity: 0.7 },
+  openRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2, marginTop: spacing.sm },
+  openText: { fontFamily: font.semibold, fontSize: 13, color: colors.green },
   item: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
   itemImage: { width: 48, height: 48, borderRadius: radius.sm },
   itemName: { fontFamily: font.medium, fontSize: 12.5, color: colors.ink },

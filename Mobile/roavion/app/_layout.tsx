@@ -81,6 +81,8 @@ export default function RootLayout() {
             <Stack.Screen name="register" options={{ title: 'Create account' }} />
             <Stack.Screen name="checkout" options={{ title: 'Checkout' }} />
             <Stack.Screen name="orders" options={{ title: 'My orders' }} />
+            {/* The title is set by the screen itself, to the order's own code. */}
+            <Stack.Screen name="order/[id]" options={{ title: 'Order' }} />
           </Stack>
         </AppProvider>
       </QueryClientProvider>

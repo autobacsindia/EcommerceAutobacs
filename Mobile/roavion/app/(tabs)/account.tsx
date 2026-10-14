@@ -133,7 +133,14 @@ export default function AccountScreen() {
             { icon: 'call-outline', label: 'Call us', onPress: () => open(`tel:${SUPPORT_PHONE}`) },
             { icon: 'logo-whatsapp', label: 'WhatsApp a specialist', onPress: () => open(`https://wa.me/${SUPPORT_PHONE.replace('+', '')}`) },
             { icon: 'mail-outline', label: 'Email support', onPress: () => open(`mailto:${SUPPORT_EMAIL}`) },
-            { icon: 'cube-outline', label: 'Track an order', onPress: () => open(`${SITE}/track`) },
+            // Signed in: their orders are already here, with the status and
+            // tracking number on each one. Sending them to the website's guest
+            // tracker would ask someone who IS signed in to prove who they are
+            // all over again, in a browser. Signed out, that page is still the
+            // right answer, because it only needs an order number.
+            customer
+              ? { icon: 'cube-outline', label: 'Track an order', onPress: () => router.push('/orders') }
+              : { icon: 'cube-outline', label: 'Track an order', onPress: () => open(`${SITE}/track`) },
           ]}
         />
 

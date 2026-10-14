@@ -148,11 +148,23 @@ export default function ProductCard({
       <View style={[s.tileBody, s.tileFootWrap]}>
         <View style={s.tileFoot}>
           <View style={s.tilePrices}>
-            {needsChoice && product.priceTo > product.priceFrom && (
-              <Text style={s.from}>from</Text>
-            )}
-            <Text style={s.price}>{inr(needsChoice ? product.priceFrom : product.price)}</Text>
-            {onSale ? <Text style={s.mrp}>{inr(product.mrp!)}</Text> : null}
+            {/* "from" rides ON the price line rather than above it. As its own
+                line it added ~9px to the only cards that have variants, which
+                knocked their price off the baseline every other card in the
+                rail shares — and reserving a slot for it instead would cost
+                every card a line to serve the few that need one. */}
+            <Text style={s.price}>
+              {needsChoice && product.priceTo > product.priceFrom && <Text style={s.from}>from </Text>}
+              {inr(needsChoice ? product.priceFrom : product.price)}
+            </Text>
+            {/* The struck-through MRP keeps its space whether or not there is a
+                discount — the same trick as `starSlot` above, for the same
+                reason. The foot is bottom-aligned, so without this slot a
+                discounted card's price floated 15px higher than the full-price
+                card beside it and the prices zig-zagged across every rail. */}
+            <View style={s.mrpSlot}>
+              {onSale ? <Text style={s.mrp}>{inr(product.mrp!)}</Text> : null}
+            </View>
           </View>
           {!soldOut && (
             <Pressable
@@ -257,8 +269,9 @@ const s = StyleSheet.create({
   starSlot: { height: 16, justifyContent: 'center' },
   priceLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2, flexWrap: 'wrap' },
   price: { fontFamily: font.bold, fontSize: 15.5, color: colors.ink },
+  mrpSlot: { height: 15, justifyContent: 'center' },
   mrp: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted, textDecorationLine: 'line-through' },
   by: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted },
-  from: { fontFamily: font.regular, fontSize: 10.5, color: colors.muted, marginBottom: -2 },
+  from: { fontFamily: font.regular, fontSize: 10.5, color: colors.muted },
   soldOut: { fontFamily: font.semibold, fontSize: 11.5, color: colors.red },
 });

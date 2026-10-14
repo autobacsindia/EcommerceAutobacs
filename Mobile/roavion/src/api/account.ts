@@ -99,6 +99,43 @@ export interface Order {
   items: OrderLine[];
 }
 
+export interface OrderAddress {
+  fullName: string;
+  phone: string;
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
+export interface OrderStep {
+  status: string;
+  at: string;
+}
+
+/**
+ * Everything the order page shows, which is more than the list needs.
+ *
+ * Kept as a separate type rather than making every field optional on `Order`:
+ * the list is a cheap `/orders` read and genuinely does not have an address or
+ * a status history, and a type that pretends otherwise invites a screen to read
+ * a field that is always undefined there.
+ */
+export interface OrderDetail extends Order {
+  subtotal: number;
+  shipping: number;
+  tax: number;
+  discount: number;
+  couponCode: string | null;
+  paymentMethod: string;
+  address: OrderAddress | null;
+  trackingNumber: string;
+  carrier: string;
+  history: OrderStep[];
+}
+
 interface RawOrder {
   _id: string;
   wpId?: number;
@@ -108,6 +145,28 @@ interface RawOrder {
   createdAt?: string;
   items?: { name?: string; quantity?: number; price?: number; image?: string;
     product?: { images?: { url?: string; isPrimary?: boolean }[] } }[];
+}
+
+/** The extra fields `/orders/:id` carries. All optional — ~1,500 migrated
+ *  orders predate parts of this schema, so nothing here may be assumed. */
+interface RawOrderDetail extends RawOrder {
+  subtotal?: number;
+  shippingCost?: number;
+  tax?: number;
+  discount?: number;
+  couponCode?: string | null;
+  /* The server projects the Payment row down to a safe summary — but only when
+     it was populated. An unpopulated order carries the raw id STRING here, so
+     this has to be read defensively rather than assumed to be an object. */
+  payment?: { paymentMethod?: string; emiPlanLabel?: string } | string | null;
+  shippingAddress?: {
+    fullName?: string; phone?: string; addressLine1?: string; addressLine2?: string;
+    city?: string; state?: string; postalCode?: string; country?: string;
+  } | null;
+  trackingNumber?: string;
+  carrier?: string;
+  statusHistory?: { status?: string; timestamp?: string }[];
+  shipments?: { trackingNumber?: string; carrier?: string }[];
 }
 
 /** Matches invoiceService.orderNumber on the server, so app and email agree. */
@@ -133,7 +192,51 @@ export async function fetchOrders(signal?: AbortSignal): Promise<Order[]> {
   return (res.orders ?? []).map(toOrder);
 }
 
-export async function fetchOrder(id: string, signal?: AbortSignal): Promise<Order> {
-  const res = await api.get<{ order?: RawOrder } & RawOrder>(`/orders/${id}`, signal);
-  return toOrder((res.order ?? res) as RawOrder);
+const toAddress = (a: RawOrderDetail['shippingAddress']): OrderAddress | null =>
+  a && (a.addressLine1 || a.city)
+    ? {
+        fullName: a.fullName ?? '',
+        phone: a.phone ?? '',
+        line1: a.addressLine1 ?? '',
+        line2: a.addressLine2 ?? '',
+        city: a.city ?? '',
+        state: a.state ?? '',
+        postalCode: a.postalCode ?? '',
+        country: a.country ?? 'India',
+      }
+    : null;
+
+export async function fetchOrder(id: string, signal?: AbortSignal): Promise<OrderDetail> {
+  const res = await api.get<{ order?: RawOrderDetail } & RawOrderDetail>(`/orders/${id}`, signal);
+  const o = (res.order ?? res) as RawOrderDetail;
+
+  // Tracking lives in two places: a legacy order-level pair, and per-parcel on
+  // `shipments` for orders split across more than one. The first parcel that
+  // has a number is the one worth showing on a phone.
+  const parcel = (o.shipments ?? []).find((sh) => sh.trackingNumber);
+
+  return {
+    ...toOrder(o),
+    subtotal: o.subtotal ?? 0,
+    shipping: o.shippingCost ?? 0,
+    tax: o.tax ?? 0,
+    discount: o.discount ?? 0,
+    couponCode: o.couponCode ?? null,
+    // The EMI label is pre-rendered by the server ("Credit Card EMI · HDFC ·
+    // 6 months @ 14%") precisely so every surface describes a plan the same
+    // way; prefer it over the bare method when there is one.
+    paymentMethod:
+      typeof o.payment === 'object' && o.payment
+        ? o.payment.emiPlanLabel || o.payment.paymentMethod || ''
+        : '',
+    address: toAddress(o.shippingAddress),
+    trackingNumber: o.trackingNumber || parcel?.trackingNumber || '',
+    carrier: o.carrier || parcel?.carrier || '',
+    // Oldest first, and only entries that carry both a status and a time —
+    // a step with no timestamp cannot be placed on a timeline.
+    history: (o.statusHistory ?? [])
+      .filter((h): h is { status: string; timestamp: string } => !!h.status && !!h.timestamp)
+      .map((h) => ({ status: h.status, at: h.timestamp }))
+      .sort((a, b) => +new Date(a.at) - +new Date(b.at)),
+  };
 }
