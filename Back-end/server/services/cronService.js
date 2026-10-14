@@ -10,6 +10,7 @@ import { checkInboundLiveness, sweepSlaBreaches, requeueStuckInbound } from './s
 import { getNotificationsQueue, enqueueVariantGeneration, variantJobId } from '../queue/queues.js';
 import { findOriginalsMissingVariants } from './storage/variantSweep.js';
 import { storageProvider } from '../config/storage.js';
+import { postStuckDigests } from './chatStuckDigest.js';
 
 class CronService {
   constructor() {
@@ -61,6 +62,7 @@ class CronService {
     this.scheduleCareersMediaRetention();
     this.scheduleAffiliateMaturation();
     this.scheduleVariantSweep();
+    this.scheduleChatStuckDigest();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -330,6 +332,37 @@ class CronService {
    * the encoding — so it cannot crowd out the API the way a bulk run would.
    * Skipped unless images live on R2 and a queue Redis is configured.
    */
+  /**
+   * Morning stuck-order digest in team chat (services/chatStuckDigest.js): one
+   * post per team listing orders that have waited too long at its step.
+   * 09:30 IST, Monday–Saturday (the working week). Read-only over a bounded,
+   * indexed scan, and keyed per team per day, so a double run posts once.
+   */
+  scheduleChatStuckDigest() {
+    const schedule = process.env.CHAT_DIGEST_CRON || '30 9 * * 1-6';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid CHAT_DIGEST_CRON "${schedule}" — chat digest NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:chatStuckDigest', 15 * 60, () =>
+        postStuckDigests().catch(err =>
+          console.error('[CronService] Chat stuck-order digest failed:', err.message)
+        )
+      ),
+      { scheduled: true, timezone: process.env.CHAT_DIGEST_TZ || 'Asia/Kolkata' }
+    );
+    this.scheduledTasks.push({
+      name: 'chatStuckDigest',
+      task,
+      schedule,
+      description: 'Team chat: morning digest of orders stuck at each team\'s step',
+    });
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[CronService] Chat stuck-order digest scheduled: "${schedule}"`);
+    }
+  }
+
   scheduleVariantSweep() {
     if (storageProvider() !== 'r2' || (!process.env.REDIS_URL && !process.env.QUEUE_REDIS_URL)) return;
     const schedule = process.env.VARIANT_SWEEP_CRON || '30 21 * * *'; // 21:30 UTC = 03:00 IST
