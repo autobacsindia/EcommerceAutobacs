@@ -232,13 +232,13 @@ describe('Team chat — files, mentions, order refs, automatic updates', () => {
   });
 
   describe('automatic business updates', () => {
-    it('a paid order posts once in #operations, even when the job retries', async () => {
+    it('a paid order posts once in #procurement (who check stock next), even when the job retries', async () => {
       const order = await Order.create(sampleOrder());
       await postBusinessUpdate('send-staff-sales-paid-alert', { orderId: String(order._id) });
       await postBusinessUpdate('send-staff-sales-paid-alert', { orderId: String(order._id) });
 
-      const ops = spaceId((await admin.get('/chat/channels')).body.channels, 'team:operations');
-      const { body } = await admin.get(`/chat/channels/${ops}/messages`);
+      const proc = spaceId((await admin.get('/chat/channels')).body.channels, 'team:procurement');
+      const { body } = await admin.get(`/chat/channels/${proc}/messages`);
       expect(body.messages).toHaveLength(1);
       expect(body.messages[0]).toMatchObject({ kind: 'system', sender: null });
       expect(body.messages[0].text).toMatch(/Paid order #/);
