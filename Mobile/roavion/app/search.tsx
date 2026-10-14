@@ -14,11 +14,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { fetchFacets, fetchProducts, fetchSuggestions } from '../src/api/catalogue';
 import {
   EMPTY_FILTERS,
-  FilterSheet,
   ListingToolbar,
   SortSheet,
   type Filters,
 } from '../src/components/ListingControls';
+import FilterSheet from '../src/components/FilterSheet';
 import ProductCard from '../src/components/ProductCard';
 import { Screenful } from '../src/components/ui';
 import { useApp } from '../src/store';
@@ -154,6 +154,8 @@ export default function SearchScreen() {
             )}
             {sheet === 'filter' && (
               <FilterSheet
+                visible
+                resultCount={facets.data?.total ?? results.data?.total ?? 0}
                 filters={filters}
                 facets={facets.data ?? null}
                 carLabel={garage ? `${garage.make}${garage.model ? ` ${garage.model}` : ''}` : null}
@@ -167,6 +169,7 @@ export default function SearchScreen() {
 
         {showSuggestions ? (
           <FlatList
+            key="suggestions"
             data={suggestions.data ?? []}
             keyExtractor={(x) => x.id}
             keyboardShouldPersistTaps="handled"
@@ -206,6 +209,7 @@ export default function SearchScreen() {
           />
         ) : (
           <FlatList
+            key="results"
             data={products}
             keyExtractor={(p) => p.id}
             numColumns={2}
@@ -233,9 +237,9 @@ const s = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.white, borderRadius: radius.pill, paddingHorizontal: spacing.lg, height: 44,
   },
-  input: { flex: 1, fontFamily: font.regular, fontSize: 14.5, color: colors.ink, padding: 0 },
+  input: { flex: 1, fontFamily: font.regular, fontSize: 14, color: colors.ink, padding: 0 },
   filterTitle: { flex: 1 },
-  filterTitleText: { fontFamily: font.bold, fontSize: 19, color: colors.white },
+  filterTitleText: { fontFamily: font.bold, fontSize: 17, color: colors.white },
 
   toolbar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -246,18 +250,18 @@ const s = StyleSheet.create({
     borderRadius: radius.pill, paddingHorizontal: spacing.md, paddingVertical: 7,
     borderWidth: 1, borderColor: colors.line,
   },
-  sortText: { fontFamily: font.medium, fontSize: 12.5, color: colors.ink2 },
+  sortText: { fontFamily: font.medium, fontSize: 12, color: colors.ink2 },
   sortSheet: { backgroundColor: colors.card, marginHorizontal: spacing.lg, marginTop: spacing.sm, borderRadius: radius.lg, overflow: 'hidden' },
   sortOption: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
   },
-  sortOptionText: { fontFamily: font.regular, fontSize: 14, color: colors.ink2 },
+  sortOptionText: { fontFamily: font.regular, fontSize: 13, color: colors.ink2 },
   sortOptionOn: { fontFamily: font.semibold, color: colors.green },
 
   suggestion: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.line,
   },
-  suggestionText: { flex: 1, fontFamily: font.regular, fontSize: 14.5, color: colors.ink },
+  suggestionText: { flex: 1, fontFamily: font.regular, fontSize: 14, color: colors.ink },
 });

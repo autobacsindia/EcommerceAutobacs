@@ -73,12 +73,29 @@ export default function CartScreen() {
       >
         {cart.items.map((item) => (
           <View key={`${item.productId}-${item.variantId ?? 'base'}`} style={s.line}>
-            <Pressable onPress={() => item.slug && router.push(`/product/${item.slug}`)} accessibilityRole="button">
+            {/* Photo AND name open the product. Only the thumbnail did, which
+                is the smallest target on the row and the last place anyone
+                taps — people tap the name. */}
+            <Pressable
+              onPress={() => item.slug && router.push(`/product/${item.slug}`)}
+              disabled={!item.slug}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${item.name}`}
+              style={({ pressed }) => pressed && { opacity: 0.85 }}
+            >
               <Photo uri={item.image} style={s.image} />
             </Pressable>
 
             <View style={s.lineBody}>
-              <Text style={s.name} numberOfLines={2}>{item.name}</Text>
+              <Pressable
+                onPress={() => item.slug && router.push(`/product/${item.slug}`)}
+                disabled={!item.slug}
+                accessibilityRole="button"
+                accessibilityLabel={`View ${item.name}`}
+                style={({ pressed }) => pressed && { opacity: 0.6 }}
+              >
+                <Text style={s.name} numberOfLines={2}>{item.name}</Text>
+              </Pressable>
               {!!item.variantLabel && <Text style={s.variant}>{item.variantLabel}</Text>}
               <Text style={s.unit}>{inr(item.price)} each</Text>
               {item.stock === 'out' && <Badge text="Out of stock" tone="red" />}
@@ -153,8 +170,8 @@ export default function CartScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: { backgroundColor: colors.header, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-  title: { fontFamily: font.bold, fontSize: 22, color: colors.white },
-  subtitle: { fontFamily: font.regular, fontSize: 12.5, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  title: { fontFamily: font.bold, fontSize: 20, color: colors.white },
+  subtitle: { fontFamily: font.regular, fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
 
   line: {
     flexDirection: 'row', gap: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg,
@@ -162,17 +179,17 @@ const s = StyleSheet.create({
   },
   image: { width: 78, height: 78, borderRadius: radius.md },
   lineBody: { flex: 1, gap: 3 },
-  name: { fontFamily: font.medium, fontSize: 13.5, lineHeight: 18, color: colors.ink, paddingRight: spacing.lg },
+  name: { fontFamily: font.medium, fontSize: 13, lineHeight: 18, color: colors.ink, paddingRight: spacing.lg },
   variant: { fontFamily: font.semibold, fontSize: 11, color: colors.green, textTransform: 'uppercase' },
-  unit: { fontFamily: font.regular, fontSize: 12, color: colors.muted },
+  unit: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted },
   lineFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm },
   stepper: {
     flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.line,
     borderRadius: radius.pill, paddingHorizontal: 4,
   },
   stepBtn: { padding: 7 },
-  qty: { fontFamily: font.bold, fontSize: 14, color: colors.ink, minWidth: 26, textAlign: 'center' },
-  lineTotal: { fontFamily: font.bold, fontSize: 15, color: colors.ink },
+  qty: { fontFamily: font.bold, fontSize: 13, color: colors.ink, minWidth: 26, textAlign: 'center' },
+  lineTotal: { fontFamily: font.bold, fontSize: 14, color: colors.ink },
   remove: { position: 'absolute', top: spacing.sm, right: spacing.sm, padding: 4 },
 
   note: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', paddingHorizontal: spacing.xs },
@@ -182,6 +199,6 @@ const s = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: colors.line, padding: spacing.lg, gap: spacing.md,
   },
   barRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  barTotal: { fontFamily: font.bold, fontSize: 20, color: colors.ink },
-  warn: { fontFamily: font.medium, fontSize: 12, color: colors.red },
+  barTotal: { fontFamily: font.bold, fontSize: 18, color: colors.ink },
+  warn: { fontFamily: font.medium, fontSize: 11.5, color: colors.red },
 });

@@ -33,12 +33,12 @@ import ProductCard from './ProductCard';
 import ScrollTopButton from './ScrollTopButton';
 import {
   EMPTY_FILTERS,
-  FilterSheet,
   ListingToolbar,
   SortSheet,
   activeFilterCount,
   type Filters,
 } from './ListingControls';
+import FilterSheet from './FilterSheet';
 import { Screenful } from './ui';
 import { useHeaderScroll, useScrollToTop } from './useHeaderScroll';
 import { useApp } from '../store';
@@ -94,9 +94,11 @@ export default function ProductListing({
       minPrice: filters.minPrice,
       maxPrice: filters.maxPrice,
       inStock: filters.inStock || undefined,
-      ...(filters.fitsMyCar && garage
-        ? { vehicleMake: garage.make, vehicleModel: garage.model || undefined }
-        : {}),
+      ...(filters.vehicleMake
+        ? { vehicleMake: filters.vehicleMake, vehicleModel: filters.vehicleModel || undefined }
+        : filters.fitsMyCar && garage
+          ? { vehicleMake: garage.make, vehicleModel: garage.model || undefined }
+          : {}),
     }),
     [categorySlug, filters, garage],
   );
@@ -183,6 +185,8 @@ export default function ProductListing({
       )}
       {sheet === 'filter' && (
         <FilterSheet
+          visible
+          resultCount={facets.data?.total ?? total}
           filters={filters}
           facets={facets.data ?? null}
           carLabel={carLabel}
@@ -272,7 +276,7 @@ const s = StyleSheet.create({
   pageHead: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: 6 },
   // Montserrat 700 at 23/28 with -0.23 tracking — the site's own page h1.
   pageTitle: { ...type.h1 },
-  pageBlurb: { ...type.body, fontSize: 14, lineHeight: 20 },
+  pageBlurb: { ...type.body, fontSize: 13, lineHeight: 20 },
 
   chipRow: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.sm },
   chip: {
@@ -284,7 +288,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.card,
   },
   chipOn: { backgroundColor: colors.green, borderColor: colors.green },
-  chipText: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
+  chipText: { fontFamily: font.medium, fontSize: 13, color: colors.ink2 },
   chipTextOn: { fontFamily: font.bold, color: colors.white },
 
   footer: { paddingVertical: spacing.xl },
@@ -292,7 +296,7 @@ const s = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: spacing.xl,
     fontFamily: font.regular,
-    fontSize: 13,
+    fontSize: 12.5,
     color: colors.muted,
   },
 });

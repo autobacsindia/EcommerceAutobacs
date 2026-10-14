@@ -169,7 +169,7 @@ const s = StyleSheet.create({
   },
   logo: { width: 105, height: 28 },
   hello: { flex: 1, alignItems: 'flex-end' },
-  helloText: { fontFamily: font.medium, fontSize: 13.5, color: 'rgba(255,255,255,0.9)' },
+  helloText: { fontFamily: font.medium, fontSize: 13, color: 'rgba(255,255,255,0.9)' },
   cart: {
     width: 42,
     height: 42,
@@ -208,7 +208,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.white,
     overflow: 'hidden',
   },
-  searchText: { flex: 1, fontFamily: font.regular, fontSize: 15, color: colors.muted },
+  searchText: { flex: 1, fontFamily: font.regular, fontSize: 14, color: colors.muted },
   go: {
     width: 52,
     height: 36,
@@ -217,7 +217,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  goText: { fontFamily: font.semibold, fontSize: 15, color: colors.white },
+  goText: { fontFamily: font.semibold, fontSize: 14, color: colors.white },
 
   // 63 tall on #1d2121, with the site's dashed green outline.
   vehicleRow: {
@@ -246,11 +246,11 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  vehicleText: { flex: 1, fontFamily: font.semibold, fontSize: 15, color: colors.white },
+  vehicleText: { flex: 1, fontFamily: font.semibold, fontSize: 14, color: colors.white },
 
   // 44 tall on the brand green.
   deptStrip: { height: 44, backgroundColor: colors.green },
   deptRow: { paddingHorizontal: spacing.md, alignItems: 'center' },
   dept: { paddingHorizontal: spacing.md, height: 44, justifyContent: 'center' },
-  deptText: { fontFamily: font.semibold, fontSize: 15, color: colors.white },
+  deptText: { fontFamily: font.semibold, fontSize: 14, color: colors.white },
 });

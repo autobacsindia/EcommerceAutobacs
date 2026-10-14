@@ -297,23 +297,23 @@ export default function CheckoutScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  label: { fontFamily: font.semibold, fontSize: 12.5, color: colors.ink2, marginBottom: 5 },
+  label: { fontFamily: font.semibold, fontSize: 12, color: colors.ink2, marginBottom: 5 },
   input: {
     backgroundColor: colors.bg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line,
-    paddingHorizontal: spacing.md, height: 46, fontFamily: font.regular, fontSize: 14.5,
+    paddingHorizontal: spacing.md, height: 46, fontFamily: font.regular, fontSize: 14,
     color: colors.ink, marginBottom: spacing.md,
   },
   sumRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.sm },
-  sumName: { flex: 1, fontFamily: font.regular, fontSize: 13.5, color: colors.ink2 },
-  sumValue: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink },
+  sumName: { flex: 1, fontFamily: font.regular, fontSize: 13, color: colors.ink2 },
+  sumValue: { fontFamily: font.medium, fontSize: 13, color: colors.ink },
   sumTotal: {
     flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md,
     paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.line,
   },
-  sumTotalLabel: { fontFamily: font.semibold, fontSize: 15, color: colors.ink },
-  sumTotalValue: { fontFamily: font.bold, fontSize: 17, color: colors.ink },
+  sumTotalLabel: { fontFamily: font.semibold, fontSize: 14, color: colors.ink },
+  sumTotalValue: { fontFamily: font.bold, fontSize: 16, color: colors.ink },
   secure: { flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginTop: spacing.md },
-  error: { fontFamily: font.medium, fontSize: 13, color: colors.red, marginTop: spacing.lg, lineHeight: 19 },
+  error: { fontFamily: font.medium, fontSize: 12.5, color: colors.red, marginTop: spacing.lg, lineHeight: 19 },
   bar: {
     position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.card,
     borderTopWidth: 1, borderTopColor: colors.line, padding: spacing.lg,

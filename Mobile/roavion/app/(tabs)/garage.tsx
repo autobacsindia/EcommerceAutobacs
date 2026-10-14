@@ -174,14 +174,14 @@ export default function GarageScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: { backgroundColor: colors.header, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-  title: { fontFamily: font.bold, fontSize: 22, color: colors.white },
-  subtitle: { fontFamily: font.regular, fontSize: 12.5, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  title: { fontFamily: font.bold, fontSize: 20, color: colors.white },
+  subtitle: { fontFamily: font.regular, fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
 
   savedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   savedIcon: { width: 46, height: 46, borderRadius: radius.md, backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center' },
   savedActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
   clear: { marginTop: spacing.md, alignSelf: 'center' },
-  clearText: { fontFamily: font.medium, fontSize: 13, color: colors.red },
+  clearText: { fontFamily: font.medium, fontSize: 12.5, color: colors.red },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   pill: {
@@ -189,7 +189,7 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, ...shadow.card,
   },
   pillOn: { backgroundColor: colors.greenSoft, borderColor: colors.green },
-  pillText: { fontFamily: font.medium, fontSize: 13.5, color: colors.ink2 },
+  pillText: { fontFamily: font.medium, fontSize: 13, color: colors.ink2 },
   pillTextOn: { fontFamily: font.semibold, color: colors.green },
 
   help: { flexDirection: 'row', gap: spacing.md, alignItems: 'center', marginTop: spacing.xl, padding: spacing.lg, backgroundColor: colors.greenFaint, borderRadius: radius.lg },

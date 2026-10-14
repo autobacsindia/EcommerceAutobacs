@@ -41,8 +41,8 @@ import {
   type Category,
   type Product,
 } from '../../src/api/catalogue';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppHeader from '../../src/components/AppHeader';
+import OfferSlider from '../../src/components/OfferSlider';
 import ScrollTopButton from '../../src/components/ScrollTopButton';
 import { useHeaderScroll, useScrollToTop } from '../../src/components/useHeaderScroll';
 import ProductCard from '../../src/components/ProductCard';
@@ -174,9 +174,12 @@ function Hero({ photos, loading }: { photos: Product[]; loading: boolean }) {
     return () => clearInterval(timer);
   }, [slides.length]);
 
+  // Pale mint with dark text, exactly as the website renders this block at
+  // phone width. It also stops the home screen opening with two saturated green
+  // panels stacked on each other, which read as one heavy slab.
   return (
     <LinearGradient
-      colors={[colors.greenMid, colors.green, colors.greenDark]}
+      colors={[colors.greenFaint, colors.greenSoft]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={s.hero}
@@ -193,7 +196,7 @@ function Hero({ photos, loading }: { photos: Product[]; loading: boolean }) {
         accessibilityLabel="Find my parts"
       >
         <Text style={s.heroCtaText}>Find my parts</Text>
-        <Ionicons name="arrow-forward" size={15} color={colors.green} />
+        <Ionicons name="arrow-forward" size={15} color={colors.white} />
       </Pressable>
 
       {loading ? (
@@ -237,7 +240,6 @@ export default function HomeScreen() {
   const { garage } = useApp();
   const scroller = useRef<ScrollView>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const insets = useSafeAreaInsets();
 
   /*
     The header scrolls away with the content, as the website's does, so the
@@ -333,6 +335,10 @@ export default function HomeScreen() {
         }
       >
         <AppHeader departments={departments} />
+
+        {/* Offers first — the banner is what a shopper scans before anything
+            else, and it is the only slot wide enough to actually sell one. */}
+        <OfferSlider offers={dealList} loading={deals.isLoading} />
 
         <Hero photos={dealList.length ? dealList : (popular.data?.products ?? [])} loading={deals.isLoading} />
 
@@ -498,7 +504,7 @@ export default function HomeScreen() {
                   accessibilityLabel={b.name}
                 >
                   {b.logo ? (
-                    <Photo uri={b.logo} style={{ width: BRAND_W - 20, height: 42 }} />
+                    <Photo uri={b.logo} style={{ width: BRAND_W - 24, height: 34 }} contentFit="contain" />
                   ) : (
                     <Text style={s.brandName} numberOfLines={2}>{b.name}</Text>
                   )}
@@ -598,14 +604,14 @@ const s = StyleSheet.create({
     fontFamily: font.bold,
     fontSize: 11,
     letterSpacing: 1.4,
-    color: 'rgba(255,255,255,0.75)',
+    color: colors.green,
   },
-  heroTitle: { fontFamily: font.extrabold, fontSize: 25, lineHeight: 31, color: colors.white, marginTop: 6 },
+  heroTitle: { fontFamily: font.heading, fontSize: 22, lineHeight: 31, letterSpacing: -0.25, color: colors.ink, marginTop: 6 },
   heroBody: {
     fontFamily: font.regular,
-    fontSize: 13.5,
+    fontSize: 13,
     lineHeight: 19,
-    color: 'rgba(255,255,255,0.82)',
+    color: colors.ink2,
     marginTop: 6,
     paddingRight: spacing.lg,
   },
@@ -615,20 +621,22 @@ const s = StyleSheet.create({
     gap: 7,
     alignSelf: 'flex-start',
     marginTop: spacing.lg,
-    backgroundColor: colors.white,
+    backgroundColor: colors.green,
     paddingHorizontal: spacing.xl,
     height: 44,
     borderRadius: radius.pill,
     overflow: 'hidden',
   },
-  heroCtaText: { fontFamily: font.bold, fontSize: 14.5, color: colors.green },
+  heroCtaText: { fontFamily: font.bold, fontSize: 14, color: colors.white },
   heroRail: { marginTop: spacing.lg, overflow: 'visible' },
   heroPhoto: {
     width: HERO_PHOTO,
     height: HERO_PHOTO * 0.78,
     borderRadius: radius.md,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   heroPhotoImg: { width: '100%', height: '100%' },
 
@@ -656,8 +664,8 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  finderTitle: { fontFamily: font.bold, fontSize: 15.5, color: colors.white },
-  finderSub: { fontFamily: font.regular, fontSize: 12, color: 'rgba(255,255,255,0.82)', marginTop: 1 },
+  finderTitle: { fontFamily: font.bold, fontSize: 15, color: colors.white },
+  finderSub: { fontFamily: font.regular, fontSize: 11.5, color: 'rgba(255,255,255,0.82)', marginTop: 1 },
   finderBody: { padding: spacing.lg, gap: spacing.md },
   finderSelect: {
     flexDirection: 'row',
@@ -670,7 +678,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.white,
     overflow: 'hidden',
   },
-  finderSelectText: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink },
+  finderSelectText: { flex: 1, fontFamily: font.medium, fontSize: 13, color: colors.ink },
   finderChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 
   trust: { flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.lg },
@@ -683,7 +691,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  trustTitle: { fontFamily: font.semibold, fontSize: 12.5, lineHeight: 17, color: colors.ink },
+  trustTitle: { fontFamily: font.semibold, fontSize: 12, lineHeight: 17, color: colors.ink },
   trustBody: { fontFamily: font.regular, fontSize: 11.5, lineHeight: 16, color: colors.muted, marginTop: 1 },
 
   brandBox: {
@@ -697,7 +705,7 @@ const s = StyleSheet.create({
     padding: spacing.sm,
     overflow: 'hidden',
   },
-  brandName: { fontFamily: font.bold, fontSize: 12, color: colors.ink, textAlign: 'center' },
+  brandName: { fontFamily: font.bold, fontSize: 11.5, color: colors.ink, textAlign: 'center' },
 
   review: {
     width: 258,
@@ -709,7 +717,7 @@ const s = StyleSheet.create({
     gap: spacing.sm,
   },
   reviewStars: { flexDirection: 'row', gap: 2 },
-  reviewText: { fontFamily: font.regular, fontSize: 13, lineHeight: 19, color: colors.ink2 },
+  reviewText: { fontFamily: font.regular, fontSize: 12.5, lineHeight: 19, color: colors.ink2 },
   reviewWho: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   avatar: {
     width: 28,
@@ -719,8 +727,8 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontFamily: font.bold, fontSize: 12.5, color: colors.green },
-  reviewName: { flex: 1, fontFamily: font.semibold, fontSize: 12.5, color: colors.ink },
+  avatarText: { fontFamily: font.bold, fontSize: 12, color: colors.green },
+  reviewName: { flex: 1, fontFamily: font.semibold, fontSize: 12, color: colors.ink },
   reviewProduct: { fontFamily: font.medium, fontSize: 11.5, color: colors.green },
 
   backToTop: {
@@ -735,7 +743,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.green,
     overflow: 'hidden',
   },
-  backToTopText: { fontFamily: font.semibold, fontSize: 14, color: colors.white },
+  backToTopText: { fontFamily: font.semibold, fontSize: 13, color: colors.white },
 
   footer: {
     flexDirection: 'row',
@@ -752,6 +760,6 @@ const s = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.lg,
   },
-  footerTitle: { fontFamily: font.semibold, fontSize: 13.5, color: colors.white },
+  footerTitle: { fontFamily: font.semibold, fontSize: 13, color: colors.white },
   footerBody: { fontFamily: font.regular, fontSize: 11.5, color: 'rgba(255,255,255,0.65)', marginTop: 1 },
 });

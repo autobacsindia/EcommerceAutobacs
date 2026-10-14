@@ -45,14 +45,22 @@ export default function ProductCard({
   /*
     Quick add, as on the website's card.
 
-    The listing payload carries no variant field, so the card cannot tell
-    whether a product needs an option chosen. Rather than guess — adding the
-    wrong variant silently is the one failure a cart must never have — it asks
-    the server, and ON ANY REFUSAL opens the product page so the customer
-    finishes the choice there. The fast path stays one tap; the ambiguous one
-    lands exactly where it can be resolved.
+    A `variable` product cannot be added from here: its options have different
+    prices and stock, and the API refuses an add without a variantId. The
+    listing payload does carry `productType`, so the card knows this up front
+    and opens the product page instead of firing a request that is certain to
+    fail. The server refusal is still handled, as the listing could be stale.
+
+    Adding the wrong variant silently is the one failure a cart must never
+    have, so neither path ever guesses an option.
   */
+  const needsChoice = product.productType === 'variable';
+
   const quickAdd = async () => {
+    if (needsChoice) {
+      open();
+      return;
+    }
     setAdding(true);
     try {
       await addItem(product.id, 1);
@@ -126,15 +134,24 @@ export default function ProductCard({
       </View>
 
       <View style={s.tileBody}>
-        <Text style={s.name} numberOfLines={2}>{product.name}</Text>
-        <Stars rating={product.rating} reviews={product.reviews} />
+        {/* Both slots are fixed height. A card with a short title or no rating
+            would otherwise sit shorter than its neighbour, and a rail of
+            ragged cards with prices at different heights is the single most
+            visible way a listing looks unfinished. */}
+        <Text style={s.name} numberOfLines={2} ellipsizeMode="tail">{product.name}</Text>
+        <View style={s.starSlot}>
+          <Stars rating={product.rating} reviews={product.reviews} />
+        </View>
       </View>
       </Pressable>
 
       <View style={[s.tileBody, s.tileFootWrap]}>
         <View style={s.tileFoot}>
           <View style={s.tilePrices}>
-            <Text style={s.price}>{inr(product.price)}</Text>
+            {needsChoice && product.priceTo > product.priceFrom && (
+              <Text style={s.from}>from</Text>
+            )}
+            <Text style={s.price}>{inr(needsChoice ? product.priceFrom : product.price)}</Text>
             {onSale ? <Text style={s.mrp}>{inr(product.mrp!)}</Text> : null}
           </View>
           {!soldOut && (
@@ -144,11 +161,13 @@ export default function ProductCard({
               hitSlop={6}
               style={s.add}
               accessibilityRole="button"
-              accessibilityLabel={`Add ${product.name} to cart`}
+              accessibilityLabel={
+                needsChoice ? `Choose options for ${product.name}` : `Add ${product.name} to cart`
+              }
             >
               {adding
                 ? <ActivityIndicator size="small" color={colors.white} />
-                : <Ionicons name="bag-handle" size={18} color={colors.white} />}
+                : <Ionicons name={needsChoice ? 'options' : 'bag-handle'} size={18} color={colors.white} />}
             </Pressable>
           )}
         </View>
@@ -194,7 +213,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.72)',
   },
-  soldOverlayText: { fontFamily: font.bold, fontSize: 12, color: colors.red },
+  soldOverlayText: { fontFamily: font.bold, fontSize: 11.5, color: colors.red },
 
   /* Measured off the website: #cc0c39, 11px bold, radius 6, padding 4x8. */
   badge: {
@@ -208,12 +227,12 @@ const s = StyleSheet.create({
   },
   badgeText: { fontFamily: font.bold, fontSize: 11, color: colors.white },
 
-  tileFoot: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.sm },
+  tileFoot: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.sm, marginTop: 2 },
   tilePrices: { flex: 1 },
   /* The site's green circle, 40x40, bottom-right of the card. */
   add: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: radius.pill,
     backgroundColor: colors.green,
     alignItems: 'center',
@@ -233,10 +252,13 @@ const s = StyleSheet.create({
   rowImage: { width: 92, height: 92, borderRadius: radius.sm },
   rowBody: { flex: 1, gap: 3, justifyContent: 'center' },
 
-  name: { fontFamily: font.medium, fontSize: 14, lineHeight: 19.25, color: colors.ink },
+  /* Two lines, always — 2 x 19.25 line-height. See the note at the call site. */
+  name: { fontFamily: font.medium, fontSize: 13, lineHeight: 18, color: colors.ink, height: 36 },
+  starSlot: { height: 16, justifyContent: 'center' },
   priceLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 2, flexWrap: 'wrap' },
-  price: { fontFamily: font.bold, fontSize: 18, color: colors.ink },
-  mrp: { fontFamily: font.regular, fontSize: 12, color: colors.muted, textDecorationLine: 'line-through' },
+  price: { fontFamily: font.bold, fontSize: 15.5, color: colors.ink },
+  mrp: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted, textDecorationLine: 'line-through' },
   by: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted },
+  from: { fontFamily: font.regular, fontSize: 10.5, color: colors.muted, marginBottom: -2 },
   soldOut: { fontFamily: font.semibold, fontSize: 11.5, color: colors.red },
 });

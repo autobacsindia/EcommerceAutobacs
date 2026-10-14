@@ -82,7 +82,7 @@ export function Button({
       ) : (
         <>
           {icon && <Ionicons name={icon} size={18} color={palette.fg} />}
-          <Text style={[s.btnLabel, { color: palette.fg }]}>{label}</Text>
+          <Text style={[s.btnLabel, { color: palette.fg }]} numberOfLines={1}>{label}</Text>
         </>
       )}
     </Pressable>
@@ -356,7 +356,7 @@ const s = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1.5,
   },
-  btnLabel: { fontFamily: font.semibold, fontSize: 15 },
+  btnLabel: { fontFamily: font.bold, fontSize: 14 },
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
@@ -371,7 +371,7 @@ const s = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
   },
-  seeAll: { fontFamily: font.semibold, fontSize: 13, color: colors.green },
+  seeAll: { fontFamily: font.semibold, fontSize: 12.5, color: colors.green },
 
   panel: {
     backgroundColor: colors.card,
@@ -388,9 +388,9 @@ const s = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.md,
   },
-  panelTitle: { fontFamily: font.bold, fontSize: 19, lineHeight: 25, color: colors.ink },
-  panelSub: { fontFamily: font.regular, fontSize: 12.5, lineHeight: 17, color: colors.muted, marginTop: 2 },
-  textLink: { fontFamily: font.semibold, fontSize: 13.5, color: colors.green },
+  panelTitle: { fontFamily: font.bold, fontSize: 17, lineHeight: 25, color: colors.ink },
+  panelSub: { fontFamily: font.regular, fontSize: 12, lineHeight: 17, color: colors.muted, marginTop: 2 },
+  textLink: { fontFamily: font.semibold, fontSize: 13, color: colors.green },
 
   chip: {
     paddingHorizontal: spacing.md,
@@ -401,13 +401,13 @@ const s = StyleSheet.create({
     backgroundColor: colors.white,
   },
   chipOn: { borderColor: colors.green, backgroundColor: colors.greenSoft },
-  chipText: { fontFamily: font.medium, fontSize: 12.5, color: colors.ink2 },
+  chipText: { fontFamily: font.medium, fontSize: 12, color: colors.ink2 },
   chipTextOn: { fontFamily: font.semibold, color: colors.green },
 
   miniLabel: { fontFamily: font.medium, fontSize: 11.5, lineHeight: 15, color: colors.ink2, marginTop: 6 },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  starText: { fontFamily: font.semibold, fontSize: 12, color: colors.ink2 },
+  starText: { fontFamily: font.semibold, fontSize: 11.5, color: colors.ink2 },
   reviewText: { fontFamily: font.regular, fontSize: 11, color: colors.muted },
   badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.sm, alignSelf: 'flex-start' },
   badgeText: { fontFamily: font.bold, fontSize: 11 },

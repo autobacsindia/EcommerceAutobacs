@@ -80,18 +80,32 @@ export const font = {
 } as const;
 
 /**
- * Sizes measured off the website at 375dp: its page h1 is Montserrat 700 at
- * 23/27.6 with -0.23px tracking, body 16, a product title 14/19.25 at weight
- * 500. Matching those is what makes a screenshot of the two sit side by side.
+ * Sizes measured off the LIVE website at 390dp, not estimated.
+ *
+ * What the site actually renders on a phone:
+ *   section heading  17-18 Montserrat 700 / 25.5-27
+ *   page title       22    700 / 27.5
+ *   body             14    400 / 21
+ *   secondary        13    400 / 19.5
+ *   meta             12    400 / 14.4
+ *   smallest label   11    400 / 14.3
+ *
+ * The app had been running one to two points above this at almost every level,
+ * which is what made it feel chunkier than the web view beside it. Everything
+ * here now matches a measured value.
+ *
+ * 11px is the floor. Anything already at or below 11.5 was left alone — below
+ * that, text stops being small and starts being unreadable, which is a worse
+ * problem than looking slightly large.
  */
 export const type = {
-  h1: { fontFamily: font.heading, fontSize: 23, lineHeight: 28, letterSpacing: -0.23, color: colors.ink },
-  h2: { fontFamily: font.heading, fontSize: 20, lineHeight: 25, letterSpacing: -0.2, color: colors.ink },
-  h3: { fontFamily: font.semibold, fontSize: 17, lineHeight: 23, color: colors.ink },
-  body: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: colors.ink2 },
-  small: { fontFamily: font.regular, fontSize: 13, lineHeight: 18, color: colors.muted },
+  h1: { fontFamily: font.heading, fontSize: 22, lineHeight: 28, letterSpacing: -0.22, color: colors.ink },
+  h2: { fontFamily: font.heading, fontSize: 18, lineHeight: 25, letterSpacing: -0.18, color: colors.ink },
+  h3: { fontFamily: font.semibold, fontSize: 16, lineHeight: 22, color: colors.ink },
+  body: { fontFamily: font.regular, fontSize: 14, lineHeight: 21, color: colors.ink2 },
+  small: { fontFamily: font.regular, fontSize: 13, lineHeight: 19, color: colors.muted },
   tiny: { fontFamily: font.medium, fontSize: 11, lineHeight: 15, color: colors.muted },
-  price: { fontFamily: font.bold, fontSize: 18, color: colors.ink },
+  price: { fontFamily: font.bold, fontSize: 17, color: colors.ink },
 } as const;
 
 /**

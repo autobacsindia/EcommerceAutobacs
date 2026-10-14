@@ -166,17 +166,17 @@ export default function AccountScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   header: { backgroundColor: colors.header, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
-  title: { fontFamily: font.bold, fontSize: 22, color: colors.white },
+  title: { fontFamily: font.bold, fontSize: 20, color: colors.white },
 
   identity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   avatar: { width: 50, height: 50, borderRadius: radius.pill, backgroundColor: colors.greenSoft, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontFamily: font.bold, fontSize: 20, color: colors.green },
+  avatarText: { fontFamily: font.bold, fontSize: 18, color: colors.green },
 
   groupTitle: { fontFamily: font.semibold, fontSize: 11, color: colors.muted, letterSpacing: 1, marginBottom: spacing.sm, marginLeft: 4 },
   group: { backgroundColor: colors.card, borderRadius: radius.lg, overflow: 'hidden', ...shadow.card },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.line },
-  rowLabel: { flex: 1, fontFamily: font.medium, fontSize: 14.5, color: colors.ink },
+  rowLabel: { flex: 1, fontFamily: font.medium, fontSize: 14, color: colors.ink },
 
-  version: { fontFamily: font.regular, fontSize: 12, color: colors.muted, textAlign: 'center', marginTop: spacing.xl },
+  version: { fontFamily: font.regular, fontSize: 11.5, color: colors.muted, textAlign: 'center', marginTop: spacing.xl },
 });
