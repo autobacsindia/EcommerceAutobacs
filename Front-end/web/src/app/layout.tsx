@@ -19,6 +19,7 @@ import { getActivePromoBanner } from "@/lib/promoBanner";
 import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from "@/lib/constants";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
+import ThemeScript from "@/components/theme/ThemeScript";
 import ContactFab from "@/components/layout/ContactFab";
 import HelpBot from "@/components/help/HelpBot";
 import { SITE_URL } from "@/lib/siteUrl";
@@ -207,8 +208,11 @@ export default async function RootLayout({
   const promoBanner = await getActivePromoBanner();
 
   return (
-    <html lang="en">
+    <html lang="en" data-theme="light" suppressHydrationWarning>
       <head>
+        {/* FIRST in <head>: it sets data-theme before the browser paints, so a
+            dark-theme visitor never sees a white flash between navigations. */}
+        <ThemeScript />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         {/* The <meta name="csp-nonce"> tag is gone with the nonce. hooks/useRazorpay.ts
             reads it to stamp the script it injects, and already handles absence

@@ -32,6 +32,29 @@
   font-family: var(--font-dm-sans), system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--ink);
 }
+
+/* Dark twin of the block above.
+   The brand green, red and star gold are NOT changed: the green is the logo,
+   and red/amber are learnt status colours that mean the same in either theme.
+   Only the surfaces and the ink invert. The green lightens one step so it
+   still clears contrast against a dark surface — the same hue, not a new one. */
+[data-theme='dark'] .sh-theme {
+  --g: #2f9c66;
+  --g-700: #228a57;
+  --g-600: #37b074;
+  --g-100: #142b20;
+  --g-50: #11201a;
+  --ink: #f2f5f4;
+  --ink-2: #c3cac8;
+  --muted: #94a09d;
+  --grey: #8a918f;
+  --bg: #0f1212;
+  --card: #171d1e;
+  --line: #2a3233;
+  --hdr: #0b0e0e;
+  --hdr-2: #141919;
+  color: var(--ink);
+}
 .sh { background: var(--bg); min-height: 100vh; }
 /* Resets live in Tailwind's `base` layer and carry no class weight (:where), so a
    utility (text-white on a green button, mb-6 under a heading) or a component
@@ -486,3 +509,65 @@
   .sh-account .sh-small { display: block; max-width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
   .sh-cart { width: 42px; height: 42px; }
 }
+
+/* The theme switch sits in the dark top bar, so it inherits white on both
+   themes rather than following --ink (which inverts). */
+.sh-theme-toggle { color: #ffffff; flex: 0 0 auto; }
+
+/* ── Hero slides in dark ────────────────────────────────────────────────────
+   The mint and sand slides are pale gradients with dark text. Under the dark
+   theme `--ink` inverts to near-white, so the text went white on cream and all
+   but disappeared — the one place a token flip is not enough, because the
+   gradient itself is a literal.
+
+   Each keeps its own character (a green slide, a cool slide, a warm slide)
+   rather than collapsing to three identical dark panels. */
+[data-theme='dark'] .sh-slide-green {
+  background:
+    radial-gradient(ellipse 60% 80% at 80% 30%, #0f6b3d 0%, transparent 60%),
+    linear-gradient(120deg, #073d22 0%, #052a18 100%);
+  color: #fff;
+}
+[data-theme='dark'] .sh-slide-mint {
+  background:
+    radial-gradient(ellipse 60% 80% at 80% 30%, #1b3a2c 0%, transparent 60%),
+    linear-gradient(120deg, #12241c 0%, #0f1a16 100%);
+  color: var(--ink);
+}
+[data-theme='dark'] .sh-slide-sand {
+  background:
+    radial-gradient(ellipse 60% 80% at 80% 30%, #332d24 0%, transparent 60%),
+    linear-gradient(120deg, #241f18 0%, #171310 100%);
+  color: var(--ink);
+}
+
+/* The fade that blends the banner into the page below it is a literal
+   `--bg` stop in light; it follows the token, but the hard-coded transparent
+   white at the top of the gradient shows as a grey haze on dark. */
+[data-theme='dark'] .sh-hero::after {
+  background: linear-gradient(to bottom, rgba(15, 18, 18, 0), var(--bg));
+}
+
+/* Carousel arrows are near-black on a pale slide; invert them. */
+[data-theme='dark'] .sh-hero-arrow { color: rgba(255, 255, 255, 0.55); }
+[data-theme='dark'] .sh-hero-arrow:hover { color: #fff; }
+[data-theme='dark'] .sh-hero-dots button { background: rgba(255, 255, 255, 0.3); }
+
+/* Product photography is shot on white. Keeping the tile white in dark mode is
+   what every large retailer does — a cut-out on a dark tile loses its edges. */
+[data-theme='dark'] .sh-slide-pic { background: #f4f6f5; }
+
+/* Form controls: `background: #fff` is a literal, so under the dark theme the
+   field stayed white while `--ink` inverted to near-white — text on its own
+   colour. These follow the surface token instead. */
+[data-theme='dark'] .sh-theme .sh-field select {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--ink);
+}
+[data-theme='dark'] .sh-theme .sh-field select:disabled {
+  background: #101914;
+  color: #7d8b85;
+}
+[data-theme='dark'] .sh-theme .sh-vcard .sh-field select { border-color: #2f5a44; }
+[data-theme='dark'] .sh-search input::placeholder { color: var(--muted); }
