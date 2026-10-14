@@ -1,4 +1,5 @@
 import { body, param, query } from 'express-validator';
+import { CUSTOMER_COMMENT_MAX } from '../../config/reviewLimits.js';
 import { validateRequest } from '../validateRequest.js';
 import mongoose from 'mongoose';
 
@@ -18,8 +19,8 @@ export const validateReviewUpdate = [
     .trim()
     .isLength({ min: 10 })
     .withMessage('Review comment must be at least 10 characters long')
-    .isLength({ max: 1000 })
-    .withMessage('Review comment must be less than 1000 characters'),
+    .isLength({ max: CUSTOMER_COMMENT_MAX })
+    .withMessage(`Review comment must be less than ${CUSTOMER_COMMENT_MAX} characters`),
   body('images')
     .optional({ nullable: true })
     .isArray({ max: 5 })
@@ -116,8 +117,8 @@ export const validateReviewSubmission = [
     .trim()
     .isLength({ min: 10 })
     .withMessage('Review comment must be at least 10 characters long')
-    .isLength({ max: 1000 })
-    .withMessage('Review comment must be less than 1000 characters'),
+    .isLength({ max: CUSTOMER_COMMENT_MAX })
+    .withMessage(`Review comment must be less than ${CUSTOMER_COMMENT_MAX} characters`),
   body('images')
     .optional({ nullable: true })
     .isArray({ max: 5 })

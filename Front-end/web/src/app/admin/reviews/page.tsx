@@ -38,8 +38,15 @@ interface Pagination {
   hasPrev: boolean;
 }
 
-/** Mirrors Review.comment's `maxlength` in the backend schema. */
-const COMMENT_MAX = 1000;
+/**
+ * Mirrors ADMIN_COMMENT_MAX in Back-end/server/config/reviewLimits.js.
+ *
+ * Higher than the 1000 a customer may submit, because the real use of this
+ * form is bringing a customer's existing Google review across, and those run
+ * long. Trimming someone's words to fit a field is how a genuine review turns
+ * into a misleading one.
+ */
+const COMMENT_MAX = 2000;
 
 export default function AdminReviewsPage() {
   const router = useRouter();

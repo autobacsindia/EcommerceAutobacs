@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { ADMIN_COMMENT_MAX } from "../config/reviewLimits.js";
 
 const ReviewSchema = new mongoose.Schema({
   product: { 
@@ -40,7 +41,13 @@ const ReviewSchema = new mongoose.Schema({
     // Migrated reviews may be rating-only; live reviews require a comment.
     required: function () { return !this.wpId; },
     trim: true,
-    maxlength: 1000
+    /*
+      The HIGHER of the two limits, because the schema cannot tell a customer
+      from a member of staff. Customer submissions are held to the lower
+      CUSTOMER_COMMENT_MAX on the public routes; this ceiling exists so an
+      admin can paste a customer's full Google review without it being cut.
+    */
+    maxlength: ADMIN_COMMENT_MAX
   },
   images: [{
     url: String,
