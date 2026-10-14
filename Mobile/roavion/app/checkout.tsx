@@ -20,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../src/api/client';
 import { addAddress, addressKey, fetchAddresses, type SavedAddress } from '../src/api/addresses';
+import { applyCoupon, fetchQuote, removeCoupon } from '../src/api/cart';
+import { ApiError } from '../src/api/client';
 import { Button, Card, Screenful, T } from '../src/components/ui';
 import { colors, font, inr, radius, spacing } from '../src/theme';
 import { useApp } from '../src/store';
@@ -121,6 +123,65 @@ export default function CheckoutScreen() {
       }
     : address;
 
+  /*
+    Coupons and the price the customer will actually pay.
+
+    The money rule holds throughout: the app never computes a discount. The
+    code goes to the server, which validates it against the real cart and
+    answers with a quote; the screen shows that quote, and the SAME code is
+    sent with the order. POST /orders reads the coupon from the request body,
+    not from the cart — an app that only applied it to the cart would display
+    a discount and then charge full price.
+  */
+  const [couponInput, setCouponInput] = useState('');
+  const [couponBusy, setCouponBusy] = useState(false);
+  const [couponMsg, setCouponMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const couponCode = cart.couponCode;
+
+  const quoteItems = cart.items.map((i) => ({
+    product: i.productId,
+    quantity: i.quantity,
+    ...(i.variantId ? { variantId: i.variantId } : {}),
+  }));
+  const quote = useQuery({
+    queryKey: ['quote', quoteItems, couponCode],
+    queryFn: ({ signal }) => fetchQuote({ items: quoteItems, couponCode: couponCode ?? null }, signal),
+    enabled: cart.items.length > 0,
+  });
+
+  const onApplyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return;
+    setCouponBusy(true);
+    setCouponMsg(null);
+    try {
+      const r = await applyCoupon(code);
+      await refreshCart();
+      setCouponInput('');
+      // `discountApplied: false` is the affiliate case: the code is kept (the
+      // affiliate still earns) but no money comes off. Say so plainly rather
+      // than showing a green "applied" beside an unchanged total.
+      setCouponMsg({ tone: r.discountApplied ? 'ok' : 'err', text: r.message });
+    } catch (err) {
+      setCouponMsg({ tone: 'err', text: err instanceof ApiError ? err.message : 'Could not apply that code.' });
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
+  const onRemoveCoupon = async () => {
+    setCouponBusy(true);
+    setCouponMsg(null);
+    try {
+      await removeCoupon();
+      await refreshCart();
+    } catch {
+      setCouponMsg({ tone: 'err', text: 'Could not remove the code. Please try again.' });
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pay, setPay] = useState<{ html: string; orderId: string } | null>(null);
@@ -160,6 +221,8 @@ export default function CheckoutScreen() {
           country: 'India',
         },
         acceptTerms: true,
+        // Required: order creation reads the coupon from HERE, not the cart.
+        ...(couponCode ? { couponCode } : {}),
       });
 
       const orderId = created.order?._id;
@@ -354,6 +417,57 @@ export default function CheckoutScreen() {
           </Card>
 
           <Card style={{ marginTop: spacing.lg }}>
+            <T kind="h3">Coupon</T>
+            {couponCode ? (
+              <View style={s.couponOn}>
+                <Ionicons name="pricetag" size={16} color={colors.green} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.couponCode}>{couponCode}</Text>
+                  {!!quote.data && quote.data.couponDiscount > 0 && (
+                    <Text style={s.couponSave}>You save {inr(quote.data.couponDiscount)}</Text>
+                  )}
+                </View>
+                <Pressable onPress={onRemoveCoupon} disabled={couponBusy} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Remove coupon ${couponCode}`}>
+                  <Text style={s.couponRemove}>{couponBusy ? '…' : 'Remove'}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={s.couponRow}>
+                <TextInput
+                  value={couponInput}
+                  onChangeText={(v) => { setCouponInput(v.toUpperCase()); setCouponMsg(null); }}
+                  placeholder="Enter coupon code"
+                  placeholderTextColor={colors.muted}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={40}
+                  returnKeyType="done"
+                  onSubmitEditing={onApplyCoupon}
+                  style={[s.input, s.couponInput]}
+                  accessibilityLabel="Coupon code"
+                />
+                <Pressable
+                  onPress={onApplyCoupon}
+                  disabled={!couponInput.trim() || couponBusy}
+                  style={[s.couponBtn, (!couponInput.trim() || couponBusy) && { opacity: 0.45 }]}
+                  accessibilityRole="button"
+                >
+                  <Text style={s.couponBtnText}>{couponBusy ? '…' : 'Apply'}</Text>
+                </Pressable>
+              </View>
+            )}
+            {/* Once the pill is showing, a green "applied" line only repeats it. */}
+            {!!couponMsg && !(couponMsg.tone === 'ok' && couponCode) && (
+              <Text style={[s.couponMsg, { color: couponMsg.tone === 'ok' ? colors.green : colors.red }]}>{couponMsg.text}</Text>
+            )}
+            {/* A code that applied earlier can stop applying — the cart fell
+                below the minimum, or it expired. The server says why. */}
+            {!!couponCode && !!quote.data?.couponError && (
+              <Text style={[s.couponMsg, { color: colors.red }]}>{quote.data.couponError}</Text>
+            )}
+          </Card>
+
+          <Card style={{ marginTop: spacing.lg }}>
             <T kind="h3">Order summary</T>
             {cart.items.map((i) => (
               <View key={`${i.productId}-${i.variantId ?? 'base'}`} style={s.sumRow}>
@@ -361,14 +475,50 @@ export default function CheckoutScreen() {
                 <Text style={s.sumValue}>{inr(i.price * i.quantity)}</Text>
               </View>
             ))}
-            <View style={s.sumTotal}>
-              <Text style={s.sumTotalLabel}>Subtotal</Text>
-              <Text style={s.sumTotalValue}>{inr(cart.totalPrice)}</Text>
-            </View>
+
+            {/* Every figure below is the server's. Nothing is added up here. */}
+            {quote.isLoading ? (
+              <Text style={[s.sumName, { marginTop: spacing.md }]}>Calculating your total…</Text>
+            ) : quote.data ? (
+              <>
+                <View style={[s.sumRow, s.sumDivider]}>
+                  <Text style={s.sumName}>Subtotal</Text>
+                  <Text style={s.sumValue}>{inr(quote.data.subtotal)}</Text>
+                </View>
+                {quote.data.couponDiscount > 0 && (
+                  <View style={s.sumRow}>
+                    <Text style={[s.sumName, { color: colors.green }]}>Coupon{quote.data.appliedCoupon ? ` (${quote.data.appliedCoupon})` : ''}</Text>
+                    <Text style={[s.sumValue, { color: colors.green }]}>− {inr(quote.data.couponDiscount)}</Text>
+                  </View>
+                )}
+                <View style={s.sumRow}>
+                  <Text style={s.sumName}>Delivery</Text>
+                  <Text style={[s.sumValue, quote.data.shipping === 0 && { color: colors.green }]}>
+                    {quote.data.shipping === 0 ? 'Free' : inr(quote.data.shipping)}
+                  </Text>
+                </View>
+                {quote.data.tax > 0 && (
+                  <View style={s.sumRow}>
+                    <Text style={s.sumName}>Tax</Text>
+                    <Text style={s.sumValue}>{inr(quote.data.tax)}</Text>
+                  </View>
+                )}
+                <View style={s.sumTotal}>
+                  <Text style={s.sumTotalLabel}>Total</Text>
+                  <Text style={s.sumTotalValue}>{inr(quote.data.total)}</Text>
+                </View>
+              </>
+            ) : (
+              <View style={s.sumTotal}>
+                <Text style={s.sumTotalLabel}>Subtotal</Text>
+                <Text style={s.sumTotalValue}>{inr(cart.totalPrice)}</Text>
+              </View>
+            )}
+
             <View style={s.secure}>
               <Ionicons name="lock-closed" size={13} color={colors.green} />
               <T kind="tiny">
-                Delivery and taxes are added by our server on the payment screen. You always pay the amount Razorpay shows.
+                Prices are confirmed by our server. You always pay exactly the amount Razorpay shows.
               </T>
             </View>
           </Card>
@@ -378,7 +528,7 @@ export default function CheckoutScreen() {
 
         <View style={[s.bar, { paddingBottom: insets.bottom + spacing.md }]}>
           <Button
-            label={busy ? 'Please wait…' : 'Place order and pay'}
+            label={busy ? 'Please wait…' : quote.data ? `Pay ${inr(quote.data.total)}` : 'Place order and pay'}
             onPress={placeOrder}
             loading={busy}
             disabled={missing.length > 0}
@@ -435,6 +585,23 @@ const s = StyleSheet.create({
   saveTitle: { fontFamily: font.semibold, fontSize: 14, color: colors.ink },
   saveBody: { fontFamily: font.regular, fontSize: 12, color: colors.muted, marginTop: 1 },
   sumRow: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.sm },
+  sumDivider: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.line },
+  couponRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, alignItems: 'flex-start' },
+  couponInput: { flex: 1, marginBottom: 0, letterSpacing: 0.8, fontFamily: font.semibold },
+  couponBtn: {
+    height: 46, paddingHorizontal: spacing.lg, borderRadius: radius.md,
+    backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center',
+  },
+  couponBtnText: { fontFamily: font.bold, fontSize: 14, color: colors.white },
+  couponOn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md,
+    padding: spacing.md, borderRadius: radius.md, borderWidth: 1.5, borderStyle: 'dashed',
+    borderColor: colors.green, backgroundColor: colors.greenFaint,
+  },
+  couponCode: { fontFamily: font.bold, fontSize: 14.5, letterSpacing: 0.8, color: colors.green },
+  couponSave: { fontFamily: font.medium, fontSize: 12.5, color: colors.ink2, marginTop: 1 },
+  couponRemove: { fontFamily: font.bold, fontSize: 13, color: colors.red },
+  couponMsg: { fontFamily: font.medium, fontSize: 12.5, marginTop: spacing.sm, lineHeight: 18 },
   sumName: { flex: 1, fontFamily: font.regular, fontSize: 13, color: colors.ink2 },
   sumValue: { fontFamily: font.medium, fontSize: 13, color: colors.ink },
   sumTotal: {
