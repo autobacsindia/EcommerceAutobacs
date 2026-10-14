@@ -23,6 +23,7 @@ import ThemeScript from "@/components/theme/ThemeScript";
 import ThemeSync from "@/components/theme/ThemeSync";
 import ContactFab from "@/components/layout/ContactFab";
 import HelpBot from "@/components/help/HelpBot";
+import HelpWidget from "@/components/layout/HelpWidget";
 import { SITE_URL } from "@/lib/siteUrl";
 import { isGoogleAdsEnabled } from "@/lib/googleAds";
 import { isMetaPixelEnabled } from "@/lib/metaPixel";
@@ -410,6 +411,7 @@ export default async function RootLayout({
                       <ConditionalFooter />
                       <SessionExpiredPrompt />
                       <ThemeSync />
+                      <HelpWidget />
                       <ContactFab />
                       <HelpBot />
                       <Toaster
