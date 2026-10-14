@@ -631,3 +631,18 @@
 .sh-rev-modal { position: relative; width: min(560px, 100%); max-height: 80vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 22px; border-radius: 14px; background: var(--card); color: var(--ink); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35); }
 .sh-rev-full { margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink-2); white-space: pre-wrap; }
 .sh-rev-close { align-self: flex-start; }
+
+/* The theme switch inside the mobile drawer. It sits on the drawer surface
+   (not the dark top bar), so it takes the ink token rather than white. */
+.sh-drawer-theme {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  /* Same 20px inset as every other drawer row (.sh-drawer-title, the links,
+     .sh-drawer-contact) — at 0 the label sat flush against the edge. */
+  padding: 8px 20px;
+}
+.sh-drawer-theme span { font-size: 15px; color: var(--ink-2); }
+.sh-drawer-theme-btn { color: var(--ink); border: 1px solid var(--line); }
+.sh-drawer-theme-btn:hover { background: var(--g-50); }
