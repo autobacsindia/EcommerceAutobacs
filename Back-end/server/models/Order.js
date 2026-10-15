@@ -882,6 +882,12 @@ OrderSchema.index(
   { 'workflow.open': 1, 'workflow.enteredAt': 1, _id: 1 },
   { partialFilterExpression: { 'workflow.open': true }, name: 'team_workflow_open' }
 );
+// Item refunds recorded but not yet paid out — the admin's "refunds to pay"
+// (admin Company overview). Partial: only orders that have a cancellation.
+OrderSchema.index(
+  { 'cancellations.refund.status': 1 },
+  { partialFilterExpression: { 'cancellations.0': { $exists: true } }, name: 'cancellation_refund_status' }
+);
 // Team "Paid orders": every order in the team workflow, newest first.
 OrderSchema.index(
   { paymentStatus: 1, createdAt: -1, _id: -1 },

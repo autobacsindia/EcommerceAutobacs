@@ -121,6 +121,8 @@ PaymentRequestSchema.index({ number: 1 }, { unique: true, name: 'payment_request
 // Lists: by status (admin, accounts) and by requester's team, newest first (keyset on createdAt, _id).
 PaymentRequestSchema.index({ status: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_status' });
 PaymentRequestSchema.index({ team: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_team' });
+// The admin activity feed: most recently changed first.
+PaymentRequestSchema.index({ updatedAt: -1 }, { name: 'payment_request_updated' });
 // "Is there a supplier request in flight for this order?" (shipping guard, order panel).
 PaymentRequestSchema.index(
   { order: 1, status: 1 },

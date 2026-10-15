@@ -42,6 +42,16 @@ const paymentRequestRepository = {
     .lean(),
 
   countByStatus: () => PaymentRequest.aggregate([{ $group: { _id: '$status', n: { $sum: 1 }, amount: { $sum: '$amount' } } }]),
+
+  /** Paid since a date, by team (index payment_request_status). */
+  paidSinceByTeam: (since) => PaymentRequest.aggregate([
+    { $match: { status: 'paid', 'payment.paidAt': { $gte: since } } },
+    { $group: { _id: '$team', n: { $sum: 1 }, amount: { $sum: '$amount' } } },
+  ]),
+
+  /** Newest request events for the activity feed. */
+  recent: (limit) => PaymentRequest.find({}).sort({ updatedAt: -1 }).limit(limit)
+    .select('number kind team amount status history requestedByName payee.name updatedAt').lean(),
 };
 
 export default paymentRequestRepository;
