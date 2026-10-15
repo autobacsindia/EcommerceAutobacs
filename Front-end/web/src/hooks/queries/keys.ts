@@ -189,3 +189,6 @@ export const teamActivityKeys = {
   performance: (days: number) => [...teamActivityKeys.all, 'performance', days] as const,
   order: (orderId: string) => [...teamActivityKeys.all, 'order', orderId] as const,
 };
+
+/** `/admin/overview` — the admin's Company overview (teams, money waiting, activity). */
+export const overviewKeys = { all: ['admin-overview'] as const };

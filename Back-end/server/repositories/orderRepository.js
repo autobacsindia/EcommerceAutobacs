@@ -1352,6 +1352,35 @@ class OrderRepository extends BaseRepository {
       .lean();
   }
 
+  /**
+   * Paid orders since `since` (today, for the admin overview): source and value.
+   * Served by team_workflow_paid; bounded.
+   */
+  async findPaidWorkflowOrdersSince(since, limit) {
+    return Order.find({
+      paymentStatus: { $in: ['paid', 'refunded'] },
+      'workflow.enteredAt': { $type: 'date' },
+      createdAt: { $gte: since },
+    }).select('totalAmount salesUser createdAt').limit(limit).lean();
+  }
+
+  /** Sales-panel orders still waiting for the customer to pay (index staff_sales_by_payment). */
+  async findUnpaidSalesOrders(limit) {
+    return Order.find({ paymentStatus: 'pending', salesUser: { $type: 'objectId' } })
+      .select('status paymentLinkExpiresAt createdAt totalAmount')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+  }
+
+  /**
+   * Item refunds recorded but not yet paid out (a team-approved refund waits
+   * here for an admin). Served by the partial `cancellation_refund_status` index.
+   */
+  async countPendingCancellationRefunds() {
+    return Order.countDocuments({ cancellations: { $elemMatch: { 'refund.status': 'pending', 'refund.productValuePaise': { $gt: 0 } } } });
+  }
+
   /** One order with everything a team view needs (lean). */
   async findForWorkflow(orderId) {
     return Order.findById(orderId)

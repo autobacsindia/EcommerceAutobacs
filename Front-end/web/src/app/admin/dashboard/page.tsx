@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -288,6 +290,9 @@ export default function AdminDashboardPage() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
             <p className="text-gray-600 mt-1">Real-time system monitoring and analytics</p>
+            <Link href="/admin/overview" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
+              Company overview — teams, payments and activity →
+            </Link>
           </div>
           <div className="text-right">
             <ConnectionStatusIndicator />

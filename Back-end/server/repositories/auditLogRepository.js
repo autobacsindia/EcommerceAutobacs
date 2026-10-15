@@ -18,6 +18,23 @@ class AuditLogRepository {
 
   find(...args) { return AuditLog.find(...args); }
   countDocuments(...args) { return AuditLog.countDocuments(...args); }
+
+  /** Newest actions by these people (index { user, createdAt }). For the admin activity feed. */
+  recentByUsers(userIds, limit) {
+    return AuditLog.find({ user: { $in: userIds } })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .select('user action resource resourceId details createdAt')
+      .lean();
+  }
+
+  /** Actions per person since a date (index { user, createdAt }). */
+  countByUserSince(userIds, since) {
+    return AuditLog.aggregate([
+      { $match: { user: { $in: userIds }, createdAt: { $gte: since } } },
+      { $group: { _id: '$user', n: { $sum: 1 }, last: { $max: '$createdAt' } } },
+    ]);
+  }
 }
 
 export default new AuditLogRepository();
