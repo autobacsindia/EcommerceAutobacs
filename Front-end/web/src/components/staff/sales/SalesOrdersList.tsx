@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Loader2, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronDown, FileText, Loader2, RefreshCw, UserPlus } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import PaymentLinkCard from './PaymentLinkCard';
 import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
-import { errorMessage, rupees, type SalesOrder, type SalesOrderPage } from './types';
+import { errorMessage, quotationHref, rupees, type SalesOrder, type SalesOrderPage } from './types';
 
 type Mode = 'sales' | 'paid';
 
@@ -166,6 +167,26 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
               >
                 {cancel.isPending ? 'Cancelling…' : 'Cancel order'}
               </button>
+            </div>
+          )}
+          {mode === 'sales' && (
+            <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+              {order.status !== 'cancelled' && (
+                <a
+                  href={quotationHref(order.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                >
+                  <FileText className="h-4 w-4 text-emerald-700" /> Quotation PDF
+                </a>
+              )}
+              <Link
+                href={`/team/sales/new?from=${encodeURIComponent(order.id)}`}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+              >
+                <UserPlus className="h-4 w-4 text-emerald-700" /> New order for this customer
+              </Link>
             </div>
           )}
           {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

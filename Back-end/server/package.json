@@ -152,6 +152,7 @@
     "node-fetch": "^3.3.2",
     "pdfkit": "^0.19.1",
     "postmark": "^4.0.7",
+    "qrcode": "1.5.4",
     "razorpay": "^2.9.6",
     "sanitize-html": "2.17.5",
     "sharp": "^0.33.5",
@@ -170,7 +171,7 @@
     "nodemon": "^3.0.1",
     "supertest": "^7.2.2"
   },
-  "_overridesNote": "DEP-2: force patched transitive versions inside the artillery (dev-only load-test) tree \u2014 clears the protobufjs ACE 'critical' from the audit report without dropping load testing.",
+  "_overridesNote": "DEP-2: force patched transitive versions inside the artillery (dev-only load-test) tree — clears the protobufjs ACE 'critical' from the audit report without dropping load testing.",
   "overrides": {
     "protobufjs": "^7.6.5"
   }

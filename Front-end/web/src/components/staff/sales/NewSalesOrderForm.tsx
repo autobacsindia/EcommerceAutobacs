@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Minus, Plus, Search, Trash2, CheckCircle2 } from 'lucide-react';
+import { Loader2, Minus, Plus, Search, Trash2, CheckCircle2, FileText, UserPlus } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import PaymentLinkCard from './PaymentLinkCard';
 import { deepDiscountLines, deepDiscountWarning, isDeepDiscount } from './offerGuard';
-import { errorMessage, rupees, type SalesOrder, type SalesProduct } from './types';
+import { errorMessage, quotationHref, rupees, type SalesOrder, type SalesProduct } from './types';
 
 type Line = {
   key: string;
@@ -57,10 +57,32 @@ const lineOffer = (l: Line) => {
  * catalogue and only accepts an offer between ₹1 and that price, so nothing typed
  * here can raise or zero a price.
  */
-export default function NewSalesOrderForm() {
+export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?: string | null } = {}) {
   const queryClient = useQueryClient();
   const [customer, setCustomer] = useState(EMPTY_CUSTOMER);
   const [address, setAddress] = useState(EMPTY_ADDRESS);
+  // "New order for this customer": start from an earlier order's customer and
+  // address (read from the server by id — no personal details in the URL).
+  const [repeatOf, setRepeatOf] = useState<string | null>(null);
+  const prefilled = useRef(false);
+  const source = useQuery({
+    queryKey: ['staff', 'sales-order', fromOrderId],
+    queryFn: () => apiClient.get<{ order: SalesOrder }>(`/staff/sales/orders/${encodeURIComponent(fromOrderId || '')}`),
+    enabled: !!fromOrderId,
+    staleTime: 60_000,
+  });
+  useEffect(() => {
+    const o = source.data?.order;
+    if (!o || prefilled.current) return;
+    prefilled.current = true;
+    setCustomer({ name: o.customer.name || '', email: o.customer.email || '', phone: o.customer.phone || '' });
+    const a = o.shippingAddress || {};
+    setAddress({
+      addressLine1: a.addressLine1 || '', addressLine2: a.addressLine2 || '',
+      city: a.city || '', state: a.state || '', postalCode: a.postalCode || '',
+    });
+    setRepeatOf(o.orderNumber);
+  }, [source.data]);
   const [lines, setLines] = useState<Line[]>([]);
   const [notes, setNotes] = useState('');
   const [q, setQ] = useState('');
@@ -148,6 +170,17 @@ export default function NewSalesOrderForm() {
     setLines([]);
     setNotes('');
     setError('');
+    setRepeatOf(null);
+  }
+
+  /** Another order for the customer just served: keep who and where, clear the items. */
+  function sameCustomerAgain() {
+    const previous = created?.order.orderNumber ?? null;
+    setCreated(null);
+    setLines([]);
+    setNotes('');
+    setError('');
+    setRepeatOf(previous);
   }
 
   if (created) {
@@ -173,6 +206,17 @@ export default function NewSalesOrderForm() {
           />
         </section>
         <div className="flex flex-wrap gap-3">
+          <a
+            href={quotationHref(o.id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+          >
+            <FileText className="h-4 w-4" /> Quotation PDF
+          </a>
+          <button type="button" onClick={sameCustomerAgain} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">
+            <UserPlus className="h-4 w-4" /> Another order for {o.customer.name}
+          </button>
           <button type="button" onClick={startAgain} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
             New order
           </button>
@@ -186,6 +230,16 @@ export default function NewSalesOrderForm() {
 
   return (
     <form onSubmit={submit} className="space-y-5">
+      {repeatOf && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
+          Same customer as order {repeatOf}. Check their details below, then add the items for this order.
+        </p>
+      )}
+      {fromOrderId && source.isError && (
+        <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">
+          Couldn&apos;t load that customer — fill in their details below.
+        </p>
+      )}
       {/* Customer */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <h2 className="mb-4 text-sm font-semibold text-gray-900">Customer</h2>
