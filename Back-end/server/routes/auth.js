@@ -283,9 +283,7 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
       avatar: user.avatar?.url || '',
       // Team profile for staff (null otherwise) — lets the client land staff on /team.
       staff: describeStaff(user),
-      username: user.username || null,
-      // A password someone else set: the client sends them to change it first.
-      mustChangePassword: !!user.mustChangePassword
+      username: user.username || null
     }
   });
 }));
@@ -310,8 +308,7 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
       // revalidation and immediately updates state without waiting for TTL expiry.
       sessionVersion: req.user.sessionVersion ?? 0,
       staff: describeStaff(req.user),
-      username: req.user.username || null,
-      mustChangePassword: !!req.user.mustChangePassword
+      username: req.user.username || null
     }
   });
 }));

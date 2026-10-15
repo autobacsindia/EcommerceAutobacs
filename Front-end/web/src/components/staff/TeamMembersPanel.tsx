@@ -25,9 +25,9 @@ type Member = {
 const USERNAME_PATTERN = '[a-z0-9][a-z0-9._\\-]{1,28}[a-z0-9]';
 
 /**
- * A password to hand to a new or reset company account. Random, no look-alike
- * characters (it is read out or typed from a note), and only ever temporary:
- * the person must replace it on first sign-in.
+ * A password for a company account. Random, with no look-alike characters,
+ * since it is read out or typed from a note. The person keeps using it until
+ * the admin changes it.
  */
 export function generateTempPassword(length = 12): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
@@ -80,6 +80,8 @@ export default function TeamMembersPanel({
   const [mode, setMode] = useState<'company' | 'invite'>('company');
   const [account, setAccount] = useState({ name: '', username: '', phone: '', password: '', isHead: false });
   const [credentials, setCredentials] = useState<Credentials | null>(null);
+  // The member whose password is being changed, and the new one being typed.
+  const [changing, setChanging] = useState<{ member: Member; password: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -144,15 +146,18 @@ export default function TeamMembersPanel({
     }
   }
 
-  async function resetPassword(member: Member) {
-    if (!window.confirm(`Set a new password for ${member.name}? They will be signed out everywhere and must choose their own password when they next sign in.`)) return;
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!changing) return;
+    const { member, password } = changing;
+    if (!window.confirm(`Change ${member.name}'s password? They will be signed out everywhere and must sign in with the new one.`)) return;
     setBusy(true); setError(''); setNotice(''); setWarning(''); setCredentials(null);
-    const password = generateTempPassword();
     try {
       await apiClient.post(`/staff/members/${member.id}/password`, { password });
       setCredentials({ name: member.name, username: member.username || '', password, reset: true });
+      setChanging(null);
     } catch (err) {
-      setError(errorMessage(err, 'Could not reset the password.'));
+      setError(errorMessage(err, 'Could not change the password.'));
     } finally {
       setBusy(false);
     }
@@ -212,7 +217,7 @@ export default function TeamMembersPanel({
           <p className="font-semibold">
             {credentials.reset ? `New password for ${credentials.name}` : `Account created for ${credentials.name}`}
           </p>
-          <p className="mt-1">Give them these details. The password is shown only now — they will choose their own when they sign in.</p>
+          <p className="mt-1">Give them these details. The password is shown only now — keep it somewhere safe. They sign in with it until you change it.</p>
           <dl className="mt-3 grid max-w-md grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-2">
             <dt className="text-green-800">Username</dt>
             <dd className="font-mono font-semibold">{credentials.username}</dd>
@@ -224,6 +229,38 @@ export default function TeamMembersPanel({
           <p className="mt-3 text-xs text-green-800">Sign-in page: autobacsindia.com/login</p>
           <button type="button" onClick={() => setCredentials(null)} className="mt-3 text-xs font-semibold underline">Done — hide these details</button>
         </div>
+      )}
+
+      {changing && (
+        <form onSubmit={changePassword} className="rounded-lg border border-blue-200 bg-blue-50 p-4" aria-label={`Change password for ${changing.member.name}`}>
+          <p className="text-sm font-semibold text-gray-900">
+            New password for {changing.member.name} <span className="font-mono font-normal text-gray-600">({changing.member.username})</span>
+          </p>
+          <p className="mt-1 text-xs text-gray-600">Their old password stops working at once and they are signed out everywhere.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <input
+              required minLength={8} maxLength={72}
+              value={changing.password}
+              onChange={(e) => setChanging({ ...changing, password: e.target.value })}
+              placeholder="New password"
+              aria-label="New password"
+              autoComplete="new-password"
+              className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm"
+            />
+            <button type="button" onClick={() => setChanging({ ...changing, password: generateTempPassword() })}
+              className="rounded-lg border border-gray-300 bg-white px-3 text-xs font-medium text-gray-700 hover:bg-gray-50">
+              Generate
+            </button>
+            <button type="submit" disabled={busy}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+              Save password
+            </button>
+            <button type="button" onClick={() => setChanging(null)}
+              className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-white">
+              Cancel
+            </button>
+          </div>
+        </form>
       )}
 
       {data?.canManage && (
@@ -251,7 +288,7 @@ export default function TeamMembersPanel({
             <UserPlus className="h-4 w-4" /> Add a person with a company login
           </h3>
           <p className="mb-3 text-xs text-gray-500">
-            The company owns this login. If they leave, remove access or reset the password — their work stays here.
+            The company owns this login and its password. Change the password any time; if they leave, remove access — their work stays here.
           </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <input
@@ -310,7 +347,7 @@ export default function TeamMembersPanel({
                 />
                 Make this person the team head (they can add and remove members)
               </label>
-            ) : <span className="text-xs text-gray-500">They will choose their own password the first time they sign in.</span>}
+            ) : <span className="text-xs text-gray-500">Only you (or the admin) can change this password later.</span>}
             <button
               type="submit"
               disabled={busy}
@@ -409,11 +446,11 @@ export default function TeamMembersPanel({
                 <td className="space-x-2 whitespace-nowrap px-4 py-3 text-right">
                   {canRemove(m) && m.companyAccount && (
                     <button
-                      onClick={() => resetPassword(m)}
+                      onClick={() => { setCredentials(null); setChanging({ member: m, password: '' }); }}
                       disabled={busy}
                       className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                     >
-                      <KeyRound className="h-3.5 w-3.5" /> Reset password
+                      <KeyRound className="h-3.5 w-3.5" /> Change password
                     </button>
                   )}
                   {canRemove(m) && (

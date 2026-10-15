@@ -27,8 +27,8 @@ type MeResponse = {
     email?: string;
     role?: string;
     staff?: { team: string; teamLabel: string; isHead: boolean } | null;
-    /** Company account whose password someone else set (config/staff.js on the API). */
-    mustChangePassword?: boolean;
+    /** Set on company accounts (config/staff.js on the API), whose password the admin manages. */
+    username?: string | null;
   };
 };
 
@@ -63,7 +63,8 @@ export default async function TeamLayout({ children }: { children: ReactNode }) 
       team={user.staff.team}
       teamLabel={user.staff.teamLabel}
       isHead={user.staff.isHead}
-      mustChangePassword={!!user.mustChangePassword}
+      // A company account's password is the admin's to change, not the person's.
+      canChangePassword={!user.username}
     >
       {children}
     </TeamLayoutClient>

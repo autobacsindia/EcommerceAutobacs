@@ -167,11 +167,15 @@ describe('Team chat', () => {
       expect(after.unread).toBe(0);
     });
 
-    it('delete: own message yes, someone else’s no — admins may delete any; text is hidden after', async () => {
+    it('delete: admins only — staff cannot remove any message, not even their own; text is hidden after', async () => {
       const mine = (await salesMember.post(`/chat/channels/${company}/messages`, { text: 'oops' })).body.message;
       const other = (await accounts.post(`/chat/channels/${company}/messages`, { text: 'not yours' })).body.message;
       expect((await salesMember.del(`/chat/messages/${other.id}`)).status).toBe(403);
-      expect((await salesMember.del(`/chat/messages/${mine.id}`)).status).toBe(200);
+      expect((await salesMember.del(`/chat/messages/${mine.id}`)).status).toBe(403);
+      expect((await salesHead.del(`/chat/messages/${mine.id}`)).status).toBe(403);
+      expect((await accounts.get(`/chat/channels/${company}/messages`)).body.messages.map((m) => m.text)).toEqual(['oops', 'not yours']);
+
+      expect((await admin.del(`/chat/messages/${mine.id}`)).status).toBe(200);
       expect((await admin.del(`/chat/messages/${other.id}`)).status).toBe(200);
       const { body } = await accounts.get(`/chat/channels/${company}/messages`);
       expect(body.messages.every((m) => m.deleted && m.text === '')).toBe(true);

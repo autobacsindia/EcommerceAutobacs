@@ -54,7 +54,7 @@ describe('company logins', () => {
     expect(screen.queryByText('Temporary#2026')).toBeNull();
   });
 
-  it('lists a company account by username, and only it can be reset', async () => {
+  it('lists a company account by username; only it gets "Change password"', async () => {
     get.mockResolvedValue(team([sam, ravi]));
     render(<TeamMembersPanel team="sales" allowHeadInvite />);
     const samRow = (await screen.findByText('Sam Kumar')).closest('tr')!;
@@ -62,13 +62,33 @@ describe('company logins', () => {
     expect(within(samRow).getByText('sam.sales')).toBeInTheDocument();
     expect(within(samRow).getByText('Company')).toBeInTheDocument();
     expect(within(raviRow).getByText('ravi@gmail.com')).toBeInTheDocument();
-    expect(within(raviRow).queryByRole('button', { name: /Reset password/ })).toBeNull();
+    expect(within(raviRow).queryByRole('button', { name: /Change password/ })).toBeNull();
+    expect(within(samRow).getByRole('button', { name: /Change password/ })).toBeInTheDocument();
+  });
 
+  it('the admin types the new password (or generates one) and it is shown once', async () => {
+    get.mockResolvedValue(team([sam]));
     post.mockResolvedValue({ success: true, member: sam });
-    fireEvent.click(within(samRow).getByRole('button', { name: /Reset password/ }));
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/members/u1/password', { password: expect.any(String) }));
-    const sent = post.mock.calls[0][1].password as string;
-    expect(await screen.findByRole('status')).toHaveTextContent(sent);
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    const samRow = (await screen.findByText('Sam Kumar')).closest('tr')!;
+    fireEvent.click(within(samRow).getByRole('button', { name: /Change password/ }));
+
+    const form = screen.getByRole('form', { name: /Change password for Sam Kumar/ });
+    fireEvent.change(within(form).getByLabelText('New password'), { target: { value: 'AdminChose#2026' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save password' }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/members/u1/password', { password: 'AdminChose#2026' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('AdminChose#2026');
+    expect(screen.queryByRole('form', { name: /Change password for/ })).toBeNull();
+  });
+
+  it('Generate fills a strong password into the change form', async () => {
+    get.mockResolvedValue(team([sam]));
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    fireEvent.click(within((await screen.findByText('Sam Kumar')).closest('tr')!).getByRole('button', { name: /Change password/ }));
+    const form = screen.getByRole('form', { name: /Change password for Sam Kumar/ });
+    fireEvent.click(within(form).getByRole('button', { name: 'Generate' }));
+    expect((within(form).getByLabelText('New password') as HTMLInputElement).value.length).toBeGreaterThanOrEqual(12);
   });
 
   it('still offers an email invite', async () => {

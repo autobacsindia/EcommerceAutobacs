@@ -11,14 +11,11 @@ class UserRepository extends BaseRepository {
     return User.findOne({ username: String(username || '').trim().toLowerCase() });
   }
 
-  /**
-   * Set a password on a staff account and end every session it has. `mustChange`
-   * when someone else chose it (a head/admin reset), false when the person did.
-   */
-  async setStaffPassword(userId, passwordHash, { mustChange }) {
+  /** Set a password on a staff account and end every session it has. */
+  async setStaffPassword(userId, passwordHash) {
     return User.findOneAndUpdate(
       { _id: userId, role: 'staff' },
-      { $set: { passwordHash, mustChangePassword: !!mustChange }, $inc: { sessionVersion: 1 } },
+      { $set: { passwordHash }, $inc: { sessionVersion: 1 } },
       { new: true }
     );
   }

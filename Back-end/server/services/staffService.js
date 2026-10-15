@@ -320,7 +320,8 @@ const hashPassword = async (password) => bcrypt.hash(String(password), await bcr
 /**
  * Create a company-owned staff login. Same authority as an invite: an admin for
  * any team (heads or members), a head for members of their own team only. The
- * password is the creator's choice, so the person must change it on first login.
+ * password is the creator's and stays theirs to manage: the person signs in with
+ * it as given, and only an admin (or their head) changes it.
  */
 export async function createCompanyAccount(actor, input, req) {
   const name = String(input.name || '').trim();
@@ -353,7 +354,6 @@ export async function createCompanyAccount(actor, input, req) {
       passwordHash: await hashPassword(input.password),
       role: 'staff',
       companyAccount: true,
-      mustChangePassword: true,
       isVerified: true,
       staff: {
         team,
@@ -376,9 +376,10 @@ export async function createCompanyAccount(actor, input, req) {
 }
 
 /**
- * Set a new password on someone else's company account (they forgot it, or the
- * person left and the account is being handed on). Same authority as removing
- * access. Ends every session on the account; the person must change it on login.
+ * Set a new password on a company account — whenever the admin decides: a
+ * routine change, a forgotten password, or someone leaving. Same authority as
+ * removing access. Ends every session on the account at once, so the old
+ * password stops working everywhere immediately.
  */
 export async function resetCompanyPassword(actor, userId, password, req) {
   const target = await userRepository.findById(userId);
@@ -394,7 +395,7 @@ export async function resetCompanyPassword(actor, userId, password, req) {
     if (target.staff.isHead) throw fail('Only an administrator can reset a team head\'s password.', 403);
   }
 
-  const updated = await userRepository.setStaffPassword(target._id, await hashPassword(password), { mustChange: true });
+  const updated = await userRepository.setStaffPassword(target._id, await hashPassword(password));
   if (!updated) throw fail('Staff member not found.', 404);
   await revokeAllRefreshTokens(updated);
 
@@ -403,19 +404,22 @@ export async function resetCompanyPassword(actor, userId, password, req) {
 }
 
 /**
- * A staff member changes their own password — required after an admin or head
- * set it. Proves they know the current one, so a session left open on a shared
- * computer cannot quietly lock the owner out.
+ * A staff member changes their own password. Only for people who sign in with
+ * their own email: a company account's password belongs to the company and is
+ * changed by the admin (resetCompanyPassword), never by the person. Proves the
+ * current one, so a session left open on a shared computer cannot lock the
+ * owner out.
  */
 export async function changeOwnPassword(actor, { currentPassword, newPassword }, req) {
   if (!isActiveStaff(actor)) throw fail('Not authorized.', 403);
+  if (actor.companyAccount) throw fail('Your password is managed by your administrator. Ask them to change it.', 403);
   const user = await userRepository.findById(actor._id);
   if (!user?.passwordHash || !(await bcrypt.compare(String(currentPassword || ''), user.passwordHash))) {
     throw fail('Your current password is not correct.', 400);
   }
   if (String(currentPassword) === String(newPassword)) throw fail('Choose a password different from the current one.', 400);
 
-  const updated = await userRepository.setStaffPassword(user._id, await hashPassword(newPassword), { mustChange: false });
+  const updated = await userRepository.setStaffPassword(user._id, await hashPassword(newPassword));
   if (!updated) throw fail('Not authorized.', 403);
   // Other devices sign out; this one gets fresh cookies from the route.
   await revokeAllRefreshTokens(updated);

@@ -657,14 +657,17 @@ export async function markChannelRead(user, channelId, seq) {
   return { lastReadSeq: upTo };
 }
 
-/** Soft-delete: the sender or an admin. The row is kept for the record. */
+/**
+ * Soft-delete: admins only. Chat is part of the company record — whoever joins a
+ * team later reads what came before — so staff cannot remove messages, not even
+ * their own. The row is kept for audit either way.
+ */
 export async function deleteMessage(user, messageId) {
   if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
   const msg = await chatRepository.findMessageById(messageId);
   if (!msg) throw fail('Message not found', 404);
   const channel = await loadAccessible(user, msg.channel); // also hides other people's DMs
-  const isOwn = msg.sender && idOf(msg.sender) === idOf(user);
-  if (!isOwn && !isAdmin(user)) throw fail('You can only delete your own messages', 403);
+  if (!isAdmin(user)) throw fail('Only an administrator can delete messages', 403);
   if (msg.deletedAt) return { id: idOf(msg), deleted: true };
 
   await chatRepository.softDeleteMessage(msg._id, user._id);
