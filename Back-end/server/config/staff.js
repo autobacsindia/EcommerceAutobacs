@@ -25,8 +25,12 @@ export const STAFF_TEAMS = Object.freeze({
 
 export const STAFF_TEAM_VALUES = Object.freeze(Object.values(STAFF_TEAMS));
 
+// The team stored as 'sales' is called GTM (go-to-market) everywhere a person
+// reads it. The key stays 'sales' on purpose: staff accounts, chat spaces and
+// orders already carry it, and a key rename would be a data migration for no
+// visible gain.
 export const STAFF_TEAM_LABELS = Object.freeze({
-  sales: 'Sales',
+  sales: 'GTM',
   procurement: 'Procurement',
   accounts: 'Accounts',
   marketing: 'Marketing',
@@ -37,6 +41,39 @@ export const STAFF_TEAM_LABELS = Object.freeze({
 export const STAFF_INVITE_TTL_MS = 48 * 60 * 60 * 1000;
 
 export const isStaffTeam = (value) => STAFF_TEAM_VALUES.includes(value);
+
+/*
+  Roles inside GTM. The head is `staff.isHead`; everyone else has a `subRole`:
+    lead       — sells: sales orders, payment links, quotations, customer
+                 decisions. Every GTM member from before roles existed is a lead
+                 (no subRole stored), so nothing they could do changes.
+    executive  — GTM executive: signs in; tools to come.
+    support    — customer support: signs in; tools to come.
+*/
+export const GTM_SUB_ROLES = Object.freeze({ LEAD: 'lead', EXECUTIVE: 'executive', SUPPORT: 'support' });
+export const GTM_SUB_ROLE_VALUES = Object.freeze(Object.values(GTM_SUB_ROLES));
+export const GTM_SUB_ROLE_LABELS = Object.freeze({ lead: 'GTM lead', executive: 'GTM executive', support: 'Customer support' });
+
+const isActiveStaffUser = (u) => u?.role === 'staff' && u.staff?.active === true;
+
+/** A GTM member's role: 'head', or their sub-role ('lead' when none is stored). */
+export function gtmRoleOf(user) {
+  if (!isActiveStaffUser(user) || user.staff.team !== STAFF_TEAMS.SALES) return null;
+  if (user.staff.isHead) return 'head';
+  return GTM_SUB_ROLE_VALUES.includes(user.staff.subRole) ? user.staff.subRole : GTM_SUB_ROLES.LEAD;
+}
+
+/** May this person sell (sales orders, links, quotations, customer decisions)? The GTM head and GTM leads. */
+export const canSell = (user) => ['head', GTM_SUB_ROLES.LEAD].includes(gtmRoleOf(user));
+
+/** What to call this person's role: "GTM head", "GTM lead", "Procurement head", "Member"… */
+export function staffRoleLabel(user) {
+  const gtm = gtmRoleOf(user);
+  if (gtm === 'head') return 'GTM head';
+  if (gtm) return GTM_SUB_ROLE_LABELS[gtm];
+  if (!isActiveStaffUser(user)) return null;
+  return user.staff.isHead ? `${STAFF_TEAM_LABELS[user.staff.team]} head` : 'Member';
+}
 
 /*
   Company accounts — staff logins the company owns.

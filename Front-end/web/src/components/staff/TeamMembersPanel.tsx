@@ -9,7 +9,7 @@ import { formatDateIST } from '@/lib/datetime';
 export type StaffTeam = 'sales' | 'procurement' | 'accounts' | 'marketing' | 'operations';
 
 export const STAFF_TEAM_LABELS: Record<StaffTeam, string> = {
-  sales: 'Sales',
+  sales: 'GTM',
   procurement: 'Procurement',
   accounts: 'Accounts',
   marketing: 'Marketing',
@@ -19,7 +19,18 @@ export const STAFF_TEAM_LABELS: Record<StaffTeam, string> = {
 type Member = {
   id: string; name: string; email: string; phone: string; isHead: boolean; addedAt: string;
   username?: string | null; companyAccount?: boolean;
+  /** GTM: 'lead' | 'executive' | 'support' (null for heads and other teams). */
+  subRole?: string | null;
+  /** "GTM head", "GTM lead", "Procurement head", "Member"… */
+  roleLabel?: string | null;
 };
+
+/** Roles inside GTM (the 'sales' team) — what each new GTM login can do. */
+const GTM_ROLES = [
+  { value: 'lead', label: 'GTM lead', hint: 'Sells: orders, payment links, quotations, customer decisions' },
+  { value: 'executive', label: 'GTM executive', hint: 'Can sign in and use team chat; tools coming soon' },
+  { value: 'support', label: 'Customer support', hint: 'Can sign in and use team chat; tools coming soon' },
+] as const;
 
 /** Same rule the server enforces (config/staff.js). */
 const USERNAME_PATTERN = '[a-z0-9][a-z0-9._\\-]{1,28}[a-z0-9]';
@@ -78,7 +89,7 @@ export default function TeamMembersPanel({
   // New people get a company login by default: the company owns it, so nothing
   // walks out with them. Inviting someone's own email stays available.
   const [mode, setMode] = useState<'company' | 'invite'>('company');
-  const [account, setAccount] = useState({ name: '', username: '', phone: '', password: '', isHead: false });
+  const [account, setAccount] = useState({ name: '', username: '', phone: '', password: '', isHead: false, subRole: 'lead' });
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   // The member whose password is being changed, and the new one being typed.
   const [changing, setChanging] = useState<{ member: Member; password: string } | null>(null);
@@ -135,9 +146,11 @@ export default function TeamMembersPanel({
         password: account.password,
         ...(team ? { team } : {}),
         ...(allowHeadInvite ? { isHead: account.isHead } : {}),
+        // A GTM member gets a role; a GTM head does not.
+        ...(isGtm && !account.isHead ? { subRole: account.subRole } : {}),
       });
       setCredentials({ name: account.name.trim(), username, password: account.password, reset: false });
-      setAccount({ name: '', username: '', phone: '', password: '', isHead: false });
+      setAccount({ name: '', username: '', phone: '', password: '', isHead: false, subRole: 'lead' });
       await load();
     } catch (err) {
       setError(errorMessage(err, 'Could not create the account.'));
@@ -191,6 +204,7 @@ export default function TeamMembersPanel({
   }
 
   const isAdminView = user?.role === 'admin';
+  const isGtm = (data?.team ?? team) === 'sales';
   const canRemove = (m: Member) =>
     !!data?.canManage && m.id !== user?._id && (isAdminView || !m.isHead);
 
@@ -337,6 +351,34 @@ export default function TeamMembersPanel({
               </button>
             </div>
           </div>
+          {isGtm && !account.isHead && (
+            <fieldset className="mt-3">
+              <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">Role</legend>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {GTM_ROLES.map((r) => (
+                  <label
+                    key={r.value}
+                    className={`flex cursor-pointer gap-2 rounded-lg border p-2.5 text-sm ${
+                      account.subRole === r.value ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="gtm-role"
+                      value={r.value}
+                      checked={account.subRole === r.value}
+                      onChange={() => setAccount({ ...account, subRole: r.value })}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block font-medium text-gray-900">{r.label}</span>
+                      <span className="block text-xs text-gray-500">{r.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
             {allowHeadInvite ? (
               <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -345,7 +387,7 @@ export default function TeamMembersPanel({
                   checked={account.isHead}
                   onChange={(e) => setAccount({ ...account, isHead: e.target.checked })}
                 />
-                Make this person the team head (they can add and remove members)
+                Make this person the {isGtm ? 'GTM head' : 'team head'} (they can add and remove members)
               </label>
             ) : <span className="text-xs text-gray-500">Only you (or the admin) can change this password later.</span>}
             <button
@@ -439,7 +481,7 @@ export default function TeamMembersPanel({
                 <td className="px-4 py-3 text-gray-700">{m.phone}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${m.isHead ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-700'}`}>
-                    {m.isHead ? 'Head' : 'Member'}
+                    {m.roleLabel || (m.isHead ? 'Head' : 'Member')}
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-gray-500">{formatDateIST(m.addedAt)}</td>

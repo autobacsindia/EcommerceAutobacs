@@ -7,7 +7,7 @@
 
 import { body, param, query } from 'express-validator';
 import mongoose from 'mongoose';
-import { STAFF_TEAM_VALUES, STAFF_USERNAME_PATTERN, STAFF_USERNAME_HINT } from '../config/staff.js';
+import { STAFF_TEAM_VALUES, STAFF_USERNAME_PATTERN, STAFF_USERNAME_HINT, GTM_SUB_ROLE_VALUES } from '../config/staff.js';
 import { isCommonPassword, COMMON_PASSWORD_MESSAGE } from '../config/commonPasswords.js';
 
 const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v);
@@ -81,6 +81,7 @@ export const validateCompanyAccount = [
   newPassword('password'),
   body('team').optional().isIn(STAFF_TEAM_VALUES).withMessage('Unknown team'),
   body('isHead').optional().isBoolean().withMessage('isHead must be true or false').toBoolean(),
+  body('subRole').optional({ values: 'falsy' }).isIn(GTM_SUB_ROLE_VALUES).withMessage('Unknown role'),
 ];
 
 export const validatePasswordReset = [

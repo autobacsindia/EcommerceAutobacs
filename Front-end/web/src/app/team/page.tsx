@@ -25,9 +25,11 @@ const PAID: Shortcut = {
 };
 
 /** What each team can do — the same split the API enforces. */
-function shortcutsFor(team: string | undefined, isHead: boolean): Shortcut[] {
+function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolean): Shortcut[] {
   switch (team) {
     case 'sales': {
+      // GTM executives and customer support have no tools yet (see COMING_SOON).
+      if (!canSell) return [];
       const list: Shortcut[] = [
         { href: '/team/sales/new', title: 'New order', text: 'For a customer on the phone or WhatsApp: pick products, give an offer price, send a payment link and QR.', icon: PlusCircle },
         { href: '/team/sales', title: isHead ? 'Team orders' : 'My orders', text: 'Payment, stock, the supplier\'s photo and tracking — and a button to send them to the customer.', icon: ReceiptText },
@@ -50,8 +52,11 @@ function shortcutsFor(team: string | undefined, isHead: boolean): Shortcut[] {
 export default function TeamDashboardPage() {
   const { user } = useAuth();
   const staff = user?.staff;
-  const items = (staff && COMING_SOON[staff.team]) || [];
-  const shortcuts = shortcutsFor(staff?.team, !!staff?.isHead);
+  const canSell = staff?.canSell ?? staff?.team === 'sales';
+  const items = staff?.team === 'sales' && !canSell
+    ? [`Your ${staff.roleLabel || 'GTM'} tools are being set up. Team chat is ready to use now.`]
+    : (staff && COMING_SOON[staff.team]) || [];
+  const shortcuts = shortcutsFor(staff?.team, !!staff?.isHead, canSell);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -60,7 +65,7 @@ export default function TeamDashboardPage() {
           Welcome{user?.name ? `, ${user.name}` : ''}
         </h1>
         <p className="text-sm text-gray-500">
-          {staff ? `${staff.teamLabel} team · ${staff.isHead ? 'Team head' : 'Team member'}` : 'Team panel'}
+          {staff ? `${staff.teamLabel} team · ${staff.roleLabel || (staff.isHead ? 'Team head' : 'Team member')}` : 'Team panel'}
         </p>
       </div>
 

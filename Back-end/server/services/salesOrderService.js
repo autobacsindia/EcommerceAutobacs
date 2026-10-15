@@ -9,8 +9,9 @@
  * verified `payment_link.paid` webhook — nobody in the panel can mark it paid.
  *
  * Who sees what (enforced here, not in the UI):
- *   - sales member  → creates orders; sees, re-links and cancels their OWN
- *   - sales head    → the same, for every sales-panel order
+ *   - GTM lead      → creates orders; sees, re-links and cancels their OWN
+ *   - GTM head      → the same, for every sales-panel order
+ *   - GTM executive / customer support → none of this (config/staff.js canSell)
  *   - accounts / procurement (any member) → read-only list of PAID sales orders
  */
 
@@ -26,7 +27,7 @@ import SearchService from './searchService.js';
 import productRepository from '../repositories/productRepository.js';
 import { effectivePrice } from '../utils/productPrice.js';
 import { isPurchasable } from '../utils/stockStatus.js';
-import { STAFF_TEAMS } from '../config/staff.js';
+import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { workflowView } from '../utils/teamWorkflow.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
@@ -130,7 +131,7 @@ function shape(o) {
  * rep can tell the customer instead of guessing.
  */
 export async function searchSalesProducts(actor, q) {
-  if (!onTeam(actor, STAFF_TEAMS.SALES)) throw fail('Not authorized.', 403);
+  if (!canSell(actor)) throw fail('Not authorized.', 403);
   const term = String(q || '').trim();
   if (term.length < 2) return [];
   const { products = [] } = await SearchService.searchProducts({ search: term, limit: 8, page: 1 });
@@ -164,7 +165,7 @@ export async function searchSalesProducts(actor, q) {
  * @param {Object} input  { customer:{name,email,phone}, shippingAddress:{…}, items:[{product, variantId?, quantity, offerPrice}], notes? }
  */
 export async function createSalesOrder(actor, input, req) {
-  if (!onTeam(actor, STAFF_TEAMS.SALES)) throw fail('Only the sales team can create orders here.', 403);
+  if (!canSell(actor)) throw fail('Only the GTM head and GTM leads can create orders here.', 403);
 
   const items = Array.isArray(input.items) ? input.items : [];
   if (items.length === 0) throw fail('Add at least one product.', 400);
@@ -236,7 +237,7 @@ export async function createSalesOrder(actor, input, req) {
 
 /** Sales: own orders (member) or every sales-panel order (head). */
 export async function listSalesOrders(actor, { cursor } = {}) {
-  if (!onTeam(actor, STAFF_TEAMS.SALES)) throw fail('Not authorized.', 403);
+  if (!canSell(actor)) throw fail('Not authorized.', 403);
   const base = isSalesHead(actor)
     ? { salesUser: { $type: 'objectId' } }
     : { salesUser: actor._id };
@@ -276,7 +277,7 @@ export async function listPaidSalesOrders(actor, { cursor } = {}) {
  * a sales head any sales-panel order. Same scope as listSalesOrders.
  */
 export async function getSalesOrder(actor, orderId) {
-  if (!onTeam(actor, STAFF_TEAMS.SALES)) throw fail('Not authorized.', 403);
+  if (!canSell(actor)) throw fail('Not authorized.', 403);
   const order = await orderRepository.findById(orderId, [
     { path: 'user', select: 'name email phone' },
     { path: 'salesUser', select: 'name' },
@@ -290,7 +291,7 @@ export async function getSalesOrder(actor, orderId) {
 
 /** Load an unpaid sales order the actor may act on. */
 async function loadOwnUnpaid(actor, orderId) {
-  if (!onTeam(actor, STAFF_TEAMS.SALES)) throw fail('Not authorized.', 403);
+  if (!canSell(actor)) throw fail('Not authorized.', 403);
   const order = await orderRepository.findById(orderId);
   if (!order || !order.salesUser) throw fail('Order not found.', 404);
   if (!isSalesHead(actor) && String(order.salesUser) !== String(actor._id)) {

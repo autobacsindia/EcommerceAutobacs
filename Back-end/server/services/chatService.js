@@ -38,9 +38,18 @@ export const DEFAULT_SPACES = Object.freeze([
     name: team,
     audience: 'team',
     team,
-    description: `${STAFF_TEAM_LABELS[team]} team`,
+    description: `${STAFF_TEAM_LABELS[team]} team`, // stored once; listChannels shows the current label
   })),
 ]);
+
+/**
+ * What a space is called on screen. A team space is named after its team's
+ * label, so the 'sales' team's space reads #gtm — without renaming the stored
+ * channel, which existing links and history point at.
+ */
+const spaceDisplayName = (c) => (c.system && typeof c.key === 'string' && c.key.startsWith('team:')
+  ? (STAFF_TEAM_LABELS[c.team] || c.name).toLowerCase()
+  : c.name);
 
 // ── who is who ───────────────────────────────────────────────────────────────
 
@@ -210,8 +219,8 @@ export async function listChannels(user) {
         id: idOf(c),
         kind: c.kind,
         key: c.key ?? null,
-        name: c.kind === 'dm' ? partner?.name ?? 'Former member' : c.name,
-        description: c.description || '',
+        name: c.kind === 'dm' ? partner?.name ?? 'Former member' : spaceDisplayName(c),
+        description: c.system && c.team ? `${STAFF_TEAM_LABELS[c.team] || c.team} team` : c.description || '',
         audience: c.audience,
         team: c.team ?? null,
         system: !!c.system,
@@ -385,7 +394,7 @@ export async function searchMessages(user, { q, channelId, before, limit } = {})
 
   const names = new Map(
     found.map((c) => {
-      if (c.kind !== 'dm') return [String(c._id), { name: c.name, kind: c.kind }];
+      if (c.kind !== 'dm') return [String(c._id), { name: spaceDisplayName(c), kind: c.kind }];
       const partner = partnerById.get((c.members || []).map(idOf).find((m) => m !== uid) ?? '');
       return [String(c._id), { name: partner?.name ?? 'Former member', kind: 'dm' }];
     }),
@@ -686,7 +695,7 @@ export async function createSpace(user, { name, description, memberIds } = {}) {
   const cleanName = cleanText(name).toLowerCase().replace(/^#/, '').replace(/\s+/g, '-').slice(0, 60);
   if (cleanName.length < 2) throw fail('Space name must be at least 2 characters', 400);
 
-  const reserved = new Set(DEFAULT_SPACES.map((s) => s.name));
+  const reserved = new Set([...DEFAULT_SPACES.map((s) => s.name), ...STAFF_TEAM_VALUES.map((t) => STAFF_TEAM_LABELS[t].toLowerCase())]);
   if (reserved.has(cleanName)) throw fail('That name is already used by a default space', 409);
   const clash = await chatRepository.spaceNameTaken(cleanName);
   if (clash) throw fail('A space with that name already exists', 409);

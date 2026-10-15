@@ -37,7 +37,7 @@ import cancellationService from './cancellationService.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
 import { detectKind, KIND } from './storage/contentSniff.js';
 import { getNotificationsQueue } from '../queue/queues.js';
-import { STAFF_TEAMS, STAFF_TEAM_LABELS } from '../config/staff.js';
+import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
 import { SHIPMENT_STATUS } from '../utils/orderFulfilment.js';
 import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
@@ -92,7 +92,8 @@ function canView(u, order) {
 /** Which queue each team works from, and who may open it. */
 const QUEUES = {
   procurement: { team: 'procurement', allowed: can.procurement },
-  decisions: { team: 'sales', allowed: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.SALES) },
+  // GTM head and leads only — executives and support do not take customer decisions.
+  decisions: { team: 'sales', allowed: (u) => isAdmin(u) || canSell(u) },
   refunds: { team: 'accounts', allowed: can.accounts },
   deliveries: { team: 'operations', allowed: can.operations },
 };

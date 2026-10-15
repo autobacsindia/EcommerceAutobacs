@@ -137,7 +137,7 @@ describe('waiting board', () => {
     expect(rows[0].waitingHours).toBeGreaterThanOrEqual(30);
     const decisions = rows.filter((r) => r.stage === STAGE.CUSTOMER_DECISION);
     expect(decisions.find((r) => r.orderId === String(sold._id)).waitingFor).toBe('Sam');
-    expect(decisions.find((r) => r.orderId === String(web._id)).waitingFor).toMatch(/Sales heads/);
+    expect(decisions.find((r) => r.orderId === String(web._id)).waitingFor).toMatch(/GTM head/);
     expect(teams).toEqual(expect.arrayContaining([
       { team: 'procurement', waiting: 1, overdue: 1 },
       { team: 'sales', waiting: 2, overdue: 0 },

@@ -175,7 +175,7 @@ class UserRepository extends BaseRepository {
     const query = { role: 'staff', 'staff.active': true };
     if (team) query['staff.team'] = team;
     return User.find(query)
-      .select('name email phone staff createdAt username companyAccount')
+      .select('name email phone role staff createdAt username companyAccount')
       .sort({ 'staff.isHead': -1, name: 1 })
       .lean();
   }
