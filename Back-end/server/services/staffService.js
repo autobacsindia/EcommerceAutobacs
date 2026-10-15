@@ -31,6 +31,7 @@ import { staffInviteEmail } from '../utils/emailTemplates.js';
 import {
   STAFF_TEAM_LABELS, STAFF_INVITE_TTL_MS, isStaffTeam,
   companyEmailFor, isCompanyEmail, normaliseUsername, isValidStaffUsername, STAFF_USERNAME_HINT,
+  STAFF_TEAMS, GTM_SUB_ROLE_VALUES, gtmRoleOf, canSell, staffRoleLabel,
 } from '../config/staff.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
@@ -60,12 +61,22 @@ const publicMember = (user) => ({
   phone: user.phone || '',
   team: user.staff?.team,
   isHead: !!user.staff?.isHead,
+  subRole: gtmRoleOf(user) && gtmRoleOf(user) !== 'head' ? gtmRoleOf(user) : null,
+  roleLabel: staffRoleLabel(user),
   addedAt: user.staff?.addedAt || user.createdAt,
 });
 
 /** The staff profile the /team panel renders from. */
 export const describeStaff = (user) => (isActiveStaff(user)
-  ? { team: user.staff.team, teamLabel: STAFF_TEAM_LABELS[user.staff.team], isHead: !!user.staff.isHead }
+  ? {
+    team: user.staff.team,
+    teamLabel: STAFF_TEAM_LABELS[user.staff.team],
+    isHead: !!user.staff.isHead,
+    // GTM roles (config/staff.js): what the panel shows and which tools it offers.
+    gtmRole: gtmRoleOf(user),
+    roleLabel: staffRoleLabel(user),
+    canSell: canSell(user),
+  }
   : null);
 
 /**
@@ -328,6 +339,7 @@ export async function createCompanyAccount(actor, input, req) {
   const phone = String(input.phone || '').trim();
   const username = normaliseUsername(input.username);
   const wantsHead = input.isHead === true;
+  const subRole = input.subRole ? String(input.subRole) : null;
 
   let team;
   if (isAdmin(actor)) {
@@ -339,6 +351,9 @@ export async function createCompanyAccount(actor, input, req) {
     throw fail('Only a team head or an administrator can add people.', 403);
   }
 
+  if (subRole && (team !== STAFF_TEAMS.SALES || !GTM_SUB_ROLE_VALUES.includes(subRole))) {
+    throw fail('A role (GTM lead, GTM executive, Customer support) applies to the GTM team only.', 400);
+  }
   if (!isValidStaffUsername(username)) throw fail(`Username: ${STAFF_USERNAME_HINT}.`, 400);
   if (await userRepository.findByUsername(username)) throw fail('That username is already taken.', 409);
   const email = companyEmailFor(username);
@@ -358,6 +373,8 @@ export async function createCompanyAccount(actor, input, req) {
       staff: {
         team,
         isHead: isAdmin(actor) ? wantsHead : false,
+        // GTM: a head has no sub-role; a member defaults to lead.
+        ...(team === STAFF_TEAMS.SALES && !(isAdmin(actor) && wantsHead) && subRole ? { subRole } : {}),
         active: true,
         addedBy: actor._id,
         addedAt: new Date(),
@@ -370,7 +387,7 @@ export async function createCompanyAccount(actor, input, req) {
   }
 
   auditLogger.logAction(req, 'CREATE', 'User', user._id, {
-    change: 'staff_company_account_created', team, isHead: !!user.staff?.isHead, username,
+    change: 'staff_company_account_created', team, isHead: !!user.staff?.isHead, subRole: user.staff?.subRole || null, username,
   });
   return publicMember(user);
 }

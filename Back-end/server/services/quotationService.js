@@ -18,7 +18,7 @@ import AppError from '../utils/AppError.js';
 import orderRepository from '../repositories/orderRepository.js';
 import { companyInfo } from '../config/company.js';
 import { QUOTATION_VALID_DAYS, QUOTATION_REMARKS } from '../config/quotation.js';
-import { STAFF_TEAMS } from '../config/staff.js';
+import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { loadLogo, orderNumber, pdfFonts } from './invoiceService.js';
 import { variantDisplayName } from '../utils/orderLines.js';
 import { formatLongDateIST } from '../utils/datetime.js';
@@ -338,7 +338,7 @@ export async function renderQuotationPdf(q) {
  * @returns {Promise<{ buffer: Buffer, filename: string }>}
  */
 export async function getQuotationPdf(actor, orderId) {
-  if (!isAdmin(actor) && !isSales(actor)) throw fail('Not authorized.', 403);
+  if (!isAdmin(actor) && !canSell(actor)) throw fail('Not authorized.', 403);
   const order = await orderRepository.findById(orderId, [
     { path: 'user', select: 'name email phone' },
     { path: 'salesUser', select: 'name phone' },

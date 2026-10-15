@@ -11,6 +11,9 @@ const MAX_FILE_MB = 10;
 
 /** Teams that can be addressed as a group. Mirrors the backend's list. */
 const TEAMS = ['sales', 'procurement', 'accounts', 'marketing', 'operations'] as const;
+/** How a team is written in a mention: the 'sales' team is GTM. */
+const MENTION_NAME: Record<string, string> = { sales: 'gtm' };
+const mentionName = (team: string) => MENTION_NAME[team] ?? team;
 
 type Pending = { file: File; preview: string | null };
 /** One row in the @mention picker: either a person or a whole team. */
@@ -91,13 +94,13 @@ export default function Composer({
     if (mentionQuery == null) return [];
     const q = mentionQuery.trim().toLowerCase();
     const peopleHits = people.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 6);
-    const teamHits = canMentionTeams ? TEAMS.filter((t) => t.includes(q)).slice(0, 3) : [];
+    const teamHits = canMentionTeams ? TEAMS.filter((t) => mentionName(t).includes(q)).slice(0, 3) : [];
     return [...teamHits.map((t) => ({ team: t })), ...peopleHits.map((p) => ({ person: p }))];
   }, [mentionQuery, people, canMentionTeams]);
 
   /** Swap the half-typed "@foo" for the chosen name and remember who was meant. */
   const pickMention = (option: MentionOption) => {
-    const label = option.person?.name ?? option.team ?? '';
+    const label = option.person?.name ?? (option.team ? mentionName(option.team) : '');
     setText((prev) => prev.replace(/(^|\s)@([\w ]{0,20})$/, (_m, lead) => `${lead}@${label} `));
     if (option.person) setMentioned((prev) => (prev.some((p) => p.id === option.person!.id) ? prev : [...prev, option.person!]));
     if (option.team) setMentionTeams((prev) => (prev.includes(option.team!) ? prev : [...prev, option.team!]));
@@ -193,7 +196,7 @@ export default function Composer({
                   ) : (
                     <>
                       <span className="grid h-7 w-7 place-items-center rounded-lg bg-gray-100 text-xs font-bold text-gray-700">@</span>
-                      <span className="flex-1 text-sm text-gray-900">@{option.team}</span>
+                      <span className="flex-1 text-sm text-gray-900">@{mentionName(option.team ?? "")}</span>
                       <span className="text-xs text-gray-500">whole team</span>
                     </>
                   )}

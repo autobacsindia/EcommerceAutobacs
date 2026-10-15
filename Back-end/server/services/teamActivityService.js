@@ -77,7 +77,7 @@ const itemNameOf = (order, itemId) => {
 /** Who a waiting stage is on: the seller for a sales decision, else the team. */
 function waitingFor(order, team) {
   if (team === 'sales' && order.salesUser) return order.salesUser.name || 'The seller';
-  if (team === 'sales') return 'Sales heads (website order)';
+  if (team === 'sales') return 'GTM head (website order)';
   return `${STAFF_TEAM_LABELS[team] || team} team`;
 }
 

@@ -80,6 +80,8 @@ const UserSchema = new mongoose.Schema({
     type: new mongoose.Schema({
       team: { type: String, enum: STAFF_TEAM_VALUES, required: true },
       isHead: { type: Boolean, default: false },
+      // GTM only (config/staff.js): 'lead' | 'executive' | 'support'. Unset = lead.
+      subRole: { type: String, enum: ['lead', 'executive', 'support'], default: undefined },
       active: { type: Boolean, default: true },
       addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
       addedAt: { type: Date, default: Date.now },

@@ -13,13 +13,14 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 /** Links per team. The API enforces the same split; this only hides what would 403. */
 const PASSWORD_PATH = '/team/password';
 
-function navFor(team: string, isHead: boolean): NavItem[] {
+function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   const nav: NavItem[] = [
     { href: '/team', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/team/chat', label: 'Team chat', icon: MessagesSquare },
   ];
   const paid: NavItem = { href: '/team/orders', label: 'Paid orders', icon: BadgeCheck };
-  if (team === 'sales') {
+  // GTM: the head and leads sell; executives and customer support have no tools yet.
+  if (team === 'sales' && canSell) {
     nav.push(
       { href: '/team/sales/new', label: 'New order', icon: PlusCircle },
       { href: '/team/sales', label: isHead ? 'Team orders' : 'My orders', icon: ReceiptText },
@@ -40,6 +41,8 @@ export default function TeamLayoutClient({
   team,
   teamLabel,
   isHead,
+  roleLabel,
+  canSell = false,
   canChangePassword = true,
   children,
 }: {
@@ -47,6 +50,10 @@ export default function TeamLayoutClient({
   team: string;
   teamLabel: string;
   isHead: boolean;
+  /** "GTM head", "GTM lead", "Procurement head", "Member"… */
+  roleLabel?: string;
+  /** GTM head and leads: the selling tools in the menu. */
+  canSell?: boolean;
   /** False for company accounts: their password is managed by the admin. */
   canChangePassword?: boolean;
   children: ReactNode;
@@ -60,7 +67,7 @@ export default function TeamLayoutClient({
     router.push('/login');
   };
 
-  const links = navFor(team, isHead).map(({ href, label, icon: Icon }) => {
+  const links = navFor(team, isHead, canSell).map(({ href, label, icon: Icon }) => {
     const active = pathname === href;
     return (
       <Link
@@ -86,7 +93,7 @@ export default function TeamLayoutClient({
         <div className="flex items-center justify-between border-b border-gray-800 p-4 md:block">
           <div>
             <p className="text-lg font-bold">{teamLabel} Team</p>
-            <p className="text-xs text-gray-400">{isHead ? 'Team head' : 'Team member'}</p>
+            <p className="text-xs text-gray-400">{roleLabel || (isHead ? 'Team head' : 'Team member')}</p>
           </div>
           <button onClick={signOut} className="rounded-lg bg-red-600 p-2 text-sm md:hidden" aria-label="Log out">
             <LogOut className="h-4 w-4" />

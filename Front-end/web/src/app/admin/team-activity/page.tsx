@@ -39,7 +39,7 @@ type Perf = {
 };
 
 const TEAM: Record<string, string> = {
-  sales: 'Sales', procurement: 'Procurement', accounts: 'Accounts', operations: 'Operations', marketing: 'Marketing', admin: 'Admin',
+  sales: 'GTM', procurement: 'Procurement', accounts: 'Accounts', operations: 'Operations', marketing: 'Marketing', admin: 'Admin',
 };
 const teamName = (t: string | null) => (t ? TEAM[t] || t : '—');
 

@@ -16,6 +16,12 @@ export interface StaffProfile {
   team: 'sales' | 'procurement' | 'accounts' | 'marketing' | 'operations';
   teamLabel: string;
   isHead: boolean;
+  /** GTM only: 'head' | 'lead' | 'executive' | 'support' (null on other teams). */
+  gtmRole?: 'head' | 'lead' | 'executive' | 'support' | null;
+  /** "GTM head", "GTM lead", "Procurement head", "Member"… */
+  roleLabel?: string | null;
+  /** GTM head and leads: orders, payment links, quotations, customer decisions. */
+  canSell?: boolean;
 }
 
 interface User {

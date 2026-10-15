@@ -109,7 +109,7 @@ describe('Staff access', () => {
       const token = lastInviteToken();
       const verify = await anon.get(`/staff/invites/verify?token=${token}`);
       expect(verify.status).toBe(200);
-      expect(verify.body.invite).toMatchObject({ email: 'head@example.com', teamLabel: 'Sales', isHead: true });
+      expect(verify.body.invite).toMatchObject({ email: 'head@example.com', teamLabel: 'GTM', isHead: true });
 
       const accept = await anon.post('/staff/invites/accept', { token, password: PASSWORD });
       expect(accept.status).toBe(200);
@@ -119,7 +119,9 @@ describe('Staff access', () => {
       expect(head.staff).toMatchObject({ team: 'sales', isHead: true, active: true });
 
       const session = await signIn('head@example.com');
-      expect(session.login.body.user.staff).toEqual({ team: 'sales', teamLabel: 'Sales', isHead: true });
+      expect(session.login.body.user.staff).toEqual({
+        team: 'sales', teamLabel: 'GTM', isHead: true, gtmRole: 'head', roleLabel: 'GTM head', canSell: true,
+      });
       const me = await session.get('/auth/me');
       expect(me.body.user.staff.team).toBe('sales');
     });

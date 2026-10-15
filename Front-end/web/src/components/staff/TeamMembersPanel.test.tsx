@@ -109,3 +109,38 @@ describe('generateTempPassword', () => {
     expect(a.slice(0, -2)).not.toMatch(/[0O1lI]/);
   });
 });
+
+describe('GTM roles', () => {
+  it('a new GTM login gets a role (lead by default, executive or customer support)', async () => {
+    get.mockResolvedValue(team());
+    post.mockResolvedValue({ success: true, member: sam });
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    fireEvent.change(await screen.findByLabelText('Full name'), { target: { value: 'Esha' } });
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'esha.exec' } });
+    fireEvent.change(screen.getByLabelText('Mobile number'), { target: { value: '9876543210' } });
+    fireEvent.change(screen.getByLabelText('First password'), { target: { value: 'Temporary#2026' } });
+    expect(screen.getByRole('radio', { name: /GTM lead/ })).toBeChecked();
+    fireEvent.click(screen.getByRole('radio', { name: /GTM executive/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Create login/ }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/accounts', expect.objectContaining({ subRole: 'executive', isHead: false })));
+  });
+
+  it('a GTM head has no role, and other teams never see the role picker', async () => {
+    get.mockResolvedValue(team());
+    const { unmount } = render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    fireEvent.click(await screen.findByLabelText(/Make this person the GTM head/));
+    expect(screen.queryByRole('radio', { name: /GTM lead/ })).toBeNull();
+    unmount();
+    get.mockResolvedValue({ ...team(), team: 'procurement', teamLabel: 'Procurement' });
+    render(<TeamMembersPanel team="procurement" allowHeadInvite />);
+    await screen.findByLabelText('Full name');
+    expect(screen.queryByRole('radio', { name: /GTM lead/ })).toBeNull();
+  });
+
+  it('shows each member by role', async () => {
+    get.mockResolvedValue(team([{ ...sam, roleLabel: 'GTM executive', subRole: 'executive' }]));
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    const row = (await screen.findByText('Sam Kumar')).closest('tr')!;
+    expect(within(row).getByText('GTM executive')).toBeInTheDocument();
+  });
+});

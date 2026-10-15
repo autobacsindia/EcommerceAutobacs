@@ -134,7 +134,7 @@ const UPDATES = {
       space: SPACE.sales,
       key: keyOf(`out-of-stock-${orderId}-${itemId}`, jobId),
       mention: owners,
-      text: `🟠 Out of stock on ${orderNumber(order)} — ${itemName(order, itemId)}. ${address(owners, 'Sales')}: ask ${customerOf(order)} whether they will wait or want a refund.`,
+      text: `🟠 Out of stock on ${orderNumber(order)} — ${itemName(order, itemId)}. ${address(owners, 'GTM')}: ask ${customerOf(order)} whether they will wait or want a refund.`,
     });
   },
 
@@ -208,7 +208,7 @@ const UPDATES = {
     return {
       space: SPACE.sales,
       key: `lead-${consultationId}`,
-      text: `💬 New consultation request from ${lead.name}${car}. Sales: please follow up.`,
+      text: `💬 New consultation request from ${lead.name}${car}. GTM: please follow up.`,
     };
   },
 };
@@ -225,7 +225,7 @@ const WORKFLOW_EVENTS = {
       space: SPACE.sales,
       key: keyOf(`ordered-${idOf(order._id)}-${itemId}`, jobId),
       mention: owners,
-      text: `🟡 ${orderNumber(order)} — ${itemName(order, itemId)} ordered from ${supplier || 'the supplier'}${by ? ` by ${by}` : ''}. ${address(owners, 'Sales')}: let ${customerOf(order)} know it is on the way to us.`,
+      text: `🟡 ${orderNumber(order)} — ${itemName(order, itemId)} ordered from ${supplier || 'the supplier'}${by ? ` by ${by}` : ''}. ${address(owners, 'GTM')}: let ${customerOf(order)} know it is on the way to us.`,
     });
   },
 
@@ -244,7 +244,7 @@ const WORKFLOW_EVENTS = {
       space: SPACE.sales,
       key: keyOf(`refund-rejected-${idOf(order._id)}-${itemId}`, jobId),
       mention: owners,
-      text: `↩️ Accounts${by ? ` (${by})` : ''} sent back the refund on ${orderNumber(order)} — ${itemName(order, itemId)}${reason ? `: “${reason}”` : ''}. ${address(owners, 'Sales')}: please follow up with ${customerOf(order)}.`,
+      text: `↩️ Accounts${by ? ` (${by})` : ''} sent back the refund on ${orderNumber(order)} — ${itemName(order, itemId)}${reason ? `: “${reason}”` : ''}. ${address(owners, 'GTM')}: please follow up with ${customerOf(order)}.`,
     });
   },
 
@@ -255,7 +255,7 @@ const WORKFLOW_EVENTS = {
       space: SPACE.sales,
       key: keyOf(`delivered-${idOf(order._id)}`, jobId),
       mention: owners,
-      text: `🏁 Delivered ${orderNumber(order)} — ${customerOf(order)}${by ? ` (confirmed by ${by})` : ''}. ${address(owners, 'Sales')}: a good moment to check they are happy.`,
+      text: `🏁 Delivered ${orderNumber(order)} — ${customerOf(order)}${by ? ` (confirmed by ${by})` : ''}. ${address(owners, 'GTM')}: a good moment to check they are happy.`,
     });
   },
 };

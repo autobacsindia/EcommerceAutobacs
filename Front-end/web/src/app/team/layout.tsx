@@ -26,7 +26,7 @@ type MeResponse = {
     name?: string;
     email?: string;
     role?: string;
-    staff?: { team: string; teamLabel: string; isHead: boolean } | null;
+    staff?: { team: string; teamLabel: string; isHead: boolean; roleLabel?: string | null; canSell?: boolean } | null;
     /** Set on company accounts (config/staff.js on the API), whose password the admin manages. */
     username?: string | null;
   };
@@ -63,6 +63,9 @@ export default async function TeamLayout({ children }: { children: ReactNode }) 
       team={user.staff.team}
       teamLabel={user.staff.teamLabel}
       isHead={user.staff.isHead}
+      roleLabel={user.staff.roleLabel || (user.staff.isHead ? 'Team head' : 'Team member')}
+      // Older sessions predate canSell: a sales member then was a seller.
+      canSell={user.staff.canSell ?? user.staff.team === 'sales'}
       // A company account's password is the admin's to change, not the person's.
       canChangePassword={!user.username}
     >
