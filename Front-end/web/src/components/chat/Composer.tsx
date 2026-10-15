@@ -21,11 +21,14 @@ export default function Composer({
   people,
   canMentionTeams,
   onSend,
+  placeholder,
 }: {
   channelName: string;
   people: ChatPerson[];
   canMentionTeams: boolean;
   onSend: (vars: SendVars) => void;
+  /** Overrides "Message #channel" — e.g. "Reply in thread". */
+  placeholder?: string;
 }) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<Pending[]>([]);
@@ -293,8 +296,8 @@ export default function Composer({
             }}
             rows={1}
             maxLength={4000}
-            placeholder={`Message ${channelName}`}
-            aria-label={`Message ${channelName}`}
+            placeholder={placeholder ?? `Message ${channelName}`}
+            aria-label={placeholder ?? `Message ${channelName}`}
             className="max-h-40 min-h-[40px] flex-1 resize-none border-0 bg-transparent px-2 py-2 text-[15px] text-gray-900 outline-none"
           />
           <button

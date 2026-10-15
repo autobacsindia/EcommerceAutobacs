@@ -128,6 +128,25 @@ function shapeMessage(m, sender) {
     mentionTeams: m.mentionTeams || [],
     refs: deleted ? [] : (m.refs || []).map((r) => ({ type: r.type, code: r.code, id: idOf(r.target) })),
     createdAt: m.createdAt,
+    ...threadFieldsOf(m),
+  };
+}
+
+/** Where a message sits in a thread, and — for a root — what its thread holds. */
+function threadFieldsOf(m) {
+  return {
+    threadRoot: m.threadRoot ? idOf(m.threadRoot) : null,
+    // Older messages predate activitySeq; their own seq is the same thing.
+    activitySeq: m.threadRoot ? null : (m.activitySeq ?? m.seq),
+    replyCount: m.replyCount || 0,
+    lastReply: m.replyCount
+      ? {
+          at: m.lastReplyAt,
+          by: m.lastReplyBy || '',
+          preview: m.lastReplyPreview || '',
+          mentions: (m.lastReplyMentions || []).map(idOf),
+        }
+      : null,
   };
 }
 
@@ -234,16 +253,50 @@ export async function listMessages(user, channelId, { before, after, limit } = {
   if (after != null && after !== '') {
     docs = await chatRepository.findMessagesAfter(channel._id, Number(after), size);
   } else {
+    // The timeline: top-level messages, by latest activity in their thread.
     const cursor = before != null && before !== '' ? Number(before) : null;
-    docs = (await chatRepository.findMessagesBefore(channel._id, cursor, size)).reverse();
+    docs = (await chatRepository.findTimelineBefore(channel._id, cursor, size)).reverse();
   }
 
-  const oldest = docs[0]?.seq;
+  const oldest = docs[0] ? (docs[0].activitySeq ?? docs[0].seq) : null;
   return {
     messages: docs.map((m) => shapeMessage(m)),
-    // Cursor for the next older page, or null when the beginning is reached.
-    nextBefore: after == null || after === '' ? (oldest > 1 ? oldest : null) : undefined,
+    // Cursor for the next older page (an activitySeq), or null at the beginning.
+    nextBefore: after == null || after === '' ? (docs.length === size && oldest > 1 ? oldest : null) : undefined,
   };
+}
+
+/** Bounded page of a thread: the root, and its replies oldest first. */
+export const THREAD_PAGE_MAX = 100;
+
+/**
+ * One thread. The root decides access: a thread is readable exactly when its
+ * channel is, and "not yours" is a 404 like everywhere else in chat.
+ *   after=<seq>  replies newer than this (paging forward / catching up)
+ */
+export async function getThread(user, rootId, { after, limit } = {}) {
+  if (!mongoose.isValidObjectId(rootId)) throw fail('Thread not found', 404);
+  const root = await chatRepository.findMessageWithSender(rootId);
+  if (!root || root.threadRoot) throw fail('Thread not found', 404);
+  await loadAccessible(user, root.channel);
+  const size = Math.min(Math.max(parseInt(limit, 10) || THREAD_PAGE_MAX, 1), THREAD_PAGE_MAX);
+  const from = after != null && after !== '' ? Number(after) : null;
+  const replies = await chatRepository.findThreadReplies(root._id, from, size);
+  return {
+    root: shapeMessage(root),
+    replies: replies.map((m) => shapeMessage(m)),
+    nextAfter: replies.length === size ? replies[replies.length - 1].seq : null,
+  };
+}
+
+/** A reply needs a live top-level message in the same channel to hang from. */
+async function loadThreadRoot(channel, rootId) {
+  if (!rootId) return null;
+  if (!mongoose.isValidObjectId(rootId)) throw fail('Thread not found', 404);
+  const root = await chatRepository.findMessageById(rootId);
+  if (!root || idOf(root.channel) !== idOf(channel)) throw fail('Thread not found', 404);
+  if (root.threadRoot) throw fail('Reply to the thread itself, not to a reply', 400);
+  return root;
 }
 
 /**
@@ -406,8 +459,10 @@ async function markRead(userId, channelId, seq) {
 }
 
 /** Post a message. Idempotent on (channel, sender, clientId). */
-export async function sendMessage(user, channelId, { text, clientId, mentions, mentionTeams, orderIds, files } = {}) {
+export async function sendMessage(user, channelId, { text, clientId, mentions, mentionTeams, orderIds, files, threadRoot } = {}) {
   const channel = await loadAccessible(user, channelId);
+  // Before any upload: a reply to a thread that is not there must not leave files behind.
+  const root = await loadThreadRoot(channel, threadRoot);
   const body = cleanText(text);
   const hasFiles = Array.isArray(files) && files.length > 0;
   // A photo on its own is a perfectly good message; only an empty one is refused.
@@ -429,7 +484,7 @@ export async function sendMessage(user, channelId, { text, clientId, mentions, m
 
   const result = await insertMessage(channel, {
     kind: 'user', sender: user, text: body, clientId,
-    attachments, mentions: people, mentionTeams: teams, refs,
+    attachments, mentions: people, mentionTeams: teams, refs, threadRoot: root,
   });
   if (!result.duplicate) notifyMentions(channel, user, result.message, people, teams);
   return result;
@@ -492,8 +547,11 @@ function notifyMentions(channel, sender, message, people, teams) {
   })().catch((err) => console.error('[chat] mention notification failed:', err.message));
 }
 
-async function insertMessage(channel, { kind, sender, text, clientId, attachments = [], mentions = [], mentionTeams = [], refs = [] }) {
-  const seq = await chatRepository.nextSeq(channel._id, new Date());
+async function insertMessage(channel, {
+  kind, sender, text, clientId, attachments = [], mentions = [], mentionTeams = [], refs = [], threadRoot = null, threadOrder,
+}) {
+  const at = new Date();
+  const seq = await chatRepository.nextSeq(channel._id, at);
   if (seq == null) throw fail('Channel not found', 404);
 
   let doc;
@@ -508,6 +566,8 @@ async function insertMessage(channel, { kind, sender, text, clientId, attachment
       mentions,
       mentionTeams,
       refs,
+      ...(threadRoot ? { threadRoot: threadRoot._id } : { activitySeq: seq }),
+      ...(threadOrder ? { threadOrder } : {}),
       ...(clientId ? { clientId } : {}),
     });
   } catch (err) {
@@ -523,8 +583,23 @@ async function insertMessage(channel, { kind, sender, text, clientId, attachment
   if (sender) await markRead(sender._id, channel._id, seq); // your own message is never "unread"
 
   const message = shapeMessage(doc, sender);
-  await publishChatEvent({ type: 'message', channelId: idOf(channel), route: audienceOf(channel), message });
-  return { message, duplicate: false };
+  // A reply moves its thread: the root's summary and position travel with the
+  // event, so every open timeline can bring the thread back to the bottom.
+  let thread = null;
+  if (threadRoot) {
+    const root = await chatRepository.bumpThread(threadRoot._id, {
+      seq,
+      at,
+      preview: (text || (attachments.length ? 'Shared a file' : '')).slice(0, 200),
+      by: kind === 'system' ? 'Roavion updates' : sender?.name || '',
+      mentions,
+    });
+    if (root) thread = shapeMessage(root);
+  }
+  await publishChatEvent({
+    type: 'message', channelId: idOf(channel), route: audienceOf(channel), message, ...(thread ? { thread } : {}),
+  });
+  return { message, thread, duplicate: false };
 }
 
 /**
@@ -532,7 +607,7 @@ async function insertMessage(channel, { kind, sender, text, clientId, attachment
  * Used by business events (new paid order, refund request…). Never throws: a chat
  * hiccup must not fail the business operation that triggered it.
  */
-export async function postSystemMessage(spaceKey, text, { key, orderIds, mentions } = {}) {
+export async function postSystemMessage(spaceKey, text, { key, orderIds, mentions, threadOrder } = {}) {
   try {
     await ensureDefaultSpaces();
     const channel = await chatRepository.findChannelByKey(spaceKey);
@@ -549,10 +624,25 @@ export async function postSystemMessage(spaceKey, text, { key, orderIds, mention
     // Same visibility filter as a person's mention. No email: the event that
     // triggered this post has already emailed the people it addresses.
     const [people] = await resolveMentions(channel, mentions, []);
-    const { message } = await insertMessage(channel, {
-      kind: 'system', sender: null, text: body, clientId: key, refs, mentions: people,
-    });
-    return message;
+    const base = { kind: 'system', sender: null, text: body, clientId: key, refs, mentions: people };
+
+    // One thread per order per space: the first update starts it, the rest reply.
+    const orderId = threadOrder && mongoose.isValidObjectId(threadOrder) ? new mongoose.Types.ObjectId(String(threadOrder)) : null;
+    if (orderId) {
+      const root = await chatRepository.findOrderThreadRoot(channel._id, orderId);
+      if (root) return (await insertMessage(channel, { ...base, threadRoot: root })).message;
+      try {
+        return (await insertMessage(channel, { ...base, threadOrder: orderId })).message;
+      } catch (err) {
+        // Two first updates raced to start the thread; the loser replies to the winner.
+        // (A duplicate on the idempotency key is handled inside insertMessage.)
+        if (err?.code !== 11000) throw err;
+        const winner = await chatRepository.findOrderThreadRoot(channel._id, orderId);
+        if (!winner) throw err;
+        return (await insertMessage(channel, { ...base, threadRoot: winner })).message;
+      }
+    }
+    return (await insertMessage(channel, base)).message;
   } catch (err) {
     console.error(`[chat] system message to ${spaceKey} failed:`, err.message);
     return null;

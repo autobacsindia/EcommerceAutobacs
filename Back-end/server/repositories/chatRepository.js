@@ -30,14 +30,50 @@ const chatRepository = {
 
   // ── messages ──
   findMessageById: (id) => ChatMessage.findById(id).lean(),
+  findMessageWithSender: (id) => ChatMessage.findById(id).populate('sender', SENDER_FIELDS).lean(),
   findByClientId: (channel, sender, clientId) =>
     ChatMessage.findOne({ channel, sender, clientId }).populate('sender', SENDER_FIELDS).lean(),
   findMessagesAfter: (channel, after, limit) =>
     ChatMessage.find({ channel, seq: { $gt: after } }).sort({ seq: 1 }).limit(limit)
       .populate('sender', SENDER_FIELDS).lean(),
-  findMessagesBefore: (channel, before, limit) =>
-    ChatMessage.find(before != null ? { channel, seq: { $lt: before } } : { channel })
-      .sort({ seq: -1 }).limit(limit).populate('sender', SENDER_FIELDS).lean(),
+  /** The channel timeline: top-level messages, newest activity first (index chat_timeline). */
+  findTimelineBefore: (channel, before, limit) =>
+    ChatMessage.find({ channel, threadRoot: null, ...(before != null ? { activitySeq: { $lt: before } } : {}) })
+      .sort({ activitySeq: -1 }).limit(limit).populate('sender', SENDER_FIELDS).lean(),
+  /**
+   * A thread's replies, oldest first (index chat_thread_replies).
+   * The `$type` is not redundant: the index is partial on it, and the planner
+   * only uses a partial index when the query states the filter itself —
+   * `{ threadRoot: id }` alone was measured as a full collection scan.
+   */
+  findThreadReplies: (threadRoot, after, limit) =>
+    ChatMessage.find({
+      threadRoot: { $eq: threadRoot, $type: 'objectId' },
+      ...(after != null ? { seq: { $gt: after } } : {}),
+    })
+      .sort({ seq: 1 }).limit(limit).populate('sender', SENDER_FIELDS).lean(),
+  findOrderThreadRoot: (channel, threadOrder) =>
+    ChatMessage.findOne({ channel, threadOrder }).populate('sender', SENDER_FIELDS).lean(),
+  /**
+   * Record a reply on its root. The summary and activitySeq move only forward:
+   * when two replies race, the newer one's summary wins whichever lands last.
+   * Returns the root as it now stands.
+   */
+  bumpThread: async (rootId, { seq, at, preview, by, mentions }) => {
+    const bumped = await ChatMessage.findOneAndUpdate(
+      { _id: rootId, activitySeq: { $lt: seq } },
+      {
+        $set: {
+          activitySeq: seq, lastReplyAt: at, lastReplyPreview: preview, lastReplyBy: by, lastReplyMentions: mentions,
+        },
+        $inc: { replyCount: 1 },
+      },
+      { new: true },
+    ).populate('sender', SENDER_FIELDS).lean();
+    if (bumped) return bumped;
+    return ChatMessage.findOneAndUpdate({ _id: rootId }, { $inc: { replyCount: 1 } }, { new: true })
+      .populate('sender', SENDER_FIELDS).lean();
+  },
   createMessage: async (doc) => (await ChatMessage.create(doc)).toObject(),
   /**
    * Search message text across a set of channels, newest first.

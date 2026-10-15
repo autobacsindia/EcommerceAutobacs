@@ -38,6 +38,11 @@
  * includes the queue job id: a retry of one job reuses its id and posts once,
  * while a second real event is a second job and posts again.
  *
+ * ── THREADS ─────────────────────────────────────────────────────────────────────
+ * Each order is one thread per space. In #sales an order's out-of-stock alert
+ * starts it; "ordered from supplier", "refund sent back" and "delivered" reply
+ * under it, and people discuss the order in the same thread.
+ *
  * ── MENTIONS ────────────────────────────────────────────────────────────────────
  * A post that needs one person (the seller on the order) @-mentions them, which
  * highlights it for them and lists it under their mentions. System posts never
@@ -93,9 +98,13 @@ const address = (people, fallback) => (people.length ? people.map((u) => `@${u.n
 
 const loadOrder = (orderId) => orderRepository.findForWorkflow(orderId);
 
-/** Shared shape for an order post. */
+/**
+ * Shared shape for an order post. Every update about one order in one space is
+ * one thread (`threadOrder`): the first starts it, the rest reply to it, and a
+ * reply brings the thread back to the bottom of the space.
+ */
 const orderPost = (order, { space, key, text, mention = [] }) => ({
-  space, key, text, orderIds: [idOf(order._id)], mentions: mention.map(idOf),
+  space, key, text, orderIds: [idOf(order._id)], mentions: mention.map(idOf), threadOrder: idOf(order._id),
 });
 
 /**
@@ -287,7 +296,7 @@ export async function postBusinessUpdate(jobName, data = {}, { jobId } = {}) {
       throw new Error(`refusing automatic post to ${update.space}`);
     }
     return await postSystemMessage(update.space, update.text, {
-      key: update.key, orderIds: update.orderIds, mentions: update.mentions,
+      key: update.key, orderIds: update.orderIds, mentions: update.mentions, threadOrder: update.threadOrder,
     });
   } catch (err) {
     console.error(`[chat] business update for ${jobName} failed (ignored):`, err.message);

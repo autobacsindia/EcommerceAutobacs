@@ -10,6 +10,8 @@ import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from '@/hooks/queries/keys';
 import {
   upsertMessage,
+  upsertReply,
+  applyThreadUpdate,
   useCanChat,
   useChatChannels,
   useChatMe,
@@ -17,7 +19,7 @@ import {
   useCreateSpace,
   useOpenDm,
 } from '@/hooks/queries/useTeamChat';
-import type { ChatChannel, ChatMessage, ChatPerson, MessagePage } from '@/hooks/queries/useTeamChat';
+import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ThreadData } from '@/hooks/queries/useTeamChat';
 import { Avatar, ChannelIcon, Dialog, GREEN } from './chatUi';
 import Conversation from './Conversation';
 import MessageSearch from './MessageSearch';
@@ -232,9 +234,17 @@ export default function TeamChat() {
     token: null,
     enabled: canChat,
     onMessage: (event) => {
-      const e = event as unknown as { type: string; channelId?: string; message?: ChatMessage; messageId?: string };
+      const e = event as unknown as {
+        type: string; channelId?: string; message?: ChatMessage; messageId?: string; thread?: ChatMessage;
+      };
       if (e.type === 'message' && e.message && e.channelId) {
-        qc.setQueryData<Pages>(chatKeys.messages(e.channelId), (d) => upsertMessage(d, e.message!));
+        if (e.message.threadRoot) {
+          // A reply: into its thread if open, and its root moves to the bottom.
+          qc.setQueryData<ThreadData>(chatKeys.thread(e.message.threadRoot), (d) => upsertReply(d, e.message!));
+          if (e.thread) qc.setQueryData<Pages>(chatKeys.messages(e.channelId), (d) => applyThreadUpdate(d, e.thread!));
+        } else {
+          qc.setQueryData<Pages>(chatKeys.messages(e.channelId), (d) => upsertMessage(d, e.message!));
+        }
         if (e.message.attachments?.length) qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
         scheduleChannelsRefresh();
       } else if (e.type === 'message_deleted' && e.channelId && e.messageId) {
@@ -251,6 +261,13 @@ export default function TeamChat() {
               }
             : d,
         );
+        // The deleted message may be a reply, or the root, of any cached thread.
+        qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) => {
+          if (!d) return d;
+          const hide = (m: ChatMessage) =>
+            m.id === e.messageId ? { ...m, deleted: true, text: '', attachments: [], refs: [] } : m;
+          return { ...d, root: hide(d.root), replies: d.replies.map(hide) };
+        });
         qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
       } else if (e.type === 'channel') {
         scheduleChannelsRefresh();
@@ -260,6 +277,7 @@ export default function TeamChat() {
     onConnect: () => {
       qc.invalidateQueries({ queryKey: chatKeys.channels() });
       if (selectedId) qc.invalidateQueries({ queryKey: chatKeys.messages(selectedId) });
+      qc.invalidateQueries({ queryKey: [...chatKeys.all, 'thread'] });
     },
   });
 

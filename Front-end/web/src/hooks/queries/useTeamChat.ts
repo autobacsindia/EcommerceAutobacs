@@ -77,10 +77,26 @@ export interface ChatMessage {
   mentionTeams: string[];
   refs: ChatRef[];
   createdAt: string;
+  /** Set on a reply: the top-level message it belongs to. */
+  threadRoot?: string | null;
+  /** Top-level only: the seq of the newest thing in its thread — the timeline's order. */
+  activitySeq?: number | null;
+  replyCount?: number;
+  lastReply?: ChatLastReply | null;
   /** Client-only: still being sent / failed to send. */
   pending?: boolean;
   failed?: boolean;
 }
+
+export interface ChatLastReply {
+  at: string;
+  by: string;
+  preview: string;
+  mentions: string[];
+}
+
+/** Where a top-level message sits in the timeline. Pending sends go last. */
+const orderOf = (m: ChatMessage) => (m.pending ? Infinity : m.activitySeq ?? m.seq);
 
 export interface MessagePage {
   messages: ChatMessage[];
@@ -166,11 +182,52 @@ export function upsertMessage(data: Pages | undefined, msg: ChatMessage): Pages 
     return { ...p, messages: next };
   });
   if (found) return { ...data, pages };
+  // A reply lives in its thread, never in the timeline (see applyThreadUpdate).
+  if (msg.threadRoot) return data;
   const [first, ...rest] = pages;
-  const merged = [...(first?.messages ?? []), msg].sort(
-    (a, b) => (a.pending ? Infinity : a.seq) - (b.pending ? Infinity : b.seq),
-  );
+  const merged = [...(first?.messages ?? []), msg].sort((a, b) => orderOf(a) - orderOf(b));
   return { ...data, pages: [{ ...(first ?? { nextBefore: null }), messages: merged }, ...rest] };
+}
+
+/**
+ * A thread moved: replace its root wherever it is cached and bring it to the
+ * newest page, so the conversation shows it at the bottom — the same order the
+ * server's timeline gives. A root that is not loaded (older than every cached
+ * page) is added too: it has just become the newest thing in the channel.
+ */
+export function applyThreadUpdate(data: Pages | undefined, root: ChatMessage): Pages | undefined {
+  if (!data) return data;
+  const pages = data.pages.map((p) => ({ ...p, messages: p.messages.filter((m) => m.id !== root.id) }));
+  const [first, ...rest] = pages;
+  const merged = [...(first?.messages ?? []), root].sort((a, b) => orderOf(a) - orderOf(b));
+  return { ...data, pages: [{ ...(first ?? { nextBefore: null }), messages: merged }, ...rest] };
+}
+
+export interface ThreadData {
+  root: ChatMessage;
+  replies: ChatMessage[];
+  nextAfter: number | null;
+}
+
+/** Insert or replace a reply in a cached thread, in seq order. */
+export function upsertReply(data: ThreadData | undefined, msg: ChatMessage): ThreadData | undefined {
+  if (!data) return data;
+  const i = data.replies.findIndex(
+    (m) => m.id === msg.id || (!!msg.clientId && m.clientId === msg.clientId && (m.pending || m.failed)),
+  );
+  const replies = i === -1 ? [...data.replies, msg] : data.replies.map((m, j) => (j === i ? msg : m));
+  replies.sort((a, b) => (a.pending ? Infinity : a.seq) - (b.pending ? Infinity : b.seq));
+  return { ...data, replies };
+}
+
+/** One thread. The live stream keeps it current while it is open. */
+export function useThread(rootId: string | null) {
+  return useQuery({
+    queryKey: chatKeys.thread(rootId ?? 'none'),
+    queryFn: () => apiClient.get<ThreadData>(`/chat/messages/${rootId}/thread`),
+    enabled: !!rootId,
+    staleTime: Infinity,
+  });
 }
 
 export interface SendVars {
@@ -180,6 +237,8 @@ export interface SendVars {
   mentionTeams?: string[];
   orderIds?: string[];
   files?: File[];
+  /** Reply in this thread. */
+  threadRoot?: string;
 }
 
 /**
@@ -190,11 +249,11 @@ export interface SendVars {
 export function useSendMessage(channelId: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (vars: SendVars): Promise<{ message: ChatMessage }> => {
+    mutationFn: async (vars: SendVars): Promise<{ message: ChatMessage; thread?: ChatMessage | null }> => {
       const url = `/chat/channels/${channelId}/messages`;
       if (!vars.files?.length) {
         const { files: _files, ...json } = vars;
-        return apiClient.post<{ message: ChatMessage }>(url, json);
+        return apiClient.post<{ message: ChatMessage; thread?: ChatMessage | null }>(url, json);
       }
       const form = new FormData();
       form.append('text', vars.text);
@@ -202,16 +261,22 @@ export function useSendMessage(channelId: string | null) {
       if (vars.mentions?.length) form.append('mentions', JSON.stringify(vars.mentions));
       if (vars.mentionTeams?.length) form.append('mentionTeams', JSON.stringify(vars.mentionTeams));
       if (vars.orderIds?.length) form.append('orderIds', JSON.stringify(vars.orderIds));
+      if (vars.threadRoot) form.append('threadRoot', vars.threadRoot);
       for (const file of vars.files) form.append('files', file);
 
       const res = await submitMultipart(`/api/v1${url}`, 'POST', form);
       const body = await parseApiResponse(res);
       if (!res.ok) throw new Error((body as { message?: string }).message || 'Could not send that message');
-      return body as unknown as { message: ChatMessage };
+      return body as unknown as { message: ChatMessage; thread?: ChatMessage | null };
     },
     onSuccess: (res) => {
       if (!channelId) return;
-      qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) => upsertMessage(d, res.message));
+      if (res.message.threadRoot) {
+        qc.setQueryData<ThreadData>(chatKeys.thread(res.message.threadRoot), (d) => upsertReply(d, res.message));
+        if (res.thread) qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) => applyThreadUpdate(d, res.thread!));
+      } else {
+        qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) => upsertMessage(d, res.message));
+      }
       // A shared file belongs in the Files tab straight away.
       if (res.message.attachments.length) qc.invalidateQueries({ queryKey: chatKeys.files(channelId) });
     },
@@ -264,9 +329,13 @@ export function useDeleteMessage() {
   return useMutation({
     mutationFn: (msg: ChatMessage) => apiClient.delete(`/chat/messages/${msg.id}`),
     onSuccess: (_r, msg) => {
-      qc.setQueryData<Pages>(chatKeys.messages(msg.channelId), (d) =>
-        upsertMessage(d, { ...msg, deleted: true, text: '' }),
-      );
+      const gone = { ...msg, deleted: true, text: '' };
+      if (msg.threadRoot) {
+        qc.setQueryData<ThreadData>(chatKeys.thread(msg.threadRoot), (d) => upsertReply(d, gone));
+      } else {
+        qc.setQueryData<Pages>(chatKeys.messages(msg.channelId), (d) => upsertMessage(d, gone));
+        qc.setQueryData<ThreadData>(chatKeys.thread(msg.id), (d) => (d ? { ...d, root: { ...d.root, ...gone } } : d));
+      }
     },
   });
 }
