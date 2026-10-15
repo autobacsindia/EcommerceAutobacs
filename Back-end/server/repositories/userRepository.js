@@ -6,6 +6,23 @@ class UserRepository extends BaseRepository {
     super(User);
   }
 
+  /** A company-account login by username (config/staff.js). */
+  async findByUsername(username) {
+    return User.findOne({ username: String(username || '').trim().toLowerCase() });
+  }
+
+  /**
+   * Set a password on a staff account and end every session it has. `mustChange`
+   * when someone else chose it (a head/admin reset), false when the person did.
+   */
+  async setStaffPassword(userId, passwordHash, { mustChange }) {
+    return User.findOneAndUpdate(
+      { _id: userId, role: 'staff' },
+      { $set: { passwordHash, mustChangePassword: !!mustChange }, $inc: { sessionVersion: 1 } },
+      { new: true }
+    );
+  }
+
   async findByEmail(email, session = null) {
     let q = User.findOne({ email: email.toLowerCase() });
     if (session) q = q.session(session);
@@ -161,7 +178,7 @@ class UserRepository extends BaseRepository {
     const query = { role: 'staff', 'staff.active': true };
     if (team) query['staff.team'] = team;
     return User.find(query)
-      .select('name email phone staff createdAt')
+      .select('name email phone staff createdAt username companyAccount')
       .sort({ 'staff.isHead': -1, name: 1 })
       .lean();
   }

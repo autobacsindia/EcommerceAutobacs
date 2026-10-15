@@ -89,6 +89,18 @@ const UserSchema = new mongoose.Schema({
     default: undefined,
   },
 
+  /*
+    Company accounts (config/staff.js): a staff login the company owns, created
+    by an admin or team head with a username and password. `companyAccount`
+    switches off every self-service way back in — forgot-password, Google
+    sign-in — and makes removed access block the login itself.
+    `mustChangePassword`: the password was set by someone else (on creation or
+    a reset), so the person must choose their own before using the panel.
+  */
+  username: { type: String, lowercase: true, trim: true, default: undefined },
+  companyAccount: { type: Boolean, default: false },
+  mustChangePassword: { type: Boolean, default: false },
+
   // WooCommerce migration linkage (ADR-005)
   wpId: { type: Number, index: { unique: true, sparse: true } },
   migratedFromWp: { type: Boolean, default: false },
@@ -242,6 +254,11 @@ UserSchema.index({ email: 1 }, { unique: true });
 // forever and `--allow-drop` would have deleted indexes that real traffic depends on.
 // The ops counts below are measured over a 162h window, not assumed.
 UserSchema.index({ role: 1 }); // 741 ops — admin/role filtering
+// Company-account logins (config/staff.js). Partial: only company accounts have a username.
+UserSchema.index(
+  { username: 1 },
+  { name: 'username_unique', unique: true, partialFilterExpression: { username: { $type: 'string' } } }
+);
 
 UserSchema.index({ 'refreshTokens.token': 1 });
 

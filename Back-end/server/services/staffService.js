@@ -10,9 +10,13 @@
  *     on another team, and can never remove another head or themselves.
  *   - Everyone else (members, customers) can grant nothing.
  *
- * Access is only granted when the emailed link is redeemed, which proves the
- * invitee controls the address. Removing access drops the account back to an
- * ordinary customer and revokes every session immediately.
+ * Two ways in:
+ *   - an INVITE to the person's own email, granted when they redeem the link
+ *     (proves they control the address); the account stays theirs;
+ *   - a COMPANY ACCOUNT (username + password set by an admin or head), which the
+ *     company owns: only an admin or head can reset its password, and removing
+ *     access blocks its login. See config/staff.js.
+ * Removing access revokes every session immediately.
  */
 
 import bcrypt from 'bcryptjs';
@@ -24,7 +28,10 @@ import userRepository from '../repositories/userRepository.js';
 import { generateTokenPair, hashToken } from '../utils/tokenUtils.js';
 import { revokeAllRefreshTokens } from '../utils/sessionManager.js';
 import { staffInviteEmail } from '../utils/emailTemplates.js';
-import { STAFF_TEAM_LABELS, STAFF_INVITE_TTL_MS, isStaffTeam } from '../config/staff.js';
+import {
+  STAFF_TEAM_LABELS, STAFF_INVITE_TTL_MS, isStaffTeam,
+  companyEmailFor, isCompanyEmail, normaliseUsername, isValidStaffUsername, STAFF_USERNAME_HINT,
+} from '../config/staff.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -46,7 +53,10 @@ const publicInvite = (invite) => ({
 const publicMember = (user) => ({
   id: String(user._id),
   name: user.name,
-  email: user.email,
+  // A company account's address is internal (`.invalid`) — show its username instead.
+  email: user.companyAccount || isCompanyEmail(user.email) ? '' : user.email,
+  username: user.username || null,
+  companyAccount: !!user.companyAccount,
   phone: user.phone || '',
   team: user.staff?.team,
   isHead: !!user.staff?.isHead,
@@ -301,4 +311,114 @@ export async function acceptInvite(token, password, req) {
     await staffInviteRepository.unclaim(invite._id);
     throw err;
   }
+}
+
+// ── Company accounts ────────────────────────────────────────────────────────────
+
+const hashPassword = async (password) => bcrypt.hash(String(password), await bcrypt.genSalt(10));
+
+/**
+ * Create a company-owned staff login. Same authority as an invite: an admin for
+ * any team (heads or members), a head for members of their own team only. The
+ * password is the creator's choice, so the person must change it on first login.
+ */
+export async function createCompanyAccount(actor, input, req) {
+  const name = String(input.name || '').trim();
+  const phone = String(input.phone || '').trim();
+  const username = normaliseUsername(input.username);
+  const wantsHead = input.isHead === true;
+
+  let team;
+  if (isAdmin(actor)) {
+    team = resolveTeamScope(actor, input.team);
+  } else if (isActiveHead(actor)) {
+    team = resolveTeamScope(actor, input.team);
+    if (wantsHead) throw fail('Only an administrator can add a team head.', 403);
+  } else {
+    throw fail('Only a team head or an administrator can add people.', 403);
+  }
+
+  if (!isValidStaffUsername(username)) throw fail(`Username: ${STAFF_USERNAME_HINT}.`, 400);
+  if (await userRepository.findByUsername(username)) throw fail('That username is already taken.', 409);
+  const email = companyEmailFor(username);
+  if (await userRepository.findByEmail(email)) throw fail('That username is already taken.', 409);
+
+  let user;
+  try {
+    user = await userRepository.create({
+      name,
+      email,
+      username,
+      phone,
+      passwordHash: await hashPassword(input.password),
+      role: 'staff',
+      companyAccount: true,
+      mustChangePassword: true,
+      isVerified: true,
+      staff: {
+        team,
+        isHead: isAdmin(actor) ? wantsHead : false,
+        active: true,
+        addedBy: actor._id,
+        addedAt: new Date(),
+      },
+    });
+  } catch (err) {
+    // Two people creating the same username at once: the unique index decides.
+    if (err?.code === 11000) throw fail('That username is already taken.', 409);
+    throw err;
+  }
+
+  auditLogger.logAction(req, 'CREATE', 'User', user._id, {
+    change: 'staff_company_account_created', team, isHead: !!user.staff?.isHead, username,
+  });
+  return publicMember(user);
+}
+
+/**
+ * Set a new password on someone else's company account (they forgot it, or the
+ * person left and the account is being handed on). Same authority as removing
+ * access. Ends every session on the account; the person must change it on login.
+ */
+export async function resetCompanyPassword(actor, userId, password, req) {
+  const target = await userRepository.findById(userId);
+  if (!isActiveStaff(target)) throw fail('Staff member not found.', 404);
+  if (!target.companyAccount) {
+    throw fail('This person signs in with their own email — they can reset it from the login page.', 400);
+  }
+  if (String(target._id) === String(actor._id)) throw fail('Change your own password from your profile.', 400);
+  if (!isAdmin(actor)) {
+    if (!isActiveHead(actor) || target.staff.team !== actor.staff.team) {
+      throw fail('You can only reset passwords for your own team.', 403);
+    }
+    if (target.staff.isHead) throw fail('Only an administrator can reset a team head\'s password.', 403);
+  }
+
+  const updated = await userRepository.setStaffPassword(target._id, await hashPassword(password), { mustChange: true });
+  if (!updated) throw fail('Staff member not found.', 404);
+  await revokeAllRefreshTokens(updated);
+
+  auditLogger.logAction(req, 'UPDATE', 'User', target._id, { change: 'staff_password_reset', team: target.staff.team });
+  return publicMember(updated);
+}
+
+/**
+ * A staff member changes their own password — required after an admin or head
+ * set it. Proves they know the current one, so a session left open on a shared
+ * computer cannot quietly lock the owner out.
+ */
+export async function changeOwnPassword(actor, { currentPassword, newPassword }, req) {
+  if (!isActiveStaff(actor)) throw fail('Not authorized.', 403);
+  const user = await userRepository.findById(actor._id);
+  if (!user?.passwordHash || !(await bcrypt.compare(String(currentPassword || ''), user.passwordHash))) {
+    throw fail('Your current password is not correct.', 400);
+  }
+  if (String(currentPassword) === String(newPassword)) throw fail('Choose a password different from the current one.', 400);
+
+  const updated = await userRepository.setStaffPassword(user._id, await hashPassword(newPassword), { mustChange: false });
+  if (!updated) throw fail('Not authorized.', 403);
+  // Other devices sign out; this one gets fresh cookies from the route.
+  await revokeAllRefreshTokens(updated);
+  auditLogger.logAction(req, 'UPDATE', 'User', user._id, { change: 'staff_password_changed' });
+  return updated;
 }

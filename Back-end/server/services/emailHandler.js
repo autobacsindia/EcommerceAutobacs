@@ -139,6 +139,19 @@ class EmailHandler {
       };
     }
 
+    // Company staff accounts carry an internal `.invalid` address (config/staff.js)
+    // with no mailbox behind it. Never send there: it would bounce, and bounces
+    // count against the sender reputation every customer email depends on.
+    if (typeof to === 'string' && /@[^@\s]+\.invalid$/i.test(to.trim())) {
+      return {
+        success: false,
+        skipped: true,
+        error: 'Recipient is an internal company account with no mailbox',
+        provider: 'postmark',
+        retryable: false
+      };
+    }
+
     // Validate recipient email
     if (!this.isValidEmail(to)) {
       return {
