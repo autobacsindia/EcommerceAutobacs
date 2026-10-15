@@ -1,9 +1,9 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, LogOut, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, KeyRound, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -11,6 +11,8 @@ import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
 /** Links per team. The API enforces the same split; this only hides what would 403. */
+const PASSWORD_PATH = '/team/password';
+
 function navFor(team: string, isHead: boolean): NavItem[] {
   const nav: NavItem[] = [
     { href: '/team', label: 'Dashboard', icon: LayoutDashboard },
@@ -38,23 +40,47 @@ export default function TeamLayoutClient({
   team,
   teamLabel,
   isHead,
+  mustChangePassword = false,
   children,
 }: {
   userName: string;
   team: string;
   teamLabel: string;
   isHead: boolean;
+  /** A password someone else chose: nothing but the change-password page until it is replaced. */
+  mustChangePassword?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const { logout } = useAuth();
   const unread = useChatUnreadTotal();
+  const onPasswordPage = pathname === PASSWORD_PATH;
+
+  // The API refuses every other staff call until the password is changed; this
+  // just takes the person straight to the one page that works.
+  useEffect(() => {
+    if (mustChangePassword && !onPasswordPage) router.replace(PASSWORD_PATH);
+  }, [mustChangePassword, onPasswordPage, router]);
 
   const signOut = async () => {
     await logout();
     router.push('/login');
   };
+
+  if (mustChangePassword) {
+    return (
+      <div className="admin-panel min-h-screen bg-gray-50">
+        <header className="flex items-center justify-between bg-gray-900 px-4 py-3 text-white">
+          <p className="font-semibold">{teamLabel} Team</p>
+          <button onClick={signOut} className="flex items-center gap-2 rounded-lg bg-red-600 px-3 py-1.5 text-sm hover:bg-red-700">
+            <LogOut className="h-4 w-4" /> Log out
+          </button>
+        </header>
+        <main className="p-4 md:p-8">{onPasswordPage ? children : <p className="text-sm text-gray-500">Opening…</p>}</main>
+      </div>
+    );
+  }
 
   const links = navFor(team, isHead).map(({ href, label, icon: Icon }) => {
     const active = pathname === href;
@@ -92,6 +118,9 @@ export default function TeamLayoutClient({
         <div className="hidden border-t border-gray-800 p-4 md:block">
           <p className="text-xs text-gray-400">Logged in as</p>
           <p className="truncate text-sm font-medium">{userName}</p>
+          <Link href={PASSWORD_PATH} className="mt-2 inline-flex items-center gap-1.5 text-xs text-gray-300 hover:text-white">
+            <KeyRound className="h-3.5 w-3.5" /> Change password
+          </Link>
           <button
             onClick={signOut}
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 p-2 text-sm hover:bg-red-700"

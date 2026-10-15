@@ -56,10 +56,14 @@ function LoginPageInner() {
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!formData.email) {
-      errors.email = 'Enter your email';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      errors.email = 'Enter a valid email address';
+    const id = formData.email.trim();
+    if (!id) {
+      errors.email = 'Enter your email or username';
+    } else if (id.includes('@')
+      ? !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id)
+      // Company staff logins (no '@') — the same rule the API applies.
+      : !/^[a-z0-9][a-z0-9._-]{1,28}[a-z0-9]$/i.test(id)) {
+      errors.email = id.includes('@') ? 'Enter a valid email address' : 'Enter a valid email or username';
     }
     if (!formData.password) errors.password = 'Enter your password';
     setValidationErrors(errors);
@@ -80,8 +84,13 @@ function LoginPageInner() {
     if (!validateForm()) return;
     try {
       setIsLoading(true);
-      const signedIn = await login(formData.email, formData.password);
+      const signedIn = await login(formData.email.trim(), formData.password);
       // Staff land on their panel unless they were sent here from a specific page.
+      // A company account with a password someone else set goes straight to change it.
+      if (signedIn?.role === 'staff' && signedIn.mustChangePassword) {
+        router.push('/team/password');
+        return;
+      }
       router.push(redirectTo === '/' && signedIn?.role === 'staff' ? '/team' : redirectTo);
     } catch (err: any) {
       // Migrated WooCommerce accounts (ADR-005) have no password yet — send them to set one.
@@ -150,7 +159,7 @@ function LoginPageInner() {
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label htmlFor="email" className="block text-sm font-display font-bold text-ink/70 uppercase tracking-[0.12em] mb-1">
-                Email or mobile phone number
+                Email or username
               </label>
               <input
                 id="email"

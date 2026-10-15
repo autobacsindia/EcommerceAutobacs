@@ -192,9 +192,15 @@ router.post("/register", registerRateLimit, validateRegister, asyncHandler(async
 router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  // Find user
-  const user = await User.findOne({ email: email.toLowerCase() });
-  if (!user) {
+  // An email, or a company-account username (no '@'; see config/staff.js).
+  const user = email.includes('@')
+    ? await User.findOne({ email: email.toLowerCase() })
+    : await User.findOne({ username: email.toLowerCase(), companyAccount: true });
+  // A company account whose access was removed cannot sign in at all — it is the
+  // company's login, not a personal shopping account to fall back to. Answered
+  // exactly like a wrong password, so it reveals nothing about the account.
+  const blocked = user?.companyAccount && !(user.role === 'staff' && user.staff?.active === true);
+  if (!user || blocked) {
     // Log failed attempt (for IP tracking)
     return failedLoginRateLimit(req, res, async () => {
       return res.status(401).json({ 
@@ -276,7 +282,10 @@ router.post("/login", loginRateLimit, validateLogin, asyncHandler(async (req, re
       isVerified: user.isVerified,
       avatar: user.avatar?.url || '',
       // Team profile for staff (null otherwise) — lets the client land staff on /team.
-      staff: describeStaff(user)
+      staff: describeStaff(user),
+      username: user.username || null,
+      // A password someone else set: the client sends them to change it first.
+      mustChangePassword: !!user.mustChangePassword
     }
   });
 }));
@@ -300,7 +309,9 @@ router.get("/me", protect, asyncHandler(async (req, res) => {
       // (ban, role change, force-logout), the client detects it on next background
       // revalidation and immediately updates state without waiting for TTL expiry.
       sessionVersion: req.user.sessionVersion ?? 0,
-      staff: describeStaff(req.user)
+      staff: describeStaff(req.user),
+      username: req.user.username || null,
+      mustChangePassword: !!req.user.mustChangePassword
     }
   });
 }));
@@ -483,7 +494,9 @@ router.post("/forgot-password", forgotPasswordRateLimit, validateForgotPassword,
   // Even if user doesn't exist, return success message
   const successMessage = 'If an account with that email exists, password reset instructions have been sent';
 
-  if (!user) {
+  // A company account (config/staff.js) is reset by an admin or team head only —
+  // never by email, which is what keeps it the company's after someone leaves.
+  if (!user || user.companyAccount) {
     // No account for this email — client still gets a generic success, but we log
     // it so "no email arrived" can be distinguished from a send failure.
     console.log(`[Auth] Password reset requested for non-existent account: ${email}`);

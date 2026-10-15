@@ -14,6 +14,9 @@ import {
   validateMemberIdParam,
   validateInviteToken,
   validateAcceptInvite,
+  validateCompanyAccount,
+  validatePasswordReset,
+  validateOwnPasswordChange,
   validateSalesProductSearch,
   validateCursorQuery,
   validateOrderIdParam,
@@ -48,7 +51,16 @@ import {
   deactivateMember,
   verifyInvite,
   acceptInvite,
+  createCompanyAccount,
+  resetCompanyPassword,
+  changeOwnPassword,
 } from '../services/staffService.js';
+import {
+  generateTokenPair as generateSessionTokenPair,
+  storeRefreshToken,
+  setAccessTokenCookie,
+  setRefreshTokenCookie,
+} from '../utils/sessionManager.js';
 import {
   searchSalesProducts,
   createSalesOrder,
@@ -89,6 +101,33 @@ router.use(authenticatedUserRateLimit, protect, staffOrAdmin);
 router.get('/me', (req, res) => {
   res.json({ success: true, staff: describeStaff(req.user), isAdmin: req.user.role === 'admin' });
 });
+
+// @route  POST /staff/password { currentPassword, newPassword } — change my own password.
+// Works while a must-change password is pending (see staffOrAdmin). Every other
+// session ends; this device gets fresh cookies so the person stays signed in here.
+router.post('/password', resetPasswordRateLimit, validateOwnPasswordChange, validateRequest, asyncHandler(async (req, res) => {
+  const user = await changeOwnPassword(req.user, req.body, req);
+  const ip = req.headers['cf-connecting-ip'] || req.ip;
+  const ua = req.headers['user-agent'];
+  const tokens = generateSessionTokenPair(user, ip, ua);
+  await storeRefreshToken(user, tokens.refreshToken, tokens.refreshTokenExpiry, ip, ua);
+  setAccessTokenCookie(res, tokens.accessToken, tokens.accessTokenExpiry);
+  setRefreshTokenCookie(res, tokens.refreshToken, tokens.refreshTokenExpiry);
+  res.json({ success: true, message: 'Password changed.' });
+}));
+
+// @route  POST /staff/accounts { name, username, phone, password, team?, isHead? }
+// A company-owned login (config/staff.js). Admin: any team; head: members of their own.
+router.post('/accounts', validateCompanyAccount, validateRequest, asyncHandler(async (req, res) => {
+  const member = await createCompanyAccount(req.user, req.body, req);
+  res.status(201).json({ success: true, member });
+}));
+
+// @route  POST /staff/members/:id/password { password } — reset a company account's password
+router.post('/members/:id/password', validatePasswordReset, validateRequest, asyncHandler(async (req, res) => {
+  const member = await resetCompanyPassword(req.user, req.params.id, req.body.password, req);
+  res.json({ success: true, member });
+}));
 
 // @route  GET /staff/team?team= — members + open invites
 router.get('/team', validateTeamQuery, validateRequest, asyncHandler(async (req, res) => {

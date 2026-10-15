@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, UserPlus, UserMinus, X, Mail } from 'lucide-react';
+import { RefreshCw, UserPlus, UserMinus, X, Mail, KeyRound, Copy, Building2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
 import { formatDateIST } from '@/lib/datetime';
@@ -16,7 +16,29 @@ export const STAFF_TEAM_LABELS: Record<StaffTeam, string> = {
   operations: 'Operations',
 };
 
-type Member = { id: string; name: string; email: string; phone: string; isHead: boolean; addedAt: string };
+type Member = {
+  id: string; name: string; email: string; phone: string; isHead: boolean; addedAt: string;
+  username?: string | null; companyAccount?: boolean;
+};
+
+/** Same rule the server enforces (config/staff.js). */
+const USERNAME_PATTERN = '[a-z0-9][a-z0-9._\\-]{1,28}[a-z0-9]';
+
+/**
+ * A password to hand to a new or reset company account. Random, no look-alike
+ * characters (it is read out or typed from a note), and only ever temporary:
+ * the person must replace it on first sign-in.
+ */
+export function generateTempPassword(length = 12): string {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const bytes = new Uint32Array(length);
+  crypto.getRandomValues(bytes);
+  const core = Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+  return `${core}#7`;
+}
+
+/** Sign-in details shown once after creating or resetting a company account. */
+type Credentials = { name: string; username: string; password: string; reset: boolean };
 type Invite = { id: string; name: string; email: string; phone: string; isHead: boolean; expiresAt: string; expired: boolean };
 type TeamResponse = {
   success: boolean;
@@ -53,6 +75,11 @@ export default function TeamMembersPanel({
   const [notice, setNotice] = useState('');
   const [warning, setWarning] = useState('');
   const [form, setForm] = useState({ name: '', email: '', phone: '', isHead: false });
+  // New people get a company login by default: the company owns it, so nothing
+  // walks out with them. Inviting someone's own email stays available.
+  const [mode, setMode] = useState<'company' | 'invite'>('company');
+  const [account, setAccount] = useState({ name: '', username: '', phone: '', password: '', isHead: false });
+  const [credentials, setCredentials] = useState<Credentials | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +116,43 @@ export default function TeamMembersPanel({
       await load();
     } catch (err) {
       setError(errorMessage(err, 'Could not send the invite.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createAccount(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setError(''); setNotice(''); setWarning(''); setCredentials(null);
+    const username = account.username.trim().toLowerCase();
+    try {
+      await apiClient.post('/staff/accounts', {
+        name: account.name.trim(),
+        username,
+        phone: account.phone.trim(),
+        password: account.password,
+        ...(team ? { team } : {}),
+        ...(allowHeadInvite ? { isHead: account.isHead } : {}),
+      });
+      setCredentials({ name: account.name.trim(), username, password: account.password, reset: false });
+      setAccount({ name: '', username: '', phone: '', password: '', isHead: false });
+      await load();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not create the account.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetPassword(member: Member) {
+    if (!window.confirm(`Set a new password for ${member.name}? They will be signed out everywhere and must choose their own password when they next sign in.`)) return;
+    setBusy(true); setError(''); setNotice(''); setWarning(''); setCredentials(null);
+    const password = generateTempPassword();
+    try {
+      await apiClient.post(`/staff/members/${member.id}/password`, { password });
+      setCredentials({ name: member.name, username: member.username || '', password, reset: true });
+    } catch (err) {
+      setError(errorMessage(err, 'Could not reset the password.'));
     } finally {
       setBusy(false);
     }
@@ -143,10 +207,125 @@ export default function TeamMembersPanel({
       {notice && <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-800">{notice}</p>}
       {warning && <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">{warning}</p>}
 
+      {credentials && (
+        <div className="rounded-lg border border-green-300 bg-green-50 p-4 text-sm text-green-900" role="status">
+          <p className="font-semibold">
+            {credentials.reset ? `New password for ${credentials.name}` : `Account created for ${credentials.name}`}
+          </p>
+          <p className="mt-1">Give them these details. The password is shown only now — they will choose their own when they sign in.</p>
+          <dl className="mt-3 grid max-w-md grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-2">
+            <dt className="text-green-800">Username</dt>
+            <dd className="font-mono font-semibold">{credentials.username}</dd>
+            <CopyButton value={credentials.username} label="Copy username" />
+            <dt className="text-green-800">Password</dt>
+            <dd className="font-mono font-semibold">{credentials.password}</dd>
+            <CopyButton value={credentials.password} label="Copy password" />
+          </dl>
+          <p className="mt-3 text-xs text-green-800">Sign-in page: autobacsindia.com/login</p>
+          <button type="button" onClick={() => setCredentials(null)} className="mt-3 text-xs font-semibold underline">Done — hide these details</button>
+        </div>
+      )}
+
       {data?.canManage && (
+        <div className="flex gap-2" role="tablist" aria-label="How to add a person">
+          {([['company', 'Company login', Building2], ['invite', 'Invite by email', Mail]] as const).map(([key, label, Icon]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={mode === key}
+              onClick={() => setMode(key)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium ${
+                mode === key ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <Icon className="h-4 w-4" /> {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {data?.canManage && mode === 'company' && (
+        <form onSubmit={createAccount} className="rounded-lg border border-gray-200 bg-white p-4">
+          <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-gray-800">
+            <UserPlus className="h-4 w-4" /> Add a person with a company login
+          </h3>
+          <p className="mb-3 text-xs text-gray-500">
+            The company owns this login. If they leave, remove access or reset the password — their work stays here.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <input
+              required minLength={2} maxLength={100}
+              value={account.name}
+              onChange={(e) => setAccount({ ...account, name: e.target.value })}
+              placeholder="Full name"
+              aria-label="Full name"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+            <input
+              required minLength={3} maxLength={30} pattern={USERNAME_PATTERN}
+              title="3–30 characters: lowercase letters, numbers, dot, dash or underscore"
+              autoCapitalize="none" autoCorrect="off" spellCheck={false}
+              value={account.username}
+              onChange={(e) => setAccount({ ...account, username: e.target.value.toLowerCase().replace(/\s+/g, '') })}
+              placeholder="Username, e.g. sam.sales"
+              aria-label="Username"
+              className="rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm"
+            />
+            <input
+              required inputMode="numeric" pattern="(\+91[\s-]?)?[6-9][0-9]{9}"
+              title="10-digit Indian mobile number"
+              value={account.phone}
+              onChange={(e) => setAccount({ ...account, phone: e.target.value })}
+              placeholder="Mobile number"
+              aria-label="Mobile number"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+            <div className="flex gap-2">
+              <input
+                required minLength={8} maxLength={72}
+                value={account.password}
+                onChange={(e) => setAccount({ ...account, password: e.target.value })}
+                placeholder="First password"
+                aria-label="First password"
+                autoComplete="new-password"
+                className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setAccount({ ...account, password: generateTempPassword() })}
+                className="shrink-0 rounded-lg border border-gray-300 px-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Generate
+              </button>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            {allowHeadInvite ? (
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={account.isHead}
+                  onChange={(e) => setAccount({ ...account, isHead: e.target.checked })}
+                />
+                Make this person the team head (they can add and remove members)
+              </label>
+            ) : <span className="text-xs text-gray-500">They will choose their own password the first time they sign in.</span>}
+            <button
+              type="submit"
+              disabled={busy}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              <Building2 className="h-4 w-4" /> Create login
+            </button>
+          </div>
+        </form>
+      )}
+
+      {data?.canManage && mode === 'invite' && (
         <form onSubmit={sendInvite} className="rounded-lg border border-gray-200 bg-white p-4">
           <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
-            <UserPlus className="h-4 w-4" /> Add a person
+            <UserPlus className="h-4 w-4" /> Invite by email
           </h3>
           <div className="grid gap-3 sm:grid-cols-3">
             <input
@@ -199,7 +378,7 @@ export default function TeamMembersPanel({
           <thead className="border-b bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Login</th>
               <th className="px-4 py-3">Mobile</th>
               <th className="px-4 py-3">Role</th>
               <th className="px-4 py-3">Added</th>
@@ -212,7 +391,14 @@ export default function TeamMembersPanel({
             ) : data?.members.length ? data.members.map((m) => (
               <tr key={m.id}>
                 <td className="px-4 py-3 font-medium text-gray-900">{m.name}</td>
-                <td className="px-4 py-3 text-gray-700">{m.email}</td>
+                <td className="px-4 py-3 text-gray-700">
+                  {m.companyAccount ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="font-mono">{m.username}</span>
+                      <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-blue-700">Company</span>
+                    </span>
+                  ) : m.email}
+                </td>
                 <td className="px-4 py-3 text-gray-700">{m.phone}</td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${m.isHead ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-700'}`}>
@@ -220,7 +406,16 @@ export default function TeamMembersPanel({
                   </span>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-gray-500">{formatDateIST(m.addedAt)}</td>
-                <td className="px-4 py-3 text-right">
+                <td className="space-x-2 whitespace-nowrap px-4 py-3 text-right">
+                  {canRemove(m) && m.companyAccount && (
+                    <button
+                      onClick={() => resetPassword(m)}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <KeyRound className="h-3.5 w-3.5" /> Reset password
+                    </button>
+                  )}
                   {canRemove(m) && (
                     <button
                       onClick={() => remove(m)}
@@ -271,5 +466,26 @@ export default function TeamMembersPanel({
         </div>
       )}
     </div>
+  );
+}
+
+/** Copy one credential to the clipboard, confirming briefly. */
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        } catch { /* clipboard blocked — the value is on screen to copy by hand */ }
+      }}
+      className="inline-flex items-center gap-1 rounded border border-green-400 px-2 py-0.5 text-xs font-medium hover:bg-green-100"
+    >
+      <Copy className="h-3 w-3" /> {copied ? 'Copied' : 'Copy'}
+    </button>
   );
 }

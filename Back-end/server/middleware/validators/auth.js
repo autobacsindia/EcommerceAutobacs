@@ -1,4 +1,5 @@
 import { body } from 'express-validator';
+import { STAFF_USERNAME_PATTERN } from '../../config/staff.js';
 import { validateRequest } from '../validateRequest.js';
 import { isCommonPassword, COMMON_PASSWORD_MESSAGE } from '../../config/commonPasswords.js';
 
@@ -24,14 +25,26 @@ export const validateRegister = [
 ];
 
 export const validateLogin = [
+  // `email` carries an email OR a company-account username (config/staff.js) —
+  // the field keeps its name so existing clients need no change. An email is
+  // normalised as before; a username is lower-cased and must fit the pattern.
   body('email')
     .notEmpty()
-    .withMessage('Email is required')
+    .withMessage('Email or username is required')
+    .isString()
+    .isLength({ max: 254 })
+    .withMessage('Email must not exceed 254 characters'),
+  body('email')
+    .if(body('email').contains('@'))
     .isEmail()
     .withMessage('Valid email is required')
-    .isLength({ max: 254 })
-    .withMessage('Email must not exceed 254 characters')
     .normalizeEmail(),
+  body('email')
+    .if(body('email').not().contains('@'))
+    .trim()
+    .toLowerCase()
+    .matches(STAFF_USERNAME_PATTERN)
+    .withMessage('Enter a valid email or username'),
   body('password')
     .notEmpty()
     .withMessage('Password is required')

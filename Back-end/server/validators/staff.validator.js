@@ -7,7 +7,7 @@
 
 import { body, param, query } from 'express-validator';
 import mongoose from 'mongoose';
-import { STAFF_TEAM_VALUES } from '../config/staff.js';
+import { STAFF_TEAM_VALUES, STAFF_USERNAME_PATTERN, STAFF_USERNAME_HINT } from '../config/staff.js';
 import { isCommonPassword, COMMON_PASSWORD_MESSAGE } from '../config/commonPasswords.js';
 
 const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v);
@@ -55,6 +55,42 @@ export const validateAcceptInvite = [
     .withMessage('Password must be between 8 and 72 characters')
     .custom((value) => !isCommonPassword(value))
     .withMessage(COMMON_PASSWORD_MESSAGE),
+];
+
+// ── Company accounts ─────────────────────────────────────────────────────────
+
+const newPassword = (field) => body(field)
+  .isString()
+  .isLength({ min: 8, max: 72 })
+  .withMessage('Password must be between 8 and 72 characters')
+  .custom((value) => !isCommonPassword(value))
+  .withMessage(COMMON_PASSWORD_MESSAGE);
+
+export const validateCompanyAccount = [
+  body('name').trim().isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
+  body('username')
+    .isString()
+    .trim()
+    .toLowerCase()
+    .matches(STAFF_USERNAME_PATTERN)
+    .withMessage(`Username: ${STAFF_USERNAME_HINT}`),
+  body('phone')
+    .trim()
+    .matches(/^(\+91[\s-]?)?[6-9]\d{9}$/)
+    .withMessage('Enter a valid 10-digit Indian mobile number'),
+  newPassword('password'),
+  body('team').optional().isIn(STAFF_TEAM_VALUES).withMessage('Unknown team'),
+  body('isHead').optional().isBoolean().withMessage('isHead must be true or false').toBoolean(),
+];
+
+export const validatePasswordReset = [
+  param('id').custom(isObjectId).withMessage('Invalid member'),
+  newPassword('password'),
+];
+
+export const validateOwnPasswordChange = [
+  body('currentPassword').isString().isLength({ min: 1, max: 200 }).withMessage('Enter your current password'),
+  newPassword('newPassword'),
 ];
 
 // ── Sales panel ──────────────────────────────────────────────────────────────
