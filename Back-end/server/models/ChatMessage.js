@@ -57,6 +57,35 @@ const ChatMessageSchema = new mongoose.Schema(
     /** Teams addressed as a group, e.g. '@accounts'. Values from config/staff.js. */
     mentionTeams: [{ type: String }],
     refs: { type: [RefSchema], default: [] },
+
+    /*
+      Threads. A reply carries `threadRoot`; a top-level message does not.
+
+      The channel timeline shows top-level messages only, ordered by
+      `activitySeq` — the seq of the newest thing in the thread (its own seq
+      until someone replies). A reply takes a channel seq like any message, so
+      unread counts and ordering stay one number per channel, and then bumps
+      its root's activitySeq: a thread that moves comes back to the bottom of
+      the conversation instead of changing silently, days up the scroll.
+
+      The root also carries a summary of its newest reply, so the timeline can
+      show "3 replies · ⏳ Ravi will wait…" without loading the thread.
+    */
+    threadRoot: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatMessage', default: null },
+    activitySeq: { type: Number },
+    replyCount: { type: Number, default: 0 },
+    lastReplyAt: { type: Date, default: null },
+    lastReplyPreview: { type: String, default: '', maxlength: 200 },
+    lastReplyBy: { type: String, default: '', maxlength: 80 },
+    lastReplyMentions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    /*
+      Set on the system post that starts an order's thread in a space. Every
+      later automatic update about that order in that space is a reply to it,
+      so one order reads as one conversation. Unique per channel (below), which
+      also settles two first updates racing to start the thread.
+    */
+    threadOrder: { type: mongoose.Schema.Types.ObjectId, default: undefined },
+
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
@@ -74,6 +103,19 @@ ChatMessageSchema.index(
 ChatMessageSchema.index(
   { channel: 1, createdAt: -1 },
   { partialFilterExpression: { 'attachments.0': { $exists: true } } }
+);
+// The channel timeline: top-level messages by latest activity. `threadRoot`
+// is null on every top-level message (default), so equality on it is exact.
+ChatMessageSchema.index({ channel: 1, threadRoot: 1, activitySeq: -1 }, { name: 'chat_timeline' });
+// A thread's replies in order. Partial: only replies carry a root.
+ChatMessageSchema.index(
+  { threadRoot: 1, seq: 1 },
+  { name: 'chat_thread_replies', partialFilterExpression: { threadRoot: { $type: 'objectId' } } }
+);
+// One order thread per channel.
+ChatMessageSchema.index(
+  { channel: 1, threadOrder: 1 },
+  { name: 'chat_order_thread', unique: true, partialFilterExpression: { threadOrder: { $type: 'objectId' } } }
 );
 // "Mentions of me", newest first.
 ChatMessageSchema.index({ mentions: 1, createdAt: -1 });

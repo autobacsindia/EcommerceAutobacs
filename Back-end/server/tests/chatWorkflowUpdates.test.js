@@ -255,6 +255,27 @@ describe('each handoff goes to the team that acts next', () => {
   });
 });
 
+describe('one thread per order per space', () => {
+  it('an order\'s #sales updates are one thread: out of stock starts it, the rest reply', async () => {
+    const order = await paidOrder({ salesUser: seller._id });
+    const id = String(order._id);
+    const [cover, mat] = ids(order);
+    await wf.setStock(procurement, id, cover, { stock: 'out_of_stock' }, req);
+    await wf.setStock(procurement, id, mat, { stock: 'ordered', supplierName: 'ARB' }, req);
+    await drainToChat();
+
+    const salesChannel = await ChatChannel.findOne({ key: 'team:sales' }).lean();
+    const all = await ChatMessage.find({ channel: salesChannel._id }).sort({ seq: 1 }).lean();
+    expect(all).toHaveLength(2);
+    expect(all[0].threadRoot).toBeNull();
+    expect(String(all[0].threadOrder)).toBe(id);
+    expect(String(all[1].threadRoot)).toBe(String(all[0]._id));
+    const root = await ChatMessage.findById(all[0]._id).lean();
+    expect(root.replyCount).toBe(1);
+    expect(root.lastReplyPreview).toMatch(/ordered from ARB/);
+  });
+});
+
 describe('#company stays for people', () => {
   it('no automatic update may target it', () => {
     expect(UPDATE_SPACES).not.toContain('company');

@@ -20,6 +20,13 @@ export const validateSendMessage = [
   // A message may be text, files, or both — the service rejects a truly empty one.
   body('text').optional({ values: 'falsy' }).isString().isLength({ max: 4000 }).withMessage('Message must be 4000 characters or fewer'),
   body('clientId').optional().isString().matches(/^[A-Za-z0-9_-]{8,64}$/).withMessage('Invalid client id'),
+  body('threadRoot').optional({ values: 'falsy' }).custom(isObjectId).withMessage('Invalid thread'),
+];
+
+export const validateThreadPage = [
+  param('id').custom(isObjectId).withMessage('Invalid thread id'),
+  query('after').optional().isInt({ min: 0 }).withMessage('Invalid cursor'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be 1-100'),
 ];
 
 export const validateFilePage = [

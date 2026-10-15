@@ -17,6 +17,7 @@ import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, SendVars } from
 import { Avatar, FileKindIcon, fileSize, timeOf } from './chatUi';
 import Composer from './Composer';
 import MessageItem from './MessageItem';
+import ThreadPanel from './ThreadPanel';
 
 type Pages = InfiniteData<MessagePage, number>;
 
@@ -120,6 +121,7 @@ export default function Conversation({
   const del = useDeleteMessage();
   const [tab, setTab] = useState<'messages' | 'files'>('messages');
   const [atBottom, setAtBottom] = useState(true);
+  const [thread, setThread] = useState<string | null>(null);
 
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -129,7 +131,12 @@ export default function Conversation({
     () => (data?.pages ?? []).slice().reverse().flatMap((p) => p.messages),
     [data],
   );
-  const lastSeq = messages.reduce((n, m) => (!m.pending && m.seq > n ? m.seq : n), 0);
+  // The newest thing on screen — a thread's activity counts, since replies are
+  // read from the timeline's summary of them.
+  const lastSeq = messages.reduce((n, m) => {
+    const at = m.activitySeq ?? m.seq;
+    return !m.pending && at > n ? at : n;
+  }, 0);
   const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
 
   // Stay pinned to the newest message; hold position when older ones load above.
@@ -148,6 +155,7 @@ export default function Conversation({
     stickToBottom.current = true;
     setAtBottom(true);
     setTab('messages');
+    setThread(null);
   }, [channel.id]);
 
   const read = useCallback(
@@ -232,116 +240,132 @@ export default function Conversation({
       : channel.description;
 
   return (
-    <section className="flex h-full min-h-0 flex-1 flex-col bg-white" aria-label={`Conversation ${title}`}>
-      <header className="border-b border-gray-200 px-4 pt-3">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={onBack} className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-100 md:hidden" aria-label="Back to channels">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          {channel.kind === 'dm' && <Avatar person={channel.partner} size="sm" />}
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-gray-900">{title}</h2>
-            {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}
-          </div>
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            {channel.kind === 'space' && channel.memberCount != null && (
-              <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                <Users className="h-4 w-4" /> {channel.memberCount}
-              </span>
-            )}
-            {onSearch && (
-              <button
-                type="button"
-                onClick={onSearch}
-                className="rounded-lg p-2 text-gray-600 hover:bg-gray-100"
-                aria-label={`Search in ${title}`}
-                title={`Search in ${title}`}
-              >
-                <Search className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="mt-2 flex gap-4" role="tablist" aria-label="Conversation sections">
-          {(['messages', 'files'] as const).map((key) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={tab === key}
-              onClick={() => setTab(key)}
-              className={`-mb-px border-b-2 pb-2 text-sm font-medium capitalize ${
-                tab === key ? 'border-emerald-700 text-emerald-800' : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {key}
+    <div className="relative flex h-full min-h-0 flex-1">
+      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white" aria-label={`Conversation ${title}`}>
+        <header className="border-b border-gray-200 px-4 pt-3">
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onBack} className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-100 md:hidden" aria-label="Back to channels">
+              <ArrowLeft className="h-5 w-5" />
             </button>
-          ))}
-        </div>
-      </header>
+            {channel.kind === 'dm' && <Avatar person={channel.partner} size="sm" />}
+            <div className="min-w-0">
+              <h2 className="truncate text-base font-semibold text-gray-900">{title}</h2>
+              {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {channel.kind === 'space' && channel.memberCount != null && (
+                <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                  <Users className="h-4 w-4" /> {channel.memberCount}
+                </span>
+              )}
+              {onSearch && (
+                <button
+                  type="button"
+                  onClick={onSearch}
+                  className="rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+                  aria-label={`Search in ${title}`}
+                  title={`Search in ${title}`}
+                >
+                  <Search className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="mt-2 flex gap-4" role="tablist" aria-label="Conversation sections">
+            {(['messages', 'files'] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={`-mb-px border-b-2 pb-2 text-sm font-medium capitalize ${
+                  tab === key ? 'border-emerald-700 text-emerald-800' : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {key}
+              </button>
+            ))}
+          </div>
+        </header>
 
-      {tab === 'files' ? (
-        <FilesPanel channelId={channel.id} />
-      ) : (
-        <>
-          <div className="relative min-h-0 flex-1">
-            <div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-4 py-3" aria-live="polite">
-              {isFetchingNextPage && <p className="py-2 text-center text-xs text-gray-500">Loading older messages…</p>}
-              {!hasNextPage && !isLoading && messages.length > 0 && (
-                <p className="py-3 text-center text-xs text-gray-400">This is the beginning of {title}</p>
-              )}
-              {isLoading && <p className="py-10 text-center text-sm text-gray-500">Loading messages…</p>}
-              {isError && (
-                <div className="py-10 text-center text-sm text-gray-600">
-                  Couldn&apos;t load messages.{' '}
-                  <button type="button" className="font-semibold text-emerald-700 underline" onClick={() => refetch()}>
-                    Try again
-                  </button>
-                </div>
-              )}
-              {!isLoading && !isError && messages.length === 0 && (
-                <div className="py-16 text-center">
-                  <p className="text-base font-semibold text-gray-800">No messages yet</p>
-                  <p className="text-sm text-gray-500">Say hello, share a photo, or link an order to get started.</p>
-                </div>
-              )}
+        {tab === 'files' ? (
+          <FilesPanel channelId={channel.id} />
+        ) : (
+          <>
+            <div className="relative min-h-0 flex-1">
+              <div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-4 py-3" aria-live="polite">
+                {isFetchingNextPage && <p className="py-2 text-center text-xs text-gray-500">Loading older messages…</p>}
+                {!hasNextPage && !isLoading && messages.length > 0 && (
+                  <p className="py-3 text-center text-xs text-gray-400">This is the beginning of {title}</p>
+                )}
+                {isLoading && <p className="py-10 text-center text-sm text-gray-500">Loading messages…</p>}
+                {isError && (
+                  <div className="py-10 text-center text-sm text-gray-600">
+                    Couldn&apos;t load messages.{' '}
+                    <button type="button" className="font-semibold text-emerald-700 underline" onClick={() => refetch()}>
+                      Try again
+                    </button>
+                  </div>
+                )}
+                {!isLoading && !isError && messages.length === 0 && (
+                  <div className="py-16 text-center">
+                    <p className="text-base font-semibold text-gray-800">No messages yet</p>
+                    <p className="text-sm text-gray-500">Say hello, share a photo, or link an order to get started.</p>
+                  </div>
+                )}
 
-              {messages.map((m, i) => (
-                <MessageItem
-                  key={m.id}
-                  message={m}
-                  previous={messages[i - 1]}
-                  meId={meId}
-                  meName={meName}
-                  peopleById={peopleById}
-                  canDelete={m.sender?.id === meId || isAdmin}
-                  orderHref={orderHref}
-                  onDelete={(msg) => { if (confirm('Delete this message?')) del.mutate(msg); }}
-                  onRetry={(msg) => doSend({ text: msg.text, clientId: msg.clientId ?? '', mentions: msg.mentions })}
-                />
-              ))}
+                {messages.map((m, i) => (
+                  <MessageItem
+                    key={m.id}
+                    message={m}
+                    previous={messages[i - 1]}
+                    meId={meId}
+                    meName={meName}
+                    peopleById={peopleById}
+                    canDelete={m.sender?.id === meId || isAdmin}
+                    orderHref={orderHref}
+                    onDelete={(msg) => { if (confirm('Delete this message?')) del.mutate(msg); }}
+                    onRetry={(msg) => doSend({ text: msg.text, clientId: msg.clientId ?? '', mentions: msg.mentions })}
+                    onOpenThread={(msg) => setThread(msg.id)}
+                  />
+                ))}
+              </div>
+
+              {!atBottom && (
+                <button
+                  type="button"
+                  onClick={scrollToBottom}
+                  className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white shadow-lg"
+                >
+                  <ArrowDown className="h-3.5 w-3.5" /> Newest messages
+                </button>
+              )}
             </div>
 
-            {!atBottom && (
-              <button
-                type="button"
-                onClick={scrollToBottom}
-                className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white shadow-lg"
-              >
-                <ArrowDown className="h-3.5 w-3.5" /> Newest messages
-              </button>
-            )}
-          </div>
-
-          <Composer
-            channelName={title}
-            people={people.filter((p) => p.id !== meId)}
-            canMentionTeams={channel.kind === 'space' && channel.audience !== 'members'}
-            onSend={doSend}
-          />
-        </>
+            <Composer
+              channelName={title}
+              people={people.filter((p) => p.id !== meId)}
+              canMentionTeams={channel.kind === 'space' && channel.audience !== 'members'}
+              onSend={doSend}
+            />
+          </>
+        )}
+      </section>
+      {thread && (
+        <ThreadPanel
+          channel={channel}
+          rootId={thread}
+          meId={meId}
+          meName={meName}
+          isAdmin={isAdmin}
+          people={people}
+          peopleById={peopleById}
+          orderHref={orderHref}
+          onClose={() => setThread(null)}
+        />
       )}
-    </section>
+    </div>
   );
 }
 

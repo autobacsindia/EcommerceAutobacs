@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Download, Package, RotateCcw, Trash2 } from 'lucide-react';
+import { Download, MessageSquareReply, Package, RotateCcw, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, dayLabel, fileSize, timeOf } from './chatUi';
 
@@ -123,6 +123,38 @@ function OrderRefs({ refs, orderHref }: { refs: ChatMessage['refs']; orderHref: 
   );
 }
 
+/**
+ * Under a message that has a thread: how many replies, and the newest one.
+ * Highlighted when that newest reply mentions me — a mention inside a thread
+ * must not be invisible from the timeline.
+ */
+function ThreadSummary({ m, meId, onOpen }: { m: ChatMessage; meId: string; onOpen: () => void }) {
+  if (!m.replyCount || !m.lastReply) return null;
+  const forMe = m.lastReply.mentions.includes(meId);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`mt-1.5 flex w-full max-w-xl items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs ${
+        forMe ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-gray-50 hover:border-emerald-600 hover:bg-emerald-50'
+      }`}
+      aria-label={`Open thread, ${m.replyCount} ${m.replyCount === 1 ? 'reply' : 'replies'}`}
+    >
+      <MessageSquareReply className="h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
+      <span className="shrink-0 font-semibold text-emerald-800">
+        {m.replyCount} {m.replyCount === 1 ? 'reply' : 'replies'}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-gray-600">
+        <span className="font-medium text-gray-800">{m.lastReply.by}:</span> {m.lastReply.preview}
+      </span>
+      <span className="shrink-0 text-gray-400">{timeOf(m.lastReply.at)}</span>
+    </button>
+  );
+}
+
+/** When a timeline row last changed: its newest reply, or when it was posted. */
+const activityAt = (m: ChatMessage) => m.lastReply?.at ?? m.createdAt;
+
 export default function MessageItem({
   message,
   previous,
@@ -133,6 +165,7 @@ export default function MessageItem({
   orderHref,
   onDelete,
   onRetry,
+  onOpenThread,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
@@ -143,17 +176,25 @@ export default function MessageItem({
   orderHref: (id: string) => string;
   onDelete: (m: ChatMessage) => void;
   onRetry: (m: ChatMessage) => void;
+  /** Open (or start) this message's thread. Absent inside a thread, where replies have no threads. */
+  onOpenThread?: (m: ChatMessage) => void;
 }) {
   const m = message;
+  // The timeline is ordered by activity, so a thread that just moved sits under
+  // today's divider even if it was started last week.
   const newDay =
-    !previous || new Date(previous.createdAt).toDateString() !== new Date(m.createdAt).toDateString();
+    !previous || new Date(activityAt(previous)).toDateString() !== new Date(activityAt(m)).toDateString();
   // Consecutive messages from one person within 5 minutes hide the repeated header.
+  // A message with a thread always shows its own header.
   const grouped =
     !newDay &&
     previous &&
+    !m.replyCount &&
+    !previous.replyCount &&
     previous.kind === m.kind &&
     previous.sender?.id === m.sender?.id &&
     new Date(m.createdAt).getTime() - new Date(previous.createdAt).getTime() < 5 * 60_000;
+  const canReply = !!onOpenThread && !m.deleted && !m.pending && !m.failed;
 
   const mine = m.sender?.id === meId;
   const mentionsMe = m.mentions.includes(meId);
@@ -201,6 +242,7 @@ export default function MessageItem({
               {m.pending && <p className="mt-1 text-xs text-gray-400">Sending…</p>}
             </div>
           )}
+          {onOpenThread && <ThreadSummary m={m} meId={meId} onOpen={() => onOpenThread(m)} />}
 
           {m.failed && (
             <p className="mt-1 flex items-center gap-2 text-xs text-red-600">
@@ -212,15 +254,30 @@ export default function MessageItem({
           )}
         </div>
 
-        {removable && (
-          <button
-            type="button"
-            onClick={() => onDelete(m)}
-            className="absolute right-2 top-1 hidden rounded-md bg-white p-1 text-gray-400 shadow-sm hover:text-red-600 focus:block group-hover:block"
-            aria-label="Delete message"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+        {(removable || canReply) && (
+          <div className="absolute right-2 top-1 hidden gap-1 focus-within:flex group-hover:flex pointer-coarse:flex">
+            {canReply && (
+              <button
+                type="button"
+                onClick={() => onOpenThread!(m)}
+                className="rounded-md bg-white p-1 text-gray-500 shadow-sm hover:text-emerald-700"
+                aria-label="Reply in thread"
+                title="Reply in thread"
+              >
+                <MessageSquareReply className="h-4 w-4" />
+              </button>
+            )}
+            {removable && (
+              <button
+                type="button"
+                onClick={() => onDelete(m)}
+                className="rounded-md bg-white p-1 text-gray-400 shadow-sm hover:text-red-600"
+                aria-label="Delete message"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

@@ -14,11 +14,13 @@ import {
   validateMarkRead,
   validateCreateSpace,
   validateOpenDm,
+  validateThreadPage,
 } from '../validators/chat.validator.js';
 import {
   listChannels,
   listFiles,
   listMessages,
+  getThread,
   searchMessages,
   listRecentOrders,
   listPeople,
@@ -177,16 +179,23 @@ router.post('/channels/:id/messages',
   uploadChatFiles, handleChatUploadError,
   validateChannelIdParam, validateSendMessage, validateRequest,
   asyncHandler(async (req, res) => {
-    const { message, duplicate } = await sendMessage(req.user, req.params.id, {
+    const { message, duplicate, thread } = await sendMessage(req.user, req.params.id, {
       text: req.body.text ?? '',
       clientId: req.body.clientId,
       mentions: asArray(req.body.mentions),
       mentionTeams: asArray(req.body.mentionTeams),
       orderIds: asArray(req.body.orderIds),
       files: req.files,
+      threadRoot: req.body.threadRoot || null,
     });
-    res.status(duplicate ? 200 : 201).json({ success: true, message });
+    // `thread`: the reply's root as it now stands, so the sender's timeline moves it too.
+    res.status(duplicate ? 200 : 201).json({ success: true, message, thread: thread ?? null });
   }));
+
+// GET /chat/messages/:id/thread?after=&limit= — a thread: its root and replies
+router.get('/messages/:id/thread', validateThreadPage, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await getThread(req.user, req.params.id, req.query)) });
+}));
 
 // GET /chat/channels/:id/files — everything shared in this channel
 router.get('/channels/:id/files', validateChannelIdParam, validateFilePage, validateRequest,
