@@ -3,6 +3,8 @@
  * earlier order's customer and address, fetched by id (no personal details in
  * the URL), and leaves the items empty.
  */
+import fs from 'fs';
+import path from 'path';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NewSalesOrderForm from './NewSalesOrderForm';
@@ -26,7 +28,15 @@ const renderForm = (fromOrderId: string | null) => render(
 beforeEach(() => get.mockReset());
 
 it('points at the server-rendered quotation for the order', () => {
-  expect(quotationHref('66f0c0ffee00000000abcdef')).toBe('/api/staff/sales/orders/66f0c0ffee00000000abcdef/quotation');
+  expect(quotationHref('66f0c0ffee00000000abcdef')).toBe('/api/v1/staff/sales/orders/66f0c0ffee00000000abcdef/quotation');
+});
+
+it('uses a path the site actually forwards to the backend', () => {
+  // A plain <a href> bypasses the API client, so it must match a rewrite in
+  // next.config.ts itself — '/api/staff/…' (no /v1) shipped once and was a 404.
+  const config = fs.readFileSync(path.join(process.cwd(), 'next.config.ts'), 'utf8');
+  const sources = [...config.matchAll(/source:\s*'([^']+)'/g)].map((m) => m[1].replace(/:path\*$/, ''));
+  expect(sources.some((src) => quotationHref('x').startsWith(src))).toBe(true);
 });
 
 it('starts a new order with the earlier customer and address, and no items', async () => {
