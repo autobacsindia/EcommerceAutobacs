@@ -153,8 +153,13 @@ export default function StoreProductCard({
 
   const CardInner = (
     <>
-      {/* Image — the whole product on a light plate, the way the home page shows it. */}
-      <div className="relative aspect-square overflow-hidden bg-obsidian">
+      {/* Image — the whole product on a light plate, the way the home page shows it.
+          The plate is a literal colour (the light theme's --color-obsidian), not the
+          token: catalogue photos are cut-outs on white and use mix-blend-multiply to
+          drop that white. On the dark theme's card colour, multiply darkened the
+          whole photo until products were barely visible. Photos are not inverted for
+          dark mode, so their plate is not either — same as the home page tiles. */}
+      <div className="relative aspect-square overflow-hidden bg-[#f7f9f8]">
         {firstImage ? (
           <ProductImage
             src={firstImage}
@@ -162,7 +167,7 @@ export default function StoreProductCard({
             className="h-full w-full object-contain mix-blend-multiply transition-transform duration-500 ease-lux group-hover:scale-[1.04]"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-[13px] text-ink-muted">
+          <div className="flex h-full w-full items-center justify-center text-[13px] text-[#5f6363]">
             No image
           </div>
         )}
