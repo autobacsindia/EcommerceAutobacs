@@ -181,3 +181,11 @@ export const staffKeys = {
   workQueue: (queue: string) => [...staffKeys.orders(), 'work', queue] as const,
   workOrder: (id: string) => [...staffKeys.orders(), 'work-order', id] as const,
 };
+
+/** `/admin/team-activity/*` — the admin's read-only view of the order workflow. */
+export const teamActivityKeys = {
+  all: ['team-activity'] as const,
+  waiting: () => [...teamActivityKeys.all, 'waiting'] as const,
+  performance: (days: number) => [...teamActivityKeys.all, 'performance', days] as const,
+  order: (orderId: string) => [...teamActivityKeys.all, 'order', orderId] as const,
+};

@@ -70,11 +70,13 @@ function lastTouched(order) {
 }
 
 /**
- * Everything stuck on one order: [{ team, stage, since }]. One entry per stage
- * per order (an order with two lines stuck at stock check counts once, from the
- * older line), because the team acts on the order, not on the line.
+ * Everything one order is waiting on right now: [{ team, stage, since }], one
+ * entry per stage (two lines at stock check count once, from the older line —
+ * the team acts on the order, not the line). Shared with the admin Team activity
+ * board (services/teamActivityService.js), so "waiting since" means the same
+ * thing in both.
  */
-export function stuckOn(order, now = Date.now()) {
+export function waitingOn(order) {
   const view = workflowView(order);
   if (!view) return [];
   const entered = new Date(order.workflow.enteredAt).getTime();
@@ -93,12 +95,14 @@ export function stuckOn(order, now = Date.now()) {
     if (!(oldest.get(STAGE.SHIPPED) <= since)) oldest.set(STAGE.SHIPPED, since);
   }
 
-  const out = [];
-  for (const [stage, since] of oldest) {
-    if (now - since < STUCK_AFTER_HOURS[stage] * HOUR) continue;
-    out.push({ team: stage === STAGE.SHIPPED ? TRANSIT_TEAM : STAGE_TEAM[stage], stage, since });
-  }
-  return out;
+  return [...oldest].map(([stage, since]) => ({
+    team: stage === STAGE.SHIPPED ? TRANSIT_TEAM : STAGE_TEAM[stage], stage, since,
+  }));
+}
+
+/** What is waiting past its stage's threshold: [{ team, stage, since }]. */
+export function stuckOn(order, now = Date.now()) {
+  return waitingOn(order).filter(({ stage, since }) => now - since >= STUCK_AFTER_HOURS[stage] * HOUR);
 }
 
 /** Scan the open workflow and group what is stuck: team → stage → [{ order, since }]. */

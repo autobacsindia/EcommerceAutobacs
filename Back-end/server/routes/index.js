@@ -81,6 +81,7 @@ import redisMonitorRoutes from './redisMonitor.js';
 import securityRoutes from './security.js';
 import csrfTokenRoutes from './csrfToken.js';
 import adminStatsRoutes from './adminStats.js';
+import adminTeamActivityRoutes from './adminTeamActivity.js';
 
 const apiRouter = express.Router();
 
@@ -194,6 +195,7 @@ apiRouter.use('/uploads', adminRouteRateLimit, uploadRoutes); // Admin-only: dir
 apiRouter.use('/admin/rate-limits/dashboard', rateLimitDashboardRoutes);
 apiRouter.use('/admin/adaptive-throttling', adaptiveThrottlingRoutes);
 apiRouter.use('/admin/redis', redisMonitorRoutes);
+apiRouter.use('/admin/team-activity', adminTeamActivityRoutes);
 apiRouter.use('/admin', adminStatsRoutes);
 
 // ============================================================================
