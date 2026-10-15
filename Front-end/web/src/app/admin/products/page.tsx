@@ -1,7 +1,7 @@
 'use client';
 
 import { type StockStatus, getStockLabel } from '@/lib/stock';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
@@ -14,6 +14,7 @@ import ExportProductsButton from '@/components/admin/ExportProductsButton';
 import SeoScoreBadge from '@/components/admin/SeoScoreBadge';
 import { SEO_REVIEW, seoReviewStatus, type SeoReview } from '@/lib/seoReview';
 import type { ScorableProduct } from '@/lib/seoScore';
+import { PRODUCTS_LIST_PATH, productEditHref } from '@/lib/adminProductsReturn';
 
 // ScorableProduct: the admin list returns the full content fields, which is what
 // lets each row show the editor's SEO score without another request.
@@ -49,6 +50,11 @@ interface CategoryInfo {
   parent?: { _id: string; name: string } | null;
 }
 
+/** A URL value if it is one of `allowed`, else the fallback. */
+function oneOf<T extends string, F extends string>(value: string | null, allowed: readonly T[], fallback: F): T | F {
+  return value && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
 function AdminProductsPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -59,12 +65,20 @@ function AdminProductsPageInner() {
   const categoryNameParam = searchParams.get('categoryName') || '';
 
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  // Page, search and filters live in the URL too, so opening a product and
+  // coming back (or reloading) lands on the same view — not page 1. The editor
+  // gets this URL as `returnTo` and goes back to it after a save.
+  const initialSearch = searchParams.get('q') || '';
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(initialSearch);
   // Admin can view all products or narrow to just active / just inactive (drafts).
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'simple' | 'variable' | 'grouped'>('all');
-  const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>(
+    oneOf(searchParams.get('status'), ['active', 'inactive'] as const, 'all'),
+  );
+  const [typeFilter, setTypeFilter] = useState<'all' | 'simple' | 'variable' | 'grouped'>(
+    oneOf(searchParams.get('type'), ['simple', 'variable', 'grouped'] as const, 'all'),
+  );
+  const [currentPage, setCurrentPage] = useState(() => Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1));
   const [categoryInfo, setCategoryInfo] = useState<CategoryInfo | null>(null);
   const limit = 50; // products per page
 
@@ -107,8 +121,10 @@ function AdminProductsPageInner() {
     router.push(`/admin/products?category=${id}&categoryName=${encodeURIComponent(name)}`);
   const clearCategoryFilter = () => router.push('/admin/products');
 
-  // Debounce search term
+  // Debounce search term. Nothing to do when it already matches (e.g. on load,
+  // where both come from the URL) — otherwise this would reset a restored page.
   useEffect(() => {
+    if (searchTerm === debouncedSearchTerm) return;
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
       setCurrentPage(1); // Reset to first page when search changes
@@ -117,17 +133,37 @@ function AdminProductsPageInner() {
     return () => {
       clearTimeout(timer);
     };
-  }, [searchTerm]);
+  }, [searchTerm, debouncedSearchTerm]);
 
-  // Reset to the first page whenever the status or product-type filter changes.
+  // Reset to the first page whenever the status, product-type or category filter
+  // CHANGES — compared against the last value, so the page restored from the URL
+  // on load is not thrown away by the effect's first run.
+  const filterKey = `${statusFilter}|${typeFilter}|${categoryId}`;
+  const lastFilterKey = useRef(filterKey);
   useEffect(() => {
+    if (lastFilterKey.current === filterKey) return;
+    lastFilterKey.current = filterKey;
     setCurrentPage(1);
-  }, [statusFilter, typeFilter]);
+  }, [filterKey]);
 
-  // Reset to the first page whenever the category filter changes.
+  // The list view as a URL: category from the URL as-is, plus page/search/filters.
+  const listUrl = useMemo(() => {
+    const q = new URLSearchParams();
+    if (categoryId) q.set('category', categoryId);
+    if (categoryNameParam) q.set('categoryName', categoryNameParam);
+    if (debouncedSearchTerm) q.set('q', debouncedSearchTerm);
+    if (statusFilter !== 'all') q.set('status', statusFilter);
+    if (typeFilter !== 'all') q.set('type', typeFilter);
+    if (currentPage > 1) q.set('page', String(currentPage));
+    const qs = q.toString();
+    return `${PRODUCTS_LIST_PATH}${qs ? `?${qs}` : ''}`;
+  }, [categoryId, categoryNameParam, debouncedSearchTerm, statusFilter, typeFilter, currentPage]);
+
+  // Keep the address bar in step without adding a history entry per page click.
   useEffect(() => {
-    setCurrentPage(1);
-  }, [categoryId]);
+    const current = `${PRODUCTS_LIST_PATH}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    if (current !== listUrl) router.replace(listUrl, { scroll: false });
+  }, [listUrl, searchParams, router]);
 
   // Resolve the filtered category's display name and parent (for the chip and
   // the "view parent category" link). Seed the name from the URL to avoid a flash.
@@ -362,7 +398,7 @@ function AdminProductsPageInner() {
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <SeoScoreBadge product={product} href={`/admin/products/edit/${product._id}`} />
+                    <SeoScoreBadge product={product} href={productEditHref(product._id, listUrl)} />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {(() => {
@@ -385,7 +421,7 @@ function AdminProductsPageInner() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                     <div className="flex gap-2">
-                      <Link href={`/admin/products/edit/${product._id}`} className="text-blue-600 hover:text-blue-900">
+                      <Link href={productEditHref(product._id, listUrl)} aria-label={`Edit ${product.name}`} className="text-blue-600 hover:text-blue-900">
                         <Edit className="h-4 w-4" />
                       </Link>
                       <button

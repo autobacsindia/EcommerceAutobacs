@@ -2,7 +2,8 @@
 
 import { type StockStatus, getStockStatus } from '@/lib/stock';
 import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { safeProductsReturn } from '@/lib/adminProductsReturn';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { adminKeys } from '@/hooks/queries/keys';
@@ -83,6 +84,8 @@ export default function EditProductPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const params = useParams();
+  // The list view this product was opened from — saving goes back there, not to page 1.
+  const returnTo = safeProductsReturn(useSearchParams().get('returnTo'));
   const productId = params.id as string;
   
   const [categories, setCategories] = useState<Category[]>([]);
@@ -369,7 +372,7 @@ export default function EditProductPage() {
       } else {
         alert(`Failed to load product: ${err.message}`);
       }
-      router.push('/admin/products');
+      router.push(returnTo);
     } finally {
       setLoading(false);
     }
@@ -682,7 +685,7 @@ export default function EditProductPage() {
       // reflected the moment we navigate back, instead of after staleTime.
       queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') });
       alert('Product updated successfully');
-      router.push('/admin/products');
+      router.push(returnTo);
     } catch (err: any) {
       alert(err.message || 'Failed to update product');
     } finally {
@@ -1495,7 +1498,6 @@ export default function EditProductPage() {
 
       {/* Sticky SEO Score sidebar */}
       <aside className="w-72 shrink-0 sticky top-6 self-start space-y-4">
-        {product && <SeoReviewControl key={product._id} productId={product._id} initial={product.seoReview} />}
         <SeoScorePanel
           data={{
             name: formData.name,
@@ -1511,6 +1513,9 @@ export default function EditProductPage() {
             whyChoose,
           }}
         />
+        {/* SEO work status sits last: the score above is what the SEO team works
+            through, and marking it Completed is the final step. */}
+        {product && <SeoReviewControl key={product._id} productId={product._id} initial={product.seoReview} />}
       </aside>
       </div>
     </div>
