@@ -16,6 +16,7 @@
  *   send-team-out-of-stock-alert     { orderId, itemId } — sales side must ask the customer: wait or refund
  *   send-team-refund-requested-alert { orderId, itemId } — Accounts heads must approve a refund
  *   send-admin-team-refund-ready-alert { orderId, itemId } — admins: an approved refund is ready to pay
+ *   post-team-chat-update            { event, orderId, itemId?, by?, supplier?, note? } — a workflow step posted to team chat only
  *   send-admin-careers-alert         { applicationId }  — notify support inbox of a new careers application
  *   send-careers-acknowledgement     { applicationId }  — confirm receipt to the applicant (idempotent)
  *   send-careers-rejection           { applicationId }  — notify the applicant they weren't selected (idempotent)
@@ -35,7 +36,7 @@
  */
 
 import { Worker } from 'bullmq';
-import { hasChatUpdate, postBusinessUpdate } from '../../services/chatBusinessUpdates.js';
+import { hasChatUpdate, postBusinessUpdate, WORKFLOW_CHAT_JOB } from '../../services/chatBusinessUpdates.js';
 import { createConnection } from '../connection.js';
 import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice } from '../../services/invoiceService.js';
@@ -164,6 +165,9 @@ const handlers = {
   'send-team-out-of-stock-alert': async (job) => { await emailTeamOutOfStockAlert(job.data); },
   'send-team-refund-requested-alert': async (job) => { await emailTeamRefundRequestedAlert(job.data); },
   'send-admin-team-refund-ready-alert': async (job) => { await emailAdminTeamRefundReadyAlert(job.data); },
+  // Workflow steps that are a chat line only (ordered, customer waits, refund sent
+  // back, delivered). Nothing to email; the chat hook below does the posting.
+  [WORKFLOW_CHAT_JOB]: async () => ({ status: 'chat-only' }),
 
   'send-admin-order-cancelled-alert': async (job) => {
     const { orderId } = job.data;
@@ -298,7 +302,7 @@ export function startNotificationWorker() {
       // the chat line is a convenience, and it is idempotent per event so a job
       // retry does not post twice.
       if (hasChatUpdate(job.name)) {
-        postBusinessUpdate(job.name, job.data).catch(() => {});
+        postBusinessUpdate(job.name, job.data, { jobId: job.id }).catch(() => {});
       }
       return result;
     },

@@ -41,6 +41,7 @@ import { STAFF_TEAMS, STAFF_TEAM_LABELS } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
 import { SHIPMENT_STATUS } from '../utils/orderFulfilment.js';
 import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
+import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -406,6 +407,9 @@ export async function setStock(actor, orderId, itemId, { stock, supplierName } =
 
   await refreshOpen(orderId);
   if (stock === STOCK.OUT_OF_STOCK) enqueue('send-team-out-of-stock-alert', { orderId: String(orderId), itemId: String(itemId) });
+  if (stock === STOCK.ORDERED) {
+    enqueue(WORKFLOW_CHAT_JOB, { event: 'ordered', orderId: String(orderId), itemId: String(itemId), supplier, by: actor.name });
+  }
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_stock', itemId: String(itemId), stock });
   return getOrder(actor, orderId);
 }
@@ -533,6 +537,7 @@ export async function recordDecision(actor, orderId, itemId, { decision, note } 
 
   await refreshOpen(orderId);
   if (decision === 'refund') enqueue('send-team-refund-requested-alert', { orderId: String(orderId), itemId: String(itemId) });
+  else enqueue(WORKFLOW_CHAT_JOB, { event: 'customer_waits', orderId: String(orderId), itemId: String(itemId), by: actor.name });
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_customer_decision', itemId: String(itemId), decision });
   return getOrder(actor, orderId);
 }
@@ -558,6 +563,9 @@ export async function reviewRefund(actor, orderId, itemId, { approve, note } = {
     );
     if (!updated) throw fail(RACE, 409);
     await refreshOpen(orderId);
+    enqueue(WORKFLOW_CHAT_JOB, {
+      event: 'refund_rejected', orderId: String(orderId), itemId: String(itemId), by: actor.name, note: String(note).slice(0, 500),
+    });
     auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_refund_rejected', itemId: String(itemId) });
     return getOrder(actor, orderId);
   }
@@ -628,6 +636,7 @@ export async function markDelivered(actor, orderId, { shipmentId } = {}, req) {
     await orderRepository.pushWorkflowEvent(orderId, event(actor, 'delivered', {
       note: inTransit.length > 1 ? `${delivered} parcels` : `Parcel ${inTransit[0].sequence}`,
     }));
+    enqueue(WORKFLOW_CHAT_JOB, { event: 'delivered', orderId: String(orderId), by: actor.name });
   }
   await refreshOpen(orderId);
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_delivered', parcels: delivered });

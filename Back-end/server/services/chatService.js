@@ -532,7 +532,7 @@ async function insertMessage(channel, { kind, sender, text, clientId, attachment
  * Used by business events (new paid order, refund request…). Never throws: a chat
  * hiccup must not fail the business operation that triggered it.
  */
-export async function postSystemMessage(spaceKey, text, { key, orderIds } = {}) {
+export async function postSystemMessage(spaceKey, text, { key, orderIds, mentions } = {}) {
   try {
     await ensureDefaultSpaces();
     const channel = await chatRepository.findChannelByKey(spaceKey);
@@ -546,8 +546,11 @@ export async function postSystemMessage(spaceKey, text, { key, orderIds } = {}) 
       if (existing) return shapeMessage(existing);
     }
     const refs = await resolveOrderRefs(orderIds);
+    // Same visibility filter as a person's mention. No email: the event that
+    // triggered this post has already emailed the people it addresses.
+    const [people] = await resolveMentions(channel, mentions, []);
     const { message } = await insertMessage(channel, {
-      kind: 'system', sender: null, text: body, clientId: key, refs,
+      kind: 'system', sender: null, text: body, clientId: key, refs, mentions: people,
     });
     return message;
   } catch (err) {
