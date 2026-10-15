@@ -68,7 +68,9 @@ import {
   listPaidSalesOrders,
   reissuePaymentLink,
   cancelUnpaidSalesOrder,
+  getSalesOrder,
 } from '../services/salesOrderService.js';
+import { getQuotationPdf } from '../services/quotationService.js';
 
 /**
  * Staff panel API (/api/v1/staff). Two halves:
@@ -172,6 +174,24 @@ router.get('/sales/orders', validateCursorQuery, validateRequest, asyncHandler(a
 }));
 
 // @route  POST /staff/sales/orders/:id/payment-link — issue a new link (old one retired)
+// @route  GET /staff/sales/orders/:id — one order (to start a new order for the same customer)
+router.get('/sales/orders/:id', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await getSalesOrder(req.user, req.params.id) });
+}));
+
+// @route  GET /staff/sales/orders/:id/quotation — the quotation PDF (seller, sales head, admin)
+router.get('/sales/orders/:id/quotation', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  const { buffer, filename } = await getQuotationPdf(req.user, req.params.id);
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `inline; filename="${filename}"`,
+    // Customer names, phone and prices: never cached by a browser or a proxy.
+    'Cache-Control': 'private, no-store',
+    'Content-Length': buffer.length,
+  });
+  res.send(buffer);
+}));
+
 router.post('/sales/orders/:id/payment-link', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await reissuePaymentLink(req.user, req.params.id, req)) });
 }));

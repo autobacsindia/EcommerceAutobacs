@@ -214,6 +214,12 @@ const FONT = HAS_UNICODE ? 'body' : 'Helvetica';
 const FONT_BOLD = HAS_UNICODE ? 'bold' : 'Helvetica-Bold';
 const CURRENCY = HAS_UNICODE ? '₹' : 'Rs.';
 
+/**
+ * The PDF fonts, shared with the sales quotation (services/quotationService.js)
+ * so both documents render ₹ and Indian names the same way. Read-only.
+ */
+export const pdfFonts = Object.freeze({ HAS_UNICODE, FONT, FONT_BOLD, CURRENCY, unicodeFonts });
+
 // Invoice-number display + filename formatting live in utils/invoiceFormat.js so
 // the confirmation email renders the exact same identifier. Re-exported here for
 // existing importers (controllers, tests).

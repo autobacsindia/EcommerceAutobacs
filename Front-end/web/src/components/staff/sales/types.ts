@@ -59,3 +59,10 @@ const whole = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR
 const paise = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** Rupees, showing paise only when there are any (an offer can be ₹4,499.50). */
 export const rupees = (n: number) => (Number.isInteger(Math.round(n * 100) / 100) ? whole : paise).format(n);
+
+/**
+ * The quotation PDF for a sales order (opened in a new tab to view, download or
+ * share). Prices come from the order on the server — the PDF cannot differ from
+ * what the payment link charges.
+ */
+export const quotationHref = (orderId: string) => `/api/staff/sales/orders/${encodeURIComponent(orderId)}/quotation`;

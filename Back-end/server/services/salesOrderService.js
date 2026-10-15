@@ -271,6 +271,23 @@ export async function listPaidSalesOrders(actor, { cursor } = {}) {
   return { orders: items.map(shape), nextCursor };
 }
 
+/**
+ * One sales order, for "New order for this customer": the seller sees their own,
+ * a sales head any sales-panel order. Same scope as listSalesOrders.
+ */
+export async function getSalesOrder(actor, orderId) {
+  if (!onTeam(actor, STAFF_TEAMS.SALES)) throw fail('Not authorized.', 403);
+  const order = await orderRepository.findById(orderId, [
+    { path: 'user', select: 'name email phone' },
+    { path: 'salesUser', select: 'name' },
+  ]);
+  if (!order || !order.salesUser) throw fail('Order not found.', 404);
+  if (!isSalesHead(actor) && String(order.salesUser._id ?? order.salesUser) !== String(actor._id)) {
+    throw fail('Order not found.', 404);
+  }
+  return shape(order);
+}
+
 /** Load an unpaid sales order the actor may act on. */
 async function loadOwnUnpaid(actor, orderId) {
   if (!onTeam(actor, STAFF_TEAMS.SALES)) throw fail('Not authorized.', 403);
