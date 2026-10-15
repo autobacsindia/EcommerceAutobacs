@@ -1334,6 +1334,24 @@ class OrderRepository extends BaseRepository {
       .lean();
   }
 
+  /**
+   * Orders that entered the team workflow since `since`, newest first, bounded —
+   * for the admin Team activity numbers. Served by the partial `team_workflow_paid`
+   * index (paymentStatus + createdAt, only workflow orders). An order is paid within
+   * minutes of creation on this flow, so createdAt stands in for the entry date.
+   */
+  async findWorkflowOrdersSince(since, limit) {
+    return Order.find({
+      paymentStatus: { $in: ['paid', 'refunded'] },
+      'workflow.enteredAt': { $type: 'date' },
+      createdAt: { $gte: since },
+    })
+      .select('orderNumber createdAt items workflow salesUser')
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .lean();
+  }
+
   /** One order with everything a team view needs (lean). */
   async findForWorkflow(orderId) {
     return Order.findById(orderId)

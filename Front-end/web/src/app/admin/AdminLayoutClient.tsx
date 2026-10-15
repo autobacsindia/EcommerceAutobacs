@@ -98,6 +98,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'System',
     items: [
       { href: '/admin/staff', label: 'Staff & Teams', icon: '🪪' },
+      { href: '/admin/team-activity', label: 'Team activity', icon: '⏱️' },
       { href: '/admin/workflows', label: 'Workflows', icon: '⚡' },
     ],
   },
