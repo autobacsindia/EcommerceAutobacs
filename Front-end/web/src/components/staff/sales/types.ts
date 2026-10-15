@@ -65,4 +65,4 @@ export const rupees = (n: number) => (Number.isInteger(Math.round(n * 100) / 100
  * share). Prices come from the order on the server — the PDF cannot differ from
  * what the payment link charges.
  */
-export const quotationHref = (orderId: string) => `/api/staff/sales/orders/${encodeURIComponent(orderId)}/quotation`;
+export const quotationHref = (orderId: string) => `/api/v1/staff/sales/orders/${encodeURIComponent(orderId)}/quotation`;
