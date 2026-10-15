@@ -93,13 +93,12 @@ const UserSchema = new mongoose.Schema({
     Company accounts (config/staff.js): a staff login the company owns, created
     by an admin or team head with a username and password. `companyAccount`
     switches off every self-service way back in — forgot-password, Google
-    sign-in — and makes removed access block the login itself.
-    `mustChangePassword`: the password was set by someone else (on creation or
-    a reset), so the person must choose their own before using the panel.
+    sign-in — and makes removed access block the login itself. Its password
+    is managed by the admin (or the team head for members): it is set when the
+    account is created and changed only by them, never by the person.
   */
   username: { type: String, lowercase: true, trim: true, default: undefined },
   companyAccount: { type: Boolean, default: false },
-  mustChangePassword: { type: Boolean, default: false },
 
   // WooCommerce migration linkage (ADR-005)
   wpId: { type: Number, index: { unique: true, sparse: true } },

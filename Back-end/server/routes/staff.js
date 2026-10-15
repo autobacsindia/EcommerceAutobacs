@@ -103,8 +103,8 @@ router.get('/me', (req, res) => {
 });
 
 // @route  POST /staff/password { currentPassword, newPassword } — change my own password.
-// Works while a must-change password is pending (see staffOrAdmin). Every other
-// session ends; this device gets fresh cookies so the person stays signed in here.
+// Email (invite) staff only; a company account's password is the admin's to change.
+// Every other session ends; this device gets fresh cookies so the person stays signed in.
 router.post('/password', resetPasswordRateLimit, validateOwnPasswordChange, validateRequest, asyncHandler(async (req, res) => {
   const user = await changeOwnPassword(req.user, req.body, req);
   const ip = req.headers['cf-connecting-ip'] || req.ip;

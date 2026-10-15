@@ -323,7 +323,7 @@ export default function Conversation({
                     meId={meId}
                     meName={meName}
                     peopleById={peopleById}
-                    canDelete={m.sender?.id === meId || isAdmin}
+                    canDelete={isAdmin} // chat is company record: only admins remove messages
                     orderHref={orderHref}
                     onDelete={(msg) => { if (confirm('Delete this message?')) del.mutate(msg); }}
                     onRetry={(msg) => doSend({ text: msg.text, clientId: msg.clientId ?? '', mentions: msg.mentions })}

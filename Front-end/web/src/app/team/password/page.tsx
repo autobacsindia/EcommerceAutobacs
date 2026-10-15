@@ -7,9 +7,9 @@ import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
 
 /**
- * Change my password. Required the first time a company account signs in, and
- * after an admin or team head resets it — the password they chose was only ever
- * meant to get the person here. Every other device is signed out; this one stays.
+ * Change my password — for staff who sign in with their own email. A company
+ * account's password is managed by the admin; the API refuses it here and the
+ * page says so. Every other device is signed out; this one stays.
  */
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -31,9 +31,7 @@ export default function ChangePasswordPage() {
       await apiClient.post('/staff/password', { currentPassword: form.current, newPassword: form.next });
       setDone(true);
       await checkAuth();
-      // A full reload, so the server layout re-reads the session and lifts the lock.
       router.replace('/team');
-      router.refresh();
     } catch (err) {
       setError((err as { rawData?: { message?: string; errors?: { msg?: string }[] } })?.rawData?.errors?.[0]?.msg
         || (err as { rawData?: { message?: string } })?.rawData?.message
@@ -63,7 +61,7 @@ export default function ChangePasswordPage() {
     <div className="mx-auto max-w-md">
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h1 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-          <KeyRound className="h-5 w-5 text-blue-600" /> Choose your password
+          <KeyRound className="h-5 w-5 text-blue-600" /> Change your password
         </h1>
         <p className="mt-1 text-sm text-gray-600">
           Use one only you know — at least 8 characters. You will stay signed in here; other devices are signed out.
@@ -72,7 +70,7 @@ export default function ChangePasswordPage() {
           <p className="mt-4 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800" role="status">Password changed. Opening your panel…</p>
         ) : (
           <form onSubmit={submit} className="mt-4 space-y-3">
-            {field('current', 'Current password (the one you were given)', 'current-password')}
+            {field('current', 'Current password', 'current-password')}
             {field('next', 'New password', 'new-password')}
             {field('confirm', 'New password again', 'new-password')}
             {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{error}</p>}

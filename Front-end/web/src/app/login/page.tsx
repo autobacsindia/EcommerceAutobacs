@@ -86,11 +86,6 @@ function LoginPageInner() {
       setIsLoading(true);
       const signedIn = await login(formData.email.trim(), formData.password);
       // Staff land on their panel unless they were sent here from a specific page.
-      // A company account with a password someone else set goes straight to change it.
-      if (signedIn?.role === 'staff' && signedIn.mustChangePassword) {
-        router.push('/team/password');
-        return;
-      }
       router.push(redirectTo === '/' && signedIn?.role === 'staff' ? '/team' : redirectTo);
     } catch (err: any) {
       // Migrated WooCommerce accounts (ADR-005) have no password yet — send them to set one.

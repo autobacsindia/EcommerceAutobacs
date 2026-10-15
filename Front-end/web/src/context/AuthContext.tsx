@@ -31,8 +31,6 @@ interface User {
   avatarUrl: string;
   /** Company staff login name (null for everyone else). */
   username?: string | null;
-  /** Company account whose password someone else set — must change it first. */
-  mustChangePassword?: boolean;
 }
 
 interface AuthContextType {
@@ -97,7 +95,6 @@ function normalizeUser(raw: any): User {
     isVerified:     raw.isVerified ?? false,
     avatarUrl,
     username:       raw.username ?? null,
-    mustChangePassword: !!raw.mustChangePassword,
   };
 }
 

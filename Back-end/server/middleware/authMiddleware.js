@@ -134,25 +134,11 @@ export const admin = asyncHandler(async (req, res, next) => {
 // This is a separate gate on purpose — `admin` above stays admin-only, so none of
 // the existing admin API opens to staff. What a staff member may do inside a
 // staff route (own team only, heads vs members) is decided by staffService.
-/**
- * The only staff endpoints usable before a must-change password is replaced:
- * reading who you are, and changing it. Everything else (team panel, chat,
- * workflow) waits — a password someone else chose is not a working credential.
- */
-const PASSWORD_CHANGE_ALLOWED = new Set(['/api/v1/staff/me', '/api/v1/staff/password']);
-
 export const staffOrAdmin = (req, res, next) => {
   const user = req.user;
   const ok = user && (user.role === 'admin' || (user.role === 'staff' && user.staff?.active === true));
   if (!ok) {
     return res.status(403).json({ success: false, message: 'Not authorized for the staff panel' });
-  }
-  if (user.mustChangePassword && !PASSWORD_CHANGE_ALLOWED.has(`${req.baseUrl}${req.path}`)) {
-    return res.status(403).json({
-      success: false,
-      code: 'PASSWORD_CHANGE_REQUIRED',
-      message: 'Choose your own password to continue.',
-    });
   }
   next();
 };

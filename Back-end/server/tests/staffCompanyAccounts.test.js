@@ -4,11 +4,12 @@
  * What must hold:
  *   - an admin creates heads or members in any team; a head creates members of
  *     their own team only; nobody else creates anything
- *   - the person signs in with the username, and cannot use the panel (team,
- *     chat, workflow) until they replace the password someone else chose
- *   - changing it ends every other session and keeps this one signed in
- *   - an admin/head reset ends the person's sessions and forces a new change;
- *     a Gmail (invite) account can never be reset by someone else
+ *   - the person signs in with the username and the password they were given,
+ *     and uses the panel straight away — no forced change
+ *   - the password is the company's: the person cannot change it; an admin (or
+ *     their head) changes it whenever needed, which ends every session at once
+ *   - a Gmail (invite) account can never be reset by someone else, and its
+ *     owner can still change their own
  *   - removing access blocks the username login outright, answered like a wrong
  *     password; the account and its history remain
  *   - no email ever goes to the internal company address, and forgot-password
@@ -91,12 +92,11 @@ describe('Company accounts', () => {
     admin = await signIn('owner@example.com');
   });
 
-  /** Create, sign in with the username, change the password — a working session. */
+  /** Create, then sign in with the username and the password the admin set. */
   async function onboard(actor, body) {
     expect((await create(actor, body)).status).toBe(201);
     const s = await signIn(body.username, TEMP);
     expect(s.login.status).toBe(200);
-    expect((await s.post('/staff/password', { currentPassword: TEMP, newPassword: MINE })).status).toBe(200);
     return s;
   }
 
@@ -106,7 +106,7 @@ describe('Company accounts', () => {
       expect(res.status).toBe(201);
       expect(res.body.member).toMatchObject({ username: 'sam.sales', companyAccount: true, email: '', team: 'sales', isHead: false });
       const user = await User.findOne({ username: 'sam.sales' }).lean();
-      expect(user).toMatchObject({ role: 'staff', companyAccount: true, mustChangePassword: true, email: 'sam.sales@staff.autobacs.invalid' });
+      expect(user).toMatchObject({ role: 'staff', companyAccount: true, email: 'sam.sales@staff.autobacs.invalid' });
     });
 
     it('lists company accounts with their username in the team', async () => {
@@ -145,53 +145,46 @@ describe('Company accounts', () => {
     });
   });
 
-  describe('first sign-in', () => {
-    it('signs in with the username (any case) and must change the password before using the panel', async () => {
+  describe('signing in', () => {
+    it('signs in with the username (any case) and the given password, and uses the panel at once', async () => {
       await create(admin, { username: 'sam.sales', team: 'sales' });
       const s = await signIn('Sam.Sales', TEMP);
       expect(s.login.status).toBe(200);
-      expect(s.login.body.user).toMatchObject({ username: 'sam.sales', mustChangePassword: true, role: 'staff' });
-
-      expect((await s.get('/staff/me')).status).toBe(200);
-      const blocked = await s.get('/staff/team');
-      expect(blocked.status).toBe(403);
-      expect(blocked.body.code).toBe('PASSWORD_CHANGE_REQUIRED');
-      expect((await s.get('/chat/channels')).status).toBe(403);
-    });
-
-    it('changing it needs the current password, keeps this session, and unlocks the panel', async () => {
-      await create(admin, { username: 'sam.sales', team: 'sales' });
-      const s = await signIn('sam.sales', TEMP);
-      expect((await s.post('/staff/password', { currentPassword: 'wrong', newPassword: MINE })).status).toBe(400);
-      expect((await s.post('/staff/password', { currentPassword: TEMP, newPassword: TEMP })).status).toBe(400);
-      expect((await s.post('/staff/password', { currentPassword: TEMP, newPassword: MINE })).status).toBe(200);
-
+      expect(s.login.body.user).toMatchObject({ username: 'sam.sales', role: 'staff' });
+      expect(s.login.body.user.mustChangePassword).toBeUndefined();
       expect((await s.get('/staff/team')).status).toBe(200);
-      expect((await s.get('/auth/me')).body.user.mustChangePassword).toBe(false);
-      expect((await signIn('sam.sales', TEMP)).login.status).toBe(401);
-      expect((await signIn('sam.sales', MINE)).login.status).toBe(200);
+      expect((await s.get('/chat/channels')).status).toBe(200);
     });
 
-    it('changing it signs out every other device', async () => {
-      await create(admin, { username: 'sam.sales', team: 'sales' });
-      const laptop = await signIn('sam.sales', TEMP);
-      const phone = await signIn('sam.sales', TEMP);
-      await laptop.post('/staff/password', { currentPassword: TEMP, newPassword: MINE });
-      expect((await phone.get('/staff/me')).status).toBe(401);
+    it('cannot change their own password — the admin manages it', async () => {
+      const s = await onboard(admin, { username: 'sam.sales', team: 'sales' });
+      const res = await s.post('/staff/password', { currentPassword: TEMP, newPassword: MINE });
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(/managed by your administrator/);
+      expect((await signIn('sam.sales', TEMP)).login.status).toBe(200);
+    });
+
+    it('a staff member on their own email can still change theirs', async () => {
+      await createUser({ name: 'Ravi', email: 'ravi@gmail.com', role: 'staff', staff: { team: 'sales', isHead: false, active: true } });
+      const ravi = await signIn('ravi@gmail.com');
+      expect((await ravi.post('/staff/password', { currentPassword: PASSWORD, newPassword: MINE })).status).toBe(200);
+      expect((await ravi.get('/staff/team')).status).toBe(200); // this session survives
+      expect((await signIn('ravi@gmail.com', MINE)).login.status).toBe(200);
     });
   });
 
   describe('resetting someone else', () => {
-    it('admin reset ends their sessions and forces a new change', async () => {
+    it('an admin change takes effect at once: old password dead, every session ended, new one works', async () => {
       const sam = await onboard(admin, { username: 'sam.sales', team: 'sales' });
       const { body } = await admin.get('/staff/team?team=sales');
       const res = await admin.post(`/staff/members/${body.members[0].id}/password`, { password: 'AdminChose#2026' });
       expect(res.status).toBe(200);
 
       expect((await sam.get('/staff/team')).status).toBe(401);
-      expect((await signIn('sam.sales', MINE)).login.status).toBe(401);
+      expect((await signIn('sam.sales', TEMP)).login.status).toBe(401);
       const again = await signIn('sam.sales', 'AdminChose#2026');
-      expect(again.login.body.user.mustChangePassword).toBe(true);
+      expect(again.login.status).toBe(200);
+      expect((await again.get('/staff/team')).status).toBe(200);
     });
 
     it('a head resets members of their own team, but not a head or another team', async () => {
@@ -221,7 +214,7 @@ describe('Company accounts', () => {
       expect((await admin.post(`/staff/members/${user._id}/deactivate`)).status).toBe(200);
 
       expect((await sam.get('/staff/me')).status).toBe(401);
-      const login = await signIn('sam.sales', MINE);
+      const login = await signIn('sam.sales', TEMP);
       expect(login.login.status).toBe(401);
       expect(login.login.body.message).toBe((await signIn('sam.sales', 'not-the-password')).login.body.message);
       expect(await User.exists({ _id: user._id })).toBeTruthy();
