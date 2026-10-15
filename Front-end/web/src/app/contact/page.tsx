@@ -1,12 +1,13 @@
 'use client';
 
-import { MapPin, Phone, Mail, Clock, ArrowRight } from 'lucide-react';
+import { MapPin, Phone, Mail, Clock, ArrowRight, Headphones } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from '@/lib/constants';
 import ContactForm from '@/components/support/ContactForm';
 import StorePageHeader from '@/components/store/StorePageHeader';
+import { capture } from '@/lib/analytics';
 
 const SUPPORT_EMAIL = 'support@autobacsindia.com';
 const SUPPORT_PHONE_DISPLAY = '+91 98952 57905';
@@ -92,6 +93,28 @@ function ContactPageInner() {
                   </div>
                 ))}
               </div>
+
+              {/* Many contact-page visitors are really asking "which part fits my
+                  car?" — the consultation form answers that better than a support
+                  ticket, so it gets the column's free space as a clear offer.
+                  Literal colours: the card stays brand green in both themes. */}
+              <Link
+                href="/consultation"
+                onClick={() => capture('consult_cta_click', { from: 'contact' })}
+                className="group mt-10 block rounded-2xl bg-gradient-to-br from-[#0d6b3e] to-[#0a5c33] p-6 text-white shadow-lg ring-1 ring-black/5 transition hover:shadow-xl sm:p-8"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15">
+                  <Headphones className="h-6 w-6" aria-hidden="true" />
+                </span>
+                <h3 className="mt-4 font-display text-xl font-bold tracking-[-0.01em]">Not sure which part fits your car?</h3>
+                <p className="mt-2 font-display text-sm leading-relaxed text-white/85">
+                  Tell us your make and model. A specialist will suggest the right parts and fitment — free, with no obligation to buy.
+                </p>
+                <span className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 font-display text-sm font-bold text-[#0a5c33] transition group-hover:bg-[#e7f3ec]">
+                  Consult a specialist
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                </span>
+              </Link>
             </div>
 
             {/* Message form (creates a tracked support ticket) + direct channels */}
