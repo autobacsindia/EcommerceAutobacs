@@ -10,6 +10,7 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import { whatsappNumber } from '@/components/staff/sales/PaymentLinkCard';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import { shrinkPhoto, STAGE_TONE, type LineAction, type WorkOrder } from './types';
+import OrderSupplierPayments from '@/components/payments/OrderSupplierPayments';
 
 type OrderResponse = { success: boolean; order: WorkOrder };
 
@@ -203,6 +204,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
           ))}
         </ul>
       </div>
+
+      <OrderSupplierPayments order={o} />
 
       {o.canShip && (
         // Keyed on the lines' stages so the form starts fresh whenever the order moves.

@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, LogOut, KeyRound, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, KeyRound, Banknote, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -31,6 +31,11 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   if (team === 'procurement') nav.push({ href: '/team/procurement', label: 'Stock & shipping', icon: PackageSearch }, paid);
   if (team === 'accounts') nav.push({ href: '/team/refunds', label: 'Refund approvals', icon: Wallet }, paid);
   if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid);
+  // Payment requests: supplier payments (procurement), expenses (operations,
+  // marketing), and paying them (accounts).
+  if (['procurement', 'accounts', 'operations', 'marketing'].includes(team)) {
+    nav.push({ href: '/team/payments', label: 'Payments', icon: Banknote });
+  }
   nav.push({ href: '/team/members', label: 'My team', icon: Users });
   return nav;
 }

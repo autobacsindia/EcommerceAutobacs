@@ -99,6 +99,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/staff', label: 'Staff & Teams', icon: '🪪' },
       { href: '/admin/team-activity', label: 'Team activity', icon: '⏱️' },
+      { href: '/admin/payments', label: 'Payments', icon: '💳' },
       { href: '/admin/workflows', label: 'Workflows', icon: '⚡' },
     ],
   },

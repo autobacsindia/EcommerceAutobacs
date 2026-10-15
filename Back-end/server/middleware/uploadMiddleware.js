@@ -365,6 +365,29 @@ const proofPhotoUpload = multer({
   limits: { fileSize: MAX_PROOF_PHOTO_SIZE, files: 1 },
 });
 
+// ── Payment requests: bills, payee QR, payment screenshot ─────────────────────
+
+/**
+ * A photo or a PDF (a supplier's invoice is often a PDF), 8 MB each. The
+ * service re-checks the bytes (contentSniff) before anything is stored.
+ */
+const paymentFileUpload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (![...ALLOWED_MIME_TYPES, 'application/pdf'].includes(file.mimetype)) {
+      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE',
+        `Invalid file type "${file.mimetype}". Upload a JPG, PNG or WebP photo, or a PDF.`), false);
+    }
+    cb(null, true);
+  },
+  limits: { fileSize: MAX_PROOF_PHOTO_SIZE, files: 3 },
+});
+
+/** Raising a request: up to two bills and one payee QR. */
+export const uploadPaymentRequestFiles = paymentFileUpload.fields([{ name: 'bill', maxCount: 2 }, { name: 'qr', maxCount: 1 }]);
+/** Recording a payment: one screenshot (field `proof`). */
+export const uploadPaymentProof = paymentFileUpload.single('proof');
+
 /** Single proof photo (field `photo`). Errors go through handleProofPhotoError. */
 export const uploadProofPhoto = proofPhotoUpload.single('photo');
 
