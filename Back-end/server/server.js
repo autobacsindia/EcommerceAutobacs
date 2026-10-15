@@ -11,6 +11,7 @@ import { startOrderWorker } from "./queue/workers/orderWorker.js";
 import { startMediaWorker } from "./queue/workers/mediaWorker.js";
 import { closeQueues } from "./queue/queues.js";
 import mongoose from "mongoose";
+import { verifyRedisAtStartup } from "./utils/redisStartupCheck.js";
 
 // ── Centralized Environment Validation ─────────────────────────────────────
 // Validates ALL critical environment variables in one place
@@ -176,22 +177,11 @@ async function bootstrap() {
 
     // 4. CRITICAL: Redis health check (required in production)
     if (process.env.NODE_ENV === 'production' && process.env.REDIS_URL) {
-      try {
-        // Import Redis client from rate limiter
-        const { default: Redis } = await import('ioredis');
-        const testClient = new Redis(process.env.REDIS_URL, {
-          maxRetriesPerRequest: 1,
-          connectTimeout: 5000,
-          commandTimeout: 2000,
-          tls: process.env.REDIS_URL?.startsWith('rediss://') ? {} : undefined,
-        });
-
-        await testClient.ping();
-        await testClient.quit();
-        console.log('✓ Redis connection verified');
-      } catch (err) {
+      const { default: Redis } = await import('ioredis');
+      const check = await verifyRedisAtStartup(process.env.REDIS_URL, { RedisCtor: Redis });
+      if (!check.ok) {
         console.error('✗ FATAL: Redis is required in production but connection failed');
-        console.error('  Error:', err.message);
+        console.error(`  Error: ${check.error} (after ${check.attempts} attempts)`);
         console.error('');
         console.error('  FIX: Ensure Redis is running and REDIS_URL is correctly configured');
         process.exit(1);
