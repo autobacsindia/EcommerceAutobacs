@@ -42,6 +42,7 @@ import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../
 import { SHIPMENT_STATUS } from '../utils/orderFulfilment.js';
 import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
 import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
+import { assertNoPendingSupplierPayment } from './paymentRequestService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -471,6 +472,9 @@ export async function shipWithProof(actor, orderId, { itemIds = [], courierName,
     .map((l) => ({ itemId: l.itemId, quantity: unshippedQuantity(o, l.itemId) }))
     .filter((l) => l.quantity > 0);
   if (!lines.length) throw fail('Nothing on this order is ready to ship. Mark the items in stock first.', 409);
+  // A supplier payment still awaiting approval or payment holds its items back:
+  // procurement asks the supplier for shipping once accounts has paid.
+  await assertNoPendingSupplierPayment(orderId, lines.map((l) => l.itemId));
 
   const ext = { jpeg: 'jpg', png: 'png', webp: 'webp' }[String(file.mimetype || '').split('/')[1]] || 'jpg';
   const stored = await putPrivateAsset({

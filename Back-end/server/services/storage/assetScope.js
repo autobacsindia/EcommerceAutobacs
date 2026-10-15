@@ -33,6 +33,8 @@ export const PRIVATE_PREFIXES = [
   'autobacs/support',
   'shipping-slips',
   'invoices',
+  // Bills, payee QR codes and payment screenshots (services/paymentRequestService.js).
+  'payment-requests',
 ];
 
 /** Prefixes that are public storefront/marketing imagery. */
