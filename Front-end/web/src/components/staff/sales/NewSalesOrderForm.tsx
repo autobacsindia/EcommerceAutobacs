@@ -9,9 +9,15 @@ import { staffKeys } from '@/hooks/queries/keys';
 import PaymentLinkCard from './PaymentLinkCard';
 import { deepDiscountLines, deepDiscountWarning, isDeepDiscount } from './offerGuard';
 import { errorMessage, quotationHref, rupees, type SalesOrder, type SalesProduct } from './types';
+import { mobileProblem, normalizeMobile } from './phone';
 
 type Line = {
   key: string;
+  /**
+   * A custom item: not in the catalogue, named and priced by the salesperson.
+   * It has no product, no list price and no stock check — `offer` IS its price.
+   */
+  custom?: boolean;
   productId: string;
   variantId: string | null;
   name: string;
@@ -46,16 +52,20 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 const lineOffer = (l: Line) => {
-  const n = l.offer.trim() === '' ? l.listPrice : Number(l.offer);
+  // A custom item has no catalogue price to fall back on: empty means "no price yet".
+  const n = l.offer.trim() === '' ? (l.custom ? NaN : l.listPrice) : Number(l.offer);
   return Number.isFinite(n) ? n : NaN;
 };
+
+let customSeq = 0;
 
 /**
  * Sales member raises an order for a customer on the phone / WhatsApp.
  *
- * Prices shown here are a preview: the server re-prices every line from the
- * catalogue and only accepts an offer between ₹1 and that price, so nothing typed
- * here can raise or zero a price.
+ * Prices shown here are a preview: the server re-prices every catalogue line and
+ * only accepts an offer between ₹1 and that price, so nothing typed here can raise
+ * or zero a catalogue price. A custom item (not in the catalogue) is priced by the
+ * seller — the server still requires a name and at least ₹1.
  */
 export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?: string | null } = {}) {
   const queryClient = useQueryClient();
@@ -116,31 +126,59 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
     setQ('');
   }
 
+  /** An item that isn't in the catalogue — starts with whatever was typed in the search box. */
+  function addCustomLine(name = '') {
+    customSeq += 1;
+    setLines((prev) => [...prev, {
+      key: `custom:${Date.now()}:${customSeq}`,
+      custom: true,
+      productId: '',
+      variantId: null,
+      name: name.trim().slice(0, 150),
+      image: '',
+      listPrice: 0,
+      quantity: 1,
+      offer: '',
+    }]);
+    setQ('');
+  }
+
   const update = (key: string, patch: Partial<Line>) =>
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
   const lineProblem = (l: Line) => {
     const o = lineOffer(l);
+    if (l.custom) {
+      if (l.name.trim().length < 2) return 'Name this item';
+      if (!Number.isFinite(o) || o < 1) return 'Enter the price (at least ₹1)';
+      return '';
+    }
     if (!Number.isFinite(o) || o < 1) return 'Offer must be at least ₹1';
     if (o > l.listPrice) return `Can't be more than ${rupees(l.listPrice)}`;
     return '';
   };
 
-  const fullTotal = lines.reduce((s, l) => s + l.listPrice * l.quantity, 0);
-  const total = lines.reduce((s, l) => s + (lineProblem(l) ? l.listPrice : lineOffer(l)) * l.quantity, 0);
+  // A custom item is "full price" at its own price: it has no catalogue price to save against.
+  const priceOf = (l: Line) => (lineProblem(l) ? (l.custom ? 0 : l.listPrice) : lineOffer(l));
+  const fullTotal = lines.reduce((s, l) => s + (l.custom ? priceOf(l) : l.listPrice) * l.quantity, 0);
+  const total = lines.reduce((s, l) => s + priceOf(l) * l.quantity, 0);
+  const phoneProblem = mobileProblem(customer.phone);
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const saving = Math.max(0, fullTotal - total);
   const hasProblem = lines.some((l) => lineProblem(l));
 
   const create = useMutation({
     mutationFn: () => apiClient.post<Created>('/staff/sales/orders', {
-      customer: { name: customer.name.trim(), email: customer.email.trim(), phone: customer.phone.trim() },
-      shippingAddress: { ...address, fullName: customer.name.trim(), phone: customer.phone.trim() },
-      items: lines.map((l) => ({
-        product: l.productId,
-        variantId: l.variantId,
-        quantity: l.quantity,
-        offerPrice: l.offer.trim() === '' ? null : Number(l.offer),
-      })),
+      customer: { name: customer.name.trim(), email: customer.email.trim(), phone: normalizeMobile(customer.phone) },
+      shippingAddress: { ...address, fullName: customer.name.trim(), phone: normalizeMobile(customer.phone) },
+      items: lines.map((l) => (l.custom
+        ? { custom: true, name: l.name.trim(), quantity: l.quantity, price: Number(l.offer) }
+        : {
+          product: l.productId,
+          variantId: l.variantId,
+          quantity: l.quantity,
+          offerPrice: l.offer.trim() === '' ? null : Number(l.offer),
+        })),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
     }),
     onSuccess: (res) => {
@@ -154,11 +192,13 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    if (phoneProblem) { setPhoneTouched(true); setError(`Mobile number: ${phoneProblem}.`); return; }
     if (lines.length === 0) { setError('Add at least one product.'); return; }
-    if (hasProblem) { setError('Fix the offer prices marked in red.'); return; }
+    if (hasProblem) { setError('Fix the items marked in red.'); return; }
     // Last stop before a real, payable order: a price under half the catalogue
     // one is far more often a dropped zero than a deal (see offerGuard).
-    const suspicious = deepDiscountLines(lines.map((l) => ({ ...l, offer: lineOffer(l) })));
+    // Custom items have no catalogue price to compare with.
+    const suspicious = deepDiscountLines(lines.filter((l) => !l.custom).map((l) => ({ ...l, offer: lineOffer(l) })));
     if (suspicious.length > 0 && !window.confirm(deepDiscountWarning(suspicious, rupees))) return;
     create.mutate();
   }
@@ -251,9 +291,15 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
           </div>
           <div>
             <label className={label} htmlFor="c-phone">Mobile (WhatsApp)</label>
-            <input id="c-phone" className={input} required inputMode="tel" placeholder="98XXXXXXXX" value={customer.phone}
-              pattern="(\+91[\s\-]?)?[6-9]\d{9}" title="10-digit Indian mobile number"
-              onChange={(e) => setCustomer({ ...customer, phone: e.target.value })} />
+            <input id="c-phone" className={`${input} ${phoneTouched && phoneProblem ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : ''}`}
+              required inputMode="tel" autoComplete="tel" placeholder="98765 43210" maxLength={16} value={customer.phone}
+              aria-invalid={phoneTouched && !!phoneProblem} aria-describedby="c-phone-hint"
+              onBlur={() => setPhoneTouched(true)}
+              // Digits, spaces, dashes and a leading + only.
+              onChange={(e) => setCustomer({ ...customer, phone: e.target.value.replace(/[^\d\s+\-]/g, '') })} />
+            <p id="c-phone-hint" className={`mt-1 text-xs ${phoneTouched && phoneProblem ? 'text-red-600' : 'text-gray-500'}`}>
+              {phoneTouched && phoneProblem ? phoneProblem : '10-digit mobile, e.g. 98765 43210'}
+            </p>
           </div>
           <div>
             <label className={label} htmlFor="c-email">Email</label>
@@ -311,6 +357,16 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
           />
           {term.length >= 2 && q.trim().length >= 2 && (
             <div className="absolute z-10 mt-1 max-h-96 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+              {/* Not in the catalogue? Sell it anyway as a custom item with its own price. */}
+              <button
+                type="button"
+                onClick={() => addCustomLine(q)}
+                className="flex w-full items-center gap-2 border-b border-gray-100 bg-emerald-50 px-3 py-2.5 text-left text-sm text-emerald-900 hover:bg-emerald-100"
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">Add <b>&ldquo;{q.trim()}&rdquo;</b> as a custom item</span>
+                <span className="shrink-0 text-xs text-emerald-700">you enter the price</span>
+              </button>
               {search.isFetching && <p className="flex items-center gap-2 p-3 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Searching…</p>}
               {search.isError && <p className="p-3 text-sm text-red-600">{errorMessage(search.error, 'Search failed.')}</p>}
               {search.data && search.data.products.length === 0 && !search.isFetching && (
@@ -356,9 +412,13 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
           )}
         </div>
 
+        <button type="button" onClick={() => addCustomLine()} className="mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:text-emerald-900">
+          <Plus className="h-4 w-4" /> Custom item (not in the catalogue)
+        </button>
+
         {lines.length === 0 ? (
           <p className="mt-4 rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
-            Search above and add the products the customer wants.
+            Search above and add the products the customer wants — or add a custom item and type its price.
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-gray-100">
@@ -373,10 +433,25 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={l.image} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
                     ) : <div className="h-12 w-12 shrink-0 rounded bg-gray-100" />}
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{l.name}</p>
-                      <p className="text-xs text-gray-500">Price {rupees(l.listPrice)}</p>
-                    </div>
+                    {l.custom ? (
+                      <div className="min-w-0 flex-1">
+                        <label className="sr-only" htmlFor={`name-${l.key}`}>Custom item name</label>
+                        <input
+                          id={`name-${l.key}`}
+                          className={`${input} ${l.name.trim().length < 2 ? 'border-red-400' : ''}`}
+                          placeholder="What is it? e.g. Fitting labour"
+                          maxLength={150}
+                          value={l.name}
+                          onChange={(e) => update(l.key, { name: e.target.value })}
+                        />
+                        <p className="mt-1 text-xs text-emerald-700">Custom item · not in the catalogue</p>
+                      </div>
+                    ) : (
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900">{l.name}</p>
+                        <p className="text-xs text-gray-500">Price {rupees(l.listPrice)}</p>
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-start gap-3">
                     <div className="flex items-center rounded-lg border border-gray-300">
@@ -391,13 +466,13 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
                       </button>
                     </div>
                     <div className="w-36">
-                      <label className="sr-only" htmlFor={`offer-${l.key}`}>Offer price for {l.name}</label>
+                      <label className="sr-only" htmlFor={`offer-${l.key}`}>{l.custom ? 'Price' : 'Offer price'} for {l.name || 'custom item'}</label>
                       <div className="relative">
                         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">₹</span>
                         <input
                           id={`offer-${l.key}`}
                           inputMode="decimal"
-                          placeholder={String(l.listPrice)}
+                          placeholder={l.custom ? 'Price' : String(l.listPrice)}
                           value={l.offer}
                           onChange={(e) => update(l.key, { offer: e.target.value.replace(/[^\d.]/g, '') })}
                           className={`${input} pl-7 ${problem ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : deep ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-100' : ''}`}
@@ -405,11 +480,12 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
                       </div>
                       <p className={`mt-1 text-xs ${problem ? 'text-red-600' : deep ? 'font-medium text-amber-700' : 'text-gray-500'}`}>
                         {problem
+                          || (l.custom ? `Price each · ${rupees(offer * l.quantity)} total` : null)
                           || (deep ? 'Less than half price — check it' : null)
                           || (offer < l.listPrice ? `Offer · saves ${rupees((l.listPrice - offer) * l.quantity)}` : 'Offer price (optional)')}
                       </p>
                     </div>
-                    <button type="button" aria-label={`Remove ${l.name}`} onClick={() => setLines(lines.filter((x) => x.key !== l.key))}
+                    <button type="button" aria-label={`Remove ${l.name || 'custom item'}`} onClick={() => setLines(lines.filter((x) => x.key !== l.key))}
                       className="p-2 text-gray-400 hover:text-red-600">
                       <Trash2 className="h-4 w-4" />
                     </button>
