@@ -169,15 +169,12 @@ describe('Team chat — files, mentions, order refs, automatic updates', () => {
       expect((await accounts.get(`/chat/channels/${sales}/files`)).status).toBe(404);
     });
 
-    it('an admin deleting the message removes its files from the Files tab; staff cannot', async () => {
-      const sent = await salesHead.upload(`/chat/channels/${company}/messages`, { text: 'oops' },
-        [{ buffer: PNG, name: 'wrong.png', type: 'image/png' }]);
-      expect((await salesHead.del(`/chat/messages/${sent.body.message.id}`)).status).toBe(403); // staff never delete
+    it('shared files cannot be deleted by anyone — they stay in the Files tab', async () => {
+      const sent = await salesHead.upload(`/chat/channels/${company}/messages`, { text: 'invoice' },
+        [{ buffer: PNG, name: 'invoice.png', type: 'image/png' }]);
+      expect((await salesHead.del(`/chat/messages/${sent.body.message.id}`)).status).toBe(403);
+      expect((await admin.del(`/chat/messages/${sent.body.message.id}`)).status).toBe(403);
       expect((await admin.get(`/chat/channels/${company}/files`)).body.files).toHaveLength(1);
-      await admin.del(`/chat/messages/${sent.body.message.id}`);
-      expect((await admin.get(`/chat/channels/${company}/files`)).body.files).toHaveLength(0);
-      const msgs = await admin.get(`/chat/channels/${company}/messages`);
-      expect(msgs.body.messages[0]).toMatchObject({ deleted: true, attachments: [] });
     });
   });
 

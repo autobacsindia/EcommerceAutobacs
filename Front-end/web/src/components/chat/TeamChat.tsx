@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { MessageSquarePlus, Plus, Search } from 'lucide-react';
+import { ChevronDown, MessageSquarePlus, Plus, Search } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from '@/hooks/queries/keys';
@@ -20,7 +20,7 @@ import {
   useOpenDm,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ThreadData } from '@/hooks/queries/useTeamChat';
-import { Avatar, ChannelIcon, Dialog, GREEN } from './chatUi';
+import { Avatar, ChannelIcon, Dialog, GREEN, shortWhen } from './chatUi';
 import Conversation from './Conversation';
 import MessageSearch from './MessageSearch';
 
@@ -188,6 +188,7 @@ export default function TeamChat() {
   const { data: people = [] } = useChatPeople();
   const [dialog, setDialog] = useState<'space' | 'dm' | null>(null);
   const [filter, setFilter] = useState('');
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // null = closed. 'all' = every channel I can see; otherwise one channel id.
   const [searching, setSearching] = useState<string | null>(null);
 
@@ -289,7 +290,11 @@ export default function TeamChat() {
 
   const term = filter.trim().toLowerCase();
   const visible = channels.filter((c) => !term || c.name.toLowerCase().includes(term));
-  const spaces = visible.filter((c) => c.kind === 'space');
+  const spaces = visible.filter((c) => c.kind === 'space' && c.audience !== 'teams');
+  const betweenTeams = visible
+    .filter((c) => c.audience === 'teams')
+    // Busiest first: the conversation that moved last is the one to look at.
+    .sort((x, y) => new Date(y.lastMessageAt || 0).getTime() - new Date(x.lastMessageAt || 0).getTime());
   const dms = visible.filter((c) => c.kind === 'dm');
 
   const row = (c: ChatChannel) => {
@@ -300,69 +305,101 @@ export default function TeamChat() {
           type="button"
           onClick={() => select(c.id)}
           aria-current={active ? 'true' : undefined}
-          className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[15px] ${
-            active ? 'bg-emerald-100 text-emerald-950' : 'text-gray-700 hover:bg-gray-100'
+          title={c.description || c.name}
+          className={`flex w-full items-center gap-3 rounded-full py-1.5 pl-2 pr-3 text-left text-sm transition-colors ${
+            active ? 'bg-emerald-100 text-emerald-950' : 'text-gray-700 hover:bg-gray-200/70'
           } ${c.unread > 0 ? 'font-semibold text-gray-900' : ''}`}
         >
           <ChannelIcon channel={c} />
-          <span className="min-w-0 flex-1 truncate">{c.name}</span>
-          {c.unread > 0 && (
+          <span className="min-w-0 flex-1 truncate">{c.audience === 'teams' || c.kind === 'dm' ? c.name : `#${c.name}`}</span>
+          {c.unread > 0 ? (
             <span className="min-w-[22px] rounded-full px-1.5 text-center text-xs font-bold leading-[20px] text-white" style={{ background: GREEN }}>
               {c.unread > 99 ? '99+' : c.unread}
             </span>
+          ) : (
+            c.lastMessageAt && <span className="shrink-0 text-[11px] font-normal text-gray-400">{shortWhen(c.lastMessageAt)}</span>
           )}
         </button>
       </li>
     );
   };
 
+  /** A collapsible list section, as in Google Chat. */
+  const section = (key: string, label: string, items: ChatChannel[], empty: string, action?: React.ReactNode) => {
+    const open = !collapsed.has(key);
+    const unread = items.reduce((n, c) => n + c.unread, 0);
+    return (
+      <div className="mt-3">
+        <div className="flex items-center justify-between pl-2 pr-1">
+          <button
+            type="button"
+            onClick={() => setCollapsed((prev) => {
+              const next = new Set(prev);
+              if (next.has(key)) next.delete(key); else next.add(key);
+              return next;
+            })}
+            className="flex items-center gap-1 rounded-full px-1 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-800"
+            aria-expanded={open}
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden="true" />
+            {label}
+            {!open && unread > 0 && <span className="ml-1 h-2 w-2 rounded-full" style={{ background: GREEN }} aria-label={`${unread} unread`} />}
+          </button>
+          {action}
+        </div>
+        {open && (
+          <ul className="mt-1 space-y-0.5">
+            {items.length === 0 && <li className="px-3 py-1 text-sm text-gray-400">{empty}</li>}
+            {items.map(row)}
+          </ul>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="relative flex h-[calc(100dvh-140px)] min-h-[480px] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div className="relative flex h-[calc(100dvh-140px)] min-h-[480px] gap-0 overflow-hidden rounded-2xl bg-[#f2f6fc] p-0 md:gap-2 md:p-2">
       <aside
-        className={`w-full shrink-0 flex-col border-r border-gray-200 bg-gray-50 md:flex md:w-72 ${selected ? 'hidden' : 'flex'}`}
+        className={`w-full shrink-0 flex-col md:flex md:w-72 ${selected ? 'hidden' : 'flex'}`}
         aria-label="Chat channels"
       >
-        <div className="px-4 pb-2 pt-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-bold text-gray-900">
-              Team chat
+        <div className="px-2 pb-1 pt-2">
+          <div className="flex items-center justify-between px-1">
+            <h1 className="text-lg font-semibold text-gray-900">
+              Chat
               {totalUnread > 0 && <span className="ml-2 align-middle text-xs font-semibold text-emerald-700">{totalUnread} new</span>}
             </h1>
-            <div className="flex items-center gap-0.5">
-              <button
-                type="button"
-                onClick={() => setSearching('all')}
-                className="rounded-lg p-2 text-gray-600 hover:bg-gray-200"
-                aria-label="Search all messages"
-                title="Search all messages"
-              >
-                <Search className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setDialog('dm')}
-                className="rounded-lg p-2 text-gray-600 hover:bg-gray-200"
-                aria-label="New message"
-                title="New message"
-              >
-                <MessageSquarePlus className="h-5 w-5" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setSearching('all')}
+              className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
+              aria-label="Search all messages"
+              title="Search all messages"
+            >
+              <Search className="h-5 w-5" />
+            </button>
           </div>
-          <div className="relative mt-2">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => setDialog('dm')}
+            className="mt-2 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-gray-800 shadow-sm hover:shadow-md"
+          >
+            <MessageSquarePlus className="h-5 w-5 text-emerald-700" /> New chat
+          </button>
+          <div className="relative mt-3">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
             <input
               type="search"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Find a space or person"
-              aria-label="Find a space or person"
-              className="h-9 w-full rounded-lg border border-gray-300 bg-white pl-8 pr-3 text-sm outline-none focus:border-emerald-600"
+              placeholder="Find a space, team or person"
+              aria-label="Find a space, team or person"
+              className="h-9 w-full rounded-full border border-transparent bg-white pl-9 pr-3 text-sm outline-none focus:border-emerald-600"
             />
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-4">
           {isLoading && <p className="px-3 py-4 text-sm text-gray-500">Loading…</p>}
           {isError && (
             <p className="px-3 py-4 text-sm text-gray-600">
@@ -373,29 +410,17 @@ export default function TeamChat() {
             </p>
           )}
 
-          <div className="mt-2 flex items-center justify-between px-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Spaces
-            {me?.canCreateSpace && (
-              <button type="button" onClick={() => setDialog('space')} className="rounded p-1 hover:bg-gray-200" aria-label="New space" title="New space">
+          {section('spaces', 'Spaces', spaces, 'No spaces match',
+            me?.canCreateSpace ? (
+              <button type="button" onClick={() => setDialog('space')} className="rounded-full p-1 text-gray-500 hover:bg-gray-200" aria-label="New space" title="New space">
                 <Plus className="h-4 w-4" />
               </button>
-            )}
-          </div>
-          <ul className="mt-1 space-y-0.5">
-            {spaces.length === 0 && <li className="px-3 py-1 text-sm text-gray-400">No spaces match</li>}
-            {spaces.map(row)}
-          </ul>
-
-          <div className="mt-4 flex items-center justify-between px-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Direct messages
-            <button type="button" onClick={() => setDialog('dm')} className="rounded p-1 hover:bg-gray-200" aria-label="Start a direct message" title="Start a direct message">
+            ) : undefined)}
+          {section('teams', 'Between teams', betweenTeams, 'No team conversations match')}
+          {section('dms', 'Direct messages', dms, 'No direct messages yet',
+            <button type="button" onClick={() => setDialog('dm')} className="rounded-full p-1 text-gray-500 hover:bg-gray-200" aria-label="Start a direct message" title="Start a direct message">
               <Plus className="h-4 w-4" />
-            </button>
-          </div>
-          <ul className="mt-1 space-y-0.5">
-            {dms.length === 0 && <li className="px-3 py-1 text-sm text-gray-400">No direct messages yet</li>}
-            {dms.map(row)}
-          </ul>
+            </button>)}
         </div>
       </aside>
 
@@ -412,8 +437,9 @@ export default function TeamChat() {
           onSearch={() => setSearching(selected.id)}
         />
       ) : (
-        <div className="hidden flex-1 items-center justify-center text-gray-500 md:flex">
-          Pick a space or person to start chatting
+        <div className="hidden flex-1 flex-col items-center justify-center gap-2 rounded-2xl bg-white text-gray-500 md:flex">
+          <MessageSquarePlus className="h-10 w-10 text-gray-300" aria-hidden="true" />
+          Pick a space, team or person to start chatting
         </div>
       )}
 

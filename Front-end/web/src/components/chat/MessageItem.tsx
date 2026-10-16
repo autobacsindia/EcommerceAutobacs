@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { Download, MessageSquareReply, Package, RotateCcw, Trash2 } from 'lucide-react';
+import { Download, MessageSquareReply, Package, Quote, RotateCcw } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
-import { Avatar, FileKindIcon, dayLabel, fileSize, timeOf } from './chatUi';
+import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
 
 /**
  * Message text as PLAIN TEXT, with links and @mentions picked out.
@@ -152,32 +152,57 @@ function ThreadSummary({ m, meId, onOpen }: { m: ChatMessage; meId: string; onOp
   );
 }
 
+/** The DOM id of a message row, so a quote can scroll to what it quotes. */
+export const messageDomId = (id: string) => `chat-msg-${id}`;
+
+/** The quoted message, above the reply. Clicking it jumps to the original. */
+function QuoteBlock({ quote, onJump }: { quote: NonNullable<ChatMessage['quote']>; onJump?: (id: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onJump?.(quote.id)}
+      className="mb-1 block w-full max-w-xl rounded-lg border-l-4 border-emerald-600 bg-gray-50 px-3 py-1.5 text-left hover:bg-emerald-50"
+      aria-label={`Quoted message from ${quote.by || 'someone'} — go to it`}
+    >
+      <span className="block text-xs font-semibold text-emerald-800">{quote.by || 'Former member'}</span>
+      <span className="line-clamp-2 block text-sm text-gray-600">{quote.preview || 'Shared a file'}</span>
+    </button>
+  );
+}
+
 /** When a timeline row last changed: its newest reply, or when it was posted. */
 const activityAt = (m: ChatMessage) => m.lastReply?.at ?? m.createdAt;
 
+/**
+ * One message, Google Chat style: round avatar, name + team + time, the text
+ * below, and a small action bar on hover (quote it, reply in a thread). There is
+ * no delete: chat is part of the company record and the API refuses deletes.
+ */
 export default function MessageItem({
   message,
   previous,
   meId,
   meName,
   peopleById,
-  canDelete,
   orderHref,
-  onDelete,
   onRetry,
   onOpenThread,
+  onQuote,
+  onJumpTo,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
   meId: string;
   meName: string;
   peopleById: Map<string, ChatPerson>;
-  canDelete: boolean;
   orderHref: (id: string) => string;
-  onDelete: (m: ChatMessage) => void;
   onRetry: (m: ChatMessage) => void;
   /** Open (or start) this message's thread. Absent inside a thread, where replies have no threads. */
   onOpenThread?: (m: ChatMessage) => void;
+  /** Quote this message in the composer. */
+  onQuote?: (m: ChatMessage) => void;
+  /** Scroll to a quoted message. */
+  onJumpTo?: (id: string) => void;
 }) {
   const m = message;
   // The timeline is ordered by activity, so a thread that just moved sits under
@@ -185,56 +210,62 @@ export default function MessageItem({
   const newDay =
     !previous || new Date(activityAt(previous)).toDateString() !== new Date(activityAt(m)).toDateString();
   // Consecutive messages from one person within 5 minutes hide the repeated header.
-  // A message with a thread always shows its own header.
+  // A message with a thread or a quote always shows its own header.
   const grouped =
     !newDay &&
     previous &&
     !m.replyCount &&
     !previous.replyCount &&
+    !m.quote &&
     previous.kind === m.kind &&
     previous.sender?.id === m.sender?.id &&
     new Date(m.createdAt).getTime() - new Date(previous.createdAt).getTime() < 5 * 60_000;
-  const canReply = !!onOpenThread && !m.deleted && !m.pending && !m.failed;
+  const live = !m.deleted && !m.pending && !m.failed;
+  const canReply = !!onOpenThread && live;
+  const canQuote = !!onQuote && live;
 
   const mine = m.sender?.id === meId;
   const mentionsMe = m.mentions.includes(meId);
   const mentionNames = m.mentions.map((id) => peopleById.get(id)?.name ?? '').filter(Boolean);
   const photos = m.attachments.filter((a) => a.kind === 'image');
   const documents = m.attachments.filter((a) => a.kind !== 'image');
-  const removable = canDelete && !m.deleted && !m.pending && !m.failed && m.kind === 'user';
 
   return (
-    <div>
+    <div id={messageDomId(m.id)} className="scroll-mt-24">
       {newDay && (
-        <div className="my-3 flex items-center gap-3 text-xs font-medium text-gray-500">
+        <div className="my-4 flex items-center gap-3 text-xs font-medium text-gray-500">
           <span className="h-px flex-1 bg-gray-200" />
-          {dayLabel(m.createdAt)}
+          <span className="rounded-full border border-gray-200 bg-white px-3 py-0.5">{dayLabel(m.createdAt)}</span>
           <span className="h-px flex-1 bg-gray-200" />
         </div>
       )}
       <div
-        className={`group relative flex gap-3 rounded-lg px-2 ${grouped ? 'py-0.5' : 'mt-2 py-1'} ${
-          mentionsMe ? 'bg-amber-50 ring-1 ring-amber-200' : 'hover:bg-gray-50'
+        className={`group relative flex gap-3 rounded-xl px-3 transition-colors ${grouped ? 'py-0.5' : 'mt-1 pb-1 pt-2'} ${
+          mentionsMe ? 'bg-amber-50 ring-1 ring-amber-200' : 'hover:bg-gray-100/70'
         }`}
       >
         {grouped ? <span className="w-9 shrink-0" /> : <Avatar person={m.sender} system={m.kind === 'system'} />}
         <div className="min-w-0 flex-1">
           {!grouped && (
-            <div className="flex flex-wrap items-baseline gap-x-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span className="text-sm font-semibold text-gray-900">
                 {m.kind === 'system' ? 'Roavion updates' : mine ? 'You' : m.sender?.name ?? 'Former member'}
               </span>
-              {m.kind !== 'system' && m.sender?.teamLabel && (
-                <span className="text-xs text-gray-500">{m.sender.teamLabel}</span>
+              {m.kind === 'system' ? (
+                <span className="rounded-full bg-emerald-100 px-2 py-px text-[11px] font-medium text-emerald-800">Automatic</span>
+              ) : (
+                <TeamBadge person={m.sender} />
               )}
-              <span className="text-xs text-gray-400">{timeOf(m.createdAt)}</span>
+              <span className="text-xs text-gray-500">{timeOf(m.createdAt)}</span>
             </div>
           )}
 
           {m.deleted ? (
-            <p className="text-sm italic text-gray-400">This message was deleted</p>
+            // Only messages hidden before the no-delete rule; nothing can be deleted now.
+            <p className="text-sm italic text-gray-400">This message was removed</p>
           ) : (
             <div className={m.pending ? 'opacity-60' : ''}>
+              {m.quote && <QuoteBlock quote={m.quote} onJump={onJumpTo} />}
               {m.text && <MessageText text={m.text} mentionNames={mentionNames} meName={meName} />}
               <Photos items={photos} />
               <Documents items={documents} />
@@ -254,27 +285,28 @@ export default function MessageItem({
           )}
         </div>
 
-        {(removable || canReply) && (
-          <div className="absolute right-2 top-1 hidden gap-1 focus-within:flex group-hover:flex pointer-coarse:flex">
+        {(canQuote || canReply) && (
+          <div className="absolute -top-3 right-3 hidden items-center gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 shadow-md focus-within:flex group-hover:flex pointer-coarse:flex">
+            {canQuote && (
+              <button
+                type="button"
+                onClick={() => onQuote!(m)}
+                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
+                aria-label="Quote in reply"
+                title="Quote in reply"
+              >
+                <Quote className="h-4 w-4" />
+              </button>
+            )}
             {canReply && (
               <button
                 type="button"
                 onClick={() => onOpenThread!(m)}
-                className="rounded-md bg-white p-1 text-gray-500 shadow-sm hover:text-emerald-700"
+                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
                 aria-label="Reply in thread"
                 title="Reply in thread"
               >
                 <MessageSquareReply className="h-4 w-4" />
-              </button>
-            )}
-            {removable && (
-              <button
-                type="button"
-                onClick={() => onDelete(m)}
-                className="rounded-md bg-white p-1 text-gray-400 shadow-sm hover:text-red-600"
-                aria-label="Delete message"
-              >
-                <Trash2 className="h-4 w-4" />
               </button>
             )}
           </div>

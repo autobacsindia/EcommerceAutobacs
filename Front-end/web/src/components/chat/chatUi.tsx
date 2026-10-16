@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { FileSpreadsheet, FileText, File as FileIcon, Hash, Image as ImageIcon, Lock, X } from 'lucide-react';
+import { ArrowLeftRight, FileSpreadsheet, FileText, File as FileIcon, Hash, Image as ImageIcon, Lock, X } from 'lucide-react';
 import type { ChatChannel, ChatPerson } from '@/hooks/queries/useTeamChat';
 
 /** The store green, so the panels match the rest of the brand. */
@@ -35,6 +35,14 @@ export function colourFor(name: string) {
 
 export const timeOf = (iso: string) =>
   new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+
+/** A list timestamp: the time today, otherwise the date. */
+export function shortWhen(iso: string) {
+  const d = new Date(iso);
+  return d.toDateString() === new Date().toDateString()
+    ? timeOf(iso)
+    : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
 
 export function dayLabel(iso: string) {
   const d = new Date(iso);
@@ -71,29 +79,63 @@ export function Avatar({
   const box = size === 'sm' ? 'h-7 w-7 text-[11px]' : 'h-9 w-9 text-sm';
   if (system) {
     return (
-      <span className={`grid ${box} shrink-0 place-items-center rounded-lg font-bold text-white`} style={{ background: GREEN }} aria-hidden="true">
+      <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold text-white`} style={{ background: GREEN }} aria-hidden="true">
         R
       </span>
     );
   }
   const name = person?.name ?? '?';
   return (
-    <span className={`grid ${box} shrink-0 place-items-center rounded-lg font-bold ${colourFor(name)}`} aria-hidden="true">
+    <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold ${colourFor(name)}`} aria-hidden="true">
       {initials(name)}
     </span>
   );
 }
 
-export function ChannelIcon({ channel }: { channel: ChatChannel }) {
+/** One colour per team, used for its badge and its conversation icon. */
+const TEAM_COLOURS: Record<string, string> = {
+  sales: 'bg-sky-100 text-sky-800',
+  procurement: 'bg-amber-100 text-amber-800',
+  accounts: 'bg-violet-100 text-violet-800',
+  operations: 'bg-teal-100 text-teal-800',
+  marketing: 'bg-rose-100 text-rose-800',
+};
+export const teamColour = (team: string | null | undefined) =>
+  (team && TEAM_COLOURS[team]) || 'bg-gray-100 text-gray-700';
+
+/** "GTM", "Procurement" … as a small coloured pill. Admins read "Admin". */
+export function TeamBadge({ person }: { person: ChatPerson | null }) {
+  if (!person?.teamLabel) return null;
+  return (
+    <span className={`rounded-full px-2 py-px text-[11px] font-medium ${person.role === 'admin' ? 'bg-gray-900 text-white' : teamColour(person.team)}`}>
+      {person.teamLabel}{person.isHead ? ' · Head' : ''}
+    </span>
+  );
+}
+
+/** The square icon a conversation shows in the list and its header. */
+export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; size?: 'sm' | 'md' }) {
+  const box = size === 'md' ? 'h-9 w-9 text-sm' : 'h-7 w-7 text-[11px]';
   if (channel.kind === 'dm') {
     return (
-      <span className={`grid h-6 w-6 shrink-0 place-items-center rounded-md text-[10px] font-bold ${colourFor(channel.name)}`} aria-hidden="true">
+      <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold ${colourFor(channel.name)}`} aria-hidden="true">
         {initials(channel.name)}
       </span>
     );
   }
+  if (channel.audience === 'teams') {
+    return (
+      <span className={`grid ${box} shrink-0 place-items-center rounded-xl ${teamColour(channel.withTeam ?? channel.teams?.[0])}`} aria-hidden="true">
+        <ArrowLeftRight className="h-3.5 w-3.5" />
+      </span>
+    );
+  }
   const Icon = channel.audience === 'members' ? Lock : Hash;
-  return <Icon className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />;
+  return (
+    <span className={`grid ${box} shrink-0 place-items-center rounded-xl ${channel.audience === 'team' ? teamColour(channel.team) : 'bg-emerald-100 text-emerald-800'}`} aria-hidden="true">
+      <Icon className="h-3.5 w-3.5" />
+    </span>
+  );
 }
 
 /** Centre-screen on desktop, bottom sheet on phones. Closes on Escape. */

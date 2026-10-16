@@ -541,3 +541,10 @@ textarea::placeholder {
      behind the image is handled per-component instead. */
   background-color: transparent;
 }
+
+/* Team chat: briefly highlight the message a quote jumped to. */
+@keyframes chat-flash {
+  0%, 60% { background-color: rgb(209 250 229); }
+  100% { background-color: transparent; }
+}
+.chat-flash > div:last-child { animation: chat-flash 1.6s ease-out; }

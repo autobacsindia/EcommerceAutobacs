@@ -38,6 +38,22 @@ const RefSchema = new mongoose.Schema(
  * One chat message. Business records: never hard-deleted. A delete sets
  * `deletedAt` and the API stops returning the text, but the row stays for audit.
  */
+/**
+ * A quoted message ("replying to …"). Snapshotted at send time, like an order's
+ * prices: the quote shows what the person was answering even if that message is
+ * later hidden. Always a message from the SAME channel (chatService enforces it),
+ * so a quote can never carry text into a conversation that could not read it.
+ */
+const QuoteSchema = new mongoose.Schema(
+  {
+    message: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatMessage', required: true },
+    seq: { type: Number, required: true },
+    by: { type: String, default: '' },
+    preview: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
 const ChatMessageSchema = new mongoose.Schema(
   {
     channel: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatChannel', required: true },
@@ -57,6 +73,7 @@ const ChatMessageSchema = new mongoose.Schema(
     /** Teams addressed as a group, e.g. '@accounts'. Values from config/staff.js. */
     mentionTeams: [{ type: String }],
     refs: { type: [RefSchema], default: [] },
+    quote: { type: QuoteSchema, default: undefined },
 
     /*
       Threads. A reply carries `threadRoot`; a top-level message does not.

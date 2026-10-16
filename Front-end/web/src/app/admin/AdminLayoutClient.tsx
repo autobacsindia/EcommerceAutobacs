@@ -299,6 +299,21 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
               <span>🌐</span>
               <span>View Site</span>
             </Link>
+            {/* Chat has its own button so it is one click from anywhere in admin. */}
+            <Link
+              href="/admin/chat"
+              className={`relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                isLinkActive('/admin/chat') ? 'bg-emerald-800 text-white' : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
+              }`}
+            >
+              <span>💬</span>
+              <span>Chat</span>
+              {chatUnread > 0 && (
+                <span className="rounded-full bg-emerald-600 px-1.5 text-xs font-bold leading-5 text-white" aria-label={`${chatUnread} unread`}>
+                  {chatUnread > 99 ? '99+' : chatUnread}
+                </span>
+              )}
+            </Link>
           </div>
 
           {/* Stats Overview — each tile drills into the orders behind the number */}
