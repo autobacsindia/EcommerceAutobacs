@@ -123,7 +123,9 @@ describe('what the quotation says', () => {
     expect(q.total).toBe(10200);
     expect(q.consistent).toBe(true);
     expect(q.totalInWords).toBe('Rupees Ten Thousand Two Hundred Only');
-    expect(q.salesPerson.name).toBe('Asha');
+    // The salesperson is never printed on the quotation — the customer deals with the company.
+    expect(q).not.toHaveProperty('salesPerson');
+    expect(JSON.stringify(q)).not.toContain('Asha');
     expect(q.customer).toMatchObject({ name: CUSTOMER.name, phone: CUSTOMER.phone, email: CUSTOMER.email });
     expect(q.number).toBe(quotationNumber(saved));
     expect(q.number).toMatch(/^QT-/);

@@ -100,6 +100,66 @@ afterAll(() => {
   else process.env.REDIS_URL = ORIGINAL_REDIS_URL;
 });
 
+describe('custom items (not in the catalogue)', () => {
+  it('mixes catalogue and custom lines, keeps their order, and totals both', async () => {
+    const rep = await makeStaff('sales');
+    const product = await makeProduct();
+    const result = await svc.createSalesOrder(rep, {
+      customer: CUSTOMER,
+      shippingAddress: ADDRESS,
+      items: [
+        { custom: true, name: '  Custom   fitting labour ', quantity: 1, price: 1500 },
+        { product: String(product._id), quantity: 2, offerPrice: 4500 },
+        { custom: true, name: 'Imported dash cam (special order)', quantity: 2, price: 7999.5 },
+      ],
+    }, req);
+
+    expect(result.order.items.map((i) => [i.name, i.quantity, i.price, i.custom])).toEqual([
+      ['Custom fitting labour', 1, 1500, true],
+      [product.name, 2, 4500, false],
+      ['Imported dash cam (special order)', 2, 7999.5, true],
+    ]);
+    expect(result.order.totalAmount).toBe(1500 + 9000 + 15999);
+
+    const saved = await Order.findById(result.order.id).lean();
+    expect(saved.items[0]).toMatchObject({ custom: true, listPrice: null });
+    expect(saved.items[0].product).toBeUndefined();
+    expect(String(saved.items[1].product)).toBe(String(product._id));
+  });
+
+  it('an order of only custom items works (no catalogue lookup at all)', async () => {
+    const rep = await makeStaff('sales');
+    const result = await svc.createSalesOrder(rep, {
+      customer: CUSTOMER, shippingAddress: ADDRESS,
+      items: [{ custom: true, name: 'Bespoke seat stitching', quantity: 1, price: 12000 }],
+    }, req);
+    expect(result.order.totalAmount).toBe(12000);
+    expect(result.paymentLink.shortUrl).toMatch(/^https:/);
+  });
+
+  it.each([
+    [{ custom: true, name: 'x', quantity: 1, price: 100 }, /Name each custom item/],
+    [{ custom: true, name: 'Labour', quantity: 1, price: 0 }, /valid price/],
+    [{ custom: true, name: 'Labour', quantity: 1, price: -50 }, /valid price/],
+    [{ custom: true, name: 'Labour', quantity: 0, price: 100 }, /Quantity/],
+    [{ custom: true, name: 'Labour', quantity: 1, price: 'abc' }, /valid price/],
+  ])('refuses a bad custom line %j', async (line, message) => {
+    const rep = await makeStaff('sales');
+    await expect(svc.createSalesOrder(rep, { customer: CUSTOMER, shippingAddress: ADDRESS, items: [line] }, req))
+      .rejects.toThrow(message);
+    expect(await Order.countDocuments({ 'items.name': 'Labour' })).toBe(0);
+  });
+
+  it('a catalogue line still cannot be priced above the catalogue', async () => {
+    const rep = await makeStaff('sales');
+    const product = await makeProduct();
+    await expect(svc.createSalesOrder(rep, {
+      customer: CUSTOMER, shippingAddress: ADDRESS,
+      items: [{ custom: true, name: 'Labour', quantity: 1, price: 500 }, { product: String(product._id), quantity: 1, offerPrice: 9999 }],
+    }, req)).rejects.toThrow(/can't be higher/);
+  });
+});
+
 describe('creating a sales order', () => {
   it('prices from the catalogue, applies the offer and sends a payment link', async () => {
     const rep = await makeStaff('sales', { name: 'Asha' });

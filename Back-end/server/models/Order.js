@@ -156,8 +156,12 @@ const OrderSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "Product",
         // Historical line items may reference products no longer in catalog; name/price are snapshotted.
-        required: function () { return this.parent()?.source !== "woocommerce"; }
+        // A CUSTOM line (sales panel: an item not in the catalogue) has no product at all.
+        required: function () { return this.parent()?.source !== "woocommerce" && !this.custom; }
       },
+      // Sales panel only: an item that is not in the catalogue, named and priced by
+      // the seller. No product, no stock, no list price — name/price are the record.
+      custom: { type: Boolean, default: undefined },
       // Selected variant (variable products only). Snapshotted like name/price so
       // order history + invoices stay correct even if the variant is later edited
       // or the product is removed. null for simple products.

@@ -104,6 +104,7 @@ function shape(o) {
       quantity: i.quantity,
       price: i.price,
       listPrice: i.listPrice ?? null,
+      custom: !!i.custom,
     })),
     customer: {
       name: o.user?.name || o.shippingAddress?.fullName || '',
@@ -162,7 +163,10 @@ export async function searchSalesProducts(actor, q) {
 /**
  * Create a sales order and its payment link.
  * @param {Object} actor  req.user (active sales staff)
- * @param {Object} input  { customer:{name,email,phone}, shippingAddress:{…}, items:[{product, variantId?, quantity, offerPrice}], notes? }
+ * @param {Object} input  { customer:{name,email,phone}, shippingAddress:{…}, items:[…], notes? }
+ *   items: a catalogue line { product, variantId?, quantity, offerPrice? }
+ *          or a CUSTOM line { custom: true, name, quantity, price } — an item that
+ *          is not in the catalogue, named and priced by the seller.
  */
 export async function createSalesOrder(actor, input, req) {
   if (!canSell(actor)) throw fail('Only the GTM head and GTM leads can create orders here.', 403);
@@ -170,17 +174,23 @@ export async function createSalesOrder(actor, input, req) {
   const items = Array.isArray(input.items) ? input.items : [];
   if (items.length === 0) throw fail('Add at least one product.', 400);
 
-  // Price every line from the catalogue — the ONLY source of the list price.
-  // priceItems also refuses inactive products, missing variants and out-of-stock items.
-  const { orderItems } = await pricingService.priceItems(
-    items.map((i) => ({ product: i.product, variantId: i.variantId || null, quantity: Number(i.quantity) })),
-  );
+  const isCustom = (i) => i?.custom === true || i?.custom === 'true';
+  const catalogueItems = items.filter((i) => !isCustom(i));
 
-  const lineItems = orderItems.map((line, idx) => {
+  // Price every CATALOGUE line from the catalogue — the ONLY source of its list price.
+  // priceItems also refuses inactive products, missing variants and out-of-stock items.
+  const { orderItems } = catalogueItems.length
+    ? await pricingService.priceItems(
+      catalogueItems.map((i) => ({ product: i.product, variantId: i.variantId || null, quantity: Number(i.quantity) })),
+    )
+    : { orderItems: [] };
+
+  const catalogueLines = orderItems.map((line, idx) => {
     const listPrice = toRupees(line.price);
-    const offer = items[idx].offerPrice === undefined || items[idx].offerPrice === null || items[idx].offerPrice === ''
+    const requested = catalogueItems[idx].offerPrice;
+    const offer = requested === undefined || requested === null || requested === ''
       ? listPrice
-      : toRupees(items[idx].offerPrice);
+      : toRupees(requested);
     if (!Number.isFinite(offer) || offer < 1) {
       throw fail(`Enter a valid offer price for ${line.name} (at least ₹1).`, 400);
     }
@@ -200,6 +210,22 @@ export async function createSalesOrder(actor, input, req) {
       image: line.image || '',
     };
   });
+
+  // Custom lines: there is no catalogue price to check against — the agreed price
+  // IS the price. Still bounded and validated here, never trusted blindly.
+  const customLine = (i) => {
+    const name = String(i.name ?? '').trim().replace(/\s+/g, ' ').slice(0, 150);
+    const quantity = Number(i.quantity);
+    const price = toRupees(i.price);
+    if (name.length < 2) throw fail('Name each custom item.', 400);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) throw fail(`Quantity for "${name}" must be 1–100.`, 400);
+    if (!Number.isFinite(price) || price < 1 || price > 10000000) throw fail(`Enter a valid price for "${name}" (at least ₹1).`, 400);
+    return { custom: true, quantity, price, listPrice: null, name, image: '' };
+  };
+
+  // Keep the order the seller entered the lines in.
+  let next = 0;
+  const lineItems = items.map((i) => (isCustom(i) ? customLine(i) : catalogueLines[next++]));
 
   const rep = await salesRepRepository.findOrCreateForUser(actor);
   const customer = input.customer || {};
@@ -221,6 +247,7 @@ export async function createSalesOrder(actor, input, req) {
 
   auditLogger.logAction(req, 'CREATE', 'Order', order._id, {
     via: 'sales_panel', totalAmount: order.totalAmount, lines: lineItems.length,
+    customLines: lineItems.filter((l) => l.custom).length,
     discounted: lineItems.some((l) => l.listPrice),
     // Sold under half the catalogue price. Allowed — the call agreed the number
     // and the panel already asked the seller to confirm — but it is the shape a

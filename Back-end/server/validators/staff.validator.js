@@ -112,20 +112,50 @@ export const validateOrderIdParam = [
  * Shape and bounds only. Prices are NOT trusted from here — the service re-prices
  * every line from the catalogue and only accepts an offer between ₹1 and that price.
  */
+/** The `items[n]` object a `items[n].field` path belongs to. */
+const lineAt = (req, path) => {
+  const m = /^items\[(\d+)\]/.exec(path);
+  return m ? req.body?.items?.[Number(m[1])] : undefined;
+};
+const isCustomLine = (req, path) => {
+  const c = lineAt(req, path)?.custom;
+  return c === true || c === 'true';
+};
+
+/**
+ * An Indian mobile number as people type it — "98765 43210", "098765-43210",
+ * "+91 98765 43210" — reduced to its 10 digits, so the rule below checks the
+ * number and not the formatting. Anything that isn't a mobile stays as typed and
+ * fails the rule.
+ */
+export const normalizeIndianMobile = (value) => {
+  const digits = String(value ?? '').replace(/[\s\-().]/g, '');
+  const m = /^(?:\+91|91|0)?([6-9]\d{9})$/.exec(digits);
+  return m ? m[1] : String(value ?? '').trim();
+};
+const INDIAN_MOBILE = /^[6-9]\d{9}$/;
+
 export const validateSalesOrder = [
   body('customer.name').trim().isLength({ min: 2, max: 100 }).withMessage('Customer name must be 2–100 characters'),
   body('customer.email').trim().isEmail().withMessage('Enter a valid customer email').isLength({ max: 254 }),
-  body('customer.phone').trim().matches(/^(\+91[\s-]?)?[6-9]\d{9}$/).withMessage('Enter a valid 10-digit Indian mobile number'),
+  body('customer.phone').customSanitizer(normalizeIndianMobile).matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit Indian mobile number (starting 6, 7, 8 or 9)'),
   body('shippingAddress.fullName').optional().trim().isLength({ max: 100 }),
-  body('shippingAddress.phone').optional({ values: 'falsy' }).trim().matches(/^(\+91[\s-]?)?[6-9]\d{9}$/).withMessage('Enter a valid delivery phone number'),
+  body('shippingAddress.phone').optional({ values: 'falsy' }).customSanitizer(normalizeIndianMobile).matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit delivery mobile number'),
   body('shippingAddress.addressLine1').trim().isLength({ min: 3, max: 200 }).withMessage('Enter the delivery address'),
   body('shippingAddress.addressLine2').optional().trim().isLength({ max: 200 }),
   body('shippingAddress.city').trim().isLength({ min: 2, max: 80 }).withMessage('Enter the city'),
   body('shippingAddress.state').trim().isLength({ min: 2, max: 80 }).withMessage('Enter the state'),
   body('shippingAddress.postalCode').trim().matches(/^\d{6}$/).withMessage('Enter a valid 6-digit PIN code'),
   body('items').isArray({ min: 1, max: 30 }).withMessage('Add between 1 and 30 products'),
-  body('items.*.product').custom(isObjectId).withMessage('Invalid product'),
+  // A line is either a catalogue product, or a CUSTOM item (not in the catalogue)
+  // that the seller names and prices — `custom: true` + name + price.
+  body('items.*.custom').optional().isBoolean().withMessage('Invalid item type').toBoolean(),
+  body('items.*.product').if((_v, { req, path }) => !isCustomLine(req, path)).custom(isObjectId).withMessage('Invalid product'),
   body('items.*.variantId').optional({ values: 'null' }).custom(isObjectId).withMessage('Invalid product option'),
+  body('items.*.name').if((_v, { req, path }) => isCustomLine(req, path))
+    .isString().trim().isLength({ min: 2, max: 150 }).withMessage('Name each custom item (2–150 characters)'),
+  body('items.*.price').if((_v, { req, path }) => isCustomLine(req, path))
+    .isFloat({ min: 1, max: 10000000 }).withMessage('Enter a price for each custom item (at least ₹1)').toFloat(),
   body('items.*.quantity').isInt({ min: 1, max: 100 }).withMessage('Quantity must be between 1 and 100').toInt(),
   body('items.*.offerPrice').optional({ values: 'null' }).isFloat({ min: 0, max: 10000000 }).withMessage('Invalid offer price'),
   body('notes').optional().isString().isLength({ max: 1000 }),

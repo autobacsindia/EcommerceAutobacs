@@ -89,10 +89,6 @@ export function buildQuotation(order, { now = Date.now() } = {}) {
         addr.postalCode,
       ].filter(Boolean),
     },
-    salesPerson: {
-      name: order.salesUser?.name || '',
-      phone: order.salesUser?.phone || '',
-    },
     lines,
     subtotalAtList,
     discount: round2(subtotalAtList - itemsTotal),
@@ -200,16 +196,11 @@ export async function renderQuotationPdf(q) {
       ]);
       y = Math.max(fromBottom, toBottom) + 16;
 
-      // Sales contact strip
-      if (q.salesPerson.name) {
-        doc.roundedRect(L, y, R - L, 26, 6).fill(C.zebra);
-        doc.font(FONT).fontSize(8.8).fillColor(C.body)
-          .text(`Your sales contact:  `, L + 12, y + 8, { continued: true })
-          .font(FONT_BOLD).fillColor(C.ink).text(q.salesPerson.name, { continued: !!q.salesPerson.phone })
-          .font(FONT).fillColor(C.body).text(q.salesPerson.phone ? `   ·   ${q.salesPerson.phone}` : '');
-        doc.font(FONT).fontSize(8.8).fillColor(C.muted).text(`Order ref ${q.orderRef}`, L, y + 8, { width: R - L - 12, align: 'right' });
-        y += 40;
-      }
+      // Order reference strip. The salesperson is deliberately NOT on the quotation:
+      // the customer deals with the company, through its own phone and email.
+      doc.roundedRect(L, y, R - L, 26, 6).fill(C.zebra);
+      doc.font(FONT).fontSize(8.8).fillColor(C.muted).text(`Order ref ${q.orderRef}`, L + 12, y + 8, { width: R - L - 24, align: 'right' });
+      y += 40;
 
       // ── Items table ─────────────────────────────────────────────────────────
       const col = {
@@ -304,7 +295,7 @@ export async function renderQuotationPdf(q) {
       } else {
         doc.font(FONT_BOLD).fontSize(10.5).fillColor(C.ink).text('Ready to order?', L + 16, py + 22, { width: pw - 32 });
         doc.font(FONT).fontSize(8.8).fillColor(C.body)
-          .text(`Contact ${q.salesPerson.name || 'our sales team'}${q.salesPerson.phone ? ` on ${q.salesPerson.phone}` : ''} for a secure payment link.`, L + 16, doc.y + 4, { width: pw - 32 });
+          .text(`Contact our sales team${companyInfo.phone ? ` on ${companyInfo.phone}` : ''} for a secure payment link.`, L + 16, doc.y + 4, { width: pw - 32 });
       }
 
       // ── Remarks ─────────────────────────────────────────────────────────────
