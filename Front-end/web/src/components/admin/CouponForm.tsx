@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { usePanel } from '@/lib/usePanel';
 
 export interface CouponFormValues {
   code: string;
@@ -52,6 +53,7 @@ const input = 'w-full border border-gray-300 rounded-lg px-3 py-2';
 
 export default function CouponForm({ initial, couponId }: { initial: CouponFormValues; couponId?: string }) {
   const router = useRouter();
+  const { base } = usePanel();
   const [v, setV] = useState<CouponFormValues>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export default function CouponForm({ initial, couponId }: { initial: CouponFormV
     try {
       if (couponId) await apiClient.put(API_ENDPOINTS.COUPON_DETAIL(couponId), payload);
       else await apiClient.post(API_ENDPOINTS.COUPONS, payload);
-      router.push('/admin/coupons');
+      router.push(`${base}/coupons`);
     } catch (err: any) {
       setError(err.message || 'Failed to save coupon');
     } finally {
@@ -182,7 +184,7 @@ export default function CouponForm({ initial, couponId }: { initial: CouponFormV
         <button type="submit" disabled={saving} className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">
           {saving ? 'Saving…' : couponId ? 'Save changes' : 'Create coupon'}
         </button>
-        <button type="button" onClick={() => router.push('/admin/coupons')} className="px-5 py-2 rounded-lg border border-gray-300 hover:bg-gray-50">
+        <button type="button" onClick={() => router.push(`${base}/coupons`)} className="px-5 py-2 rounded-lg border border-gray-300 hover:bg-gray-50">
           Cancel
         </button>
       </div>

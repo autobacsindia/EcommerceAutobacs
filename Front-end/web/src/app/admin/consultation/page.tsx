@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, Eye, Trash2, ChevronLeft, ChevronRight, Calendar, Phone, Car, MapPin, Zap, Check } from 'lucide-react';
 import apiClient from '@/lib/api';
+import { usePanel } from '@/lib/usePanel';
 
 interface Consultation {
   _id: string;
@@ -34,6 +35,7 @@ const STATUS_STYLES: Record<string, string> = {
 const STATUS_OPTIONS = ['new', 'contacted', 'completed', 'cancelled'] as const;
 
 export default function AdminConsultationPage() {
+  const { isAdmin } = usePanel();
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [counts, setCounts] = useState<Counts>({ new: 0, contacted: 0, completed: 0, cancelled: 0 });
   const [loading, setLoading] = useState(true);
@@ -207,9 +209,11 @@ export default function AdminConsultationPage() {
                           <button onClick={e => { e.stopPropagation(); setSelected(c); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                             <Eye className="h-4 w-4" />
                           </button>
-                          <button onClick={e => { e.stopPropagation(); deleteConsultation(c._id); }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {isAdmin && (
+                            <button onClick={e => { e.stopPropagation(); deleteConsultation(c._id); }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

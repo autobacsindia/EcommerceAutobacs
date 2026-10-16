@@ -6,6 +6,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { formatDateTimeIST } from '@/lib/datetime';
 import type { SpinCampaign, SpinStatus } from '@/types/spin';
+import { usePanel } from '@/lib/usePanel';
 
 /**
  * Admin — Spin-to-Win campaigns.
@@ -60,6 +61,7 @@ const emptyForm = () => {
 };
 
 export default function SpinCampaignsPage() {
+  const { base } = usePanel();
   const [campaigns, setCampaigns] = useState<SpinCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -305,7 +307,7 @@ export default function SpinCampaignsPage() {
                 </td>
                 <td className="px-4 py-3 text-right text-gray-700">{c.goodieWinRatePercent}%</td>
                 <td className="px-4 py-3 text-right">
-                  <Link href={`/admin/spin/${c._id}`} className="text-blue-600 hover:underline">
+                  <Link href={`${base}/spin/${c._id}`} className="text-blue-600 hover:underline">
                     Manage →
                   </Link>
                 </td>

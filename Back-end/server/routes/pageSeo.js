@@ -1,7 +1,7 @@
 import express from "express";
 import pageSeoRepository from "../repositories/pageSeoRepository.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { protect, admin } from "../middleware/authMiddleware.js";
+import { protect, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { normalizeSeo } from "../utils/seo.js";
 import { STATIC_PAGES, STATIC_PAGE_BY_PATH } from "../config/staticPages.js";
 import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
@@ -42,7 +42,7 @@ router.get(
 router.get(
   "/admin",
   protect,
-  admin,
+  adminOrMarketing,
   asyncHandler(async (_req, res) => {
     const stored = await pageSeoRepository.find({}).lean();
     const byPath = new Map(stored.map((d) => [d.path, d]));
@@ -87,7 +87,7 @@ router.get(
 router.put(
   "/admin",
   protect,
-  admin,
+  adminOrMarketing,
   asyncHandler(async (req, res) => {
     const path = normalizePath(req.body.path);
     if (!path) {

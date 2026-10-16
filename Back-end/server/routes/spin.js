@@ -14,7 +14,7 @@
  */
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
-import { protect, admin } from '../middleware/authMiddleware.js';
+import { protect, admin, adminOrMarketing } from '../middleware/authMiddleware.js';
 import { spinRateLimit } from '../middleware/rate-limit/index.js';
 import { publicBrowsingRateLimit } from '../middleware/rate-limit/ecommerceLimiters.js';
 import { validateRequest } from '../middleware/validateRequest.js';
@@ -61,24 +61,24 @@ const router = express.Router();
 router.get('/public/live', publicBrowsingRateLimit, asyncHandler(getPublicLiveCampaign));
 
 // ── Admin: campaigns ────────────────────────────────────────────────────────
-router.get('/admin/campaigns', protect, admin, asyncHandler(listCampaigns));
-router.post('/admin/campaigns', protect, admin, validateCreateCampaign, validateRequest, asyncHandler(createCampaign));
-router.put('/admin/campaigns/:id', protect, admin, validateUpdateCampaign, validateRequest, asyncHandler(updateCampaign));
-router.post('/admin/campaigns/:id/publish', protect, admin, validateCampaignIdParam, validateRequest, asyncHandler(publishCampaign));
-router.patch('/admin/campaigns/:id/status', protect, admin, validateCampaignStatus, validateRequest, asyncHandler(setCampaignStatus));
+router.get('/admin/campaigns', protect, adminOrMarketing, asyncHandler(listCampaigns));
+router.post('/admin/campaigns', protect, adminOrMarketing, validateCreateCampaign, validateRequest, asyncHandler(createCampaign));
+router.put('/admin/campaigns/:id', protect, adminOrMarketing, validateUpdateCampaign, validateRequest, asyncHandler(updateCampaign));
+router.post('/admin/campaigns/:id/publish', protect, adminOrMarketing, validateCampaignIdParam, validateRequest, asyncHandler(publishCampaign));
+router.patch('/admin/campaigns/:id/status', protect, adminOrMarketing, validateCampaignStatus, validateRequest, asyncHandler(setCampaignStatus));
 // Opening a new window: clone, never date-edit the old row (see cloneCampaign).
-router.post('/admin/campaigns/:id/clone', protect, admin, validateCloneCampaign, validateRequest, asyncHandler(cloneCampaign));
-router.get('/admin/campaigns/:id/odds', protect, admin, validateCampaignIdParam, validateRequest, asyncHandler(getOdds));
+router.post('/admin/campaigns/:id/clone', protect, adminOrMarketing, validateCloneCampaign, validateRequest, asyncHandler(cloneCampaign));
+router.get('/admin/campaigns/:id/odds', protect, adminOrMarketing, validateCampaignIdParam, validateRequest, asyncHandler(getOdds));
 
 // ── Admin: prizes ───────────────────────────────────────────────────────────
-router.get('/admin/campaigns/:id/prizes', protect, admin, validateCampaignIdParam, validateRequest, asyncHandler(listPrizes));
-router.post('/admin/campaigns/:id/prizes', protect, admin, validateCreatePrize, validateRequest, asyncHandler(createPrize));
-router.put('/admin/prizes/:prizeId', protect, admin, validateUpdatePrize, validateRequest, asyncHandler(updatePrize));
+router.get('/admin/campaigns/:id/prizes', protect, adminOrMarketing, validateCampaignIdParam, validateRequest, asyncHandler(listPrizes));
+router.post('/admin/campaigns/:id/prizes', protect, adminOrMarketing, validateCreatePrize, validateRequest, asyncHandler(createPrize));
+router.put('/admin/prizes/:prizeId', protect, adminOrMarketing, validateUpdatePrize, validateRequest, asyncHandler(updatePrize));
 router.delete('/admin/prizes/:prizeId', protect, admin, validatePrizeIdParam, validateRequest, asyncHandler(deactivatePrize));
 
 // ── Admin: fulfilment queue ─────────────────────────────────────────────────
-router.get('/admin/winners', protect, admin, validateWinnerList, validateRequest, asyncHandler(listWinners));
-router.patch('/admin/winners/:id/fulfil', protect, admin, validateSpinResultIdParam, validateRequest, asyncHandler(fulfilWinner));
+router.get('/admin/winners', protect, adminOrMarketing, validateWinnerList, validateRequest, asyncHandler(listWinners));
+router.patch('/admin/winners/:id/fulfil', protect, adminOrMarketing, validateSpinResultIdParam, validateRequest, asyncHandler(fulfilWinner));
 
 // ── Customer ────────────────────────────────────────────────────────────────
 router.get('/orders/:orderId', protect, validateOrderIdParam, validateRequest, asyncHandler(getSpinStatus));

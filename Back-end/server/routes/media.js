@@ -5,7 +5,7 @@ import ArticleComment from "../models/ArticleComment.js";
 import PressCoverage from "../models/PressCoverage.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { protect, admin } from "../middleware/authMiddleware.js";
+import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { normalizeSeo } from "../utils/seo.js";
 import { cleanArticleHTML } from "../utils/htmlSanitizer.js";
 import { revalidateFrontendTags } from "../services/frontendRevalidator.js";
@@ -368,7 +368,7 @@ router.get("/trending", asyncHandler(async (req, res) => {
 }));
 
 // GET /media/stats  — admin analytics summary
-router.get("/stats", protect, admin, asyncHandler(async (req, res) => {
+router.get("/stats", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const [totalArticles, publishedArticles, totalNews, totalBlogs, topArticles, totalImages, totalVideos] = await Promise.all([
     articleRepository.countDocuments(),
     articleRepository.countDocuments({ status: "published" }),
@@ -458,7 +458,7 @@ router.get("/press", asyncHandler(async (req, res) => {
 const PRESS_FIELDS = ["publication", "date", "headline", "excerpt", "url", "image", "tilt", "tape", "order", "featured", "status"];
 
 // GET /media/admin/press
-router.get("/admin/press", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin/press", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const { status, page = 1, limit = 50 } = req.query;
   const query = {};
   if (status) query.status = status;
@@ -477,7 +477,7 @@ router.get("/admin/press", protect, admin, asyncHandler(async (req, res) => {
 }));
 
 // POST /media/admin/press
-router.post("/admin/press", protect, admin, asyncHandler(async (req, res) => {
+router.post("/admin/press", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const { publication, headline, url } = req.body;
   if (!publication || !headline || !url) {
     return res.status(400).json({ success: false, message: "Publication, headline, and URL are required" });
@@ -492,7 +492,7 @@ router.post("/admin/press", protect, admin, asyncHandler(async (req, res) => {
 }));
 
 // PUT /media/admin/press/:id
-router.put("/admin/press/:id", protect, admin, asyncHandler(async (req, res) => {
+router.put("/admin/press/:id", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const item = await PressCoverage.findById(req.params.id);
   if (!item) return res.status(404).json({ success: false, message: "Press item not found" });
 
@@ -513,7 +513,7 @@ router.delete("/admin/press/:id", protect, admin, asyncHandler(async (req, res) 
 // ─── ADMIN: Articles CRUD ─────────────────────────────────────────────────────
 
 // GET /media/admin/articles
-router.get("/admin/articles", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin/articles", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const { type, status, page = 1, limit = 20 } = req.query;
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -538,14 +538,14 @@ router.get("/admin/articles", protect, admin, asyncHandler(async (req, res) => {
 }));
 
 // GET /media/admin/articles/:id
-router.get("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin/articles/:id", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const article = await articleRepository.findById(req.params.id);
   if (!article) return res.status(404).json({ success: false, message: "Article not found" });
   res.json({ success: true, data: article });
 }));
 
 // POST /media/admin/articles
-router.post("/admin/articles", protect, admin, asyncHandler(async (req, res) => {
+router.post("/admin/articles", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const { title, type, coverImage, excerpt, content, category, tags, author, status, featured, seo } = req.body;
 
   if (!title || !content) {
@@ -587,7 +587,7 @@ router.post("/admin/articles", protect, admin, asyncHandler(async (req, res) => 
 }));
 
 // PUT /media/admin/articles/:id
-router.put("/admin/articles/:id", protect, admin, asyncHandler(async (req, res) => {
+router.put("/admin/articles/:id", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const article = await articleRepository.findById(req.params.id);
   if (!article) return res.status(404).json({ success: false, message: "Article not found" });
 
@@ -664,7 +664,7 @@ router.delete("/admin/articles/:id", protect, admin, asyncHandler(async (req, re
 // ─── ADMIN: Media Items CRUD ──────────────────────────────────────────────────
 
 // GET /media/admin/media-items?type=image|video
-router.get("/admin/media-items", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin/media-items", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const { type, page = 1, limit = 24 } = req.query;
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -684,7 +684,7 @@ router.get("/admin/media-items", protect, admin, asyncHandler(async (req, res) =
 }));
 
 // POST /media/admin/media-items
-router.post("/admin/media-items", protect, admin, asyncHandler(async (req, res) => {
+router.post("/admin/media-items", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const { type, title, description, url, thumbnail, album, category, tags, featured, status, duration } = req.body;
 
   if (!type || !title || !url) {
@@ -718,7 +718,7 @@ router.post("/admin/media-items", protect, admin, asyncHandler(async (req, res) 
 }));
 
 // PUT /media/admin/media-items/:id
-router.put("/admin/media-items/:id", protect, admin, asyncHandler(async (req, res) => {
+router.put("/admin/media-items/:id", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const item = await mediaItemRepository.findById(req.params.id);
   if (!item) return res.status(404).json({ success: false, message: "Media item not found" });
 
@@ -743,7 +743,7 @@ router.delete("/admin/media-items/:id", protect, admin, asyncHandler(async (req,
 // ─── Admin: comment moderation ────────────────────────────────────────────────
 
 // GET /media/admin/comments?articleSlug=&type=news|blog&approved=&page=&limit=
-router.get("/admin/comments", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin/comments", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const { articleSlug, type, approved, page = 1, limit = 50 } = req.query;
   const filter = {};
 
@@ -780,7 +780,7 @@ router.get("/admin/comments", protect, admin, asyncHandler(async (req, res) => {
 }));
 
 // PATCH /media/admin/comments/:id/approve  — toggle approved
-router.patch("/admin/comments/:id/approve", protect, admin, asyncHandler(async (req, res) => {
+router.patch("/admin/comments/:id/approve", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const doc = await ArticleComment.findById(req.params.id);
   if (!doc) return res.status(404).json({ success: false, message: "Comment not found" });
   doc.approved = !doc.approved;

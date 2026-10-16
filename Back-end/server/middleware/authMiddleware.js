@@ -129,6 +129,23 @@ export const admin = asyncHandler(async (req, res, next) => {
   next();
 });
 
+/**
+ * Marketing areas (blog & content, page SEO, coupons, campaigns, spin-to-win,
+ * promo banners, leads, consultations): an admin — through the full `admin`
+ * gate, anomaly detection included — or an ACTIVE member of the marketing team.
+ * Run after `protect`.
+ *
+ * Applied route by route, never to a whole admin router: everything else in the
+ * admin API stays admin-only. Deletes inside these areas stay on `admin` too —
+ * staff do not remove company records.
+ */
+export const adminOrMarketing = (req, res, next) => {
+  const user = req.user;
+  if (user?.role === 'admin') return admin(req, res, next);
+  if (user?.role === 'staff' && user.staff?.active === true && user.staff.team === 'marketing') return next();
+  return res.status(403).json({ success: false, message: 'Not authorized' });
+};
+
 // Staff-panel gate: an ACTIVE staff member, or an admin. Run after `protect`.
 //
 // This is a separate gate on purpose — `admin` above stays admin-only, so none of

@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect, admin } from '../middleware/authMiddleware.js';
+import { protect, admin, adminOrMarketing } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import {
   getAvailableCoupons, listCoupons, getCoupon,
@@ -15,10 +15,10 @@ const router = express.Router();
 router.get('/available', getAvailableCoupons);
 
 // Admin CRUD (every route guarded by protect + admin).
-router.get('/', protect, admin, listCoupons);
-router.post('/', protect, admin, validateCouponCreate, validateRequest, createCoupon);
-router.get('/:id', protect, admin, validateCouponId, validateRequest, getCoupon);
-router.put('/:id', protect, admin, validateCouponId, validateCouponUpdate, validateRequest, updateCoupon);
+router.get('/', protect, adminOrMarketing, listCoupons);
+router.post('/', protect, adminOrMarketing, validateCouponCreate, validateRequest, createCoupon);
+router.get('/:id', protect, adminOrMarketing, validateCouponId, validateRequest, getCoupon);
+router.put('/:id', protect, adminOrMarketing, validateCouponId, validateCouponUpdate, validateRequest, updateCoupon);
 router.delete('/:id', protect, admin, validateCouponId, validateRequest, deleteCoupon);
 
 export default router;

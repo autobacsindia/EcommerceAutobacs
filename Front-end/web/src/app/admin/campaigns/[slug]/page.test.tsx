@@ -16,7 +16,7 @@ import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AdminCampaignEditor from './page';
 
-jest.mock('next/navigation', () => ({ useParams: () => ({ slug: 'c' }) }));
+jest.mock('next/navigation', () => ({ useParams: () => ({ slug: 'c' }), usePathname: () => '/admin/campaigns/c' }));
 jest.mock('@/components/admin/campaigns/MemberRosterPanel', () => ({
   __esModule: true, default: () => <div data-testid="roster" />,
 }));

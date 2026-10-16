@@ -16,6 +16,7 @@ import {
   LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, VIP_MIN_SPENT_PAISE, SalesRep,
   cancelAttribution, type OrderHistoryItem,
 } from '@/lib/leads';
+import { usePanel } from '@/lib/usePanel';
 
 interface LeadDetailResponse {
   success: boolean;
@@ -24,6 +25,7 @@ interface LeadDetailResponse {
 }
 
 export default function LeadDetailPage() {
+  const { base, isAdmin } = usePanel();
   const { id } = useParams<{ id: string }>();
   const [lead, setLead] = useState<Lead | null>(null);
   const [orderHistory, setOrderHistory] = useState<OrderHistoryItem[]>([]);
@@ -115,7 +117,7 @@ export default function LeadDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link href="/admin/leads" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
+      <Link href={`${base}/leads`} className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
         <ArrowLeft className="h-4 w-4" /> Back to leads
       </Link>
 
@@ -179,9 +181,11 @@ export default function LeadDetailPage() {
                 <UserMinus className="h-3 w-3" /> Release
               </button>
             )}
-            <Link href="/admin/sales-reps" className="text-xs text-blue-600 hover:underline" title="Manage rep names">
-              Manage
-            </Link>
+            {isAdmin && (
+              <Link href="/admin/sales-reps" className="text-xs text-blue-600 hover:underline" title="Manage rep names">
+                Manage
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -216,7 +220,7 @@ export default function LeadDetailPage() {
           </section>
 
           {/* Close deal */}
-          <CloseDealForm lead={lead} reps={reps} onClosed={load} />
+          {isAdmin && <CloseDealForm lead={lead} reps={reps} onClosed={load} />}
         </div>
 
         {/* Right: at a glance — what's open now + lifetime value */}
@@ -251,9 +255,11 @@ export default function LeadDetailPage() {
             <section className="rounded-lg border border-gray-200 bg-white p-5">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-900">Customer value</h2>
-                <Link href={`/admin/users?search=${encodeURIComponent(lead.linkedUser.email || lead.linkedUser.phone || '')}`} className="text-xs text-blue-600 hover:underline">
-                  View account
-                </Link>
+                {isAdmin && (
+                  <Link href={`/admin/users?search=${encodeURIComponent(lead.linkedUser.email || lead.linkedUser.phone || '')}`} className="text-xs text-blue-600 hover:underline">
+                    View account
+                  </Link>
+                )}
               </div>
               <dl className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">

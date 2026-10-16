@@ -7,6 +7,8 @@ import { LayoutDashboard, Users, LogOut, KeyRound, Banknote, PlusCircle, Receipt
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
+import { MARKETING_BASE } from '@/lib/usePanel';
+import { MARKETING_AREAS } from './marketingAreas';
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 
@@ -31,6 +33,7 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   if (team === 'procurement') nav.push({ href: '/team/procurement', label: 'Stock & shipping', icon: PackageSearch }, paid);
   if (team === 'accounts') nav.push({ href: '/team/refunds', label: 'Refund approvals', icon: Wallet }, paid);
   if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid);
+  if (team === 'marketing') nav.push(...MARKETING_AREAS.map(({ href, label, icon }) => ({ href, label, icon })));
   // Payment requests: supplier payments (procurement), expenses (operations,
   // marketing), and paying them (accounts).
   if (['procurement', 'accounts', 'operations', 'marketing'].includes(team)) {
@@ -73,7 +76,8 @@ export default function TeamLayoutClient({
   };
 
   const links = navFor(team, isHead, canSell).map(({ href, label, icon: Icon }) => {
-    const active = pathname === href;
+    // Marketing screens have detail pages (a coupon, a campaign) under them.
+    const active = pathname === href || (href.startsWith(`${MARKETING_BASE}/`) && pathname.startsWith(`${href}/`));
     return (
       <Link
         key={href}
