@@ -8,6 +8,9 @@ import mongoose from 'mongoose';
  *   - 'all'     every admin and active staff member (#company)
  *   - 'team'    admins + active staff of `team` (#sales, #accounts, …)
  *   - 'members' admins + the explicit `members` list (custom spaces)
+ *   - 'teams'   admins + active staff of either team in `teams` — the private
+ *               conversation between two teams (e.g. Procurement ↔ Accounts).
+ *               A third team never sees it; the whole of both teams does.
  * Direct messages are kind 'dm' with audience 'members' and are the one place
  * admins are NOT implicitly present — a DM is only ever its two participants.
  *
@@ -25,8 +28,10 @@ const ChatChannelSchema = new mongoose.Schema(
     key: { type: String, default: undefined },
     name: { type: String, trim: true, maxlength: 60 },
     description: { type: String, trim: true, maxlength: 240, default: '' },
-    audience: { type: String, enum: ['all', 'team', 'members'], required: true },
+    audience: { type: String, enum: ['all', 'team', 'members', 'teams'], required: true },
     team: { type: String, default: null },
+    // audience 'teams' only: the two teams, sorted (matches the 'pair:<a>:<b>' key).
+    teams: { type: [String], default: undefined },
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     system: { type: Boolean, default: false }, // created by the app, cannot be archived
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

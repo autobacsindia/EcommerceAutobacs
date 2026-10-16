@@ -21,9 +21,7 @@ const renderItem = (m: ChatMessage, onOpenThread?: (m: ChatMessage) => void) =>
       meId="me"
       meName="Sam"
       peopleById={new Map()}
-      canDelete={false}
       orderHref={(id) => `/team/orders/${id}`}
-      onDelete={() => {}}
       onRetry={() => {}}
       onOpenThread={onOpenThread}
     />,

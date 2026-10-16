@@ -9,14 +9,13 @@ import {
   upsertMessage,
   useChannelFiles,
   useChatMessages,
-  useDeleteMessage,
   useMarkRead,
   useSendMessage,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, SendVars } from '@/hooks/queries/useTeamChat';
-import { Avatar, FileKindIcon, fileSize, timeOf } from './chatUi';
-import Composer from './Composer';
-import MessageItem from './MessageItem';
+import { Avatar, ChannelIcon, FileKindIcon, fileSize, timeOf } from './chatUi';
+import Composer, { mentionableTeams } from './Composer';
+import MessageItem, { messageDomId } from './MessageItem';
 import ThreadPanel from './ThreadPanel';
 
 type Pages = InfiniteData<MessagePage, number>;
@@ -118,8 +117,8 @@ export default function Conversation({
     useChatMessages(channel.id);
   const send = useSendMessage(channel.id);
   const markRead = useMarkRead();
-  const del = useDeleteMessage();
   const [tab, setTab] = useState<'messages' | 'files'>('messages');
+  const [quote, setQuote] = useState<ChatMessage | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [thread, setThread] = useState<string | null>(null);
 
@@ -156,7 +155,20 @@ export default function Conversation({
     setAtBottom(true);
     setTab('messages');
     setThread(null);
+    setQuote(null);
   }, [channel.id]);
+
+  /** Scroll to a quoted message and flash it. Older than what is loaded: say so. */
+  const jumpTo = useCallback((id: string) => {
+    const el = document.getElementById(messageDomId(id));
+    if (!el) {
+      alert('That message is further back — scroll up to load older messages.');
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('chat-flash');
+    setTimeout(() => el.classList.remove('chat-flash'), 1600);
+  }, []);
 
   const read = useCallback(
     (seq: number) => {
@@ -220,6 +232,9 @@ export default function Conversation({
       mentions: vars.mentions ?? [],
       mentionTeams: vars.mentionTeams ?? [],
       refs: [],
+      quote: quote && vars.quoteId === quote.id
+        ? { id: quote.id, seq: quote.seq, by: quote.kind === 'system' ? 'Roavion updates' : quote.sender?.name ?? '', preview: quote.text }
+        : null,
       createdAt: new Date().toISOString(),
       pending: true,
     };
@@ -233,7 +248,7 @@ export default function Conversation({
     });
   };
 
-  const title = channel.kind === 'dm' ? channel.name : `#${channel.name}`;
+  const title = channel.kind === 'dm' ? channel.name : channel.audience === 'teams' ? channel.name : `#${channel.name}`;
   const subtitle =
     channel.kind === 'dm'
       ? [channel.partner?.teamLabel, channel.partner?.isHead ? 'Head' : null].filter(Boolean).join(' · ')
@@ -241,13 +256,13 @@ export default function Conversation({
 
   return (
     <div className="relative flex h-full min-h-0 flex-1">
-      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white" aria-label={`Conversation ${title}`}>
-        <header className="border-b border-gray-200 px-4 pt-3">
+      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white md:rounded-2xl" aria-label={`Conversation ${title}`}>
+        <header className="border-b border-gray-100 px-4 pt-3">
           <div className="flex items-center gap-3">
             <button type="button" onClick={onBack} className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-100 md:hidden" aria-label="Back to channels">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            {channel.kind === 'dm' && <Avatar person={channel.partner} size="sm" />}
+            {channel.kind === 'dm' ? <Avatar person={channel.partner} /> : <ChannelIcon channel={channel} size="md" />}
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-gray-900">{title}</h2>
               {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}
@@ -283,7 +298,7 @@ export default function Conversation({
                   tab === key ? 'border-emerald-700 text-emerald-800' : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {key}
+                {key === 'messages' ? 'Chat' : 'Files'}
               </button>
             ))}
           </div>
@@ -310,8 +325,13 @@ export default function Conversation({
                 )}
                 {!isLoading && !isError && messages.length === 0 && (
                   <div className="py-16 text-center">
+                    <div className="mx-auto mb-3 w-fit"><ChannelIcon channel={channel} size="md" /></div>
                     <p className="text-base font-semibold text-gray-800">No messages yet</p>
-                    <p className="text-sm text-gray-500">Say hello, share a photo, or link an order to get started.</p>
+                    <p className="text-sm text-gray-500">
+                      {channel.audience === 'teams'
+                        ? `Only ${channel.description || 'these two teams'} (and admin) can see this conversation.`
+                        : 'Say hello, share a photo, or link an order to get started.'}
+                    </p>
                   </div>
                 )}
 
@@ -323,11 +343,11 @@ export default function Conversation({
                     meId={meId}
                     meName={meName}
                     peopleById={peopleById}
-                    canDelete={isAdmin} // chat is company record: only admins remove messages
                     orderHref={orderHref}
-                    onDelete={(msg) => { if (confirm('Delete this message?')) del.mutate(msg); }}
-                    onRetry={(msg) => doSend({ text: msg.text, clientId: msg.clientId ?? '', mentions: msg.mentions })}
+                    onRetry={(msg) => doSend({ text: msg.text, clientId: msg.clientId ?? '', mentions: msg.mentions, quoteId: msg.quote?.id })}
                     onOpenThread={(msg) => setThread(msg.id)}
+                    onQuote={setQuote}
+                    onJumpTo={jumpTo}
                   />
                 ))}
               </div>
@@ -346,8 +366,10 @@ export default function Conversation({
             <Composer
               channelName={title}
               people={people.filter((p) => p.id !== meId)}
-              canMentionTeams={channel.kind === 'space' && channel.audience !== 'members'}
+              teams={mentionableTeams(channel)}
               onSend={doSend}
+              quote={quote}
+              onClearQuote={() => setQuote(null)}
             />
           </>
         )}

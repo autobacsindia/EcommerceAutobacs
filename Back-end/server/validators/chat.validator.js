@@ -21,6 +21,7 @@ export const validateSendMessage = [
   body('text').optional({ values: 'falsy' }).isString().isLength({ max: 4000 }).withMessage('Message must be 4000 characters or fewer'),
   body('clientId').optional().isString().matches(/^[A-Za-z0-9_-]{8,64}$/).withMessage('Invalid client id'),
   body('threadRoot').optional({ values: 'falsy' }).custom(isObjectId).withMessage('Invalid thread'),
+  body('quoteId').optional({ values: 'falsy' }).custom(isObjectId).withMessage('Invalid quoted message'),
 ];
 
 export const validateThreadPage = [

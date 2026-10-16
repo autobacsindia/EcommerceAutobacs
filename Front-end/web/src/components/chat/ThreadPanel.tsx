@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { chatKeys } from '@/hooks/queries/keys';
-import { upsertReply, useDeleteMessage, useSendMessage, useThread } from '@/hooks/queries/useTeamChat';
+import { upsertReply, useSendMessage, useThread } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, SendVars, ThreadData } from '@/hooks/queries/useTeamChat';
-import Composer from './Composer';
+import Composer, { mentionableTeams } from './Composer';
 import MessageItem from './MessageItem';
 
 /**
@@ -41,7 +41,7 @@ export default function ThreadPanel({
   const qc = useQueryClient();
   const { data, isLoading, isError, refetch } = useThread(rootId);
   const send = useSendMessage(channel.id);
-  const del = useDeleteMessage();
+  const [quote, setQuote] = useState<ChatMessage | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const replies = data?.replies ?? [];
 
@@ -71,6 +71,9 @@ export default function ThreadPanel({
       mentions: vars.mentions ?? [],
       mentionTeams: vars.mentionTeams ?? [],
       refs: [],
+      quote: quote && vars.quoteId === quote.id
+        ? { id: quote.id, seq: quote.seq, by: quote.kind === 'system' ? 'Roavion updates' : quote.sender?.name ?? '', preview: quote.text }
+        : null,
       createdAt: new Date().toISOString(),
       threadRoot: rootId,
       pending: true,
@@ -90,16 +93,16 @@ export default function ThreadPanel({
       meId={meId}
       meName={meName}
       peopleById={peopleById}
-      canDelete={isAdmin} // chat is company record: only admins remove messages
       orderHref={orderHref}
-      onDelete={(msg) => { if (confirm('Delete this message?')) del.mutate(msg); }}
-      onRetry={(msg) => doSend({ text: msg.text, clientId: msg.clientId ?? '', mentions: msg.mentions })}
+      onRetry={(msg) => doSend({ text: msg.text, clientId: msg.clientId ?? '', mentions: msg.mentions, quoteId: msg.quote?.id })}
+      onQuote={setQuote}
+      onJumpTo={(id) => document.getElementById(`chat-msg-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
     />
   );
 
   return (
     <aside
-      className="absolute inset-0 z-20 flex min-h-0 flex-col bg-white md:static md:w-[380px] md:shrink-0 md:border-l md:border-gray-200"
+      className="absolute inset-0 z-20 flex min-h-0 flex-col bg-white md:static md:ml-2 md:w-[380px] md:shrink-0 md:rounded-2xl"
       aria-label="Thread"
     >
       <header className="flex items-center gap-2 border-b border-gray-200 px-4 py-3">
@@ -148,9 +151,11 @@ export default function ThreadPanel({
       <Composer
         channelName={channel.kind === 'dm' ? channel.name : `#${channel.name}`}
         people={people.filter((p) => p.id !== meId)}
-        canMentionTeams={channel.kind === 'space' && channel.audience !== 'members'}
+        teams={mentionableTeams(channel)}
         onSend={doSend}
         placeholder="Reply in thread"
+        quote={quote}
+        onClearQuote={() => setQuote(null)}
       />
     </aside>
   );

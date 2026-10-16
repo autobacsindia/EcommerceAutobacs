@@ -84,16 +84,27 @@ describe('Team chat', () => {
       expect(res.status).toBe(401);
     });
 
-    it('admins see #company and every team space', async () => {
+    it('admins see #company, every team space and every team-to-team conversation', async () => {
       const { body } = await admin.get('/chat/channels');
-      expect(body.channels.map((c) => c.key)).toEqual([
+      const keys = body.channels.map((c) => c.key);
+      expect(keys.slice(0, 6)).toEqual([
         'company', 'team:sales', 'team:procurement', 'team:accounts', 'team:marketing', 'team:operations',
       ]);
+      // 5 teams → 10 pairs, each once.
+      expect(keys.filter((k) => k.startsWith('pair:'))).toHaveLength(10);
+      const pair = body.channels.find((c) => c.key === 'pair:accounts:procurement');
+      expect(pair).toMatchObject({ audience: 'teams', name: 'Accounts ↔ Procurement', withTeam: null });
     });
 
-    it('staff see #company and only their own team space', async () => {
+    it('staff see #company, their own team space and their team\'s conversations with each other team', async () => {
       const { body } = await salesMember.get('/chat/channels');
-      expect(body.channels.map((c) => c.key).sort()).toEqual(['company', 'team:sales']);
+      expect(body.channels.map((c) => c.key).sort()).toEqual([
+        'company', 'pair:accounts:sales', 'pair:marketing:sales', 'pair:operations:sales', 'pair:procurement:sales', 'team:sales',
+      ]);
+      // Named after the OTHER team, from where the reader sits.
+      expect(body.channels.find((c) => c.key === 'pair:accounts:sales')).toMatchObject({ name: 'Accounts', withTeam: 'accounts' });
+      const fromAccounts = (await accounts.get('/chat/channels')).body.channels.find((c) => c.key === 'pair:accounts:sales');
+      expect(fromAccounts).toMatchObject({ name: 'GTM', withTeam: 'sales' });
     });
 
     it('another team cannot read or post in a team space (404, not 403)', async () => {
@@ -167,19 +178,111 @@ describe('Team chat', () => {
       expect(after.unread).toBe(0);
     });
 
-    it('delete: admins only — staff cannot remove any message, not even their own; text is hidden after', async () => {
+    it('no one can delete a message — not staff, not their own, not even an admin', async () => {
       const mine = (await salesMember.post(`/chat/channels/${company}/messages`, { text: 'oops' })).body.message;
       const other = (await accounts.post(`/chat/channels/${company}/messages`, { text: 'not yours' })).body.message;
       expect((await salesMember.del(`/chat/messages/${other.id}`)).status).toBe(403);
       expect((await salesMember.del(`/chat/messages/${mine.id}`)).status).toBe(403);
       expect((await salesHead.del(`/chat/messages/${mine.id}`)).status).toBe(403);
-      expect((await accounts.get(`/chat/channels/${company}/messages`)).body.messages.map((m) => m.text)).toEqual(['oops', 'not yours']);
-
-      expect((await admin.del(`/chat/messages/${mine.id}`)).status).toBe(200);
-      expect((await admin.del(`/chat/messages/${other.id}`)).status).toBe(200);
+      expect((await admin.del(`/chat/messages/${mine.id}`)).status).toBe(403);
+      expect((await admin.del(`/chat/messages/${other.id}`)).status).toBe(403);
       const { body } = await accounts.get(`/chat/channels/${company}/messages`);
-      expect(body.messages.every((m) => m.deleted && m.text === '')).toBe(true);
-      expect(await ChatMessage.countDocuments({ deletedAt: { $ne: null } })).toBe(2); // kept for the record
+      expect(body.messages.map((m) => [m.text, m.deleted])).toEqual([['oops', false], ['not yours', false]]);
+      expect(await ChatMessage.countDocuments({ deletedAt: { $ne: null } })).toBe(0);
+    });
+
+    it('a message hidden before the no-delete rule stays hidden', async () => {
+      const msg = (await accounts.post(`/chat/channels/${company}/messages`, { text: 'old secret' })).body.message;
+      await ChatMessage.updateOne({ _id: msg.id }, { $set: { deletedAt: new Date() } });
+      const { body } = await salesMember.get(`/chat/channels/${company}/messages`);
+      expect(body.messages[0]).toMatchObject({ deleted: true, text: '' });
+    });
+  });
+
+  describe('team-to-team conversations', () => {
+    let procurement, pairs;
+    beforeEach(async () => {
+      await createUser({ name: 'Priya', email: 'priya@example.com', role: 'staff', staff: staff('procurement') });
+      procurement = await signIn('priya@example.com');
+      const all = (await admin.get('/chat/channels')).body.channels;
+      pairs = Object.fromEntries(all.filter((c) => c.key?.startsWith('pair:')).map((c) => [c.key, c.id]));
+    });
+
+    it('both whole teams read and post; a third team gets 404; admin reads everything', async () => {
+      const pa = pairs['pair:accounts:procurement'];
+      await procurement.post(`/chat/channels/${pa}/messages`, { text: 'Supplier invoice for #A12 attached' });
+      expect((await accounts.post(`/chat/channels/${pa}/messages`, { text: 'Approved' })).status).toBe(201);
+      expect((await admin.get(`/chat/channels/${pa}/messages`)).body.messages.map((m) => m.text))
+        .toEqual(['Supplier invoice for #A12 attached', 'Approved']);
+      // GTM is not part of Procurement ↔ Accounts: it cannot read, post, or learn it exists.
+      expect((await salesMember.get(`/chat/channels/${pa}/messages`)).status).toBe(404);
+      expect((await salesHead.post(`/chat/channels/${pa}/messages`, { text: 'hi' })).status).toBe(404);
+      expect((await salesMember.get('/chat/channels')).body.channels.some((c) => c.id === pa)).toBe(false);
+    });
+
+    it('GTM ↔ Accounts is a separate conversation Procurement never sees, even in search', async () => {
+      const sa = pairs['pair:accounts:sales'];
+      await salesMember.post(`/chat/channels/${sa}/messages`, { text: 'refund zebra for customer' });
+      expect((await procurement.get(`/chat/channels/${sa}/messages`)).status).toBe(404);
+      const found = await procurement.get('/chat/search?q=zebra');
+      expect(found.status).toBe(200);
+      expect(found.body.messages || found.body.results || []).toHaveLength(0);
+      expect(((await accounts.get('/chat/search?q=zebra')).body.messages || []).length).toBe(1);
+    });
+
+    it('team mentions work for the two teams in the conversation only', async () => {
+      const sa = pairs['pair:accounts:sales'];
+      const res = await salesMember.post(`/chat/channels/${sa}/messages`, { text: '@accounts please check', mentionTeams: ['accounts', 'procurement'] });
+      expect(res.body.message.mentionTeams).toEqual(['accounts']);
+    });
+
+    it('the live event for a team-to-team message routes to both teams and admins only', async () => {
+      const events = [];
+      const off = onChatEvent((e) => events.push(e));
+      const pa = pairs['pair:accounts:procurement'];
+      await procurement.post(`/chat/channels/${pa}/messages`, { text: 'live' });
+      off();
+      const route = events.find((e) => e.type === 'message' && e.channelId === pa)?.route;
+      expect(route).toMatchObject({ audience: 'teams', teams: ['accounts', 'procurement'] });
+      const asStaff = (team) => ({ _id: '0'.repeat(24), role: 'staff', staff: { team, active: true } });
+      expect(canAccess(asStaff('procurement'), route)).toBe(true);
+      expect(canAccess(asStaff('accounts'), route)).toBe(true);
+      expect(canAccess(asStaff('sales'), route)).toBe(false);
+      expect(canAccess({ _id: '1'.repeat(24), role: 'admin' }, route)).toBe(true);
+    });
+
+    it('a team space stays private to its own team', async () => {
+      const procSpace = spaceId((await admin.get('/chat/channels')).body.channels, 'team:procurement');
+      expect((await salesMember.get(`/chat/channels/${procSpace}/messages`)).status).toBe(404);
+      expect((await procurement.get(`/chat/channels/${procSpace}/messages`)).status).toBe(200);
+    });
+  });
+
+  describe('quoting a message', () => {
+    let company;
+    beforeEach(async () => {
+      company = spaceId((await admin.get('/chat/channels')).body.channels, 'company');
+    });
+
+    it('snapshots the quoted message and shows it with the reply', async () => {
+      const q = (await accounts.post(`/chat/channels/${company}/messages`, { text: 'Payment for #A12 is approved' })).body.message;
+      const res = await salesMember.post(`/chat/channels/${company}/messages`, { text: 'Thanks!', quoteId: q.id });
+      expect(res.status).toBe(201);
+      expect(res.body.message.quote).toEqual({ id: q.id, seq: q.seq, by: 'Anu', preview: 'Payment for #A12 is approved' });
+      const listed = (await admin.get(`/chat/channels/${company}/messages`)).body.messages.at(-1);
+      expect(listed.quote.preview).toBe('Payment for #A12 is approved');
+    });
+
+    it('cannot quote a message from another conversation (would leak its text)', async () => {
+      const sales = spaceId((await admin.get('/chat/channels')).body.channels, 'team:sales');
+      const secret = (await salesMember.post(`/chat/channels/${sales}/messages`, { text: 'sales only' })).body.message;
+      const res = await salesMember.post(`/chat/channels/${company}/messages`, { text: 'look', quoteId: secret.id });
+      expect(res.status).toBe(404);
+      expect(await ChatMessage.countDocuments({ text: 'look' })).toBe(0);
+    });
+
+    it('rejects a malformed quote id', async () => {
+      expect((await salesMember.post(`/chat/channels/${company}/messages`, { text: 'x', quoteId: 'nope' })).status).toBe(400);
     });
   });
 

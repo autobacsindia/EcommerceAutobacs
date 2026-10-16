@@ -30,7 +30,16 @@ export const MESSAGE_MAX_LENGTH = 4000;
 export const PAGE_SIZE_DEFAULT = 50;
 export const PAGE_SIZE_MAX = 100;
 
-/** The spaces every install has. Team spaces follow config/staff.js. */
+/**
+ * Every pair of teams, sorted, once each: the private team-to-team conversations.
+ * A key is 'pair:<a>:<b>' with a < b, so both sides converge on one channel.
+ */
+export const TEAM_PAIRS = Object.freeze(
+  STAFF_TEAM_VALUES.flatMap((a, i) => STAFF_TEAM_VALUES.slice(i + 1).map((b) => [a, b].sort())),
+);
+const pairKey = ([a, b]) => `pair:${a}:${b}`;
+
+/** The spaces every install has. Team spaces and team pairs follow config/staff.js. */
 export const DEFAULT_SPACES = Object.freeze([
   { key: 'company', name: 'company', audience: 'all', team: null, description: 'Announcements and general talk for the whole company' },
   ...STAFF_TEAM_VALUES.map((team) => ({
@@ -39,6 +48,14 @@ export const DEFAULT_SPACES = Object.freeze([
     audience: 'team',
     team,
     description: `${STAFF_TEAM_LABELS[team]} team`, // stored once; listChannels shows the current label
+  })),
+  ...TEAM_PAIRS.map((pair) => ({
+    key: pairKey(pair),
+    name: pair.join('-'),
+    audience: 'teams',
+    team: null,
+    teams: pair,
+    description: pair.map((t) => STAFF_TEAM_LABELS[t]).join(' ↔ '),
   })),
 ]);
 
@@ -50,6 +67,22 @@ export const DEFAULT_SPACES = Object.freeze([
 const spaceDisplayName = (c) => (c.system && typeof c.key === 'string' && c.key.startsWith('team:')
   ? (STAFF_TEAM_LABELS[c.team] || c.name).toLowerCase()
   : c.name);
+
+/**
+ * A team-to-team conversation is named from where the reader sits: Procurement
+ * sees "Accounts", Accounts sees "Procurement", an admin sees both sides. Team
+ * labels as written ("GTM"), not #lowercase — these are teams, not spaces.
+ */
+function channelNameFor(c, user) {
+  if (c.audience !== 'teams') return spaceDisplayName(c);
+  const labels = (c.teams || []).map((t) => STAFF_TEAM_LABELS[t] || t);
+  const mine = teamOf(user);
+  if (mine && (c.teams || []).includes(mine)) {
+    const other = (c.teams || []).find((t) => t !== mine);
+    return STAFF_TEAM_LABELS[other] || other || c.name;
+  }
+  return labels.join(' ↔ ');
+}
 
 // ── who is who ───────────────────────────────────────────────────────────────
 
@@ -69,6 +102,8 @@ export function canAccess(user, channel) {
   if (channel.audience === 'all') return true;
   if (isAdmin(user)) return true;
   if (channel.audience === 'team') return !!channel.team && teamOf(user) === channel.team;
+  // Team-to-team: both whole teams, nobody else (admins are handled above).
+  if (channel.audience === 'teams') return Array.isArray(channel.teams) && channel.teams.includes(teamOf(user));
   return isMember;
 }
 
@@ -83,6 +118,7 @@ function accessFilter(user) {
     $or: [
       { audience: 'all' },
       { audience: 'team', team: teamOf(user) },
+      { audience: 'teams', teams: teamOf(user) },
       { audience: 'members', members: uid },
     ],
   };
@@ -136,6 +172,7 @@ function shapeMessage(m, sender) {
     mentions: (m.mentions || []).map(idOf),
     mentionTeams: m.mentionTeams || [],
     refs: deleted ? [] : (m.refs || []).map((r) => ({ type: r.type, code: r.code, id: idOf(r.target) })),
+    quote: !deleted && m.quote ? { id: idOf(m.quote.message), seq: m.quote.seq, by: m.quote.by, preview: m.quote.preview } : null,
     createdAt: m.createdAt,
     ...threadFieldsOf(m),
   };
@@ -164,6 +201,7 @@ const audienceOf = (c) => ({
   kind: c.kind,
   audience: c.audience,
   team: c.team ?? null,
+  teams: c.teams ?? [],
   members: (c.members || []).map(idOf),
   archived: !!c.archived,
 });
@@ -194,7 +232,7 @@ export async function listChannels(user) {
   await ensureDefaultSpaces();
   const channels = await chatRepository.findChannels(
     accessFilter(user),
-    'kind key name description audience team members system lastMessageSeq lastMessageAt createdBy'
+    'kind key name description audience team teams members system lastMessageSeq lastMessageAt createdBy'
   );
 
   const ids = channels.map((c) => c._id);
@@ -219,10 +257,16 @@ export async function listChannels(user) {
         id: idOf(c),
         kind: c.kind,
         key: c.key ?? null,
-        name: c.kind === 'dm' ? partner?.name ?? 'Former member' : spaceDisplayName(c),
-        description: c.system && c.team ? `${STAFF_TEAM_LABELS[c.team] || c.team} team` : c.description || '',
+        name: c.kind === 'dm' ? partner?.name ?? 'Former member' : channelNameFor(c, user),
+        description: c.audience === 'teams'
+          ? (c.teams || []).map((t) => STAFF_TEAM_LABELS[t] || t).join(' ↔ ')
+          : c.system && c.team ? `${STAFF_TEAM_LABELS[c.team] || c.team} team` : c.description || '',
         audience: c.audience,
         team: c.team ?? null,
+        // The OTHER team, from where this person sits (null for admins and non-pair channels).
+        withTeam: c.audience === 'teams' && (c.teams || []).includes(teamOf(user))
+          ? (c.teams || []).find((t) => t !== teamOf(user)) ?? null
+          : null,
         system: !!c.system,
         partner: c.kind === 'dm' ? personOf(partner) : null,
         memberCount: c.audience === 'members' ? c.members.length : null,
@@ -296,6 +340,20 @@ export async function getThread(user, rootId, { after, limit } = {}) {
     replies: replies.map((m) => shapeMessage(m)),
     nextAfter: replies.length === size ? replies[replies.length - 1].seq : null,
   };
+}
+
+/**
+ * The message being quoted, snapshotted. It must be a live message in the SAME
+ * channel: quoting from another conversation would copy its text to people who
+ * cannot read it. "Not here" is a 404, like every other chat lookup.
+ */
+async function loadQuote(channel, quoteId) {
+  if (!quoteId) return null;
+  if (!mongoose.isValidObjectId(quoteId)) throw fail('Quoted message not found', 404);
+  const q = await chatRepository.findMessageWithSender(quoteId);
+  if (!q || idOf(q.channel) !== idOf(channel) || q.deletedAt) throw fail('Quoted message not found', 404);
+  const preview = (q.text || ((q.attachments || []).length ? 'Shared a file' : '')).slice(0, 200);
+  return { message: q._id, seq: q.seq, by: q.kind === 'system' ? 'Roavion updates' : q.sender?.name || '', preview };
 }
 
 /** A reply needs a live top-level message in the same channel to hang from. */
@@ -468,10 +526,11 @@ async function markRead(userId, channelId, seq) {
 }
 
 /** Post a message. Idempotent on (channel, sender, clientId). */
-export async function sendMessage(user, channelId, { text, clientId, mentions, mentionTeams, orderIds, files, threadRoot } = {}) {
+export async function sendMessage(user, channelId, { text, clientId, mentions, mentionTeams, orderIds, files, threadRoot, quoteId } = {}) {
   const channel = await loadAccessible(user, channelId);
   // Before any upload: a reply to a thread that is not there must not leave files behind.
   const root = await loadThreadRoot(channel, threadRoot);
+  const quote = await loadQuote(channel, quoteId);
   const body = cleanText(text);
   const hasFiles = Array.isArray(files) && files.length > 0;
   // A photo on its own is a perfectly good message; only an empty one is refused.
@@ -493,7 +552,7 @@ export async function sendMessage(user, channelId, { text, clientId, mentions, m
 
   const result = await insertMessage(channel, {
     kind: 'user', sender: user, text: body, clientId,
-    attachments, mentions: people, mentionTeams: teams, refs, threadRoot: root,
+    attachments, mentions: people, mentionTeams: teams, refs, threadRoot: root, quote,
   });
   if (!result.duplicate) notifyMentions(channel, user, result.message, people, teams);
   return result;
@@ -510,8 +569,10 @@ async function resolveMentions(channel, mentions, mentionTeams) {
 
   const teams = [...new Set((Array.isArray(mentionTeams) ? mentionTeams : []).map(String))]
     .filter((t) => STAFF_TEAM_VALUES.includes(t))
-    // Only meaningful where the whole team is present: their own space, or #company.
-    .filter(() => channel.audience === 'all' || channel.audience === 'team')
+    // Only meaningful where the whole team is present: their own space, #company,
+    // or a team-to-team conversation that team is part of.
+    .filter((t) => channel.audience === 'all' || channel.audience === 'team'
+      || (channel.audience === 'teams' && (channel.teams || []).includes(t)))
     .slice(0, 5);
 
   return [allowed, teams];
@@ -557,7 +618,7 @@ function notifyMentions(channel, sender, message, people, teams) {
 }
 
 async function insertMessage(channel, {
-  kind, sender, text, clientId, attachments = [], mentions = [], mentionTeams = [], refs = [], threadRoot = null, threadOrder,
+  kind, sender, text, clientId, attachments = [], mentions = [], mentionTeams = [], refs = [], threadRoot = null, threadOrder, quote = null,
 }) {
   const at = new Date();
   const seq = await chatRepository.nextSeq(channel._id, at);
@@ -578,6 +639,7 @@ async function insertMessage(channel, {
       ...(threadRoot ? { threadRoot: threadRoot._id } : { activitySeq: seq }),
       ...(threadOrder ? { threadOrder } : {}),
       ...(clientId ? { clientId } : {}),
+      ...(quote ? { quote } : {}),
     });
   } catch (err) {
     // Same clientId raced in from a parallel request: return the winner. The seq
@@ -667,26 +729,12 @@ export async function markChannelRead(user, channelId, seq) {
 }
 
 /**
- * Soft-delete: admins only. Chat is part of the company record — whoever joins a
- * team later reads what came before — so staff cannot remove messages, not even
- * their own. The row is kept for audit either way.
+ * Chat messages cannot be deleted — by anyone, admins included. Chat is part of
+ * the company record: whoever joins a team later reads what came before. Messages
+ * hidden before this rule stay hidden (the read path still honours `deletedAt`).
  */
-export async function deleteMessage(user, messageId) {
-  if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
-  const msg = await chatRepository.findMessageById(messageId);
-  if (!msg) throw fail('Message not found', 404);
-  const channel = await loadAccessible(user, msg.channel); // also hides other people's DMs
-  if (!isAdmin(user)) throw fail('Only an administrator can delete messages', 403);
-  if (msg.deletedAt) return { id: idOf(msg), deleted: true };
-
-  await chatRepository.softDeleteMessage(msg._id, user._id);
-  await publishChatEvent({
-    type: 'message_deleted',
-    channelId: idOf(channel),
-    route: audienceOf(channel),
-    messageId: idOf(msg),
-  });
-  return { id: idOf(msg), deleted: true };
+export async function deleteMessage() {
+  throw fail('Chat messages cannot be deleted', 403);
 }
 
 /** New custom space. Admins and team heads only; the creator is always a member. */
@@ -695,7 +743,7 @@ export async function createSpace(user, { name, description, memberIds } = {}) {
   const cleanName = cleanText(name).toLowerCase().replace(/^#/, '').replace(/\s+/g, '-').slice(0, 60);
   if (cleanName.length < 2) throw fail('Space name must be at least 2 characters', 400);
 
-  const reserved = new Set([...DEFAULT_SPACES.map((s) => s.name), ...STAFF_TEAM_VALUES.map((t) => STAFF_TEAM_LABELS[t].toLowerCase())]);
+  const reserved = new Set([...DEFAULT_SPACES.map((s) => s.name), ...STAFF_TEAM_VALUES.map((t) => STAFF_TEAM_LABELS[t].toLowerCase()), 'company']);
   if (reserved.has(cleanName)) throw fail('That name is already used by a default space', 409);
   const clash = await chatRepository.spaceNameTaken(cleanName);
   if (clash) throw fail('A space with that name already exists', 409);

@@ -187,6 +187,7 @@ router.post('/channels/:id/messages',
       orderIds: asArray(req.body.orderIds),
       files: req.files,
       threadRoot: req.body.threadRoot || null,
+      quoteId: req.body.quoteId || null,
     });
     // `thread`: the reply's root as it now stands, so the sender's timeline moves it too.
     res.status(duplicate ? 200 : 201).json({ success: true, message, thread: thread ?? null });
@@ -214,7 +215,7 @@ router.post('/channels/:id/read', validateChannelIdParam, validateMarkRead, vali
     res.json({ success: true, ...(await markChannelRead(req.user, req.params.id, req.body.seq)) });
   }));
 
-// DELETE /chat/messages/:id — own message, or any message for admins (soft delete)
+// DELETE /chat/messages/:id — always refused: no one deletes chat (see deleteMessage)
 router.delete('/messages/:id', validateMessageIdParam, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await deleteMessage(req.user, req.params.id)) });
 }));

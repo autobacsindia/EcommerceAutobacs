@@ -22,8 +22,13 @@ export interface ChatChannel {
   key: string | null;
   name: string;
   description: string;
-  audience: 'all' | 'team' | 'members';
+  /** 'teams': the private conversation between two whole teams. */
+  audience: 'all' | 'team' | 'members' | 'teams';
   team: string | null;
+  /** audience 'teams' only: the two teams. */
+  teams?: string[] | null;
+  /** audience 'teams' only: the OTHER team, from where I sit (null for admins). */
+  withTeam?: string | null;
   system: boolean;
   partner: ChatPerson | null;
   memberCount: number | null;
@@ -76,6 +81,8 @@ export interface ChatMessage {
   mentions: string[];
   mentionTeams: string[];
   refs: ChatRef[];
+  /** The message this one quotes, as it read when quoted. */
+  quote?: ChatQuote | null;
   createdAt: string;
   /** Set on a reply: the top-level message it belongs to. */
   threadRoot?: string | null;
@@ -86,6 +93,13 @@ export interface ChatMessage {
   /** Client-only: still being sent / failed to send. */
   pending?: boolean;
   failed?: boolean;
+}
+
+export interface ChatQuote {
+  id: string;
+  seq: number;
+  by: string;
+  preview: string;
 }
 
 export interface ChatLastReply {
@@ -239,6 +253,8 @@ export interface SendVars {
   files?: File[];
   /** Reply in this thread. */
   threadRoot?: string;
+  /** Quote this message (same conversation only — the API refuses others). */
+  quoteId?: string;
 }
 
 /**
@@ -262,6 +278,7 @@ export function useSendMessage(channelId: string | null) {
       if (vars.mentionTeams?.length) form.append('mentionTeams', JSON.stringify(vars.mentionTeams));
       if (vars.orderIds?.length) form.append('orderIds', JSON.stringify(vars.orderIds));
       if (vars.threadRoot) form.append('threadRoot', vars.threadRoot);
+      if (vars.quoteId) form.append('quoteId', vars.quoteId);
       for (const file of vars.files) form.append('files', file);
 
       const res = await submitMultipart(`/api/v1${url}`, 'POST', form);
@@ -320,22 +337,6 @@ export function useMarkRead() {
       qc.setQueryData<ChatChannel[]>(chatKeys.channels(), (list) =>
         list?.map((c) => (c.id === channelId ? { ...c, lastReadSeq: seq, unread: Math.max(0, c.lastMessageSeq - seq) } : c)),
       );
-    },
-  });
-}
-
-export function useDeleteMessage() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (msg: ChatMessage) => apiClient.delete(`/chat/messages/${msg.id}`),
-    onSuccess: (_r, msg) => {
-      const gone = { ...msg, deleted: true, text: '' };
-      if (msg.threadRoot) {
-        qc.setQueryData<ThreadData>(chatKeys.thread(msg.threadRoot), (d) => upsertReply(d, gone));
-      } else {
-        qc.setQueryData<Pages>(chatKeys.messages(msg.channelId), (d) => upsertMessage(d, gone));
-        qc.setQueryData<ThreadData>(chatKeys.thread(msg.id), (d) => (d ? { ...d, root: { ...d.root, ...gone } } : d));
-      }
     },
   });
 }

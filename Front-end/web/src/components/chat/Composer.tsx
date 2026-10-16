@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Package, Paperclip, Send, X } from 'lucide-react';
-import type { ChatPerson, RecentOrder, SendVars } from '@/hooks/queries/useTeamChat';
+import { Package, Paperclip, Quote, Send, X } from 'lucide-react';
+import type { ChatChannel, ChatMessage, ChatPerson, RecentOrder, SendVars } from '@/hooks/queries/useTeamChat';
 import { useRecentOrders } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, GREEN, fileSize, newClientId } from './chatUi';
 
@@ -15,6 +15,17 @@ const TEAMS = ['sales', 'procurement', 'accounts', 'marketing', 'operations'] as
 const MENTION_NAME: Record<string, string> = { sales: 'gtm' };
 const mentionName = (team: string) => MENTION_NAME[team] ?? team;
 
+/**
+ * Which teams can be @mentioned here — only where the whole team can read it:
+ * #company and team spaces (any team, as before), a team-to-team conversation
+ * (its two teams), and never a custom space or a DM. The API applies the same rule.
+ */
+export function mentionableTeams(channel: ChatChannel): readonly string[] {
+  if (channel.kind !== 'space' || channel.audience === 'members') return [];
+  if (channel.audience === 'teams') return channel.teams ?? [];
+  return TEAMS;
+}
+
 type Pending = { file: File; preview: string | null };
 /** One row in the @mention picker: either a person or a whole team. */
 type MentionOption = { person?: ChatPerson; team?: string };
@@ -22,16 +33,22 @@ type MentionOption = { person?: ChatPerson; team?: string };
 export default function Composer({
   channelName,
   people,
-  canMentionTeams,
+  teams,
   onSend,
   placeholder,
+  quote,
+  onClearQuote,
 }: {
   channelName: string;
   people: ChatPerson[];
-  canMentionTeams: boolean;
+  /** Teams that may be @mentioned here (see mentionableTeams). */
+  teams: readonly string[];
   onSend: (vars: SendVars) => void;
   /** Overrides "Message #channel" — e.g. "Reply in thread". */
   placeholder?: string;
+  /** The message being quoted, shown above the box until sent or cleared. */
+  quote?: ChatMessage | null;
+  onClearQuote?: () => void;
 }) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<Pending[]>([]);
@@ -48,6 +65,11 @@ export default function Composer({
 
   // Object URLs for image previews have to be released or the tab leaks memory.
   useEffect(() => () => files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview)), [files]);
+
+  // Picking "Quote in reply" puts the cursor straight in the box.
+  useEffect(() => {
+    if (quote) box.current?.focus();
+  }, [quote]);
 
   // Grow with the text instead of scrolling inside one line.
   useEffect(() => {
@@ -94,9 +116,9 @@ export default function Composer({
     if (mentionQuery == null) return [];
     const q = mentionQuery.trim().toLowerCase();
     const peopleHits = people.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 6);
-    const teamHits = canMentionTeams ? TEAMS.filter((t) => mentionName(t).includes(q)).slice(0, 3) : [];
+    const teamHits = teams.filter((t) => mentionName(t).includes(q)).slice(0, 3);
     return [...teamHits.map((t) => ({ team: t })), ...peopleHits.map((p) => ({ person: p }))];
-  }, [mentionQuery, people, canMentionTeams]);
+  }, [mentionQuery, people, teams]);
 
   /** Swap the half-typed "@foo" for the chosen name and remember who was meant. */
   const pickMention = (option: MentionOption) => {
@@ -117,10 +139,12 @@ export default function Composer({
       clientId: newClientId(),
       // Only keep mentions whose name survived any later editing of the text.
       mentions: mentioned.filter((p) => body.includes(`@${p.name}`)).map((p) => p.id),
-      mentionTeams: mentionTeams.filter((t) => body.includes(`@${t}`)),
+      mentionTeams: mentionTeams.filter((t) => body.includes(`@${mentionName(t)}`)),
       orderIds: orders.map((o) => o.id),
       files: files.map((f) => f.file),
+      ...(quote ? { quoteId: quote.id } : {}),
     });
+    onClearQuote?.();
     files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
     setText('');
     setFiles([]);
@@ -133,7 +157,7 @@ export default function Composer({
   return (
     <form
       onSubmit={submit}
-      className="border-t border-gray-200 p-3"
+      className="px-3 pb-3 pt-1 sm:px-4"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
@@ -174,6 +198,21 @@ export default function Composer({
       )}
 
       {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+
+      {quote && (
+        <div className="mb-2 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <Quote className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-emerald-800">
+              Quoting {quote.kind === 'system' ? 'Roavion updates' : quote.sender?.name ?? 'Former member'}
+            </p>
+            <p className="truncate text-sm text-gray-700">{quote.text || 'Shared a file'}</p>
+          </div>
+          <button type="button" onClick={onClearQuote} className="rounded-full p-1 text-gray-500 hover:bg-white" aria-label="Remove quote">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       <div className="relative">
         {/* @mention picker */}
@@ -239,11 +278,11 @@ export default function Composer({
           </div>
         )}
 
-        <div className="flex items-end gap-1 rounded-xl border border-gray-300 bg-white p-1.5 focus-within:border-emerald-600">
+        <div className="flex items-end gap-1 rounded-3xl border border-transparent bg-gray-100 p-1.5 transition-colors focus-within:border-emerald-600 focus-within:bg-white">
           <button
             type="button"
             onClick={() => fileInput.current?.click()}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 hover:text-gray-800"
             aria-label="Attach a file"
             title="Attach a photo or document"
           >
@@ -252,7 +291,7 @@ export default function Composer({
           <button
             type="button"
             onClick={() => setShowOrders((v) => !v)}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 hover:text-gray-800"
             aria-label="Link an order"
             title="Link an order"
           >
@@ -284,6 +323,7 @@ export default function Composer({
               if (e.key === 'Escape') {
                 setMentionQuery(null);
                 setShowOrders(false);
+                if (!mentionOptions.length && !showOrders) onClearQuote?.();
                 return;
               }
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
