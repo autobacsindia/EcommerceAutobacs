@@ -14,7 +14,8 @@ import ExportProductsButton from '@/components/admin/ExportProductsButton';
 import SeoScoreBadge from '@/components/admin/SeoScoreBadge';
 import { SEO_REVIEW, seoReviewStatus, type SeoReview } from '@/lib/seoReview';
 import type { ScorableProduct } from '@/lib/seoScore';
-import { PRODUCTS_LIST_PATH, productEditHref } from '@/lib/adminProductsReturn';
+import { productsListPath, productEditHref } from '@/lib/adminProductsReturn';
+import { usePanel } from '@/lib/usePanel';
 
 // ScorableProduct: the admin list returns the full content fields, which is what
 // lets each row show the editor's SEO score without another request.
@@ -56,6 +57,7 @@ function oneOf<T extends string, F extends string>(value: string | null, allowed
 }
 
 function AdminProductsPageInner() {
+  const { base: panelBase, isAdmin: canManage } = usePanel();
   const searchParams = useSearchParams();
   const router = useRouter();
   // Category filter is URL-driven so it's shareable/bookmarkable. The backend
@@ -118,8 +120,8 @@ function AdminProductsPageInner() {
   const loading = isPending;
 
   const goToCategory = (id: string, name: string) =>
-    router.push(`/admin/products?category=${id}&categoryName=${encodeURIComponent(name)}`);
-  const clearCategoryFilter = () => router.push('/admin/products');
+    router.push(`${panelBase}/products?category=${id}&categoryName=${encodeURIComponent(name)}`);
+  const clearCategoryFilter = () => router.push(`${panelBase}/products`);
 
   // Debounce search term. Nothing to do when it already matches (e.g. on load,
   // where both come from the URL) — otherwise this would reset a restored page.
@@ -156,14 +158,14 @@ function AdminProductsPageInner() {
     if (typeFilter !== 'all') q.set('type', typeFilter);
     if (currentPage > 1) q.set('page', String(currentPage));
     const qs = q.toString();
-    return `${PRODUCTS_LIST_PATH}${qs ? `?${qs}` : ''}`;
-  }, [categoryId, categoryNameParam, debouncedSearchTerm, statusFilter, typeFilter, currentPage]);
+    return `${productsListPath(panelBase)}${qs ? `?${qs}` : ''}`;
+  }, [categoryId, categoryNameParam, debouncedSearchTerm, statusFilter, typeFilter, currentPage, panelBase]);
 
   // Keep the address bar in step without adding a history entry per page click.
   useEffect(() => {
-    const current = `${PRODUCTS_LIST_PATH}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    const current = `${productsListPath(panelBase)}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     if (current !== listUrl) router.replace(listUrl, { scroll: false });
-  }, [listUrl, searchParams, router]);
+  }, [listUrl, searchParams, router, panelBase]);
 
   // Resolve the filtered category's display name and parent (for the chip and
   // the "view parent category" link). Seed the name from the URL to avoid a flash.
@@ -237,12 +239,15 @@ function AdminProductsPageInner() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <h1 className="text-2xl md:text-3xl font-bold">Products Management</h1>
         <div className="flex items-start gap-2">
-          <ExportProductsButton />
-          <Link href="/admin/products/import" className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm">
-            <Upload className="h-4 w-4" />
-            Import CSV
-          </Link>
-          <Link href="/admin/products/create" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm">
+          {/* Bulk export/import are admin-only on the API; marketing edits product by product. */}
+          {canManage && <ExportProductsButton />}
+          {canManage && (
+            <Link href={`${panelBase}/products/import`} className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 flex items-center gap-2 text-sm">
+              <Upload className="h-4 w-4" />
+              Import CSV
+            </Link>
+          )}
+          <Link href={`${panelBase}/products/create`} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm">
             <Plus className="h-4 w-4" />
             Add Product
           </Link>
@@ -398,7 +403,7 @@ function AdminProductsPageInner() {
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <SeoScoreBadge product={product} href={productEditHref(product._id, listUrl)} />
+                    <SeoScoreBadge product={product} href={productEditHref(product._id, listUrl, panelBase)} />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     {(() => {
@@ -421,15 +426,17 @@ function AdminProductsPageInner() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                     <div className="flex gap-2">
-                      <Link href={productEditHref(product._id, listUrl)} aria-label={`Edit ${product.name}`} className="text-blue-600 hover:text-blue-900">
+                      <Link href={productEditHref(product._id, listUrl, panelBase)} aria-label={`Edit ${product.name}`} className="text-blue-600 hover:text-blue-900">
                         <Edit className="h-4 w-4" />
                       </Link>
-                      <button
-                        onClick={() => handleDelete(product._id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {canManage && (
+                        <button
+                          onClick={() => handleDelete(product._id)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

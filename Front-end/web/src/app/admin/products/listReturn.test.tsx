@@ -11,6 +11,8 @@ const replace = jest.fn();
 const push = jest.fn();
 let params = new URLSearchParams();
 jest.mock('next/navigation', () => ({
+  // lib/usePanel reads the path to pick admin vs the marketing panel.
+  usePathname: () => '/admin/products',
   useSearchParams: () => params,
   useRouter: () => ({ replace, push }),
 }));

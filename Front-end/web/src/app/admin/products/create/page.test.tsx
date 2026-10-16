@@ -17,6 +17,8 @@ jest.mock('@/lib/api');
 
 // Mock useRouter
 jest.mock('next/navigation', () => ({
+  // lib/usePanel reads the path to pick admin vs the marketing panel.
+  usePathname: () => '/admin/products',
   useRouter: jest.fn(),
 }));
 

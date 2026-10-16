@@ -23,6 +23,7 @@ import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/compon
 import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } from '@/components/admin/VariantsEditor';
 import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
 import { generateSlug } from '@/lib/utils';
+import { usePanel } from '@/lib/usePanel';
 
 type Category = CategoryOption;
 
@@ -81,11 +82,12 @@ interface Product {
 const NO_IMAGES: CloudinaryImage[] = [];
 
 export default function EditProductPage() {
+  const { base: panelBase } = usePanel();
   const router = useRouter();
   const queryClient = useQueryClient();
   const params = useParams();
   // The list view this product was opened from — saving goes back there, not to page 1.
-  const returnTo = safeProductsReturn(useSearchParams().get('returnTo'));
+  const returnTo = safeProductsReturn(useSearchParams().get('returnTo'), panelBase);
   const productId = params.id as string;
   
   const [categories, setCategories] = useState<Category[]>([]);
@@ -1039,7 +1041,7 @@ export default function EditProductPage() {
                 ))}
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                Brands are managed in <Link href="/admin/brands" className="text-blue-600 hover:underline">Admin → Brands</Link>.
+                Brands are managed in <Link href={`${panelBase}/brands`} className="text-blue-600 hover:underline">Admin → Brands</Link>.
               </p>
             </div>
             

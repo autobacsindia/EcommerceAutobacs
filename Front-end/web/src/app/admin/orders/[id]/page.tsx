@@ -24,6 +24,7 @@ import type { ShipmentSummary } from '@/lib/orderFulfilment';
 import type { OrderPaymentSummary } from '@/lib/types';
 import { GatewayOfferRows, PaymentStatusTag } from '@/components/orders/PaymentSummary';
 import type { GatewayOffer } from '@/components/orders/PaymentSummary';
+import { usePanel } from '@/lib/usePanel';
 
 /** What the gateway holds — and so the most a refund can send back. */
 const amountPaidOf = (o: { totalAmount: number; gatewayOffer?: GatewayOffer | null }) =>
@@ -189,6 +190,7 @@ interface Order {
 }
 
 function AdminOrderDetailPageInner() {
+  const { base: panelBase, isAdmin: canManage } = usePanel();
   const router = useRouter();
   const params = useParams();
   const orderId = params.id as string;
@@ -243,8 +245,8 @@ function AdminOrderDetailPageInner() {
     // Optional-called: scrollIntoView is absent in jsdom, and a missing scroll must
     // never break the form actually opening.
     parcelsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-    router.replace(`/admin/orders/${orderId}`, { scroll: false });
-  }, [order, searchParams, handledParcelParam, orderId, router]);
+    router.replace(`${panelBase}/orders/${orderId}`, { scroll: false });
+  }, [order, searchParams, handledParcelParam, orderId, router, panelBase]);
 
   const fetchOrder = async () => {
     try {
@@ -254,7 +256,7 @@ function AdminOrderDetailPageInner() {
     } catch (err) {
       console.error('Failed to fetch order:', err);
       alert('Failed to load order details');
-      router.push('/admin/orders');
+      router.push(`${panelBase}/orders`);
     } finally {
       setLoading(false);
     }
@@ -481,13 +483,18 @@ function AdminOrderDetailPageInner() {
           slip is worth printing for every order, and hanging its only link off the
           reward meant an order without one had no way to reach it at all.
         */}
-        <Link
-          href={`/admin/orders/${orderId}/packing-slip`}
-          className="ml-auto flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
-        >
-          <Package className="h-4 w-4" />
-          Packing slip
-        </Link>
+        {canManage ? (
+          <Link
+            href={`${panelBase}/orders/${orderId}/packing-slip`}
+            className="ml-auto flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+          >
+            <Package className="h-4 w-4" />
+            Packing slip
+          </Link>
+        ) : (
+          // View-only reader (marketing): the warehouse slip is not theirs to print.
+          <span className="ml-auto rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">View only</span>
+        )}
         {['paid', 'refunded'].includes(order.paymentStatus || '') && (
           <a
             href={`/api/v1/orders/${orderId}/invoice`}
@@ -600,7 +607,8 @@ function AdminOrderDetailPageInner() {
                         received — asking for a review of either is the kind of mail
                         that loses a customer rather than earning a review.
                       */}
-                      {!isReward
+                      {canManage
+                        && !isReward
                         && !fullyCancelled
                         && ['delivered', 'returned'].includes(order.status || '')
                         && reviewableProductId(line) && (
@@ -632,6 +640,8 @@ function AdminOrderDetailPageInner() {
                           {!line.voided && (
                             line.packed ? (
                               <p className="text-sm font-medium text-green-700">✓ Packed</p>
+                            ) : !canManage ? (
+                              <p className="text-sm text-gray-500">Not packed yet</p>
                             ) : (
                               <button
                                 onClick={handleMarkRewardPacked}
@@ -905,7 +915,7 @@ function AdminOrderDetailPageInner() {
             <div className="p-6">
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Update Status
+                  {canManage ? 'Update Status' : 'Status'}
                 </label>
                 {order.status === AWAITING_PAYMENT ? (
                   // Fulfillment is locked until the gateway confirms payment. Payment
@@ -914,6 +924,10 @@ function AdminOrderDetailPageInner() {
                     Awaiting payment. Fulfillment unlocks automatically once payment
                     succeeds — payment status can’t be set manually.
                   </div>
+                ) : !canManage ? (
+                  <p className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm font-medium text-gray-800">
+                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                  </p>
                 ) : (
                   <select
                     value={order.status}
@@ -971,7 +985,7 @@ function AdminOrderDetailPageInner() {
                 single Refund button that sends every line refund still owed. The whole-
                 order block below would offer a "full refund" the server refuses (409).
               */}
-              {(order.cancellations?.length ?? 0) > 0 && (
+              {canManage && (order.cancellations?.length ?? 0) > 0 && (
                 <RefundAllPanel
                   orderId={orderId}
                   paymentStatus={order.paymentStatus}
@@ -982,7 +996,7 @@ function AdminOrderDetailPageInner() {
               )}
 
               {/* Refund control — only for cancelled orders where money was captured. */}
-              {order.status === 'cancelled' && ['paid', 'refunded'].includes(order.paymentStatus || '')
+              {canManage && order.status === 'cancelled' && ['paid', 'refunded'].includes(order.paymentStatus || '')
                 && !(order.cancellations?.length) && (
                 <div className="mt-4 p-4 border border-gray-200 rounded-md">
                   <div className="flex items-center justify-between mb-2">

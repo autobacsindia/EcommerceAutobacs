@@ -14,7 +14,6 @@ const COMING_SOON: Record<string, string[]> = {
   operations: ['Reminders for parcels that have been in transit too long'],
   marketing: [
     'Orders and leads by source: Google Ads, Meta, website',
-    'Product SEO (titles and descriptions for each product)',
   ],
 };
 

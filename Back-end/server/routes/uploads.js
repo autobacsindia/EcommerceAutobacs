@@ -32,8 +32,11 @@ const ALLOWED_FOLDERS = {
   spin:       "autobacs/spin-prizes",
 };
 
-/** The folders the marketing team may upload into (blog, media, banners, spin prizes). */
-const MARKETING_FOLDERS = ["articles", "media", "promos", "spin"];
+/**
+ * The folders the marketing team may upload into: blog, media, banners, spin
+ * prizes, and the catalogue (products, brands, categories, vehicles) it edits.
+ */
+const MARKETING_FOLDERS = ["articles", "media", "promos", "spin", "products", "brands", "categories", "vehicles"];
 
 /** A 24-char hex Mongo ObjectId — the only per-entity subfolder we accept. */
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
@@ -50,7 +53,7 @@ router.post(
     // Marketing uploads only into its own areas — never catalogue imagery, and
     // never by falling back to the products folder on an unknown key.
     if (req.user.role !== "admin" && !MARKETING_FOLDERS.includes(key)) {
-      return res.status(403).json({ success: false, message: "You can upload images for the blog, banners and spin-to-win only." });
+      return res.status(403).json({ success: false, message: "You can't upload images into that folder." });
     }
     let folder = ALLOWED_FOLDERS[key] || ALLOWED_FOLDERS.products;
 

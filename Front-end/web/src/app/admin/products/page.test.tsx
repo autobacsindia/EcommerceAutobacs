@@ -9,6 +9,8 @@ jest.mock('@/lib/api');
 
 // Mock next/navigation (the page reads the category filter from the URL).
 jest.mock('next/navigation', () => ({
+  // lib/usePanel reads the path to pick admin vs the marketing panel.
+  usePathname: () => '/admin/products',
   useRouter: () => ({ push: jest.fn() }),
   useSearchParams: () => ({ get: () => null }),
 }));

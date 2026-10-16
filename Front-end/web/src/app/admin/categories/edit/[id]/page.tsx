@@ -8,6 +8,7 @@ import { revalidateHome } from '@/lib/revalidateHome';
 import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
 import { validateImageFile, IMAGE_ACCEPT, IMAGE_MAX_FILE_MB } from '@/lib/imageUpload';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
+import { usePanel } from '@/lib/usePanel';
 
 // Define the Category interface inline to avoid import issues
 interface Category {
@@ -28,6 +29,7 @@ interface Category {
 }
 
 export default function EditCategoryPage() {
+  const { base: panelBase } = usePanel();
   const router = useRouter();
   const params = useParams();
   const categoryId = params.id as string;
@@ -184,7 +186,7 @@ export default function EditCategoryPage() {
 
       // Refresh the home page's cached categories section, then redirect.
       revalidateHome('home:categories');
-      router.push('/admin/categories');
+      router.push(`${panelBase}/categories`);
       router.refresh();
     } catch (err: any) {
       console.error('Failed to update category:', err);

@@ -8,6 +8,8 @@ import { useRouter } from 'next/navigation';
 jest.mock('@/lib/api');
 jest.mock('@/lib/revalidateHome', () => ({ revalidateHome: jest.fn() }));
 jest.mock('next/navigation', () => ({
+  // lib/usePanel reads the path to pick admin vs the marketing panel.
+  usePathname: () => '/admin/brands',
   useRouter: jest.fn(),
 }));
 jest.mock('lucide-react', () => ({

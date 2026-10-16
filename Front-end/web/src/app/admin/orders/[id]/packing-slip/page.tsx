@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import apiClient from '@/lib/api';
 import { formatDateTimeIST } from '@/lib/datetime';
 import { buildOrderLines } from '@/lib/orderLines';
+import { usePanel } from '@/lib/usePanel';
 
 /**
  * Printable packing slip.
@@ -69,6 +70,7 @@ interface SlipOrder {
 }
 
 function PackingSlipPageInner() {
+  const { base: panelBase } = usePanel();
   const { id } = useParams<{ id: string }>();
   /*
     `?shipment=<id>` prints the pick list for ONE parcel.
@@ -132,7 +134,7 @@ function PackingSlipPageInner() {
     return (
       <div className="p-8 text-gray-600">
         That parcel isn&apos;t on this order.{' '}
-        <a href={`/admin/orders/${order._id}`} className="text-blue-600 hover:underline">Back to order</a>
+        <a href={`${panelBase}/orders/${order._id}`} className="text-blue-600 hover:underline">Back to order</a>
       </div>
     );
   }
@@ -149,7 +151,7 @@ function PackingSlipPageInner() {
       `}</style>
 
       <div className="no-print mb-6 flex items-center justify-between border-b pb-4">
-        <a href={`/admin/orders/${order._id}`} className="text-sm text-blue-600 hover:underline">
+        <a href={`${panelBase}/orders/${order._id}`} className="text-sm text-blue-600 hover:underline">
           ← Back to order
         </a>
         <button

@@ -139,6 +139,14 @@ export const admin = asyncHandler(async (req, res, next) => {
  * admin API stays admin-only. Deletes inside these areas stay on `admin` too —
  * staff do not remove company records.
  */
+/**
+ * May this person READ any order (not only their own)? Admins, and active marketing
+ * staff for the view-only Orders screen. Used by the order READ handlers only —
+ * every order write (status, refund, cancel, delete, tracking) stays admin-guarded.
+ */
+export const canViewAllOrders = (user) =>
+  user?.role === 'admin' || (user?.role === 'staff' && user.staff?.active === true && user.staff.team === 'marketing');
+
 export const adminOrMarketing = (req, res, next) => {
   const user = req.user;
   if (user?.role === 'admin') return admin(req, res, next);

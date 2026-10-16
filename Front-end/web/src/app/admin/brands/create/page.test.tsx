@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 // The form now submits multipart/form-data via raw fetch (so the logo file can
 // be uploaded to Cloudinary), not apiClient JSON. We mock global.fetch.
 jest.mock('next/navigation', () => ({
+  // lib/usePanel reads the path to pick admin vs the marketing panel.
+  usePathname: () => '/admin/brands',
   useRouter: jest.fn(),
 }));
 jest.mock('@/lib/revalidateHome', () => ({ revalidateHome: jest.fn() }));

@@ -10,6 +10,7 @@ import { ArrowLeft, Save, Loader2, Package } from 'lucide-react';
 import Link from 'next/link';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 import ImageUploader from '@/components/ui/ImageUploader';
+import { usePanel } from '@/lib/usePanel';
 
 interface Brand {
   id: string;
@@ -23,6 +24,7 @@ interface Brand {
 }
 
 export default function EditBrandPage({ params }: { params: Promise<{ id: string }> }) {
+  const { base: panelBase } = usePanel();
   const { id } = use(params);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -103,7 +105,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
 
       revalidateHome('home:brands');
       alert('Brand updated successfully!');
-      router.push('/admin/brands');
+      router.push(`${panelBase}/brands`);
     } catch (err: any) {
       setError(err.message || 'Failed to update brand');
     } finally {
@@ -129,7 +131,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
           {error}
         </div>
         <Link 
-          href="/admin/brands" 
+          href={`${panelBase}/brands`} 
           className="mt-4 inline-flex items-center gap-2 text-blue-600 hover:text-blue-800"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -146,7 +148,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
           Brand not found
         </div>
         <Link 
-          href="/admin/brands" 
+          href={`${panelBase}/brands`} 
           className="mt-4 inline-flex items-center gap-2 text-blue-600 hover:text-blue-800"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -160,7 +162,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
     <div className="p-8">
       <div className="mb-8">
         <Link 
-          href="/admin/brands" 
+          href={`${panelBase}/brands`} 
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -169,7 +171,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Edit Brand: {brand.name}</h1>
           <Link
-            href={`/admin/brands/${id}/products`}
+            href={`${panelBase}/brands/${id}/products`}
             className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700"
           >
             <Package className="h-4 w-4" />
@@ -299,7 +301,7 @@ export default function EditBrandPage({ params }: { params: Promise<{ id: string
               )}
             </button>
             <Link
-              href="/admin/brands"
+              href={`${panelBase}/brands`}
               className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Cancel

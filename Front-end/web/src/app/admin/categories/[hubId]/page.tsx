@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, Plus, Edit, Trash2, FolderOpen, Package, Star } from 'lucide-react';
 import apiClient from '@/lib/api';
+import { usePanel } from '@/lib/usePanel';
 
 interface Category {
   _id: string;
@@ -27,6 +28,7 @@ interface Category {
 // subcategories. Reached by clicking a hub on /admin/categories. "Add Subcategory"
 // pre-parents the new category to this hub.
 export default function HubDetailPage() {
+  const { base: panelBase, isAdmin: canManage } = usePanel();
   const params = useParams();
   const hubId = params.hubId as string;
 
@@ -100,7 +102,7 @@ export default function HubDetailPage() {
   if (error || !hub) {
     return (
       <div className="p-6">
-        <Link href="/admin/categories" className="flex items-center text-gray-600 hover:text-gray-900 mb-4">
+        <Link href={`${panelBase}/categories`} className="flex items-center text-gray-600 hover:text-gray-900 mb-4">
           <ArrowLeft className="h-5 w-5 mr-2" />
           Back to Categories
         </Link>
@@ -123,7 +125,7 @@ export default function HubDetailPage() {
 
   return (
     <div className="p-6">
-      <Link href="/admin/categories" className="flex items-center text-gray-600 hover:text-gray-900 mb-4">
+      <Link href={`${panelBase}/categories`} className="flex items-center text-gray-600 hover:text-gray-900 mb-4">
         <ArrowLeft className="h-5 w-5 mr-2" />
         Back to Categories
       </Link>
@@ -165,14 +167,14 @@ export default function HubDetailPage() {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <Link
-            href={`/admin/categories/edit/${hub._id}`}
+            href={`${panelBase}/categories/edit/${hub._id}`}
             className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 flex items-center"
           >
             <Edit className="h-4 w-4 mr-2" />
             Edit hub
           </Link>
           <Link
-            href={`/admin/categories/create?parent=${hub._id}`}
+            href={`${panelBase}/categories/create?parent=${hub._id}`}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
           >
             <Plus className="h-5 w-5 mr-2" />
@@ -188,7 +190,7 @@ export default function HubDetailPage() {
             <h3 className="text-lg font-medium text-gray-900 mb-2">No subcategories yet</h3>
             <p className="text-gray-500 mb-4">Add a subcategory under &ldquo;{hub.name}&rdquo;.</p>
             <Link
-              href={`/admin/categories/create?parent=${hub._id}`}
+              href={`${panelBase}/categories/create?parent=${hub._id}`}
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
             >
               Add Subcategory
@@ -228,18 +230,21 @@ export default function HubDetailPage() {
                   </div>
                   <div className="flex items-center space-x-2 flex-shrink-0">
                     <Link
-                      href={`/admin/products?category=${sub._id}&categoryName=${encodeURIComponent(sub.name)}`}
+                      href={`${panelBase}/products?category=${sub._id}&categoryName=${encodeURIComponent(sub.name)}`}
                       className="p-2 text-gray-500 hover:text-blue-600"
                       title="View products in this subcategory"
                     >
                       <Package className="h-5 w-5" />
                     </Link>
-                    <Link href={`/admin/categories/edit/${sub._id}`} className="p-2 text-gray-500 hover:text-gray-700" title="Edit">
+                    <Link href={`${panelBase}/categories/edit/${sub._id}`} className="p-2 text-gray-500 hover:text-gray-700" title="Edit">
                       <Edit className="h-5 w-5" />
                     </Link>
-                    <button onClick={() => handleDelete(sub._id)} className="p-2 text-gray-500 hover:text-red-600" title="Delete">
-                      <Trash2 className="h-5 w-5" />
-                    </button>
+                    {/* Deleting stays with the admin (API-enforced). */}
+                    {canManage && (
+                      <button onClick={() => handleDelete(sub._id)} className="p-2 text-gray-500 hover:text-red-600" title="Delete">
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

@@ -5,6 +5,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Plus, Edit, Trash2, Search, Package, ToggleLeft, ToggleRight } from 'lucide-react';
 import Link from 'next/link';
+import { usePanel } from '@/lib/usePanel';
 
 interface Vehicle {
   _id: string;
@@ -33,6 +34,7 @@ interface VehiclesResponse {
 }
 
 export default function AdminVehiclesPage() {
+  const { base: panelBase, isAdmin: canManage } = usePanel();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -144,7 +146,7 @@ export default function AdminVehiclesPage() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Vehicles Management</h1>
         <Link
-          href="/admin/vehicles/create"
+          href={`${panelBase}/vehicles/create`}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
         >
           <Plus className="h-4 w-4" />
@@ -210,14 +212,14 @@ export default function AdminVehiclesPage() {
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex gap-2">
                     <Link 
-                      href={`/admin/vehicles/${vehicle._id}`} 
+                      href={`${panelBase}/vehicles/${vehicle._id}`} 
                       className="text-blue-600 hover:text-blue-900"
                       title="Edit"
                     >
                       <Edit className="h-4 w-4" />
                     </Link>
                     <Link 
-                      href={`/admin/vehicles/${vehicle._id}/products`} 
+                      href={`${panelBase}/vehicles/${vehicle._id}/products`} 
                       className="text-purple-600 hover:text-purple-900"
                       title="Manage Products"
                     >
@@ -230,13 +232,16 @@ export default function AdminVehiclesPage() {
                     >
                       {vehicle.isActive ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
                     </button>
-                    <button
-                      onClick={() => handleDelete(vehicle._id, `${vehicle.make} ${vehicle.model}`)}
-                      className="text-red-600 hover:text-red-900"
-                      title="Delete permanently"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {/* Deleting stays with the admin (API-enforced). */}
+                    {canManage && (
+                      <button
+                        onClick={() => handleDelete(vehicle._id, `${vehicle.make} ${vehicle.model}`)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Delete permanently"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -298,7 +303,7 @@ export default function AdminVehiclesPage() {
 
       {vehicles.length === 0 && !loading && (
         <div className="text-center py-12 text-gray-500">
-          No vehicles found. <Link href="/admin/vehicles/create" className="text-blue-600 hover:underline">Create your first vehicle</Link>
+          No vehicles found. <Link href={`${panelBase}/vehicles/create`} className="text-blue-600 hover:underline">Create your first vehicle</Link>
         </div>
       )}
     </div>

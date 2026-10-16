@@ -1,4 +1,5 @@
 import orderRepository from '../repositories/orderRepository.js';
+import { canViewAllOrders } from '../middleware/authMiddleware.js';
 import { CUSTOMER_LIST_FIELDS, ADMIN_LIST_FIELDS } from '../repositories/orderProjections.js';
 import { shipmentsForViewer } from '../utils/shipmentView.js';
 import paymentRepository from '../repositories/paymentRepository.js';
@@ -319,7 +320,8 @@ export const getOrderById = async (req, res) => {
   const isOwner    = orderUserId && orderUserId === req.user.id;
   const isAdmin    = req.user.role === 'admin';
 
-  if (!isOwner && !isAdmin) {
+  // Marketing may read any order (view-only Orders screen); writes stay admin.
+  if (!isOwner && !canViewAllOrders(req.user)) {
     return res.status(403).json({ success: false, message: 'Not authorized to access this order' });
   }
 
@@ -386,12 +388,11 @@ export const downloadInvoice = async (req, res) => {
     return res.status(404).json({ success: false, message: 'Order not found' });
   }
 
-  // Same authorization as getOrderById: owner or admin only.
+  // Same authorization as getOrderById: the owner, or anyone who may read every order.
   const orderUserId = order.user?._id?.toString();
   const isOwner = orderUserId && orderUserId === req.user.id;
-  const isAdmin = req.user.role === 'admin';
 
-  if (!isOwner && !isAdmin) {
+  if (!isOwner && !canViewAllOrders(req.user)) {
     return res.status(403).json({ success: false, message: 'Not authorized to access this order' });
   }
 
@@ -1497,7 +1498,7 @@ export const getShipments = async (req, res) => {
   if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
 
   const isOwner = order.user?.toString() === req.user.id;
-  if (!isOwner && req.user.role !== 'admin') {
+  if (!isOwner && !canViewAllOrders(req.user)) {
     return res.status(403).json({ success: false, message: 'Not authorized to view this order' });
   }
 
@@ -1521,7 +1522,7 @@ export const getCancellations = async (req, res) => {
   if (!order) throw new AppError('Order not found', 404);
 
   const isOwner = order.user?.toString() === req.user.id;
-  if (!isOwner && req.user.role !== 'admin') {
+  if (!isOwner && !canViewAllOrders(req.user)) {
     throw new AppError('Not authorized to view this order', 403);
   }
 
@@ -1972,7 +1973,7 @@ export const getStatusHistory = async (req, res) => {
     return res.status(404).json({ success: false, message: 'Order not found' });
   }
 
-  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (order.user?.toString() !== req.user.id && !canViewAllOrders(req.user)) {
     return res.status(403).json({ success: false, message: 'Not authorized to access this order' });
   }
 
@@ -1995,8 +1996,12 @@ export const getValidTransitions = async (req, res) => {
     return res.status(404).json({ success: false, message: 'Order not found' });
   }
 
-  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (order.user?.toString() !== req.user.id && !canViewAllOrders(req.user)) {
     return res.status(403).json({ success: false, message: 'Not authorized to access this order' });
+  }
+  // A view-only reader (marketing) can move an order nowhere.
+  if (req.user.role !== 'admin' && order.user?.toString() !== req.user.id) {
+    return res.json({ success: true, currentStatus: order.status, validNextStatuses: [], validReasons: {} });
   }
 
   const isAdmin      = req.user.role === 'admin';
@@ -2109,7 +2114,7 @@ export const getTracking = async (req, res) => {
     return res.status(404).json({ success: false, message: 'Order not found' });
   }
 
-  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (order.user?.toString() !== req.user.id && !canViewAllOrders(req.user)) {
     return res.status(403).json({ success: false, message: 'Not authorized to access this order' });
   }
 
@@ -2526,7 +2531,7 @@ export const getReturnRequest = async (req, res) => {
     return res.status(404).json({ success: false, message: 'Order not found' });
   }
 
-  if (order.user?.toString() !== req.user.id && req.user.role !== 'admin') {
+  if (order.user?.toString() !== req.user.id && !canViewAllOrders(req.user)) {
     return res.status(403).json({ success: false, message: 'Not authorized to access this order' });
   }
 

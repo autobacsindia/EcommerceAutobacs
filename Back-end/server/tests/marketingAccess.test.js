@@ -16,6 +16,8 @@ import { app, cronService, adaptiveThrottlingService } from '../app.js';
 import * as dbHandler from './db-handler.js';
 import User from '../models/User.js';
 import emailHandler from '../services/emailHandler.js';
+import Order from '../models/Order.js';
+import Category from '../models/Category.js';
 
 const BASE = '/api/v1';
 const PASSWORD = 'SecurePass123!';
@@ -56,6 +58,11 @@ const MARKETING_READS = [
   '/media/admin/press',
   '/leads',
   '/consultation/admin',
+  // Catalogue (full edit, no delete) and Orders (view + export).
+  '/products/admin/list',
+  '/categories/admin/all',
+  '/vehicles/admin/list',
+  '/orders/admin/all',
 ];
 
 /** Deletes stay admin-only — staff never remove company records. */
@@ -67,6 +74,10 @@ const ADMIN_ONLY_DELETES = [
   `/media/admin/press/${FAKE_ID}`,
   `/consultation/admin/${FAKE_ID}`,
   `/campaigns/${FAKE_ID}/product-tiers/T1`,
+  `/products/${FAKE_ID}`,
+  `/brands/${FAKE_ID}`,
+  `/categories/${FAKE_ID}`,
+  `/vehicles/${FAKE_ID}`,
 ];
 
 describe('Marketing team access', () => {
@@ -149,11 +160,74 @@ describe('Marketing team access', () => {
     expect((await s.del(`/coupons/${FAKE_ID}`)).status).not.toBe(403);
   });
 
-  describe('uploads', () => {
-    it('marketing cannot sign uploads into catalogue folders', async () => {
+  describe('orders: view and export only', () => {
+    const seedOrder = async () => {
+      const customer = await createUser({ email: 'buyer@autobacs.test' });
+      return Order.create({
+        user: customer._id,
+        items: [{ product: new mongoose.Types.ObjectId(), name: 'Keycase', quantity: 1, price: 2176 }],
+        subtotal: 2176, totalAmount: 2176,
+        shippingAddress: { fullName: 'B', phone: '9000000000', addressLine1: '1 St', city: 'Pune', state: 'MH', postalCode: '411001', country: 'India' },
+        status: 'processing', paymentStatus: 'paid',
+      });
+    };
+
+    it('marketing reads any order and its history, but can move it nowhere', async () => {
+      await marketer();
+      const order = await seedOrder();
+      const s = await signIn('mk@autobacs.test');
+      expect((await s.get(`/orders/${order._id}`)).status).toBe(200);
+      expect((await s.get(`/orders/${order._id}/status-history`)).status).toBe(200);
+      expect((await s.get(`/orders/${order._id}/shipments`)).status).toBe(200);
+      const t = await s.get(`/orders/${order._id}/valid-transitions`);
+      expect(t.status).toBe(200);
+      expect(t.body.validNextStatuses).toEqual([]);
+    });
+
+    it('every order write is refused for marketing', async () => {
+      await marketer();
+      const order = await seedOrder();
+      const s = await signIn('mk@autobacs.test');
+      expect((await s.put(`/orders/${order._id}/status`, { status: 'shipped' })).status).toBe(403);
+      expect((await s.post(`/orders/${order._id}/refund`, {})).status).toBe(403);
+      expect((await s.post(`/orders/${order._id}/shipments`, {})).status).toBe(403);
+      expect((await s.del(`/orders/${order._id}`)).status).toBe(403);
+      expect((await Order.findById(order._id).lean()).status).toBe('processing');
+    });
+
+    it('other teams still cannot read someone else\'s order', async () => {
+      await createUser({ email: 'ops@autobacs.test', role: 'staff', staff: { team: 'operations' } });
+      const order = await seedOrder();
+      const s = await signIn('ops@autobacs.test');
+      expect((await s.get(`/orders/${order._id}`)).status).toBe(403);
+    });
+  });
+
+  describe('catalogue: full edit, no delete', () => {
+    it('marketing creates and edits a category; deleting it is refused', async () => {
       await marketer();
       const s = await signIn('mk@autobacs.test');
-      for (const folder of ['products', 'brands', 'categories', 'vehicles', 'nonsense', undefined]) {
+      const created = await s.post('/categories', { name: 'Diwali Picks', slug: 'diwali-picks', description: 'Festive' });
+      expect([200, 201]).toContain(created.status);
+      const id = created.body.data?._id || created.body.category?._id || (await Category.findOne({ name: 'Diwali Picks' }))?._id;
+      expect(id).toBeTruthy();
+      expect((await s.put(`/categories/${id}`, { name: 'Diwali Picks 2026', slug: 'diwali-picks' })).status).toBe(200);
+      expect((await s.del(`/categories/${id}`)).status).toBe(403);
+      expect(await Category.exists({ _id: id })).toBeTruthy();
+    });
+
+    it('other teams cannot edit the catalogue', async () => {
+      await createUser({ email: 'ops@autobacs.test', role: 'staff', staff: { team: 'operations' } });
+      const s = await signIn('ops@autobacs.test');
+      expect((await s.post('/categories', { name: 'Nope' })).status).toBe(403);
+    });
+  });
+
+  describe('uploads', () => {
+    it('marketing cannot sign uploads into an unknown folder', async () => {
+      await marketer();
+      const s = await signIn('mk@autobacs.test');
+      for (const folder of ['nonsense', 'avatars']) {
         const res = await s.post('/uploads/signature', { folder });
         expect({ folder, status: res.status }).toEqual({ folder, status: 403 });
       }
@@ -162,7 +236,7 @@ describe('Marketing team access', () => {
     it('marketing may sign uploads into its own folders', async () => {
       await marketer();
       const s = await signIn('mk@autobacs.test');
-      for (const folder of ['articles', 'media', 'promos', 'spin']) {
+      for (const folder of ['articles', 'media', 'promos', 'spin', 'products', 'brands', 'categories', 'vehicles']) {
         const res = await s.post('/uploads/signature', { folder });
         expect({ folder, status: res.status }).not.toEqual({ folder, status: 403 });
       }
@@ -173,7 +247,6 @@ describe('Marketing team access', () => {
       const s = await signIn('mk@autobacs.test');
       const res = await s.post('/uploads/cleanup', {
         publicIds: [
-          'autobacs/products/abc',
           'autobacs/media-evil/x',
           'autobacs/media/../products/abc',
           'other/thing',

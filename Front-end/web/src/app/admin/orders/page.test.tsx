@@ -22,6 +22,8 @@ jest.mock('@/lib/api');
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 jest.mock('next/navigation', () => ({
+  // lib/usePanel reads the path to pick admin vs the marketing panel.
+  usePathname: () => '/admin/orders',
   useRouter: () => ({
     push: mockPush,
     // Filter changes use replace(), not push() — see updateURL in the page.
