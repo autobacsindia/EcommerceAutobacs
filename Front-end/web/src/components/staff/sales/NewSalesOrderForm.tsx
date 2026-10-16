@@ -232,7 +232,7 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
           <div className="text-sm text-green-900">
             <p className="font-semibold">Order {o.orderNumber} created — {rupees(o.totalAmount)}</p>
             <p>Send the link or QR below to {o.customer.name}. You will be emailed as soon as they pay, and Accounts and Procurement are told automatically.</p>
-            {created.customerIsNew && <p className="mt-1 text-green-800">A new customer account was created; they get an email to set their password.</p>}
+            {created.customerIsNew && o.customer.email && <p className="mt-1 text-green-800">A new customer account was created; they get an email to set their password.</p>}
           </div>
         </div>
         <section className="rounded-xl border border-gray-200 bg-white p-5">
@@ -302,9 +302,12 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
             </p>
           </div>
           <div>
-            <label className={label} htmlFor="c-email">Email</label>
-            <input id="c-email" type="email" className={input} required value={customer.email}
+            <label className={label} htmlFor="c-email">Email (optional)</label>
+            <input id="c-email" type="email" className={input} value={customer.email} placeholder="Leave empty if they have none"
               onChange={(e) => setCustomer({ ...customer, email: e.target.value })} />
+            {!customer.email.trim() && (
+              <p className="mt-1 text-xs text-gray-500">No email: the payment link is sent by SMS — share it on WhatsApp too.</p>
+            )}
           </div>
         </div>
       </section>

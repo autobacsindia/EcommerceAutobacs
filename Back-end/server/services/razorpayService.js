@@ -17,6 +17,7 @@ import metaCapiService from './metaCapiService.js';
 import affiliateCommissionService from './affiliateCommissionService.js';
 import { resolvePaymentMethod, buildMethodDetails } from '../utils/paymentMethodDetails.js';
 import * as Sentry from '@sentry/node';
+import { isInternalEmail } from '../utils/customerContact.js';
 
 /**
  * Ceiling on the optional EMI-plan lookup performed during a capture. Kept well inside
@@ -120,6 +121,9 @@ class RazorpayService {
    * @returns {Promise<{id:string, shortUrl:string}>}
    */
   async createPaymentLink(order, { name, email, phone } = {}, { attempt = 1 } = {}) {
+    // An internal `.invalid` address (phone-only customer, staff account) has no
+    // mailbox — never hand it to Razorpay to email. The link then goes by SMS.
+    if (isInternalEmail(email)) email = undefined;
     const amount = Math.round((order.totalAmount || 0) * 100); // paise
     if (!amount || amount < 100) {
       throw new Error('Payment link amount must be at least ₹1');

@@ -53,6 +53,13 @@ describe('validateSalesOrder', () => {
     expect(errors.join()).not.toMatch(/items\[0\]\.product/);
   });
 
+  it('email is optional, but a typed one must be valid', async () => {
+    expect((await run(base({ customer: { name: 'Ravi', email: '', phone: '9876543210' } }))).errors).toEqual([]);
+    expect((await run(base({ customer: { name: 'Ravi', phone: '9876543210' } }))).errors).toEqual([]);
+    const { errors } = await run(base({ customer: { name: 'Ravi', email: 'not-an-email', phone: '9876543210' } }));
+    expect(errors.join()).toMatch(/customer.email/);
+  });
+
   it('a catalogue line still needs a real product id', async () => {
     const { errors } = await run(base({ items: [{ product: 'nope', quantity: 1 }] }));
     expect(errors.join()).toMatch(/items\[0\]\.product: Invalid product/);

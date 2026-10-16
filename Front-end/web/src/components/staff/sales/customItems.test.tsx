@@ -24,7 +24,7 @@ const fill = (labelText: RegExp, value: string) => fireEvent.change(screen.getBy
 function fillCustomer(phone: string) {
   fill(/^Name$/, 'Ravi Kumar');
   fill(/Mobile/, phone);
-  fill(/^Email$/, 'ravi@example.com');
+  fill(/Email/, 'ravi@example.com');
   fill(/House \/ street/, '12 MG Road');
   fill(/^City$/, 'Pune');
   fill(/^State$/, 'Maharashtra');
@@ -78,6 +78,19 @@ it('a custom item needs a name and a price before the order can be sent', async 
   fireEvent.click(screen.getByRole('button', { name: /Create order/ }));
   expect(await screen.findByRole('alert')).toHaveTextContent(/Fix the items marked in red/);
   expect(post).not.toHaveBeenCalled();
+});
+
+it('email is optional: an order without one is sent with an empty email', async () => {
+  renderForm();
+  fillCustomer('9876543210');
+  fill(/Email/, '');
+  expect(screen.getByText(/payment link is sent by SMS/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Custom item \(not in the catalogue\)/ }));
+  fireEvent.change(screen.getByLabelText('Custom item name'), { target: { value: 'Labour' } });
+  fireEvent.change(screen.getByLabelText(/Price for Labour/), { target: { value: '500' } });
+  fireEvent.click(screen.getByRole('button', { name: /Create order/ }));
+  await waitFor(() => expect(post).toHaveBeenCalled());
+  expect(post.mock.calls[0][1].customer.email).toBe('');
 });
 
 it('blocks a wrong mobile number and says why', async () => {
