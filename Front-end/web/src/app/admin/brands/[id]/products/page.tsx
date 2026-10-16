@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { ArrowLeft, Search, Plus, X, Loader2, Check } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePanel } from '@/lib/usePanel';
 
 interface Brand {
   id: string;
@@ -42,6 +43,7 @@ interface ProductsResponse {
 }
 
 export default function BrandProductsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { base: panelBase } = usePanel();
   const { id } = use(params);
   const [brand, setBrand] = useState<Brand | null>(null);
   const [mappedProducts, setMappedProducts] = useState<Product[]>([]);
@@ -159,7 +161,7 @@ export default function BrandProductsPage({ params }: { params: Promise<{ id: st
       {/* Header */}
       <div className="mb-8">
         <Link 
-          href={`/admin/brands/${id}`} 
+          href={`${panelBase}/brands/${id}`} 
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="h-4 w-4" />

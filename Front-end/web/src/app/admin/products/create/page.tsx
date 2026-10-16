@@ -17,6 +17,7 @@ import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPa
 import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } from '@/components/admin/VariantsEditor';
 import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
 import SlugField from '@/components/admin/SlugField';
+import { usePanel } from '@/lib/usePanel';
 
 type Category = CategoryOption;
 
@@ -37,6 +38,7 @@ interface Brand {
 }
 
 export default function CreateProductPage() {
+  const { base: panelBase } = usePanel();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -272,7 +274,7 @@ export default function CreateProductPage() {
       // otherwise TanStack serves the pre-create cached list for up to staleTime.
       queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') });
       alert('Product created successfully');
-      router.push('/admin/products');
+      router.push(`${panelBase}/products`);
     } catch (err: any) {
       alert(err.message || 'Failed to create product');
     } finally {
@@ -555,7 +557,7 @@ export default function CreateProductPage() {
                 ))}
               </select>
               <p className="mt-1 text-xs text-gray-500">
-                Brands are managed in <Link href="/admin/brands" className="text-blue-600 hover:underline">Admin → Brands</Link>.
+                Brands are managed in <Link href={`${panelBase}/brands`} className="text-blue-600 hover:underline">Admin → Brands</Link>.
               </p>
             </div>
             

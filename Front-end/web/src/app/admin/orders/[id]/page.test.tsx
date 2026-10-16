@@ -6,7 +6,10 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 
 // Mock dependencies
 jest.mock('@/lib/api');
+let mockPathname = '/admin/orders/order123';
 jest.mock('next/navigation', () => ({
+  // lib/usePanel reads the path to pick admin vs the marketing panel.
+  usePathname: () => mockPathname,
   useRouter: jest.fn(),
   useParams: jest.fn(),
   // Read for the `?parcel=1` hand-off from the orders list.
@@ -172,6 +175,20 @@ describe('AdminOrderDetailPage', () => {
       await waitFor(() => expect(screen.getByText('Test Product')).toBeInTheDocument());
       expect(screen.queryByText(/^Model:/)).not.toBeInTheDocument();
     });
+  });
+
+  it('in the marketing panel the order is view-only: no status control, no packing slip', async () => {
+    mockPathname = '/team/marketing/orders/order123';
+    try {
+      render(<AdminOrderDetailPage />);
+      await waitFor(() => expect(screen.getByText(/ORD-001/)).toBeInTheDocument());
+      expect(screen.queryByRole('combobox')).toBeNull();
+      expect(screen.getByText('View only')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Packing slip/ })).toBeNull();
+      expect(apiClient.put).not.toHaveBeenCalled();
+    } finally {
+      mockPathname = '/admin/orders/order123';
+    }
   });
 
   it('confirms via modal before updating status', async () => {

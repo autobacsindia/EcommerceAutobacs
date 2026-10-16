@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { ArrowLeft, Search, Plus, X, Loader2, Check, Edit } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePanel } from '@/lib/usePanel';
 
 interface Vehicle {
   id: string;
@@ -41,6 +42,7 @@ interface ProductsResponse {
 }
 
 export default function VehicleProductsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { base: panelBase } = usePanel();
   const { id } = use(params);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [mappedProducts, setMappedProducts] = useState<Product[]>([]);
@@ -177,7 +179,7 @@ export default function VehicleProductsPage({ params }: { params: Promise<{ id: 
       {/* Header */}
       <div className="mb-8">
         <Link 
-          href={`/admin/vehicles/${id}`} 
+          href={`${panelBase}/vehicles/${id}`} 
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -260,7 +262,7 @@ export default function VehicleProductsPage({ params }: { params: Promise<{ id: 
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center gap-4">
                     <Link
-                      href={`/admin/products/edit/${product._id}`}
+                      href={`${panelBase}/products/edit/${product._id}`}
                       className="text-blue-600 hover:text-blue-900 flex items-center gap-1"
                     >
                       <Edit className="h-4 w-4" />

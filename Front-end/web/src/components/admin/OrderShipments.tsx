@@ -7,6 +7,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { formatLongDateIST } from '@/lib/datetime';
 import { OTHER_CARRIER_CODE } from '@/lib/orderStatusUpdate';
+import { usePanel } from '@/lib/usePanel';
 
 /**
  * Admin — the parcels an order left in.
@@ -99,6 +100,7 @@ const STATUS_STYLE: Record<Shipment['status'], string> = {
 };
 
 export default function OrderShipments({ orderId, itemNames, rewardName, onChanged, openFormSignal = 0 }: Props) {
+  const { base: panelBase, isAdmin: canManage } = usePanel();
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [remaining, setRemaining] = useState<RemainingLine[]>([]);
   const [summary, setSummary] = useState<FulfilmentSummary | null>(null);
@@ -303,7 +305,7 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
             Goodie not yet in a parcel
           </span>
         )}
-        {(remaining.length > 0 || (summary?.owesGoodie && !summary.rewardShipped)) && (
+        {canManage && (remaining.length > 0 || (summary?.owesGoodie && !summary.rewardShipped)) && (
           <button
             onClick={() => setOpen((v) => !v)}
             className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
@@ -313,7 +315,7 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
         )}
       </div>
 
-      {open && (
+      {canManage && open && (
         <div className="border-b bg-gray-50 p-6">
           <p className="mb-3 text-sm font-medium text-gray-700">What goes in this parcel?</p>
           <div className="space-y-2">
@@ -434,15 +436,17 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
                 </span>
               )}
               {/* Per-parcel pick list — prints only what belongs in THIS box. */}
-              <a
-                href={`/admin/orders/${orderId}/packing-slip?shipment=${shipment._id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-auto rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              >
-                🖨 Slip
-              </a>
-              {shipment.status === 'packed' && (
+              {canManage && (
+                <a
+                  href={`${panelBase}/orders/${orderId}/packing-slip?shipment=${shipment._id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  🖨 Slip
+                </a>
+              )}
+              {canManage && shipment.status === 'packed' && (
                 <button
                   onClick={() => handleDispatch(shipment)}
                   disabled={busyId === shipment._id}
@@ -452,7 +456,7 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
                   {busyId === shipment._id ? 'Saving…' : 'Dispatch'}
                 </button>
               )}
-              {shipment.status === 'shipped' && (
+              {canManage && shipment.status === 'shipped' && (
                 <button
                   onClick={() => handleDelivered(shipment)}
                   disabled={busyId === shipment._id}

@@ -2,7 +2,7 @@ import express from "express";
 import categoryRepository from "../repositories/categoryRepository.js";
 import productRepository from "../repositories/productRepository.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { protect, admin } from "../middleware/authMiddleware.js";
+import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { validateCategory, validateCategoryUpdate, validateIdParam, validateSlugParam } from "../middleware/validationMiddleware.js";
 import { invalidateCache } from "../middleware/cacheMiddleware.js";
 import { categoryTags } from "../utils/nextTags.js";
@@ -69,7 +69,7 @@ router.get("/", httpCache('CATEGORY_LIST'), asyncHandler(async (req, res) => {
 // @access  Private/Admin
 // NOTE: declared before "/:id" so the literal path is matched first, and left
 // uncached so admins always see the current state after create/update/delete.
-router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin/all", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   // Product counts drive the dashboard's badges, but they cost a distinct
   // aggregation over every active product. Pickers (the product create/edit
   // category multi-select, the parent-hub dropdown) only need the tree, so they
@@ -221,7 +221,7 @@ router.get("/slug/:slug", validateSlugParam, httpCache('CATEGORY_ITEM'), asyncHa
 router.post(
   "/",
   protect,
-  admin,
+  adminOrMarketing,
   concurrentUploadGuard,
   uploadSingle('image'),
   handleMulterError,
@@ -314,7 +314,7 @@ router.post(
 router.put(
   "/:id",
   protect,
-  admin,
+  adminOrMarketing,
   concurrentUploadGuard,
   uploadSingle('image'),
   handleMulterError,
@@ -508,7 +508,7 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
 // @route   PATCH /categories/:id/feature
 // @desc    Toggle a category's homepage-featured flag (one-click from the admin list)
 // @access  Private/Admin
-router.patch("/:id/feature", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
+router.patch("/:id/feature", protect, adminOrMarketing, validateIdParam, asyncHandler(async (req, res) => {
   const category = await categoryRepository.findById(req.params.id);
   if (!category) {
     return res.status(404).json({ success: false, message: 'Category not found' });

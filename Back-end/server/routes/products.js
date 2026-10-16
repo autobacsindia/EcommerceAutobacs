@@ -15,7 +15,7 @@ import {
   validateSearchAnalytics,
   validateProductSearch
 } from "../middleware/validationMiddleware.js";
-import { protect, admin } from "../middleware/authMiddleware.js";
+import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { httpCache } from "../middleware/httpCache.js";
 import { invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
 import {
@@ -103,7 +103,7 @@ router.get("/", publicBrowsingRateLimit, searchBurstLimit, searchRateLimit, http
 // @access  Private/Admin
 // Defined before "/:id" so the literal path wins over the id param. No cache
 // middleware here on purpose — admins must see their edits immediately.
-router.get("/admin/list", protect, admin, validateProductSearch, asyncHandler(getAdminProducts));
+router.get("/admin/list", protect, adminOrMarketing, validateProductSearch, asyncHandler(getAdminProducts));
 
 // @route   GET /products/admin/export
 // @desc    Whole catalogue (drafts included, deleted excluded) as an .xlsx download:
@@ -309,7 +309,7 @@ router.get("/batch", publicProductRateLimit, asyncHandler(async (req, res) => {
 // @route   GET /products/:id/admin-fetch
 // @desc    Fetch product by ID for admin editing — no redirect, returns inactive products too
 // @access  Private/Admin
-router.get("/:id/admin-fetch", protect, admin, validateProductIdParam, asyncHandler(getProduct));
+router.get("/:id/admin-fetch", protect, adminOrMarketing, validateProductIdParam, asyncHandler(getProduct));
 
 // @route   GET /products/:id
 // @desc    301 redirect to slug-based canonical URL; preserves backlinks and prevents duplicate indexing
@@ -370,7 +370,7 @@ router.get('/:id/complementary', validateProductIdParam, publicProductRateLimit,
 router.post(
   "/",
   protect,
-  admin,
+  adminOrMarketing,
   concurrentUploadGuard,
   uploadMultiple('images', 8),
   handleMulterError,
@@ -384,7 +384,7 @@ router.post(
 router.put(
   "/:id",
   protect,
-  admin,
+  adminOrMarketing,
   validateProductIdParam,
   concurrentUploadGuard,
   uploadMultiple('images', 8),
@@ -406,7 +406,7 @@ router.put(
 router.patch(
   "/:id/seo-review",
   protect,
-  admin,
+  adminOrMarketing,
   validateProductIdParam,
   body('status').isIn(['todo', 'in_progress', 'done']).withMessage('Choose Needs check, Working or Completed'),
   validateRequest,
@@ -435,7 +435,7 @@ router.delete(
 router.post(
   "/:id/images",
   protect,
-  admin,
+  adminOrMarketing,
   concurrentUploadGuard,
   uploadMultiple('images', 8),
   handleMulterError,
@@ -449,7 +449,7 @@ router.post(
 router.delete(
   "/:id/images/:encodedPublicId",
   protect,
-  admin,
+  adminOrMarketing,
   asyncHandler(deleteProductImage)
 );
 
@@ -459,7 +459,7 @@ router.delete(
 router.post(
   "/:id/stock",
   protect,
-  admin,
+  adminOrMarketing,
   validateStockUpdate,
   asyncHandler(updateStock),
   // Invalidate all product caches after a stock update. updateStock does no

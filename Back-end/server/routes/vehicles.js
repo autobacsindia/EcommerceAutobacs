@@ -3,7 +3,7 @@ import vehicleRepository from "../repositories/vehicleRepository.js";
 import productRepository from "../repositories/productRepository.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { protect, admin } from "../middleware/authMiddleware.js";
+import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import {
   validateVehicleUpdate,
   validateVehicleProductMap,
@@ -218,7 +218,7 @@ router.get('/make-model/:make/:model/products', validateMakeModelParam, asyncHan
 router.post(
   "/",
   protect,
-  admin,
+  adminOrMarketing,
   concurrentUploadGuard,
   uploadSingle('image'),
   handleMulterError,
@@ -271,7 +271,7 @@ router.post(
 router.put(
   "/:id",
   protect,
-  admin,
+  adminOrMarketing,
   concurrentUploadGuard,
   uploadSingle('image'),
   handleMulterError,
@@ -464,7 +464,7 @@ router.delete("/:id", protect, admin, validateIdParam, asyncHandler(async (req, 
 // Also unlike /admin/all, this does NOT compute a per-vehicle product count —
 // that route fires one countDocuments per row (N+1), which is pure waste when
 // all the picker renders is a checkbox label.
-router.get("/admin/list", protect, admin, asyncHandler(async (_req, res) => {
+router.get("/admin/list", protect, adminOrMarketing, asyncHandler(async (_req, res) => {
   const ADMIN_LIST_CAP = 500;
 
   const vehicles = await vehicleRepository
@@ -502,7 +502,7 @@ router.get("/admin/list", protect, admin, asyncHandler(async (_req, res) => {
 // @route   GET /vehicles/admin/all
 // @desc    Get all vehicles (including inactive) for admin
 // @access  Private/Admin
-router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin/all", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const search = req.query.search || '';
@@ -553,7 +553,7 @@ router.get("/admin/all", protect, admin, asyncHandler(async (req, res) => {
 // @route   PATCH /vehicles/:id/toggle-status
 // @desc    Toggle vehicle active status
 // @access  Private/Admin
-router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
+router.patch("/:id/toggle-status", protect, adminOrMarketing, validateIdParam, asyncHandler(async (req, res) => {
   const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {
@@ -578,7 +578,7 @@ router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler
 // @route   GET /vehicles/:id/products
 // @desc    Get products mapped to a vehicle
 // @access  Private/Admin
-router.get("/:id/products", protect, admin, validateIdParam, validateVehicleQuery, asyncHandler(async (req, res) => {
+router.get("/:id/products", protect, adminOrMarketing, validateIdParam, validateVehicleQuery, asyncHandler(async (req, res) => {
   const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {
@@ -629,7 +629,7 @@ router.get("/:id/products", protect, admin, validateIdParam, validateVehicleQuer
 // @route   POST /vehicles/:id/products/map
 // @desc    Map products to a vehicle
 // @access  Private/Admin
-router.post("/:id/products/map", protect, admin, validateVehicleProductMap, asyncHandler(async (req, res) => {
+router.post("/:id/products/map", protect, adminOrMarketing, validateVehicleProductMap, asyncHandler(async (req, res) => {
   const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {
@@ -662,7 +662,7 @@ router.post("/:id/products/map", protect, admin, validateVehicleProductMap, asyn
 // @route   DELETE /vehicles/:id/products/:productId
 // @desc    Unmap a product from a vehicle
 // @access  Private/Admin
-router.delete("/:id/products/:productId", protect, admin, validateIdParam, validateRouteProductId, asyncHandler(async (req, res) => {
+router.delete("/:id/products/:productId", protect, adminOrMarketing, validateIdParam, validateRouteProductId, asyncHandler(async (req, res) => {
   const vehicle = await vehicleRepository.findById(req.params.id);
 
   if (!vehicle) {

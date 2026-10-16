@@ -8,6 +8,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import ImageUploader from '@/components/ui/ImageUploader';
+import { usePanel } from '@/lib/usePanel';
 
 interface Vehicle {
   _id: string;
@@ -22,6 +23,7 @@ interface Vehicle {
 }
 
 export default function EditVehiclePage({ params }: { params: Promise<{ id: string }> }) {
+  const { base: panelBase } = usePanel();
   const unwrappedParams = use(params);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -57,19 +59,19 @@ export default function EditVehiclePage({ params }: { params: Promise<{ id: stri
           });
         } else {
           alert('Vehicle not found');
-          router.push('/admin/vehicles');
+          router.push(`${panelBase}/vehicles`);
         }
       } catch (err: any) {
         console.error('Error fetching vehicle:', err);
         alert(err.message || 'Failed to fetch vehicle data');
-        router.push('/admin/vehicles');
+        router.push(`${panelBase}/vehicles`);
       } finally {
         setInitialLoading(false);
       }
     };
 
     fetchVehicle();
-  }, [unwrappedParams.id, router]);
+  }, [unwrappedParams.id, router, panelBase]);
 
   // Auto-generate slug when make or model changes
   useEffect(() => {
@@ -136,7 +138,7 @@ export default function EditVehiclePage({ params }: { params: Promise<{ id: stri
       }
 
       alert('Vehicle updated successfully!');
-      router.push('/admin/vehicles');
+      router.push(`${panelBase}/vehicles`);
     } catch (err: any) {
       alert(err.message || 'Failed to update vehicle');
     } finally {
@@ -176,7 +178,7 @@ export default function EditVehiclePage({ params }: { params: Promise<{ id: stri
   return (
     <div className="p-8 max-w-2xl mx-auto">
       <Link 
-        href="/admin/vehicles" 
+        href={`${panelBase}/vehicles`} 
         className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -328,7 +330,7 @@ export default function EditVehiclePage({ params }: { params: Promise<{ id: stri
             {loading ? 'Updating...' : 'Update Vehicle'}
           </button>
           <Link
-            href="/admin/vehicles"
+            href={`${panelBase}/vehicles`}
             className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 text-center"
           >
             Cancel

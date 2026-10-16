@@ -22,7 +22,7 @@ import {
   validateRefundRevert,
   validateCancellationRefundRevert
 } from "../middleware/validationMiddleware.js";
-import { protect, admin } from "../middleware/authMiddleware.js";
+import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { uploadPdfSingle, validatePdfUpload, handleMulterError } from "../middleware/uploadMiddleware.js";
 import { checkoutRateLimit } from "../middleware/rateLimitMiddleware.js";
 import { validateCancellation } from "../middleware/orderStatusMiddleware.js";
@@ -336,7 +336,7 @@ router.get("/analytics/tracking-stats", protect, admin, validateOrderAnalyticsQu
 // @route   GET /orders/admin/all
 // @desc    Get all orders (Admin only)
 // @access  Private/Admin
-router.get("/admin/all", protect, admin, validateAdminOrderQuery, asyncHandler(getAllOrdersAdmin));
+router.get("/admin/all", protect, adminOrMarketing, validateAdminOrderQuery, asyncHandler(getAllOrdersAdmin));
 
 // ========================================
 // RETURN REQUEST ENDPOINTS

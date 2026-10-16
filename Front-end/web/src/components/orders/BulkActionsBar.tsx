@@ -11,6 +11,8 @@ interface BulkActionsBarProps {
   onBulkStatusUpdate: (status: string, reason: string, notes: string) => Promise<void>;
   onExportSelected: () => void;
   onBulkDelete: () => void;
+  /** False for view-only readers (marketing): Export stays, Delete and status changes go. */
+  canManage?: boolean;
 }
 
 export default function BulkActionsBar({
@@ -20,7 +22,8 @@ export default function BulkActionsBar({
   onClearSelection,
   onBulkStatusUpdate,
   onExportSelected,
-  onBulkDelete
+  onBulkDelete,
+  canManage = true,
 }: BulkActionsBarProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [status, setStatus] = useState('');
@@ -76,13 +79,15 @@ export default function BulkActionsBar({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={onBulkDelete}
-              className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </button>
+            {canManage && (
+              <button
+                onClick={onBulkDelete}
+                className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+            )}
             <button
               onClick={onExportSelected}
               className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
@@ -90,17 +95,19 @@ export default function BulkActionsBar({
               <Download className="h-4 w-4" />
               Export
             </button>
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-            >
-              Update Status
-              <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-            </button>
+            {canManage && (
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+              >
+                Update Status
+                <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+              </button>
+            )}
           </div>
         </div>
 
-        {isExpanded && (
+        {canManage && isExpanded && (
           <div className="mt-4 pt-4 border-t border-gray-200">
             <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>

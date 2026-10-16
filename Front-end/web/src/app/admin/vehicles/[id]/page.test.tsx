@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 // GET (load) still uses apiClient; the update now submits multipart via fetch.
 jest.mock('@/lib/api');
 jest.mock('next/navigation', () => ({
+  // lib/usePanel reads the path to pick admin vs the marketing panel.
+  usePathname: () => '/admin/vehicles',
   useRouter: jest.fn(),
 }));
 jest.mock('lucide-react', () => ({

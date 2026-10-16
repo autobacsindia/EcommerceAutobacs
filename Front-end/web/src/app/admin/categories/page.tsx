@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Plus, Edit, Trash2, FolderOpen, Package, Star, ChevronRight } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
+import { usePanel } from '@/lib/usePanel';
 
 // Define the Category interface inline to avoid import issues
 interface Category {
@@ -30,6 +31,7 @@ interface Category {
 // ONLY hubs (top-level categories); a hub's subcategories are managed on its own
 // detail page (/admin/categories/[hubId]). "Add Category" here creates a new hub.
 export default function AdminCategoriesPage() {
+  const { base: panelBase, isAdmin: canManage } = usePanel();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +113,7 @@ export default function AdminCategoriesPage() {
         <div className="flex items-center justify-between">
           {/* The info block navigates into the hub's subcategory detail page. */}
           <Link
-            href={`/admin/categories/${category._id}`}
+            href={`${panelBase}/categories/${category._id}`}
             className="flex items-center flex-1 min-w-0 group"
             title="Open subcategories"
           >
@@ -167,20 +169,23 @@ export default function AdminCategoriesPage() {
               <Star className={`h-5 w-5 ${category.isFeatured ? 'fill-current' : ''}`} />
             </button>
             <Link
-              href={`/admin/products?category=${category._id}&categoryName=${encodeURIComponent(category.name)}`}
+              href={`${panelBase}/products?category=${category._id}&categoryName=${encodeURIComponent(category.name)}`}
               className="p-2 text-gray-500 hover:text-blue-600"
               title="View products in this category"
             >
               <Package className="h-5 w-5" />
             </Link>
-            <Link href={`/admin/categories/edit/${category._id}`} className="p-2 text-gray-500 hover:text-gray-700" title="Edit hub">
+            <Link href={`${panelBase}/categories/edit/${category._id}`} className="p-2 text-gray-500 hover:text-gray-700" title="Edit hub">
               <Edit className="h-5 w-5" />
             </Link>
-            <button onClick={() => handleDelete(category._id)} className="p-2 text-gray-500 hover:text-red-600" title="Delete">
-              <Trash2 className="h-5 w-5" />
-            </button>
+            {/* Deleting stays with the admin (API-enforced). */}
+            {canManage && (
+              <button onClick={() => handleDelete(category._id)} className="p-2 text-gray-500 hover:text-red-600" title="Delete">
+                <Trash2 className="h-5 w-5" />
+              </button>
+            )}
             <Link
-              href={`/admin/categories/${category._id}`}
+              href={`${panelBase}/categories/${category._id}`}
               className="p-2 text-gray-400 hover:text-gray-700"
               title="Open subcategories"
             >
@@ -226,7 +231,7 @@ export default function AdminCategoriesPage() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Categories</h1>
           <Link
-            href="/admin/categories/create"
+            href={`${panelBase}/categories/create`}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
           >
             <Plus className="h-5 w-5 mr-2" />
@@ -252,7 +257,7 @@ export default function AdminCategoriesPage() {
       <div className="flex justify-between items-center mb-2">
         <h1 className="text-2xl font-bold text-gray-900">Categories</h1>
         <Link
-          href="/admin/categories/create"
+          href={`${panelBase}/categories/create`}
           className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center"
         >
           <Plus className="h-5 w-5 mr-2" />
@@ -270,7 +275,7 @@ export default function AdminCategoriesPage() {
             <h3 className="text-lg font-medium text-gray-900 mb-2">No categories found</h3>
             <p className="text-gray-500 mb-4">Get started by creating a new category.</p>
             <Link
-              href="/admin/categories/create"
+              href={`${panelBase}/categories/create`}
               className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
             >
               Create Category

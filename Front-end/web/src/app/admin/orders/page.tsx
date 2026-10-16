@@ -20,6 +20,7 @@ import ParcelProgressBadge from '@/components/orders/shared/ParcelProgressBadge'
 import { outstandingParcels, hasCancellations, hasOpenReturn } from '@/lib/orderFulfilment';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
 import { getRefundBadge } from '@/lib/refundBadge';
+import { usePanel } from '@/lib/usePanel';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -181,6 +182,7 @@ function OrdersPagination({
 }
 
 function AdminOrdersPageInner() {
+  const { base: panelBase, isAdmin: canManage } = usePanel();
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -343,7 +345,7 @@ function AdminOrdersPageInner() {
     ) {
       // `parcel=1` opens the panel's create-parcel form and scrolls to it, so the admin
       // lands on the same form the detail page's own dropdown would have opened.
-      router.push(`/admin/orders/${order._id}?parcel=1`);
+      router.push(`${panelBase}/orders/${order._id}?parcel=1`);
       return;
     }
 
@@ -416,8 +418,8 @@ function AdminOrdersPageInner() {
     else params.delete('page');
 
     if (params.toString() === searchParams.toString()) return;
-    router.replace(`/admin/orders?${params.toString()}`, { scroll: false });
-  }, [currentPage, searchParams, router]);
+    router.replace(`${panelBase}/orders?${params.toString()}`, { scroll: false });
+  }, [currentPage, searchParams, router, panelBase]);
 
   const handleFiltersChange = (newFilters: OrderFilters) => {
     setFilters(newFilters);
@@ -441,7 +443,7 @@ function AdminOrdersPageInner() {
     // would stack a history entry per typing pause and make Back walk backwards through
     // half-typed search terms instead of leaving the page. The URL stays a shareable
     // snapshot of the current view either way.
-    router.replace(`/admin/orders?${params.toString()}`, { scroll: false });
+    router.replace(`${panelBase}/orders?${params.toString()}`, { scroll: false });
   };
 
   // Sorting re-orders the whole result set, so jump back to page 1 — staying on
@@ -809,6 +811,11 @@ function AdminOrdersPageInner() {
                     {order.status === 'awaiting_payment' ? (
                       // Fulfillment hasn't started — the Payment column tells the story.
                       <span className="text-gray-400">—</span>
+                    ) : !canManage ? (
+                      // View-only reader (marketing): the status, not a control.
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${ORDER_STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-800'}`}>
+                        {ORDER_STATUS_LABELS[order.status] || order.status}
+                      </span>
                     ) : (
                       <>
                         <select
@@ -907,7 +914,7 @@ function AdminOrdersPageInner() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <Link
-                      href={`/admin/orders/${order._id}`}
+                      href={`${panelBase}/orders/${order._id}`}
                       className="text-blue-600 hover:text-blue-900 inline-flex items-center gap-1"
                     >
                       <Eye className="h-4 w-4" />
@@ -957,6 +964,7 @@ function AdminOrdersPageInner() {
         onBulkStatusUpdate={handleBulkStatusUpdate}
         onExportSelected={handleExportSelected}
         onBulkDelete={handleBulkDelete}
+        canManage={canManage}
       />
 
       {pendingChange && (
@@ -966,7 +974,7 @@ function AdminOrdersPageInner() {
           newStatus={pendingChange.to}
           shipsEverythingCount={pendingChange.unitCount}
           deliversParcelCount={pendingChange.parcelCount}
-          orderHref={`/admin/orders/${pendingChange.orderId}`}
+          orderHref={`${panelBase}/orders/${pendingChange.orderId}`}
           notifiesCustomer={CUSTOMER_NOTIFIED_STATUSES.includes(pendingChange.to)}
           onConfirm={confirmStatusChange}
           onClose={() => setPendingChange(null)}

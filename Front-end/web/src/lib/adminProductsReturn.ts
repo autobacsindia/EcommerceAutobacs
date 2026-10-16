@@ -9,18 +9,26 @@
  */
 export const PRODUCTS_LIST_PATH = '/admin/products';
 
-export function safeProductsReturn(raw: string | null | undefined): string {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return PRODUCTS_LIST_PATH;
+/**
+ * The product list for a panel: '/admin' → /admin/products, the marketing panel
+ * ('/team/marketing') → /team/marketing/products. See lib/usePanel.
+ */
+export const productsListPath = (base = '/admin') => `${base}/products`;
+
+export function safeProductsReturn(raw: string | null | undefined, base = '/admin'): string {
+  const list = productsListPath(base);
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return list;
   try {
     const url = new URL(raw, 'http://local.invalid');
-    if (url.origin !== 'http://local.invalid' || url.pathname !== PRODUCTS_LIST_PATH) return PRODUCTS_LIST_PATH;
+    // Only THIS panel's product list — never another path, panel or origin.
+    if (url.origin !== 'http://local.invalid' || url.pathname !== list) return list;
     return `${url.pathname}${url.search}`;
   } catch {
-    return PRODUCTS_LIST_PATH;
+    return list;
   }
 }
 
 /** The editor link for a product, remembering the list view it was opened from. */
-export function productEditHref(productId: string, listUrl: string): string {
-  return `/admin/products/edit/${productId}?returnTo=${encodeURIComponent(listUrl)}`;
+export function productEditHref(productId: string, listUrl: string, base = '/admin'): string {
+  return `${base}/products/edit/${productId}?returnTo=${encodeURIComponent(listUrl)}`;
 }

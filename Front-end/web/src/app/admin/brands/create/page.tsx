@@ -8,8 +8,10 @@ import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
 import ImageUploader from '@/components/ui/ImageUploader';
+import { usePanel } from '@/lib/usePanel';
 
 export default function CreateBrandPage() {
+  const { base: panelBase } = usePanel();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export default function CreateBrandPage() {
 
       revalidateHome('home:brands');
       alert('Brand created successfully!');
-      router.push('/admin/brands');
+      router.push(`${panelBase}/brands`);
     } catch (err: any) {
       setError(err.message || 'Failed to create brand');
     } finally {
@@ -69,7 +71,7 @@ export default function CreateBrandPage() {
     <div className="p-8">
       <div className="mb-8">
         <Link 
-          href="/admin/brands" 
+          href={`${panelBase}/brands`} 
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -163,7 +165,7 @@ export default function CreateBrandPage() {
               )}
             </button>
             <Link
-              href="/admin/brands"
+              href={`${panelBase}/brands`}
               className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Cancel

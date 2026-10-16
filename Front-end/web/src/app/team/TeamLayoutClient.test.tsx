@@ -58,6 +58,11 @@ it('marketing gets its panel screens, highlighted on their detail pages too', ()
     [/Promo banners/, '/team/marketing/promo-banners'],
     [/Leads/, '/team/marketing/leads'],
     [/Consultations/, '/team/marketing/consultation'],
+    [/^Products$/, '/team/marketing/products'],
+    [/Brands/, '/team/marketing/brands'],
+    [/Categories/, '/team/marketing/categories'],
+    [/Vehicles/, '/team/marketing/vehicles'],
+    [/^Orders$/, '/team/marketing/orders'],
     [/Payments/, '/team/payments'],
   ] as const) {
     expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);

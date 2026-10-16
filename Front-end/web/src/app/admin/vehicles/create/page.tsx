@@ -6,8 +6,10 @@ import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipart
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import ImageUploader from '@/components/ui/ImageUploader';
+import { usePanel } from '@/lib/usePanel';
 
 export default function CreateVehiclePage() {
+  const { base: panelBase } = usePanel();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -83,7 +85,7 @@ export default function CreateVehiclePage() {
       }
 
       alert('Vehicle created successfully!');
-      router.push('/admin/vehicles');
+      router.push(`${panelBase}/vehicles`);
     } catch (err: any) {
       alert(err.message || 'Failed to create vehicle');
     } finally {
@@ -111,7 +113,7 @@ export default function CreateVehiclePage() {
   return (
     <div className="p-8 max-w-2xl mx-auto">
       <Link 
-        href="/admin/vehicles" 
+        href={`${panelBase}/vehicles`} 
         className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -245,7 +247,7 @@ export default function CreateVehiclePage() {
             {loading ? 'Creating...' : 'Create Vehicle'}
           </button>
           <Link
-            href="/admin/vehicles"
+            href={`${panelBase}/vehicles`}
             className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 text-center"
           >
             Cancel

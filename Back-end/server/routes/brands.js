@@ -3,7 +3,7 @@ import brandRepository from "../repositories/brandRepository.js";
 import productRepository from "../repositories/productRepository.js";
 import Product from "../models/Product.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { protect, admin } from "../middleware/authMiddleware.js";
+import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { 
   validateBrand, 
   validateBrandUpdate, 
@@ -172,7 +172,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 router.post(
   "/",
   protect,
-  admin,
+  adminOrMarketing,
   concurrentUploadGuard,
   uploadSingle('logo'),
   handleMulterError,
@@ -217,7 +217,7 @@ router.post(
 router.put(
   "/:id",
   protect,
-  admin,
+  adminOrMarketing,
   concurrentUploadGuard,
   uploadSingle('logo'),
   handleMulterError,
@@ -377,7 +377,7 @@ router.get("/:id/products", httpCache('BRAND_PRODUCTS'), asyncHandler(async (req
 // @route   POST /brands/:id/products
 // @desc    Map products to a brand
 // @access  Private/Admin
-router.post("/:id/products", protect, admin, validateBrandProductMap, asyncHandler(async (req, res) => {
+router.post("/:id/products", protect, adminOrMarketing, validateBrandProductMap, asyncHandler(async (req, res) => {
   const { productIds } = req.body;
 
   const brand = await brandRepository.findById(req.params.id);
@@ -409,7 +409,7 @@ router.post("/:id/products", protect, admin, validateBrandProductMap, asyncHandl
 // @route   DELETE /brands/:id/products/:productId
 // @desc    Unmap a product from a brand
 // @access  Private/Admin
-router.delete("/:id/products/:productId", protect, admin, validateIdParam, validateRouteProductId, asyncHandler(async (req, res) => {
+router.delete("/:id/products/:productId", protect, adminOrMarketing, validateIdParam, validateRouteProductId, asyncHandler(async (req, res) => {
   const brand = await brandRepository.findById(req.params.id);
 
   if (!brand) {
@@ -443,7 +443,7 @@ router.delete("/:id/products/:productId", protect, admin, validateIdParam, valid
 // @route   PATCH /brands/:id/toggle-status
 // @desc    Toggle brand active status
 // @access  Private/Admin
-router.patch("/:id/toggle-status", protect, admin, validateIdParam, asyncHandler(async (req, res) => {
+router.patch("/:id/toggle-status", protect, adminOrMarketing, validateIdParam, asyncHandler(async (req, res) => {
   const brand = await brandRepository.findById(req.params.id);
 
   if (!brand) {

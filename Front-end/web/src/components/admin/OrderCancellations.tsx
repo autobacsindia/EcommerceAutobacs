@@ -8,6 +8,7 @@ import { AlertTriangle, IndianRupee, PackageX, RotateCcw } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { formatLongDateIST } from '@/lib/datetime';
+import { usePanel } from '@/lib/usePanel';
 
 /**
  * Admin — lines cancelled before delivery, and the money going back for them.
@@ -118,6 +119,8 @@ export default function OrderCancellations({ orderId, itemNames, onChanged, refr
   // dialog remounts per cancellation and seeds its amount from the right one.
   const [offlineFor, setOfflineFor] = useState<string | null>(null);
 
+  // View-only readers (marketing) see what was cancelled and refunded, and act on nothing.
+  const { isAdmin: canManage } = usePanel();
   const [open, setOpen] = useState(false);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('out_of_stock');
@@ -261,7 +264,7 @@ export default function OrderCancellations({ orderId, itemNames, onChanged, refr
             {summary.label}
           </span>
         )}
-        {remaining.length > 0 && (
+        {canManage && remaining.length > 0 && (
           <button
             onClick={() => setOpen((v) => !v)}
             className="ml-auto rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
@@ -271,7 +274,7 @@ export default function OrderCancellations({ orderId, itemNames, onChanged, refr
         )}
       </div>
 
-      {open && (
+      {canManage && open && (
         <div className="border-b bg-gray-50 p-6">
           <p className="mb-3 text-sm font-medium text-gray-700">How many of each should be cancelled?</p>
           <div className="space-y-2">
@@ -405,7 +408,7 @@ export default function OrderCancellations({ orderId, itemNames, onChanged, refr
                     ).replace('₹', '')}
                   </span>
                 )}
-                {(status === 'pending' || status === 'failed') && (
+                {canManage && (status === 'pending' || status === 'failed') && (
                   <div className="ml-auto flex items-center gap-2">
                     <button
                       onClick={() => handleRefund(cancellation)}
@@ -431,7 +434,7 @@ export default function OrderCancellations({ orderId, itemNames, onChanged, refr
                   present and no gateway refund id. Razorpay money has genuinely left and
                   cannot be pulled back by a field write; the backend refuses it too.
                 */}
-                {status === 'completed' && refund?.offlineMethod && !refund?.razorpayRefundId && (
+                {canManage && status === 'completed' && refund?.offlineMethod && !refund?.razorpayRefundId && (
                   <button
                     onClick={() => handleRevert(cancellation)}
                     disabled={busyId === cancellation._id}

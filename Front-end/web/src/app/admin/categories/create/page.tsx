@@ -8,6 +8,7 @@ import { revalidateHome } from '@/lib/revalidateHome';
 import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
 import { validateImageFile, IMAGE_ACCEPT, IMAGE_MAX_FILE_MB } from '@/lib/imageUpload';
 import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
+import { usePanel } from '@/lib/usePanel';
 
 // Define the Category interface inline to avoid import issues
 interface Category {
@@ -31,6 +32,7 @@ interface Category {
 //  - subcategory mode (param present): creates a subcategory under that hub. The
 //    parent is fixed to the hub and shown read-only — you can't re-parent from here.
 function CreateCategoryForm() {
+  const { base: panelBase } = usePanel();
   const router = useRouter();
   const searchParams = useSearchParams();
   const parentId = searchParams.get('parent') || undefined;
@@ -160,7 +162,7 @@ function CreateCategoryForm() {
 
       // Back to where it belongs: the hub detail page for a subcategory, the hub
       // list otherwise.
-      router.push(isSubcategory && parentId ? `/admin/categories/${parentId}` : '/admin/categories');
+      router.push(isSubcategory && parentId ? `${panelBase}/categories/${parentId}` : `${panelBase}/categories`);
       router.refresh();
     } catch (err: any) {
       console.error('Failed to create category:', err);
@@ -170,7 +172,7 @@ function CreateCategoryForm() {
     }
   };
 
-  const backHref = isSubcategory && parentId ? `/admin/categories/${parentId}` : '/admin/categories';
+  const backHref = isSubcategory && parentId ? `${panelBase}/categories/${parentId}` : `${panelBase}/categories`;
 
   return (
     <div className="p-6">

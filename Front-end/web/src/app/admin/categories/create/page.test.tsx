@@ -7,6 +7,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 // Mock dependencies
 jest.mock('@/lib/api');
 jest.mock('next/navigation', () => ({
+  // lib/usePanel reads the path to pick admin vs the marketing panel.
+  usePathname: () => '/admin/categories',
   useRouter: jest.fn(),
   useSearchParams: jest.fn(),
 }));

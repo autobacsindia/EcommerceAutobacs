@@ -7,6 +7,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { Plus, Edit, Trash2, Search, Package, Eye, ToggleLeft, ToggleRight } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePanel } from '@/lib/usePanel';
 
 interface Brand {
   id: string;
@@ -32,6 +33,7 @@ interface BrandsResponse {
 }
 
 export default function AdminBrandsPage() {
+  const { base: panelBase, isAdmin: canManage } = usePanel();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -132,7 +134,7 @@ export default function AdminBrandsPage() {
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Brands Management</h1>
         <Link 
-          href="/admin/brands/create" 
+          href={`${panelBase}/brands/create`} 
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
         >
           <Plus className="h-4 w-4" />
@@ -229,14 +231,14 @@ export default function AdminBrandsPage() {
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <div className="flex gap-2">
                     <Link 
-                      href={`/admin/brands/${brand.id}`} 
+                      href={`${panelBase}/brands/${brand.id}`} 
                       className="text-blue-600 hover:text-blue-900"
                       title="Edit"
                     >
                       <Edit className="h-4 w-4" />
                     </Link>
                     <Link 
-                      href={`/admin/brands/${brand.id}/products`} 
+                      href={`${panelBase}/brands/${brand.id}/products`} 
                       className="text-purple-600 hover:text-purple-900"
                       title="View Products"
                     >
@@ -249,13 +251,16 @@ export default function AdminBrandsPage() {
                     >
                       {brand.isActive ? <ToggleRight className="h-4 w-4" /> : <ToggleLeft className="h-4 w-4" />}
                     </button>
-                    <button
-                      onClick={() => handleDelete(brand.id, brand.name)}
-                      className="text-red-600 hover:text-red-900"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {/* Deleting stays with the admin (API-enforced). */}
+                    {canManage && (
+                      <button
+                        onClick={() => handleDelete(brand.id, brand.name)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -317,7 +322,7 @@ export default function AdminBrandsPage() {
 
       {brands.length === 0 && !loading && (
         <div className="text-center py-12 text-gray-500">
-          No brands found. <Link href="/admin/brands/create" className="text-blue-600 hover:underline">Create your first brand</Link>
+          No brands found. <Link href={`${panelBase}/brands/create`} className="text-blue-600 hover:underline">Create your first brand</Link>
         </div>
       )}
     </div>
