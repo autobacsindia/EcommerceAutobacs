@@ -22,6 +22,12 @@ import { cancelledQuantityForItem } from '@/lib/orderFulfilment';
 import { outstandingParcels } from '@/lib/orderFulfilment';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
 import type { OrderPaymentSummary } from '@/lib/types';
+import { GatewayOfferRows, PaymentStatusTag } from '@/components/orders/PaymentSummary';
+import type { GatewayOffer } from '@/components/orders/PaymentSummary';
+
+/** What the gateway holds — and so the most a refund can send back. */
+const amountPaidOf = (o: { totalAmount: number; gatewayOffer?: GatewayOffer | null }) =>
+  o.gatewayOffer?.discount ? o.gatewayOffer.amountPaid : o.totalAmount;
 
 // Fulfillment stages an admin can move to (mirrors the list page + backend rules).
 const ALL_STATUSES = ['awaiting_payment', 'processing', 'shipped', 'delivered', 'returned', 'cancelled'];
@@ -144,6 +150,8 @@ interface Order {
   tax: number;
   discount: number;
   totalAmount: number;
+  /** A Razorpay offer at checkout: the customer paid (and can be refunded) less than totalAmount. */
+  gatewayOffer?: GatewayOffer | null;
   trackingNumber?: string;
   carrier?: {
     name?: string;
@@ -273,7 +281,7 @@ function AdminOrderDetailPageInner() {
   // we refetch to reflect processing/completed.
   const handleProcessRefund = async () => {
     if (!order) return;
-    if (!window.confirm(`Refund ₹${order.totalAmount.toFixed(2)} to ${order.user?.name || 'the customer'} via Razorpay? This cannot be undone.`)) {
+    if (!window.confirm(`Refund ₹${amountPaidOf(order).toFixed(2)} to ${order.user?.name || 'the customer'} via Razorpay? This cannot be undone.`)) {
       return;
     }
     setRefunding(true);
@@ -466,6 +474,7 @@ function AdminOrderDetailPageInner() {
         <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
           {getStatusLabel(order.status)}
         </span>
+        <PaymentStatusTag paymentStatus={order.paymentStatus} tone="admin" />
         {/*
           Packing slip — the printable pick list, now including any won goodie as a
           tickable row. Lives here rather than inside the (removed) reward banner: the
@@ -991,7 +1000,7 @@ function AdminOrderDetailPageInner() {
                     })()}
                   </div>
                   <p className="text-sm text-gray-600 mb-3">
-                    Full refund of <span className="font-medium">₹{order.totalAmount.toFixed(2)}</span> to the original payment method via Razorpay.
+                    Full refund of <span className="font-medium">₹{amountPaidOf(order).toFixed(2)}</span> to the original payment method via Razorpay.
                   </p>
                   {order.refundDetails?.transactionId && (
                     <p className="text-xs text-gray-500 mb-1">Refund ID: {order.refundDetails.transactionId}</p>
@@ -1082,7 +1091,7 @@ function AdminOrderDetailPageInner() {
                     open
                     onClose={() => setOfflineDialogOpen(false)}
                     onSubmit={handleMarkOffline}
-                    maxAmount={order.totalAmount}
+                    maxAmount={amountPaidOf(order)}
                     subject={`order #${order.orderNumber || order._id}`}
                     defaultReference={offlineReference}
                   />
@@ -1124,6 +1133,7 @@ function AdminOrderDetailPageInner() {
                 <span>Total</span>
                 <span>₹{order.totalAmount.toFixed(2)}</span>
               </div>
+              <GatewayOfferRows offer={order.gatewayOffer} tone="admin" />
             </div>
           </div>
         </div>

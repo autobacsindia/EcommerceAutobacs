@@ -359,6 +359,24 @@ const OrderSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  /*
+    A Razorpay offer applied AT THE GATEWAY (e.g. "Flat ₹100 instant discount on
+    American Express"). The customer is charged totalAmount − discount; our prices,
+    coupons and GST are untouched — totalAmount stays what we sold for. Written only
+    by the payment success path after Razorpay itself confirmed the offer (see
+    razorpayService._resolveGatewayOffer). Refunds use amountPaid, never totalAmount,
+    because that is all the gateway holds.
+  */
+  gatewayOffer: {
+    type: new mongoose.Schema({
+      offerIds: { type: [String], default: [] },
+      name: { type: String, default: '' },
+      discount: { type: Number, required: true },   // rupees taken off by the offer
+      amountPaid: { type: Number, required: true }, // rupees actually captured
+      paymentId: { type: String, default: '' },
+    }, { _id: false }),
+    default: undefined,
+  },
   // FULFILLMENT status only (the "where is the parcel?" axis). Payment lives on
   // paymentStatus below. `awaiting_payment` is the internal pre-payment state for a
   // just-created order (rendered as "—" in admin — not a real stage); it flips to

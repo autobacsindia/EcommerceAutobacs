@@ -232,7 +232,9 @@ export function matchOrderLine(orderLines, returnedLine) {
 export function remainingRefundable(
   order, siblingReturns = [], excludeReturnId = null, payment = null, excludeCancellationId = null,
 ) {
-  const capturedPaise = toPaise(order?.totalAmount || 0);
+  // What the gateway actually holds: the total, less any Razorpay offer applied at
+  // checkout (order.gatewayOffer). Refunding the full total would be rejected.
+  const capturedPaise = Math.max(0, toPaise(order?.totalAmount || 0) - toPaise(order?.gatewayOffer?.discount || 0));
 
   let refundedPaise = 0;
   for (const rr of siblingReturns) {

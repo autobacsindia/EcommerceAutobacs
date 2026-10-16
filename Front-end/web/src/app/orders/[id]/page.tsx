@@ -36,6 +36,8 @@ import {
   customerCancelScope,
   remainingCancellableUnits,
 } from '@/lib/orderFulfilment';
+import { GatewayOfferRows, PaymentStatusTag } from '@/components/orders/PaymentSummary';
+import type { GatewayOffer } from '@/components/orders/PaymentSummary';
 import type { ItemFulfilmentState } from '@/lib/orderFulfilment';
 
 interface OrderDetail {
@@ -48,6 +50,9 @@ interface OrderDetail {
   shippingCost: number;
   tax: number;
   discount: number;
+  paymentStatus?: string;
+  /** A Razorpay offer at checkout: the customer paid less than totalAmount. */
+  gatewayOffer?: GatewayOffer | null;
   shippingAddress: {
     fullName: string;
     phone: string;
@@ -471,9 +476,12 @@ export default function OrderDetailPage() {
                 Placed on {formatLongDateTimeIST(order.createdAt)}
               </p>
             </div>
-            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-[15px] font-display font-bold ${getStatusColor(order.status)}`}>
-              {getStatusIcon(order.status)}
-              {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-[15px] font-display font-bold ${getStatusColor(order.status)}`}>
+                {getStatusIcon(order.status)}
+                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+              </div>
+              <PaymentStatusTag paymentStatus={order.paymentStatus} />
             </div>
           </div>
           <div className="mt-8">
@@ -752,6 +760,7 @@ export default function OrderDetailPage() {
                 <span className="font-display text-ink tracking-[-0.01em]">Total</span>
                 <span className="text-xl font-display font-bold text-gold">₹{(order.totalAmount || 0).toFixed(2)}</span>
               </div>
+              <GatewayOfferRows offer={order.gatewayOffer} />
             </div>
           </div>
         </div>

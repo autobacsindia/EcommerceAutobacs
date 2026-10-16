@@ -480,6 +480,12 @@ export const generateInvoicePdf = async (order, user = null) => {
         rs(order.totalAmount),
         { big: true }
       );
+      // A Razorpay bank offer at checkout lowers what the customer PAID, not the
+      // invoice value: the sale (and its GST) is the total above. Shown below it.
+      if (order.gatewayOffer?.discount > 0) {
+        sumRow('Razorpay offer:', `- ${rs(order.gatewayOffer.discount)}`, { muted: true });
+        sumRow('Amount paid:', rs(order.gatewayOffer.amountPaid));
+      }
 
       // ── Footer note ──────────────────────────────────────────────────────────
       if (shippingExtra) {

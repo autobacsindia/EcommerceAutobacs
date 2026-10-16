@@ -58,6 +58,8 @@ interface Order {
   createdAt: string;
   status: string;
   paymentStatus?: string;
+  /** Razorpay offer at checkout — the customer paid less than totalAmount. */
+  gatewayOffer?: { discount: number; amountPaid: number } | null;
   cancelledBy?: 'admin' | 'customer' | 'system';
   totalAmount: number;
   refundDetails?: {
@@ -787,6 +789,11 @@ function AdminOrdersPageInner() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
                       ₹{order.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {order.gatewayOffer?.discount ? (
+                        <span className="block text-xs font-normal text-green-700" title="Razorpay offer at checkout">
+                          paid ₹{order.gatewayOffer.amountPaid.toLocaleString('en-IN')} (offer −₹{order.gatewayOffer.discount.toLocaleString('en-IN')})
+                        </span>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
