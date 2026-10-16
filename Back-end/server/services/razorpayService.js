@@ -267,7 +267,7 @@ class RazorpayService {
    * @param {string} userId - User ID
    * @returns {Promise<Object>} Processing result
    */
-  async processPaymentSuccess(orderId, paymentData, userId) {
+  async processPaymentSuccess(orderId, paymentData, userId, { gatewayOffer = null } = {}) {
     // EMI tenure/rate needs a separate expanded fetch. Do it here, OUTSIDE and BEFORE
     // the transaction — a slow or failing metadata call must not hold a Mongo
     // transaction open, and must not be able to abort the capture. Non-EMI payments
@@ -306,9 +306,10 @@ class RazorpayService {
         if (existing) {
           paymentId = existing._id;
           // Self-heal the order axis if a prior partial run left it unlinked/unpaid.
-          if (String(order.payment) !== String(existing._id) || order.paymentStatus !== 'paid') {
+          if (String(order.payment) !== String(existing._id) || order.paymentStatus !== 'paid' || (gatewayOffer && !order.gatewayOffer)) {
             order.payment = existing._id;
             order.paymentStatus = 'paid';
+            if (gatewayOffer && !order.gatewayOffer) order.gatewayOffer = gatewayOffer;
             await orderRepository.save(order, session);
           }
           return;
@@ -318,7 +319,8 @@ class RazorpayService {
           {
             order: orderId,
             user: userId,
-            amount: order.totalAmount,
+            // What was actually captured: less than the total when a Razorpay offer applied.
+            amount: gatewayOffer ? gatewayOffer.amountPaid : order.totalAmount,
             currency: 'INR',
             // Pass the WHOLE entity, not `.method` — that is what lets a debit card be
             // told apart from a credit card (both arrive as method: 'card').
@@ -337,6 +339,7 @@ class RazorpayService {
         order.payment = paymentRecord._id;
         // Payment axis is authoritative here — set it directly (idempotent on retry).
         order.paymentStatus = 'paid';
+        if (gatewayOffer) order.gatewayOffer = gatewayOffer;
         await orderRepository.save(order, session);
 
         // Advance fulfillment into `processing` only from the pre-payment state.
@@ -579,10 +582,10 @@ class RazorpayService {
 
     // Amount/currency guard (throws on mismatch — a real security anomaly the caller
     // will surface to Sentry) + idempotency check, identical to the webhook path.
-    const { alreadyProcessed } = await this._validatePaymentAgainstOrder(order, captured);
+    const { alreadyProcessed, gatewayOffer } = await this._validatePaymentAgainstOrder(order, captured);
     if (alreadyProcessed) return { recovered: false, reason: 'already_processed' };
 
-    await this.processPaymentSuccess(order._id.toString(), captured, order.user?.toString());
+    await this.processPaymentSuccess(order._id.toString(), captured, order.user?.toString(), { gatewayOffer });
     return { recovered: true, paymentId: captured.id };
   }
 
@@ -721,19 +724,109 @@ class RazorpayService {
    * @returns {Promise<{alreadyProcessed: boolean}>}
    */
   async _validatePaymentAgainstOrder(order, paymentEntity) {
-    const expected = Math.round((order.totalAmount || 0) * 100); // paise
-    if (paymentEntity.amount !== expected) {
-      console.error(`[SECURITY] Amount mismatch! | Order: ${order._id} | Expected: ${expected} paise | Got: ${paymentEntity.amount} paise`);
-      throw new Error('Amount mismatch');
-    }
     if (paymentEntity.currency !== 'INR') {
       console.error(`[SECURITY] Currency mismatch! | Order: ${order._id} | Expected: INR | Got: ${paymentEntity.currency}`);
       throw new Error('Currency mismatch');
     }
+    const expected = Math.round((order.totalAmount || 0) * 100); // paise
+    let gatewayOffer = null;
+    if (paymentEntity.amount !== expected) {
+      // The one legitimate shortfall: a Razorpay offer applied at checkout. Anything
+      // else — more than the total, or less without Razorpay vouching for it — is
+      // the anomaly this guard exists for.
+      gatewayOffer = paymentEntity.amount > 0 && paymentEntity.amount < expected
+        ? await this._resolveGatewayOffer(order, paymentEntity, expected)
+        : null;
+      if (!gatewayOffer) {
+        console.error(`[SECURITY] Amount mismatch! | Order: ${order._id} | Expected: ${expected} paise | Got: ${paymentEntity.amount} paise`);
+        throw new Error('Amount mismatch');
+      }
+      console.log(`[Payment] Razorpay offer accepted | Order: ${order._id} | Paid ${paymentEntity.amount} of ${expected} paise | Offer: ${gatewayOffer.offerIds.join(',')}`);
+    }
     // order.payment is an ObjectId reference — query the Payment collection by the
     // gateway payment id for the real processed status.
     const existingPayment = await paymentRepository.findByGatewayPaymentId(paymentEntity.id);
-    return { alreadyProcessed: !!(existingPayment && existingPayment.status === 'completed') };
+    return { alreadyProcessed: !!(existingPayment && existingPayment.status === 'completed'), gatewayOffer };
+  }
+
+  /** GET a Razorpay REST resource with our keys. Server-to-server; never trusts the client. */
+  async _razorpayGet(path) {
+    const auth = Buffer.from(`${this.key_id}:${this.key_secret}`).toString('base64');
+    const res = await fetch(`https://api.razorpay.com/v1${path}`, {
+      headers: { Authorization: `Basic ${auth}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) throw new Error(`Razorpay GET ${path.split('?')[0]} → ${res.status}`);
+    return res.json();
+  }
+
+  /**
+   * Is a short payment explained by a Razorpay offer? Every fact comes from
+   * Razorpay's own API, never from the webhook body or the browser:
+   *   1. the payment belongs to THIS order's Razorpay order;
+   *   2. that Razorpay order is for our full total, Razorpay calls it `paid`, and
+   *      what it received is exactly this payment;
+   *   3. Razorpay lists at least one offer applied to the payment;
+   *   4. when the offer's terms can be read, the shortfall is within its benefit.
+   * Returns the offer snapshot for the order, or null (→ the caller rejects).
+   * A Razorpay outage here is thrown, not swallowed: the webhook retries and the
+   * hourly reconciliation tries again — a paid order must not be rejected for good
+   * because an API call timed out.
+   */
+  async _resolveGatewayOffer(order, paymentEntity, expectedPaise) {
+    if (!order.razorpayOrderId || paymentEntity.order_id !== order.razorpayOrderId) return null;
+
+    const [rzpOrder, expanded] = await Promise.all([
+      this._razorpayGet(`/orders/${encodeURIComponent(order.razorpayOrderId)}`),
+      this._razorpayGet(`/payments/${encodeURIComponent(paymentEntity.id)}?expand[]=offers`),
+    ]);
+    if (rzpOrder.amount !== expectedPaise || rzpOrder.status !== 'paid') return null;
+    if (rzpOrder.amount_paid !== paymentEntity.amount || expanded.amount !== paymentEntity.amount) return null;
+    if (expanded.status !== 'captured') return null;
+
+    const offerIds = (expanded.offers?.items || []).map((o) => o?.id).filter(Boolean);
+    if (!offerIds.length) return null;
+
+    const shortfallPaise = expectedPaise - paymentEntity.amount;
+    const terms = await this._findOfferTerms(offerIds[0]);
+    if (terms?.capPaise != null && shortfallPaise > terms.capPaise) {
+      console.error(`[SECURITY] Offer shortfall exceeds its benefit | Order: ${order._id} | Short ${shortfallPaise} paise, offer cap ${terms.capPaise}`);
+      return null;
+    }
+
+    return {
+      offerIds,
+      name: terms?.name || '',
+      discount: shortfallPaise / 100,
+      amountPaid: paymentEntity.amount / 100,
+      paymentId: paymentEntity.id,
+    };
+  }
+
+  /**
+   * An offer's name and benefit cap, for display and the extra cap check. Razorpay
+   * has no fetch-one-offer endpoint, so this walks the (bounded) offer list.
+   * Best-effort: null when not found or the list is unavailable.
+   */
+  async _findOfferTerms(offerId) {
+    try {
+      for (let skip = 0; skip < 200; skip += 50) {
+        const page = await this._razorpayGet(`/offers?count=50&skip=${skip}`);
+        const offer = (page.items || []).find((o) => o.id === offerId);
+        if (offer) {
+          const benefit = offer.rules?.items?.[0]?.benefits?.items?.[0];
+          const max = Number(benefit?.max_benefit_value) || 0;
+          const flat = Number(benefit?.value) || 0;
+          // Percentage offers carry a cap in max_benefit_value; flat ones only `value`.
+          const capPaise = benefit?.type === 'instant_discount' ? (max > 0 ? max : flat) : null;
+          return { name: offer.display_text || offer.name || '', capPaise: capPaise || null };
+        }
+        if (!page.has_more) break;
+      }
+    } catch (err) {
+      console.warn(`[Payment] Could not read Razorpay offer ${offerId}:`, err.message);
+    }
+    return null;
   }
 
   /**
@@ -760,7 +853,7 @@ class RazorpayService {
       throw new Error('Order not found');
     }
 
-    const { alreadyProcessed } = await this._validatePaymentAgainstOrder(order, paymentEntity);
+    const { alreadyProcessed, gatewayOffer } = await this._validatePaymentAgainstOrder(order, paymentEntity);
     if (alreadyProcessed) {
       console.log(`[Webhook] Payment already processed for order: ${orderId}`);
       return;
@@ -768,7 +861,7 @@ class RazorpayService {
 
     // Process payment (same as frontend verification)
     console.log(`[Webhook] Processing payment for order: ${orderId}`);
-    await this.processPaymentSuccess(orderId, paymentEntity, order.user?.toString());
+    await this.processPaymentSuccess(orderId, paymentEntity, order.user?.toString(), { gatewayOffer });
   }
 
   /**
@@ -798,7 +891,7 @@ class RazorpayService {
     }
 
     // Same amount (rounded)/currency/idempotency guards as a captured payment.
-    const { alreadyProcessed } = await this._validatePaymentAgainstOrder(order, paymentEntity);
+    const { alreadyProcessed, gatewayOffer } = await this._validatePaymentAgainstOrder(order, paymentEntity);
     if (alreadyProcessed) {
       console.log(`[Webhook] Payment link already processed for order: ${orderId}`);
       return;
@@ -807,7 +900,7 @@ class RazorpayService {
     // Ensure downstream code that reads notes.orderId still works.
     paymentEntity.notes = { ...(paymentEntity.notes || {}), orderId };
     console.log(`[Webhook] Processing payment-link payment for order: ${orderId}`);
-    await this.processPaymentSuccess(orderId, paymentEntity, order.user?.toString());
+    await this.processPaymentSuccess(orderId, paymentEntity, order.user?.toString(), { gatewayOffer });
   }
 
   /**

@@ -14,6 +14,8 @@ jest.mock('next/navigation', () => ({
 }));
 jest.mock('lucide-react', () => ({
   ArrowLeft: () => <span data-testid="icon-arrow-left">ArrowLeft</span>,
+  // PaymentStatusTag / GatewayOfferRows (components/orders/PaymentSummary).
+  BadgePercent: () => <span />, CheckCircle: () => <span />, Clock: () => <span />, RotateCcw: () => <span />, XCircle: () => <span />,
   Package: () => <span data-testid="icon-package">Package</span>,
   MapPin: () => <span data-testid="icon-map-pin">MapPin</span>,
   CreditCard: () => <span data-testid="icon-credit-card">CreditCard</span>,

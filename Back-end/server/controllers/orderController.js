@@ -1032,9 +1032,11 @@ export const processRefund = async (req, res) => {
   // the admin can retry with a corrected amount.
   const siblingReturns = await returnRequestRepository.find({ order: order._id }).select('refund').lean();
   const headroom = remainingRefundable(order, siblingReturns, null, payment);
-  const refundRupees = Math.min(order.totalAmount, headroom.remainingRupees);
+  // The capture, not the total: a Razorpay offer (order.gatewayOffer) means the
+  // customer paid — and can be refunded — less than totalAmount.
+  const refundRupees = Math.min(headroom.capturedRupees, headroom.remainingRupees);
 
-  if (refundRupees < order.totalAmount) {
+  if (refundRupees < headroom.capturedRupees) {
     return res.status(422).json({
       success: false,
       message: `Only ₹${headroom.remainingRupees} of ₹${headroom.capturedRupees} is still refundable on this order `

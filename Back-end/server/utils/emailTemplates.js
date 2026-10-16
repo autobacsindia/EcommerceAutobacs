@@ -565,6 +565,11 @@ export const orderConfirmationEmail = ({ order, user = null, company = {} }) => 
     line, never an `Order.items` entry. See utils/orderLines.js.
   */
   const lines = buildOrderLines(order, { audience: 'customer' });
+  // A Razorpay offer at checkout (order.gatewayOffer) means the customer paid less
+  // than the order total — say so, and show what they actually paid.
+  const offer = order.gatewayOffer?.discount > 0 ? order.gatewayOffer : null;
+  const offerLabel = offer?.name ? `Razorpay offer (${offer.name})` : 'Razorpay offer';
+  const paidAmount = offer ? offer.amountPaid : order.totalAmount;
   const lineAmount = (line) => (line.isFree ? 'FREE' : inr(line.lineTotal));
   const lineLabel = (line) =>
     `${lineName(line)}${line.kind === 'reward' ? ' (free gift you won 🎁)' : ''}`;
@@ -585,7 +590,7 @@ ${itemsText}
 
 Subtotal: ${inr(order.subtotal)}
 ${order.couponDiscount ? `Coupon discount: -${inr(order.couponDiscount)}\n` : ''}${order.karmaDiscount ? `Karma points: -${inr(order.karmaDiscount)}\n` : ''}Shipping: ${shippingValue}
-${shippingExtra ? 'Total (excl. shipping)' : 'Total Paid'}: ${inr(order.totalAmount)}${shippingExtra ? '\n\nShipping is calculated and collected at the time of delivery.' : ''}
+${offer ? `Order total: ${inr(order.totalAmount)}\n${offerLabel}: -${inr(offer.discount)}\n` : ''}${shippingExtra ? 'Total (excl. shipping)' : 'Total Paid'}: ${inr(paidAmount)}${shippingExtra ? '\n\nShipping is calculated and collected at the time of delivery.' : ''}
 
 Your tax invoice is attached to this email as a PDF.
 
@@ -645,7 +650,9 @@ ${companyName}
           ${order.karmaDiscount ? totalsRow('Karma points', `- ${inr(order.karmaDiscount)}`) : ''}
           ${totalsRow('Shipping', shippingValue)}
           ${order.tax ? totalsRow('Tax (incl.)', inr(order.tax)) : ''}
-          ${totalsRow(shippingExtra ? 'Total (excl. shipping)' : 'Total Paid', inr(order.totalAmount), true)}
+          ${offer ? totalsRow('Order total', inr(order.totalAmount)) : ''}
+          ${offer ? totalsRow(offerLabel, `- ${inr(offer.discount)}`) : ''}
+          ${totalsRow(shippingExtra ? 'Total (excl. shipping)' : 'Total Paid', inr(paidAmount), true)}
         </tfoot>
       </table>
       ${shippingExtra ? `<p style="margin-top:12px;font-size:13px;color:#666;">Shipping is calculated and collected at the time of delivery.</p>` : ''}

@@ -15,6 +15,7 @@ import ParcelProgressBadge from '@/components/orders/shared/ParcelProgressBadge'
 import { hasCancellations } from '@/lib/orderFulfilment';
 import { variantDisplayName } from '@/lib/orderLines';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
+import { PaymentStatusTag } from '@/components/orders/PaymentSummary';
 
 interface Order {
   _id: string;
@@ -22,6 +23,8 @@ interface Order {
   createdAt: string;
   status: string;
   totalAmount: number;
+  paymentStatus?: string;
+  gatewayOffer?: { discount: number; amountPaid: number } | null;
   items: Array<{
     product?: { _id: string; name: string };
     productId?: { _id: string; name: string };
@@ -364,6 +367,12 @@ export default function OrdersPage() {
                     <span className="text-2xl font-display font-bold text-gold">
                       ₹{order.totalAmount.toFixed(2)}
                     </span>
+                    {order.gatewayOffer?.discount ? (
+                      <p className="text-sm text-ink-muted font-display">
+                        You paid ₹{order.gatewayOffer.amountPaid.toFixed(2)} · ₹{order.gatewayOffer.discount.toFixed(2)} Razorpay offer
+                      </p>
+                    ) : null}
+                    <div className="mt-2"><PaymentStatusTag paymentStatus={order.paymentStatus} /></div>
                   </div>
                   <Link
                     href={`/orders/${order._id}`}

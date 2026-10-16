@@ -25,6 +25,8 @@ jest.mock('lucide-react', () => ({
   Filter: () => <span>FilterIcon</span>,
   Search: () => <span>SearchIcon</span>,
   ChevronDown: () => <span>ChevronDownIcon</span>,
+  // PaymentStatusTag / GatewayOfferRows (components/orders/PaymentSummary).
+  BadgePercent: () => <span />, CheckCircle: () => <span />, Clock: () => <span />, RotateCcw: () => <span />, XCircle: () => <span />,
 }));
 
 // Mock Skeleton
