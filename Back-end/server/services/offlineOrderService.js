@@ -21,6 +21,7 @@ import { BUYER_TYPES } from '../config/buyer.js';
 import { ACCEPTANCE_CHANNELS } from '../config/legalDocuments.js';
 import { hashToken } from '../utils/tokenUtils.js';
 import { getNotificationsQueue } from '../queue/queues.js';
+import { isInternalEmail } from '../utils/customerContact.js';
 
 /** Payment links expire after this long (matches razorpayService.createPaymentLink). */
 export const PAYMENT_LINK_TTL_MS = 48 * 60 * 60 * 1000;
@@ -169,7 +170,9 @@ export async function createOfflineOrderRecord({
     // `payment_link.paid` webhook drives it paid → processing — no manual mark.
     let link;
     try {
-      link = await razorpayService.createPaymentLink(order, { name: address.fullName, email: normEmail, phone });
+      // A phone-only customer's internal address must never reach Razorpay: the
+      // link then goes by SMS only (utils/customerContact.js).
+      link = await razorpayService.createPaymentLink(order, { name: address.fullName, email: isInternalEmail(normEmail) ? undefined : normEmail, phone });
     } catch (linkErr) {
       // Roll back so a Razorpay failure doesn't strand an unpayable order — and,
       // for a brand-new buyer, an account they can never claim.
@@ -239,7 +242,8 @@ export async function createOfflineOrderRecord({
         .add('send-staff-sales-paid-alert', { orderId: order._id.toString() })
         .catch((err) => console.error('[Queue] Failed to enqueue send-staff-sales-paid-alert:', err.message));
     }
-    if (isNewUser) {
+    // No set-password email for a phone-only customer: there is no mailbox.
+    if (isNewUser && !isInternalEmail(normEmail)) {
       queue
         .add('send-magic-link-email', {
           email: normEmail,

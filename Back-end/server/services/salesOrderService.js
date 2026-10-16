@@ -29,6 +29,7 @@ import { effectivePrice } from '../utils/productPrice.js';
 import { isPurchasable } from '../utils/stockStatus.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { workflowView } from '../utils/teamWorkflow.js';
+import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -108,7 +109,7 @@ function shape(o) {
     })),
     customer: {
       name: o.user?.name || o.shippingAddress?.fullName || '',
-      email: o.user?.email || o.guestEmail || '',
+      email: publicEmail(o.user?.email || o.guestEmail || ''),
       phone: o.shippingAddress?.phone || o.user?.phone || '',
     },
     shippingAddress: o.shippingAddress || null,
@@ -232,7 +233,9 @@ export async function createSalesOrder(actor, input, req) {
 
   const { order, customer: buyer, paymentLink } = await createOfflineOrderRecord({
     body: {}, // retail buyer: no GSTIN block from the panel
-    email: String(customer.email).trim(),
+    // No email → an internal one from the mobile number, so a repeat order finds
+    // the same customer and no mail is ever attempted (utils/customerContact.js).
+    email: String(customer.email ?? '').trim() || phoneOnlyEmailFor(String(customer.phone ?? '').trim()),
     phone: String(customer.phone).trim(),
     name: String(customer.name || '').trim(),
     lineItems,
@@ -359,7 +362,8 @@ export async function reissuePaymentLink(actor, orderId, req) {
   const attempt = (order.paymentLinkAttempts || 1) + 1;
   const link = await razorpayService.createPaymentLink(order, {
     name: order.shippingAddress?.fullName || populated.user?.name,
-    email: populated.user?.email || order.guestEmail,
+    // Never an internal (phone-only) address — that link goes by SMS only.
+    email: publicEmail(populated.user?.email || order.guestEmail) || undefined,
     phone: order.shippingAddress?.phone,
   }, { attempt });
 

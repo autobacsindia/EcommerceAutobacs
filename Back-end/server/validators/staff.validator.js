@@ -137,7 +137,8 @@ const INDIAN_MOBILE = /^[6-9]\d{9}$/;
 
 export const validateSalesOrder = [
   body('customer.name').trim().isLength({ min: 2, max: 100 }).withMessage('Customer name must be 2–100 characters'),
-  body('customer.email').trim().isEmail().withMessage('Enter a valid customer email').isLength({ max: 254 }),
+  // Optional: a customer on the phone may have no email (utils/customerContact.js).
+  body('customer.email').optional({ values: 'falsy' }).trim().isEmail().withMessage('Enter a valid customer email, or leave it empty').isLength({ max: 254 }),
   body('customer.phone').customSanitizer(normalizeIndianMobile).matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit Indian mobile number (starting 6, 7, 8 or 9)'),
   body('shippingAddress.fullName').optional().trim().isLength({ max: 100 }),
   body('shippingAddress.phone').optional({ values: 'falsy' }).customSanitizer(normalizeIndianMobile).matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit delivery mobile number'),

@@ -23,6 +23,7 @@ import { loadLogo, orderNumber, pdfFonts } from './invoiceService.js';
 import { variantDisplayName } from '../utils/orderLines.js';
 import { formatLongDateIST } from '../utils/datetime.js';
 import { rupeesInWords } from '../utils/amountInWords.js';
+import { publicEmail } from '../utils/customerContact.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -81,7 +82,7 @@ export function buildQuotation(order, { now = Date.now() } = {}) {
     customer: {
       name: order.user?.name || addr.fullName || 'Customer',
       phone: addr.phone || order.user?.phone || '',
-      email: order.user?.email || order.guestEmail || '',
+      email: publicEmail(order.user?.email || order.guestEmail || ''),
       address: [
         addr.addressLine1,
         addr.addressLine2,

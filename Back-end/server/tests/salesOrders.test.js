@@ -100,6 +100,47 @@ afterAll(() => {
   else process.env.REDIS_URL = ORIGINAL_REDIS_URL;
 });
 
+describe('customer without an email', () => {
+  const noEmail = (phone = '9845012345') => ({ name: 'Phone Only Customer', email: '', phone });
+
+  it('creates the order; the link goes by SMS only and no email is shown or attempted', async () => {
+    const rep = await makeStaff('sales');
+    const product = await makeProduct();
+    const result = await svc.createSalesOrder(rep, { ...orderInput(product), customer: noEmail() }, req);
+
+    expect(result.paymentLink.shortUrl).toMatch(/^https:/);
+    expect(result.order.customer.email).toBe(''); // the internal address is never shown
+    // Razorpay gets the phone, never the internal address.
+    expect(rz.created[0].customer.email).toBeUndefined();
+    expect(rz.created[0].customer.phone).toBe('9845012345');
+    // No set-password email to a mailbox that does not exist.
+    expect(enqueued.find((j) => j.name === 'send-magic-link-email')).toBeUndefined();
+
+    const saved = await Order.findById(result.order.id).populate('user').lean();
+    expect(saved.user.email).toBe('m9845012345@phone.autobacs.invalid');
+    expect(saved.user.phone).toBe('9845012345');
+  });
+
+  it('the next order for the same mobile reuses the same customer', async () => {
+    const rep = await makeStaff('sales');
+    const product = await makeProduct();
+    const a = await svc.createSalesOrder(rep, { ...orderInput(product), customer: noEmail() }, req);
+    const b = await svc.createSalesOrder(rep, { ...orderInput(product), customer: noEmail() }, req);
+    expect(b.customerIsNew).toBe(false);
+    const [oa, ob] = await Promise.all([Order.findById(a.order.id).lean(), Order.findById(b.order.id).lean()]);
+    expect(String(oa.user)).toBe(String(ob.user));
+    expect(await User.countDocuments({ email: /@phone\.autobacs\.invalid$/ })).toBe(1);
+  });
+
+  it('a customer who gives an email is unchanged', async () => {
+    const rep = await makeStaff('sales');
+    const product = await makeProduct();
+    const result = await svc.createSalesOrder(rep, orderInput(product), req);
+    expect(result.order.customer.email).toBe(CUSTOMER.email);
+    expect(rz.created[0].customer.email).toBe(CUSTOMER.email);
+  });
+});
+
 describe('custom items (not in the catalogue)', () => {
   it('mixes catalogue and custom lines, keeps their order, and totals both', async () => {
     const rep = await makeStaff('sales');
