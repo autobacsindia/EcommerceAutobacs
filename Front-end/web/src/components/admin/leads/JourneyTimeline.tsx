@@ -13,6 +13,7 @@ import {
 } from '@/lib/leads';
 import type { JourneyEvent, JourneyGroup } from '@/lib/leadJourney';
 import { formatDateIST, formatDateTimeIST, toIsoAttr } from '@/lib/datetime';
+import { usePanel } from '@/lib/usePanel';
 
 const SIGNAL_ICONS: Record<LeadSourceType, LucideIcon> = {
   consultation: MessageCircle,
@@ -73,6 +74,7 @@ function formatItems(items: NonNullable<OrderSnapshot['items']>, itemCount?: num
 
 /** One event row: icon on the rail, title + optional body, dated on the right. */
 function EventRow({ ev }: { ev: JourneyEvent }) {
+  const { isAdmin } = usePanel();
   const Icon = iconFor(ev);
   return (
     <li className="relative flex gap-3 pb-4 last:pb-0">
@@ -81,7 +83,7 @@ function EventRow({ ev }: { ev: JourneyEvent }) {
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 text-sm">{renderBody(ev)}</div>
+          <div className="min-w-0 text-sm">{renderBody(ev, isAdmin)}</div>
           {/* Row shows the day; the hover title carries the exact IST clock time,
               which is what a rep needs when reconstructing a same-day sequence. */}
           <time
@@ -97,7 +99,8 @@ function EventRow({ ev }: { ev: JourneyEvent }) {
   );
 }
 
-function renderBody(ev: JourneyEvent) {
+/** `isAdmin`: orders are an admin screen, so other panels get the order number without a link. */
+function renderBody(ev: JourneyEvent, isAdmin: boolean) {
   if (ev.kind === 'signal') {
     const snap = ev.snapshot as OrderSnapshot | undefined;
     const cancel = ev.sourceType === 'order_cancelled'
@@ -132,9 +135,13 @@ function renderBody(ev: JourneyEvent) {
       : null;
     return (
       <span className="flex flex-wrap items-center gap-1 text-gray-700">
-        <Link href={`/admin/orders/${ev.orderId}`} className="font-medium text-blue-600 hover:underline">
-          Order {ev.orderNumber || ev.orderId.slice(-6)}
-        </Link>
+        {isAdmin ? (
+          <Link href={`/admin/orders/${ev.orderId}`} className="font-medium text-blue-600 hover:underline">
+            Order {ev.orderNumber || ev.orderId.slice(-6)}
+          </Link>
+        ) : (
+          <span className="font-medium">Order {ev.orderNumber || ev.orderId.slice(-6)}</span>
+        )}
         <span className="text-gray-500">₹{ev.total?.toLocaleString('en-IN')} · {ev.status}</span>
         {cancel?.by && <span className="text-xs text-gray-400">{cancel.by}</span>}
         {ev.paymentStatus === 'refunded' && (

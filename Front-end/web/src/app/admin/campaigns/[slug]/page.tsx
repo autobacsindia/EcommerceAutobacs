@@ -12,6 +12,7 @@ import { istStartOfDayISO, istEndOfDayISO, toISTDateInput } from '@/lib/istDate'
 import MemberRosterPanel from '@/components/admin/campaigns/MemberRosterPanel';
 import ProductTierPanel from '@/components/admin/campaigns/ProductTierPanel';
 import RedemptionsPanel from '@/components/admin/campaigns/RedemptionsPanel';
+import { usePanel } from '@/lib/usePanel';
 
 /**
  * Admin — campaign editor.
@@ -121,6 +122,7 @@ const field = `w-full ${fieldBase}`;
 const card = 'rounded-lg border border-zinc-800 bg-zinc-900/40 p-6';
 
 export default function AdminCampaignEditor() {
+  const { base } = usePanel();
   const { slug } = useParams<{ slug: string }>();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<Partial<Campaign> | null>(null);
@@ -172,7 +174,7 @@ export default function AdminCampaignEditor() {
 
   return (
     <div className="p-8 max-w-5xl">
-      <Link href="/admin/campaigns" className="mb-6 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white">
+      <Link href={`${base}/campaigns`} className="mb-6 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white">
         <ArrowLeft size={14} /> All campaigns
       </Link>
 

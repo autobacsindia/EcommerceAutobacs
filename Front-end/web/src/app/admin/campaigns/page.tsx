@@ -6,6 +6,7 @@ import { Power, PlayCircle, FileEdit, Users, IndianRupee } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { campaignKeys } from '@/hooks/queries/keys';
+import { usePanel } from '@/lib/usePanel';
 
 /**
  * Admin — promotional campaigns.
@@ -53,6 +54,7 @@ const day = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : '—';
 
 export default function AdminCampaignsPage() {
+  const { base } = usePanel();
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
@@ -104,7 +106,7 @@ export default function AdminCampaignsPage() {
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
-                      <Link href={`/admin/campaigns/${c.slug}`} className="text-lg font-semibold text-white hover:text-gold">
+                      <Link href={`${base}/campaigns/${c.slug}`} className="text-lg font-semibold text-white hover:text-gold">
                         {c.name}
                       </Link>
                       <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${STATUS_STYLES[c.status]}`}>

@@ -1,7 +1,7 @@
 import express from "express";
 import consultationRepository from "../repositories/consultationRepository.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { protect, admin } from "../middleware/authMiddleware.js";
+import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { enqueueNotification } from "../queue/queues.js";
 import leadSyncService from "../services/leadSyncService.js";
 
@@ -59,7 +59,7 @@ router.post("/", asyncHandler(async (req, res) => {
 // ─── ADMIN: List all consultations ───────────────────────────────────────────
 
 // GET /api/v1/consultation/admin?status=new&page=1&limit=20
-router.get("/admin", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const { status, page = 1, limit = 20, search } = req.query;
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -104,7 +104,7 @@ router.get("/admin", protect, admin, asyncHandler(async (req, res) => {
 }));
 
 // GET /api/v1/consultation/admin/:id
-router.get("/admin/:id", protect, admin, asyncHandler(async (req, res) => {
+router.get("/admin/:id", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const consultation = await consultationRepository.findById(req.params.id);
   if (!consultation) {
     return res.status(404).json({ success: false, message: "Consultation not found" });
@@ -113,7 +113,7 @@ router.get("/admin/:id", protect, admin, asyncHandler(async (req, res) => {
 }));
 
 // PATCH /api/v1/consultation/admin/:id/status
-router.patch("/admin/:id/status", protect, admin, asyncHandler(async (req, res) => {
+router.patch("/admin/:id/status", protect, adminOrMarketing, asyncHandler(async (req, res) => {
   const { status } = req.body;
   if (!["new", "contacted", "completed", "cancelled"].includes(status)) {
     return res.status(400).json({ success: false, message: "Invalid status value" });

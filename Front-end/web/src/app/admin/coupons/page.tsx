@@ -5,6 +5,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { Plus, Edit, Trash2, ToggleLeft, ToggleRight, EyeOff, Eye } from 'lucide-react';
 import Link from 'next/link';
+import { usePanel } from '@/lib/usePanel';
 
 interface Coupon {
   _id: string;
@@ -35,6 +36,7 @@ function describe(c: Coupon): string {
 }
 
 export default function AdminCouponsPage() {
+  const { base, isAdmin } = usePanel();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -89,7 +91,7 @@ export default function AdminCouponsPage() {
     <div className="p-8">
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Coupons</h1>
-        <Link href="/admin/coupons/create" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
+        <Link href={`${base}/coupons/create`} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
           <Plus className="h-4 w-4" /> New Coupon
         </Link>
       </div>
@@ -136,8 +138,8 @@ export default function AdminCouponsPage() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-3">
-                    <Link href={`/admin/coupons/edit/${c._id}`} className="text-blue-600 hover:text-blue-800"><Edit className="h-4 w-4" /></Link>
-                    <button onClick={() => handleDelete(c._id, c.code)} className="text-red-600 hover:text-red-800"><Trash2 className="h-4 w-4" /></button>
+                    <Link href={`${base}/coupons/edit/${c._id}`} className="text-blue-600 hover:text-blue-800"><Edit className="h-4 w-4" /></Link>
+                    {isAdmin && <button onClick={() => handleDelete(c._id, c.code)} className="text-red-600 hover:text-red-800"><Trash2 className="h-4 w-4" /></button>}
                   </div>
                 </td>
               </tr>

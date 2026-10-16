@@ -13,6 +13,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { campaignKeys } from '@/hooks/queries/keys';
 import { formatIsoDateTimeIST } from '@/lib/datetime';
+import { usePanel } from '@/lib/usePanel';
 
 const inr = (n: number | null | undefined) => `₹${(n ?? 0).toLocaleString('en-IN')}`;
 const card = 'rounded-lg border border-zinc-800 bg-zinc-900/40 p-6';
@@ -74,6 +75,7 @@ function PaymentBadge({ status }: { status: string }) {
 }
 
 export default function RedemptionsPanel({ slug }: { slug: string }) {
+  const { isAdmin } = usePanel();
   /*
     A cursor STACK, not a single cursor. Keyset pagination is forward-only — the cursor
     encodes "after this row", and there is no reverse form of it — so stepping back
@@ -140,7 +142,10 @@ export default function RedemptionsPanel({ slug }: { slug: string }) {
                     <span className="block text-xs text-zinc-500">{r.user?.email || 'account removed'}</span>
                   </td>
                   <td className="py-2.5 pr-4">
-                    {r.order ? (
+                    {r.order && !isAdmin ? (
+                      // Orders are an admin screen; marketing sees the reference only.
+                      <span className="text-white">{r.order._id.slice(-8)}</span>
+                    ) : r.order ? (
                       <Link
                         href={`/admin/orders/${r.order._id}`}
                         className="inline-flex items-center gap-1 text-gold hover:underline"

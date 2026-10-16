@@ -11,6 +11,7 @@ import { Search, AlertTriangle, Tag, Trash2, RefreshCw } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { campaignKeys } from '@/hooks/queries/keys';
+import { usePanel } from '@/lib/usePanel';
 
 const inr = (n: number | null | undefined) => `₹${(n ?? 0).toLocaleString('en-IN')}`;
 const field = 'w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:border-gold focus:outline-none';
@@ -84,6 +85,7 @@ interface TiersPage {
 }
 
 export default function ProductTierPanel({ campaignId }: { campaignId: string }) {
+  const { isAdmin } = usePanel();
   const queryClient = useQueryClient();
 
   const [tierCode, setTierCode] = useState('');
@@ -422,7 +424,7 @@ export default function ProductTierPanel({ campaignId }: { campaignId: string })
             >
               Next
             </button>
-            {filterTier && (
+            {isAdmin && filterTier && (
               <button
                 type="button"
                 onClick={() => {

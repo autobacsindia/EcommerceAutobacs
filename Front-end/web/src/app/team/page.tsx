@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Users, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { MARKETING_AREAS } from './marketingAreas';
 
 /** Still to come, per team. Shown so the team knows what is planned. */
 const COMING_SOON: Record<string, string[]> = {
@@ -13,7 +14,7 @@ const COMING_SOON: Record<string, string[]> = {
   operations: ['Reminders for parcels that have been in transit too long'],
   marketing: [
     'Orders and leads by source: Google Ads, Meta, website',
-    'Coupon and campaign performance',
+    'Product SEO (titles and descriptions for each product)',
   ],
 };
 
@@ -44,6 +45,8 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
       return [{ href: '/team/refunds', title: 'Refund approvals', text: 'Approve refunds for out-of-stock items. An admin then pays them.', icon: Wallet }, PAID];
     case 'operations':
       return [{ href: '/team/deliveries', title: 'Deliveries', text: 'Parcels on their way — follow up and mark them delivered.', icon: Truck }, PAID];
+    case 'marketing':
+      return MARKETING_AREAS.map(({ href, label, text, icon }) => ({ href, title: label, text, icon }));
     default:
       return [];
   }

@@ -11,7 +11,7 @@
  */
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
-import { protect, admin } from '../middleware/authMiddleware.js';
+import { protect, admin, adminOrMarketing } from '../middleware/authMiddleware.js';
 import { cacheMiddleware } from '../middleware/cacheControl.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import {
@@ -35,25 +35,25 @@ const router = express.Router();
 // ── Admin (declared first so "/admin" never falls through to a public handler) ──
 router.get(
   '/admin',
-  protect, admin,
+  protect, adminOrMarketing,
   validatePromoBannerList, validateRequest,
   asyncHandler(listBanners),
 );
 router.post(
   '/admin',
-  protect, admin,
+  protect, adminOrMarketing,
   validateCreatePromoBanner, validateRequest,
   asyncHandler(createBanner),
 );
 router.put(
   '/admin/:id',
-  protect, admin,
+  protect, adminOrMarketing,
   validateUpdatePromoBanner, validateRequest,
   asyncHandler(updateBanner),
 );
 router.patch(
   '/admin/:id/toggle',
-  protect, admin,
+  protect, adminOrMarketing,
   validateTogglePromoBanner, validateRequest,
   asyncHandler(toggleBanner),
 );

@@ -1,6 +1,6 @@
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
-import { protect, admin } from '../middleware/authMiddleware.js';
+import { protect, adminOrMarketing } from '../middleware/authMiddleware.js';
 import {
   listLeads,
   getLeadStats,
@@ -18,7 +18,8 @@ import {
 const router = express.Router();
 
 // Sales CRM is admin-only (sales reps operate as admins — no separate role).
-router.use(protect, admin);
+// Marketing works leads too (follow-up, status, assignment); see adminOrMarketing.
+router.use(protect, adminOrMarketing);
 
 router.get('/', asyncHandler(listLeads));
 router.get('/stats', asyncHandler(getLeadStats));

@@ -12,6 +12,7 @@ import {
   LEAD_SOURCE_LABELS, LEAD_SOURCE_COLORS, customerBadge, SalesRep, cancelAttribution, scoreBadge, sourceBadges,
 } from '@/lib/leads';
 import { formatDateIST, formatDateTimeIST, toIsoAttr } from '@/lib/datetime';
+import { usePanel } from '@/lib/usePanel';
 
 type Assignment = 'all' | 'unassigned';
 // Which segment of the pipeline to show. `active` (default) hides the passive
@@ -41,6 +42,7 @@ const SOURCE_OPTIONS: LeadSourceType[] = [
 ];
 
 export default function AdminLeadsPage() {
+  const { base, isAdmin } = usePanel();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0, hasNext: false, hasPrev: false });
@@ -208,18 +210,23 @@ export default function AdminLeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setOfflineDone(null); setOfflineOpen(true); }}
-            className="flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
-          >
-            <Plus className="h-4 w-4" /> New offline order
-          </button>
-          <Link
-            href="/admin/sales-reps"
-            className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            <Users className="h-4 w-4" /> Manage reps
-          </Link>
+          {/* Orders and the rep list are the admin's (and GTM's), not marketing's. */}
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => { setOfflineDone(null); setOfflineOpen(true); }}
+                className="flex items-center gap-2 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+              >
+                <Plus className="h-4 w-4" /> New offline order
+              </button>
+              <Link
+                href="/admin/sales-reps"
+                className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <Users className="h-4 w-4" /> Manage reps
+              </Link>
+            </>
+          )}
           <button
             onClick={() => { load(); loadStats(); }}
             className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
@@ -230,7 +237,7 @@ export default function AdminLeadsPage() {
       </div>
 
       {/* Standalone offline-order modal — for a customer not in the pipeline. */}
-      {offlineOpen && (
+      {isAdmin && offlineOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" role="dialog" aria-modal="true">
           <div className="mt-8 mb-8 w-full max-w-2xl rounded-lg border border-gray-200 bg-white p-6 shadow-xl">
             <div className="mb-1 flex items-start justify-between">
@@ -532,7 +539,7 @@ export default function AdminLeadsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <Link href={`/admin/leads/${lead._id}`} className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                      <Link href={`${base}/leads/${lead._id}`} className="flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50">
                         <Eye className="h-3 w-3" /> Open
                       </Link>
                     </div>
@@ -555,8 +562,8 @@ export default function AdminLeadsPage() {
       </div>
 
       <p className="flex items-center gap-1 text-xs text-gray-400">
-        <CheckCircle2 className="h-3 w-3" /> Set a lead&apos;s owner from the dropdown. Names come from{' '}
-        <Link href="/admin/sales-reps" className="underline">Sales Reps</Link>.
+        <CheckCircle2 className="h-3 w-3" /> Set a lead&apos;s owner from the dropdown.
+        {isAdmin && <> Names come from{' '}<Link href="/admin/sales-reps" className="underline">Sales Reps</Link>.</>}
       </p>
     </div>
   );

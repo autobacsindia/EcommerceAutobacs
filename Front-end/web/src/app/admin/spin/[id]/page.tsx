@@ -9,6 +9,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { PREVIEW_TOOLS_ENABLED } from '@/lib/previewTools';
 import { formatDateTimeIST } from '@/lib/datetime';
 import type { SpinCampaign, SpinPrize, OddsPreview, PublishFieldError, PrizeKind } from '@/types/spin';
+import { usePanel } from '@/lib/usePanel';
 
 /**
  * Admin — one Spin-to-Win campaign: its prizes, its real odds, and the publish gate.
@@ -57,6 +58,7 @@ const toLocalInput = (iso: string | null | undefined) => {
 };
 
 export default function SpinCampaignDetailPage() {
+  const { base, isAdmin } = usePanel();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
@@ -403,7 +405,7 @@ export default function SpinCampaignDetailPage() {
       const res = await apiClient.post<{ success: boolean; campaign: SpinCampaign }>(
         API_ENDPOINTS.SPIN_CAMPAIGN_CLONE(id), { slug: slug.trim() },
       );
-      router.push(`/admin/spin/${res.campaign._id}`);
+      router.push(`${base}/spin/${res.campaign._id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to clone');
       setBusy(false);
@@ -421,7 +423,7 @@ export default function SpinCampaignDetailPage() {
 
   return (
     <div className="p-6">
-      <Link href="/admin/spin" className="text-sm text-blue-600 hover:underline">← All campaigns</Link>
+      <Link href={`${base}/spin`} className="text-sm text-blue-600 hover:underline">← All campaigns</Link>
 
       <div className="mt-2 mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -962,7 +964,7 @@ export default function SpinCampaignDetailPage() {
                       {/* Restock lives inside Edit, not in a prompt() dialog: two write
                           paths for one number is how the dead stock field survived. */}
                       <button onClick={() => openEdit(p)} className="mr-2 text-blue-600 hover:underline">Edit</button>
-                      <button onClick={() => removePrize(p)} className="text-red-600 hover:underline">Remove</button>
+                      {isAdmin && <button onClick={() => removePrize(p)} className="text-red-600 hover:underline">Remove</button>}
                     </td>
                   </tr>
                 );

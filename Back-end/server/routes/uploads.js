@@ -10,7 +10,7 @@
  */
 import express from "express";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
-import { protect, admin } from "../middleware/authMiddleware.js";
+import { protect, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { generateUploadSignature, deleteManyFromCloudinary } from "../utils/cloudinaryHelpers.js";
 import { storageProvider } from "../config/storage.js";
 import { enqueueVariantGeneration } from "../queue/queues.js";
@@ -32,6 +32,9 @@ const ALLOWED_FOLDERS = {
   spin:       "autobacs/spin-prizes",
 };
 
+/** The folders the marketing team may upload into (blog, media, banners, spin prizes). */
+const MARKETING_FOLDERS = ["articles", "media", "promos", "spin"];
+
 /** A 24-char hex Mongo ObjectId — the only per-entity subfolder we accept. */
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
 
@@ -41,9 +44,14 @@ const OBJECT_ID = /^[a-f0-9]{24}$/i;
 router.post(
   "/signature",
   protect,
-  admin,
+  adminOrMarketing,
   asyncHandler(async (req, res) => {
     const key = typeof req.body?.folder === "string" ? req.body.folder : "products";
+    // Marketing uploads only into its own areas — never catalogue imagery, and
+    // never by falling back to the products folder on an unknown key.
+    if (req.user.role !== "admin" && !MARKETING_FOLDERS.includes(key)) {
+      return res.status(403).json({ success: false, message: "You can upload images for the blog, banners and spin-to-win only." });
+    }
     let folder = ALLOWED_FOLDERS[key] || ALLOWED_FOLDERS.products;
 
     // Optional per-entity subfolder (e.g. autobacs/products/<productId>) so
@@ -93,16 +101,21 @@ router.post(
 // @route   POST /uploads/cleanup
 // @desc    Best-effort delete of assets a client uploaded directly but couldn't
 //          attach to a record (e.g. a mid-batch failure aborted the save).
-// @access  Private/Admin
+// @access  Private/Admin, or marketing staff for their own folders only
 router.post(
   "/cleanup",
   protect,
-  admin,
+  adminOrMarketing,
   asyncHandler(async (req, res) => {
     const raw = Array.isArray(req.body?.publicIds) ? req.body.publicIds : [];
+    // Marketing may only tidy up the folders it can upload into — never catalogue
+    // imagery. A trailing "/" stops "autobacs/media" matching "autobacs/media-x".
+    const prefixes = req.user.role === "admin"
+      ? ["autobacs/"]
+      : MARKETING_FOLDERS.map((k) => `${ALLOWED_FOLDERS[k]}/`);
     // Only our own folders, capped — never let a client delete an arbitrary asset.
     const ids = raw
-      .filter((id) => typeof id === "string" && id.startsWith("autobacs/"))
+      .filter((id) => typeof id === "string" && !id.includes("..") && prefixes.some((p) => id.startsWith(p)))
       .slice(0, 20);
     if (!ids.length) return res.json({ success: true, deleted: 0 });
 

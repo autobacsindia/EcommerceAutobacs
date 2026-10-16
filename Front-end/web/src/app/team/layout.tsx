@@ -10,45 +10,17 @@
 
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import TeamLayoutClient from './TeamLayoutClient';
+import { fetchMe } from './staffSession';
 
 export const metadata: Metadata = {
   title: 'Team Panel | Autobacs India',
   robots: { index: false, follow: false, nocache: true },
 };
 
-type MeResponse = {
-  success?: boolean;
-  user?: {
-    id: string;
-    name?: string;
-    email?: string;
-    role?: string;
-    staff?: { team: string; teamLabel: string; isHead: boolean; roleLabel?: string | null; canSell?: boolean } | null;
-    /** Set on company accounts (config/staff.js on the API), whose password the admin manages. */
-    username?: string | null;
-  };
-};
-
-async function fetchMe(): Promise<MeResponse | null> {
-  const cookieStore = await cookies();
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-  try {
-    const res = await fetch(`${apiUrl}/api/v1/auth/me`, {
-      headers: { Cookie: cookieStore.toString(), 'Content-Type': 'application/json' },
-      cache: 'no-store',
-    });
-    return res.ok ? ((await res.json()) as MeResponse) : null;
-  } catch (error) {
-    console.error(`[Team Layout] Backend auth check failed | ${error instanceof Error ? error.message : 'Unknown'}`);
-    return null;
-  }
-}
-
 export default async function TeamLayout({ children }: { children: ReactNode }) {
-  // redirect() throws by design, so every decision is made outside the try above.
+  // redirect() throws by design, so every decision is made here, outside fetchMe's try.
   const me = await fetchMe();
   if (!me?.success || !me.user) redirect('/login?redirect=/team');
 

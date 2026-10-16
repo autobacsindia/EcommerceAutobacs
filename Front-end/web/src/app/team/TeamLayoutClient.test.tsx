@@ -10,7 +10,7 @@ let pathname = '/team';
 jest.mock('next/navigation', () => ({ usePathname: () => pathname, useRouter: () => ({ replace: jest.fn(), push: jest.fn() }) }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ logout: jest.fn() }) }));
 jest.mock('@/hooks/queries/useTeamChat', () => ({ useChatUnreadTotal: () => 0 }));
-jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
+jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => <a href={href} className={className}>{children}</a> }));
 
 const shell = (canChangePassword: boolean, extra: { canSell?: boolean; roleLabel?: string } = { canSell: true }) => render(
   <TeamLayoutClient userName="Sam" team="sales" teamLabel="GTM" isHead={false} canChangePassword={canChangePassword} {...extra}>
@@ -40,4 +40,41 @@ it('a GTM lead gets the selling tools; an executive or customer support does not
   expect(screen.queryByRole('link', { name: /Customer decisions/ })).toBeNull();
   expect(screen.getByRole('link', { name: /Team chat/ })).toBeInTheDocument();
   expect(screen.getByText('GTM executive')).toBeInTheDocument();
+});
+
+it('marketing gets its panel screens, highlighted on their detail pages too', () => {
+  pathname = '/team/marketing/coupons/edit/abc';
+  render(
+    <TeamLayoutClient userName="Mia" team="marketing" teamLabel="Marketing" isHead={false}>
+      <p>panel content</p>
+    </TeamLayoutClient>,
+  );
+  for (const [name, href] of [
+    [/Blog & media/, '/team/marketing/blog'],
+    [/Page SEO/, '/team/marketing/seo'],
+    [/Coupons/, '/team/marketing/coupons'],
+    [/Campaigns/, '/team/marketing/campaigns'],
+    [/Spin to win/, '/team/marketing/spin'],
+    [/Promo banners/, '/team/marketing/promo-banners'],
+    [/Leads/, '/team/marketing/leads'],
+    [/Consultations/, '/team/marketing/consultation'],
+    [/Payments/, '/team/payments'],
+  ] as const) {
+    expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);
+  }
+  expect(screen.getByRole('link', { name: /Coupons/ }).className).toContain('bg-blue-600');
+  expect(screen.getByRole('link', { name: /Campaigns/ }).className).not.toContain('bg-blue-600');
+  // Selling and stock tools stay with their teams.
+  expect(screen.queryByRole('link', { name: /New order/ })).toBeNull();
+  pathname = '/team';
+});
+
+it('other teams do not get the marketing screens', () => {
+  render(
+    <TeamLayoutClient userName="Op" team="operations" teamLabel="Operations" isHead={false}>
+      <p>panel content</p>
+    </TeamLayoutClient>,
+  );
+  expect(screen.queryByRole('link', { name: /Coupons/ })).toBeNull();
+  expect(screen.queryByRole('link', { name: /Page SEO/ })).toBeNull();
 });

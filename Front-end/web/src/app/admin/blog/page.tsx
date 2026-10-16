@@ -11,6 +11,7 @@ import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/compon
 import RichTextEditor from '@/components/ui/RichTextEditor';
 import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
 import SingleImageUpload from '@/components/ui/SingleImageUpload';
+import { usePanel } from '@/lib/usePanel';
 
 type Tab = 'posts' | 'gallery' | 'videos' | 'comments';
 
@@ -73,6 +74,7 @@ const EMPTY_MEDIA = {
 };
 
 export default function AdminBlogPage() {
+  const { isAdmin } = usePanel();
   const [tab, setTab] = useState<Tab>('posts');
   const [articles, setArticles] = useState<Article[]>([]);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
@@ -520,12 +522,14 @@ export default function AdminBlogPage() {
                           >
                             <Edit2 className="h-4 w-4" />
                           </button>
-                          <button
-                            onClick={() => deletePost(article._id)}
-                            className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => deletePost(article._id)}
+                              className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -558,9 +562,11 @@ export default function AdminBlogPage() {
                     <button onClick={() => startEditMedia(item)} className="p-1.5 bg-white rounded-full text-gray-700 hover:text-blue-600">
                       <Edit2 className="h-4 w-4" />
                     </button>
-                    <button onClick={() => deleteMedia(item._id)} className="p-1.5 bg-white rounded-full text-gray-700 hover:text-red-600">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {isAdmin && (
+                      <button onClick={() => deleteMedia(item._id)} className="p-1.5 bg-white rounded-full text-gray-700 hover:text-red-600">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                   <div className="absolute bottom-0 left-0 right-0 bg-black/60 px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <p className="text-white text-xs truncate">{item.title}</p>
@@ -591,9 +597,11 @@ export default function AdminBlogPage() {
                       <button onClick={() => startEditMedia(item)} className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                         <Edit2 className="h-3 w-3" /> Edit
                       </button>
-                      <button onClick={() => deleteMedia(item._id)} className="text-xs text-red-600 hover:underline flex items-center gap-1">
-                        <Trash2 className="h-3 w-3" /> Delete
-                      </button>
+                      {isAdmin && (
+                        <button onClick={() => deleteMedia(item._id)} className="text-xs text-red-600 hover:underline flex items-center gap-1">
+                          <Trash2 className="h-3 w-3" /> Delete
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -679,12 +687,14 @@ export default function AdminBlogPage() {
                           >
                             {c.approved ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                           </button>
-                          <button
-                            onClick={() => deleteComment(c._id)}
-                            className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => deleteComment(c._id)}
+                              className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

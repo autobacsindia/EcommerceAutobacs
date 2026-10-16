@@ -5,6 +5,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
 import { PROMO_SLOT_SPECS, promoAspectRatio, PROMO_MAX_HEIGHT } from '@/components/layout/PromoBanner';
+import { usePanel } from '@/lib/usePanel';
 
 /**
  * Admin — site-wide promo banner.
@@ -165,6 +166,7 @@ const toPayload = (draft: Draft) => {
 const SIZE_TOLERANCE = 0.9;
 
 export default function AdminPromoBannersPage() {
+  const { isAdmin } = usePanel();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -520,9 +522,11 @@ export default function AdminPromoBannersPage() {
               <button onClick={() => openEdit(b)} className="shrink-0 border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
                 Edit
               </button>
-              <button onClick={() => remove(b)} className="shrink-0 text-red-600 text-sm hover:underline">
-                Delete
-              </button>
+              {isAdmin && (
+                <button onClick={() => remove(b)} className="shrink-0 text-red-600 text-sm hover:underline">
+                  Delete
+                </button>
+              )}
             </div>
           ))}
         </div>
