@@ -12,7 +12,7 @@ const overview = {
   today: { paidOrders: 3, paidValue: 52000, gtmOrders: 1, websiteOrders: 2, newConsultations: 2, openSupportTickets: 4, salesLinksWaiting: 1 },
   money: {
     awaitingApproval: { n: 2, amount: 1750 },
-    withAccounts: { n: 1, amount: 38000, onHold: 1 },
+    toPay: { n: 1, amount: 38000, onHold: 1 },
     paidThisMonth: { n: 1, amount: 4000, byTeam: [{ team: 'procurement', label: 'Procurement', n: 1, amount: 4000 }] },
     itemRefundsToPay: 1,
   },
@@ -28,7 +28,9 @@ const overview = {
 it('shows today, money waiting, teams, overdue work, people and the activity feed', async () => {
   get.mockResolvedValue(overview);
   render(<QueryClientProvider client={new QueryClient()}><CompanyOverviewPage /></QueryClientProvider>);
-  expect(await screen.findByText('Waiting for your approval')).toBeInTheDocument();
+  expect(await screen.findByText('Waiting for accounts to approve')).toBeInTheDocument();
+  // The admin's own queue is the approved money, not the undecided money.
+  expect(screen.getByText('Approved — for you to pay')).toBeInTheDocument();
   expect(get).toHaveBeenCalledWith('/admin/overview');
   expect(screen.getByText('₹52,000 · 1 GTM, 2 website')).toBeInTheDocument();
   expect(screen.getByText('₹38,000 · 1 on hold')).toBeInTheDocument();

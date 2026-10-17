@@ -15,15 +15,18 @@ export default function AdminPaymentsPage() {
         <p className="text-sm text-gray-600">Supplier payments and team expenses. You approve; accounts pays and records it.</p>
       </div>
       <PaymentRequestList
-        initial="submitted"
+        initial="to_pay"
         teams={[
           { value: 'procurement', label: 'Procurement' },
           { value: 'operations', label: 'Operations' },
           { value: 'marketing', label: 'Marketing' },
         ]}
+        /* The admin opens on what they must PAY — accounts has already approved
+           it and nothing moves until the money goes out. "Waiting for accounts"
+           is there to look at, not to act on. */
         filters={[
-          { value: 'submitted', label: 'Waiting for my approval' },
-          { value: 'to_pay', label: 'With accounts' },
+          { value: 'to_pay', label: 'To pay' },
+          { value: 'to_approve', label: 'Waiting for accounts' },
           { value: 'paid', label: 'Paid' },
           { value: 'declined', label: 'Declined' },
           { value: 'all', label: 'All' },

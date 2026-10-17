@@ -110,7 +110,7 @@ it('shows money waiting, paid this month by team, and item refunds still to pay'
 
   const { money } = await companyOverview(admin);
   expect(money.awaitingApproval).toEqual({ n: 1, amount: 1000 });
-  expect(money.withAccounts).toEqual({ n: 2, amount: 750, onHold: 1 });
+  expect(money.toPay).toEqual({ n: 2, amount: 750, onHold: 1 });
   expect(money.paidThisMonth).toMatchObject({ n: 1, amount: 4000, byTeam: [{ team: 'procurement', n: 1, amount: 4000 }] });
   expect(money.itemRefundsToPay).toBe(1);
 });
