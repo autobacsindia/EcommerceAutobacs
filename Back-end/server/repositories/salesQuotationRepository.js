@@ -13,6 +13,11 @@ class SalesQuotationRepository extends BaseRepository {
     return SalesQuotation.find(q).sort({ _id: -1 }).limit(limit).lean();
   }
 
+  /** Who the quotation is for and who sells it — nothing else (customer bank details). */
+  async findContact(id) {
+    return SalesQuotation.findById(id).select('customer salesUser').lean();
+  }
+
   /**
    * Move an OPEN quotation on, atomically: only one of two concurrent "accept" or
    * "edit" clicks can win; the loser gets null.

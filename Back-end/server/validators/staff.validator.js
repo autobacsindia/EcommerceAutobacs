@@ -239,7 +239,45 @@ export const validateRefundReview = [
   body('note').optional({ values: 'falsy' }).isString().trim().isLength({ max: 500 }),
 ];
 
+export const validateRefundRetry = [
+  ...validateWorkOrder,
+  param('cancellationId').custom(isObjectId).withMessage('Invalid refund'),
+];
+
 export const validateMarkDelivered = [
   ...validateWorkOrder,
   body('shipmentId').optional({ values: 'falsy' }).custom(isObjectId).withMessage('Invalid parcel'),
 ];
+
+/** Admin edits a team member. Every field optional; at least one is checked in the service. */
+export const validateMemberUpdate = [
+  param('id').custom(isObjectId).withMessage('Invalid member id'),
+  body('name').optional().trim().isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
+  body('phone').optional().customSanitizer(normalizeIndianMobile).matches(INDIAN_MOBILE).withMessage('Enter a valid 10-digit Indian mobile number'),
+  body('username').optional().isString().trim().toLowerCase().matches(STAFF_USERNAME_PATTERN).withMessage(`Username: ${STAFF_USERNAME_HINT}`),
+  body('team').optional().isIn(STAFF_TEAM_VALUES).withMessage('Choose a team'),
+  body('isHead').optional().isBoolean().withMessage('Invalid head setting').toBoolean(),
+  body('subRole').optional({ values: 'null' }).isIn(GTM_SUB_ROLE_VALUES).withMessage('Choose a GTM role'),
+];
+
+// ── Customer bank details (refunds / NEFT) ──────────────────────────────────────
+const validateCustomerBankTarget = [
+  param('kind').isIn(['quotation', 'order']).withMessage('Unknown record'),
+  param('id').custom(isObjectId).withMessage('Invalid id'),
+];
+
+export const validateCustomerBankRead = [
+  ...validateCustomerBankTarget,
+  query('reveal').optional().isIn(['0', '1', 'true', 'false']).withMessage('reveal must be 0 or 1'),
+];
+
+export const validateCustomerBankSave = [
+  ...validateCustomerBankTarget,
+  body('accountName').isString().trim().isLength({ min: 2, max: 120 }).withMessage('Enter the account holder\'s name'),
+  body('accountNumber').isString().isLength({ min: 6, max: 30 }).withMessage('Enter the account number'),
+  body('confirmAccountNumber').optional().isString().isLength({ max: 30 }),
+  body('ifsc').isString().trim().isLength({ min: 11, max: 11 }).withMessage('Enter the 11-character IFSC code'),
+  body('bankName').optional({ values: 'falsy' }).isString().trim().isLength({ max: 120 }),
+];
+
+export const validateCustomerBankRemove = validateCustomerBankTarget;

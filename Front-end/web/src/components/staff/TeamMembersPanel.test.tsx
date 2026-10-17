@@ -7,9 +7,10 @@ import TeamMembersPanel, { generateTempPassword } from './TeamMembersPanel';
 
 const get = jest.fn();
 const post = jest.fn();
+const put = jest.fn();
 jest.mock('@/lib/api-client', () => ({
   __esModule: true,
-  default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), delete: jest.fn() },
+  default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), put: (...a: unknown[]) => put(...a), delete: jest.fn() },
 }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { _id: 'admin', role: 'admin' } }) }));
 
@@ -142,5 +143,34 @@ describe('GTM roles', () => {
     render(<TeamMembersPanel team="sales" allowHeadInvite />);
     const row = (await screen.findByText('Sam Kumar')).closest('tr')!;
     expect(within(row).getByText('GTM executive')).toBeInTheDocument();
+  });
+
+  it('admin edits a member: name, mobile, username, team, role', async () => {
+    window.confirm = jest.fn(() => true);
+    get.mockResolvedValue(team([sam]));
+    put.mockResolvedValue({ success: true, member: sam });
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    const row = (await screen.findByText('Sam Kumar')).closest('tr')!;
+    fireEvent.click(within(row).getByRole('button', { name: /Edit/ }));
+    const form = screen.getByRole('form', { name: 'Edit Sam Kumar' });
+    fireEvent.change(within(form).getByLabelText('Full name'), { target: { value: 'Sam K' } });
+    fireEvent.change(within(form).getByLabelText('Username (sign-in)'), { target: { value: 'sam.gtm' } });
+    fireEvent.change(within(form).getByLabelText('Team'), { target: { value: 'procurement' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/staff/members/u1', {
+      name: 'Sam K', phone: '9876543210', username: 'sam.gtm', team: 'procurement', isHead: false,
+    }));
+    // A team change asks first, because it signs them out.
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/signed out/));
+  });
+
+  it('the admin sees "Delete", which keeps their history', async () => {
+    window.confirm = jest.fn(() => false);
+    get.mockResolvedValue(team([sam]));
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    const row = (await screen.findByText('Sam Kumar')).closest('tr')!;
+    fireEvent.click(within(row).getByRole('button', { name: /Delete/ }));
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/past work .* stays/));
+    expect(post).not.toHaveBeenCalledWith('/staff/members/u1/deactivate', {});
   });
 });

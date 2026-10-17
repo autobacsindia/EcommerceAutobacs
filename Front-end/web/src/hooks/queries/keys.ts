@@ -186,6 +186,9 @@ export const staffKeys = {
   /** Team workflow — invalidate `orders()` after any action, since one action moves an order between lists. */
   workQueue: (queue: string) => [...staffKeys.orders(), 'work', queue] as const,
   workOrder: (id: string) => [...staffKeys.orders(), 'work-order', id] as const,
+  /** A customer's saved bank account, as seen from one quotation / order (masked). */
+  customerBanks: () => [...staffKeys.all, 'customer-bank'] as const,
+  customerBank: (kind: string, id: string) => [...staffKeys.customerBanks(), kind, id] as const,
 };
 
 /** `/admin/team-activity/*` — the admin's read-only view of the order workflow. */

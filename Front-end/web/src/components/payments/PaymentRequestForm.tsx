@@ -77,7 +77,7 @@ export default function PaymentRequestForm({
     <form onSubmit={submit} className="space-y-4 rounded-xl border border-gray-200 bg-white p-5" aria-label={supplier ? 'Supplier payment request' : 'Expense request'}>
       <div>
         <h3 className="text-base font-semibold text-gray-900">{supplier ? 'Request supplier payment' : 'New expense request'}</h3>
-        <p className="text-xs text-gray-500">Goes to the admin for approval, then accounts pays it. You can follow it in Payments and in team chat.</p>
+        <p className="text-xs text-gray-500">Operations purchases are approved by the admin; everything else by accounts. Accounts then pays it. You can follow it in Payments and in team chat.</p>
       </div>
 
       {supplier ? (

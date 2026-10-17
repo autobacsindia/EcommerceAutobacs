@@ -18,7 +18,8 @@ const TEAMS = [
  * Payments in the team panel.
  *   operations / marketing — raise expenses and follow them
  *   procurement           — follow supplier payments (raised from each order)
- *   accounts              — pay what the admin has approved; see every team
+ *   accounts              — approve and pay everything except Operations purchases
+ *                           (those wait for the admin's approval); see every team
  */
 export default function TeamPaymentsPage() {
   const { user } = useAuth();
@@ -36,8 +37,8 @@ export default function TeamPaymentsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
           <p className="text-sm text-gray-500">
             {isAccounts
-              ? 'Pay what the admin has approved, then record the payment with its reference and screenshot.'
-              : 'Each request goes to the admin for approval, then accounts pays it. Download the slip or receipt at any stage.'}
+              ? 'Approve and pay requests, then record each payment with its reference and screenshot. Operations purchases need the admin\'s approval first.'
+              : 'Operations purchases go to the admin for approval; everything else to accounts. Accounts then pays it. Download the slip or receipt at any stage.'}
           </p>
         </div>
         {raisesExpenses && !adding && (
@@ -63,7 +64,7 @@ export default function TeamPaymentsPage() {
         initial={isAccounts ? 'to_pay' : 'open'}
         teams={isAccounts ? TEAMS : undefined}
         filters={isAccounts
-          ? [{ value: 'to_pay', label: 'To pay' }, { value: 'submitted', label: 'Waiting for admin' }, { value: 'paid', label: 'Paid' }, { value: 'all', label: 'All' }]
+          ? [{ value: 'to_pay', label: 'To approve & pay' }, { value: 'submitted', label: 'Waiting for approval' }, { value: 'paid', label: 'Paid' }, { value: 'all', label: 'All' }]
           : [{ value: 'open', label: 'In progress' }, { value: 'paid', label: 'Paid' }, { value: 'all', label: 'All' }]}
       />
     </div>

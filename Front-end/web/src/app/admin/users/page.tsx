@@ -5,6 +5,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import apiClient from '@/lib/api';
 import { adminKeys } from '@/hooks/queries/keys';
 import { Plus, Trash2, Search, Eye, X, BadgeCheck } from 'lucide-react';
+import { displayEmail } from '@/lib/internalEmail';
 
 interface Address {
   fullName: string;
@@ -209,7 +210,7 @@ export default function AdminUsersPage() {
               <tr key={user._id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                  <div className="text-sm text-gray-500">{user.email}</div>
+                  <div className="text-sm text-gray-500">{displayEmail(user.email)}</div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 text-xs rounded-full ${
@@ -321,7 +322,7 @@ export default function AdminUsersPage() {
               
               <div>
                 <label className="block text-sm font-medium text-gray-500 mb-1">Email ID</label>
-                <p className="text-lg text-gray-900">{selectedUser.email}</p>
+                <p className="text-lg text-gray-900">{displayEmail(selectedUser.email)}</p>
               </div>
               
               <div>

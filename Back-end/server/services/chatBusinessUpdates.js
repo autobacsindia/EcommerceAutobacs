@@ -16,8 +16,9 @@
  *   customer will wait            #procurement   procurement — source it
  *   refund requested              #accounts      accounts — approve or send back
  *   refund sent back              #sales         the seller — follow up
- *   refund approved               #accounts      an admin — pay it
- *   refund failed at the gateway  #accounts      an admin — retry it
+ *   refund sent (out of stock)    #sales         the seller — tell the customer
+ *   refund could not be sent      #accounts      accounts — retry it from the team panel
+ *   refund failed at the gateway  #accounts      accounts or an admin — retry it
  *   shipped                       #operations    operations — follow to delivery
  *   delivered                     #sales         the seller — close the loop
  *   order cancelled               #procurement   procurement — stop sourcing
@@ -149,8 +150,8 @@ const UPDATES = {
     });
   },
 
-  // Accounts approved: the refund now waits for an admin to pay it. Admins see
-  // every team space, so it stays in #accounts with the rest of the refund's story.
+  // Legacy: approvals used to wait for an admin to pay. Accounts now sends the refund
+  // itself, so nothing enqueues this any more; kept so jobs already queued still run.
   'send-admin-team-refund-ready-alert': async ({ orderId, itemId }, { jobId }) => {
     const order = await loadOrder(orderId);
     if (!order) return null;
@@ -172,7 +173,7 @@ const UPDATES = {
       space: SPACE.accounts,
       key: keyOf(`refund-failed-${orderId}`, jobId),
       mention: people,
-      text: `⚠️ Refund FAILED at the payment gateway on ${orderNumber(order)} — ${customerOf(order)} is still owed money. ${address(people, 'Admin')}: please retry it from Admin → Refunds.`,
+      text: `⚠️ Refund FAILED at the payment gateway on ${orderNumber(order)} — ${customerOf(order)} is still owed money. Accounts (or ${address(people, 'Admin')}): please retry it from the order in the team panel or Admin → Refunds.`,
     });
   },
 
@@ -245,6 +246,28 @@ const WORKFLOW_EVENTS = {
       key: keyOf(`refund-rejected-${idOf(order._id)}-${itemId}`, jobId),
       mention: owners,
       text: `↩️ Accounts${by ? ` (${by})` : ''} sent back the refund on ${orderNumber(order)} — ${itemName(order, itemId)}${reason ? `: “${reason}”` : ''}. ${address(owners, 'GTM')}: please follow up with ${customerOf(order)}.`,
+    });
+  },
+
+  // Accounts approved an out-of-stock refund and it went to Razorpay.
+  refund_sent: async (order, { itemId, by, note }, { jobId }) => {
+    const owners = await salesOwners(order);
+    const detail = String(note || '').trim().slice(0, 200);
+    return orderPost(order, {
+      space: SPACE.sales,
+      key: keyOf(`refund-sent-${idOf(order._id)}-${itemId || 'order'}`, jobId),
+      mention: owners,
+      text: `💸 Refund sent on ${orderNumber(order)}${itemId ? ` — ${itemName(order, itemId)}` : ''}${by ? ` by ${by}` : ''}${detail ? ` (${detail})` : ''}. ${address(owners, 'GTM')}: let ${customerOf(order)} know — banks usually take 5–7 working days.`,
+    });
+  },
+
+  // The send was refused (gateway down, nothing captured…): the customer is still owed.
+  refund_send_failed: async (order, { itemId, by, note }, { jobId }) => {
+    const reason = String(note || '').trim().slice(0, 300);
+    return orderPost(order, {
+      space: SPACE.accounts,
+      key: keyOf(`refund-send-failed-${idOf(order._id)}-${itemId || 'order'}`, jobId),
+      text: `⚠️ The refund on ${orderNumber(order)}${itemId ? ` — ${itemName(order, itemId)}` : ''} was approved${by ? ` by ${by}` : ''} but could not be sent${reason ? `: “${reason}”` : ''}. Accounts: please retry it from the order in the team panel.`,
     });
   },
 

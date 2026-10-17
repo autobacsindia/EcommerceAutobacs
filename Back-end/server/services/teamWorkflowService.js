@@ -4,9 +4,10 @@
  *   procurement : stock check per item (in stock / ordered from supplier / out of stock),
  *                 then uploads the supplier's photo + courier + tracking → shipped
  *   sales       : out of stock → asks the customer: wait for stock, or refund
- *   accounts    : approves (or sends back) a refund the customer asked for
+ *   accounts    : approves (or sends back) a refund the customer asked for, and an
+ *                 approval SENDS it (Razorpay); a failed send is retried from here too
  *   operations  : follows the parcel and marks it delivered
- *   admin       : pays the approved refund from the admin Refunds page (unchanged)
+ *   admin       : can do everything above; the admin Refunds page still works too
  *
  * ── ONE SET OF RECORDS ──────────────────────────────────────────────────────────
  * Nothing here writes shipments or refunds itself. "Shipped" is a parcel created by
@@ -23,9 +24,14 @@
  * the cancellation is recorded and released if recording fails, so one approval can
  * never create two refunds.
  *
- * ── NO MONEY MOVES HERE ─────────────────────────────────────────────────────────
- * The team panel never calls the payment gateway. An approved refund becomes a
- * `pending` cancellation refund that only an admin can pay.
+ * ── THE ONE PLACE MONEY MOVES ───────────────────────────────────────────────────
+ * Accounts' approval records the cancellation and then sends its refund through
+ * cancellationService.refundCancellation — the same routine behind the admin
+ * Refunds button. Its atomic claim on the cancellation's refund is what makes a
+ * double-click, a retry, or Accounts and an admin pressing at once pay ONCE; the
+ * amount is recomputed there from the order against what is still refundable.
+ * Only out-of-stock refunds raised in this workflow are sent from here — returns
+ * are still refunded by an admin after inspection.
  */
 
 import crypto from 'crypto';
@@ -170,8 +176,10 @@ const HISTORY_LABELS = {
   customer_waits: 'Customer will wait for stock',
   refund_requested: 'Customer wants a refund',
   refund_rejected: 'Refund sent back by accounts',
-  refund_approved: 'Refund approved — waiting for admin to pay',
+  refund_approved: 'Refund approved by accounts',
   refund_approval_failed: 'Refund approval could not be recorded',
+  refund_sent: 'Refund sent to the customer',
+  refund_send_failed: 'Refund could not be sent — retry it',
   shipped: 'Supplier proof uploaded — shipped',
   delivered: 'Marked delivered',
 };
@@ -225,6 +233,8 @@ function detail(u, o) {
       cancelledAt: c.cancelledAt || null,
       refundStatus: c.refund?.status || null,
       refundAmount: c.refund?.productValuePaise != null ? c.refund.productValuePaise / 100 : null,
+      refundFailure: c.refund?.status === 'failed' ? c.refund.failureReason || '' : '',
+      canSendRefund: canSendRefund(u, o, c),
     })),
     history: (o.workflow?.history || []).slice().reverse().map((h) => ({
       at: h.at,
@@ -237,6 +247,8 @@ function detail(u, o) {
     canShip: can.procurement(u) && (view?.lines || []).some((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER),
     // Talking to the customer is the sales side's job: the seller, a sales head, or admin.
     canContactCustomer: can.decide(u, o),
+    // The customer's saved bank account (refunds / NEFT): accounts and admin.
+    canSeeCustomerBank: can.accounts(u),
   };
 }
 
@@ -547,9 +559,55 @@ export async function recordDecision(actor, orderId, itemId, { decision, note } 
   return getOrder(actor, orderId);
 }
 
+/** A cancellation this workflow created (an approved out-of-stock refund) — never a return or an admin cancel. */
+const workflowCancellation = (o, cancellationId) =>
+  (o.workflow?.lines || []).some((l) => l.cancellationId && idOf(l.cancellationId) === String(cancellationId));
+
+/** May this person (re)send this cancellation's refund from the team panel? */
+function canSendRefund(u, o, c) {
+  return can.accounts(u)
+    && ['pending', 'failed'].includes(c.refund?.status)
+    && o.paymentStatus === 'paid'
+    && workflowCancellation(o, c._id);
+}
+
 /**
- * Accounts: approve the refund (the item is cancelled and its refund waits for an
- * admin to pay it), or send it back to sales with a note.
+ * Send (or retry) the refund of a cancellation this workflow recorded. Never throws for
+ * a gateway failure — the outcome is written to the history and the chat, and the
+ * caller gets the updated order either way.
+ */
+async function sendRefund(actor, orderId, cancellationId, itemId, req) {
+  const result = await cancellationService.refundCancellation(orderId, cancellationId);
+  const sent = result.success && !result.alreadyRefunded;
+  const amount = result.refund?.amountRupees;
+  const note = sent
+    ? [amount != null ? `₹${amount}` : '', result.message].filter(Boolean).join(' — ')
+    : result.message;
+  await orderRepository.pushWorkflowEvent(
+    orderId,
+    event(actor, result.success ? 'refund_sent' : 'refund_send_failed', { itemId, note }),
+  );
+  if (sent || !result.success) {
+    enqueue(WORKFLOW_CHAT_JOB, {
+      event: result.success ? 'refund_sent' : 'refund_send_failed',
+      orderId: String(orderId),
+      ...(itemId && { itemId: String(itemId) }),
+      by: actor.name,
+      note: String(note || '').slice(0, 300),
+    });
+  }
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, {
+    change: result.success ? 'team_refund_sent' : 'team_refund_send_failed',
+    cancellationId: String(cancellationId),
+    ...(amount != null && { amountRupees: amount }),
+    ...(!result.success && { reason: result.message }),
+  });
+  return result;
+}
+
+/**
+ * Accounts: approve the refund — the item is cancelled and the refund is sent to the
+ * customer straight away — or send it back to sales with a note.
  */
 export async function reviewRefund(actor, orderId, itemId, { approve, note } = {}, req) {
   if (!can.accounts(actor)) throw fail('Only the accounts team can approve refunds.', 403);
@@ -615,10 +673,32 @@ export async function reviewRefund(actor, orderId, itemId, { approve, note } = {
     }),
   );
   await refreshOpen(orderId);
-  enqueue('send-admin-team-refund-ready-alert', { orderId: String(orderId), itemId: String(itemId) });
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, {
     change: 'team_refund_approved', itemId: String(itemId), cancellationId: String(result.cancellation._id),
   });
+  // The approval is recorded whatever the gateway says next: a failed send stays
+  // `failed` on the cancellation and is retried with retryRefund.
+  await sendRefund(actor, orderId, result.cancellation._id, line.itemId, req);
+  return getOrder(actor, orderId);
+}
+
+/** Accounts: send again a refund whose first attempt failed (or never went out). */
+export async function retryRefund(actor, orderId, cancellationId, req) {
+  if (!can.accounts(actor)) throw fail('Only the accounts team can send refunds.', 403);
+  const order = await orderRepository.findForWorkflow(orderId);
+  if (!order) throw fail('Order not found.', 404);
+  const record = (order.cancellations || []).find((c) => idOf(c._id) === String(cancellationId));
+  if (!record || !workflowCancellation(order, cancellationId)) {
+    throw fail('This refund is not one the team panel sends — use Admin → Refunds.', 404);
+  }
+  if (!canSendRefund(actor, order, record)) {
+    throw fail(record.refund?.status === 'completed' || record.refund?.status === 'processing'
+      ? 'This refund has already been sent.'
+      : 'This refund cannot be sent from here.', 409);
+  }
+  const line = (order.workflow?.lines || []).find((l) => idOf(l.cancellationId) === String(cancellationId));
+  const result = await sendRefund(actor, orderId, cancellationId, line?.itemId, req);
+  if (!result.success) throw fail(result.message || 'The refund could not be sent.', result.statusCode || 502);
   return getOrder(actor, orderId);
 }
 

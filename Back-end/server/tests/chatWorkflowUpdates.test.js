@@ -50,6 +50,8 @@ const { default: ChatChannel } = await import('../models/ChatChannel.js');
 const { default: ChatMessage } = await import('../models/ChatMessage.js');
 const { default: orderStatusService } = await import('../services/orderStatusService.js');
 const { default: emailHandler } = await import('../services/emailHandler.js');
+const { default: Payment } = await import('../models/Payment.js');
+const { default: razorpayService } = await import('../services/razorpayService.js');
 const wf = await import('../services/teamWorkflowService.js');
 const { postBusinessUpdate, UPDATE_SPACES, WORKFLOW_CHAT_JOB } = await import('../services/chatBusinessUpdates.js');
 
@@ -194,10 +196,16 @@ describe('each handoff goes to the team that acts next', () => {
       .toMatch(/Refund requested on #.* — Floor mat .*Accounts: please approve or send it back/);
   });
 
-  it('refund sent back → #sales with the reason; approved → #accounts addressed to the admins', async () => {
+  it('refund sent back → #sales with the reason; approved and sent → #sales so the seller tells the customer', async () => {
+    jest.spyOn(razorpayService, 'refundPayment').mockResolvedValue({ refundId: 'rfnd_1', status: 'pending' });
     const order = await paidOrder({ salesUser: seller._id });
     const [cover, mat] = ids(order);
     const id = String(order._id);
+    const payment = await Payment.create({
+      order: order._id, user: order.user, amount: 7000, gatewayPaymentId: `pay_${id}`,
+      paymentGateway: 'razorpay', paymentMethod: 'upi', status: 'completed',
+    });
+    await Order.updateOne({ _id: order._id }, { $set: { payment: payment._id } });
     for (const item of [cover, mat]) {
       await wf.setStock(procurement, id, item, { stock: 'out_of_stock' }, req);
       await wf.recordDecision(seller, id, item, { decision: 'refund' }, req);
@@ -210,9 +218,24 @@ describe('each handoff goes to the team that acts next', () => {
     expect(back.text).toMatch(/sent back the refund on #.* — Seat cover: “Customer already took store credit”\. @Sam: please follow up/);
     expect(back.mentions).toEqual([String(seller._id)]);
 
-    const approved = (await inSpace('team:accounts')).find((p) => /Refund approved/.test(p.text));
-    expect(approved.text).toMatch(/Floor mat\. @Owner: please pay it from Admin → Refunds/);
-    expect(approved.mentions).toEqual([String(owner._id)]);
+    const sent = (await inSpace('team:sales')).find((p) => /Refund sent/.test(p.text));
+    expect(sent.text).toMatch(/Refund sent on #.* — Floor mat by accounts \d+ \(₹2000 — .*\)\. @Sam: let Ravi know/);
+    expect(sent.mentions).toEqual([String(seller._id)]);
+    // No admin step any more: nothing asks an admin to pay it.
+    expect((await posts()).some((p) => /please pay it/.test(p.text))).toBe(false);
+  });
+
+  it('an approved refund that could not be sent → #accounts, asking accounts to retry', async () => {
+    const order = await paidOrder({ salesUser: seller._id }); // no Razorpay capture on file
+    const id = String(order._id);
+    const [cover] = ids(order);
+    await wf.setStock(procurement, id, cover, { stock: 'out_of_stock' }, req);
+    await wf.recordDecision(seller, id, cover, { decision: 'refund' }, req);
+    await wf.reviewRefund(accounts, id, cover, { approve: true }, req);
+    await drainToChat();
+
+    const failed = (await inSpace('team:accounts')).find((p) => /could not be sent/.test(p.text));
+    expect(failed.text).toMatch(/Seat cover was approved by accounts \d+ but could not be sent: “No Razorpay payment id.*”\. Accounts: please retry/);
   });
 
   it('shipped → #operations with courier and tracking; delivered → #sales', async () => {
@@ -234,7 +257,7 @@ describe('each handoff goes to the team that acts next', () => {
     await postBusinessUpdate('send-admin-refund-failed-alert', { orderId: String(order._id) }, { jobId: '9' });
     const [post] = await posts();
     expect(post.space).toBe('team:accounts');
-    expect(post.text).toMatch(/Refund FAILED .*@Owner: please retry/);
+    expect(post.text).toMatch(/Refund FAILED .*Accounts \(or @Owner\): please retry/);
   });
 
   it('a cancelled order → #procurement, but only if the teams were working it', async () => {

@@ -12,6 +12,7 @@ import {
   validateStaffInvite,
   validateInviteIdParam,
   validateMemberIdParam,
+  validateMemberUpdate,
   validateInviteToken,
   validateAcceptInvite,
   validateCompanyAccount,
@@ -33,6 +34,10 @@ import {
   validateShipWithProof,
   validateCustomerDecision,
   validateRefundReview,
+  validateRefundRetry,
+  validateCustomerBankRead,
+  validateCustomerBankSave,
+  validateCustomerBankRemove,
   validateMarkDelivered,
 } from '../validators/staff.validator.js';
 import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard } from '../middleware/uploadMiddleware.js';
@@ -45,6 +50,7 @@ import {
   shipWithProof,
   recordDecision,
   reviewRefund,
+  retryRefund,
   markDelivered,
 } from '../services/teamWorkflowService.js';
 import {
@@ -53,6 +59,7 @@ import {
   inviteMember,
   revokeInvite,
   deactivateMember,
+  updateMember,
   verifyInvite,
   acceptInvite,
   createCompanyAccount,
@@ -74,6 +81,7 @@ import {
   getSalesOrder,
 } from '../services/salesOrderService.js';
 import { getQuotationPdf } from '../services/quotationService.js';
+import { getBankAccount, saveBankAccount, removeBankAccount } from '../services/customerBankService.js';
 import {
   createQuotation, updateQuotation, cancelQuotation, acceptQuotation,
   getQuotation, listQuotations, getQuotationDocument,
@@ -159,6 +167,11 @@ router.delete('/invites/:id', validateInviteIdParam, validateRequest, asyncHandl
 }));
 
 // @route  POST /staff/members/:id/deactivate — remove someone's staff access
+// @route  PUT /staff/members/:id — admin edits name, mobile, username, team, head, GTM role
+router.put('/members/:id', validateMemberUpdate, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, member: await updateMember(req.user, req.params.id, req.body, req) });
+}));
+
 router.post('/members/:id/deactivate', validateMemberIdParam, validateRequest, asyncHandler(async (req, res) => {
   const member = await deactivateMember(req.user, req.params.id, req);
   res.json({ success: true, member });
@@ -333,9 +346,32 @@ router.post('/work/orders/:id/lines/:itemId/refund', validateRefundReview, valid
   res.json({ success: true, order: await reviewRefund(req.user, req.params.id, req.params.itemId, req.body, req) });
 }));
 
+// @route  POST /staff/work/orders/:id/refunds/:cancellationId/send — accounts: retry a refund that failed
+router.post('/work/orders/:id/refunds/:cancellationId/send', validateRefundRetry, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await retryRefund(req.user, req.params.id, req.params.cancellationId, req) });
+}));
+
 // @route  POST /staff/work/orders/:id/delivered  { shipmentId? } — operations
 router.post('/work/orders/:id/delivered', validateMarkDelivered, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, order: await markDelivered(req.user, req.params.id, req.body, req) });
+}));
+
+// ── Customer bank details for refunds / NEFT (never cards) ─────────────────────
+// Reached through a quotation or an order the person may handle; masked, except
+// for accounts / admin asking for ?reveal=1 (audit-logged).
+// @route  GET    /staff/customer-bank/:kind(quotation|order)/:id
+// @route  PUT    /staff/customer-bank/:kind/:id  { accountName, accountNumber, confirmAccountNumber?, ifsc, bankName? }
+// @route  DELETE /staff/customer-bank/:kind/:id
+router.get('/customer-bank/:kind/:id', validateCustomerBankRead, validateRequest, asyncHandler(async (req, res) => {
+  const reveal = ['1', 'true'].includes(String(req.query.reveal || ''));
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, ...(await getBankAccount(req.user, req.params.kind, req.params.id, { reveal }, req)) });
+}));
+router.put('/customer-bank/:kind/:id', validateCustomerBankSave, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await saveBankAccount(req.user, req.params.kind, req.params.id, req.body, req)) });
+}));
+router.delete('/customer-bank/:kind/:id', validateCustomerBankRemove, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await removeBankAccount(req.user, req.params.kind, req.params.id, req)) });
 }));
 
 export default router;

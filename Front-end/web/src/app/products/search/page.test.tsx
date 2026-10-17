@@ -185,4 +185,43 @@ describe('SearchPage', () => {
     // "Did you mean?" should not be present
     expect(screen.queryByText('Did you mean:')).not.toBeInTheDocument();
   });
+
+  describe('"Show more" survives a visit to a product and back', () => {
+    const page = (n: number, hasNext: boolean) => ({
+      products: [{ _id: `p${n}`, name: `Product ${n}`, slug: `product-${n}`, price: 100, images: [], stock: 'in' }],
+      total: 3, hasNext,
+    });
+    const pageOf = (url: string) => Number(new URL(url, 'http://x').searchParams.get('page'));
+
+    afterEach(() => window.history.replaceState(null, '', '/'));
+
+    it('coming back with shown=3 loads pages 1–3 again', async () => {
+      mockSearchParams.delete('search');
+      mockSearchParams.set('q', 'seat');
+      window.history.replaceState(null, '', '/products/search?q=seat&shown=3');
+      (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+        const n = pageOf(url);
+        return Promise.resolve(page(n, n < 3));
+      });
+      render(<SearchPage />);
+      await waitFor(() => expect(screen.getByText('Product 3')).toBeInTheDocument());
+      expect(screen.getByText('Product 1')).toBeInTheDocument();
+      expect((apiClient.get as jest.Mock).mock.calls.map(([u]) => u).filter((u: string) => u.includes('page=')).map(pageOf)).toEqual([1, 2, 3]);
+    });
+
+    it('clicking Show more records the page in the address', async () => {
+      mockSearchParams.delete('search');
+      mockSearchParams.set('q', 'seat');
+      window.history.replaceState(null, '', '/products/search?q=seat');
+      (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+        const n = pageOf(url);
+        return Promise.resolve(page(n, n < 3));
+      });
+      render(<SearchPage />);
+      await waitFor(() => expect(screen.getByText('Product 1')).toBeInTheDocument());
+      screen.getByRole('button', { name: /show more|load more/i }).click();
+      await waitFor(() => expect(screen.getByText('Product 2')).toBeInTheDocument());
+      expect(new URL(window.location.href).searchParams.get('shown')).toBe('2');
+    });
+  });
 });

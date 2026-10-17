@@ -12,8 +12,9 @@ const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:
 const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50';
 
 const ACTION_LABELS: Record<string, string> = {
-  submitted: 'Raised', approved: 'Approved by admin', declined: 'Declined by admin',
-  on_hold: 'Put on hold by accounts', paid: 'Paid by accounts', cancelled: 'Cancelled',
+  // Who acted is shown beside each entry: an admin, or accounts (everything except Operations purchases).
+  submitted: 'Raised', approved: 'Approved', declined: 'Declined',
+  on_hold: 'Put on hold', paid: 'Paid', cancelled: 'Cancelled',
 };
 const FILE_LABELS = { bill: 'Bill / invoice', qr: 'Payment QR', proof: 'Payment screenshot' } as const;
 

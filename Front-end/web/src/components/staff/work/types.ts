@@ -72,11 +72,17 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     cancelledAt: string | null;
     refundStatus: string | null;
     refundAmount: number | null;
+    /** Why the last send failed (shown to the team). */
+    refundFailure: string;
+    /** Accounts (or admin): this out-of-stock refund can be sent / retried from here. */
+    canSendRefund: boolean;
   }[];
   history: { at: string; by: string; team: string; action: string; item: string; note: string }[];
   canShip: boolean;
   /** Seller, sales head or admin — shows the "Send to customer" WhatsApp button. */
   canContactCustomer: boolean;
+  /** Accounts or admin — the customer's saved bank account for refunds / NEFT. */
+  canSeeCustomerBank?: boolean;
 };
 
 export const STAGE_TONE: Record<LineStage, string> = {

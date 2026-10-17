@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, UserPlus, UserMinus, X, Mail, KeyRound, Copy, Building2 } from 'lucide-react';
+import { RefreshCw, UserPlus, UserMinus, X, Mail, KeyRound, Copy, Building2, Pencil } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
 import { formatDateIST } from '@/lib/datetime';
@@ -93,6 +93,10 @@ export default function TeamMembersPanel({
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   // The member whose password is being changed, and the new one being typed.
   const [changing, setChanging] = useState<{ member: Member; password: string } | null>(null);
+  // Admin: the member being edited (name, mobile, username, team, head, GTM role).
+  const [editing, setEditing] = useState<{
+    member: Member; name: string; phone: string; username: string; team: StaffTeam; isHead: boolean; subRole: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -189,12 +193,39 @@ export default function TeamMembersPanel({
     }
   }
 
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    const { member } = editing;
+    const roleChange = editing.team !== (data?.team ?? team) || editing.isHead !== member.isHead
+      || (editing.team === 'sales' && !editing.isHead && editing.subRole !== (member.subRole ?? 'lead'));
+    if (roleChange && !window.confirm(`Change ${member.name}'s team or role? They will be signed out and sign in again with the new access.`)) return;
+    setBusy(true); setError(''); setNotice(''); setWarning('');
+    try {
+      await apiClient.put(`/staff/members/${member.id}`, {
+        name: editing.name.trim(),
+        phone: editing.phone.trim(),
+        ...(member.companyAccount ? { username: editing.username.trim().toLowerCase() } : {}),
+        team: editing.team,
+        isHead: editing.isHead,
+        ...(editing.team === 'sales' && !editing.isHead ? { subRole: editing.subRole } : {}),
+      });
+      setNotice(`${editing.name.trim()} saved.${roleChange ? ' They have been signed out and will sign in with the new access.' : ''}`);
+      setEditing(null);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not save the changes.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove(member: Member) {
-    if (!window.confirm(`Remove ${member.name}'s access? They will be signed out immediately and lose the ${data?.teamLabel} panel.`)) return;
+    if (!window.confirm(`Delete ${member.name} from the ${data?.teamLabel} team? They are signed out at once and can no longer sign in. Their past work (orders, chats, approvals) stays and still shows their name.`)) return;
     setBusy(true); setError(''); setNotice(''); setWarning('');
     try {
       await apiClient.post(`/staff/members/${member.id}/deactivate`, {});
-      setNotice(`${member.name} no longer has access.`);
+      setNotice(`${member.name} was removed from the team. Their past work is kept.`);
       await load();
     } catch (err) {
       setError(errorMessage(err, 'Could not remove access.'));
@@ -273,6 +304,51 @@ export default function TeamMembersPanel({
               className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-white">
               Cancel
             </button>
+          </div>
+        </form>
+      )}
+
+      {editing && (
+        <form onSubmit={saveEdit} className="rounded-lg border border-blue-200 bg-blue-50 p-4" aria-label={`Edit ${editing.member.name}`}>
+          <p className="text-sm font-semibold text-gray-900">Edit {editing.member.name}</p>
+          <p className="mt-1 text-xs text-gray-600">Changing the team or role signs them out; their history stays with them.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="text-xs font-medium text-gray-700">Full name
+              <input required minLength={2} maxLength={100} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
+            </label>
+            <label className="text-xs font-medium text-gray-700">Mobile number
+              <input required inputMode="tel" value={editing.phone} onChange={(e) => setEditing({ ...editing, phone: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
+            </label>
+            {editing.member.companyAccount && (
+              <label className="text-xs font-medium text-gray-700">Username (sign-in)
+                <input required pattern={USERNAME_PATTERN} value={editing.username} onChange={(e) => setEditing({ ...editing, username: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm" />
+              </label>
+            )}
+            <label className="text-xs font-medium text-gray-700">Team
+              <select value={editing.team} onChange={(e) => setEditing({ ...editing, team: e.target.value as StaffTeam })}
+                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+                {(Object.keys(STAFF_TEAM_LABELS) as StaffTeam[]).map((t) => <option key={t} value={t}>{STAFF_TEAM_LABELS[t]}</option>)}
+              </select>
+            </label>
+            {editing.team === 'sales' && !editing.isHead && (
+              <label className="text-xs font-medium text-gray-700">GTM role
+                <select value={editing.subRole} onChange={(e) => setEditing({ ...editing, subRole: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm">
+                  {GTM_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="flex items-center gap-2 self-end text-sm text-gray-800">
+              <input type="checkbox" checked={editing.isHead} onChange={(e) => setEditing({ ...editing, isHead: e.target.checked })} />
+              Team head (can add and remove members)
+            </label>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button type="submit" disabled={busy} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">Save changes</button>
+            <button type="button" onClick={() => setEditing(null)} className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-white">Cancel</button>
           </div>
         </form>
       )}
@@ -486,9 +562,24 @@ export default function TeamMembersPanel({
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-gray-500">{formatDateIST(m.addedAt)}</td>
                 <td className="space-x-2 whitespace-nowrap px-4 py-3 text-right">
+                  {isAdminView && m.id !== user?._id && (
+                    <button
+                      onClick={() => {
+                        setCredentials(null); setChanging(null);
+                        setEditing({
+                          member: m, name: m.name, phone: m.phone, username: m.username || '',
+                          team: (data?.team ?? team ?? 'sales') as StaffTeam, isHead: m.isHead, subRole: m.subRole || 'lead',
+                        });
+                      }}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit
+                    </button>
+                  )}
                   {canRemove(m) && m.companyAccount && (
                     <button
-                      onClick={() => { setCredentials(null); setChanging({ member: m, password: '' }); }}
+                      onClick={() => { setCredentials(null); setEditing(null); setChanging({ member: m, password: '' }); }}
                       disabled={busy}
                       className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                     >
@@ -501,7 +592,7 @@ export default function TeamMembersPanel({
                       disabled={busy}
                       className="inline-flex items-center gap-1 rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
                     >
-                      <UserMinus className="h-3.5 w-3.5" /> Remove access
+                      <UserMinus className="h-3.5 w-3.5" /> {isAdminView ? 'Delete' : 'Remove access'}
                     </button>
                   )}
                 </td>
