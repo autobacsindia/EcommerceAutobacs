@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, LogOut, KeyRound, Banknote, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -24,7 +24,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   // GTM: the head and leads sell; executives and customer support have no tools yet.
   if (team === 'sales' && canSell) {
     nav.push(
-      { href: '/team/sales/new', label: 'New order', icon: PlusCircle },
+      { href: '/team/sales/new', label: 'New quotation', icon: PlusCircle },
+      { href: '/team/sales/quotations', label: 'Quotations', icon: FileText },
       { href: '/team/sales', label: isHead ? 'Team orders' : 'My orders', icon: ReceiptText },
       { href: '/team/decisions', label: 'Customer decisions', icon: PhoneCall },
     );

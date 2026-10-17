@@ -11,6 +11,8 @@ import { mobileProblem, normalizeMobile } from './phone';
 const get = jest.fn();
 const post = jest.fn();
 jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a) } }));
+const push = jest.fn();
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 
 const renderForm = () => render(
@@ -33,11 +35,8 @@ function fillCustomer(phone: string) {
 
 beforeEach(() => {
   get.mockReset().mockResolvedValue({ products: [] });
-  post.mockReset().mockResolvedValue({
-    order: { id: 'o1', orderNumber: '#A1', totalAmount: 3000, customer: { name: 'Ravi Kumar', phone: '9876543210' }, paymentLinkExpiresAt: null },
-    paymentLink: { id: 'plink_1', shortUrl: 'https://rzp.io/i/x' },
-    customerIsNew: false,
-  });
+  push.mockReset();
+  post.mockReset().mockResolvedValue({ quotation: { id: 'q1' } });
 });
 
 describe('mobile number helpers', () => {
@@ -61,11 +60,13 @@ it('adds what was typed as a custom item, with the price the salesperson enters'
   expect(screen.getByLabelText('Custom item name')).toHaveValue('Fitting labour');
   fireEvent.change(screen.getByLabelText(/Price for Fitting labour/), { target: { value: '1500' } });
   fireEvent.click(screen.getByRole('button', { name: /More/ }));
-  fireEvent.click(screen.getByRole('button', { name: /Create order/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Create quotation/ }));
 
   await waitFor(() => expect(post).toHaveBeenCalled());
   const [url, body] = post.mock.calls[0];
-  expect(url).toBe('/staff/sales/orders');
+  // Quotation first: no order and no payment link yet.
+  expect(url).toBe('/staff/sales/quotations');
+  await waitFor(() => expect(push).toHaveBeenCalledWith('/team/sales/quotations/q1'));
   expect(body.items).toEqual([{ custom: true, name: 'Fitting labour', quantity: 2, price: 1500 }]);
   // Sent as the 10 digits the API stores, whatever spacing was typed.
   expect(body.customer.phone).toBe('9876543210');
@@ -75,7 +76,7 @@ it('a custom item needs a name and a price before the order can be sent', async 
   renderForm();
   fillCustomer('9876543210');
   fireEvent.click(screen.getByRole('button', { name: /Custom item \(not in the catalogue\)/ }));
-  fireEvent.click(screen.getByRole('button', { name: /Create order/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Create quotation/ }));
   expect(await screen.findByRole('alert')).toHaveTextContent(/Fix the items marked in red/);
   expect(post).not.toHaveBeenCalled();
 });
@@ -84,11 +85,11 @@ it('email is optional: an order without one is sent with an empty email', async 
   renderForm();
   fillCustomer('9876543210');
   fill(/Email/, '');
-  expect(screen.getByText(/payment link is sent by SMS/)).toBeInTheDocument();
+  expect(screen.getByText(/payment links will go by SMS/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /Custom item \(not in the catalogue\)/ }));
   fireEvent.change(screen.getByLabelText('Custom item name'), { target: { value: 'Labour' } });
   fireEvent.change(screen.getByLabelText(/Price for Labour/), { target: { value: '500' } });
-  fireEvent.click(screen.getByRole('button', { name: /Create order/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Create quotation/ }));
   await waitFor(() => expect(post).toHaveBeenCalled());
   expect(post.mock.calls[0][1].customer.email).toBe('');
 });
@@ -99,7 +100,7 @@ it('blocks a wrong mobile number and says why', async () => {
   fireEvent.click(screen.getByRole('button', { name: /Custom item \(not in the catalogue\)/ }));
   fireEvent.change(screen.getByLabelText('Custom item name'), { target: { value: 'Labour' } });
   fireEvent.change(screen.getByLabelText(/Price for Labour/), { target: { value: '500' } });
-  fireEvent.click(screen.getByRole('button', { name: /Create order/ }));
+  fireEvent.click(screen.getByRole('button', { name: /Create quotation/ }));
   expect(await screen.findByRole('alert')).toHaveTextContent(/Mobile number: Too short/);
   expect(screen.getByLabelText(/Mobile/)).toHaveAttribute('aria-invalid', 'true');
   expect(post).not.toHaveBeenCalled();

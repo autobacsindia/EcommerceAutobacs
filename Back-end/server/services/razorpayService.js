@@ -120,11 +120,13 @@ class RazorpayService {
    *   `notes.orderId` first, which never changes.
    * @returns {Promise<{id:string, shortUrl:string}>}
    */
-  async createPaymentLink(order, { name, email, phone } = {}, { attempt = 1 } = {}) {
+  async createPaymentLink(order, { name, email, phone } = {}, { attempt = 1, part = null } = {}) {
     // An internal `.invalid` address (phone-only customer, staff account) has no
     // mailbox — never hand it to Razorpay to email. The link then goes by SMS.
     if (isInternalEmail(email)) email = undefined;
-    const amount = Math.round((order.totalAmount || 0) * 100); // paise
+    // A payment PART (quotation-first sales orders) charges its own amount; a
+    // whole-order link charges the order total, exactly as before.
+    const amount = Math.round(((part ? part.amount : order.totalAmount) || 0) * 100); // paise
     if (!amount || amount < 100) {
       throw new Error('Payment link amount must be at least ₹1');
     }
@@ -139,9 +141,13 @@ class RazorpayService {
         amount,
         currency: 'INR',
         accept_partial: false,
-        description: `Autobacs India — order ${order.orderNumber || order._id}`,
+        description: part
+          ? `Autobacs India — order ${order.orderNumber || order._id} (payment ${part.index} of ${part.of})`
+          : `Autobacs India — order ${order.orderNumber || order._id}`,
         // Unique per link (Razorpay rejects a repeated reference_id).
-        reference_id: attempt > 1 ? `${order._id.toString()}-r${attempt}` : order._id.toString(),
+        reference_id: part
+          ? `${order._id.toString()}-p${part.ref}`
+          : attempt > 1 ? `${order._id.toString()}-r${attempt}` : order._id.toString(),
         customer: {
           ...(name ? { name } : {}),
           ...(email ? { email } : {}),
@@ -149,7 +155,8 @@ class RazorpayService {
         },
         notify: { sms: !!phone, email: !!email }, // Razorpay sends it
         reminder_enable: true,
-        notes: { orderId: order._id.toString() }, // how the webhook finds us
+        // How the webhook finds us; a part also carries which part it is.
+        notes: { orderId: order._id.toString(), ...(part ? { partRef: String(part.ref) } : {}) },
         expire_by: Math.floor(Date.now() / 1000) + 48 * 60 * 60, // 48h
       });
 
@@ -203,6 +210,20 @@ class RazorpayService {
     const instance = new Razorpay.default({ key_id: this.key_id, key_secret: this.key_secret });
     const link = await instance.paymentLink.fetch(linkId);
     return { status: link?.status || 'unknown' };
+  }
+
+  /**
+   * A payment link with the CAPTURED payments made through it, each as a full
+   * payment entity — for the sweep that recovers a part whose webhook never came.
+   * @returns {Promise<{status: string, payments: Object[]}>}
+   */
+  async fetchPaymentLinkCaptures(linkId) {
+    const Razorpay = await import('razorpay');
+    const instance = new Razorpay.default({ key_id: this.key_id, key_secret: this.key_secret });
+    const link = await instance.paymentLink.fetch(linkId);
+    const ids = (link?.payments || []).filter((p) => p.status === 'captured').map((p) => p.payment_id);
+    const payments = await Promise.all(ids.map((id) => instance.payments.fetch(id)));
+    return { status: link?.status || 'unknown', payments: payments.filter((p) => p?.status === 'captured') };
   }
 
   /**
@@ -367,71 +388,9 @@ class RazorpayService {
         createdHere = true;
       });
 
-      // ── Order confirmation + invoice email (best-effort, post-commit) ─────────
-      // Enqueued only after the transaction commits so a rolled-back payment never
-      // emails an invoice, and only by the delivery that actually created the payment
-      // so duplicate webhooks don't double-enqueue. A Redis/queue failure must not
-      // fail the payment itself.
-      if (createdHere && process.env.REDIS_URL) {
-        const queue = getNotificationsQueue();
-        queue
-          .add('send-order-invoice', { orderId })
-          .catch((err) =>
-            console.error(`[Queue] Failed to enqueue send-order-invoice for ${orderId}:`, err.message)
-          );
-
-        // Tell the support inbox there is a paid order to fulfil. Same
-        // create-once gate as the invoice, so a duplicate webhook can't re-alert.
-        queue
-          .add('send-admin-order-placed-alert', { orderId })
-          .catch((err) =>
-            console.error(`[Queue] Failed to enqueue send-admin-order-placed-alert for ${orderId}:`, err.message)
-          );
-
-        // Every paid order now enters the team workflow (website or sales panel):
-        // tell the Accounts, Procurement and Operations heads, and the sales person
-        // on their own orders. Same create-once gate, so a webhook retry can't re-alert.
-        queue
-          .add('send-staff-sales-paid-alert', { orderId })
-          .catch((err) =>
-            console.error(`[Queue] Failed to enqueue send-staff-sales-paid-alert for ${orderId}:`, err.message)
-          );
-      }
-
-      /*
-        ── Affiliate commission accrual (best-effort, once) ──────────────────────
-        Same `createdHere` gate as the emails above, so a duplicate webhook cannot
-        double-credit an affiliate — and the partial-unique {order, type:'accrual'}
-        index is the second line of defence for two concurrent deliveries that each
-        believe they created the payment.
-
-        Fire-and-forget on purpose: this is OUR cost ledger, not the customer's money.
-        A failure here must never fail a payment that has already been captured. It is
-        recoverable — the row can be written by hand — whereas a thrown capture is not.
-
-        Deliberately NOT moved inside the transaction above. It writes only
-        AffiliateCommission rows, never the Order, which is exactly what keeps it clear
-        of the WiredTiger self-deadlock that once made every capture fail after ~180s.
-      */
-      if (createdHere) {
-        affiliateCommissionService
-          .accrueForOrder(orderId)
-          .catch((err) =>
-            console.error(`[Affiliate] Commission accrual failed for ${orderId}:`, err.message)
-          );
-      }
-
-      // ── Meta Conversions API: server-side Purchase (best-effort, once) ────────
-      // Same create-once gate as the emails, so duplicate webhooks never double-
-      // count. Deduped against the client Pixel by event_id = order id. Fetched
-      // WITH product+user populated so content_ids and hashed identifiers resolve.
-      // Fire-and-forget: a Meta outage must never fail a captured payment.
-      if (createdHere && metaCapiService.isEnabled()) {
-        orderRepository
-          .findWithPopulated(orderId)
-          .then((populated) => (populated ? metaCapiService.sendPurchaseEvent(populated) : null))
-          .catch((err) => console.error(`[MetaCAPI] Purchase dispatch failed for ${orderId}:`, err.message));
-      }
+      // Post-commit side effects, only by the delivery that created the payment so
+      // duplicate webhooks never double-send (see _afterOrderPaid).
+      if (createdHere) this._afterOrderPaid(orderId);
 
       return {
         success: true,
@@ -473,6 +432,202 @@ class RazorpayService {
       throw new Error(`Failed to process payment: ${error.message}`);
     } finally {
       await session.endSession();
+    }
+  }
+
+  /**
+   * One PART of a quotation-first sales order was paid (its own Razorpay link).
+   *
+   * Same guarantees as processPaymentSuccess, per part:
+   *   - the captured amount must equal THIS part's amount exactly (else it throws
+   *     "Amount mismatch" — never a silent accept);
+   *   - one Payment row per gateway payment (unique gatewayPaymentId), so a
+   *     duplicate or concurrent webhook settles to exactly one record;
+   *   - the ORDER becomes paid — and the team workflow, invoice and alerts fire —
+   *     only once, when the paid parts reach the order total.
+   * A part paid on a link that was cancelled meanwhile (a race with Razorpay) is
+   * still recorded: the money is real. If that takes the paid sum past the total,
+   * it is logged loudly so an admin can refund the excess.
+   */
+  async processPaymentPart(orderId, linkId, paymentEntity) {
+    if (paymentEntity.currency !== 'INR') {
+      console.error(`[SECURITY] Currency mismatch! | Order: ${orderId} | Part link: ${linkId} | Got: ${paymentEntity.currency}`);
+      throw new Error('Currency mismatch');
+    }
+    paymentEntity = await this._enrichEmiPlan(paymentEntity);
+
+    const session = await mongoose.startSession();
+    let orderNowPaid = false;
+    let partNowPaid = false;
+    try {
+      await session.withTransaction(async () => {
+        orderNowPaid = false;
+        partNowPaid = false;
+        const order = await orderRepository.findById(orderId, [], session);
+        if (!order) throw new Error('Order not found');
+        const part = (order.paymentParts || []).find((p) => p.linkId === linkId);
+        if (!part) throw new Error('Payment part not found');
+
+        const expected = Math.round(Number(part.amount) * 100);
+        if (paymentEntity.amount !== expected) {
+          console.error(`[SECURITY] Amount mismatch on payment part | Order: ${orderId} | Link: ${linkId} | Expected: ${expected} paise | Got: ${paymentEntity.amount} paise`);
+          throw new Error('Amount mismatch');
+        }
+
+        // Idempotency: this capture is already recorded on this part.
+        if (part.status === 'paid' && part.gatewayPaymentId === paymentEntity.id) return;
+        if (part.status === 'paid') {
+          // A second, different capture on one link — should be impossible (links
+          // are single-use). Record nothing; flag it for a human.
+          console.error(`[PAYMENT] Second capture ${paymentEntity.id} on already-paid part ${linkId} of order ${orderId} — refund it in Razorpay`);
+          return;
+        }
+
+        let payment = await paymentRepository.findByGatewayPaymentId(paymentEntity.id, session);
+        if (!payment) {
+          payment = await paymentRepository.createPayment({
+            order: order._id,
+            user: order.user,
+            amount: part.amount,
+            currency: 'INR',
+            paymentMethod: resolvePaymentMethod(paymentEntity),
+            methodDetails: buildMethodDetails(paymentEntity),
+            paymentGateway: 'razorpay',
+            gatewayOrderId: paymentEntity.order_id,
+            gatewayPaymentId: paymentEntity.id,
+            status: 'completed',
+            paymentDetails: { razorpay: paymentEntity, paymentPartLink: linkId },
+          }, session);
+        }
+
+        if (part.status === 'cancelled') {
+          console.error(`[PAYMENT] Part ${linkId} of order ${orderId} was paid after it was cancelled — recording the money`);
+        }
+        part.status = 'paid';
+        part.gatewayPaymentId = paymentEntity.id;
+        part.payment = payment._id;
+        part.paidAt = new Date();
+        partNowPaid = true;
+
+        const paidPaise = (order.paymentParts || [])
+          .filter((p) => p.status === 'paid')
+          .reduce((sum, p) => sum + Math.round(Number(p.amount) * 100), 0);
+        const totalPaise = Math.round(Number(order.totalAmount) * 100);
+        if (paidPaise > totalPaise) {
+          console.error(`[PAYMENT] Order ${orderId} received ₹${paidPaise / 100} against ₹${totalPaise / 100} — refund the excess`);
+        }
+
+        if (order.paymentStatus !== 'paid' && paidPaise >= totalPaise) {
+          order.paymentStatus = 'paid';
+          // The first part paid stands as "the" payment for code that reads one.
+          const firstPaid = [...order.paymentParts]
+            .filter((p) => p.status === 'paid')
+            .sort((a, b) => new Date(a.paidAt) - new Date(b.paidAt))[0];
+          order.payment = firstPaid?.payment || payment._id;
+          await orderRepository.save(order, session);
+          if (order.status === 'awaiting_payment') {
+            const result = await orderStatusService.updateOrderStatus(orderId, 'processing', {
+              userId: null,
+              isAdmin: true,
+              reason: 'payment_verified',
+              notes: `Fully paid via Razorpay in ${order.paymentParts.filter((p) => p.status === 'paid').length} payment(s). Last: ${paymentEntity.id}`,
+              metadata: { gatewayId: paymentEntity.id, transactionId: paymentEntity.id },
+              session,
+            });
+            if (!result.success) throw new Error(`Failed to update order status: ${result.message}`);
+          }
+          orderNowPaid = true;
+        } else {
+          await orderRepository.save(order, session);
+        }
+      });
+    } catch (error) {
+      // A concurrent delivery recorded it first (unique gatewayPaymentId) — fine.
+      if (error?.code === 11000 || /writeconflict|duplicate key/i.test(error?.message || '')) {
+        const existing = await paymentRepository.findByGatewayPaymentId(paymentEntity.id);
+        if (existing) return { partPaid: false, orderPaid: false, alreadyProcessed: true };
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+
+    if (orderNowPaid) this._afterOrderPaid(orderId);
+    return { partPaid: partNowPaid, orderPaid: orderNowPaid, alreadyProcessed: !partNowPaid };
+  }
+
+  /**
+   * Everything that happens once an order is PAID, after the transaction commits:
+   * invoice + admin + team alerts (queue), affiliate accrual, Meta CAPI Purchase.
+   * Called exactly once per order — by processPaymentSuccess (one payment) or by
+   * processPaymentPart when the LAST part is paid. Best-effort and never throws:
+   * the money is already captured.
+   */
+  _afterOrderPaid(orderId) {
+    // ── Order confirmation + invoice email (best-effort, post-commit) ─────────
+    // Enqueued only after the transaction commits so a rolled-back payment never
+    // emails an invoice, and only by the delivery that actually created the payment
+    // so duplicate webhooks don't double-enqueue. A Redis/queue failure must not
+    // fail the payment itself.
+    if (process.env.REDIS_URL) {
+      const queue = getNotificationsQueue();
+      queue
+        .add('send-order-invoice', { orderId })
+        .catch((err) =>
+          console.error(`[Queue] Failed to enqueue send-order-invoice for ${orderId}:`, err.message)
+        );
+
+      // Tell the support inbox there is a paid order to fulfil. Same
+      // create-once gate as the invoice, so a duplicate webhook can't re-alert.
+      queue
+        .add('send-admin-order-placed-alert', { orderId })
+        .catch((err) =>
+          console.error(`[Queue] Failed to enqueue send-admin-order-placed-alert for ${orderId}:`, err.message)
+        );
+
+      // Every paid order now enters the team workflow (website or sales panel):
+      // tell the Accounts, Procurement and Operations heads, and the sales person
+      // on their own orders. Same create-once gate, so a webhook retry can't re-alert.
+      queue
+        .add('send-staff-sales-paid-alert', { orderId })
+        .catch((err) =>
+          console.error(`[Queue] Failed to enqueue send-staff-sales-paid-alert for ${orderId}:`, err.message)
+        );
+    }
+
+    /*
+      ── Affiliate commission accrual (best-effort, once) ──────────────────────
+      Same `createdHere` gate as the emails above, so a duplicate webhook cannot
+      double-credit an affiliate — and the partial-unique {order, type:'accrual'}
+      index is the second line of defence for two concurrent deliveries that each
+      believe they created the payment.
+
+      Fire-and-forget on purpose: this is OUR cost ledger, not the customer's money.
+      A failure here must never fail a payment that has already been captured. It is
+      recoverable — the row can be written by hand — whereas a thrown capture is not.
+
+      Deliberately NOT moved inside the transaction above. It writes only
+      AffiliateCommission rows, never the Order, which is exactly what keeps it clear
+      of the WiredTiger self-deadlock that once made every capture fail after ~180s.
+    */
+    {
+      affiliateCommissionService
+        .accrueForOrder(orderId)
+        .catch((err) =>
+          console.error(`[Affiliate] Commission accrual failed for ${orderId}:`, err.message)
+        );
+    }
+
+    // ── Meta Conversions API: server-side Purchase (best-effort, once) ────────
+    // Same create-once gate as the emails, so duplicate webhooks never double-
+    // count. Deduped against the client Pixel by event_id = order id. Fetched
+    // WITH product+user populated so content_ids and hashed identifiers resolve.
+    // Fire-and-forget: a Meta outage must never fail a captured payment.
+    if (metaCapiService.isEnabled()) {
+      orderRepository
+        .findWithPopulated(orderId)
+        .then((populated) => (populated ? metaCapiService.sendPurchaseEvent(populated) : null))
+        .catch((err) => console.error(`[MetaCAPI] Purchase dispatch failed for ${orderId}:`, err.message));
     }
   }
 
@@ -892,6 +1047,14 @@ class RazorpayService {
     if (!order) {
       console.error(`[SECURITY] payment_link.paid for non-existent order: ${orderId}`);
       throw new Error('Order not found');
+    }
+
+    // A payment PART (quotation-first sales order): settled against that part's
+    // own amount, never the order total.
+    if (link?.id && (order.paymentParts || []).some((p) => p.linkId === link.id)) {
+      console.log(`[Webhook] Processing payment part ${link.id} for order: ${orderId}`);
+      await this.processPaymentPart(orderId, link.id, paymentEntity);
+      return;
     }
 
     // Same amount (rounded)/currency/idempotency guards as a captured payment.

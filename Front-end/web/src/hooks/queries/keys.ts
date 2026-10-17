@@ -177,6 +177,12 @@ export const staffKeys = {
   salesOrders: () => [...staffKeys.orders(), 'sales'] as const,
   paidOrders: () => [...staffKeys.orders(), 'paid'] as const,
   salesProducts: (q: string) => [...staffKeys.all, 'sales-products', q.trim().toLowerCase()] as const,
+  /** One sales order (its payment requests). Under orders(), so list invalidation refreshes it too. */
+  salesOrder: (id: string) => [...staffKeys.orders(), 'sales-order', id] as const,
+  /** GTM quotations — invalidate after create, edit, cancel or accept. */
+  quotations: () => [...staffKeys.all, 'quotations'] as const,
+  quotationList: (status: string) => [...staffKeys.quotations(), 'list', status] as const,
+  quotation: (id: string) => [...staffKeys.quotations(), 'one', id] as const,
   /** Team workflow — invalidate `orders()` after any action, since one action moves an order between lists. */
   workQueue: (queue: string) => [...staffKeys.orders(), 'work', queue] as const,
   workOrder: (id: string) => [...staffKeys.orders(), 'work-order', id] as const,

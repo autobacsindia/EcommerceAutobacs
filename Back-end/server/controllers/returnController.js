@@ -70,6 +70,7 @@ import {
   buildReturnUploadTargets,
 } from '../services/storage/returnsUploadTargets.js';
 import * as Sentry from '@sentry/node';
+import { isSplitPaid, SPLIT_REFUND_MESSAGE } from '../utils/splitPayment.js';
 
 const MB = 1024 * 1024;
 const VIDEO_MAX_BYTES = 60 * MB;
@@ -1654,6 +1655,7 @@ export const initiateReturnRefund = asyncHandler(async (req, res) => {
     if (!payment || !payment.gatewayPaymentId) {
       throw new AppError('No Razorpay payment id on file — refund in the dashboard and record it here as an offline refund.', 422);
     }
+    if (isSplitPaid(order)) throw new AppError(SPLIT_REFUND_MESSAGE, 422);
 
     // Instrument constraint (debit-card EMI = full refund only). Checked HERE, after the
     // amount is final but before claimForRefund, so a refund the gateway would reject

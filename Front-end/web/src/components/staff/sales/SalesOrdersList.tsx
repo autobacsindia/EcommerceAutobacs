@@ -25,6 +25,13 @@ function statusOf(o: SalesOrder): { text: string; cls: string } {
     return { text: after[o.status] || 'Paid', cls: 'bg-green-100 text-green-800' };
   }
   if (o.status === 'cancelled') return { text: 'Cancelled', cls: 'bg-gray-200 text-gray-700' };
+  // Quotation-first order: paid through payment requests (possibly in parts).
+  if (o.paymentFlow === 'parts') {
+    const p = o.payment;
+    if (p && p.amountPaid > 0) return { text: `${rupees(p.amountPaid)} of ${rupees(o.totalAmount)} received`, cls: 'bg-amber-100 text-amber-800' };
+    if (p && p.parts.some((x) => x.status === 'pending')) return { text: 'Waiting for payment', cls: 'bg-amber-100 text-amber-800' };
+    return { text: 'Payment not requested yet', cls: 'bg-blue-100 text-blue-800' };
+  }
   if (o.linkState === 'active') return { text: 'Waiting for payment', cls: 'bg-amber-100 text-amber-800' };
   return { text: 'Link expired', cls: 'bg-red-100 text-red-800' };
 }
@@ -129,7 +136,14 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
             )}
           </div>
 
-          {mode === 'sales' && unpaid && order.linkState === 'active' && order.paymentLinkUrl && (
+          {mode === 'sales' && order.paymentFlow === 'parts' && (
+            <Link href={`/team/sales/orders/${order.id}`}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              {unpaid ? 'Request & manage payment →' : 'Payment details →'}
+            </Link>
+          )}
+
+          {mode === 'sales' && unpaid && order.paymentFlow !== 'parts' && order.linkState === 'active' && order.paymentLinkUrl && (
             <div className="rounded-lg bg-gray-50 p-4">
               <PaymentLinkCard
                 url={order.paymentLinkUrl}
@@ -142,7 +156,8 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
             </div>
           )}
 
-          {mode === 'sales' && unpaid && (
+          {/* Older single-link orders keep their own controls; parts orders use the payment page. */}
+          {mode === 'sales' && unpaid && order.paymentFlow !== 'parts' && (
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -185,7 +200,7 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
                 href={`/team/sales/new?from=${encodeURIComponent(order.id)}`}
                 className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
               >
-                <UserPlus className="h-4 w-4 text-emerald-700" /> New order for this customer
+                <UserPlus className="h-4 w-4 text-emerald-700" /> New quotation for this customer
               </Link>
             </div>
           )}
@@ -224,7 +239,7 @@ export default function SalesOrdersList({ mode }: { mode: Mode }) {
   if (orders.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-        {mode === 'paid' ? 'No paid orders yet.' : 'No orders yet. Create one from “New order”.'}
+        {mode === 'paid' ? 'No paid orders yet.' : 'No orders yet. Orders appear here when a client accepts a quotation.'}
       </p>
     );
   }

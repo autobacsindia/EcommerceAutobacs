@@ -50,7 +50,8 @@ const saveBusinessProfile = (userId, buyer) =>
  * @param {string} [p.leadId]
  * @param {string|null} [p.salesRepId]   name-only SalesRep credited with the deal
  * @param {string|null} [p.salesUserId]  staff User who created the order (sales panel)
- * @param {'paid'|'link'} p.paymentMode
+ * @param {'paid'|'link'|'later'} p.paymentMode  'later': no link yet — payment is requested
+ *   afterwards in parts (salesPaymentService); nothing is sent until it is paid.
  * @param {string} p.actorId       User id recorded in status history
  * @param {string} [p.defaultNote]
  * @returns {Promise<{order: Object, customer: {id, email, isNewUser}, paymentLink: {id, shortUrl}|null}>}
@@ -137,7 +138,7 @@ export async function createOfflineOrderRecord({
     ...(buyer.type === BUYER_TYPES.ENTERPRISE && { buyer }),
     legalAcceptance,
     // Link flow converts the chosen lead on payment (deferred), so remember it.
-    crmLeadId: paymentMode === 'link' ? (leadId || null) : null,
+    crmLeadId: paymentMode === 'link' || paymentMode === 'later' ? (leadId || null) : null,
     items: lineItems,
     shippingAddress: address,
     subtotal,
@@ -165,7 +166,9 @@ export async function createOfflineOrderRecord({
 
   // ── Settle the order ──────────────────────────────────────────────────────
   let paymentLink = null;
-  if (paymentMode === 'link') {
+  if (paymentMode === 'later') {
+    // Stays awaiting_payment with no link; payment is requested on it later.
+  } else if (paymentMode === 'link') {
     // Collect via Razorpay: the order stays `awaiting_payment`. The
     // `payment_link.paid` webhook drives it paid → processing — no manual mark.
     let link;
@@ -178,6 +181,18 @@ export async function createOfflineOrderRecord({
       // for a brand-new buyer, an account they can never claim.
       await orderRepository.delete(order._id).catch(() => {});
       if (isNewUser) await userRepository.delete(user._id).catch(() => {});
+      // Over the Razorpay account's per-payment limit: not a server fault, and not
+      // something a retry fixes. Say so plainly (422), with what to do instead.
+      if (/maximum amount/i.test(linkErr.message || '')) {
+        const total = Math.round(order.totalAmount || 0).toLocaleString('en-IN');
+        throw new AppError(
+          `₹${total} is more than Razorpay allows in one payment on our account, so no payment link could be made. `
+          + 'Split it into smaller orders (after creating one, use "Another order for this customer"), '
+          + 'or ask Accounts to get the Razorpay limit raised. Nothing was saved.',
+          422,
+          { expose: true },
+        );
+      }
       throw new AppError(`Could not create payment link: ${linkErr.message}`, 502, { expose: true });
     }
     order.paymentLinkId = link.id;
@@ -231,8 +246,8 @@ export async function createOfflineOrderRecord({
   // ── Emails (best-effort, idempotent) ─────────────────────────────────────
   if (process.env.REDIS_URL) {
     const queue = getNotificationsQueue();
-    // Invoice only for an already-paid order; the link flow invoices on payment.
-    if (paymentMode !== 'link') {
+    // Invoice only for an already-paid order; link/later flows invoice on payment.
+    if (paymentMode === 'paid') {
       queue
         .add('send-order-invoice', { orderId: order._id.toString() })
         .catch((err) => console.error('[Queue] Failed to enqueue send-order-invoice:', err.message));

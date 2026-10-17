@@ -47,6 +47,7 @@ import { SHIPMENT_STATUS } from '../utils/orderFulfilment.js';
 import { supportsPartialRefund } from '../utils/paymentMethodDetails.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import * as Sentry from '@sentry/node';
+import { isSplitPaid, SPLIT_REFUND_MESSAGE } from '../utils/splitPayment.js';
 
 // Bounded retries for the compare-and-set. A conflict means another admin cancelled
 // something while we validated; re-reading resolves it. More than a couple of rounds
@@ -244,6 +245,9 @@ class CancellationService {
     }
 
     const payment = order.payment ? await paymentRepository.findById(order.payment) : null;
+    if (isSplitPaid(order)) {
+      return { success: false, message: SPLIT_REFUND_MESSAGE, statusCode: 422 };
+    }
     if (!payment?.gatewayPaymentId) {
       return {
         success: false,

@@ -9,12 +9,15 @@ function Form() {
   return <NewSalesOrderForm fromOrderId={useSearchParams().get('from')} />;
 }
 
-/** Sales: raise an order for a phone / WhatsApp customer and send them a payment link. */
+/**
+ * GTM: a quotation for a phone / WhatsApp customer. It is shared first; when the
+ * customer agrees it becomes the order and payment is requested on it.
+ */
 export default function NewSalesOrderPage() {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-2xl font-bold text-gray-900">New order</h1>
-      <p className="mb-6 text-sm text-gray-500">For a customer who called or messaged. They pay with the Razorpay link or QR you send.</p>
+      <h1 className="text-2xl font-bold text-gray-900">New quotation</h1>
+      <p className="mb-6 text-sm text-gray-500">For a customer who called or messaged. Share the quotation PDF; when they agree, create the order and send the payment link.</p>
       <Suspense fallback={null}>
         <Form />
       </Suspense>

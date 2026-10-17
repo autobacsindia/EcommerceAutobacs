@@ -32,11 +32,11 @@ it('staff on their own email get the change-password link', () => {
 
 it('a GTM lead gets the selling tools; an executive or customer support does not', () => {
   const { unmount } = shell(false, { canSell: true, roleLabel: 'GTM lead' });
-  expect(screen.getByRole('link', { name: /New order/ })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /New quotation/ })).toBeInTheDocument();
   expect(screen.getByText('GTM lead')).toBeInTheDocument();
   unmount();
   shell(false, { canSell: false, roleLabel: 'GTM executive' });
-  expect(screen.queryByRole('link', { name: /New order/ })).toBeNull();
+  expect(screen.queryByRole('link', { name: /New quotation/ })).toBeNull();
   expect(screen.queryByRole('link', { name: /Customer decisions/ })).toBeNull();
   expect(screen.getByRole('link', { name: /Team chat/ })).toBeInTheDocument();
   expect(screen.getByText('GTM executive')).toBeInTheDocument();
@@ -70,7 +70,7 @@ it('marketing gets its panel screens, highlighted on their detail pages too', ()
   expect(screen.getByRole('link', { name: /Coupons/ }).className).toContain('bg-blue-600');
   expect(screen.getByRole('link', { name: /Campaigns/ }).className).not.toContain('bg-blue-600');
   // Selling and stock tools stay with their teams.
-  expect(screen.queryByRole('link', { name: /New order/ })).toBeNull();
+  expect(screen.queryByRole('link', { name: /New quotation/ })).toBeNull();
   pathname = '/team';
 });
 

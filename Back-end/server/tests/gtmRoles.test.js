@@ -148,6 +148,7 @@ describe('GTM roles', () => {
           items: [{ product: '0'.repeat(24), quantity: 1 }],
         })).status).toBe(403);
         expect((await s.get('/staff/work?queue=decisions')).status).toBe(403);
+        expect((await s.get('/staff/sales/quotations')).status).toBe(403);
         expect((await s.get('/staff/sales/orders/000000000000000000000000/quotation')).status).toBe(403);
       }
     });
@@ -156,7 +157,12 @@ describe('GTM roles', () => {
       await create(head, { username: 'lead.one', subRole: 'lead' });
       const lead = await signIn('lead.one', PW);
       expect((await lead.get('/staff/sales/orders')).status).toBe(200);
+      expect((await lead.get('/staff/sales/quotations')).status).toBe(200);
       expect((await lead.get('/staff/work?queue=decisions')).status).toBe(200);
+      // Quotation-first: the old one-step "order + link" is retired.
+      const old = await lead.post('/staff/sales/orders', {});
+      expect(old.status).toBe(410);
+      expect(old.body.message).toMatch(/Create a quotation first/);
     });
   });
 

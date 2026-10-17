@@ -30,6 +30,7 @@ import { isPurchasable } from '../utils/stockStatus.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { workflowView } from '../utils/teamWorkflow.js';
 import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
+import { paymentSummary, retireAllParts } from './salesPaymentService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -75,7 +76,7 @@ async function page(baseQuery, cursor, { includePayment = false } = {}) {
     limit: PAGE_SIZE + 1,
     sort: { createdAt: -1, _id: -1 },
     select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
-      + 'paymentLinkUrl paymentLinkExpiresAt payment workflow shipments cancellations',
+      + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations',
     populate,
   });
   const hasMore = rows.length > PAGE_SIZE;
@@ -85,6 +86,8 @@ async function page(baseQuery, cursor, { includePayment = false } = {}) {
 
 const linkState = (o, now = Date.now()) => {
   if (o.paymentStatus === 'paid' || o.status !== 'awaiting_payment') return null;
+  // Quotation-first orders are paid in parts (paymentParts), never by this link.
+  if (!o.paymentLinkId && !o.paymentLinkUrl) return null;
   const exp = o.paymentLinkExpiresAt ? new Date(o.paymentLinkExpiresAt).getTime() : null;
   return exp && exp > now ? 'active' : 'expired';
 };
@@ -122,6 +125,9 @@ function shape(o) {
     paymentLinkExpiresAt: o.paymentLinkExpiresAt || null,
     razorpayPaymentId: payment?.gatewayPaymentId || null,
     paymentMethod: payment?.method || null,
+    // Quotation-first orders: the payment parts and how much is in / still to ask.
+    paymentFlow: o.paymentLinkId || o.paymentLinkUrl ? 'link' : 'parts',
+    payment: paymentSummary(o),
   };
 }
 
@@ -162,17 +168,15 @@ export async function searchSalesProducts(actor, q) {
 }
 
 /**
- * Create a sales order and its payment link.
- * @param {Object} actor  req.user (active sales staff)
- * @param {Object} input  { customer:{name,email,phone}, shippingAddress:{…}, items:[…], notes? }
- *   items: a catalogue line { product, variantId?, quantity, offerPrice? }
- *          or a CUSTOM line { custom: true, name, quantity, price } — an item that
- *          is not in the catalogue, named and priced by the seller.
+ * Price the lines of a sales quotation / order — the ONE place they are priced.
+ *   catalogue line { product, variantId?, quantity, offerPrice? } → priced from the
+ *     catalogue (inactive / out-of-stock refused); the offer must be ₹1 … list price
+ *   custom line { custom: true, name, quantity, price } → not in the catalogue,
+ *     named and priced by the seller, bounded here
+ * Returns order-shaped lines in the order they were entered.
  */
-export async function createSalesOrder(actor, input, req) {
-  if (!canSell(actor)) throw fail('Only the GTM head and GTM leads can create orders here.', 403);
-
-  const items = Array.isArray(input.items) ? input.items : [];
+export async function priceSalesLines(inputItems) {
+  const items = Array.isArray(inputItems) ? inputItems : [];
   if (items.length === 0) throw fail('Add at least one product.', 400);
 
   const isCustom = (i) => i?.custom === true || i?.custom === 'true';
@@ -227,6 +231,22 @@ export async function createSalesOrder(actor, input, req) {
   // Keep the order the seller entered the lines in.
   let next = 0;
   const lineItems = items.map((i) => (isCustom(i) ? customLine(i) : catalogueLines[next++]));
+
+  return lineItems;
+}
+
+/**
+ * Create a sales order and its payment link.
+ * @param {Object} actor  req.user (active sales staff)
+ * @param {Object} input  { customer:{name,email,phone}, shippingAddress:{…}, items:[…], notes? }
+ *   items: a catalogue line { product, variantId?, quantity, offerPrice? }
+ *          or a CUSTOM line { custom: true, name, quantity, price } — an item that
+ *          is not in the catalogue, named and priced by the seller.
+ */
+export async function createSalesOrder(actor, input, req) {
+  if (!canSell(actor)) throw fail('Only the GTM head and GTM leads can create orders here.', 403);
+
+  const lineItems = await priceSalesLines(input.items);
 
   const rep = await salesRepRepository.findOrCreateForUser(actor);
   const customer = input.customer || {};
@@ -390,7 +410,9 @@ export async function reissuePaymentLink(actor, orderId, req) {
 /** Cancel an unpaid sales order (customer changed their mind). */
 export async function cancelUnpaidSalesOrder(actor, orderId, req) {
   const order = await loadOwnUnpaid(actor, orderId);
-  await retireCurrentLink(order);
+  // A part-paid order is refused there (money taken); waiting parts are cancelled.
+  if ((order.paymentParts || []).length) await retireAllParts(order);
+  else await retireCurrentLink(order);
   const result = await orderStatusService.updateOrderStatus(order._id.toString(), 'cancelled', {
     userId: actor._id,
     isAdmin: false,

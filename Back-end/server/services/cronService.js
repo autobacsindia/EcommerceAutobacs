@@ -4,7 +4,7 @@ import importJobRepository from '../repositories/importJobRepository.js';
 import { runWordPressSync } from './wordpressSyncService.js';
 import { expireEndedSales } from './productSaleService.js';
 import { runFrequentSweeps, runDailySweeps } from './leadSweepService.js';
-import { reconcileStuckPayments } from './paymentReconciliationService.js';
+import { reconcileStuckPayments, reconcileSalesLinks } from './paymentReconciliationService.js';
 import { recomputeSalesScores } from './salesScoreService.js';
 import { checkInboundLiveness, sweepSlaBreaches, requeueStuckInbound } from './supportHealthService.js';
 import { getNotificationsQueue, enqueueVariantGeneration, variantJobId } from '../queue/queues.js';
@@ -446,9 +446,11 @@ class CronService {
 
     const task = cron.schedule(schedule, () =>
       this.withDistributedLock('cron:lock:paymentReconcile', 5 * 60, () =>
-        reconcileStuckPayments().catch(err =>
-          console.error('[CronService] Payment reconciliation sweep failed:', err.message)
-        )
+        reconcileStuckPayments()
+          .catch(err => console.error('[CronService] Payment reconciliation sweep failed:', err.message))
+          // GTM payment links (parts + older single links) in the same locked run.
+          .then(() => reconcileSalesLinks())
+          .catch(err => console.error('[CronService] Sales link reconciliation failed:', err.message))
       )
     );
     this.scheduledTasks.push({
