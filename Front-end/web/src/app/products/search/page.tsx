@@ -120,21 +120,31 @@ function SearchPageInner() {
       const shown = Math.min(MAX_RESTORED_PAGES, Math.max(1, Number(new URLSearchParams(window.location.search).get('shown')) || 1));
 
       try {
-        const result = await getProducts(resolved);
+        // Coming back to a list that had "Show more" pages open: load them again —
+        // all at once, not one after another. Measured on production: an uncached
+        // page takes 1.7–3.8 s, so three pages in sequence kept the shopper waiting
+        // ~8 s on Back; in parallel it is the slowest single page. Same number of
+        // requests either way (well inside the 40-per-10s search burst limit).
+        const settled = await Promise.allSettled(
+          Array.from({ length: shown }, (_, i) => getProducts({ ...resolved, page: String(i + 1) })),
+        );
         if (!isMounted) return;
+        if (settled[0].status === 'rejected') throw settled[0].reason;
+        const result = settled[0].value;
 
         const firstPage: any[] = result.products || [];
         let fetched: any[] = firstPage;
-        // Coming back to a list that had "Show more" pages open: load them again.
         let more = Boolean(result.hasNext);
         let last = result;
-        for (let page = 2; page <= shown && more; page += 1) {
-          const next = await getProducts({ ...resolved, page: String(page) });
-          if (!isMounted) return;
-          fetched = [...fetched, ...(next.products || [])];
-          more = Boolean(next.hasNext);
-          last = next;
-          pageRef.current = page;
+        // Pages are joined in order and stop at the first gap: a page that failed
+        // leaves "Show more" to fetch it, so nothing is skipped or duplicated.
+        for (let i = 1; i < settled.length && more; i += 1) {
+          const next = settled[i];
+          if (next.status !== 'fulfilled') break;
+          fetched = [...fetched, ...(next.value.products || [])];
+          more = Boolean(next.value.hasNext);
+          last = next.value;
+          pageRef.current = i + 1;
         }
         setProducts(fetched);
         // Measured, not assumed. This page never sends `limit`, so the page size is
