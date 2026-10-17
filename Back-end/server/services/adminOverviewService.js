@@ -115,8 +115,12 @@ export async function companyOverview(actor, now = Date.now()) {
   const by = Object.fromEntries(requestsByStatus.map((r) => [r._id, { n: r.n, amount: round2(r.amount) }]));
   const zero = { n: 0, amount: 0 };
   const money = {
+    // Accounts has not decided yet.
     awaitingApproval: by.submitted || zero,
-    withAccounts: {
+    // Accounts approved it; the money leaves on the ADMIN's action. Named for
+    // who must act, not for who looked at it last — the old `withAccounts` was
+    // written when accounts paid, and read as the opposite of what it counts.
+    toPay: {
       n: (by.approved?.n || 0) + (by.on_hold?.n || 0),
       amount: round2((by.approved?.amount || 0) + (by.on_hold?.amount || 0)),
       onHold: by.on_hold?.n || 0,

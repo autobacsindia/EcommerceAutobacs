@@ -22,7 +22,7 @@ type Overview = {
   };
   money: {
     awaitingApproval: { n: number; amount: number };
-    withAccounts: { n: number; amount: number; onHold: number };
+    toPay: { n: number; amount: number; onHold: number };
     paidThisMonth: { n: number; amount: number; byTeam: { team: string; label: string; n: number; amount: number }[] };
     itemRefundsToPay: number;
   };
@@ -83,8 +83,10 @@ export default function CompanyOverviewPage() {
           <section aria-labelledby="ov-money">
             <h2 id="ov-money" className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">Money waiting</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Tile label="Waiting for your approval" value={data.money.awaitingApproval.n} sub={rupees(data.money.awaitingApproval.amount)} href="/admin/payments" tone={data.money.awaitingApproval.n ? 'warn' : 'default'} />
-              <Tile label="With accounts to pay" value={data.money.withAccounts.n} sub={`${rupees(data.money.withAccounts.amount)}${data.money.withAccounts.onHold ? ` · ${data.money.withAccounts.onHold} on hold` : ''}`} href="/admin/payments" />
+              {/* Not the admin's queue any more: accounts decides these. Shown
+                  without the warning tone, because nothing here is theirs to do. */}
+              <Tile label="Waiting for accounts to approve" value={data.money.awaitingApproval.n} sub={rupees(data.money.awaitingApproval.amount)} href="/admin/payments" />
+              <Tile label="Approved — for you to pay" value={data.money.toPay.n} sub={`${rupees(data.money.toPay.amount)}${data.money.toPay.onHold ? ` · ${data.money.toPay.onHold} on hold` : ''}`} href="/admin/payments" />
               <Tile label="Item refunds to pay" value={data.money.itemRefundsToPay} sub="Approved by accounts, waiting for you" href="/admin/refunds" tone={data.money.itemRefundsToPay ? 'warn' : 'default'} />
               <Tile label="Paid this month" value={rupees(data.money.paidThisMonth.amount)} sub={data.money.paidThisMonth.byTeam.map((t) => `${t.label} ${rupees(t.amount)}`).join(' · ') || 'Nothing yet'} href="/admin/payments" />
             </div>

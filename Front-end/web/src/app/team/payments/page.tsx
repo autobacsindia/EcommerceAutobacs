@@ -61,10 +61,12 @@ export default function TeamPaymentsPage() {
       )}
 
       <PaymentRequestList
-        initial={isAccounts ? 'to_pay' : 'open'}
+        initial={isAccounts ? 'to_approve' : 'open'}
         teams={isAccounts ? TEAMS : undefined}
+        /* Accounts opens on its own job — the requests waiting for a decision.
+           "With admin to pay" is the handover it can watch but not act on. */
         filters={isAccounts
-          ? [{ value: 'to_pay', label: 'To approve & pay' }, { value: 'submitted', label: 'Waiting for approval' }, { value: 'paid', label: 'Paid' }, { value: 'all', label: 'All' }]
+          ? [{ value: 'to_approve', label: 'To approve' }, { value: 'to_pay', label: 'With admin to pay' }, { value: 'paid', label: 'Paid' }, { value: 'all', label: 'All' }]
           : [{ value: 'open', label: 'In progress' }, { value: 'paid', label: 'Paid' }, { value: 'all', label: 'All' }]}
       />
     </div>

@@ -162,33 +162,35 @@ describe('Payment requests', () => {
   describe('approval and payment', () => {
     const raise = async () => (await expense(ops.session, { payee: BANK })).body.request.id;
 
-    it('an Operations purchase: admin approves, then accounts pays with a reference and screenshot — each once', async () => {
+    it('accounts approves, then the ADMIN pays with a reference and screenshot — each once', async () => {
       const id = await raise();
-      expect((await ops.session.get(`/payment-requests/${id}`)).body.request).toMatchObject({ approver: 'admin', statusLabel: 'Waiting for admin approval' });
-      expect((await accounts.session.post(`/payment-requests/${id}/approve`)).status).toBe(403);
-      expect((await accounts.session.post(`/payment-requests/${id}/decline`, { note: 'Not needed' })).status).toBe(403);
-      expect((await accounts.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_ABC123' })).status).toBe(403);
+      expect((await ops.session.get(`/payment-requests/${id}`)).body.request).toMatchObject({ approver: 'accounts', statusLabel: 'Waiting for accounts approval' });
+      // The team that raised it has no say in either half of the decision.
+      expect((await ops.session.post(`/payment-requests/${id}/approve`)).status).toBe(403);
+      expect((await ops.session.post(`/payment-requests/${id}/decline`, { note: 'Not needed' })).status).toBe(403);
+      expect((await ops.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_ABC123' })).status).toBe(403);
 
-      const approved = await admin.session.post(`/payment-requests/${id}/approve`, { note: 'OK' });
+      const approved = await accounts.session.post(`/payment-requests/${id}/approve`, { note: 'OK' });
       expect(approved.status).toBe(200);
       expect(approved.body.request.status).toBe('approved');
-      expect((await admin.session.post(`/payment-requests/${id}/approve`)).status).toBe(409);
+      expect((await accounts.session.post(`/payment-requests/${id}/approve`)).status).toBe(409);
 
-      expect((await ops.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_ABC123' })).status).toBe(403);
-      expect((await accounts.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: '' })).status).toBe(400);
-      const paid = await accounts.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_ABC123' },
+      // Approving is NOT paying: the money leaves on the admin's action alone.
+      expect((await accounts.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_ABC123' })).status).toBe(403);
+      expect((await admin.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: '' })).status).toBe(400);
+      const paid = await admin.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_ABC123' },
         [{ field: 'proof', buffer: JPEG, name: 'paid.jpg', type: 'image/jpeg' }]);
       expect(paid.status).toBe(200);
-      expect(paid.body.request).toMatchObject({ status: 'paid', payment: { method: 'razorpay', reference: 'pout_ABC123', paidByName: 'Anu' } });
+      expect(paid.body.request).toMatchObject({ status: 'paid', payment: { method: 'razorpay', reference: 'pout_ABC123', paidByName: 'Owner' } });
       expect(paid.body.request.files.map((f) => f.kind)).toEqual(['bill', 'proof']);
-      expect((await accounts.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_DUP' })).status).toBe(409);
+      expect((await admin.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_DUP' })).status).toBe(409);
 
       const saved = await PaymentRequest.findById(id).lean();
-      expect(saved.history.map((h) => [h.action, h.byName])).toEqual([['submitted', 'Omar'], ['approved', 'Owner'], ['paid', 'Anu']]);
+      expect(saved.history.map((h) => [h.action, h.byName])).toEqual([['submitted', 'Omar'], ['approved', 'Anu'], ['paid', 'Owner']]);
       expect((await ops.session.get(`/payment-requests/${id}`)).body.request.status).toBe('paid');
     });
 
-    it('an admin may pay an Operations purchase straight away — that approves it too', async () => {
+    it('an admin may pay a waiting request straight away — that approves it too', async () => {
       const id = await raise();
       const paid = await admin.session.form(`/payment-requests/${id}/pay`, { method: 'bank', reference: 'UTR12345678' });
       expect(paid.status).toBe(200);
@@ -197,57 +199,74 @@ describe('Payment requests', () => {
       expect(String(saved.approvedBy)).toBe(String(admin.user._id));
     });
 
-    it('a marketing expense is approved, declined and paid by accounts — no admin needed', async () => {
+    it('a marketing expense takes the same path as every other team: accounts approves, admin pays', async () => {
       const a = (await expense(marketing.session, { category: 'purchase', description: 'Banner printing' })).body.request.id;
       const view = (await accounts.session.get(`/payment-requests/${a}`)).body.request;
-      expect(view).toMatchObject({ approver: 'accounts', statusLabel: 'Waiting for accounts approval', can: expect.objectContaining({ approve: true, decline: true, pay: true }) });
+      expect(view).toMatchObject({
+        approver: 'accounts',
+        statusLabel: 'Waiting for accounts approval',
+        // Accounts decides but does not pay — that is the whole point of the split.
+        can: expect.objectContaining({ approve: true, decline: true, pay: false }),
+      });
       expect((await marketing.session.post(`/payment-requests/${a}/approve`)).status).toBe(403);
       expect((await accounts.session.post(`/payment-requests/${a}/approve`, { note: 'OK' })).body.request.status).toBe('approved');
-      expect((await accounts.session.form(`/payment-requests/${a}/pay`, { method: 'upi', reference: 'UPI99887766' })).body.request.status).toBe('paid');
-      expect((await PaymentRequest.findById(a).lean()).history.map((h) => [h.action, h.byName])).toEqual([['submitted', 'Mira'], ['approved', 'Anu'], ['paid', 'Anu']]);
+      expect((await accounts.session.form(`/payment-requests/${a}/pay`, { method: 'upi', reference: 'UPI99887766' })).status).toBe(403);
+      expect((await admin.session.form(`/payment-requests/${a}/pay`, { method: 'upi', reference: 'UPI99887766' })).body.request.status).toBe('paid');
+      expect((await PaymentRequest.findById(a).lean()).history.map((h) => [h.action, h.byName])).toEqual([['submitted', 'Mira'], ['approved', 'Anu'], ['paid', 'Owner']]);
 
-      // Paid straight from "waiting": one step, recorded as approved by accounts.
+      // Paid straight from "waiting" by the admin: one step, recorded as approved by them.
       const b = (await expense(marketing.session, { category: 'purchase', description: 'Flyers' })).body.request.id;
-      const paid = await accounts.session.form(`/payment-requests/${b}/pay`, { method: 'bank', reference: 'UTR11223344' });
+      const paid = await admin.session.form(`/payment-requests/${b}/pay`, { method: 'bank', reference: 'UTR11223344' });
       expect(paid.body.request.status).toBe('paid');
-      expect(String((await PaymentRequest.findById(b).lean()).approvedBy)).toBe(String(accounts.user._id));
+      expect(String((await PaymentRequest.findById(b).lean()).approvedBy)).toBe(String(admin.user._id));
       // …once: a second press finds it already paid.
-      expect((await accounts.session.form(`/payment-requests/${b}/pay`, { method: 'bank', reference: 'UTR11223355' })).status).toBe(409);
+      expect((await admin.session.form(`/payment-requests/${b}/pay`, { method: 'bank', reference: 'UTR11223355' })).status).toBe(409);
 
       const c = (await expense(marketing.session, { category: 'purchase', description: 'Stickers' })).body.request.id;
       expect((await accounts.session.post(`/payment-requests/${c}/decline`, { note: 'Duplicate bill' })).body.request.status).toBe('declined');
     });
 
-    it("accounts' to-pay queue holds approved work plus non-Operations requests waiting for accounts", async () => {
-      const opsWaiting = await raise();
-      const opsApproved = await raise();
-      await admin.session.post(`/payment-requests/${opsApproved}/approve`);
+    it('there are two queues: what accounts must approve, and what the admin must pay', async () => {
+      const waiting = await raise();
+      const approved = await raise();
+      await accounts.session.post(`/payment-requests/${approved}/approve`);
       const mktWaiting = (await expense(marketing.session, { category: 'purchase', description: 'Banner printing' })).body.request.id;
-      const queue = (await accounts.session.get('/payment-requests?status=to_pay')).body.requests.map((r) => r.id);
-      expect(queue).toEqual(expect.arrayContaining([opsApproved, mktWaiting]));
-      expect(queue).not.toContain(opsWaiting);
+
+      // Accounts' queue: everything still waiting for a decision, any team.
+      const toApprove = (await accounts.session.get('/payment-requests?status=to_approve')).body.requests.map((r) => r.id);
+      expect(toApprove).toEqual(expect.arrayContaining([waiting, mktWaiting]));
+      expect(toApprove).not.toContain(approved);
+
+      // The admin's queue: only what has already been approved (or put on hold).
+      const toPay = (await admin.session.get('/payment-requests?status=to_pay')).body.requests.map((r) => r.id);
+      expect(toPay).toContain(approved);
+      expect(toPay).not.toContain(waiting);
+      expect(toPay).not.toContain(mktWaiting);
     });
 
-    it('accounts can hold an approved request with a reason, then pay it; admin can decline a held one', async () => {
+    it('the admin holds an approved request with a reason, then pays it; accounts can decline a held one', async () => {
       const a = await raise();
-      await admin.session.post(`/payment-requests/${a}/approve`);
-      expect((await accounts.session.post(`/payment-requests/${a}/hold`, {})).status).toBe(400);
-      expect((await accounts.session.post(`/payment-requests/${a}/hold`, { note: 'Funds arrive Friday' })).body.request.status).toBe('on_hold');
-      expect((await accounts.session.form(`/payment-requests/${a}/pay`, { method: 'bank', reference: 'UTR998877' })).body.request.status).toBe('paid');
+      await accounts.session.post(`/payment-requests/${a}/approve`);
+      // Hold is the payer's word — "I am not sending this yet" — so it moved to
+      // the admin along with paying.
+      expect((await accounts.session.post(`/payment-requests/${a}/hold`, { note: 'Funds arrive Friday' })).status).toBe(403);
+      expect((await admin.session.post(`/payment-requests/${a}/hold`, {})).status).toBe(400);
+      expect((await admin.session.post(`/payment-requests/${a}/hold`, { note: 'Funds arrive Friday' })).body.request.status).toBe('on_hold');
+      expect((await admin.session.form(`/payment-requests/${a}/pay`, { method: 'bank', reference: 'UTR998877' })).body.request.status).toBe('paid');
 
       const b = await raise();
-      await admin.session.post(`/payment-requests/${b}/approve`);
-      await accounts.session.post(`/payment-requests/${b}/hold`, { note: 'Check with supplier' });
-      expect((await admin.session.post(`/payment-requests/${b}/decline`, { note: 'Duplicate bill' })).body.request).toMatchObject({ status: 'declined', decisionNote: 'Duplicate bill' });
+      await accounts.session.post(`/payment-requests/${b}/approve`);
+      await admin.session.post(`/payment-requests/${b}/hold`, { note: 'Check with supplier' });
+      expect((await accounts.session.post(`/payment-requests/${b}/decline`, { note: 'Duplicate bill' })).body.request).toMatchObject({ status: 'declined', decisionNote: 'Duplicate bill' });
     });
 
     it('declining needs a reason; the requester can cancel only while it waits for approval', async () => {
       const a = await raise();
-      expect((await admin.session.post(`/payment-requests/${a}/decline`, {})).status).toBe(400);
+      expect((await accounts.session.post(`/payment-requests/${a}/decline`, {})).status).toBe(400);
       expect((await ops2.session.post(`/payment-requests/${a}/cancel`)).status).toBe(403); // same team, not the requester or head
       expect((await ops.session.post(`/payment-requests/${a}/cancel`)).body.request.status).toBe('cancelled');
       const b = await raise();
-      await admin.session.post(`/payment-requests/${b}/approve`);
+      await accounts.session.post(`/payment-requests/${b}/approve`);
       expect((await ops.session.post(`/payment-requests/${b}/cancel`)).status).toBe(409);
     });
   });
@@ -284,8 +303,8 @@ describe('Payment requests', () => {
       expect(slip.status).toBe(200);
       expect(slip.body.subarray(0, 5).toString()).toBe('%PDF-');
       expect(slip.headers['content-disposition']).toMatch(/Payment-request-PR-\d+\.pdf/);
-      await admin.session.post(`/payment-requests/${id}/approve`);
-      await accounts.session.form(`/payment-requests/${id}/pay`, { method: 'upi', reference: 'UPI12345678' });
+      await accounts.session.post(`/payment-requests/${id}/approve`);
+      await admin.session.form(`/payment-requests/${id}/pay`, { method: 'upi', reference: 'UPI12345678' });
       expect((await ops.session.get(`/payment-requests/${id}/slip`)).headers['content-disposition']).toMatch(/Receipt-PR-\d+\.pdf/);
     });
   });
@@ -333,9 +352,9 @@ describe('Payment requests', () => {
       // An item with no supplier request ships as it always has.
       await expect(wf.shipWithProof(procurement.user, id, { itemIds: [mat] }, photo, req)).resolves.toBeTruthy();
 
-      // A supplier payment is accounts' own call: approved and paid without an admin.
+      // Same two hands as every other request: accounts approves, the admin pays.
       expect((await accounts.session.post(`/payment-requests/${prId}/approve`)).status).toBe(200);
-      await accounts.session.form(`/payment-requests/${prId}/pay`, { method: 'bank', reference: 'UTR55667788' });
+      await admin.session.form(`/payment-requests/${prId}/pay`, { method: 'bank', reference: 'UTR55667788' });
       await expect(wf.shipWithProof(procurement.user, id, { itemIds: [kit] }, photo, req)).resolves.toBeTruthy();
 
       const list = (await procurement.session.get(`/payment-requests/order/${id}`)).body.requests;
@@ -346,15 +365,18 @@ describe('Payment requests', () => {
   describe('chat', () => {
     it('posts each step in #accounts and the requester team space, one thread per request', async () => {
       const id = (await expense(ops.session)).body.request.id;
-      await admin.session.post(`/payment-requests/${id}/approve`);
-      await accounts.session.form(`/payment-requests/${id}/pay`, { method: 'upi', reference: 'UPI12345678' });
+      await accounts.session.post(`/payment-requests/${id}/approve`);
+      await admin.session.form(`/payment-requests/${id}/pay`, { method: 'upi', reference: 'UPI12345678' });
 
       const accountsSpace = await ChatChannel.findOne({ key: 'team:accounts' }).lean();
       const msgs = await ChatMessage.find({ channel: accountsSpace._id }).sort({ seq: 1 }).lean();
       expect(msgs).toHaveLength(3);
       expect(String(msgs[0].threadOrder)).toBe(id);
-      expect(msgs[0].text).toMatch(/New fuel expense PR-\d+ .*Admin: please approve/);
-      expect(msgs[0].mentions.map(String)).toContain(String(admin.user._id));
+      // Raised → accounts is asked. Approved → the admin is asked, and mentioned,
+      // because nothing moves until they pay.
+      expect(msgs[0].text).toMatch(/New fuel expense PR-\d+ .*Accounts: please approve/);
+      expect(msgs[1].text).toMatch(/Admin: please pay/);
+      expect(msgs[1].mentions.map(String)).toContain(String(admin.user._id));
       expect(msgs.slice(1).every((m) => String(m.threadRoot) === String(msgs[0]._id))).toBe(true);
       expect(msgs[2].text).toMatch(/Paid fuel expense .*UPI ref UPI12345678/);
 
