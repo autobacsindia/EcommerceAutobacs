@@ -8,8 +8,9 @@
  *   raise an expense           operations, marketing (and admin)
  *   cancel                     the requester, or their team head — while submitted
  *   approve / decline          accounts (and admin) — every team's requests
- *   pay / put on hold          admin only — after accounts' approval; an admin may
+ *   pay                        admin only — after accounts' approval; an admin may
  *                              also pay a waiting request directly (that approves it)
+ *   put on hold                accounts or admin — a brake, on an approved request
  *   see                        admin and accounts: everything; a team: its own
  *
  * ── NO MONEY MOVES HERE ─────────────────────────────────────────────────────────
@@ -51,7 +52,7 @@ const PAGE_SIZE = 25;
 export const STATUS_LABELS = Object.freeze({
   submitted: 'Waiting for accounts approval',
   approved: 'Approved — waiting for admin to pay',
-  on_hold: 'On hold with admin',
+  on_hold: 'On hold',
   paid: 'Paid',
   declined: 'Declined',
   cancelled: 'Cancelled',
@@ -72,6 +73,14 @@ const roleOf = (u) => (isAdmin(u) ? 'admin' : u?.staff?.team || '');
  */
 const mayDecide = (u) => isAdmin(u) || isAccounts(u);
 const mayPay = (u) => isAdmin(u);
+/*
+  Hold is BOTH their business, which is why it is not simply `mayPay`.
+  Accounts parks a request it has approved but does not want paid yet (the bill
+  is queried, the funds arrive Friday); the admin parks one they are not ready
+  to send. Either way it is a brake, never a payment, so sharing it cannot move
+  money — and the one person who must not have it is the requester.
+*/
+const mayHold = (u) => mayDecide(u) || mayPay(u);
 
 /** May `user` see this request? */
 const canSee = (user, req) => seesAll(user) || (isActiveStaff(user) && user.staff.team === req.team);
@@ -241,7 +250,7 @@ export function shape(r, viewer) {
       // Only the admin pays — an approved request, or a waiting one directly
       // (the approval is recorded with the payment).
       pay: mayPay(viewer) && ['submitted', 'approved', 'on_hold'].includes(r.status),
-      hold: mayPay(viewer) && r.status === 'approved',
+      hold: mayHold(viewer) && r.status === 'approved',
       cancel: r.status === 'submitted' && (idOf(r.requestedBy) === idOf(viewer?._id) || isHeadOfTeam || isAdmin(viewer)),
     },
   };
@@ -376,7 +385,7 @@ export async function decline(actor, id, { note } = {}, req) {
 }
 
 export async function hold(actor, id, { note } = {}, req) {
-  if (!mayPay(actor)) throw fail('Only the admin can put a payment on hold.', 403);
+  if (!mayHold(actor)) throw fail('Only accounts or an admin can put a payment on hold.', 403);
   const reason = String(note || '').trim();
   if (reason.length < 3) throw fail('Say why it is on hold (e.g. funds arrive Friday).', 400);
   await loadVisible(actor, id);
@@ -384,7 +393,7 @@ export async function hold(actor, id, { note } = {}, req) {
     { status: 'on_hold', decisionNote: reason.slice(0, 1000) }, entry(actor, 'on_hold', reason));
   if (!r) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'on_hold' });
-  await tellChat(r, 'on_hold', `⏸️ Admin put ${what(r)} on hold: “${reason.slice(0, 200)}”.`, { mentionRequester: true });
+  await tellChat(r, 'on_hold', `⏸️ ${isAdmin(actor) ? 'Admin' : 'Accounts'} put ${what(r)} on hold: “${reason.slice(0, 200)}”.`, { mentionAdmins: true, mentionRequester: true });
   return shape(r, actor);
 }
 

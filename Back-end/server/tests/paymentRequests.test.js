@@ -244,19 +244,22 @@ describe('Payment requests', () => {
       expect(toPay).not.toContain(mktWaiting);
     });
 
-    it('the admin holds an approved request with a reason, then pays it; accounts can decline a held one', async () => {
+    it('either accounts or the admin can hold an approved request; only the admin pays it', async () => {
+      // Hold is a brake, not a payment, so both halves of the decision have it:
+      // accounts parks a bill it is querying, the admin parks one they are not
+      // ready to send. The requester never has it.
       const a = await raise();
       await accounts.session.post(`/payment-requests/${a}/approve`);
-      // Hold is the payer's word — "I am not sending this yet" — so it moved to
-      // the admin along with paying.
-      expect((await accounts.session.post(`/payment-requests/${a}/hold`, { note: 'Funds arrive Friday' })).status).toBe(403);
-      expect((await admin.session.post(`/payment-requests/${a}/hold`, {})).status).toBe(400);
-      expect((await admin.session.post(`/payment-requests/${a}/hold`, { note: 'Funds arrive Friday' })).body.request.status).toBe('on_hold');
+      expect((await ops.session.post(`/payment-requests/${a}/hold`, { note: 'Not yet please' })).status).toBe(403);
+      expect((await accounts.session.post(`/payment-requests/${a}/hold`, {})).status).toBe(400);
+      expect((await accounts.session.post(`/payment-requests/${a}/hold`, { note: 'Funds arrive Friday' })).body.request.status).toBe('on_hold');
+      // Held or not, accounts still cannot be the one to pay it.
+      expect((await accounts.session.form(`/payment-requests/${a}/pay`, { method: 'bank', reference: 'UTR998877' })).status).toBe(403);
       expect((await admin.session.form(`/payment-requests/${a}/pay`, { method: 'bank', reference: 'UTR998877' })).body.request.status).toBe('paid');
 
       const b = await raise();
       await accounts.session.post(`/payment-requests/${b}/approve`);
-      await admin.session.post(`/payment-requests/${b}/hold`, { note: 'Check with supplier' });
+      expect((await admin.session.post(`/payment-requests/${b}/hold`, { note: 'Check with supplier' })).body.request.status).toBe('on_hold');
       expect((await accounts.session.post(`/payment-requests/${b}/decline`, { note: 'Duplicate bill' })).body.request).toMatchObject({ status: 'declined', decisionNote: 'Duplicate bill' });
     });
 
