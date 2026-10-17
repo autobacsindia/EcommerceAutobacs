@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, PlusCircle, ReceiptText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck } from 'lucide-react';
+import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MARKETING_AREAS } from './marketingAreas';
@@ -31,7 +31,8 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
       // GTM executives and customer support have no tools yet (see COMING_SOON).
       if (!canSell) return [];
       const list: Shortcut[] = [
-        { href: '/team/sales/new', title: 'New order', text: 'For a customer on the phone or WhatsApp: pick products, give an offer price, send a payment link and QR.', icon: PlusCircle },
+        { href: '/team/sales/new', title: 'New quotation', text: 'For a customer on the phone or WhatsApp: pick products or add custom items, give offer prices, share the quotation PDF.', icon: PlusCircle },
+        { href: '/team/sales/quotations', title: 'Quotations', text: 'Edit, share or cancel a quotation — and when the client agrees, create the order and send the payment link (split if needed).', icon: FileText },
         { href: '/team/sales', title: isHead ? 'Team orders' : 'My orders', text: 'Payment, stock, the supplier\'s photo and tracking — and a button to send them to the customer.', icon: ReceiptText },
         { href: '/team/decisions', title: 'Customer decisions', text: 'Out-of-stock items: ask the customer to wait or take a refund.', icon: PhoneCall },
       ];

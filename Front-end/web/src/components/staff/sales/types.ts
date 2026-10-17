@@ -7,6 +7,29 @@ export type SalesOrderItem = {
   price: number;
   /** Catalogue price when the line was sold at an offer; null = full price. */
   listPrice: number | null;
+  /** Not in the catalogue — named and priced by the seller. */
+  custom?: boolean;
+};
+
+/** One payment request on a quotation-first order (its own Razorpay link). */
+export type PaymentPart = {
+  id: string;
+  n: number;
+  amount: number;
+  status: 'pending' | 'paid' | 'expired' | 'cancelled';
+  /** Only while it can be paid. */
+  url: string | null;
+  expiresAt: string;
+  paidAt: string | null;
+};
+
+export type PaymentSummary = {
+  parts: PaymentPart[];
+  amountPaid: number;
+  /** Paid + still waiting. */
+  amountRequested: number;
+  /** What no link covers yet. */
+  amountToRequest: number;
 };
 
 export type SalesOrder = {
@@ -38,7 +61,52 @@ export type SalesOrder = {
   paymentLinkExpiresAt: string | null;
   razorpayPaymentId: string | null;
   paymentMethod: string | null;
+  /** 'parts': quotation-first order, paid through payment requests; 'link': older single link. */
+  paymentFlow?: 'link' | 'parts';
+  payment?: PaymentSummary;
 };
+
+export type QuotationLine = {
+  product: string | null;
+  variantId: string | null;
+  variantLabel: string | null;
+  custom: boolean;
+  name: string;
+  image: string;
+  quantity: number;
+  price: number;
+  listPrice: number | null;
+};
+
+export type Quotation = {
+  id: string;
+  /** "QT-7F3A91C2", or "QT-7F3A91C2-v2" from the second version. */
+  number: string;
+  version: number;
+  status: 'open' | 'expired' | 'accepted' | 'cancelled';
+  customer: { name: string; email: string; phone: string };
+  shippingAddress: SalesOrder['shippingAddress'];
+  items: QuotationLine[];
+  totalAmount: number;
+  notes: string;
+  validUntil: string;
+  salesPerson: string | null;
+  /** Set once the customer accepted. */
+  orderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  revisions: { version: number; totalAmount: number; savedAt: string }[];
+};
+
+export type QuotationPage = { quotations: Quotation[]; nextCursor: string | null; scope: 'mine' | 'team' };
+
+/** The quotation PDF (opened in a new tab to view, download or share). */
+export const quotationPdfHref = (quotationId: string) =>
+  `/api/v1/staff/sales/quotations/${encodeURIComponent(quotationId)}/pdf`;
+
+/** The payment-request PDF: every part with its amount, link and QR. */
+export const paymentRequestHref = (orderId: string) =>
+  `/api/v1/staff/sales/orders/${encodeURIComponent(orderId)}/payment-request`;
 
 export type SalesOrderPage = { success: boolean; orders: SalesOrder[]; nextCursor: string | null; scope?: 'mine' | 'team' };
 

@@ -135,6 +135,27 @@ export const normalizeIndianMobile = (value) => {
 };
 const INDIAN_MOBILE = /^[6-9]\d{9}$/;
 
+export const validateQuotationIdParam = [
+  param('id').custom(isObjectId).withMessage('Invalid quotation id'),
+];
+
+export const validateQuotationList = [
+  query('cursor').optional().custom(isObjectId).withMessage('Invalid page cursor'),
+  query('status').optional().isIn(['open', 'accepted', 'cancelled']).withMessage('Unknown status'),
+];
+
+/** Request payment on an order in one or more parts (rupees). */
+export const validatePaymentParts = [
+  param('id').custom(isObjectId).withMessage('Invalid order id'),
+  body('amounts').isArray({ min: 1, max: 10 }).withMessage('Enter between 1 and 10 amounts'),
+  body('amounts.*').isFloat({ min: 1, max: 10000000 }).withMessage('Each part must be between ₹1 and ₹1,00,00,000').toFloat(),
+];
+
+export const validatePaymentPartParam = [
+  param('id').custom(isObjectId).withMessage('Invalid order id'),
+  param('partId').custom(isObjectId).withMessage('Invalid payment part'),
+];
+
 export const validateSalesOrder = [
   body('customer.name').trim().isLength({ min: 2, max: 100 }).withMessage('Customer name must be 2–100 characters'),
   // Optional: a customer on the phone may have no email (utils/customerContact.js).

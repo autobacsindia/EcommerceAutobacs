@@ -36,6 +36,7 @@ import { providerOf, r2PrivateUrl } from '../services/storage/privateAssetUrl.js
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import * as Sentry from '@sentry/node';
+import { isSplitPaid, SPLIT_REFUND_MESSAGE } from '../utils/splitPayment.js';
 
 /**
  * Project a populated Payment document down to what a client may see.
@@ -1015,6 +1016,9 @@ export const processRefund = async (req, res) => {
       success: false,
       message: 'No Razorpay payment id on file for this order — refund manually in the dashboard.'
     });
+  }
+  if (isSplitPaid(order)) {
+    return res.status(422).json({ success: false, message: SPLIT_REFUND_MESSAGE });
   }
 
   // Cancellation is always a FULL refund of what was captured. `totalAmount` is already

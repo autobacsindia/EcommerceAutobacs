@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Minus, Plus, Search, Trash2, CheckCircle2, FileText, UserPlus } from 'lucide-react';
+import { Loader2, Minus, Plus, Search, Trash2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
-import PaymentLinkCard from './PaymentLinkCard';
 import { deepDiscountLines, deepDiscountWarning, isDeepDiscount } from './offerGuard';
-import { errorMessage, quotationHref, rupees, type SalesOrder, type SalesProduct } from './types';
+import { errorMessage, rupees, type Quotation, type SalesOrder, type SalesProduct } from './types';
 import { mobileProblem, normalizeMobile } from './phone';
 
 type Line = {
@@ -27,12 +26,6 @@ type Line = {
   quantity: number;
   /** What the rep typed; empty = full price. */
   offer: string;
-};
-
-type Created = {
-  order: SalesOrder;
-  paymentLink: { id: string; shortUrl: string };
-  customerIsNew: boolean;
 };
 
 const EMPTY_CUSTOMER = { name: '', email: '', phone: '' };
@@ -67,10 +60,26 @@ let customSeq = 0;
  * or zero a catalogue price. A custom item (not in the catalogue) is priced by the
  * seller — the server still requires a name and at least ₹1.
  */
-export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?: string | null } = {}) {
+export default function NewSalesOrderForm({
+  fromOrderId = null,
+  quotation = null,
+}: {
+  fromOrderId?: string | null;
+  /** Editing this quotation (saves a new version) instead of creating one. */
+  quotation?: Quotation | null;
+} = {}) {
   const queryClient = useQueryClient();
-  const [customer, setCustomer] = useState(EMPTY_CUSTOMER);
-  const [address, setAddress] = useState(EMPTY_ADDRESS);
+  const router = useRouter();
+  const editing = !!quotation;
+  const [customer, setCustomer] = useState(() => (quotation
+    ? { name: quotation.customer.name, email: quotation.customer.email || '', phone: quotation.customer.phone }
+    : EMPTY_CUSTOMER));
+  const [address, setAddress] = useState(() => {
+    const a = quotation?.shippingAddress;
+    return a
+      ? { addressLine1: a.addressLine1 || '', addressLine2: a.addressLine2 || '', city: a.city || '', state: a.state || '', postalCode: a.postalCode || '' }
+      : EMPTY_ADDRESS;
+  });
   // "New order for this customer": start from an earlier order's customer and
   // address (read from the server by id — no personal details in the URL).
   const [repeatOf, setRepeatOf] = useState<string | null>(null);
@@ -93,10 +102,21 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
     });
     setRepeatOf(o.orderNumber);
   }, [source.data]);
-  const [lines, setLines] = useState<Line[]>([]);
-  const [notes, setNotes] = useState('');
+  const [lines, setLines] = useState<Line[]>(() => (quotation?.items || []).map((l, i) => (l.custom
+    ? { key: `custom:q${i}`, custom: true, productId: '', variantId: null, name: l.name, image: '', listPrice: 0, quantity: l.quantity, offer: String(l.price) }
+    : {
+      key: `${l.product}:${l.variantId || ''}`,
+      productId: l.product || '',
+      variantId: l.variantId,
+      name: l.variantLabel ? `${l.name} — ${l.variantLabel}` : l.name,
+      image: l.image,
+      // Stored only when marked down; otherwise the line was quoted at list.
+      listPrice: l.listPrice ?? l.price,
+      quantity: l.quantity,
+      offer: l.listPrice ? String(l.price) : '',
+    })));
+  const [notes, setNotes] = useState(quotation?.notes || '');
   const [q, setQ] = useState('');
-  const [created, setCreated] = useState<Created | null>(null);
   const [error, setError] = useState('');
   const term = useDebounced(q.trim(), 300);
 
@@ -168,7 +188,8 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
   const hasProblem = lines.some((l) => lineProblem(l));
 
   const create = useMutation({
-    mutationFn: () => apiClient.post<Created>('/staff/sales/orders', {
+    mutationFn: () => {
+      const body = {
       customer: { name: customer.name.trim(), email: customer.email.trim(), phone: normalizeMobile(customer.phone) },
       shippingAddress: { ...address, fullName: customer.name.trim(), phone: normalizeMobile(customer.phone) },
       items: lines.map((l) => (l.custom
@@ -180,13 +201,16 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
           offerPrice: l.offer.trim() === '' ? null : Number(l.offer),
         })),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
-    }),
-    onSuccess: (res) => {
-      setCreated(res);
-      queryClient.invalidateQueries({ queryKey: staffKeys.orders() });
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      return editing
+        ? apiClient.put<{ quotation: Quotation }>(`/staff/sales/quotations/${quotation!.id}`, body)
+        : apiClient.post<{ quotation: Quotation }>('/staff/sales/quotations', body);
     },
-    onError: (e) => setError(errorMessage(e, 'Could not create the order. Please try again.')),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.quotations() });
+      router.push(`/team/sales/quotations/${res.quotation.id}`);
+    },
+    onError: (e) => setError(errorMessage(e, editing ? 'Could not save the quotation. Please try again.' : 'Could not create the quotation. Please try again.')),
   });
 
   function submit(e: React.FormEvent) {
@@ -203,76 +227,11 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
     create.mutate();
   }
 
-  function startAgain() {
-    setCreated(null);
-    setCustomer(EMPTY_CUSTOMER);
-    setAddress(EMPTY_ADDRESS);
-    setLines([]);
-    setNotes('');
-    setError('');
-    setRepeatOf(null);
-  }
-
-  /** Another order for the customer just served: keep who and where, clear the items. */
-  function sameCustomerAgain() {
-    const previous = created?.order.orderNumber ?? null;
-    setCreated(null);
-    setLines([]);
-    setNotes('');
-    setError('');
-    setRepeatOf(previous);
-  }
-
-  if (created) {
-    const o = created.order;
-    return (
-      <div className="space-y-5">
-        <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4">
-          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-          <div className="text-sm text-green-900">
-            <p className="font-semibold">Order {o.orderNumber} created — {rupees(o.totalAmount)}</p>
-            <p>Send the link or QR below to {o.customer.name}. You will be emailed as soon as they pay, and Accounts and Procurement are told automatically.</p>
-            {created.customerIsNew && o.customer.email && <p className="mt-1 text-green-800">A new customer account was created; they get an email to set their password.</p>}
-          </div>
-        </div>
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <PaymentLinkCard
-            url={created.paymentLink.shortUrl}
-            orderNumber={o.orderNumber}
-            amount={o.totalAmount}
-            customerName={o.customer.name}
-            customerPhone={o.customer.phone}
-            expiresAt={o.paymentLinkExpiresAt}
-          />
-        </section>
-        <div className="flex flex-wrap gap-3">
-          <a
-            href={quotationHref(o.id)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
-          >
-            <FileText className="h-4 w-4" /> Quotation PDF
-          </a>
-          <button type="button" onClick={sameCustomerAgain} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">
-            <UserPlus className="h-4 w-4" /> Another order for {o.customer.name}
-          </button>
-          <button type="button" onClick={startAgain} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-            New order
-          </button>
-          <Link href="/team/sales" className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">
-            See my orders
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <form onSubmit={submit} className="space-y-5">
       {repeatOf && (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900" role="status">
-          Same customer as order {repeatOf}. Check their details below, then add the items for this order.
+          Same customer as order {repeatOf}. Check their details below, then add the items for this quotation.
         </p>
       )}
       {fromOrderId && source.isError && (
@@ -306,7 +265,7 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
             <input id="c-email" type="email" className={input} value={customer.email} placeholder="Leave empty if they have none"
               onChange={(e) => setCustomer({ ...customer, email: e.target.value })} />
             {!customer.email.trim() && (
-              <p className="mt-1 text-xs text-gray-500">No email: the payment link is sent by SMS — share it on WhatsApp too.</p>
+              <p className="mt-1 text-xs text-gray-500">No email: payment links will go by SMS — share them on WhatsApp too.</p>
             )}
           </div>
         </div>
@@ -511,7 +470,7 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
         {error && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs text-gray-500">Customer pays</p>
+            <p className="text-xs text-gray-500">Quotation total</p>
             <p className="text-2xl font-bold text-gray-900">{rupees(total)}</p>
             {saving > 0 && <p className="text-xs font-medium text-green-700">Offer saves {rupees(saving)} on {rupees(fullTotal)}</p>}
           </div>
@@ -520,7 +479,7 @@ export default function NewSalesOrderForm({ fromOrderId = null }: { fromOrderId?
             disabled={create.isPending || lines.length === 0}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Create order &amp; payment link
+            {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />} {editing ? 'Save new version' : 'Create quotation'}
           </button>
         </div>
       </div>

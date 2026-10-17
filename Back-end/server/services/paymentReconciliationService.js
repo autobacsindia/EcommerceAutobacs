@@ -160,3 +160,85 @@ async function maybeAlertWebhooksDown(unresolvedCount, now) {
 }
 
 export default { reconcileStuckPayments };
+
+/**
+ * GTM payment links — the safety net for a payment_link.paid webhook that never
+ * arrived. Two kinds, both bounded and replayed through the SAME code the webhook
+ * runs (so all of its amount and idempotency guards apply):
+ *   - payment PARTS of quotation-first orders → razorpayService.processPaymentPart
+ *   - the older single link per sales order (paymentLinkId) → the whole-order path
+ * A part whose link expired or was cancelled without a payment is marked so.
+ */
+export async function reconcileSalesLinks({ now = Date.now() } = {}) {
+  const settled = new Date(now - MIN_AGE_MS);
+  let recovered = 0;
+  let failed = 0;
+  let closed = 0;
+
+  const partOrders = await orderRepository.find(
+    {
+      status: 'awaiting_payment',
+      paymentStatus: 'pending',
+      paymentParts: { $elemMatch: { status: 'pending', createdAt: { $lt: settled } } },
+    },
+    { limit: BATCH, select: '_id paymentParts', sort: { _id: 1 } },
+  );
+  for (const order of partOrders) {
+    for (const part of order.paymentParts || []) {
+      if (part.status !== 'pending' || new Date(part.createdAt) >= settled) continue;
+      try {
+        const { status, payments } = await razorpayService.fetchPaymentLinkCaptures(part.linkId);
+        for (const payment of payments) {
+          const r = await razorpayService.processPaymentPart(String(order._id), part.linkId, payment);
+          if (r.partPaid) {
+            recovered += 1;
+            console.warn(`[Reconcile] Recovered payment part | order: ${order._id} | link: ${part.linkId} — webhook was missed`);
+          }
+        }
+        if (payments.length === 0 && (status === 'expired' || status === 'cancelled')) {
+          await orderRepository.model.updateOne(
+            { _id: order._id, paymentParts: { $elemMatch: { _id: part._id, status: 'pending' } } },
+            { $set: { 'paymentParts.$.status': status } },
+          );
+          closed += 1;
+        }
+      } catch (err) {
+        failed += 1;
+        console.error(`[Reconcile] Payment part ${part.linkId} of order ${order._id}:`, err.message);
+        Sentry.captureException(err, { extra: { orderId: String(order._id), linkId: part.linkId } });
+      }
+    }
+  }
+
+  const linkOrders = await orderRepository.find(
+    {
+      salesUser: { $type: 'objectId' },
+      paymentLinkId: { $type: 'string' },
+      status: 'awaiting_payment',
+      paymentStatus: 'pending',
+      createdAt: { $lt: settled, $gt: new Date(now - 7 * 24 * 60 * 60 * 1000) },
+    },
+    { limit: BATCH, select: '_id user totalAmount paymentLinkId', sort: { _id: 1 } },
+  );
+  for (const order of linkOrders) {
+    try {
+      const { payments } = await razorpayService.fetchPaymentLinkCaptures(order.paymentLinkId);
+      const captured = payments[0];
+      if (!captured) continue;
+      const { alreadyProcessed, gatewayOffer } = await razorpayService._validatePaymentAgainstOrder(order, captured);
+      if (alreadyProcessed) continue;
+      await razorpayService.processPaymentSuccess(String(order._id), captured, order.user ? String(order.user) : undefined, { gatewayOffer });
+      recovered += 1;
+      console.warn(`[Reconcile] Recovered sales payment link | order: ${order._id} | link: ${order.paymentLinkId} — webhook was missed`);
+    } catch (err) {
+      failed += 1;
+      console.error(`[Reconcile] Sales link of order ${order._id}:`, err.message);
+      Sentry.captureException(err, { extra: { orderId: String(order._id), linkId: order.paymentLinkId } });
+    }
+  }
+
+  if (recovered || failed || closed) {
+    console.log(`[Reconcile] Sales links | recovered: ${recovered} | closed: ${closed} | failed: ${failed}`);
+  }
+  return { recovered, failed, closed };
+}

@@ -26,10 +26,11 @@ jest.unstable_mockModule('../queue/queues.js', () => ({
 }));
 
 // Razorpay double: records links made / cancelled; behaviour switchable per test.
-const rz = { created: [], cancelled: [], failCancel: false, remoteStatus: 'created', seq: 0 };
+const rz = { created: [], cancelled: [], failCancel: false, failCreate: null, remoteStatus: 'created', seq: 0 };
 jest.unstable_mockModule('../services/razorpayService.js', () => ({
   default: {
     createPaymentLink: async (order, customer, opts = {}) => {
+      if (rz.failCreate) throw new Error(rz.failCreate);
       rz.seq += 1;
       const link = { id: `plink_${rz.seq}`, shortUrl: `https://rzp.io/i/l${rz.seq}` };
       rz.created.push({ order, customer, opts, link });
@@ -89,6 +90,7 @@ beforeEach(() => {
   rz.created.length = 0;
   rz.cancelled.length = 0;
   rz.failCancel = false;
+  rz.failCreate = null;
   rz.remoteStatus = 'created';
   rz.seq = 0;
 });
@@ -98,6 +100,33 @@ process.env.REDIS_URL = 'redis://localhost:6379';
 afterAll(() => {
   if (ORIGINAL_REDIS_URL === undefined) delete process.env.REDIS_URL;
   else process.env.REDIS_URL = ORIGINAL_REDIS_URL;
+});
+
+describe('an order over the Razorpay per-payment limit', () => {
+  it('says so plainly (422, not a server error) and saves nothing', async () => {
+    const rep = await makeStaff('sales');
+    rz.failCreate = 'Failed to create payment link: amount exceeds maximum amount allowed.';
+    const attempt = svc.createSalesOrder(rep, {
+      customer: { name: 'Big Build', email: 'bigbuild@example.com', phone: '9820917286' },
+      shippingAddress: ADDRESS,
+      items: [{ custom: true, name: 'Lift kit', quantity: 1, price: 750000 }],
+    }, req);
+    await expect(attempt).rejects.toMatchObject({
+      statusCode: 422,
+      message: expect.stringMatching(/₹7,50,000 is more than Razorpay allows in one payment.*Split it into smaller orders.*Nothing was saved/),
+    });
+    expect(await Order.countDocuments({ 'items.name': 'Lift kit' })).toBe(0);
+    expect(await User.countDocuments({ email: 'bigbuild@example.com' })).toBe(0); // the new customer is rolled back too
+  });
+
+  it('any other Razorpay failure is still reported as before', async () => {
+    const rep = await makeStaff('sales');
+    rz.failCreate = 'Bad gateway';
+    await expect(svc.createSalesOrder(rep, {
+      customer: CUSTOMER, shippingAddress: ADDRESS,
+      items: [{ custom: true, name: 'Labour', quantity: 1, price: 500 }],
+    }, req)).rejects.toMatchObject({ statusCode: 502, message: expect.stringMatching(/Could not create payment link: Bad gateway/) });
+  });
 });
 
 describe('customer without an email', () => {

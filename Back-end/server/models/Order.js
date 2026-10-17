@@ -28,6 +28,29 @@ const OrderSchema = new mongoose.Schema({
   paymentLinkExpiresAt: { type: Date, default: null },
   // How many links this order has had; makes each Razorpay reference_id unique.
   paymentLinkAttempts: { type: Number, default: 0 },
+  /*
+    Quotation-first GTM orders (services/salesPaymentService.js): payment is
+    requested in one or more PARTS, each its own Razorpay link — so an order over
+    Razorpay's per-payment limit can still be paid. The order is `paid` only when
+    every live part is paid and the paid parts add up exactly to totalAmount.
+    Absent on every other order (website, older sales orders with paymentLinkId).
+  */
+  paymentParts: {
+    type: [new mongoose.Schema({
+      amount: { type: Number, required: true }, // rupees
+      linkId: { type: String, required: true },
+      linkUrl: { type: String, required: true },
+      expiresAt: { type: Date, required: true },
+      status: { type: String, enum: ['pending', 'paid', 'cancelled', 'expired'], default: 'pending' },
+      gatewayPaymentId: { type: String, default: null },
+      payment: { type: mongoose.Schema.Types.ObjectId, ref: 'Payment', default: null },
+      paidAt: { type: Date, default: null },
+      createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      createdAt: { type: Date, default: Date.now },
+      cancelledAt: { type: Date, default: null },
+    }, { _id: true })],
+    default: undefined,
+  },
   // The staff member (team panel, sales team) who created this offline order.
   // Drives "my orders" / team scoping; `salesRep` stays the name-only CRM credit.
   salesUser: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
@@ -945,6 +968,12 @@ OrderSchema.index({ 'refundDetails.transactionId': 1 }, { sparse: true });
 // A plain index is always planner-usable and is what production actually has.
 // Do not "fix the drift" by making this partial again.
 OrderSchema.index({ sessionId: 1 });
+// Reconciliation of quotation-first payment parts (paymentReconciliationService
+// .reconcileSalesLinks): only orders with a WAITING part are indexed.
+OrderSchema.index(
+  { 'paymentParts.status': 1, _id: 1 },
+  { name: 'order_payment_parts_pending', partialFilterExpression: { 'paymentParts.status': 'pending' } }
+);
 
 /*
   Affiliate attribution reporting ("which orders did this affiliate bring, newest first")

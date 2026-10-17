@@ -21,6 +21,10 @@ import {
   validateCursorQuery,
   validateOrderIdParam,
   validateSalesOrder,
+  validateQuotationIdParam,
+  validateQuotationList,
+  validatePaymentParts,
+  validatePaymentPartParam,
   validateWorkQueue,
   validateWorkOrder,
   validateWorkParcel,
@@ -63,7 +67,6 @@ import {
 } from '../utils/sessionManager.js';
 import {
   searchSalesProducts,
-  createSalesOrder,
   listSalesOrders,
   listPaidSalesOrders,
   reissuePaymentLink,
@@ -71,6 +74,12 @@ import {
   getSalesOrder,
 } from '../services/salesOrderService.js';
 import { getQuotationPdf } from '../services/quotationService.js';
+import {
+  createQuotation, updateQuotation, cancelQuotation, acceptQuotation,
+  getQuotation, listQuotations, getQuotationDocument,
+} from '../services/salesQuotationService.js';
+import { requestPayment, cancelPart, getPaymentRequestPdf } from '../services/salesPaymentService.js';
+import { canSell } from '../config/staff.js';
 
 /**
  * Staff panel API (/api/v1/staff). Two halves:
@@ -162,10 +171,73 @@ router.get('/sales/products', validateSalesProductSearch, validateRequest, async
   res.json({ success: true, products: await searchSalesProducts(req.user, req.query.q) });
 }));
 
-// @route  POST /staff/sales/orders — create an order + its Razorpay payment link
-router.post('/sales/orders', validateSalesOrder, validateRequest, asyncHandler(async (req, res) => {
-  const result = await createSalesOrder(req.user, req.body, req);
-  res.status(201).json({ success: true, ...result });
+// @route  POST /staff/sales/orders — RETIRED: GTM sells quotation-first now.
+// A quotation is created and shared, accepted, and payment is requested on the
+// resulting order (routes below). Non-sellers still get 403, as before.
+router.post('/sales/orders', (req, res) => {
+  if (!canSell(req.user)) return res.status(403).json({ success: false, message: 'Not authorized.' });
+  return res.status(410).json({ success: false, message: 'Create a quotation first, then accept it and request payment.' });
+});
+
+// ── Quotations (salesQuotationService) ──────────────────────────────────────
+
+const sendPdf = (res, { buffer, filename }) => {
+  res.set({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `inline; filename="${filename}"`,
+    // Customer names, phone and prices: never cached by a browser or a proxy.
+    'Cache-Control': 'private, no-store',
+    'Content-Length': buffer.length,
+  });
+  res.send(buffer);
+};
+
+// @route  POST /staff/sales/quotations — new quotation (same body as a sales order)
+router.post('/sales/quotations', validateSalesOrder, validateRequest, asyncHandler(async (req, res) => {
+  res.status(201).json({ success: true, quotation: await createQuotation(req.user, req.body, req) });
+}));
+
+// @route  GET /staff/sales/quotations?cursor=&status= — own (lead) / all (head)
+router.get('/sales/quotations', validateQuotationList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listQuotations(req.user, req.query)) });
+}));
+
+router.get('/sales/quotations/:id', validateQuotationIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, quotation: await getQuotation(req.user, req.params.id) });
+}));
+
+// @route  PUT /staff/sales/quotations/:id — edit an open quotation (new version)
+router.put('/sales/quotations/:id', validateQuotationIdParam, validateSalesOrder, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, quotation: await updateQuotation(req.user, req.params.id, req.body, req) });
+}));
+
+router.post('/sales/quotations/:id/cancel', validateQuotationIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, quotation: await cancelQuotation(req.user, req.params.id, req) });
+}));
+
+// @route  POST /staff/sales/quotations/:id/accept — customer agreed → the order (no link yet)
+router.post('/sales/quotations/:id/accept', validateQuotationIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.status(201).json({ success: true, ...(await acceptQuotation(req.user, req.params.id, req)) });
+}));
+
+router.get('/sales/quotations/:id/pdf', validateQuotationIdParam, validateRequest, asyncHandler(async (req, res) => {
+  sendPdf(res, await getQuotationDocument(req.user, req.params.id));
+}));
+
+// ── Payment on a quotation-first order, in parts (salesPaymentService) ─────
+
+// @route  POST /staff/sales/orders/:id/payment-parts { amounts: [rupees…] }
+router.post('/sales/orders/:id/payment-parts', validatePaymentParts, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, payment: await requestPayment(req.user, req.params.id, req.body.amounts, req) });
+}));
+
+router.post('/sales/orders/:id/payment-parts/:partId/cancel', validatePaymentPartParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, payment: await cancelPart(req.user, req.params.id, req.params.partId, req) });
+}));
+
+// @route  GET /staff/sales/orders/:id/payment-request — PDF: every waiting part with its link + QR
+router.get('/sales/orders/:id/payment-request', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  sendPdf(res, await getPaymentRequestPdf(req.user, req.params.id));
 }));
 
 // @route  GET /staff/sales/orders?cursor= — own orders (member) / all (head)
