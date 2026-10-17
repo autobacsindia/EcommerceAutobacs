@@ -7,6 +7,7 @@ import { LayoutDashboard, Users, LogOut, KeyRound, Banknote, PlusCircle, Receipt
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
+import NotificationBell from '@/components/notifications/NotificationBell';
 import { MARKETING_BASE } from '@/lib/usePanel';
 import { MARKETING_AREAS } from './marketingAreas';
 
@@ -100,14 +101,19 @@ export default function TeamLayoutClient({
   return (
     <div className="admin-panel min-h-screen bg-gray-50 md:flex">
       <aside className="bg-gray-900 text-white md:fixed md:inset-y-0 md:flex md:w-60 md:flex-col">
-        <div className="flex items-center justify-between border-b border-gray-800 p-4 md:block">
+        <div className="flex items-center justify-between border-b border-gray-800 p-4">
           <div>
             <p className="text-lg font-bold">{teamLabel} Team</p>
             <p className="text-xs text-gray-400">{roleLabel || (isHead ? 'Team head' : 'Team member')}</p>
           </div>
-          <button onClick={signOut} className="rounded-lg bg-red-600 p-2 text-sm md:hidden" aria-label="Log out">
-            <LogOut className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Everything waiting on this team in one place — approvals,
+                refunds, unread chat — so nobody opens each page to check. */}
+            <NotificationBell chatHref="/team/chat" tone="dark" />
+            <button onClick={signOut} className="rounded-lg bg-red-600 p-2 text-sm md:hidden" aria-label="Log out">
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         <nav className="flex gap-2 overflow-x-auto p-3 md:flex-1 md:flex-col">{links}</nav>
         <div className="hidden border-t border-gray-800 p-4 md:block">

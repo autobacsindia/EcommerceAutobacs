@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAdminStats } from '@/hooks/queries/useAdminStats';
 import { formatCurrency } from '@/lib/utils';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
+import NotificationBell from '@/components/notifications/NotificationBell';
 
 interface NavItem {
   href?: string;
@@ -314,6 +315,9 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
                 </span>
               )}
             </Link>
+            {/* One glance for everything else that is waiting — approvals,
+                refunds — so nobody has to open each section to find out. */}
+            <NotificationBell chatHref="/admin/chat" />
           </div>
 
           {/* Stats Overview — each tile drills into the orders behind the number */}

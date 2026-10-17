@@ -10,6 +10,10 @@ let pathname = '/team';
 jest.mock('next/navigation', () => ({ usePathname: () => pathname, useRouter: () => ({ replace: jest.fn(), push: jest.fn() }) }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ logout: jest.fn() }) }));
 jest.mock('@/hooks/queries/useTeamChat', () => ({ useChatUnreadTotal: () => 0 }));
+// The header now carries the notification bell. This file is about the NAV, so
+// the bell's own data is stubbed — its behaviour is covered in
+// components/notifications/NotificationBell.test.tsx.
+jest.mock('@/hooks/queries/useNotifications', () => ({ useWaitingWork: () => ({ data: { items: [], total: 0 } }) }));
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => <a href={href} className={className}>{children}</a> }));
 
 const shell = (canChangePassword: boolean, extra: { canSell?: boolean; roleLabel?: string } = { canSell: true }) => render(
