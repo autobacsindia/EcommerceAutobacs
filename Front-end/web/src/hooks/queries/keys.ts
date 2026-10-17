@@ -201,3 +201,6 @@ export const teamActivityKeys = {
 
 /** `/admin/overview` — the admin's Company overview (teams, money waiting, activity). */
 export const overviewKeys = { all: ['admin-overview'] as const };
+
+/** `/notifications/summary` — what is waiting on me, for the header bell. */
+export const notificationKeys = { all: ['notifications'] as const, summary: () => ['notifications', 'summary'] as const };

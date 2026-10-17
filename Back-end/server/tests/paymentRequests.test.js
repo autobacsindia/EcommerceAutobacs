@@ -5,10 +5,10 @@
  *
  * What must hold:
  *   - only procurement raises supplier payments; only operations / marketing raise expenses
- *   - Operations purchases: only an admin approves or declines; accounts pays only after
- *     that (an admin may also pay one straight away)
- *   - everything else (marketing expenses, supplier payments): accounts approves, declines
- *     and pays — paying a waiting request approves it in the same step
+ *   - ONE path for every team: accounts approves or declines, the admin pays.
+ *     Accounts cannot pay; an admin paying a waiting request approves it in the
+ *     same step. Either of them may put an approved request on hold.
+ *   - the bell counts only what is the viewer's own job
  *   - every step happens once (double click → 409), and is in the history
  *   - a team sees only its own requests; admin and accounts see all; bank numbers
  *     are masked for anyone outside the approval chain and the requester
@@ -362,6 +362,65 @@ describe('Payment requests', () => {
 
       const list = (await procurement.session.get(`/payment-requests/order/${id}`)).body.requests;
       expect(list).toEqual([expect.objectContaining({ status: 'paid', itemNames: ['Lift kit'] })]);
+    });
+  });
+
+  describe('the bell', () => {
+    /*
+      The bell is the reason the counts exist: nobody should have to open each
+      section to find out whether something is waiting. So what matters is not
+      that it counts, but that it counts the RIGHT person's work — a bell that
+      rings for someone else's queue teaches people to ignore it.
+    */
+    const bell = (who) => who.session.get('/notifications/summary');
+
+    it('shows accounts what it must approve, and never what it cannot pay', async () => {
+      const waiting = (await expense(ops.session, { payee: BANK })).body.request.id;
+      const approved = (await expense(marketing.session, { category: 'purchase', description: 'Flyers' })).body.request.id;
+      await accounts.session.post(`/payment-requests/${approved}/approve`);
+
+      const { body } = await bell(accounts);
+      const keys = body.items.map((i) => i.key);
+      expect(keys).toContain('payments_to_approve');
+      expect(keys).not.toContain('payments_to_pay');
+      expect(body.items.find((i) => i.key === 'payments_to_approve')).toMatchObject({ count: 1, href: '/team/payments' });
+      expect(String(waiting)).toBeTruthy();
+    });
+
+    it('shows the admin what is approved and waiting to be paid, not what accounts has yet to decide', async () => {
+      await expense(ops.session, { payee: BANK });                       // still waiting on accounts
+      const b = (await expense(marketing.session, { category: 'purchase', description: 'Flyers' })).body.request.id;
+      await accounts.session.post(`/payment-requests/${b}/approve`);
+
+      const { body } = await bell(admin);
+      const keys = body.items.map((i) => i.key);
+      expect(keys).toContain('payments_to_pay');
+      expect(keys).not.toContain('payments_to_approve');
+      expect(body.items.find((i) => i.key === 'payments_to_pay')).toMatchObject({ count: 1, href: '/admin/payments' });
+    });
+
+    it('a team that only raises requests is told about nothing', async () => {
+      await expense(ops.session, { payee: BANK });
+      const { body } = await bell(ops);
+      // Its own request is not work waiting ON it — it is waiting on accounts.
+      expect(body.items).toEqual([]);
+      expect(body.total).toBe(0);
+    });
+
+    it('the total is the sum, and drops as the work is done', async () => {
+      const a = (await expense(marketing.session, { category: 'purchase', description: 'Flyers' })).body.request.id;
+      expect((await bell(accounts)).body.total).toBe(1);
+      await accounts.session.post(`/payment-requests/${a}/approve`);
+      // Off accounts' list the moment it is approved, onto the admin's.
+      expect((await bell(accounts)).body.total).toBe(0);
+      expect((await bell(admin)).body.total).toBe(1);
+      await admin.session.form(`/payment-requests/${a}/pay`, { method: 'upi', reference: 'UPI12341234' });
+      expect((await bell(admin)).body.total).toBe(0);
+    });
+
+    it('a customer cannot ask at all', async () => {
+      const customer = await makeUser('Cara', 'customer');
+      expect((await bell(customer)).status).toBe(403);
     });
   });
 
