@@ -239,6 +239,74 @@ export async function deactivateMember(actor, userId, req) {
 }
 
 /**
+ * Admin edits a team member: name, mobile, username (company logins), team,
+ * head, GTM role. Their history stays attached — it is the same account.
+ *
+ * Name / mobile only: nothing else changes. A change to team, head or GTM role
+ * changes what they may do, so every session ends and they sign in again under
+ * the new permissions. A username change moves the company login (and its
+ * internal address) with it.
+ */
+export async function updateMember(actor, userId, input = {}, req) {
+  if (!isAdmin(actor)) throw fail('Only an administrator can edit team members.', 403);
+  const target = await userRepository.findById(userId);
+  if (!isActiveStaff(target)) throw fail('Staff member not found.', 404);
+
+  const set = {};
+  const changed = [];
+  if (input.name !== undefined && input.name !== target.name) { set.name = String(input.name).trim(); changed.push('name'); }
+  if (input.phone !== undefined && input.phone !== target.phone) { set.phone = String(input.phone).trim(); changed.push('phone'); }
+
+  if (input.username !== undefined) {
+    const username = normaliseUsername(input.username);
+    if (username !== target.username) {
+      if (!target.companyAccount) throw fail('Only a company login has a username — this person signs in with their own email.', 400);
+      if (!isValidStaffUsername(username)) throw fail(`Username: ${STAFF_USERNAME_HINT}.`, 400);
+      const taken = await userRepository.findByUsername(username);
+      if (taken && String(taken._id) !== String(target._id)) throw fail('That username is already taken.', 409);
+      set.username = username;
+      set.email = companyEmailFor(username);
+      changed.push('username');
+    }
+  }
+
+  const team = input.team !== undefined ? input.team : target.staff.team;
+  if (!isStaffTeam(team)) throw fail('Choose a team.', 400);
+  const isHead = input.isHead !== undefined ? input.isHead === true : !!target.staff.isHead;
+  // GTM only: a head has no sub-role; a member keeps (or gets) one, defaulting to lead.
+  let subRole = input.subRole !== undefined ? input.subRole : (target.staff.subRole ?? null);
+  if (team !== STAFF_TEAMS.SALES || isHead) subRole = null;
+  if (subRole && !GTM_SUB_ROLE_VALUES.includes(subRole)) throw fail('Choose a GTM role.', 400);
+
+  const permissionsChange = team !== target.staff.team || isHead !== !!target.staff.isHead
+    || (subRole ?? null) !== (target.staff.subRole ?? null);
+  if (permissionsChange) {
+    set['staff.team'] = team;
+    set['staff.isHead'] = isHead;
+    set['staff.subRole'] = subRole ?? undefined;
+    changed.push('role');
+  }
+  if (changed.length === 0) return publicMember(target);
+
+  let updated;
+  try {
+    updated = await userRepository.updateActiveStaff(target._id, set, { bumpSession: permissionsChange || changed.includes('username') });
+  } catch (err) {
+    if (err?.code === 11000) throw fail('That username is already taken.', 409);
+    throw err;
+  }
+  if (!updated) throw fail('Staff member not found.', 404);
+  if (permissionsChange || changed.includes('username')) await revokeAllRefreshTokens(updated);
+
+  auditLogger.logAction(req, 'UPDATE', 'User', target._id, {
+    change: 'staff_member_edited', fields: changed,
+    from: { team: target.staff.team, isHead: !!target.staff.isHead, subRole: target.staff.subRole ?? null, username: target.username ?? null },
+    to: { team, isHead, subRole: subRole ?? null, username: set.username ?? target.username ?? null },
+  });
+  return publicMember(updated);
+}
+
+/**
  * Is the person who sent this invite still allowed to grant it? An invite from a
  * head who has since lost their role must not keep working.
  */

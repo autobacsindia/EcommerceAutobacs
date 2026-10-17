@@ -185,4 +185,80 @@ describe('SearchPage', () => {
     // "Did you mean?" should not be present
     expect(screen.queryByText('Did you mean:')).not.toBeInTheDocument();
   });
+
+  describe('"Show more" survives a visit to a product and back', () => {
+    const page = (n: number, hasNext: boolean) => ({
+      products: [{ _id: `p${n}`, name: `Product ${n}`, slug: `product-${n}`, price: 100, images: [], stock: 'in' }],
+      total: 3, hasNext,
+    });
+    const pageOf = (url: string) => Number(new URL(url, 'http://x').searchParams.get('page'));
+
+    afterEach(() => window.history.replaceState(null, '', '/'));
+
+    it('coming back with shown=3 loads pages 1–3 again', async () => {
+      mockSearchParams.delete('search');
+      mockSearchParams.set('q', 'seat');
+      window.history.replaceState(null, '', '/products/search?q=seat&shown=3');
+      (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+        const n = pageOf(url);
+        return Promise.resolve(page(n, n < 3));
+      });
+      render(<SearchPage />);
+      await waitFor(() => expect(screen.getByText('Product 3')).toBeInTheDocument());
+      expect(screen.getByText('Product 1')).toBeInTheDocument();
+      expect((apiClient.get as jest.Mock).mock.calls.map(([u]) => u).filter((u: string) => u.includes('page=')).map(pageOf)).toEqual([1, 2, 3]);
+    });
+
+    it('asks for every restored page at once, and shows them in page order whatever order they arrive in', async () => {
+      mockSearchParams.delete('search');
+      mockSearchParams.set('q', 'seat');
+      window.history.replaceState(null, '', '/products/search?q=seat&shown=3');
+      const pending: Record<number, () => void> = {};
+      (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+        const n = pageOf(url);
+        if (!n) return Promise.resolve({ products: [], total: 0, hasNext: false }); // not a results page
+        return new Promise((resolve) => { pending[n] = () => resolve(page(n, n < 3)); });
+      });
+      render(<SearchPage />);
+      // All three requests are out before any answer comes back.
+      await waitFor(() => expect(Object.keys(pending).sort()).toEqual(['1', '2', '3']));
+      pending[3](); pending[2](); pending[1]();
+      await waitFor(() => expect(screen.getByText('Product 3')).toBeInTheDocument());
+      const names = screen.getAllByText(/^Product \d$/).map((el) => el.textContent);
+      expect(names).toEqual(['Product 1', 'Product 2', 'Product 3']);
+    });
+
+    it('a restored page that fails stops the list there, and Show more fetches it — nothing skipped', async () => {
+      mockSearchParams.delete('search');
+      mockSearchParams.set('q', 'seat');
+      window.history.replaceState(null, '', '/products/search?q=seat&shown=3');
+      let failPage2 = true;
+      (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+        const n = pageOf(url);
+        if (n === 2 && failPage2) { failPage2 = false; return Promise.reject(new Error('timeout')); }
+        return Promise.resolve(page(n, n < 3));
+      });
+      render(<SearchPage />);
+      await waitFor(() => expect(screen.getByText('Product 1')).toBeInTheDocument());
+      expect(screen.queryByText('Product 3')).not.toBeInTheDocument(); // not shown after a gap
+
+      screen.getByRole('button', { name: /show more|load more/i }).click();
+      await waitFor(() => expect(screen.getByText('Product 2')).toBeInTheDocument());
+    });
+
+    it('clicking Show more records the page in the address', async () => {
+      mockSearchParams.delete('search');
+      mockSearchParams.set('q', 'seat');
+      window.history.replaceState(null, '', '/products/search?q=seat');
+      (apiClient.get as jest.Mock).mockImplementation((url: string) => {
+        const n = pageOf(url);
+        return Promise.resolve(page(n, n < 3));
+      });
+      render(<SearchPage />);
+      await waitFor(() => expect(screen.getByText('Product 1')).toBeInTheDocument());
+      screen.getByRole('button', { name: /show more|load more/i }).click();
+      await waitFor(() => expect(screen.getByText('Product 2')).toBeInTheDocument());
+      expect(new URL(window.location.href).searchParams.get('shown')).toBe('2');
+    });
+  });
 });

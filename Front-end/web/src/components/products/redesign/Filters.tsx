@@ -294,6 +294,7 @@ export default function Filters({
     }) => {
       const p = new URLSearchParams(searchParams.toString());
       p.delete('page'); // any filter change resets pagination
+      p.delete('shown'); // …and the search page's restored "Show more" pages
 
       const set = (k: string, arr: string[] | number[]) =>
         arr.length ? p.set(k, arr.join(',')) : p.delete(k);

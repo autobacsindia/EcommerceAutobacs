@@ -65,6 +65,15 @@ const isAccounts = (u) => onTeam(u, STAFF_TEAMS.ACCOUNTS);
 const seesAll = (u) => isAdmin(u) || isAccounts(u);
 const roleOf = (u) => (isAdmin(u) ? 'admin' : u?.staff?.team || '');
 
+/**
+ * Who decides a request. Operations purchases need an ADMIN (approve, or pay
+ * directly). Every other request — Procurement supplier payments, Marketing
+ * expenses — is approved and paid by ACCOUNTS (an admin may still act on any).
+ */
+export const needsAdmin = (r) => r?.team === STAFF_TEAMS.OPERATIONS;
+const mayDecide = (u, r) => isAdmin(u) || (!needsAdmin(r) && isAccounts(u));
+const decider = (r) => (needsAdmin(r) ? 'Admin' : 'Accounts');
+
 /** May `user` see this request? */
 const canSee = (user, req) => seesAll(user) || (isActiveStaff(user) && user.staff.team === req.team);
 
@@ -205,7 +214,9 @@ export function shape(r, viewer) {
     number: r.number,
     kind: r.kind,
     status: r.status,
-    statusLabel: STATUS_LABELS[r.status],
+    statusLabel: r.status === 'submitted'
+      ? (needsAdmin(r) ? 'Waiting for admin approval' : 'Waiting for accounts approval')
+      : STATUS_LABELS[r.status],
     team: r.team,
     teamLabel: STAFF_TEAM_LABELS[r.team] || r.team,
     requestedBy: r.requestedByName,
@@ -226,10 +237,15 @@ export function shape(r, viewer) {
     decisionNote: r.decisionNote || '',
     history: (r.history || []).map((h) => ({ at: h.at, byName: h.byName, role: h.role, action: h.action, note: h.note })),
     createdAt: r.createdAt,
+    // Who must approve it: 'admin' (Operations purchases) or 'accounts' (the rest).
+    approver: needsAdmin(r) ? 'admin' : 'accounts',
     can: {
-      approve: isAdmin(viewer) && r.status === 'submitted',
-      decline: isAdmin(viewer) && ['submitted', 'on_hold'].includes(r.status),
-      pay: (isAccounts(viewer) || isAdmin(viewer)) && ['approved', 'on_hold'].includes(r.status),
+      approve: mayDecide(viewer, r) && r.status === 'submitted',
+      decline: mayDecide(viewer, r) && ['submitted', 'on_hold'].includes(r.status),
+      // Accounts pays an approved request; whoever may approve may also pay it
+      // straight away (the approval is recorded with the payment).
+      pay: ((isAccounts(viewer) || isAdmin(viewer)) && ['approved', 'on_hold'].includes(r.status))
+        || (mayDecide(viewer, r) && r.status === 'submitted'),
       hold: (isAccounts(viewer) || isAdmin(viewer)) && r.status === 'approved',
       cancel: r.status === 'submitted' && (idOf(r.requestedBy) === idOf(viewer?._id) || isHeadOfTeam || isAdmin(viewer)),
     },
@@ -266,7 +282,7 @@ export async function createExpense(actor, input, uploaded, req) {
     history: [entry(actor, 'submitted')],
   });
   auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'expense', amount, team });
-  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} from ${doc.requestedByName} (${STAFF_TEAM_LABELS[team]}). Admin: please approve or decline.`, { mentionAdmins: true });
+  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} from ${doc.requestedByName} (${STAFF_TEAM_LABELS[team]}). ${decider(doc)}: please approve or decline.`, { mentionAdmins: needsAdmin(doc) });
   return shape(doc, actor);
 }
 
@@ -324,7 +340,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     history: [entry(actor, 'submitted')],
   });
   auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', amount, orderId: idOf(order._id) });
-  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}. Admin: please approve or decline.`, { mentionAdmins: true });
+  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}. ${decider(doc)}: please approve or decline.`, { mentionAdmins: needsAdmin(doc) });
   return shape(doc, actor);
 }
 
@@ -340,27 +356,27 @@ async function loadVisible(actor, id) {
 const MOVED = 'This request has just been updated by someone else. Refresh to see where it is now.';
 
 export async function approve(actor, id, { note } = {}, req) {
-  if (!isAdmin(actor)) throw fail('Only an admin approves payments.', 403);
-  await loadVisible(actor, id);
+  const r0 = await loadVisible(actor, id);
+  if (!mayDecide(actor, r0)) throw fail(needsAdmin(r0) ? 'Operations purchases are approved by an admin.' : 'Only accounts or an admin approves payments.', 403);
   const r = await paymentRequestRepository.transition(id, ['submitted'],
     { status: 'approved', approvedBy: actor._id, approvedAt: new Date(), decisionNote: String(note || '').slice(0, 1000) },
     entry(actor, 'approved', note));
   if (!r) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'approved' });
-  await tellChat(r, 'approved', `✅ Admin approved ${what(r)}. Accounts: please pay and record the payment.`);
+  await tellChat(r, 'approved', `✅ ${isAdmin(actor) ? 'Admin' : 'Accounts'} approved ${what(r)}. Accounts: please pay and record the payment.`);
   return shape(r, actor);
 }
 
 export async function decline(actor, id, { note } = {}, req) {
-  if (!isAdmin(actor)) throw fail('Only an admin declines payments.', 403);
+  const r0 = await loadVisible(actor, id);
+  if (!mayDecide(actor, r0)) throw fail(needsAdmin(r0) ? 'Operations purchases are declined by an admin.' : 'Only accounts or an admin declines payments.', 403);
   const reason = String(note || '').trim();
   if (reason.length < 3) throw fail('Say why it is declined — the requester sees this.', 400);
-  await loadVisible(actor, id);
   const r = await paymentRequestRepository.transition(id, ['submitted', 'on_hold'],
     { status: 'declined', decisionNote: reason.slice(0, 1000) }, entry(actor, 'declined', reason));
   if (!r) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'declined' });
-  await tellChat(r, 'declined', `⛔ Admin declined ${what(r)}: “${reason.slice(0, 200)}”.`, { mentionRequester: true });
+  await tellChat(r, 'declined', `⛔ ${isAdmin(actor) ? 'Admin' : 'Accounts'} declined ${what(r)}: “${reason.slice(0, 200)}”.`, { mentionRequester: true });
   return shape(r, actor);
 }
 
@@ -384,10 +400,17 @@ export async function markPaid(actor, id, { method, reference, note } = {}, proo
   if (!how) throw fail('Choose how it was paid.', 400);
   const ref = String(reference || '').trim();
   if (ref.length < 4) throw fail('Enter the payment reference (Razorpay payout ID or bank UTR).', 400);
-  await loadVisible(actor, id);
+  const r0 = await loadVisible(actor, id);
+  // Paying a request that is still waiting for approval counts as approving it —
+  // only for someone who may approve it (an admin; accounts for non-Operations).
+  const from = mayDecide(actor, r0) ? ['submitted', 'approved', 'on_hold'] : ['approved', 'on_hold'];
+  if (r0.status === 'submitted' && !mayDecide(actor, r0)) {
+    throw fail('Operations purchases need an admin\'s approval before accounts can pay them.', 403);
+  }
   const proof = proofFile ? await storeFiles([proofFile], ['proof'], actor) : [];
   const now = new Date();
-  const r = await paymentRequestRepository.transition(id, ['approved', 'on_hold'], {
+  const r = await paymentRequestRepository.transition(id, from, {
+    ...(r0.status === 'submitted' ? { approvedBy: actor._id, approvedAt: now } : {}),
     status: 'paid',
     payment: { method: how, reference: ref.slice(0, 120), paidAt: now, paidBy: actor._id, paidByName: actor.name || '' },
   }, entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`, note].filter(Boolean).join(' — ')), proof.length ? { files: { $each: proof } } : {});
@@ -437,7 +460,14 @@ export async function list(actor, { status, team, cursor } = {}) {
   const query = {};
   if (seesAll(actor)) { if (team) query.team = String(team); } else query.team = actor.staff.team;
   if (status === 'open') query.status = { $in: OPEN_STATUSES };
-  else if (status === 'to_pay') query.status = { $in: ['approved', 'on_hold'] }; // accounts' queue
+  else if (status === 'to_pay') {
+    // Accounts' queue: everything approved or on hold, plus the requests accounts
+    // itself approves (everything except Operations) still waiting for a decision.
+    query.$or = [
+      { status: { $in: ['approved', 'on_hold'] } },
+      { status: 'submitted', team: { $ne: STAFF_TEAMS.OPERATIONS } },
+    ];
+  }
   else if (status && STATUS_LABELS[status]) query.status = status;
   const before = cursor ? decodeCursor(cursor) : null;
   const rows = await paymentRequestRepository.page(query, { before, limit: PAGE_SIZE + 1 });

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import { SlidersHorizontal, X } from 'lucide-react';
@@ -90,6 +90,21 @@ function SearchPageInner() {
   const currentSort = searchParams.get('sort') || 'relevance';
   const searchTerm  = searchParams.get('q') || searchParams.get('search') || '';
 
+  /*
+    "Show more" must survive a visit to a product and back. How many pages are on
+    screen is kept in the address (`shown`), and the scroll position in session
+    storage — so Back rebuilds the same list and lands on the same product instead
+    of dropping the shopper on page 1. `shown` is not part of the search itself:
+    the fetch below keys on everything EXCEPT it, so writing it never refetches.
+  */
+  const queryKey = useMemo(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete('shown');
+    return p.toString();
+  }, [searchParams]);
+  const scrollKey = `search-scroll:${queryKey}`;
+  const MAX_RESTORED_PAGES = 10;
+
   // Reset and fetch page 1 whenever the query/filters/sort changes
   useEffect(() => {
     let isMounted = true;
@@ -100,22 +115,45 @@ function SearchPageInner() {
       setLoading(true);
       setProducts([]);
 
-      const resolved = Object.fromEntries(searchParams.entries());
+      const resolved = Object.fromEntries(new URLSearchParams(queryKey).entries());
       resolved.page = '1';
+      const shown = Math.min(MAX_RESTORED_PAGES, Math.max(1, Number(new URLSearchParams(window.location.search).get('shown')) || 1));
 
       try {
-        const result = await getProducts(resolved);
+        // Coming back to a list that had "Show more" pages open: load them again —
+        // all at once, not one after another. Measured on production: an uncached
+        // page takes 1.7–3.8 s, so three pages in sequence kept the shopper waiting
+        // ~8 s on Back; in parallel it is the slowest single page. Same number of
+        // requests either way (well inside the 40-per-10s search burst limit).
+        const settled = await Promise.allSettled(
+          Array.from({ length: shown }, (_, i) => getProducts({ ...resolved, page: String(i + 1) })),
+        );
         if (!isMounted) return;
+        if (settled[0].status === 'rejected') throw settled[0].reason;
+        const result = settled[0].value;
 
-        const fetched: any[] = result.products || [];
+        const firstPage: any[] = result.products || [];
+        let fetched: any[] = firstPage;
+        let more = Boolean(result.hasNext);
+        let last = result;
+        // Pages are joined in order and stop at the first gap: a page that failed
+        // leaves "Show more" to fetch it, so nothing is skipped or duplicated.
+        for (let i = 1; i < settled.length && more; i += 1) {
+          const next = settled[i];
+          if (next.status !== 'fulfilled') break;
+          fetched = [...fetched, ...(next.value.products || [])];
+          more = Boolean(next.value.hasNext);
+          last = next.value;
+          pageRef.current = i + 1;
+        }
         setProducts(fetched);
         // Measured, not assumed. This page never sends `limit`, so the page size is
         // whatever the backend defaults to — and that default differs per engine.
         // A hardcoded constant here was wrong for years (12 against a real 20) and
         // would quietly go wrong again on any engine or default change.
-        setFirstPageSize(fetched.length);
+        setFirstPageSize(firstPage.length);
         setTotal(result.total || 0);
-        setHasNext(result.hasNext || false);
+        setHasNext(last.hasNext || false);
         setRelaxed(Boolean(result.relaxed));
 
         trackViewItemList({
@@ -150,15 +188,37 @@ function SearchPageInner() {
       }
     };
 
-    fetchData();
+    fetchData().then(() => {
+      // Back to where the shopper was (saved as they scrolled), once the rows exist.
+      try {
+        const y = Number(sessionStorage.getItem(scrollKey));
+        if (isMounted && y > 0) requestAnimationFrame(() => window.scrollTo(0, y));
+      } catch { /* storage blocked — just start at the top */ }
+    });
     return () => { isMounted = false; };
-  }, [searchParams]);
+    // queryKey, not searchParams: writing `shown` must not refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryKey]);
+
+  // Remember the scroll position for this search (throttled), for the way back.
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const onScroll = () => {
+      if (t) return;
+      t = setTimeout(() => {
+        t = null;
+        try { sessionStorage.setItem(scrollKey, String(window.scrollY)); } catch { /* ignore */ }
+      }, 200);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { window.removeEventListener('scroll', onScroll); if (t) clearTimeout(t); };
+  }, [scrollKey]);
 
   const handleLoadMore = async () => {
     if (loadingMore || !hasNext) return;
     setLoadingMore(true);
     const nextPage = pageRef.current + 1;
-    const resolved = Object.fromEntries(searchParams.entries());
+    const resolved = Object.fromEntries(new URLSearchParams(queryKey).entries());
     resolved.page = String(nextPage);
 
     try {
@@ -168,6 +228,10 @@ function SearchPageInner() {
       setHasNext(result.hasNext || false);
       setRelaxed(Boolean(result.relaxed));
       pageRef.current = nextPage;
+      // Record it in the address (no navigation, no refetch) so Back restores it.
+      const url = new URL(window.location.href);
+      url.searchParams.set('shown', String(nextPage));
+      window.history.replaceState(window.history.state, '', url.toString());
     } catch (error: any) {
       if (error.name !== 'AbortError') {
         console.error('Error loading more products:', {
@@ -183,6 +247,7 @@ function SearchPageInner() {
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const sortValue = e.target.value;
     const currentParams = new URLSearchParams(searchParams.toString());
+    currentParams.delete('shown'); // a new search starts on page 1
     currentParams.delete('sort');
     if (sortValue !== 'relevance') currentParams.set('sort', sortValue);
     currentParams.delete('page');
@@ -191,6 +256,7 @@ function SearchPageInner() {
 
   const handleCorrectionClick = (correctedTerm: string) => {
     const currentParams = new URLSearchParams(searchParams.toString());
+    currentParams.delete('shown'); // a new search starts on page 1
     // Write the term under the canonical `q` and clear any legacy `search` so the
     // two can't disagree (the page reads `q` first).
     currentParams.set('q', correctedTerm);

@@ -8,6 +8,7 @@ import { useState } from 'react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
+import CustomerBankCard from './CustomerBankCard';
 import { whatsappNumber } from './PaymentLinkCard';
 import { errorMessage, quotationPdfHref, rupees, type Quotation } from './types';
 
@@ -181,6 +182,8 @@ export default function QuotationDetail({ id }: { id: string }) {
           <p className="text-xl font-bold text-gray-900">{rupees(quote.totalAmount)}</p>
         </div>
       </section>
+
+      {quote.status !== 'cancelled' && <CustomerBankCard kind="quotation" id={quote.id} />}
 
       {quote.notes && (
         <p className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700"><span className="font-medium">Note: </span>{quote.notes}</p>

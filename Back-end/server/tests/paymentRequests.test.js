@@ -5,7 +5,10 @@
  *
  * What must hold:
  *   - only procurement raises supplier payments; only operations / marketing raise expenses
- *   - only admin approves or declines; only accounts (or admin) pays or holds — after approval
+ *   - Operations purchases: only an admin approves or declines; accounts pays only after
+ *     that (an admin may also pay one straight away)
+ *   - everything else (marketing expenses, supplier payments): accounts approves, declines
+ *     and pays — paying a waiting request approves it in the same step
  *   - every step happens once (double click → 409), and is in the history
  *   - a team sees only its own requests; admin and accounts see all; bank numbers
  *     are masked for anyone outside the approval chain and the requester
@@ -159,10 +162,12 @@ describe('Payment requests', () => {
   describe('approval and payment', () => {
     const raise = async () => (await expense(ops.session, { payee: BANK })).body.request.id;
 
-    it('admin approves, then accounts pays with a reference and screenshot — each once', async () => {
+    it('an Operations purchase: admin approves, then accounts pays with a reference and screenshot — each once', async () => {
       const id = await raise();
+      expect((await ops.session.get(`/payment-requests/${id}`)).body.request).toMatchObject({ approver: 'admin', statusLabel: 'Waiting for admin approval' });
       expect((await accounts.session.post(`/payment-requests/${id}/approve`)).status).toBe(403);
-      expect((await accounts.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_ABC123' })).status).toBe(409);
+      expect((await accounts.session.post(`/payment-requests/${id}/decline`, { note: 'Not needed' })).status).toBe(403);
+      expect((await accounts.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_ABC123' })).status).toBe(403);
 
       const approved = await admin.session.post(`/payment-requests/${id}/approve`, { note: 'OK' });
       expect(approved.status).toBe(200);
@@ -181,6 +186,46 @@ describe('Payment requests', () => {
       const saved = await PaymentRequest.findById(id).lean();
       expect(saved.history.map((h) => [h.action, h.byName])).toEqual([['submitted', 'Omar'], ['approved', 'Owner'], ['paid', 'Anu']]);
       expect((await ops.session.get(`/payment-requests/${id}`)).body.request.status).toBe('paid');
+    });
+
+    it('an admin may pay an Operations purchase straight away — that approves it too', async () => {
+      const id = await raise();
+      const paid = await admin.session.form(`/payment-requests/${id}/pay`, { method: 'bank', reference: 'UTR12345678' });
+      expect(paid.status).toBe(200);
+      expect(paid.body.request.status).toBe('paid');
+      const saved = await PaymentRequest.findById(id).lean();
+      expect(String(saved.approvedBy)).toBe(String(admin.user._id));
+    });
+
+    it('a marketing expense is approved, declined and paid by accounts — no admin needed', async () => {
+      const a = (await expense(marketing.session, { category: 'purchase', description: 'Banner printing' })).body.request.id;
+      const view = (await accounts.session.get(`/payment-requests/${a}`)).body.request;
+      expect(view).toMatchObject({ approver: 'accounts', statusLabel: 'Waiting for accounts approval', can: expect.objectContaining({ approve: true, decline: true, pay: true }) });
+      expect((await marketing.session.post(`/payment-requests/${a}/approve`)).status).toBe(403);
+      expect((await accounts.session.post(`/payment-requests/${a}/approve`, { note: 'OK' })).body.request.status).toBe('approved');
+      expect((await accounts.session.form(`/payment-requests/${a}/pay`, { method: 'upi', reference: 'UPI99887766' })).body.request.status).toBe('paid');
+      expect((await PaymentRequest.findById(a).lean()).history.map((h) => [h.action, h.byName])).toEqual([['submitted', 'Mira'], ['approved', 'Anu'], ['paid', 'Anu']]);
+
+      // Paid straight from "waiting": one step, recorded as approved by accounts.
+      const b = (await expense(marketing.session, { category: 'purchase', description: 'Flyers' })).body.request.id;
+      const paid = await accounts.session.form(`/payment-requests/${b}/pay`, { method: 'bank', reference: 'UTR11223344' });
+      expect(paid.body.request.status).toBe('paid');
+      expect(String((await PaymentRequest.findById(b).lean()).approvedBy)).toBe(String(accounts.user._id));
+      // …once: a second press finds it already paid.
+      expect((await accounts.session.form(`/payment-requests/${b}/pay`, { method: 'bank', reference: 'UTR11223355' })).status).toBe(409);
+
+      const c = (await expense(marketing.session, { category: 'purchase', description: 'Stickers' })).body.request.id;
+      expect((await accounts.session.post(`/payment-requests/${c}/decline`, { note: 'Duplicate bill' })).body.request.status).toBe('declined');
+    });
+
+    it("accounts' to-pay queue holds approved work plus non-Operations requests waiting for accounts", async () => {
+      const opsWaiting = await raise();
+      const opsApproved = await raise();
+      await admin.session.post(`/payment-requests/${opsApproved}/approve`);
+      const mktWaiting = (await expense(marketing.session, { category: 'purchase', description: 'Banner printing' })).body.request.id;
+      const queue = (await accounts.session.get('/payment-requests?status=to_pay')).body.requests.map((r) => r.id);
+      expect(queue).toEqual(expect.arrayContaining([opsApproved, mktWaiting]));
+      expect(queue).not.toContain(opsWaiting);
     });
 
     it('accounts can hold an approved request with a reason, then pay it; admin can decline a held one', async () => {
@@ -288,7 +333,8 @@ describe('Payment requests', () => {
       // An item with no supplier request ships as it always has.
       await expect(wf.shipWithProof(procurement.user, id, { itemIds: [mat] }, photo, req)).resolves.toBeTruthy();
 
-      await admin.session.post(`/payment-requests/${prId}/approve`);
+      // A supplier payment is accounts' own call: approved and paid without an admin.
+      expect((await accounts.session.post(`/payment-requests/${prId}/approve`)).status).toBe(200);
       await accounts.session.form(`/payment-requests/${prId}/pay`, { method: 'bank', reference: 'UTR55667788' });
       await expect(wf.shipWithProof(procurement.user, id, { itemIds: [kit] }, photo, req)).resolves.toBeTruthy();
 

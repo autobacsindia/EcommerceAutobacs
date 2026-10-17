@@ -17,6 +17,7 @@ import {
   cancelAttribution, type OrderHistoryItem,
 } from '@/lib/leads';
 import { usePanel } from '@/lib/usePanel';
+import { displayEmail } from '@/lib/internalEmail';
 
 interface LeadDetailResponse {
   success: boolean;
@@ -144,7 +145,7 @@ export default function LeadDetailPage() {
             )}
           </div>
           <div className="mt-2 flex flex-col gap-1 text-sm text-gray-600">
-            {lead.email && <span className="flex items-center gap-1"><Mail className="h-4 w-4" />{lead.email}</span>}
+            {displayEmail(lead.email, { label: false }) && <span className="flex items-center gap-1"><Mail className="h-4 w-4" />{lead.email}</span>}
             {lead.phone && <span className="flex items-center gap-1"><Phone className="h-4 w-4" />{lead.phone}</span>}
           </div>
         </div>

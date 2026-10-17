@@ -84,6 +84,33 @@ describe('WorkOrderPanel', () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/lines/i1/refund', { approve: false, note: 'Customer will wait' }));
   });
 
+  it('shows why a refund failed and lets accounts retry it', async () => {
+    const failed = {
+      id: 'c1', items: [{ name: 'Snorkel', quantity: 1 }], reason: 'out_of_stock', cancelledAt: '2026-10-07T05:00:00Z',
+      refundStatus: 'failed', refundAmount: 6000, refundFailure: 'Gateway timeout', canSendRefund: true,
+    };
+    get.mockResolvedValue({ success: true, order: { ...base, cancellations: [failed] } });
+    post.mockResolvedValue({ success: true, order: { ...base, cancellations: [{ ...failed, refundStatus: 'processing', refundFailure: '', canSendRefund: false }] } });
+    renderPanel();
+
+    expect(await screen.findByText('Gateway timeout')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry refund' }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/refunds/c1/send', {}));
+    expect(await screen.findByText(/Refund sent/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry refund' })).not.toBeInTheDocument();
+  });
+
+  it('offers no refund button when the server does not allow it', async () => {
+    get.mockResolvedValue({ success: true, order: { ...base, cancellations: [{
+      id: 'c1', items: [{ name: 'Snorkel', quantity: 1 }], reason: 'out_of_stock', cancelledAt: null,
+      refundStatus: 'failed', refundAmount: 6000, refundFailure: 'Gateway timeout', canSendRefund: false,
+    }] } });
+    renderPanel();
+    await screen.findByText('Gateway timeout');
+    expect(screen.queryByRole('button', { name: /retry refund|send refund/i })).not.toBeInTheDocument();
+  });
+
   it('uploads the supplier proof as multipart with the CSRF header', async () => {
     const shippable = { ...base, canShip: true, lines: [{ ...base.lines[0], stage: 'with_supplier' as const, actions: ['ship' as const] }] };
     get.mockResolvedValue({ success: true, order: shippable });

@@ -25,6 +25,7 @@ import type { OrderPaymentSummary } from '@/lib/types';
 import { GatewayOfferRows, PaymentStatusTag } from '@/components/orders/PaymentSummary';
 import type { GatewayOffer } from '@/components/orders/PaymentSummary';
 import { usePanel } from '@/lib/usePanel';
+import { displayEmail } from '@/lib/internalEmail';
 
 /** What the gateway holds — and so the most a refund can send back. */
 const amountPaidOf = (o: { totalAmount: number; gatewayOffer?: GatewayOffer | null }) =>
@@ -850,7 +851,7 @@ function AdminOrderDetailPageInner() {
               <div>
                 <p className="text-sm text-gray-500">Customer</p>
                 <p className="font-medium">{order.user.name}</p>
-                <p className="text-gray-600 text-sm">{order.user.email}</p>
+                <p className="text-gray-600 text-sm">{displayEmail(order.user.email)}</p>
               </div>
               
               {order.trackingNumber && (

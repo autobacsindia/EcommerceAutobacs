@@ -548,3 +548,34 @@ textarea::placeholder {
   100% { background-color: transparent; }
 }
 .chat-flash > div:last-child { animation: chat-flash 1.6s ease-out; }
+
+/*
+  Pointer cursor on everything clickable, everywhere (storefront, admin, team panel).
+  Tailwind v4's preflight dropped `cursor: pointer` from buttons, so every <button>
+  showed an arrow. In the base layer, so a utility on an element (cursor-default,
+  cursor-text, disabled:cursor-not-allowed…) still wins.
+*/
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"],
+  [role="option"],
+  [role="menuitem"],
+  a[href],
+  summary,
+  select:not(:disabled),
+  label[for],
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled,
+  [aria-disabled="true"],
+  select:disabled,
+  input:disabled {
+    cursor: not-allowed;
+  }
+}

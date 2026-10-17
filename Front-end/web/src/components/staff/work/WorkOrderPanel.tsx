@@ -7,10 +7,12 @@ import apiClient from '@/lib/api-client';
 import { tokenManager } from '@/lib/http/tokenManager';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
+import CustomerBankCard from '@/components/staff/sales/CustomerBankCard';
 import { whatsappNumber } from '@/components/staff/sales/PaymentLinkCard';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import { shrinkPhoto, STAGE_TONE, type LineAction, type WorkOrder } from './types';
 import OrderSupplierPayments from '@/components/payments/OrderSupplierPayments';
+import { displayEmail } from '@/lib/internalEmail';
 
 type OrderResponse = { success: boolean; order: WorkOrder };
 
@@ -21,10 +23,10 @@ const danger = `${btn} border border-red-300 bg-white text-red-700 hover:bg-red-
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
 const REFUND_STATUS: Record<string, string> = {
-  pending: 'Waiting for admin to pay',
-  processing: 'Refund in progress',
+  pending: 'Approved — not sent yet',
+  processing: 'Refund sent — reaching the customer\'s bank',
   completed: 'Refunded',
-  failed: 'Refund failed — admin will retry',
+  failed: 'Refund failed — retry it',
   not_applicable: 'Nothing to refund',
 };
 
@@ -125,7 +127,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
         {has('refund') && <button type="button" disabled={busy} className={danger}
           onClick={() => { if (window.confirm('The customer wants a refund for this item? Accounts will review it.')) act.mutate({ path: `${path}/decision`, body: { decision: 'refund' } }); }}>Customer wants refund</button>}
         {has('approve') && <button type="button" disabled={busy} className={primary}
-          onClick={() => { if (window.confirm(`Approve the refund for "${line.name}"? It will be cancelled, and an admin will pay the refund.`)) act.mutate({ path: `${path}/refund`, body: { approve: true } }); }}>Approve refund</button>}
+          onClick={() => { if (window.confirm(`Approve the refund for "${line.name}"? It will be cancelled and the refund sent to the customer now.`)) act.mutate({ path: `${path}/refund`, body: { approve: true } }); }}>Approve refund</button>}
         {has('reject') && <button type="button" disabled={busy} className={secondary}
           onClick={() => { setNoteFor({ itemId: line.itemId, kind: 'reject' }); setNote(''); }}>Send back</button>}
       </div>
@@ -140,7 +142,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Customer</p>
           <p className="text-gray-900">{o.customer.name}</p>
           <p className="text-gray-700">{o.customer.phone}</p>
-          <p className="break-all text-gray-700">{o.customer.email}</p>
+          {displayEmail(o.customer.email, { label: false }) && <p className="break-all text-gray-700">{o.customer.email}</p>}
         </div>
         {a && (
           <div>
@@ -261,6 +263,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
         </div>
       )}
 
+      {o.canSeeCustomerBank && <CustomerBankCard kind="order" id={o.id} />}
+
       {/* Refunds */}
       {o.cancellations.length > 0 && (
         <div>
@@ -269,9 +273,19 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
             {o.cancellations.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-3">
                 <span className="text-gray-800">{c.items.map((i) => `${i.name} × ${i.quantity}`).join(', ')}</span>
-                <span className="text-xs font-medium text-gray-700">
+                <span className={`text-xs font-medium ${c.refundStatus === 'failed' ? 'text-red-700' : 'text-gray-700'}`}>
                   {c.refundAmount != null && `${rupees(c.refundAmount)} · `}{REFUND_STATUS[c.refundStatus || ''] || c.refundStatus}
                 </span>
+                {c.refundFailure && <p className="w-full text-xs text-red-700">{c.refundFailure}</p>}
+                {c.canSendRefund && (
+                  <button type="button" className={primary} disabled={busy}
+                    onClick={() => {
+                      const amount = c.refundAmount != null ? `${rupees(c.refundAmount)} ` : '';
+                      if (window.confirm(`Send the ${amount}refund to the customer now?`)) act.mutate({ path: `/refunds/${c.id}/send`, body: {} });
+                    }}>
+                    {c.refundStatus === 'failed' ? 'Retry refund' : 'Send refund'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>

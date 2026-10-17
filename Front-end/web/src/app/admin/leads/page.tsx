@@ -13,6 +13,7 @@ import {
 } from '@/lib/leads';
 import { formatDateIST, formatDateTimeIST, toIsoAttr } from '@/lib/datetime';
 import { usePanel } from '@/lib/usePanel';
+import { displayEmail } from '@/lib/internalEmail';
 
 type Assignment = 'all' | 'unassigned';
 // Which segment of the pipeline to show. `active` (default) hides the passive
@@ -461,7 +462,7 @@ export default function AdminLeadsPage() {
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{lead.name || 'Unknown'}</div>
                     <div className="flex flex-col gap-0.5 text-xs text-gray-500">
-                      {lead.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{lead.email}</span>}
+                      {displayEmail(lead.email, { label: false }) && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{lead.email}</span>}
                       {lead.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{lead.phone}</span>}
                     </div>
                     {(() => {

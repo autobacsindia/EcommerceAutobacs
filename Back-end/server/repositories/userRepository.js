@@ -230,6 +230,29 @@ class UserRepository extends BaseRepository {
    * account still being active staff so a double click is a no-op, not a second
    * sessionVersion bump. Returns the updated user, or null if nothing changed.
    */
+  /**
+   * Edit an ACTIVE staff member. `bumpSession` ends every session (a change to
+   * what they may do, or to the username they sign in with). `staff.subRole`
+   * set to undefined is unset.
+   */
+  async updateActiveStaff(userId, set, { bumpSession = false } = {}) {
+    const $set = {};
+    const $unset = {};
+    for (const [k, v] of Object.entries(set)) {
+      if (v === undefined) $unset[k] = '';
+      else $set[k] = v;
+    }
+    return User.findOneAndUpdate(
+      { _id: userId, role: 'staff', 'staff.active': true },
+      {
+        ...(Object.keys($set).length ? { $set } : {}),
+        ...(Object.keys($unset).length ? { $unset } : {}),
+        ...(bumpSession ? { $inc: { sessionVersion: 1 } } : {}),
+      },
+      { new: true, runValidators: true }
+    );
+  }
+
   async revokeStaff(userId, deactivatedBy, now = new Date()) {
     return User.findOneAndUpdate(
       { _id: userId, role: 'staff', 'staff.active': true },

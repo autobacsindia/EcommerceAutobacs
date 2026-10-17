@@ -7,6 +7,7 @@ import { FileText, Loader2, Plus, Split, Trash2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
+import CustomerBankCard from './CustomerBankCard';
 import PaymentLinkCard from './PaymentLinkCard';
 import { errorMessage, paymentRequestHref, rupees, type PaymentPart, type SalesOrder } from './types';
 
@@ -215,6 +216,8 @@ export default function SalesOrderPayment({ id }: { id: string }) {
           </ul>
         </section>
       )}
+
+      <CustomerBankCard kind="order" id={o.id} />
 
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 

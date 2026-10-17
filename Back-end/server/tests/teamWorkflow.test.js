@@ -8,9 +8,11 @@
  *   - stock check → supplier → proof creates a real parcel (customer email, roll-up)
  *   - operations' "delivered" goes through the parcel machinery and closes the order
  *   - out of stock → customer waits (back to stock check) or refund →
- *     accounts approves → a pending cancellation refund for an ADMIN to pay
- *   - the panel never moves money: the gateway refund is never called
- *   - one approval = one refund, even when two people click at once
+ *     accounts approves → the refund is SENT through cancellationService (the
+ *     admin Refunds routine) — no admin step
+ *   - a failed send keeps the approval, says why, and accounts can retry it
+ *   - one approval = one refund = one gateway call, even when two people click
+ *     at once or a retry races the first send
  */
 
 import { jest } from '@jest/globals';
@@ -47,6 +49,7 @@ const { default: User } = await import('../models/User.js');
 const { default: orderStatusService } = await import('../services/orderStatusService.js');
 const { default: razorpayService } = await import('../services/razorpayService.js');
 const { default: cancellationService } = await import('../services/cancellationService.js');
+const { default: Payment } = await import('../models/Payment.js');
 const wf = await import('../services/teamWorkflowService.js');
 const { listPaidSalesOrders } = await import('../services/salesOrderService.js');
 const { workflowView, STAGE } = await import('../utils/teamWorkflow.js');
@@ -92,6 +95,28 @@ async function paidOrder({ salesUser = null, items } = {}) {
   return Order.findById(order._id).lean();
 }
 const ids = (o) => o.items.map((i) => String(i._id));
+
+/** The Razorpay capture behind a paid order — what a refund is sent against. */
+async function withPayment(order) {
+  const payment = await Payment.create({
+    order: order._id, user: order.user, amount: order.totalAmount, gatewayPaymentId: `pay_${order._id}`,
+    paymentGateway: 'razorpay', paymentMethod: 'upi', status: 'completed',
+  });
+  await Order.updateOne({ _id: order._id }, { $set: { payment: payment._id } });
+  return payment;
+}
+
+/** Out of stock → the customer wants a refund → waiting for accounts. */
+async function refundRequested(order) {
+  const p = await staff('procurement');
+  const head = await staff('sales', { isHead: true });
+  const id = String(order._id);
+  const [cover] = ids(order);
+  await wf.setStock(p, id, cover, { stock: 'out_of_stock' }, req);
+  await wf.recordDecision(head, id, cover, { decision: 'refund' }, req);
+  return { id, cover, procurement: p };
+}
+const chatEvents = () => enqueued.filter((j) => j.name === 'post-team-chat-update').map((j) => j.data.event);
 
 beforeEach(() => {
   enqueued.length = 0;
@@ -244,7 +269,7 @@ describe('in stock → supplier → proof → delivered', () => {
   });
 });
 
-describe('out of stock → customer → accounts → admin', () => {
+describe('out of stock → customer → accounts sends the refund', () => {
   it('sends a waiting customer back to the stock check', async () => {
     const p = await staff('procurement');
     const head = await staff('sales', { isHead: true });
@@ -278,17 +303,12 @@ describe('out of stock → customer → accounts → admin', () => {
       .rejects.toMatchObject({ statusCode: 403 });
   });
 
-  it('turns an approved refund into a PENDING cancellation refund — no money moves', async () => {
-    const refundSpy = jest.spyOn(razorpayService, 'refundPayment');
-    const p = await staff('procurement');
-    const head = await staff('sales', { isHead: true });
+  it('approving cancels the item and SENDS its refund — no admin step', async () => {
+    const refundSpy = jest.spyOn(razorpayService, 'refundPayment').mockResolvedValue({ refundId: 'rfnd_1', status: 'pending' });
     const acc = await staff('accounts');
     const order = await paidOrder();
-    const id = String(order._id);
-    const [cover] = ids(order);
-
-    await wf.setStock(p, id, cover, { stock: 'out_of_stock' }, req);
-    await wf.recordDecision(head, id, cover, { decision: 'refund' }, req);
+    await withPayment(order);
+    const { id, cover } = await refundRequested(order);
     expect(enqueued.map((j) => j.name)).toContain('send-team-refund-requested-alert');
     expect((await wf.listQueue(acc, 'refunds')).orders.map((r) => r.id)).toEqual([id]);
 
@@ -297,14 +317,86 @@ describe('out of stock → customer → accounts → admin', () => {
     const fresh = await Order.findById(id).lean();
     expect(fresh.cancellations).toHaveLength(1);
     expect(fresh.cancellations[0]).toMatchObject({ reason: 'out_of_stock' });
-    expect(fresh.cancellations[0].refund.status).toBe('pending');
-    expect(fresh.cancellations[0].refund.productValuePaise).toBe(500000);
+    expect(fresh.cancellations[0].refund).toMatchObject({ status: 'processing', razorpayRefundId: 'rfnd_1', productValuePaise: 500000 });
+    expect(refundSpy).toHaveBeenCalledTimes(1);
+    expect(refundSpy).toHaveBeenCalledWith(`pay_${id}`, 500000, expect.objectContaining({ orderId: id }));
     expect(String(fresh.workflow.lines[0].cancellationId)).toBe(String(fresh.cancellations[0]._id));
     expect(view.lines[0].stage).toBe(STAGE.CANCELLED);
     expect(fresh.status).toBe('processing'); // the floor mats are still owed
-    expect(refundSpy).not.toHaveBeenCalled();
-    expect(enqueued.map((j) => j.name)).toContain('send-admin-team-refund-ready-alert');
+    expect(view.history.map((h) => h.action)).toEqual(expect.arrayContaining(['Refund approved by accounts', 'Refund sent to the customer']));
+    expect(view.cancellations[0]).toMatchObject({ refundStatus: 'processing', canSendRefund: false });
+    expect(chatEvents()).toContain('refund_sent');
+    expect(enqueued.map((j) => j.name)).not.toContain('send-admin-team-refund-ready-alert');
     expect((await wf.listQueue(acc, 'refunds')).orders).toHaveLength(0);
+  });
+
+  it('a gateway failure keeps the approval, says why, and accounts can retry it', async () => {
+    const refundSpy = jest.spyOn(razorpayService, 'refundPayment').mockRejectedValueOnce(new Error('Gateway timeout'));
+    const acc = await staff('accounts');
+    const order = await paidOrder();
+    await withPayment(order);
+    const { id, cover, procurement } = await refundRequested(order);
+
+    const view = await wf.reviewRefund(acc, id, cover, { approve: true }, req);
+    expect(view.lines[0].stage).toBe(STAGE.CANCELLED); // approved — not undone by the failed send
+    expect(view.cancellations[0]).toMatchObject({ refundStatus: 'failed', canSendRefund: true });
+    expect(view.cancellations[0].refundFailure).toMatch(/Gateway timeout/);
+    expect(view.history.map((h) => h.action)).toContain('Refund could not be sent — retry it');
+    expect(chatEvents()).toContain('refund_send_failed');
+    expect((await wf.getOrder(procurement, id)).cancellations[0].canSendRefund).toBe(false);
+
+    refundSpy.mockResolvedValueOnce({ refundId: 'rfnd_2', status: 'processed' });
+    const retried = await wf.retryRefund(acc, id, view.cancellations[0].id, req);
+    expect(retried.cancellations[0]).toMatchObject({ refundStatus: 'completed', canSendRefund: false });
+    expect(refundSpy).toHaveBeenCalledTimes(2);
+
+    // Pressed again after it went through: refused, nothing sent.
+    await expect(wf.retryRefund(acc, id, view.cancellations[0].id, req)).rejects.toMatchObject({ statusCode: 409 });
+    expect(refundSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('two retries at the same moment send the money once', async () => {
+    const refundSpy = jest.spyOn(razorpayService, 'refundPayment').mockRejectedValueOnce(new Error('down'));
+    const [a1, a2] = [await staff('accounts'), await staff('accounts')];
+    const order = await paidOrder();
+    await withPayment(order);
+    const { id, cover } = await refundRequested(order);
+    const view = await wf.reviewRefund(a1, id, cover, { approve: true }, req);
+
+    refundSpy.mockResolvedValue({ refundId: 'rfnd_3', status: 'pending' });
+    const cid = view.cancellations[0].id;
+    const results = await Promise.allSettled([wf.retryRefund(a1, id, cid, req), wf.retryRefund(a2, id, cid, req)]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(refundSpy).toHaveBeenCalledTimes(2); // the failed first try + ONE retry
+  });
+
+  it('only accounts (or admin) may retry, and only refunds this panel created', async () => {
+    jest.spyOn(razorpayService, 'refundPayment').mockRejectedValue(new Error('down'));
+    const acc = await staff('accounts');
+    const order = await paidOrder();
+    await withPayment(order);
+    const { id, cover, procurement } = await refundRequested(order);
+    const view = await wf.reviewRefund(acc, id, cover, { approve: true }, req);
+    const cid = view.cancellations[0].id;
+
+    await expect(wf.retryRefund(procurement, id, cid, req)).rejects.toMatchObject({ statusCode: 403 });
+    await expect(wf.retryRefund(await staff('sales', { isHead: true }), id, cid, req)).rejects.toMatchObject({ statusCode: 403 });
+    await expect(wf.retryRefund(await admin(), id, cid, req)).rejects.toMatchObject({ statusCode: 502 }); // allowed — the gateway is still down
+
+    // An admin cancellation (not from the out-of-stock flow) stays on Admin → Refunds.
+    const adminCancel = await cancellationService.cancelLines(id, { lines: [{ itemId: ids(order)[1], quantity: 1 }] }, {});
+    await expect(wf.retryRefund(acc, id, String(adminCancel.cancellation._id), req)).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('an order with no Razorpay capture on file: approved, and the reason is shown', async () => {
+    const refundSpy = jest.spyOn(razorpayService, 'refundPayment');
+    const acc = await staff('accounts');
+    const order = await paidOrder(); // no payment row
+    const { id, cover } = await refundRequested(order);
+    const view = await wf.reviewRefund(acc, id, cover, { approve: true }, req);
+    expect(view.lines[0].stage).toBe(STAGE.CANCELLED);
+    expect(refundSpy).not.toHaveBeenCalled();
+    expect(view.history.find((h) => h.action === 'Refund could not be sent — retry it').note).toMatch(/Razorpay payment id/);
   });
 
   it('a refund sent back by accounts needs a note and returns to the sales decision', async () => {
@@ -323,7 +415,8 @@ describe('out of stock → customer → accounts → admin', () => {
     expect((await Order.findById(id).lean()).cancellations || []).toHaveLength(0);
   });
 
-  it('approves only once when two people approve at the same moment', async () => {
+  it('approves — and sends — only once when two people approve at the same moment', async () => {
+    const refundSpy = jest.spyOn(razorpayService, 'refundPayment').mockResolvedValue({ refundId: 'rfnd_x', status: 'pending' });
     const p = await staff('procurement');
     const head = await staff('sales', { isHead: true });
     const [a1, a2] = [await staff('accounts'), await staff('accounts')];
@@ -333,6 +426,7 @@ describe('out of stock → customer → accounts → admin', () => {
     await wf.setStock(p, id, cover, { stock: 'out_of_stock' }, req);
     await wf.recordDecision(head, id, cover, { decision: 'refund' }, req);
 
+    await withPayment(order);
     const results = await Promise.allSettled([
       wf.reviewRefund(a1, id, cover, { approve: true }, req),
       wf.reviewRefund(a2, id, cover, { approve: true }, req),
@@ -340,6 +434,7 @@ describe('out of stock → customer → accounts → admin', () => {
 
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect((await Order.findById(id).lean()).cancellations).toHaveLength(1);
+    expect(refundSpy).toHaveBeenCalledTimes(1);
   });
 
   it('releases the approval if the cancellation cannot be recorded, so it can be retried', async () => {

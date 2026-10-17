@@ -1381,6 +1381,11 @@ class OrderRepository extends BaseRepository {
     return Order.countDocuments({ cancellations: { $elemMatch: { 'refund.status': 'pending', 'refund.productValuePaise': { $gt: 0 } } } });
   }
 
+  /** The order's customer contact and seller — nothing else (customer bank details). */
+  async findCustomerContact(orderId) {
+    return Order.findById(orderId).select('user salesUser shippingAddress').populate('user', 'name phone').lean();
+  }
+
   /** One order with everything a team view needs (lean). */
   async findForWorkflow(orderId) {
     return Order.findById(orderId)
