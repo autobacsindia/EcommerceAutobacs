@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Minus, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, Minus, Plus, Search, Trash2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { deepDiscountLines, deepDiscountWarning, isDeepDiscount } from './offerGuard';
@@ -165,6 +165,24 @@ export default function NewSalesOrderForm({
 
   const update = (key: string, patch: Partial<Line>) =>
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+
+  /**
+   * Move one line up (-1) or down (+1).
+   *
+   * Takes the INDEX rather than the key because the buttons already know their
+   * position and the array is the order — the quotation PDF prints these lines
+   * exactly as they sit here. Guarded at both ends so a click on a disabled
+   * edge button (or a double-click that races the re-render) cannot wrap an
+   * item from the top of the list to the bottom.
+   */
+  const moveLine = (index: number, direction: -1 | 1) =>
+    setLines((prev) => {
+      const to = index + direction;
+      if (index < 0 || index >= prev.length || to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[to]] = [next[to], next[index]];
+      return next;
+    });
 
   const lineProblem = (l: Line) => {
     const o = lineOffer(l);
@@ -384,7 +402,7 @@ export default function NewSalesOrderForm({
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-gray-100">
-            {lines.map((l) => {
+            {lines.map((l, i) => {
               const problem = lineProblem(l);
               const offer = lineOffer(l);
               const deep = !problem && isDeepDiscount(l.listPrice, offer);
@@ -446,6 +464,33 @@ export default function NewSalesOrderForm({
                           || (deep ? 'Less than half price — check it' : null)
                           || (offer < l.listPrice ? `Offer · saves ${rupees((l.listPrice - offer) * l.quantity)}` : 'Offer price (optional)')}
                       </p>
+                    </div>
+                    {/*
+                      Reorder: the quotation PDF prints these lines in array order,
+                      so moving a row here is what changes what the customer sees.
+                      Buttons rather than drag-and-drop — this form is used on a
+                      phone mid-call, where a drag fights the page scroll, and
+                      buttons are reachable by keyboard and screen reader.
+                    */}
+                    <div className="flex flex-col">
+                      <button
+                        type="button"
+                        aria-label={`Move ${l.name || 'custom item'} up`}
+                        disabled={i === 0}
+                        onClick={() => moveLine(i, -1)}
+                        className="px-1.5 py-0.5 text-gray-400 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Move ${l.name || 'custom item'} down`}
+                        disabled={i === lines.length - 1}
+                        onClick={() => moveLine(i, 1)}
+                        className="px-1.5 py-0.5 text-gray-400 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
                     </div>
                     <button type="button" aria-label={`Remove ${l.name || 'custom item'}`} onClick={() => setLines(lines.filter((x) => x.key !== l.key))}
                       className="p-2 text-gray-400 hover:text-red-600">

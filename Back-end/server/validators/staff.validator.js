@@ -104,6 +104,16 @@ export const validateCursorQuery = [
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
 ];
 
+/**
+ * The paid-order list, optionally split by fulfilment stage ("Order processing"
+ * vs "Delivered"). Absent means every paid order, which is what the list did
+ * before the split — so an older client keeps working unchanged.
+ */
+export const validatePaidOrdersQuery = [
+  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+  query('stage').optional().isIn(['processing', 'delivered']).withMessage('Invalid stage'),
+];
+
 export const validateOrderIdParam = [
   param('id').custom(isObjectId).withMessage('Invalid order id'),
 ];

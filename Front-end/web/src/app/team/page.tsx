@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck } from 'lucide-react';
+import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MARKETING_AREAS } from './marketingAreas';
@@ -20,8 +20,13 @@ const COMING_SOON: Record<string, string[]> = {
 type Shortcut = { href: string; title: string; text: string; icon: LucideIcon };
 
 const PAID: Shortcut = {
-  href: '/team/orders', title: 'Paid orders',
-  text: 'Every paid order — website and sales — with who sold it, the payment and where it is up to.', icon: BadgeCheck,
+  href: '/team/orders', title: 'Order processing',
+  text: 'Every paid order still being worked — website and GTM — with who sold it, the payment and where it is up to.', icon: BadgeCheck,
+};
+
+const DELIVERED: Shortcut = {
+  href: '/team/orders/delivered', title: 'Delivered',
+  text: 'Orders that reached the customer. Kept for the record — nothing further is needed.', icon: PackageCheck,
 };
 
 /** What each team can do — the same split the API enforces. */
@@ -36,15 +41,15 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
         { href: '/team/sales', title: isHead ? 'Team orders' : 'My orders', text: 'Payment, stock, the supplier\'s photo and tracking — and a button to send them to the customer.', icon: ReceiptText },
         { href: '/team/decisions', title: 'Customer decisions', text: 'Out-of-stock items: ask the customer to wait or take a refund.', icon: PhoneCall },
       ];
-      if (isHead) list.push(PAID);
+      if (isHead) list.push(PAID, DELIVERED);
       return list;
     }
     case 'procurement':
-      return [{ href: '/team/procurement', title: 'Stock & shipping', text: 'Check stock for each paid order, record the supplier, upload the supplier\'s photo when dispatched.', icon: PackageSearch }, PAID];
+      return [{ href: '/team/procurement', title: 'Orders', text: 'Check stock for each paid order, record the supplier, upload the supplier\'s photo when dispatched.', icon: PackageSearch }, PAID, DELIVERED];
     case 'accounts':
-      return [{ href: '/team/refunds', title: 'Refund approvals', text: 'Approve refunds for out-of-stock items. An admin then pays them.', icon: Wallet }, PAID];
+      return [{ href: '/team/refunds', title: 'Refund approvals', text: 'Approve refunds for out-of-stock items. An admin then pays them.', icon: Wallet }, PAID, DELIVERED];
     case 'operations':
-      return [{ href: '/team/deliveries', title: 'Deliveries', text: 'Parcels on their way — follow up and mark them delivered.', icon: Truck }, PAID];
+      return [{ href: '/team/deliveries', title: 'Deliveries', text: 'Parcels on their way — follow up and mark them delivered.', icon: Truck }, PAID, DELIVERED];
     case 'marketing':
       return MARKETING_AREAS.map(({ href, label, text, icon }) => ({ href, title: label, text, icon }));
     default:

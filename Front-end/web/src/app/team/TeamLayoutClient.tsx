@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, LogOut, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -21,7 +21,13 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
     { href: '/team', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/team/chat', label: 'Team chat', icon: MessagesSquare },
   ];
-  const paid: NavItem = { href: '/team/orders', label: 'Paid orders', icon: BadgeCheck };
+  /*
+    The paid list, split in two so "what still needs doing" is not buried under
+    everything ever sold. Both go to every team that had the single list before,
+    so nobody loses sight of an order — it just moves across once delivered.
+  */
+  const paid: NavItem = { href: '/team/orders', label: 'Order processing', icon: BadgeCheck };
+  const delivered: NavItem = { href: '/team/orders/delivered', label: 'Delivered', icon: PackageCheck };
   // GTM: the head and leads sell; executives and customer support have no tools yet.
   if (team === 'sales' && canSell) {
     nav.push(
@@ -30,11 +36,11 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
       { href: '/team/sales', label: isHead ? 'Team orders' : 'My orders', icon: ReceiptText },
       { href: '/team/decisions', label: 'Customer decisions', icon: PhoneCall },
     );
-    if (isHead) nav.push(paid);
+    if (isHead) nav.push(paid, delivered);
   }
-  if (team === 'procurement') nav.push({ href: '/team/procurement', label: 'Stock & shipping', icon: PackageSearch }, paid);
-  if (team === 'accounts') nav.push({ href: '/team/refunds', label: 'Refund approvals', icon: Wallet }, paid);
-  if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid);
+  if (team === 'procurement') nav.push({ href: '/team/procurement', label: 'Orders', icon: PackageSearch }, paid, delivered);
+  if (team === 'accounts') nav.push({ href: '/team/refunds', label: 'Refund approvals', icon: Wallet }, paid, delivered);
+  if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid, delivered);
   if (team === 'marketing') nav.push(...MARKETING_AREAS.map(({ href, label, icon }) => ({ href, label, icon })));
   // Payment requests: supplier payments (procurement), expenses (operations,
   // marketing), and paying them (accounts).

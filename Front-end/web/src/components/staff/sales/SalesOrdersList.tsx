@@ -12,6 +12,8 @@ import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
 import { errorMessage, quotationHref, rupees, type SalesOrder, type SalesOrderPage } from './types';
 
 type Mode = 'sales' | 'paid';
+/** Which half of the paid list to show: still being worked, or handed over. */
+type Stage = 'processing' | 'delivered';
 
 /** One status pill per row, in words the team uses. */
 function statusOf(o: SalesOrder): { text: string; cls: string } {
@@ -215,12 +217,19 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
  * Sales-panel orders. `sales`: the member's own (or, for the head, the team's).
  * `paid`: every paid sales order, for Accounts / Procurement.
  */
-export default function SalesOrdersList({ mode }: { mode: Mode }) {
-  const endpoint = mode === 'paid' ? '/staff/orders/paid' : '/staff/sales/orders';
+export default function SalesOrdersList({ mode, stage }: { mode: Mode; stage?: Stage }) {
+  const base = mode === 'paid' ? '/staff/orders/paid' : '/staff/sales/orders';
+  // Only the paid list is split by stage; the sales list has no such axis.
+  const endpoint = mode === 'paid' && stage ? `${base}?stage=${stage}` : base;
   const q = useInfiniteQuery({
-    queryKey: mode === 'paid' ? staffKeys.paidOrders() : staffKeys.salesOrders(),
-    queryFn: ({ pageParam }) =>
-      apiClient.get<SalesOrderPage>(pageParam ? `${endpoint}?cursor=${encodeURIComponent(pageParam)}` : endpoint),
+    queryKey: mode === 'paid' ? staffKeys.paidOrders(stage) : staffKeys.salesOrders(),
+    queryFn: ({ pageParam }) => {
+      // The endpoint may already carry ?stage, so the cursor joins with & not ?.
+      const url = pageParam
+        ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}cursor=${encodeURIComponent(pageParam)}`
+        : endpoint;
+      return apiClient.get<SalesOrderPage>(url);
+    },
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor || undefined,
     // Payments land from the customer's phone — keep the list fresh while open.
@@ -239,7 +248,13 @@ export default function SalesOrdersList({ mode }: { mode: Mode }) {
   if (orders.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-        {mode === 'paid' ? 'No paid orders yet.' : 'No orders yet. Orders appear here when a client accepts a quotation.'}
+        {mode !== 'paid'
+          ? 'No orders yet. Orders appear here when a client accepts a quotation.'
+          : stage === 'delivered'
+            ? 'No delivered orders yet. An order moves here once every parcel has been delivered.'
+            : stage === 'processing'
+              ? 'Nothing in progress. Paid orders appear here until they are delivered.'
+              : 'No paid orders yet.'}
       </p>
     );
   }
