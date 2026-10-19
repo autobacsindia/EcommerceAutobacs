@@ -20,6 +20,7 @@ import {
   validateOwnPasswordChange,
   validateSalesProductSearch,
   validateCursorQuery,
+  validatePaidOrdersQuery,
   validateOrderIdParam,
   validateSalesOrder,
   validateQuotationIdParam,
@@ -286,9 +287,10 @@ router.post('/sales/orders/:id/cancel', validateOrderIdParam, validateRequest, a
   res.json({ success: true, order: await cancelUnpaidSalesOrder(req.user, req.params.id, req) });
 }));
 
-// @route  GET /staff/orders/paid?cursor= — paid sales orders (accounts, procurement, sales head)
-router.get('/orders/paid', validateCursorQuery, validateRequest, asyncHandler(async (req, res) => {
-  res.json({ success: true, ...(await listPaidSalesOrders(req.user, { cursor: req.query.cursor })) });
+// @route  GET /staff/orders/paid?cursor=&stage=processing|delivered — paid sales
+//         orders (accounts, procurement, operations, sales head). No stage = all.
+router.get('/orders/paid', validatePaidOrdersQuery, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listPaidSalesOrders(req.user, { cursor: req.query.cursor, stage: req.query.stage })) });
 }));
 
 // ── Team workflow (scope enforced in teamWorkflowService) ───────────────────

@@ -300,17 +300,36 @@ export async function listSalesOrders(actor, { cursor } = {}) {
  * included) paid since the team workflow started. Accounts, Procurement, Operations,
  * the sales head — and admin, who can see everything anyway.
  */
-export async function listPaidSalesOrders(actor, { cursor } = {}) {
+/**
+ * Fulfilment stages the paid-order list can be split by.
+ *
+ * Listed with `$in` rather than `{ $ne: 'delivered' }` on purpose: an inequality
+ * cannot use `{ status: 1, createdAt: -1 }` as anything better than a scan,
+ * and this list is short and closed (it is the Order `status` enum minus the
+ * one stage it names). A status added to the model without being added here
+ * would silently vanish from BOTH lists, which is why the two are asserted
+ * against each other in tests.
+ */
+export const PAID_ORDER_STAGES = Object.freeze({
+  // Everything still being worked: paid but not yet handed over.
+  processing: ['awaiting_payment', 'processing', 'shipped', 'returned', 'cancelled'],
+  delivered: ['delivered'],
+});
+
+export async function listPaidSalesOrders(actor, { cursor, stage } = {}) {
   const allowed = actor?.role === 'admin'
     || onTeam(actor, STAFF_TEAMS.ACCOUNTS)
     || onTeam(actor, STAFF_TEAMS.PROCUREMENT)
     || onTeam(actor, STAFF_TEAMS.OPERATIONS)
     || isSalesHead(actor);
   if (!allowed) throw fail('Not authorized.', 403);
+  // No stage (or an unknown one) keeps the old behaviour: every paid order.
+  const stageStatuses = PAID_ORDER_STAGES[stage];
   const { items, nextCursor } = await page(
     {
       // `refunded` stays listed so Accounts can still see an order after its refund.
       paymentStatus: { $in: ['paid', 'refunded'] },
+      ...(stageStatuses ? { status: { $in: stageStatuses } } : {}),
       $or: [
         { salesUser: { $type: 'objectId' } },              // staff_sales_by_payment
         { 'workflow.enteredAt': { $type: 'date' } },       // team_workflow_paid

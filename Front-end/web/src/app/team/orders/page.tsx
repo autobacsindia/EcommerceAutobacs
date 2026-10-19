@@ -2,13 +2,20 @@
 
 import SalesOrdersList from '@/components/staff/sales/SalesOrdersList';
 
-/** Every paid order the teams handle — website and sales — with where it is up to. */
-export default function PaidOrdersPage() {
+/**
+ * Paid orders still being worked — website and GTM alike — with where each one
+ * is up to. Delivered orders move to /team/orders/delivered so this list stays
+ * the day's work rather than the whole history.
+ */
+export default function OrderProcessingPage() {
   return (
     <div className="max-w-4xl">
-      <h1 className="text-2xl font-bold text-gray-900">Paid orders</h1>
-      <p className="mb-6 text-sm text-gray-500">Every paid order — from the website or taken by the sales team — with who sold it and where it is up to.</p>
-      <SalesOrdersList mode="paid" />
+      <h1 className="text-2xl font-bold text-gray-900">Order processing</h1>
+      <p className="mb-6 text-sm text-gray-500">
+        Every paid order being worked on — from the website or taken by the GTM team — with who sold it and
+        where it is up to. Once every parcel is delivered it moves to Delivered.
+      </p>
+      <SalesOrdersList mode="paid" stage="processing" />
     </div>
   );
 }

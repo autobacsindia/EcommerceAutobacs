@@ -350,6 +350,58 @@ describe('who sees which orders', () => {
     await expect(svc.listSalesOrders(accounts)).rejects.toMatchObject({ statusCode: 403 });
   });
 
+  /*
+    The paid list is split in two for the team panel: "Order processing" (still
+    being worked) and "Delivered" (handed over). Splitting a list people rely on
+    is only safe if nothing can fall between the halves, so the second test
+    pins the two stage lists against the model's own status enum.
+  */
+  describe('split by fulfilment stage', () => {
+    it('separates what is still being worked from what has been delivered', async () => {
+      const rep = await makeStaff('sales');
+      const accounts = await makeStaff('accounts');
+      const product = await makeProduct();
+
+      const { order: working } = await svc.createSalesOrder(rep, orderInput(product), req);
+      const { order: done } = await svc.createSalesOrder(rep, orderInput(product), req);
+      await Order.updateOne({ _id: working.id }, { $set: { paymentStatus: 'paid', status: 'shipped' } });
+      await Order.updateOne({ _id: done.id }, { $set: { paymentStatus: 'paid', status: 'delivered' } });
+
+      const processing = await svc.listPaidSalesOrders(accounts, { stage: 'processing' });
+      expect(processing.orders.map((o) => o.id)).toEqual([working.id]);
+
+      const delivered = await svc.listPaidSalesOrders(accounts, { stage: 'delivered' });
+      expect(delivered.orders.map((o) => o.id)).toEqual([done.id]);
+    });
+
+    it('still returns every paid order when no stage is asked for', async () => {
+      const rep = await makeStaff('sales');
+      const accounts = await makeStaff('accounts');
+      const product = await makeProduct();
+
+      const { order: a } = await svc.createSalesOrder(rep, orderInput(product), req);
+      const { order: b } = await svc.createSalesOrder(rep, orderInput(product), req);
+      await Order.updateOne({ _id: a.id }, { $set: { paymentStatus: 'paid', status: 'processing' } });
+      await Order.updateOne({ _id: b.id }, { $set: { paymentStatus: 'paid', status: 'delivered' } });
+
+      const { orders } = await svc.listPaidSalesOrders(accounts);
+      expect(new Set(orders.map((o) => o.id))).toEqual(new Set([a.id, b.id]));
+    });
+
+    /*
+      The invariant that makes the split safe: every fulfilment status the model
+      allows belongs to exactly ONE stage. A status added to the enum without
+      being placed here would be invisible in both lists — an order nobody can
+      see, which is the worst possible outcome for an order list.
+    */
+    it('covers every fulfilment status exactly once', () => {
+      const inModel = Order.schema.path('status').enumValues;
+      const covered = [...svc.PAID_ORDER_STAGES.processing, ...svc.PAID_ORDER_STAGES.delivered];
+      expect(new Set(covered)).toEqual(new Set(inModel));
+      expect(covered).toHaveLength(inModel.length); // none listed in both stages
+    });
+  });
+
   it('pages with a cursor', async () => {
     const rep = await makeStaff('sales');
     const product = await makeProduct();
