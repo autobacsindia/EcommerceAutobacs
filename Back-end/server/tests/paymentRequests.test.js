@@ -146,10 +146,14 @@ describe('Payment requests', () => {
       untouched (accounts) and is covered below: widening who can ask must not
       widen who can decide.
     */
-    it('every team can raise an expense', async () => {
+    it('every team can raise an expense, including one added later', async () => {
       for (const who of [procurement, accounts, gtmLead]) {
         expect((await expense(who.session)).status).toBe(201);
       }
+      const developer = await makeUser('Dev', 'staff', staff('developer'));
+      const raised = await expense(developer.session);
+      expect(raised.status).toBe(201);
+      expect(raised.body.request.team).toBe('developer');
     });
 
     it('a team that is not a real team is refused', async () => {

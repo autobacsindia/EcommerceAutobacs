@@ -7,6 +7,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import MessageItem from './MessageItem';
 import Composer, { mentionableTeams } from './Composer';
 import type { ChatChannel, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
+import { STAFF_TEAMS } from '@/lib/staffTeams';
 
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 jest.mock('@/hooks/queries/useTeamChat', () => ({ useRecentOrders: () => ({ data: [], isLoading: false }) }));
@@ -52,7 +53,9 @@ describe('messages', () => {
 
 describe('which teams can be @mentioned', () => {
   it('any team in #company and team spaces; only the two teams between teams; none in DMs or custom spaces', () => {
-    expect(mentionableTeams(channel({ audience: 'all' }))).toHaveLength(5);
+    // Every team — derived, because this read `5` and broke the day a sixth
+    // team was added. The rule is "all of them here", not "five of them".
+    expect(mentionableTeams(channel({ audience: 'all' }))).toEqual([...STAFF_TEAMS]);
     expect(mentionableTeams(channel({ audience: 'teams', teams: ['accounts', 'sales'] }))).toEqual(['accounts', 'sales']);
     expect(mentionableTeams(channel({ kind: 'dm', audience: 'members' }))).toEqual([]);
     expect(mentionableTeams(channel({ audience: 'members' }))).toEqual([]);

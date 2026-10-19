@@ -21,6 +21,10 @@ export const STAFF_TEAMS = Object.freeze({
   // Delivery follow-up: sees every paid order and the supplier's shipping proof,
   // and marks parcels delivered.
   OPERATIONS: 'operations',
+  // The people who build and run the site. No order or money tools — they get
+  // the things every team has: a login, their team space and the team-to-team
+  // conversations, expenses, and their own member list.
+  DEVELOPER: 'developer',
 });
 
 export const STAFF_TEAM_VALUES = Object.freeze(Object.values(STAFF_TEAMS));
@@ -35,6 +39,7 @@ export const STAFF_TEAM_LABELS = Object.freeze({
   accounts: 'Accounts',
   marketing: 'Marketing',
   operations: 'Operations',
+  developer: 'Developer',
 });
 
 /** How long an emailed invite link stays usable. Personal inboxes are read late. */

@@ -12,6 +12,7 @@ import User from '../models/User.js';
 import ChatMessage from '../models/ChatMessage.js';
 import { postSystemMessage, canAccess } from '../services/chatService.js';
 import { onChatEvent } from '../services/chatEvents.js';
+import { STAFF_TEAM_VALUES } from '../config/staff.js';
 
 const BASE = '/api/v1';
 const PASSWORD = 'SecurePass123!';
@@ -87,20 +88,32 @@ describe('Team chat', () => {
     it('admins see #company, every team space and every team-to-team conversation', async () => {
       const { body } = await admin.get('/chat/channels');
       const keys = body.channels.map((c) => c.key);
-      expect(keys.slice(0, 6)).toEqual([
-        'company', 'team:sales', 'team:procurement', 'team:accounts', 'team:marketing', 'team:operations',
+      // #company first, then one space per team, in config order.
+      expect(keys.slice(0, STAFF_TEAM_VALUES.length + 1)).toEqual([
+        'company', ...STAFF_TEAM_VALUES.map((t) => `team:${t}`),
       ]);
-      // 5 teams → 10 pairs, each once.
-      expect(keys.filter((k) => k.startsWith('pair:'))).toHaveLength(10);
+      /*
+        n teams → n(n-1)/2 pairs, each exactly once. Derived rather than written
+        out: this read "5 teams → 10 pairs" and broke the day a sixth team was
+        added, which is noise — the rule being tested is the pairing, not how
+        many teams the company happens to have today.
+      */
+      const n = STAFF_TEAM_VALUES.length;
+      expect(keys.filter((k) => k.startsWith('pair:'))).toHaveLength((n * (n - 1)) / 2);
       const pair = body.channels.find((c) => c.key === 'pair:accounts:procurement');
       expect(pair).toMatchObject({ audience: 'teams', name: 'Accounts ↔ Procurement', withTeam: null });
     });
 
     it('staff see #company, their own team space and their team\'s conversations with each other team', async () => {
       const { body } = await salesMember.get('/chat/channels');
+      // Their own space, #company, and one conversation per OTHER team — built
+      // from the team list so adding a team does not rewrite this expectation.
+      const others = STAFF_TEAM_VALUES.filter((t) => t !== 'sales');
       expect(body.channels.map((c) => c.key).sort()).toEqual([
-        'company', 'pair:accounts:sales', 'pair:marketing:sales', 'pair:operations:sales', 'pair:procurement:sales', 'team:sales',
-      ]);
+        'company',
+        ...others.map((t) => `pair:${[t, 'sales'].sort().join(':')}`),
+        'team:sales',
+      ].sort());
       // Named after the OTHER team, from where the reader sits.
       expect(body.channels.find((c) => c.key === 'pair:accounts:sales')).toMatchObject({ name: 'Accounts', withTeam: 'accounts' });
       const fromAccounts = (await accounts.get('/chat/channels')).body.channels.find((c) => c.key === 'pair:accounts:sales');
