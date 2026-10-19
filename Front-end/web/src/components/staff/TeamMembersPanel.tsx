@@ -6,15 +6,12 @@ import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
 import { formatDateIST } from '@/lib/datetime';
 
-export type StaffTeam = 'sales' | 'procurement' | 'accounts' | 'marketing' | 'operations';
+// The team list lives in lib/staffTeams.ts. Imported for this file's own use and
+// re-exported, because several screens already import it from this module.
+import { STAFF_TEAM_LABELS, type StaffTeam } from '@/lib/staffTeams';
 
-export const STAFF_TEAM_LABELS: Record<StaffTeam, string> = {
-  sales: 'GTM',
-  procurement: 'Procurement',
-  accounts: 'Accounts',
-  marketing: 'Marketing',
-  operations: 'Operations',
-};
+export { STAFF_TEAM_LABELS };
+export type { StaffTeam };
 
 type Member = {
   id: string; name: string; email: string; phone: string; isHead: boolean; addedAt: string;

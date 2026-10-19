@@ -127,7 +127,7 @@ describe('Payment requests', () => {
   });
 
   describe('raising an expense', () => {
-    it('operations and marketing raise one; it starts with admin, numbered, with the bill stored privately', async () => {
+    it('a team raises one; it starts with accounts, numbered, with the bill stored privately', async () => {
       const res = await expense(ops.session);
       expect(res.status).toBe(201);
       expect(res.body.request).toMatchObject({
@@ -139,10 +139,24 @@ describe('Payment requests', () => {
       expect((await expense(marketing.session, { category: 'purchase', description: 'Banner printing' })).status).toBe(201);
     });
 
-    it('other teams cannot raise expenses', async () => {
-      expect((await expense(procurement.session)).status).toBe(403);
-      expect((await expense(accounts.session)).status).toBe(403);
-      expect((await expense(gtmLead.session)).status).toBe(403);
+    /*
+      EVERY team may claim. It used to be Operations and Marketing only, which
+      meant GTM paid for its own fuel and Procurement could not claim a courier
+      charge — the rule did not match how the company spends. Who may APPROVE is
+      untouched (accounts) and is covered below: widening who can ask must not
+      widen who can decide.
+    */
+    it('every team can raise an expense', async () => {
+      for (const who of [procurement, accounts, gtmLead]) {
+        expect((await expense(who.session)).status).toBe(201);
+      }
+    });
+
+    it('a team that is not a real team is refused', async () => {
+      const outsider = await makeUser('Nobody', 'staff', staff('operations'));
+      // Inactive staff are not staff, whatever team they name.
+      await User.updateOne({ _id: outsider.user._id }, { $set: { 'staff.active': false } });
+      expect((await expense(outsider.session)).status).toBe(403);
     });
 
     it('checks the amount, payee and files', async () => {

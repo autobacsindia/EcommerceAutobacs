@@ -5,12 +5,13 @@ import { Package, Paperclip, Quote, Send, X } from 'lucide-react';
 import type { ChatChannel, ChatMessage, ChatPerson, RecentOrder, SendVars } from '@/hooks/queries/useTeamChat';
 import { useRecentOrders } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, GREEN, fileSize, newClientId } from './chatUi';
+import { STAFF_TEAMS } from '@/lib/staffTeams';
 
 const MAX_FILES = 5;
 const MAX_FILE_MB = 10;
 
-/** Teams that can be addressed as a group. Mirrors the backend's list. */
-const TEAMS = ['sales', 'procurement', 'accounts', 'marketing', 'operations'] as const;
+/** Teams that can be addressed as a group. One list — see lib/staffTeams.ts. */
+const TEAMS = STAFF_TEAMS;
 /** How a team is written in a mention: the 'sales' team is GTM. */
 const MENTION_NAME: Record<string, string> = { sales: 'gtm' };
 const mentionName = (team: string) => MENTION_NAME[team] ?? team;
