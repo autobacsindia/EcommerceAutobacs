@@ -212,6 +212,13 @@ describe('unpaid sales order on hold', () => {
     await expect(sales.holdSalesOrder(rep, orderId, {}, req)).rejects.toThrow(/already paid or closed/);
   });
 
+  it('cannot be held while a bank transfer waits for accounts', async () => {
+    const rep = await makeStaff('sales');
+    const orderId = await orderFor(rep);
+    await Order.updateOne({ _id: orderId }, { $set: { bankTransferPendingAt: new Date() } });
+    await expect(sales.holdSalesOrder(rep, orderId, {}, req)).rejects.toMatchObject({ statusCode: 409 });
+  });
+
   it('another seller cannot hold it; other teams cannot either', async () => {
     const a = await makeStaff('sales');
     const b = await makeStaff('sales');
