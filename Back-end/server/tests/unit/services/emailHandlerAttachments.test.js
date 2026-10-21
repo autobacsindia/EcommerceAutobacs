@@ -70,14 +70,14 @@ describe('emailHandler — sender override + welcome email', () => {
   });
 
   test('sendWelcomeEmail sends from POSTMARK_WELCOME_FROM_EMAIL with a welcome subject', async () => {
-    process.env.POSTMARK_WELCOME_FROM_EMAIL = 'hi@autobacsindia.com';
+    process.env.POSTMARK_WELCOME_FROM_EMAIL = 'info@autobacsindia.com';
     process.env.POSTMARK_WELCOME_FROM_NAME = 'Autobacs India';
 
     const res = await emailHandler.sendWelcomeEmail('newuser@example.com', { name: 'Asha Rao' });
 
     expect(res.success).toBe(true);
     const msg = fakeClient.sendEmail.mock.calls[0][0];
-    expect(msg.From).toBe('Autobacs India <hi@autobacsindia.com>');
+    expect(msg.From).toBe('Autobacs India <info@autobacsindia.com>');
     expect(msg.To).toBe('newuser@example.com');
     expect(msg.Subject).toMatch(/welcome/i);
     expect(msg.HtmlBody).toContain('Asha'); // first name personalization
