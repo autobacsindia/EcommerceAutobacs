@@ -7,6 +7,7 @@ import { FileText, Loader2, Plus, Split, Trash2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
+import BankTransferForm from './BankTransferForm';
 import CustomerBankCard from './CustomerBankCard';
 import PaymentLinkCard from './PaymentLinkCard';
 import { errorMessage, paymentRequestHref, rupees, type PaymentPart, type SalesOrder } from './types';
@@ -143,6 +144,9 @@ export default function SalesOrderPayment({ id }: { id: string }) {
   const received = pay?.amountPaid ?? (paid ? o.totalAmount : 0);
   const pct = o.totalAmount > 0 ? Math.min(100, Math.round((received / o.totalAmount) * 100)) : 0;
   const anyPaid = parts.some((p) => p.status === 'paid');
+  // Recorded as paid by bank transfer: accounts is checking — no new link, no cancel.
+  const transferWaiting = open && !!o.bankTransferPending;
+  const canPay = open && !transferWaiting;
 
   return (
     <div className="space-y-5">
@@ -165,10 +169,23 @@ export default function SalesOrderPayment({ id }: { id: string }) {
           <div className="h-full bg-green-600 transition-all" style={{ width: `${pct}%` }} />
         </div>
         {paid && <p className="mt-3 text-sm font-medium text-green-800">Fully paid — the order is with Procurement.</p>}
+        {paid && o.offlinePayment?.method === 'bank_transfer' && (
+          <p className="mt-1 text-sm text-gray-600">
+            Paid by bank transfer (UTR {o.offlinePayment.reference}){o.offlinePayment.confirmedBy ? `, confirmed by ${o.offlinePayment.confirmedBy}` : ''}.
+          </p>
+        )}
         {o.status === 'cancelled' && <p className="mt-3 text-sm font-medium text-gray-600">This order was cancelled.</p>}
       </section>
 
-      {open && pay && pay.amountToRequest > 0 && <RequestPayment key={pay.amountToRequest} order={o} onDone={refresh} />}
+      {transferWaiting && (
+        <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <span className="font-semibold">Bank transfer recorded — waiting for accounts.</span> They will check the bank and confirm it, and the order then goes to Procurement. If they reject it, you will see why in team chat and can record it again or send a new link.
+        </p>
+      )}
+
+      {canPay && pay && pay.amountToRequest > 0 && <RequestPayment key={pay.amountToRequest} order={o} onDone={refresh} />}
+
+      {canPay && !anyPaid && <BankTransferForm order={o} onDone={refresh} />}
 
       {parts.length > 0 && (
         <section className="space-y-3">
@@ -186,7 +203,7 @@ export default function SalesOrderPayment({ id }: { id: string }) {
                   <p className="text-sm font-semibold text-gray-900">Payment {p.n} · {rupees(p.amount)}</p>
                   <div className="flex items-center gap-2">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${PART_STATUS[p.status].cls}`}>{PART_STATUS[p.status].text}</span>
-                    {open && (p.status === 'pending' || p.status === 'expired') && (
+                    {canPay && (p.status === 'pending' || p.status === 'expired') && (
                       <button type="button" disabled={cancelPart.isPending}
                         onClick={() => {
                           if (window.confirm(`Cancel the ${rupees(p.amount)} link? You can then request that amount again.`)) cancelPart.mutate(p.id);
@@ -221,7 +238,7 @@ export default function SalesOrderPayment({ id }: { id: string }) {
 
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
-      {open && !anyPaid && (
+      {canPay && !anyPaid && (
         <button type="button" disabled={cancelOrder.isPending}
           onClick={() => { if (window.confirm(`Cancel order ${o.orderNumber}? Every waiting payment link stops working.`)) cancelOrder.mutate(); }}
           className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">

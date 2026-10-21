@@ -27,6 +27,7 @@ function statusOf(o: SalesOrder): { text: string; cls: string } {
     return { text: after[o.status] || 'Paid', cls: 'bg-green-100 text-green-800' };
   }
   if (o.status === 'cancelled') return { text: 'Cancelled', cls: 'bg-gray-200 text-gray-700' };
+  if (o.bankTransferPending) return { text: 'Bank transfer · accounts checking', cls: 'bg-amber-100 text-amber-800' };
   // Quotation-first order: paid through payment requests (possibly in parts).
   if (o.paymentFlow === 'parts') {
     const p = o.payment;

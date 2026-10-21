@@ -151,7 +151,8 @@ function lineActions(u, order, line) {
   const out = [];
   if (can.procurement(u)) {
     switch (line.stage) {
-      case STAGE.STOCK_CHECK: out.push('in_stock', 'ordered', 'out_of_stock'); break;
+      // 'ship' here too: "Ship all" sends lines nobody stock-checked yet — shipping them proves they were in stock.
+      case STAGE.STOCK_CHECK: out.push('in_stock', 'ordered', 'out_of_stock', 'ship'); break;
       case STAGE.TO_SHIP:
         out.push('ordered', 'out_of_stock', 'ship', line.paymentInitiatedAt ? 'payment_undo' : 'payment_initiated');
         break;
@@ -244,7 +245,7 @@ function detail(u, o) {
       item: h.itemId ? names.get(idOf(h.itemId)) || '' : '',
       note: h.note || '',
     })),
-    canShip: can.procurement(u) && (view?.lines || []).some((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER),
+    canShip: can.procurement(u) && (view?.lines || []).some((l) => SHIP_STAGES.has(l.stage)),
     // Talking to the customer is the sales side's job: the seller, a sales head, or admin.
     canContactCustomer: can.decide(u, o),
     // The customer's saved bank account (refunds / NEFT): accounts and admin.
@@ -375,6 +376,9 @@ async function loadLine(orderId, itemId) {
 
 const RACE = 'Someone else just updated this item. Refresh and try again.';
 
+/** Lines a parcel may take: anything not out of stock, refunded, or already shipped. */
+const SHIP_STAGES = new Set([STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.WITH_SUPPLIER]);
+
 /**
  * Procurement: record the stock check for one item.
  * @param {'in_stock'|'ordered'|'out_of_stock'} stock
@@ -475,15 +479,15 @@ export async function shipWithProof(actor, orderId, { itemIds = [], courierName,
   const o = await orderRepository.findForWorkflow(orderId);
   if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
   const view = workflowView(o);
-  const shippable = view.lines.filter((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER);
+  const shippable = view.lines.filter((l) => SHIP_STAGES.has(l.stage));
   const wanted = itemIds.length ? shippable.filter((l) => itemIds.map(String).includes(l.itemId)) : shippable;
   if (itemIds.length && wanted.length !== new Set(itemIds.map(String)).size) {
-    throw fail('Only items marked in stock or ordered from the supplier can be shipped.', 409);
+    throw fail('Items marked out of stock, refunded or already shipped can\'t go in a parcel. Refresh and choose again.', 409);
   }
   const lines = wanted
     .map((l) => ({ itemId: l.itemId, quantity: unshippedQuantity(o, l.itemId) }))
     .filter((l) => l.quantity > 0);
-  if (!lines.length) throw fail('Nothing on this order is ready to ship. Mark the items in stock first.', 409);
+  if (!lines.length) throw fail('Nothing on this order is left to ship.', 409);
   // A supplier payment still awaiting approval or payment holds its items back:
   // procurement asks the supplier for shipping once accounts has paid.
   await assertNoPendingSupplierPayment(orderId, lines.map((l) => l.itemId));
@@ -527,6 +531,19 @@ export async function shipWithProof(actor, orderId, { itemIds = [], courierName,
   await orderRepository.pushWorkflowEvent(orderId, event(actor, 'shipped', {
     note: [courier, tracking].filter(Boolean).join(' · ') || 'Photo only',
   }));
+  // Lines shipped straight from the stock check were in stock — record it, so the
+  // line's history reads true. Compare-and-set on "still unchecked": if someone else
+  // set the stock meanwhile, theirs stands. The parcel itself already makes the line
+  // "Shipped" (stage is derived from parcels), so this is the record, not the gate.
+  const shippedIds = new Set(lines.map((l) => l.itemId));
+  for (const l of wanted.filter((x) => x.stage === STAGE.STOCK_CHECK && shippedIds.has(x.itemId))) {
+    await orderRepository.updateWorkflowLineIf(
+      orderId, l.itemId,
+      { stock: { $in: [STOCK.PENDING, null] }, refundRequestedAt: null, accountsApprovedAt: null },
+      { set: { stock: STOCK.IN_STOCK, stockBy: actor._id, stockAt: new Date() }, unset: [] },
+      event(actor, `stock_${STOCK.IN_STOCK}`, { itemId: l.itemId, note: 'Shipped without a separate stock check' }),
+    );
+  }
   await refreshOpen(orderId);
   enqueue('send-team-shipped-alert', { orderId: String(orderId), shipmentId: String(result.shipment._id) });
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, {

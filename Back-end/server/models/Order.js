@@ -54,6 +54,41 @@ const OrderSchema = new mongoose.Schema({
   // The staff member (team panel, sales team) who created this offline order.
   // Drives "my orders" / team scoping; `salesRep` stays the name-only CRM credit.
   salesUser: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  // A bank transfer has been recorded for this unpaid sales order and is waiting
+  // for accounts to find it in the bank (models/BankTransfer.js). While set, no new
+  // payment link can be issued and the order cannot be cancelled — the money may
+  // already be in the account. Cleared when accounts confirms or rejects.
+  bankTransferPendingAt: { type: Date, default: undefined },
+  // Paid outside Razorpay: what accounts confirmed. Refunds of such an order are
+  // made by bank, not through Razorpay (there is no gateway payment to refund).
+  offlinePayment: {
+    type: new mongoose.Schema({
+      method: { type: String, enum: ["bank_transfer"], required: true },
+      reference: String,
+      paidOn: Date,
+      amount: Number,
+      transfer: { type: mongoose.Schema.Types.ObjectId, ref: "BankTransfer" },
+      confirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      confirmedByName: String,
+      confirmedAt: Date,
+    }, { _id: false }),
+    default: undefined,
+  },
+  // Who credited this website order to a salesman, and when (services/orderAttributionService.js).
+  // Capped at 50 entries on write. `from`/`to` null = "no one".
+  salesAttribution: {
+    type: [new mongoose.Schema({
+      at: { type: Date, required: true },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      byName: String,
+      from: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      fromName: String,
+      to: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      toName: String,
+      note: String,
+    }, { _id: false })],
+    default: undefined,
+  },
 
   /*
     Team workflow (the /team panel): stock check → supplier → proof → delivery, or

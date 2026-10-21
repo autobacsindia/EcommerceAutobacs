@@ -34,6 +34,8 @@ import { paymentSummary, retireAllParts } from './salesPaymentService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
+export const BANK_TRANSFER_WAITING = 'A bank transfer is waiting for accounts to check on this order. Wait until they confirm or reject it.';
+
 const PAGE_SIZE = 25;
 
 const isActiveStaff = (u) => u?.role === 'staff' && u.staff?.active === true;
@@ -76,7 +78,8 @@ async function page(baseQuery, cursor, { includePayment = false } = {}) {
     limit: PAGE_SIZE + 1,
     sort: { createdAt: -1, _id: -1 },
     select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
-      + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations',
+      + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
+      + 'bankTransferPendingAt offlinePayment',
     populate,
   });
   const hasMore = rows.length > PAGE_SIZE;
@@ -128,6 +131,10 @@ function shape(o) {
     // Quotation-first orders: the payment parts and how much is in / still to ask.
     paymentFlow: o.paymentLinkId || o.paymentLinkUrl ? 'link' : 'parts',
     payment: paymentSummary(o),
+    // Recorded and waiting for accounts (services/bankTransferService.js).
+    bankTransferPending: !!o.bankTransferPendingAt,
+    // Paid by bank transfer: what accounts confirmed.
+    offlinePayment: o.offlinePayment ? { method: o.offlinePayment.method, reference: o.offlinePayment.reference, confirmedBy: o.offlinePayment.confirmedByName || '' } : null,
   };
 }
 
@@ -369,6 +376,8 @@ async function loadOwnUnpaid(actor, orderId) {
   if (order.paymentStatus === 'paid' || order.status !== 'awaiting_payment') {
     throw fail('This order is already paid or closed.', 409);
   }
+  // The customer may already have paid by bank transfer: no second link, no cancel.
+  if (order.bankTransferPendingAt) throw fail(BANK_TRANSFER_WAITING, 409);
   return order;
 }
 
@@ -378,7 +387,7 @@ async function loadOwnUnpaid(actor, orderId) {
  * likely because the customer has just paid), stop — never issue a second link
  * or cancel an order whose money may already be taken.
  */
-async function retireCurrentLink(order) {
+export async function retireCurrentLink(order) {
   if (!order.paymentLinkId) return;
   const live = order.paymentLinkExpiresAt && new Date(order.paymentLinkExpiresAt).getTime() > Date.now();
   if (!live) return;

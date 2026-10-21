@@ -114,6 +114,38 @@ export const validatePaidOrdersQuery = [
   query('stage').optional().isIn(['processing', 'delivered']).withMessage('Invalid stage'),
 ];
 
+export const validateAttributionList = [
+  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+];
+
+// salesUserId / expectedSalesUserId: an id, or null for "no one".
+const idOrNull = (v) => v === null || (typeof v === 'string' && /^[a-f0-9]{24}$/i.test(v));
+export const validateSetSeller = [
+  param('id').custom(isObjectId).withMessage('Invalid order id'),
+  body('salesUserId').exists().withMessage('Choose a salesman (or none)').bail().custom(idOrNull).withMessage('Invalid salesman'),
+  body('expectedSalesUserId').exists().withMessage('Refresh the page and try again').bail().custom(idOrNull).withMessage('Invalid salesman'),
+  body('note').optional().isString().isLength({ max: 300 }).withMessage('Note is too long (300 characters maximum)'),
+];
+
+export const validateBankTransferList = [
+  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+  query('status').optional().isIn(['pending', 'confirmed', 'rejected', 'all']).withMessage('Invalid status'),
+];
+
+export const validateBankTransferId = [
+  param('id').custom(isObjectId).withMessage('Invalid bank transfer id'),
+];
+
+export const validateBankTransferFile = [
+  param('id').custom(isObjectId).withMessage('Invalid bank transfer id'),
+  param('fileId').custom(isObjectId).withMessage('Invalid file id'),
+];
+
+export const validateBankTransferReject = [
+  param('id').custom(isObjectId).withMessage('Invalid bank transfer id'),
+  body('note').isString().trim().isLength({ min: 3, max: 500 }).withMessage('Say why (3–500 characters)'),
+];
+
 export const validateOrderIdParam = [
   param('id').custom(isObjectId).withMessage('Invalid order id'),
 ];

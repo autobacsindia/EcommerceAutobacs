@@ -537,6 +537,25 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ Spin-to-Win indexes confirmed');
 
+    // MONEY-CRITICAL: one real bank-transfer UTR pays one order (models/BankTransfer.js).
+    // bankTransferService also checks before inserting; this unique index is what
+    // decides when two people record the same UTR at the same moment. Partial on
+    // `active: true` (an equality, which a partialFilterExpression accepts) so a
+    // REJECTED transfer does not block the corrected one.
+    await db.collection('banktransfers').createIndex(
+      { referenceKey: 1 },
+      { unique: true, partialFilterExpression: { active: true }, name: 'bank_transfer_utr_active', background: true }
+    );
+    await db.collection('banktransfers').createIndex(
+      { status: 1, createdAt: -1, _id: -1 },
+      { name: 'bank_transfer_status_recent', background: true }
+    );
+    await db.collection('banktransfers').createIndex(
+      { order: 1, createdAt: -1 },
+      { name: 'bank_transfer_order', background: true }
+    );
+    console.log('✓ BankTransfer indexes confirmed');
+
     // ── Affiliate program ──────────────────────────────────────────────────────
     // MONEY-CRITICAL: one commission accrual per order, forever.
     //

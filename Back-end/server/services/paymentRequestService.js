@@ -147,6 +147,9 @@ export function cleanPayee(p = {}) {
 /** "XXXXXX4321" — for lists and chat, where the full number is not needed. */
 export const maskAccount = (n) => (n ? `${'X'.repeat(Math.max(0, String(n).length - 4))}${String(n).slice(-4)}` : '');
 
+/** Cloudinary keeps PDFs as 'raw' and photos as 'image' — deletes must say which. */
+const resourceTypeOf = (f) => (f.contentType === 'application/pdf' ? 'raw' : 'image');
+
 /** Store uploaded files privately after checking the bytes are a photo or a PDF. */
 async function storeFiles(files, kinds, actor) {
   const stored = [];
@@ -172,7 +175,7 @@ async function storeFiles(files, kinds, actor) {
     }
   } catch (err) {
     // Nothing half-saved: remove what was stored before the failure.
-    await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: f.contentType === 'application/pdf' ? 'raw' : 'image' }).catch(() => {})));
+    await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
     throw err;
   }
   return stored;
@@ -410,7 +413,7 @@ export async function hold(actor, id, { note } = {}, req) {
 }
 
 /** The admin records the payment made (Razorpay / bank / UPI), with a reference and a screenshot. */
-export async function markPaid(actor, id, { method, reference, note } = {}, proofFile, req) {
+export async function markPaid(actor, id, { method, reference, note } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
   const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
   if (!how) throw fail('Choose how it was paid.', 400);
@@ -419,7 +422,8 @@ export async function markPaid(actor, id, { method, reference, note } = {}, proo
   const r0 = await loadVisible(actor, id);
   // The admin paying a request still waiting for approval approves it in the same step.
   const from = ['submitted', 'approved', 'on_hold'];
-  const proof = proofFile ? await storeFiles([proofFile], ['proof'], actor) : [];
+  const uploads = (Array.isArray(proofFiles) ? proofFiles : [proofFiles]).filter(Boolean);
+  const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor) : [];
   const now = new Date();
   const r = await paymentRequestRepository.transition(id, from, {
     ...(r0.status === 'submitted' ? { approvedBy: actor._id, approvedAt: now } : {}),
@@ -428,7 +432,7 @@ export async function markPaid(actor, id, { method, reference, note } = {}, proo
   }, entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`, note].filter(Boolean).join(' — ')), proof.length ? { files: { $each: proof } } : {});
   if (!r) {
     // Lost the race: the screenshot belongs to no payment.
-    await Promise.all(proof.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: 'image' }).catch(() => {})));
+    await Promise.all(proof.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
     throw fail(MOVED, 409);
   }
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'paid', method: how, reference: ref });

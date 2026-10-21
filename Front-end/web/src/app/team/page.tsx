@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck } from 'lucide-react';
+import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, Landmark } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MARKETING_AREAS } from './marketingAreas';
@@ -40,6 +40,7 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
         { href: '/team/sales/quotations', title: 'Quotations', text: 'Edit, share or cancel a quotation — and when the client agrees, create the order and send the payment link (split if needed).', icon: FileText },
         { href: '/team/sales', title: isHead ? 'Team orders' : 'My orders', text: 'Payment, stock, the supplier\'s photo and tracking — and a button to send them to the customer.', icon: ReceiptText },
         { href: '/team/decisions', title: 'Customer decisions', text: 'Out-of-stock items: ask the customer to wait or take a refund.', icon: PhoneCall },
+        { href: '/team/bank-transfers', title: 'Bank transfers', text: isHead ? 'Customers who paid by bank transfer, and whether accounts has confirmed the money.' : 'Your customers who paid by bank transfer, and whether accounts has confirmed the money.', icon: Landmark },
       ];
       if (isHead) list.push(PAID, DELIVERED);
       return list;
@@ -47,7 +48,11 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
     case 'procurement':
       return [{ href: '/team/procurement', title: 'Orders', text: 'Check stock for each paid order, record the supplier, upload the supplier\'s photo when dispatched.', icon: PackageSearch }, PAID, DELIVERED];
     case 'accounts':
-      return [{ href: '/team/refunds', title: 'Refund approvals', text: 'Approve refunds for out-of-stock items. An admin then pays them.', icon: Wallet }, PAID, DELIVERED];
+      return [
+        { href: '/team/refunds', title: 'Refund approvals', text: 'Approve refunds for out-of-stock items. An admin then pays them.', icon: Wallet },
+        { href: '/team/bank-transfers', title: 'Bank transfers', text: 'A customer paid by bank transfer: check the bank, then confirm (the order is paid) or reject.', icon: Landmark },
+        PAID, DELIVERED,
+      ];
     case 'operations':
       return [{ href: '/team/deliveries', title: 'Deliveries', text: 'Parcels on their way — follow up and mark them delivered.', icon: Truck }, PAID, DELIVERED];
     case 'marketing':

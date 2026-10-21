@@ -371,6 +371,10 @@ const proofPhotoUpload = multer({
  * A photo or a PDF (a supplier's invoice is often a PDF), 8 MB each. The
  * service re-checks the bytes (contentSniff) before anything is stored.
  */
+/** Per-request file caps for payment requests (each file still ≤ MAX_PROOF_PHOTO_SIZE). */
+export const MAX_BILL_FILES = 5;
+export const MAX_PROOF_FILES = 3;
+
 const paymentFileUpload = multer({
   storage,
   fileFilter: (req, file, cb) => {
@@ -380,13 +384,13 @@ const paymentFileUpload = multer({
     }
     cb(null, true);
   },
-  limits: { fileSize: MAX_PROOF_PHOTO_SIZE, files: 3 },
+  limits: { fileSize: MAX_PROOF_PHOTO_SIZE, files: MAX_BILL_FILES + 1 },
 });
 
-/** Raising a request: up to two bills and one payee QR. */
-export const uploadPaymentRequestFiles = paymentFileUpload.fields([{ name: 'bill', maxCount: 2 }, { name: 'qr', maxCount: 1 }]);
-/** Recording a payment: one screenshot (field `proof`). */
-export const uploadPaymentProof = paymentFileUpload.single('proof');
+/** Raising a request: up to five bills and one payee QR. */
+export const uploadPaymentRequestFiles = paymentFileUpload.fields([{ name: 'bill', maxCount: MAX_BILL_FILES }, { name: 'qr', maxCount: 1 }]);
+/** Recording a payment: up to three screenshots (field `proof`). */
+export const uploadPaymentProof = paymentFileUpload.array('proof', MAX_PROOF_FILES);
 
 /** Single proof photo (field `photo`). Errors go through handleProofPhotoError. */
 export const uploadProofPhoto = proofPhotoUpload.single('photo');

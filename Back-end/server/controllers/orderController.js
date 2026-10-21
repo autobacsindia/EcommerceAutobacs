@@ -354,8 +354,18 @@ export const getOrderById = async (req, res) => {
       : Promise.resolve(order.shipments),
   ]);
 
+  // Staff-only parts of the order — the team workflow (staff names, suppliers,
+  // internal notes), who sold it and who credited it, and who confirmed a bank
+  // transfer — never go to the customer.
+  const staffView = canViewAllOrders(req.user);
+  const {
+    workflow: _workflow, salesAttribution: _salesAttribution, salesUser: _salesUser,
+    salesRep: _salesRep, crmLeadId: _crmLeadId, bankTransferPendingAt: _bankTransferPendingAt,
+    offlinePayment: _offlinePayment, ...customerSafe
+  } = order;
+
   const normalizedOrder = {
-    ...order,
+    ...(staffView ? order : customerSafe),
     shippingSlip: signedSlip,
     shipments: signedShipments,
     returnRequest: hasRealReturnRequest ? order.returnRequest : undefined,

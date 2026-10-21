@@ -313,7 +313,12 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   );
 }
 
-/** Procurement: the supplier's photo (+ courier and tracking) → the order is shipped. */
+/**
+ * Procurement (or admin): the supplier's photo (+ courier and tracking) → the chosen items
+ * are shipped. Starts with every item ticked — "ship all" — since one box is the common
+ * case; untick to send part now. Items not stock-checked yet may go too: the server
+ * records them in stock. Out-of-stock and refunded items never show here.
+ */
 function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: (r: OrderResponse) => void; onError: (m: string) => void }) {
   const shippable = order.lines.filter((l) => l.actions.includes('ship') && l.unshipped > 0);
   const [selected, setSelected] = useState<string[]>(shippable.map((l) => l.itemId));
@@ -321,6 +326,7 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
   const [courier, setCourier] = useState('');
   const [tracking, setTracking] = useState('');
   const [busy, setBusy] = useState(false);
+  const allChosen = shippable.every((l) => selected.includes(l.itemId));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -350,11 +356,19 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
       {shippable.length > 1 && (
         <fieldset className="space-y-1">
           <legend className="mb-1 text-xs font-medium text-gray-700">Items in this parcel</legend>
+          <label className="flex items-center gap-2 border-b border-blue-100 pb-1 text-sm font-medium text-gray-900">
+            <input type="checkbox" checked={allChosen}
+              onChange={(e) => setSelected(e.target.checked ? shippable.map((l) => l.itemId) : [])} />
+            All items
+          </label>
           {shippable.map((l) => (
             <label key={l.itemId} className="flex items-center gap-2 text-sm text-gray-800">
               <input type="checkbox" checked={selected.includes(l.itemId)}
                 onChange={(e) => setSelected(e.target.checked ? [...selected, l.itemId] : selected.filter((x) => x !== l.itemId))} />
-              {l.name}{l.variantLabel ? ` — ${l.variantLabel}` : ''} × {l.unshipped}
+              <span>
+                {l.name}{l.variantLabel ? ` — ${l.variantLabel}` : ''} × {l.unshipped}
+                {l.stage === 'stock_check' && <span className="ml-1 text-xs text-gray-500">(not stock-checked — will be marked in stock)</span>}
+              </span>
             </label>
           ))}
         </fieldset>
@@ -376,8 +390,10 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
           <input className={input} maxLength={80} value={tracking} onChange={(e) => setTracking(e.target.value)} />
         </label>
       </div>
-      <button type="submit" disabled={busy || !file} className={primary}>
-        {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Upload proof &amp; mark shipped
+      <button type="submit" disabled={busy || !file || !selected.length} className={primary}>
+        {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        {shippable.length > 1 && allChosen ? 'Upload proof & ship all items'
+          : shippable.length > 1 ? `Upload proof & ship ${selected.length} of ${shippable.length} items` : 'Upload proof & mark shipped'}
       </button>
     </form>
   );

@@ -231,19 +231,57 @@ describe('in stock → supplier → proof → delivered', () => {
     expect((await wf.listQueue(ops, 'deliveries')).orders).toHaveLength(0);
   });
 
-  it('ships only the items chosen, and refuses items not yet checked', async () => {
+  it('ships only the items chosen, and refuses an out-of-stock item', async () => {
     const p = await staff('procurement');
     const order = await paidOrder();
     const id = String(order._id);
     const [cover, mat] = ids(order);
     await wf.setStock(p, id, cover, { stock: 'in_stock' }, req);
+    await wf.setStock(p, id, mat, { stock: 'out_of_stock' }, req);
 
     await expect(wf.shipWithProof(p, id, { itemIds: [cover, mat] }, photo(), req)).rejects.toMatchObject({ statusCode: 409 });
     expect(stored.size).toBe(0); // nothing uploaded when refused up front
 
     const view = await wf.shipWithProof(p, id, { itemIds: [cover] }, photo(), req);
-    expect(view.lines.map((l) => l.stage)).toEqual([STAGE.SHIPPED, STAGE.STOCK_CHECK]);
+    expect(view.lines.map((l) => l.stage)).toEqual([STAGE.SHIPPED, STAGE.CUSTOMER_DECISION]);
     expect((await Order.findById(id).lean()).workflow.open).toBe(true);
+    // "Ship all" now means "all that may ship" — the out-of-stock line is not among them.
+    await expect(wf.shipWithProof(p, id, {}, photo(), req)).rejects.toMatchObject({ statusCode: 409, message: expect.stringMatching(/left to ship/) });
+  });
+
+  it('ship all: every item in one parcel, even ones nobody stock-checked — which are then recorded in stock', async () => {
+    const p = await staff('procurement');
+    const order = await paidOrder();
+    const id = String(order._id);
+    const [cover, mat] = ids(order);
+    await wf.setStock(p, id, cover, { stock: 'ordered', supplierName: 'Ram Traders' }, req);
+    // mat: never checked.
+    let view = await wf.getOrder(p, id);
+    expect(view.canShip).toBe(true);
+    expect(view.lines.find((l) => l.itemId === mat).actions).toContain('ship');
+
+    view = await wf.shipWithProof(p, id, {}, photo(), req);
+    const fresh = await Order.findById(id).lean();
+    expect(fresh.status).toBe('shipped');
+    expect(fresh.shipments).toHaveLength(1);
+    expect(fresh.shipments[0].lines.map((l) => String(l.itemId)).sort()).toEqual([cover, mat].sort());
+    expect(view.lines.every((l) => l.stage === STAGE.SHIPPED)).toBe(true);
+    const lines = new Map(fresh.workflow.lines.map((l) => [String(l.itemId), l]));
+    expect(lines.get(mat).stock).toBe('in_stock');
+    expect(lines.get(cover).stock).toBe('ordered'); // a checked line keeps what procurement said
+    expect(view.history.find((h) => h.action === 'Marked in stock')).toMatchObject({ note: 'Shipped without a separate stock check' });
+    expect(view.canShip).toBe(false);
+  });
+
+  it('the admin can ship too; sales, accounts and operations cannot', async () => {
+    const order = await paidOrder();
+    const id = String(order._id);
+    for (const u of [await staff('sales', { isHead: true }), await staff('accounts'), await staff('operations')]) {
+      await expect(wf.shipWithProof(u, id, {}, photo(), req)).rejects.toMatchObject({ statusCode: 403 });
+      expect((await wf.getOrder(u, id)).canShip).toBe(false);
+    }
+    await wf.shipWithProof(await admin(), id, {}, photo(), req);
+    expect((await Order.findById(id).lean()).shipments).toHaveLength(1);
   });
 
   it('refuses a file that is not really an image', async () => {

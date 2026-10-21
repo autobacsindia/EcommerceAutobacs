@@ -25,6 +25,7 @@
 import paymentRequestRepository from '../repositories/paymentRequestRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import { STAFF_TEAMS } from '../config/staff.js';
+import { countPending as countPendingBankTransfers } from './bankTransferService.js';
 
 const isAdmin = (u) => u?.role === 'admin';
 const isActiveStaff = (u) => u?.role === 'staff' && u?.staff?.active === true;
@@ -42,9 +43,11 @@ export async function summaryFor(user) {
 
   const wantsPayments = isAdmin(user) || isAccounts(user);
   // One aggregate covers both payment queues; refunds are a separate table.
-  const [byStatus, refunds] = await Promise.all([
+  const [byStatus, refunds, transfers] = await Promise.all([
     wantsPayments ? paymentRequestRepository.countByStatus() : Promise.resolve([]),
     isAdmin(user) || isAccounts(user) ? orderRepository.countPendingCancellationRefunds() : Promise.resolve(0),
+    // A small collection (a handful of rows a week), so a count is cheap.
+    wantsPayments ? countPendingBankTransfers() : Promise.resolve(0),
   ]);
   const n = (status) => byStatus.find((r) => r._id === status)?.n || 0;
 
@@ -72,6 +75,16 @@ export async function summaryFor(user) {
       label: 'Refunds to send',
       count: refunds,
       href: isAdmin(user) ? '/admin/orders?refunds=pending' : '/team/refunds',
+    });
+  }
+
+  // A customer paid a sales order by bank transfer: accounts (or the admin) checks the bank.
+  if (wantsPayments) {
+    items.push({
+      key: 'bank_transfers_to_verify',
+      label: 'Bank transfers to check',
+      count: transfers,
+      href: isAdmin(user) ? '/admin/bank-transfers' : '/team/bank-transfers',
     });
   }
 
