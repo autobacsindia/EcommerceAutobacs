@@ -598,7 +598,7 @@ class EmailHandler {
 
   /**
    * Send the welcome email on registration.
-   * Sent from a friendlier sender (POSTMARK_WELCOME_FROM_EMAIL, e.g. hi@autobacsindia.com)
+   * Sent from a friendlier sender (POSTMARK_WELCOME_FROM_EMAIL, e.g. info@autobacsindia.com)
    * than the default transactional noreply@ — falls back to the default sender if unset.
    * The address must be on a verified sender / confirmed domain in Postmark.
    * @param {string} to - Recipient email

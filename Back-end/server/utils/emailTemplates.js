@@ -674,63 +674,253 @@ ${companyName}
 };
 
 /**
- * Welcome Email Template (sent on registration).
+ * Welcome Email Template (sent once, when the account is verified — see
+ * routes/auth.js sendWelcomeOnce). Sent from POSTMARK_WELCOME_FROM_EMAIL.
+ *
+ * Built for email clients, not browsers: tables, inline styles, a bulletproof
+ * button, no web font required (DM Sans where supported, Arial otherwise), and
+ * `color-scheme: light` so dark-mode clients do not invert the brand colours.
+ * The customer's name is the only user input and is always escaped.
+ *
  * @param {Object} params
  * @param {string} [params.name] - User's name
+ * @param {string} [params.siteUrl] - Storefront origin (defaults to the live site)
  * @returns {Object} - { subject, text, html }
  */
-export const welcomeEmail = ({ name } = {}) => {
-  const firstName = (name || '').trim().split(' ')[0] || 'there';
-  const subject = 'Welcome to Autobacs India 🎉';
+export const welcomeEmail = ({ name, siteUrl } = {}) => {
+  const given = String(name || '').trim().split(/\s+/)[0] || '';
+  const firstName = given || 'there';
+  const safeName = escapeHtml(firstName);
+  const site = String(siteUrl || 'https://www.autobacsindia.com').replace(/\/$/, '');
+  const year = new Date().getFullYear();
+  const subject = given ? `Welcome to Autobacs India, ${given} 🎉` : 'Welcome to Autobacs India 🎉';
+
+  const garageUrl = `${site}/account/garage`;
+  const shopUrl = `${site}/products`;
+  const consultUrl = `${site}/consultation`;
+  const font = "'DM Sans',Arial,Helvetica,sans-serif";
 
   const text = `
 Hi ${firstName},
 
-Welcome to Autobacs India — we're glad to have you!
+Welcome to Autobacs India — your account is ready.
 
-Your account is ready. You can now:
-  • Shop genuine car care, accessories and parts
-  • Track your orders in real time
-  • Save your garage and get fitment-matched products
+Here's what you can do from today:
+  • Shop performance mods & upgrades — genuine parts from Ironman 4x4, Profender, Brembo, Bushranger and more.
+  • Save your cars to your garage — we'll show you only the parts that fit them: ${garageUrl}
+  • Track your orders in real time — live updates from dispatch to your door.
 
-Browse the store: https://autobacsindia.com
+Not sure what fits your build? Book a free consultation with a specialist: ${consultUrl}
 
-If you have any questions, just reply to this email — we're happy to help.
+Start shopping: ${shopUrl}
 
 See you on the road,
-The Autobacs India Team
+Team Autobacs India
+
+Need help?
+Questions: info@autobacsindia.com
+Order tracking & product queries: support@autobacsindia.com
+Grievances: grievance@autobacsindia.com
+
+© ${year} Roavion Automotive Pvt. Ltd. All rights reserved.
   `.trim();
+
+  const feature = (icon, title, body, last = false) => `
+                <tr>
+                  <td width="52" valign="top" style="padding:16px 0;${last ? '' : 'border-bottom:1px solid #EDF1EE;'}">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                      <td width="40" height="40" align="center" valign="middle" style="width:40px;height:40px;background:#E8F5EC;border-radius:12px;font-size:18px;line-height:40px;">${icon}</td>
+                    </tr></table>
+                  </td>
+                  <td valign="top" style="padding:16px 0 16px 14px;${last ? '' : 'border-bottom:1px solid #EDF1EE;'}font-family:${font};">
+                    <p style="margin:0;font-size:15px;line-height:22px;font-weight:700;color:#0F1111;">${title}</p>
+                    <p style="margin:4px 0 0 0;font-size:13px;line-height:20px;color:#55605A;">${body}</p>
+                  </td>
+                </tr>`;
+
+  const trust = (title, body) => `
+                  <td class="stack" width="33%" valign="top" style="padding:0 6px;">
+                    <p style="margin:0;font-family:${font};font-size:12px;line-height:18px;font-weight:700;color:#0A5C33;">${title}</p>
+                    <p style="margin:2px 0 10px 0;font-family:${font};font-size:12px;line-height:18px;color:#6B756F;">${body}</p>
+                  </td>`;
 
   const html = `
 <!DOCTYPE html>
-<html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
   <title>Welcome to Autobacs India</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: light only; supported-color-schemes: light only; }
+    a { text-decoration: none; }
+    @media only screen and (max-width:620px) {
+      .container { width:100% !important; border-radius:0 !important; }
+      .px { padding-left:22px !important; padding-right:22px !important; }
+      .hero-title { font-size:27px !important; line-height:33px !important; }
+      .stack { display:block !important; width:100% !important; padding:0 !important; }
+      .btn a { display:block !important; }
+    }
+  </style>
 </head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.6;color:#333;background:#f5f5f5;margin:0;padding:0;">
-  <div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
-    <div style="background:#111;padding:28px 30px;">
-      <h1 style="color:#fff;margin:0;font-size:24px;">Welcome to Autobacs India 🎉</h1>
-    </div>
-    <div style="padding:30px;">
-      <p>Hi ${firstName},</p>
-      <p>We're glad to have you! Your account is ready to go.</p>
-      <ul style="padding-left:20px;">
-        <li>🛒 Shop genuine car care, accessories and parts</li>
-        <li>📦 Track your orders in real time</li>
-        <li>🚗 Save your garage and get fitment-matched products</li>
-      </ul>
-      <div style="text-align:center;margin:28px 0;">
-        <a href="https://autobacsindia.com" style="display:inline-block;background:#111;color:#fff;padding:13px 28px;text-decoration:none;border-radius:6px;font-weight:bold;">Start Shopping</a>
-      </div>
-      <p style="font-size:13px;color:#999;">Questions? Just reply to this email — we're happy to help.</p>
-    </div>
-    <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
-      <p style="margin:4px 0;">© ${new Date().getFullYear()} Autobacs India. All rights reserved.</p>
-    </div>
+<body style="margin:0;padding:0;background:#EEF2EF;-webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;">
+
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#EEF2EF;font-size:1px;line-height:1px;">
+    Your account is ready, ${safeName}. Save your cars to your garage and see only the upgrades that fit.&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;
   </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#EEF2EF;">
+    <tr>
+      <td align="center" style="padding:32px 12px;">
+
+        <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 12px 40px rgba(10,40,25,0.10);">
+
+          <!-- Logo bar -->
+          <tr>
+            <td class="px" style="background:#0B0F0D;padding:24px 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                <td valign="middle">
+                  <a href="${site}" target="_blank" style="text-decoration:none;">
+                    <img src="${site}/images/roavion-logo.png" width="150" alt="ROAVION — Powered by Autobacs India" style="display:block;width:150px;max-width:150px;height:auto;border:0;outline:none;color:#FFFFFF;font-family:${font};font-size:20px;font-weight:800;">
+                  </a>
+                </td>
+                <td align="right" valign="middle" style="font-family:${font};font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#7E8A83;">
+                  Member since ${year}
+                </td>
+              </tr></table>
+            </td>
+          </tr>
+
+          <!-- Brand stripe: the logo's green / white / grey -->
+          <tr>
+            <td style="font-size:0;line-height:0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                <td width="60%" height="4" style="background:#0F7A43;height:4px;font-size:0;line-height:0;">&nbsp;</td>
+                <td width="25%" height="4" style="background:#E6ECE8;height:4px;font-size:0;line-height:0;">&nbsp;</td>
+                <td width="15%" height="4" style="background:#7A7F7C;height:4px;font-size:0;line-height:0;">&nbsp;</td>
+              </tr></table>
+            </td>
+          </tr>
+
+          <!-- Hero -->
+          <tr>
+            <td class="px" bgcolor="#0A5C33" style="background-color:#0A5C33;background-image:linear-gradient(135deg,#0B6B3B 0%,#0A5C33 55%,#07432A 100%);padding:44px 40px 46px 40px;">
+              <p style="margin:0 0 12px 0;font-family:${font};font-size:11px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:#7FE0A6;">
+                Your account is ready
+              </p>
+              <h1 class="hero-title" style="margin:0;font-family:${font};font-size:34px;line-height:40px;font-weight:800;letter-spacing:-0.8px;color:#FFFFFF;">
+                Welcome aboard, ${safeName}&nbsp;&#127881;
+              </h1>
+              <p style="margin:16px 0 0 0;font-family:${font};font-size:16px;line-height:25px;color:#D3EADB;">
+                Your ride, your build &mdash; and a team that knows both. Let&rsquo;s get started.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Intro -->
+          <tr>
+            <td class="px" style="padding:36px 40px 4px 40px;font-family:${font};font-size:15px;line-height:24px;color:#0F1111;">
+              Here&rsquo;s what you can do from today:
+            </td>
+          </tr>
+
+          <!-- Features -->
+          <tr>
+            <td class="px" style="padding:6px 40px 0 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+${feature('&#9881;&#65039;', 'Shop performance mods &amp; upgrades', 'Genuine accessories and parts from Ironman 4x4, Profender, Brembo, Bushranger and more.')}
+${feature('&#128663;', 'Save your cars to your garage', 'Add your vehicles once and we&rsquo;ll show you only the parts that fit them.')}
+${feature('&#128230;', 'Track your orders in real time', 'Live updates from dispatch to your door.', true)}
+              </table>
+            </td>
+          </tr>
+
+          <!-- CTA -->
+          <tr>
+            <td align="center" class="px" style="padding:32px 40px 10px 40px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="btn">
+                <tr>
+                  <td align="center" bgcolor="#0A5C33" style="border-radius:999px;background:#0A5C33;">
+                    <a href="${garageUrl}" target="_blank" style="display:inline-block;padding:16px 40px;font-family:${font};font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;border-radius:999px;">
+                      Add your car &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:14px 0 0 0;font-family:${font};font-size:13px;line-height:20px;color:#55605A;">
+                or <a href="${shopUrl}" target="_blank" style="color:#0A5C33;font-weight:700;text-decoration:none;">start shopping</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Specialist -->
+          <tr>
+            <td class="px" style="padding:24px 40px 8px 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F4F8F5;border:1px solid #DCEBE1;border-radius:12px;">
+                <tr>
+                  <td style="padding:18px 20px;font-family:${font};">
+                    <p style="margin:0;font-size:14px;line-height:21px;font-weight:700;color:#0F1111;">Not sure what fits your build?</p>
+                    <p style="margin:4px 0 0 0;font-size:13px;line-height:20px;color:#55605A;">
+                      Talk to a specialist before you buy &mdash; fitment advice is free.
+                      <a href="${consultUrl}" target="_blank" style="color:#0A5C33;font-weight:700;text-decoration:none;">Book a free consultation &rarr;</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Trust strip -->
+          <tr>
+            <td class="px" style="padding:22px 34px 6px 34px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+${trust('Genuine brands', 'Original parts from the brands we stock.')}
+${trust('Fitment experts', 'Advice from people who build cars.')}
+${trust('Secure payments', 'UPI, cards, net banking and EMI.')}
+              </tr></table>
+            </td>
+          </tr>
+
+          <!-- Sign-off -->
+          <tr>
+            <td class="px" style="padding:18px 40px 34px 40px;font-family:${font};font-size:15px;line-height:24px;color:#0F1111;">
+              See you on the road,<br>
+              <strong>Team Autobacs India</strong>
+            </td>
+          </tr>
+
+          <!-- Contact -->
+          <tr>
+            <td class="px" style="padding:22px 40px;background:#F4F7F5;border-top:1px solid #E1E8E3;font-family:${font};font-size:12px;line-height:20px;color:#6B756F;">
+              <strong style="color:#0F1111;">Need help?</strong><br>
+              Questions: <a href="mailto:info@autobacsindia.com" style="color:#0A5C33;text-decoration:none;font-weight:600;">info@autobacsindia.com</a><br>
+              Order tracking &amp; product queries: <a href="mailto:support@autobacsindia.com" style="color:#0A5C33;text-decoration:none;font-weight:600;">support@autobacsindia.com</a><br>
+              Grievances: <a href="mailto:grievance@autobacsindia.com" style="color:#0A5C33;text-decoration:none;font-weight:600;">grievance@autobacsindia.com</a>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" class="px" style="padding:4px 40px 26px 40px;background:#F4F7F5;font-family:${font};font-size:11px;line-height:18px;color:#97A09A;">
+              <a href="${site}" target="_blank" style="color:#55605A;text-decoration:none;font-weight:700;">autobacsindia.com</a>
+              &nbsp;&middot;&nbsp;
+              <a href="https://www.instagram.com/autobacsindia" target="_blank" style="color:#55605A;text-decoration:none;font-weight:700;">Instagram</a>
+              &nbsp;&middot;&nbsp;
+              <a href="https://www.youtube.com/@AutobacsIndia" target="_blank" style="color:#55605A;text-decoration:none;font-weight:700;">YouTube</a><br>
+              You&rsquo;re receiving this because you created an account at autobacsindia.com.<br>
+              &copy; ${year} Roavion Automotive Pvt. Ltd. All rights reserved.
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
   `.trim();
