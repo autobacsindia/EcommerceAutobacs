@@ -9,6 +9,7 @@ import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import CustomerBankCard from './CustomerBankCard';
+import HoldControl from './HoldControl';
 import { whatsappNumber } from './PaymentLinkCard';
 import { errorMessage, quotationPdfHref, rupees, type Quotation } from './types';
 
@@ -112,6 +113,12 @@ export default function QuotationDetail({ id }: { id: string }) {
               </button>
             )}
           </div>
+
+          {editable && (
+            <div className="mt-4">
+              <HoldControl base={`/staff/sales/quotations/${encodeURIComponent(quote.id)}`} hold={quote.hold} what="quotation" onDone={refresh} />
+            </div>
+          )}
 
           {open && (
             <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4">

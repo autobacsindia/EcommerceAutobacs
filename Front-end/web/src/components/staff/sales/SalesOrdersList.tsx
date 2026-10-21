@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { ChevronDown, FileText, Loader2, RefreshCw, UserPlus } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
-import { formatDateTimeIST } from '@/lib/datetime';
+import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
+import HoldControl from './HoldControl';
 import PaymentLinkCard from './PaymentLinkCard';
 import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
 import { errorMessage, quotationHref, rupees, type SalesOrder, type SalesOrderPage } from './types';
@@ -28,6 +29,11 @@ function statusOf(o: SalesOrder): { text: string; cls: string } {
   }
   if (o.status === 'cancelled') return { text: 'Cancelled', cls: 'bg-gray-200 text-gray-700' };
   if (o.bankTransferPending) return { text: 'Bank transfer · accounts checking', cls: 'bg-amber-100 text-amber-800' };
+  if (o.hold) {
+    return o.hold.due
+      ? { text: 'Follow up now', cls: 'bg-orange-100 text-orange-800' }
+      : { text: `On hold · follow up ${formatDateIST(o.hold.until)}`, cls: 'bg-amber-100 text-amber-800' };
+  }
   // Quotation-first order: paid through payment requests (possibly in parts).
   if (o.paymentFlow === 'parts') {
     const p = o.payment;
@@ -187,6 +193,9 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
               </button>
             </div>
           )}
+          {mode === 'sales' && unpaid && !order.bankTransferPending && (
+            <HoldControl base={`/staff/sales/orders/${encodeURIComponent(order.id)}`} hold={order.hold} what="order" onDone={done} />
+          )}
           {mode === 'sales' && (
             <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
               {order.status !== 'cancelled' && (
@@ -219,11 +228,14 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
  * `paid`: every paid sales order, for Accounts / Procurement.
  */
 export default function SalesOrdersList({ mode, stage }: { mode: Mode; stage?: Stage }) {
+  // The seller's list is split into active orders and those "On hold — customer thinking".
+  const [view, setView] = useState<'active' | 'on_hold'>('active');
   const base = mode === 'paid' ? '/staff/orders/paid' : '/staff/sales/orders';
-  // Only the paid list is split by stage; the sales list has no such axis.
-  const endpoint = mode === 'paid' && stage ? `${base}?stage=${stage}` : base;
+  const endpoint = mode === 'paid'
+    ? (stage ? `${base}?stage=${stage}` : base)
+    : `${base}?view=${view}`;
   const q = useInfiniteQuery({
-    queryKey: mode === 'paid' ? staffKeys.paidOrders(stage) : staffKeys.salesOrders(),
+    queryKey: mode === 'paid' ? staffKeys.paidOrders(stage) : staffKeys.salesOrderList(view),
     queryFn: ({ pageParam }) => {
       // The endpoint may already carry ?stage, so the cursor joins with & not ?.
       const url = pageParam
@@ -240,29 +252,45 @@ export default function SalesOrdersList({ mode, stage }: { mode: Mode; stage?: S
   const orders = q.data?.pages.flatMap((p) => p.orders) ?? [];
   const showSeller = mode === 'paid' || q.data?.pages[0]?.scope === 'team';
 
+  const tabs = mode !== 'paid' && (
+    <div className="flex flex-wrap gap-2" role="tablist" aria-label="Which orders">
+      {([['active', 'Active'], ['on_hold', 'On hold']] as const).map(([key, label]) => (
+        <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
+          className={`rounded-full px-3 py-1 text-sm font-medium ${view === key ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
   if (q.isPending) {
-    return <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading orders…</p>;
+    return <div className="space-y-3">{tabs}<p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading orders…</p></div>;
   }
   if (q.isError) {
     return <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load orders.')}</p>;
   }
   if (orders.length === 0) {
     return (
+      <div className="space-y-3">{tabs}
       <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
         {mode !== 'paid'
-          ? 'No orders yet. Orders appear here when a client accepts a quotation.'
+          ? (view === 'on_hold'
+            ? 'Nothing on hold. Use “On hold – customer thinking” on an unpaid order when a customer needs time.'
+            : 'No orders yet. Orders appear here when a client accepts a quotation.')
           : stage === 'delivered'
             ? 'No delivered orders yet. An order moves here once every parcel has been delivered.'
             : stage === 'processing'
               ? 'Nothing in progress. Paid orders appear here until they are delivered.'
               : 'No paid orders yet.'}
       </p>
+      </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {tabs || <span />}
         <button type="button" onClick={() => q.refetch()} disabled={q.isFetching}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? 'animate-spin' : ''}`} /> Refresh

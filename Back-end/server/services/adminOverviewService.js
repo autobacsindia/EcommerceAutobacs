@@ -107,8 +107,10 @@ export async function companyOverview(actor, now = Date.now()) {
     websiteOrders: paidToday.length - gtmToday.length,
     newConsultations,
     openSupportTickets: openTickets,
+    // Parked "On hold — customer thinking" until a follow-up date: not waiting on anyone yet.
     salesLinksWaiting: unpaidSales.filter((o) => o.status === 'awaiting_payment'
-      && o.paymentLinkExpiresAt && new Date(o.paymentLinkExpiresAt).getTime() > now).length,
+      && o.paymentLinkExpiresAt && new Date(o.paymentLinkExpiresAt).getTime() > now
+      && !(o.salesHold?.until && new Date(o.salesHold.until).getTime() > now)).length,
   };
 
   // ── Money waiting ──

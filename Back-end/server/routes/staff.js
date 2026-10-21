@@ -20,7 +20,6 @@ import {
   validatePasswordReset,
   validateOwnPasswordChange,
   validateSalesProductSearch,
-  validateCursorQuery,
   validatePaidOrdersQuery,
   validateAttributionList,
   validateBankTransferList,
@@ -31,6 +30,9 @@ import {
   validateOrderIdParam,
   validateSalesOrder,
   validateQuotationIdParam,
+  validateQuotationHold,
+  validateOrderHold,
+  validateSalesOrderList,
   validateQuotationList,
   validatePaymentParts,
   validatePaymentPartParam,
@@ -83,6 +85,8 @@ import {
 import {
   searchSalesProducts,
   listSalesOrders,
+  holdSalesOrder,
+  resumeSalesOrder,
   listPaidSalesOrders,
   reissuePaymentLink,
   cancelUnpaidSalesOrder,
@@ -91,7 +95,7 @@ import {
 import { getQuotationPdf } from '../services/quotationService.js';
 import { getBankAccount, saveBankAccount, removeBankAccount } from '../services/customerBankService.js';
 import {
-  createQuotation, updateQuotation, cancelQuotation, acceptQuotation,
+  createQuotation, updateQuotation, cancelQuotation, acceptQuotation, holdQuotation, resumeQuotation,
   getQuotation, listQuotations, getQuotationDocument,
 } from '../services/salesQuotationService.js';
 import { requestPayment, cancelPart, getPaymentRequestPdf } from '../services/salesPaymentService.js';
@@ -240,6 +244,16 @@ router.post('/sales/quotations/:id/cancel', validateQuotationIdParam, validateRe
   res.json({ success: true, quotation: await cancelQuotation(req.user, req.params.id, req) });
 }));
 
+// @route  POST /staff/sales/quotations/:id/hold { until?, note? } — "On hold — customer thinking"
+router.post('/sales/quotations/:id/hold', validateQuotationHold, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, quotation: await holdQuotation(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/sales/quotations/:id/resume — back to the active list
+router.post('/sales/quotations/:id/resume', validateQuotationIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, quotation: await resumeQuotation(req.user, req.params.id, req) });
+}));
+
 // @route  POST /staff/sales/quotations/:id/accept — customer agreed → the order (no link yet)
 router.post('/sales/quotations/:id/accept', validateQuotationIdParam, validateRequest, asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, ...(await acceptQuotation(req.user, req.params.id, req)) });
@@ -265,9 +279,19 @@ router.get('/sales/orders/:id/payment-request', validateOrderIdParam, validateRe
   sendPdf(res, await getPaymentRequestPdf(req.user, req.params.id));
 }));
 
-// @route  GET /staff/sales/orders?cursor= — own orders (member) / all (head)
-router.get('/sales/orders', validateCursorQuery, validateRequest, asyncHandler(async (req, res) => {
-  res.json({ success: true, ...(await listSalesOrders(req.user, { cursor: req.query.cursor })) });
+// @route  GET /staff/sales/orders?cursor=&view=active|on_hold — own orders (member) / all (head)
+router.get('/sales/orders', validateSalesOrderList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listSalesOrders(req.user, { cursor: req.query.cursor, view: req.query.view || 'active' })) });
+}));
+
+// @route  POST /staff/sales/orders/:id/hold { until?, note? } — "On hold — customer thinking"
+router.post('/sales/orders/:id/hold', validateOrderHold, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await holdSalesOrder(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/sales/orders/:id/resume — back to the active list
+router.post('/sales/orders/:id/resume', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await resumeSalesOrder(req.user, req.params.id, req) });
 }));
 
 // @route  POST /staff/sales/orders/:id/payment-link — issue a new link (old one retired)

@@ -1367,7 +1367,7 @@ class OrderRepository extends BaseRepository {
   /** Sales-panel orders still waiting for the customer to pay (index staff_sales_by_payment). */
   async findUnpaidSalesOrders(limit) {
     return Order.find({ paymentStatus: 'pending', salesUser: { $type: 'objectId' } })
-      .select('status paymentLinkExpiresAt createdAt totalAmount')
+      .select('status paymentLinkExpiresAt createdAt totalAmount salesHold')
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();

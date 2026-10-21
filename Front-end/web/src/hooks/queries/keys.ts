@@ -175,6 +175,8 @@ export const staffKeys = {
   /** Every sales-order list (own / team / paid) — invalidate after create, re-link or cancel. */
   orders: () => [...staffKeys.all, 'orders'] as const,
   salesOrders: () => [...staffKeys.orders(), 'sales'] as const,
+  /** The seller's list: 'active' or the orders parked "On hold — customer thinking". */
+  salesOrderList: (view: 'active' | 'on_hold') => [...staffKeys.salesOrders(), view] as const,
   /**
    * The paid-order lists. `stage` keeps "Order processing" and "Delivered" in
    * separate cache entries — they are different server queries, and an action

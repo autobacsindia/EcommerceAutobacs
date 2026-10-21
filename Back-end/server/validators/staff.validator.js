@@ -183,7 +183,21 @@ export const validateQuotationIdParam = [
 
 export const validateQuotationList = [
   query('cursor').optional().custom(isObjectId).withMessage('Invalid page cursor'),
-  query('status').optional().isIn(['open', 'accepted', 'cancelled']).withMessage('Unknown status'),
+  query('status').optional().isIn(['open', 'on_hold', 'accepted', 'cancelled']).withMessage('Unknown status'),
+];
+
+/** "On hold — customer thinking" body: follow-up date (YYYY-MM-DD, optional) and a note. */
+const holdBody = [
+  body('until').optional({ values: 'falsy' }).matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Choose a follow-up date'),
+  body('note').optional().isString().isLength({ max: 300 }).withMessage('Keep the note under 300 characters'),
+];
+export const validateQuotationHold = [param('id').custom(isObjectId).withMessage('Invalid quotation id'), ...holdBody];
+export const validateOrderHold = [param('id').custom(isObjectId).withMessage('Invalid order id'), ...holdBody];
+
+/** Sales order list: page cursor and which view (active / on hold). */
+export const validateSalesOrderList = [
+  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+  query('view').optional().isIn(['active', 'on_hold']).withMessage('Unknown view'),
 ];
 
 /** Request payment on an order in one or more parts (rupees). */
