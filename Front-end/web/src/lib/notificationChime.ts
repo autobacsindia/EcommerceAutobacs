@@ -1,10 +1,10 @@
 /**
- * The notification chime — two soft notes, synthesised, no audio file.
+ * The notification chime — a bright three-note "ding", synthesised, no audio file.
  *
  * ── Why not an mp3 ──────────────────────────────────────────────────────────
  * A file means a network fetch that can fail, a decode, a binary in the repo
- * and a licence to worry about, all for 150ms of sound. Two oscillators cost
- * nothing, start instantly, and cannot 404.
+ * and a licence to worry about (the chimes of Google Chat, Slack and the like
+ * belong to those companies). Oscillators start instantly and cannot 404.
  *
  * ── Why it may be silent the first time ─────────────────────────────────────
  * Every browser refuses to play audio until the person has interacted with the
@@ -13,10 +13,15 @@
  * and is merely resumed later. Until that gesture the badge is the only signal,
  * which is why the badge, not the sound, is the thing the bell relies on.
  *
- * ── Why it is quiet ─────────────────────────────────────────────────────────
- * This fires in an office, on someone else's machine, possibly often. A chime
- * people reach to disable is worse than no chime, so it is short, soft, and
- * mutable — see `muted`.
+ * ── Why it sounds the way it does ───────────────────────────────────────────
+ * The first version was two pure sine tones at ~7% volume: polite, but lost on
+ * a laptop speaker in a busy office, so people missed new work. This one is
+ * what messaging apps do — a quick rising arpeggio (A5 → C#6 → E6, a major
+ * chord, which reads as "something arrived", not "something is wrong") with a
+ * bell-like timbre: each note is a sine plus a quieter octave and a faint
+ * twelfth, struck fast and decaying naturally. Loud, but through a limiter
+ * (DynamicsCompressor) so overlapping notes never clip or crackle. Still
+ * mutable from the bell — see `muted`.
  */
 
 const MUTE_KEY = 'roavion-notify-muted';
@@ -59,21 +64,53 @@ export function arm(): void {
   }
 }
 
-/** One note of the chime. */
-function note(at: number, hz: number, seconds: number, peak: number): void {
+/** Overall loudness (0–1) after the limiter. */
+export const CHIME_VOLUME = 0.9;
+
+/**
+ * Where notes go: a limiter feeding a volume control feeding the speakers.
+ * Built once per audio context.
+ */
+let bus: AudioNode | null = null;
+function output(): AudioNode | null {
+  if (!ctx) return null;
+  if (!bus) {
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.knee.value = 6;
+    limiter.ratio.value = 12;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.12;
+    const volume = ctx.createGain();
+    volume.gain.value = CHIME_VOLUME;
+    limiter.connect(volume).connect(ctx.destination);
+    bus = limiter;
+  }
+  return bus;
+}
+
+/** One partial of a note: a sine with a fast strike and a natural decay. */
+function partial(at: number, hz: number, seconds: number, peak: number, dest: AudioNode): void {
   if (!ctx) return;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  // A sine with a soft envelope: a square or a hard start reads as an ALARM,
-  // and this is "someone needs you", not "something is wrong".
   osc.type = 'sine';
   osc.frequency.value = hz;
   gain.gain.setValueAtTime(0.0001, at);
-  gain.gain.exponentialRampToValueAtTime(peak, at + 0.015);
+  gain.gain.exponentialRampToValueAtTime(peak, at + 0.006);
   gain.gain.exponentialRampToValueAtTime(0.0001, at + seconds);
-  osc.connect(gain).connect(ctx.destination);
+  osc.connect(gain).connect(dest);
   osc.start(at);
-  osc.stop(at + seconds + 0.02);
+  osc.stop(at + seconds + 0.03);
+}
+
+/** One bell-like note: fundamental, octave and a faint twelfth. */
+function note(at: number, hz: number, seconds: number, peak: number): void {
+  const dest = output();
+  if (!dest) return;
+  partial(at, hz, seconds, peak, dest);
+  partial(at, hz * 2, seconds * 0.6, peak * 0.35, dest);
+  partial(at, hz * 3, seconds * 0.35, peak * 0.12, dest);
 }
 
 /**
@@ -86,10 +123,11 @@ export function chime(): void {
   try {
     arm();
     if (!ctx || ctx.state !== 'running') return;
-    const t = ctx.currentTime;
-    // A rising fifth: C6 then G6. Short, and clearly "a thing arrived".
-    note(t, 1046.5, 0.12, 0.07);
-    note(t + 0.1, 1568.0, 0.16, 0.055);
+    const t = ctx.currentTime + 0.01;
+    // A5 → C#6 → E6: a quick rising major arpeggio, the last note left to ring.
+    note(t, 880.0, 0.22, 0.5);
+    note(t + 0.09, 1108.73, 0.22, 0.5);
+    note(t + 0.18, 1318.51, 0.55, 0.55);
   } catch {
     // Nothing here is worth an error boundary.
   }
