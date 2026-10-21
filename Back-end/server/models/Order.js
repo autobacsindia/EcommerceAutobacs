@@ -89,6 +89,20 @@ const OrderSchema = new mongoose.Schema({
     }, { _id: false })],
     default: undefined,
   },
+  // Unpaid sales order parked as "On hold — customer thinking" (utils/salesHold.js).
+  // Changes nothing about price or payment: links stay live, the status stays
+  // awaiting_payment. It only hides the order from the active list and the
+  // "payment links waiting" count until the follow-up date.
+  salesHold: {
+    type: new mongoose.Schema({
+      since: Date,
+      until: { type: Date, required: true },
+      note: { type: String, default: "" },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      byName: String,
+    }, { _id: false }),
+    default: undefined,
+  },
 
   /*
     Team workflow (the /team panel): stock check → supplier → proof → delivery, or

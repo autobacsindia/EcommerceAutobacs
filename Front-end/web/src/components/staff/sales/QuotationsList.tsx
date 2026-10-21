@@ -6,12 +6,13 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Loader2, RefreshCw } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
-import { formatDateTimeIST } from '@/lib/datetime';
+import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 import { QUOTATION_STATUS } from './QuotationDetail';
 import { errorMessage, rupees, type QuotationPage } from './types';
 
 const FILTERS = [
   { key: 'open', label: 'Open' },
+  { key: 'on_hold', label: 'On hold' },
   { key: 'accepted', label: 'Accepted' },
   { key: 'cancelled', label: 'Cancelled' },
   { key: '', label: 'All' },
@@ -55,7 +56,7 @@ export default function QuotationsList() {
       {q.isError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load quotations.')}</p>}
       {!q.isPending && !q.isError && rows.length === 0 && (
         <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-          No quotations here. Create one from “New quotation”.
+          {status === 'on_hold' ? 'Nothing on hold. Use “On hold – customer thinking” on a quotation when a customer needs time.' : 'No quotations here. Create one from “New quotation”.'}
         </p>
       )}
 
@@ -68,8 +69,12 @@ export default function QuotationsList() {
               <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{r.customer.name}</span>
               {team && r.salesPerson && <span className="text-xs text-gray-500">{r.salesPerson}</span>}
               <span className="text-sm font-semibold text-gray-900">{rupees(r.totalAmount)}</span>
-              <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${QUOTATION_STATUS[r.status].cls}`}>{QUOTATION_STATUS[r.status].text}</span>
-              <span className="w-full text-xs text-gray-500">Updated {formatDateTimeIST(r.updatedAt)}</span>
+              {r.hold && (r.status === 'open' || r.status === 'expired')
+                ? <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${r.hold.due ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>
+                    {r.hold.due ? 'Follow up now' : `On hold · follow up ${formatDateIST(r.hold.until)}`}
+                  </span>
+                : <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${QUOTATION_STATUS[r.status].cls}`}>{QUOTATION_STATUS[r.status].text}</span>}
+              <span className="w-full text-xs text-gray-500">Updated {formatDateTimeIST(r.updatedAt)}{r.hold?.note ? ` · ${r.hold.note}` : ''}</span>
             </Link>
           </li>
         ))}

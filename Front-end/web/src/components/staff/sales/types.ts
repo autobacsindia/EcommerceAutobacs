@@ -68,6 +68,7 @@ export type SalesOrder = {
   bankTransferPending?: boolean;
   /** Paid by bank transfer: what accounts confirmed. */
   offlinePayment?: { method: 'bank_transfer'; reference: string; confirmedBy: string } | null;
+  hold?: SalesHold | null;
 };
 
 export type QuotationLine = {
@@ -80,6 +81,17 @@ export type QuotationLine = {
   quantity: number;
   price: number;
   listPrice: number | null;
+};
+
+/** "On hold — customer thinking" on a quotation or an unpaid order; null when not held. */
+export type SalesHold = {
+  since: string | null;
+  /** Follow-up date (start of that day, India time). */
+  until: string;
+  note: string;
+  by: string;
+  /** The follow-up date has arrived: the record is back in the active list. */
+  due: boolean;
 };
 
 export type Quotation = {
@@ -100,6 +112,7 @@ export type Quotation = {
   createdAt: string;
   updatedAt: string;
   revisions: { version: number; totalAmount: number; savedAt: string }[];
+  hold?: SalesHold | null;
 };
 
 export type QuotationPage = { quotations: Quotation[]; nextCursor: string | null; scope: 'mine' | 'team' };

@@ -23,6 +23,7 @@ import { buildQuotation, renderQuotationPdf } from './quotationService.js';
 import { QUOTATION_VALID_DAYS } from '../config/quotation.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { phoneOnlyEmailFor } from '../utils/customerContact.js';
+import { buildHold, shapeHold, heldFilter, notHeldFilter } from '../utils/salesHold.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const DAY = 24 * 60 * 60 * 1000;
@@ -87,6 +88,9 @@ export function shapeQuotation(q, { now = Date.now() } = {}) {
     number: printedNumber(q),
     version: q.version,
     status: expired ? 'expired' : q.status,
+    // Only an open quotation can be on hold; an accepted / cancelled one keeps the
+    // old field but it no longer means anything.
+    hold: q.status === 'open' ? shapeHold(q.hold, now) : null,
     customer: { ...q.customer },
     shippingAddress: q.shippingAddress,
     items: (q.items || []).map((l) => ({
@@ -201,6 +205,32 @@ export async function cancelQuotation(actor, id, req) {
 }
 
 /**
+ * "On hold — customer thinking": park an open quotation until a follow-up date
+ * (`until`, YYYY-MM-DD; default in 3 days) so the seller's active list holds
+ * only live conversations. Nothing about the quotation changes — it can still
+ * be edited, shared, accepted or cancelled while on hold. Holding again just
+ * moves the date.
+ */
+export async function holdQuotation(actor, id, input = {}, req) {
+  const q = await loadActionable(actor, id);
+  const hold = buildHold(actor, input);
+  const updated = await salesQuotationRepository.updateIfOpen(q._id, { $set: { hold } });
+  if (!updated) throw fail('This quotation was changed just now — reload it.', 409);
+  auditLogger.logAction(req, 'UPDATE', 'SalesQuotation', q._id, { change: 'on_hold', until: hold.until });
+  return shapeQuotation({ ...updated, salesUser: q.salesUser });
+}
+
+/** Back to the active list. Resuming one that is not on hold is a no-op. */
+export async function resumeQuotation(actor, id, req) {
+  const q = await loadActionable(actor, id);
+  if (!q.hold) return shapeQuotation(q);
+  const updated = await salesQuotationRepository.updateIfOpen(q._id, { $unset: { hold: '' } });
+  if (!updated) throw fail('This quotation was changed just now — reload it.', 409);
+  auditLogger.logAction(req, 'UPDATE', 'SalesQuotation', q._id, { change: 'resumed' });
+  return shapeQuotation({ ...updated, salesUser: q.salesUser });
+}
+
+/**
  * The customer accepted: create the order from these exact lines, with no payment
  * link yet. The catalogue is re-checked first (still sold, in stock, and still at
  * or above the quoted price) — a quotation that no longer holds must be edited.
@@ -264,6 +294,10 @@ export async function listQuotations(actor, { cursor, status } = {}) {
   if (!canSell(actor) && !isAdmin(actor)) throw fail('Not authorized.', 403);
   const filter = isSalesHead(actor) || isAdmin(actor) ? {} : { salesUser: actor._id };
   if (['open', 'accepted', 'cancelled'].includes(status)) filter.status = status;
+  // "Open" is the active list: on-hold quotations leave it until their follow-up
+  // date, then come back (marked due). "On hold" lists the parked ones.
+  if (status === 'open') Object.assign(filter, notHeldFilter('hold'));
+  if (status === 'on_hold') Object.assign(filter, { status: 'open' }, heldFilter('hold'));
   const before = cursor && mongoose.isValidObjectId(cursor) ? new mongoose.Types.ObjectId(cursor) : null;
   const rows = await salesQuotationRepository.model
     .find({ ...filter, ...(before ? { _id: { $lt: before } } : {}) })
@@ -307,4 +341,4 @@ export async function quotationForOrder(orderId) {
   return q ? { id: idOf(q._id), number: printedNumber(q) } : null;
 }
 
-export default { createQuotation, updateQuotation, cancelQuotation, acceptQuotation, getQuotation, listQuotations, getQuotationDocument };
+export default { createQuotation, updateQuotation, cancelQuotation, acceptQuotation, holdQuotation, resumeQuotation, getQuotation, listQuotations, getQuotationDocument };

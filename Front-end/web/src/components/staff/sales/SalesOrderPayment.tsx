@@ -9,6 +9,7 @@ import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import BankTransferForm from './BankTransferForm';
 import CustomerBankCard from './CustomerBankCard';
+import HoldControl from './HoldControl';
 import PaymentLinkCard from './PaymentLinkCard';
 import { errorMessage, paymentRequestHref, rupees, type PaymentPart, type SalesOrder } from './types';
 
@@ -181,6 +182,10 @@ export default function SalesOrderPayment({ id }: { id: string }) {
         <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <span className="font-semibold">Bank transfer recorded — waiting for accounts.</span> They will check the bank and confirm it, and the order then goes to Procurement. If they reject it, you will see why in team chat and can record it again or send a new link.
         </p>
+      )}
+
+      {canPay && (
+        <HoldControl base={`/staff/sales/orders/${encodeURIComponent(o.id)}`} hold={o.hold} what="order" onDone={refresh} />
       )}
 
       {canPay && pay && pay.amountToRequest > 0 && <RequestPayment key={pay.amountToRequest} order={o} onDone={refresh} />}

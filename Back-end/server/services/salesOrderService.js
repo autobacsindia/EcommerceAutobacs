@@ -28,6 +28,7 @@ import productRepository from '../repositories/productRepository.js';
 import { effectivePrice } from '../utils/productPrice.js';
 import { isPurchasable } from '../utils/stockStatus.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
+import { buildHold, shapeHold, heldFilter } from '../utils/salesHold.js';
 import { workflowView } from '../utils/teamWorkflow.js';
 import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
 import { paymentSummary, retireAllParts } from './salesPaymentService.js';
@@ -79,7 +80,7 @@ async function page(baseQuery, cursor, { includePayment = false } = {}) {
     sort: { createdAt: -1, _id: -1 },
     select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
       + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
-      + 'bankTransferPendingAt offlinePayment',
+      + 'bankTransferPendingAt offlinePayment salesHold',
     populate,
   });
   const hasMore = rows.length > PAGE_SIZE;
@@ -135,6 +136,8 @@ function shape(o) {
     bankTransferPending: !!o.bankTransferPendingAt,
     // Paid by bank transfer: what accounts confirmed.
     offlinePayment: o.offlinePayment ? { method: o.offlinePayment.method, reference: o.offlinePayment.reference, confirmedBy: o.offlinePayment.confirmedByName || '' } : null,
+    // "On hold — customer thinking": only meaningful while the order is unpaid.
+    hold: o.status === 'awaiting_payment' && o.paymentStatus === 'pending' ? shapeHold(o.salesHold) : null,
   };
 }
 
@@ -292,12 +295,32 @@ export async function createSalesOrder(actor, input, req) {
   return { order: shape(populated), paymentLink, customerIsNew: buyer.isNewUser };
 }
 
-/** Sales: own orders (member) or every sales-panel order (head). */
-export async function listSalesOrders(actor, { cursor } = {}) {
+const UNPAID = { status: 'awaiting_payment', paymentStatus: 'pending' };
+
+/**
+ * Sales: own orders (member) or every sales-panel order (head).
+ *
+ * `view`: 'active' (default) leaves out unpaid orders parked "On hold — customer
+ * thinking" until their follow-up date; 'on_hold' lists only those.
+ */
+export async function listSalesOrders(actor, { cursor, view = 'active' } = {}) {
   if (!canSell(actor)) throw fail('Not authorized.', 403);
-  const base = isSalesHead(actor)
+  const owner = isSalesHead(actor)
     ? { salesUser: { $type: 'objectId' } }
     : { salesUser: actor._id };
+  const now = new Date();
+  const base = view === 'on_hold'
+    ? { ...owner, ...UNPAID, ...heldFilter('salesHold', now) }
+    : {
+      ...owner,
+      // Anything not unpaid-and-held: never held, follow-up due, or paid / closed.
+      $or: [
+        { salesHold: null },
+        { 'salesHold.until': { $lte: now } },
+        { status: { $ne: 'awaiting_payment' } },
+        { paymentStatus: { $ne: 'pending' } },
+      ],
+    };
   const { items, nextCursor } = await page(base, cursor);
   return { orders: items.map(shape), nextCursor, scope: isSalesHead(actor) ? 'team' : 'mine' };
 }
@@ -363,6 +386,40 @@ export async function getSalesOrder(actor, orderId) {
     throw fail('Order not found.', 404);
   }
   return shape(order);
+}
+
+/**
+ * "On hold — customer thinking" for an unpaid sales order. Changes nothing about
+ * price or payment — links stay live, so a customer who decides early can still
+ * pay — it only parks the order until the follow-up date. The update is guarded
+ * on the order still being unpaid, so a payment landing at the same moment wins.
+ */
+export async function holdSalesOrder(actor, orderId, input = {}, req) {
+  const order = await loadOwnUnpaid(actor, orderId);
+  const hold = buildHold(actor, input);
+  const updated = await orderRepository.model.findOneAndUpdate(
+    { _id: order._id, ...UNPAID },
+    { $set: { salesHold: hold } },
+    { new: true },
+  );
+  if (!updated) throw fail('This order was paid or changed just now — reload it.', 409);
+  auditLogger.logAction(req, 'UPDATE', 'Order', order._id, { change: 'sales_on_hold', until: hold.until });
+  return getSalesOrder(actor, String(order._id));
+}
+
+/** Back to the active list. Allowed on a paid order too (it just clears the note). */
+export async function resumeSalesOrder(actor, orderId, req) {
+  if (!canSell(actor)) throw fail('Not authorized.', 403);
+  const order = await orderRepository.findById(orderId);
+  if (!order || !order.salesUser) throw fail('Order not found.', 404);
+  if (!isSalesHead(actor) && String(order.salesUser) !== String(actor._id)) {
+    throw fail('You can only manage your own orders.', 403);
+  }
+  if (order.salesHold) {
+    await orderRepository.model.updateOne({ _id: order._id }, { $unset: { salesHold: '' } });
+    auditLogger.logAction(req, 'UPDATE', 'Order', order._id, { change: 'sales_resumed' });
+  }
+  return getSalesOrder(actor, String(order._id));
 }
 
 /** Load an unpaid sales order the actor may act on. */

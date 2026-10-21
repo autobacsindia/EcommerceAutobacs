@@ -75,6 +75,19 @@ const SalesQuotationSchema = new mongoose.Schema(
       savedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     }],
 
+    // "On hold — customer thinking" (utils/salesHold.js): still open, just parked
+    // until the follow-up date. Absent when not on hold.
+    hold: {
+      type: new mongoose.Schema({
+        since: Date,
+        until: { type: Date, required: true },
+        note: { type: String, default: '' },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        byName: String,
+      }, { _id: false }),
+      default: undefined,
+    },
+
     order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: null },
     acceptedAt: { type: Date, default: null },
     acceptedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
