@@ -10,6 +10,14 @@ export const validateMessageIdParam = [
   param('id').custom(isObjectId).withMessage('Invalid message id'),
 ];
 
+/** Editing your own message: the new text only. The service rejects an empty one. */
+export const validateEditMessage = [
+  param('id').custom(isObjectId).withMessage('Invalid message id'),
+  body('text').exists().withMessage('Text is required')
+    .bail().isString().withMessage('Text must be text')
+    .bail().isLength({ max: 4000 }).withMessage('Message must be 4000 characters or fewer'),
+];
+
 export const validateMessagePage = [
   query('before').optional().isInt({ min: 1 }).withMessage('Invalid cursor'),
   query('after').optional().isInt({ min: 0 }).withMessage('Invalid cursor'),

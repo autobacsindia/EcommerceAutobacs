@@ -12,6 +12,7 @@ import {
   upsertMessage,
   upsertReply,
   applyThreadUpdate,
+  applyMessageChange,
   useCanChat,
   useChatChannels,
   useChatMe,
@@ -248,7 +249,28 @@ export default function TeamChat() {
         }
         if (e.message.attachments?.length) qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
         scheduleChannelsRefresh();
+      } else if (e.type === 'message_edited' && e.message && e.channelId) {
+        /*
+          The broadcast carries the PUBLIC version — current text, no history —
+          because one payload goes to everyone in the channel. An admin is
+          entitled to the earlier versions too, so an admin refetches instead
+          of taking the broadcast copy (which would overwrite the history they
+          already have).
+        */
+        if (isAdmin) {
+          qc.invalidateQueries({ queryKey: chatKeys.messages(e.channelId) });
+          qc.invalidateQueries({ queryKey: [...chatKeys.all, 'thread'] });
+        } else {
+          applyMessageChange(qc, e.channelId, e.message, e.thread);
+        }
+      } else if (e.type === 'message_deleted' && e.channelId && e.messageId && isAdmin) {
+        // Admins see a deleted message's words; the broadcast carries only its id.
+        qc.invalidateQueries({ queryKey: chatKeys.messages(e.channelId) });
+        qc.invalidateQueries({ queryKey: [...chatKeys.all, 'thread'] });
+        qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
       } else if (e.type === 'message_deleted' && e.channelId && e.messageId) {
+        // If it was a thread's newest reply, the thread's "last reply" line changed too.
+        if (e.thread) applyMessageChange(qc, e.channelId, e.thread);
         qc.setQueryData<Pages>(chatKeys.messages(e.channelId), (d) =>
           d
             ? {
@@ -256,7 +278,7 @@ export default function TeamChat() {
                 pages: d.pages.map((p) => ({
                   ...p,
                   messages: p.messages.map((m) =>
-                    m.id === e.messageId ? { ...m, deleted: true, text: '', attachments: [], refs: [] } : m,
+                    m.id === e.messageId ? { ...m, deleted: true, text: '', attachments: [], refs: [], quote: null, editableUntil: null } : m,
                   ),
                 })),
               }
@@ -266,7 +288,7 @@ export default function TeamChat() {
         qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) => {
           if (!d) return d;
           const hide = (m: ChatMessage) =>
-            m.id === e.messageId ? { ...m, deleted: true, text: '', attachments: [], refs: [] } : m;
+            m.id === e.messageId ? { ...m, deleted: true, text: '', attachments: [], refs: [], quote: null, editableUntil: null } : m;
           return { ...d, root: hide(d.root), replies: d.replies.map(hide) };
         });
         qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });

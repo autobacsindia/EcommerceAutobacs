@@ -1,7 +1,8 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Download, MessageSquareReply, Package, Quote, RotateCcw } from 'lucide-react';
+import { Download, History, MessageSquareReply, Package, Pencil, Quote, RotateCcw, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
 
@@ -165,7 +166,11 @@ function QuoteBlock({ quote, onJump }: { quote: NonNullable<ChatMessage['quote']
       aria-label={`Quoted message from ${quote.by || 'someone'} — go to it`}
     >
       <span className="block text-xs font-semibold text-emerald-800">{quote.by || 'Former member'}</span>
-      <span className="line-clamp-2 block text-sm text-gray-600">{quote.preview || 'Shared a file'}</span>
+      <span className={`line-clamp-2 block text-sm ${quote.deleted && !quote.preview ? 'italic text-gray-400' : 'text-gray-600'}`}>
+        {/* An empty preview of a deleted message is NOT "Shared a file": the
+            server withholds deleted words from everyone but admins. */}
+        {quote.preview || (quote.deleted ? 'This message was deleted' : 'Shared a file')}
+      </span>
     </button>
   );
 }
@@ -174,9 +179,60 @@ function QuoteBlock({ quote, onJump }: { quote: NonNullable<ChatMessage['quote']
 const activityAt = (m: ChatMessage) => m.lastReply?.at ?? m.createdAt;
 
 /**
+ * Is it still inside its edit window? Re-renders once, at the moment the window
+ * closes, so the Edit and Delete buttons disappear on their own instead of
+ * staying up to fail with "too late" when clicked. One timer per recent message
+ * of yours — not a clock ticking for every row on screen.
+ */
+function useStillEditable(until: string | null | undefined): boolean {
+  const end = until ? new Date(until).getTime() : 0;
+  const [open, setOpen] = useState(() => end > Date.now());
+  useEffect(() => {
+    const left = end - Date.now();
+    setOpen(left > 0);
+    if (left <= 0) return undefined;
+    // setTimeout tops out at ~24.8 days; the window is 15 minutes, so no clamp.
+    const t = setTimeout(() => setOpen(false), left);
+    return () => clearTimeout(t);
+  }, [end]);
+  return open;
+}
+
+/** The text before each edit. Admins only — the API sends it to nobody else. */
+function EditHistory({ history }: { history: NonNullable<ChatMessage['editHistory']> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-800"
+        aria-expanded={open}
+      >
+        <History className="h-3 w-3" /> {open ? 'Hide' : 'Show'} earlier version{history.length === 1 ? '' : 's'} ({history.length})
+      </button>
+      {open && (
+        <ol className="mt-1 space-y-1 border-l-2 border-gray-200 pl-3">
+          {history.map((h, i) => (
+            <li key={`${h.editedAt}-${i}`} className="text-xs text-gray-500">
+              <span className="whitespace-pre-wrap break-words">{h.text || '(no text)'}</span>
+              <span className="ml-2 text-gray-400">replaced {timeOf(h.editedAt)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+/**
  * One message, Google Chat style: round avatar, name + team + time, the text
- * below, and a small action bar on hover (quote it, reply in a thread). There is
- * no delete: chat is part of the company record and the API refuses deletes.
+ * below, and a small action bar on hover (quote it, reply in a thread — and,
+ * on your own message for 15 minutes, edit or delete it).
+ *
+ * A deleted message reads "This message was deleted" for everyone except an
+ * admin, who is sent its words and sees them marked as deleted. Which version
+ * arrives is the server's decision; this only draws what it was given.
  */
 export default function MessageItem({
   message,
@@ -189,6 +245,8 @@ export default function MessageItem({
   onOpenThread,
   onQuote,
   onJumpTo,
+  onEdit,
+  onDelete,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
@@ -203,6 +261,10 @@ export default function MessageItem({
   onQuote?: (m: ChatMessage) => void;
   /** Scroll to a quoted message. */
   onJumpTo?: (id: string) => void;
+  /** Save new text for your own message. Rejects with a message to show. */
+  onEdit?: (m: ChatMessage, text: string) => Promise<unknown>;
+  /** Delete your own message. Rejects with a message to show. */
+  onDelete?: (m: ChatMessage) => Promise<unknown>;
 }) {
   const m = message;
   // The timeline is ordered by activity, so a thread that just moved sits under
@@ -225,6 +287,50 @@ export default function MessageItem({
   const canQuote = !!onQuote && live;
 
   const mine = m.sender?.id === meId;
+  const editable = useStillEditable(m.editableUntil);
+  // Your own message, still inside the window. The server checks all of this
+  // again — the buttons are only a convenience.
+  const canChange = live && mine && m.kind === 'user' && editable;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [changeError, setChangeError] = useState('');
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  // The window can close while you are typing; drop out of edit mode with it.
+  useEffect(() => {
+    if (!canChange) { setEditing(false); setConfirmDelete(false); }
+  }, [canChange]);
+  useEffect(() => { if (editing) editorRef.current?.focus(); }, [editing]);
+
+  const startEdit = () => { setDraft(m.text); setChangeError(''); setConfirmDelete(false); setEditing(true); };
+  const saveEdit = async () => {
+    if (!onEdit || busy) return;
+    if (draft.trim() === m.text.trim()) { setEditing(false); return; }
+    setBusy(true);
+    setChangeError('');
+    try {
+      await onEdit(m, draft);
+      setEditing(false);
+    } catch (err) {
+      setChangeError(err instanceof Error ? err.message : 'Could not save the change');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const doDelete = async () => {
+    if (!onDelete || busy) return;
+    setBusy(true);
+    setChangeError('');
+    try {
+      await onDelete(m);
+      setConfirmDelete(false);
+    } catch (err) {
+      setChangeError(err instanceof Error ? err.message : 'Could not delete the message');
+    } finally {
+      setBusy(false);
+    }
+  };
   const mentionsMe = m.mentions.includes(meId);
   const mentionNames = m.mentions.map((id) => peopleById.get(id)?.name ?? '').filter(Boolean);
   const photos = m.attachments.filter((a) => a.kind === 'image');
@@ -257,12 +363,59 @@ export default function MessageItem({
                 <TeamBadge person={m.sender} />
               )}
               <span className="text-xs text-gray-500">{timeOf(m.createdAt)}</span>
+              {m.edited && !m.deleted && (
+                <span className="text-xs text-gray-400" title={m.editedAt ? `Edited ${timeOf(m.editedAt)}` : 'Edited'}>
+                  (edited)
+                </span>
+              )}
             </div>
           )}
 
-          {m.deleted ? (
-            // Only messages hidden before the no-delete rule; nothing can be deleted now.
-            <p className="text-sm italic text-gray-400">This message was removed</p>
+          {m.deleted && !(m.text || m.attachments.length) ? (
+            <p className="text-sm italic text-gray-400">This message was deleted</p>
+          ) : m.deleted ? (
+            // Admin view: the server sent the words of a deleted message. Shown
+            // muted and labelled, so it is never mistaken for a live message.
+            <div className="rounded-lg border border-dashed border-red-200 bg-red-50/40 px-3 py-2">
+              <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-red-700">
+                <Trash2 className="h-3 w-3" /> Deleted by sender{m.deletedAt ? ` · ${timeOf(m.deletedAt)}` : ''}
+              </p>
+              <div className="opacity-70">
+                {m.text && <MessageText text={m.text} mentionNames={mentionNames} meName={meName} />}
+                <Photos items={photos} />
+                <Documents items={documents} />
+              </div>
+            </div>
+          ) : editing ? (
+            <div className="max-w-xl">
+              <textarea
+                ref={editorRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') { e.preventDefault(); setEditing(false); }
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void saveEdit(); }
+                }}
+                maxLength={4000}
+                rows={Math.min(8, Math.max(2, draft.split('\n').length))}
+                aria-label="Edit message"
+                className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+              />
+              <div className="mt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void saveEdit()}
+                  disabled={busy || (!draft.trim() && !m.attachments.length)}
+                  className="rounded-md bg-emerald-700 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {busy ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" onClick={() => setEditing(false)} className="rounded-md px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100">
+                  Cancel
+                </button>
+                <span className="text-[11px] text-gray-400">Esc to cancel · Ctrl+Enter to save</span>
+              </div>
+            </div>
           ) : (
             <div className={m.pending ? 'opacity-60' : ''}>
               {m.quote && <QuoteBlock quote={m.quote} onJump={onJumpTo} />}
@@ -273,6 +426,24 @@ export default function MessageItem({
               {m.pending && <p className="mt-1 text-xs text-gray-400">Sending…</p>}
             </div>
           )}
+          {m.editHistory && m.editHistory.length > 0 && <EditHistory history={m.editHistory} />}
+          {confirmDelete && (
+            <div role="alertdialog" aria-label="Delete this message?" className="mt-1 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-800">
+              Delete this message for everyone?
+              <button
+                type="button"
+                onClick={() => void doDelete()}
+                disabled={busy}
+                className="rounded-md bg-red-600 px-2.5 py-1 font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {busy ? 'Deleting…' : 'Delete'}
+              </button>
+              <button type="button" onClick={() => setConfirmDelete(false)} className="rounded-md px-2.5 py-1 font-medium hover:bg-red-100">
+                Cancel
+              </button>
+            </div>
+          )}
+          {changeError && <p role="alert" className="mt-1 text-xs text-red-600">{changeError}</p>}
           {onOpenThread && <ThreadSummary m={m} meId={meId} onOpen={() => onOpenThread(m)} />}
 
           {m.failed && (
@@ -285,7 +456,7 @@ export default function MessageItem({
           )}
         </div>
 
-        {(canQuote || canReply) && (
+        {(canQuote || canReply || (canChange && !editing && (onEdit || onDelete))) && (
           <div className="absolute -top-3 right-3 hidden items-center gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 shadow-md focus-within:flex group-hover:flex pointer-coarse:flex">
             {canQuote && (
               <button
@@ -307,6 +478,28 @@ export default function MessageItem({
                 title="Reply in thread"
               >
                 <MessageSquareReply className="h-4 w-4" />
+              </button>
+            )}
+            {canChange && !editing && onEdit && (
+              <button
+                type="button"
+                onClick={startEdit}
+                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
+                aria-label="Edit message"
+                title="Edit (within 15 minutes of sending)"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            )}
+            {canChange && !editing && onDelete && (
+              <button
+                type="button"
+                onClick={() => { setChangeError(''); setConfirmDelete(true); }}
+                className="rounded-full p-1.5 text-gray-600 hover:bg-red-50 hover:text-red-700"
+                aria-label="Delete message"
+                title="Delete (within 15 minutes of sending)"
+              >
+                <Trash2 className="h-4 w-4" />
               </button>
             )}
           </div>

@@ -1,5 +1,5 @@
 /**
- * Phase 5 chat rules on screen: no delete anywhere, quoting a message, and
+ * Phase 5 chat rules on screen: no delete on someone else's message, quoting a message, and
  * team @mentions that reach the team (including GTM, written "@gtm" but sent as
  * the stored 'sales' key — a mismatch that used to drop every GTM mention).
  */
@@ -30,7 +30,8 @@ const channel = (over: Partial<ChatChannel>): ChatChannel => ({
 });
 
 describe('messages', () => {
-  it('have no delete button for anyone', () => {
+  // Edit and delete are your-own-message-within-15-minutes only (chatEditDelete.test.tsx).
+  it('have no delete button on someone else\'s message', () => {
     item(msg, { onOpenThread: () => {}, onQuote: () => {} });
     expect(screen.queryByRole('button', { name: /delete/i })).toBeNull();
   });

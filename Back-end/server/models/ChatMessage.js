@@ -36,7 +36,8 @@ const RefSchema = new mongoose.Schema(
 
 /**
  * One chat message. Business records: never hard-deleted. A delete sets
- * `deletedAt` and the API stops returning the text, but the row stays for audit.
+ * `deletedAt`; the row and its text stay, admins can still read them, and the
+ * API withholds them from everyone else.
  */
 /**
  * A quoted message ("replying to …"). Snapshotted at send time, like an order's
@@ -50,6 +51,27 @@ const QuoteSchema = new mongoose.Schema(
     seq: { type: Number, required: true },
     by: { type: String, default: '' },
     preview: { type: String, default: '' },
+    /*
+      Set when the quoted message is later deleted by its author. The preview
+      is a snapshot, so without this flag the deleted words would live on in
+      every reply that quoted them. Readers other than admins get the preview
+      withheld; admins (who see every message) still read it.
+    */
+    deleted: { type: Boolean, default: undefined },
+  },
+  { _id: false }
+);
+
+/**
+ * One earlier version of an edited message. Admins read these; nobody else does —
+ * an edit exists to correct a message, and showing everyone the mistake would
+ * defeat that. Kept for the same reason deletes are soft: chat is part of the
+ * company record.
+ */
+const EditSchema = new mongoose.Schema(
+  {
+    text: { type: String, default: '' },
+    editedAt: { type: Date, required: true },
   },
   { _id: false }
 );
@@ -102,6 +124,16 @@ const ChatMessageSchema = new mongoose.Schema(
       also settles two first updates racing to start the thread.
     */
     threadOrder: { type: mongoose.Schema.Types.ObjectId, default: undefined },
+
+    /*
+      Edit and delete: the author only, within CHAT_EDIT_WINDOW_MS of sending
+      (chatService). Both are SOFT — the row and its earlier text stay, and an
+      admin sees them; everyone else sees "edited" or "This message was deleted".
+      `editHistory` holds the versions BEFORE each edit, oldest first, capped so
+      a message edited in a loop cannot grow without bound.
+    */
+    editedAt: { type: Date, default: null },
+    editHistory: { type: [EditSchema], default: undefined },
 
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

@@ -9,6 +9,7 @@ import {
   validateFilePage,
   validateOrderPick,
   validateMessageIdParam,
+  validateEditMessage,
   validateMessagePage,
   validateSendMessage,
   validateMarkRead,
@@ -27,6 +28,7 @@ import {
   sendMessage,
   markChannelRead,
   deleteMessage,
+  editMessage,
   createSpace,
   openDirectMessage,
   canAccess,
@@ -215,7 +217,13 @@ router.post('/channels/:id/read', validateChannelIdParam, validateMarkRead, vali
     res.json({ success: true, ...(await markChannelRead(req.user, req.params.id, req.body.seq)) });
   }));
 
-// DELETE /chat/messages/:id — always refused: no one deletes chat (see deleteMessage)
+// PATCH /chat/messages/:id { text } — edit your own message, within 15 minutes
+router.patch('/messages/:id', validateEditMessage, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await editMessage(req.user, req.params.id, { text: req.body.text })) });
+}));
+
+// DELETE /chat/messages/:id — delete your own message, within 15 minutes.
+// Soft: admins still see it (see chatService, "editing and deleting").
 router.delete('/messages/:id', validateMessageIdParam, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await deleteMessage(req.user, req.params.id)) });
 }));

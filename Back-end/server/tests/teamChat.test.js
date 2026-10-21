@@ -191,17 +191,24 @@ describe('Team chat', () => {
       expect(after.unread).toBe(0);
     });
 
-    it('no one can delete a message — not staff, not their own, not even an admin', async () => {
+    /*
+      Only the AUTHOR may delete, and only within 15 minutes — the full rule,
+      its edges and the places deleted words could leak are covered in
+      teamChatEditDelete.test.js. This is the summary: nobody else, head and
+      admin included, can remove someone else's message, and a delete is soft.
+    */
+    it('only the author can delete their own message, and the row is kept', async () => {
       const mine = (await salesMember.post(`/chat/channels/${company}/messages`, { text: 'oops' })).body.message;
       const other = (await accounts.post(`/chat/channels/${company}/messages`, { text: 'not yours' })).body.message;
       expect((await salesMember.del(`/chat/messages/${other.id}`)).status).toBe(403);
-      expect((await salesMember.del(`/chat/messages/${mine.id}`)).status).toBe(403);
       expect((await salesHead.del(`/chat/messages/${mine.id}`)).status).toBe(403);
-      expect((await admin.del(`/chat/messages/${mine.id}`)).status).toBe(403);
       expect((await admin.del(`/chat/messages/${other.id}`)).status).toBe(403);
+      expect((await salesMember.del(`/chat/messages/${mine.id}`)).status).toBe(200);
+
       const { body } = await accounts.get(`/chat/channels/${company}/messages`);
-      expect(body.messages.map((m) => [m.text, m.deleted])).toEqual([['oops', false], ['not yours', false]]);
-      expect(await ChatMessage.countDocuments({ deletedAt: { $ne: null } })).toBe(0);
+      expect(body.messages.map((m) => [m.text, m.deleted])).toEqual([['', true], ['not yours', false]]);
+      // Soft: both rows still exist.
+      expect(await ChatMessage.countDocuments({})).toBe(2);
     });
 
     it('a message hidden before the no-delete rule stays hidden', async () => {
@@ -281,7 +288,7 @@ describe('Team chat', () => {
       const q = (await accounts.post(`/chat/channels/${company}/messages`, { text: 'Payment for #A12 is approved' })).body.message;
       const res = await salesMember.post(`/chat/channels/${company}/messages`, { text: 'Thanks!', quoteId: q.id });
       expect(res.status).toBe(201);
-      expect(res.body.message.quote).toEqual({ id: q.id, seq: q.seq, by: 'Anu', preview: 'Payment for #A12 is approved' });
+      expect(res.body.message.quote).toEqual({ id: q.id, seq: q.seq, by: 'Anu', preview: 'Payment for #A12 is approved', deleted: false });
       const listed = (await admin.get(`/chat/channels/${company}/messages`)).body.messages.at(-1);
       expect(listed.quote.preview).toBe('Payment for #A12 is approved');
     });
