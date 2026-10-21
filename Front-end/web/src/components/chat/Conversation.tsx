@@ -11,6 +11,8 @@ import {
   useChatMessages,
   useMarkRead,
   useSendMessage,
+  useEditMessage,
+  useDeleteMessage,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, SendVars } from '@/hooks/queries/useTeamChat';
 import { Avatar, ChannelIcon, FileKindIcon, fileSize, timeOf } from './chatUi';
@@ -116,6 +118,8 @@ export default function Conversation({
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } =
     useChatMessages(channel.id);
   const send = useSendMessage(channel.id);
+  const edit = useEditMessage(channel.id);
+  const remove = useDeleteMessage(channel.id);
   const markRead = useMarkRead();
   const [tab, setTab] = useState<'messages' | 'files'>('messages');
   const [quote, setQuote] = useState<ChatMessage | null>(null);
@@ -348,6 +352,8 @@ export default function Conversation({
                     onOpenThread={(msg) => setThread(msg.id)}
                     onQuote={setQuote}
                     onJumpTo={jumpTo}
+                    onEdit={(msg, text) => edit.mutateAsync({ id: msg.id, text })}
+                    onDelete={(msg) => remove.mutateAsync(msg.id)}
                   />
                 ))}
               </div>

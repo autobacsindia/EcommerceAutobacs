@@ -169,12 +169,23 @@ describe('Team chat — files, mentions, order refs, automatic updates', () => {
       expect((await accounts.get(`/chat/channels/${sales}/files`)).status).toBe(404);
     });
 
-    it('shared files cannot be deleted by anyone — they stay in the Files tab', async () => {
+    /*
+      The author may delete their own message (and its file) within 15 minutes;
+      nobody may delete anyone else's. A deleted file leaves everyone's Files tab
+      except an admin's — admins see every message, and a file someone sent is
+      still a file the company received.
+    */
+    it('only the author can delete a shared file, and an admin still sees it', async () => {
       const sent = await salesHead.upload(`/chat/channels/${company}/messages`, { text: 'invoice' },
         [{ buffer: PNG, name: 'invoice.png', type: 'image/png' }]);
-      expect((await salesHead.del(`/chat/messages/${sent.body.message.id}`)).status).toBe(403);
-      expect((await admin.del(`/chat/messages/${sent.body.message.id}`)).status).toBe(403);
-      expect((await admin.get(`/chat/channels/${company}/files`)).body.files).toHaveLength(1);
+      const id = sent.body.message.id;
+      expect((await admin.del(`/chat/messages/${id}`)).status).toBe(403);   // not theirs
+      expect((await salesHead.del(`/chat/messages/${id}`)).status).toBe(200);
+
+      expect((await salesHead.get(`/chat/channels/${company}/files`)).body.files).toHaveLength(0);
+      const adminFiles = (await admin.get(`/chat/channels/${company}/files`)).body.files;
+      expect(adminFiles).toHaveLength(1);
+      expect(adminFiles[0]).toMatchObject({ name: 'invoice.png', deleted: true });
     });
   });
 

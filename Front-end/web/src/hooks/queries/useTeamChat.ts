@@ -93,13 +93,27 @@ export interface ChatMessage {
   /** Client-only: still being sent / failed to send. */
   pending?: boolean;
   failed?: boolean;
+  /** The author changed the text after sending. */
+  edited?: boolean;
+  editedAt?: string | null;
+  /**
+   * Until when its author may still edit or delete it. Null on system posts and
+   * deleted messages. A hint for the UI — the server enforces the real window.
+   */
+  editableUntil?: string | null;
+  /** Admins only: the text before each edit, oldest first. */
+  editHistory?: { text: string; editedAt: string }[];
+  /** Admins only: when a deleted message was deleted. */
+  deletedAt?: string;
 }
 
 export interface ChatQuote {
   id: string;
   seq: number;
   by: string;
+  /** Empty when the quoted message was since deleted (except for admins). */
   preview: string;
+  deleted?: boolean;
 }
 
 export interface ChatLastReply {
@@ -296,6 +310,73 @@ export function useSendMessage(channelId: string | null) {
       }
       // A shared file belongs in the Files tab straight away.
       if (res.message.attachments.length) qc.invalidateQueries({ queryKey: chatKeys.files(channelId) });
+    },
+  });
+}
+
+/**
+ * Put a changed message (and, when it was a thread's newest reply, its thread
+ * root) back into every cache that holds it — IN PLACE.
+ *
+ * Not applyThreadUpdate: that moves a thread to the bottom of the conversation,
+ * which is right when someone replies and wrong when someone fixes a typo. The
+ * server leaves the thread's position alone on an edit or delete, and so does this.
+ */
+export function applyMessageChange(
+  qc: ReturnType<typeof useQueryClient>,
+  channelId: string,
+  msg: ChatMessage,
+  thread?: ChatMessage | null,
+) {
+  const replace = (list: ChatMessage[], m: ChatMessage) => list.map((x) => (x.id === m.id ? m : x));
+  const inPages = (m: ChatMessage) =>
+    qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) =>
+      d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: replace(p.messages, m) })) } : d,
+    );
+  // A message is cached as a thread's root (when that thread is open) or as a reply in one.
+  const inThreads = (m: ChatMessage) =>
+    qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) =>
+      d ? { ...d, root: d.root.id === m.id ? m : d.root, replies: replace(d.replies, m) } : d,
+    );
+
+  if (!msg.threadRoot) inPages(msg);
+  inThreads(msg);
+  if (thread) {
+    inPages(thread);
+    inThreads(thread);
+  }
+}
+
+/** Edit your own message's text, within the window the server allows. */
+export function useEditMessage(channelId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) =>
+      apiClient.patch<{ message: ChatMessage; thread?: ChatMessage | null }>(`/chat/messages/${id}`, { text }),
+    onSuccess: (res) => {
+      if (channelId) applyMessageChange(qc, channelId, res.message, res.thread);
+    },
+  });
+}
+
+/**
+ * Delete your own message, within the window the server allows.
+ *
+ * Refetches rather than patching the cache: what a deleted message looks like
+ * depends on who is reading (an admin still sees its words, nobody else does),
+ * and only the server knows that. A delete is rare enough that a refetch costs
+ * nothing anyone will notice.
+ */
+export function useDeleteMessage(channelId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete<{ deleted: boolean; messageId: string; thread?: ChatMessage | null }>(`/chat/messages/${id}`),
+    onSuccess: () => {
+      if (!channelId) return;
+      qc.invalidateQueries({ queryKey: chatKeys.messages(channelId) });
+      qc.invalidateQueries({ queryKey: [...chatKeys.all, 'thread'] });
+      qc.invalidateQueries({ queryKey: chatKeys.files(channelId) });
     },
   });
 }

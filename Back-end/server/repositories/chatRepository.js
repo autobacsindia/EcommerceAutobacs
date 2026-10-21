@@ -95,11 +95,15 @@ const chatRepository = {
       .limit(limit)
       .populate('sender', SENDER_FIELDS)
       .lean(),
-  /** Newest messages carrying at least one attachment — the channel's Files tab. */
-  findMessagesWithFiles: (channel, before, limit) =>
+  /**
+   * Newest messages carrying at least one attachment — the channel's Files tab.
+   * `includeDeleted` is for admins, who see every message: a file its author
+   * deleted is still a file the company received.
+   */
+  findMessagesWithFiles: (channel, before, limit, { includeDeleted = false } = {}) =>
     ChatMessage.find({
       channel,
-      deletedAt: null,
+      ...(includeDeleted ? {} : { deletedAt: null }),
       'attachments.0': { $exists: true },
       ...(before ? { createdAt: { $lt: new Date(before) } } : {}),
     })
@@ -109,6 +113,69 @@ const chatRepository = {
       .lean(),
   softDeleteMessage: (id, by, at = new Date()) =>
     ChatMessage.updateOne({ _id: id, deletedAt: null }, { $set: { deletedAt: at, deletedBy: by } }),
+
+  /*
+    ── Author edits and deletes ───────────────────────────────────────────────
+    Each is ONE conditional write whose filter carries every rule: the author,
+    a person's message (not a system post), not already deleted, and sent after
+    `notBefore` (the edit window). Checking those in the service and then
+    writing would let a request read "inside the window" at 14:59 and land at
+    15:01; in the filter, the database is the clock that decides.
+  */
+  /**
+   * Replace the text, keeping the old one in `editHistory`. `fromText` is a
+   * compare-and-set: two edits racing from the same version cannot both
+   * succeed, so neither silently drops the other from the history.
+   * Returns the updated message, or null when no rule allowed the write.
+   */
+  editOwnMessage: (id, sender, { fromText, toText, notBefore, at = new Date(), keep = 20 }) =>
+    ChatMessage.findOneAndUpdate(
+      { _id: id, sender, kind: 'user', deletedAt: null, createdAt: { $gte: notBefore }, text: fromText },
+      {
+        $set: { text: toText, editedAt: at },
+        $push: { editHistory: { $each: [{ text: fromText, editedAt: at }], $slice: -keep } },
+      },
+      { new: true },
+    ).populate('sender', SENDER_FIELDS).lean(),
+  /** Soft-delete. Returns the message as it now stands, or null. */
+  deleteOwnMessage: (id, sender, { notBefore, at = new Date() }) =>
+    ChatMessage.findOneAndUpdate(
+      { _id: id, sender, kind: 'user', deletedAt: null, createdAt: { $gte: notBefore } },
+      { $set: { deletedAt: at, deletedBy: sender } },
+      { new: true },
+    ).lean(),
+
+  /*
+    Quotes are snapshots, so the quoted words live on in every reply that
+    quoted them. Scoped by channel — a quote is always from the same channel
+    (chatService enforces it), and the channel prefix keeps this on the
+    { channel, seq } index instead of scanning every message in chat.
+  */
+  /** The quoted message was deleted: flag every quote of it. */
+  markQuotesDeleted: (channel, messageId) =>
+    ChatMessage.updateMany({ channel, 'quote.message': messageId }, { $set: { 'quote.deleted': true } }),
+  /** The quoted message was edited: quotes show the corrected words. */
+  refreshQuotePreviews: (channel, messageId, preview) =>
+    ChatMessage.updateMany({ channel, 'quote.message': messageId }, { $set: { 'quote.preview': preview } }),
+
+  /** A thread's newest reply that is still visible to everyone, or null. */
+  findLatestLiveReply: (threadRoot) =>
+    ChatMessage.findOne({ threadRoot, deletedAt: null })
+      .sort({ seq: -1 })
+      .populate('sender', SENDER_FIELDS)
+      .lean(),
+  /**
+   * Rewrite a thread's "last reply" summary in place. Position (activitySeq)
+   * and replyCount are left alone: a deleted reply still sits in the thread as
+   * "This message was deleted", and the thread should not jump in the timeline
+   * because someone corrected a typo.
+   */
+  setThreadSummary: (rootId, { preview, by, mentions }) =>
+    ChatMessage.findOneAndUpdate(
+      { _id: rootId },
+      { $set: { lastReplyPreview: preview, lastReplyBy: by, lastReplyMentions: mentions } },
+      { new: true },
+    ).populate('sender', SENDER_FIELDS).lean(),
 
   // ── read positions ──
   findReadStates: (user, channelIds) =>

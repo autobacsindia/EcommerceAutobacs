@@ -27,6 +27,16 @@ import { orderNumber } from './invoiceService.js';
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
 export const MESSAGE_MAX_LENGTH = 4000;
+
+/**
+ * How long after sending its author may still edit or delete a message.
+ *
+ * Long enough to catch a typo, the wrong channel or a half-sent thought; short
+ * enough that a conversation people have already acted on cannot be rewritten
+ * under them. Enforced by the database write itself (chatRepository
+ * editOwnMessage / deleteOwnMessage), not by a check that could race the clock.
+ */
+export const CHAT_EDIT_WINDOW_MS = 15 * 60 * 1000;
 export const PAGE_SIZE_DEFAULT = 50;
 export const PAGE_SIZE_MAX = 100;
 
@@ -154,27 +164,69 @@ const personOf = (u) =>
       }
     : null;
 
-function shapeMessage(m, sender) {
+/**
+ * A message as `viewer` may see it.
+ *
+ * Admins see EVERY message: a deleted one keeps its text and files (flagged
+ * `deleted`), and an edited one carries its earlier versions. Everyone else
+ * gets a deleted message emptied and an edited one with only its current text.
+ *
+ * ⚠ Anything BROADCAST over the live stream must be shaped with no viewer:
+ * one payload goes to everyone in the channel, so it must be the version the
+ * least-privileged reader may see. Only a response to one person's own request
+ * (a page, a thread, a search) is shaped for that person.
+ */
+function shapeMessage(m, sender, viewer = null) {
   const deleted = !!m.deletedAt;
+  const admin = isAdmin(viewer);
+  const hide = deleted && !admin;
   return {
     id: idOf(m),
     channelId: idOf(m.channel),
     seq: m.seq,
     kind: m.kind,
-    text: deleted ? '' : m.text,
+    text: hide ? '' : m.text,
     deleted,
     sender: m.kind === 'system' ? null : personOf(sender ?? m.sender),
     clientId: m.clientId ?? null,
-    // A deleted message takes its attachments and references with it.
-    attachments: deleted ? [] : (m.attachments || []).map((a) => ({
+    // A deleted message takes its attachments and references with it — for
+    // everyone but an admin.
+    attachments: hide ? [] : (m.attachments || []).map((a) => ({
       url: a.url, kind: a.kind, name: a.name, mime: a.mime, size: a.size,
     })),
     mentions: (m.mentions || []).map(idOf),
     mentionTeams: m.mentionTeams || [],
-    refs: deleted ? [] : (m.refs || []).map((r) => ({ type: r.type, code: r.code, id: idOf(r.target) })),
-    quote: !deleted && m.quote ? { id: idOf(m.quote.message), seq: m.quote.seq, by: m.quote.by, preview: m.quote.preview } : null,
+    refs: hide ? [] : (m.refs || []).map((r) => ({ type: r.type, code: r.code, id: idOf(r.target) })),
+    quote: shapeQuote(m.quote, hide, admin),
     createdAt: m.createdAt,
+    edited: !!m.editedAt,
+    editedAt: m.editedAt ?? null,
+    // The client shows Edit / Delete until then; the server enforces it. A
+    // system post has no author, so it is never anyone's to change.
+    editableUntil: m.kind === 'user' && !deleted
+      ? new Date(new Date(m.createdAt).getTime() + CHAT_EDIT_WINDOW_MS)
+      : null,
+    ...(admin && deleted ? { deletedAt: m.deletedAt } : {}),
+    ...(admin && m.editHistory?.length
+      ? { editHistory: m.editHistory.map((h) => ({ text: h.text, editedAt: h.editedAt })) }
+      : {}),
     ...threadFieldsOf(m),
+  };
+}
+
+/**
+ * The quote a message carries. A quote of a since-deleted message keeps its
+ * snapshot in the database, but only an admin is shown the words.
+ */
+function shapeQuote(q, hidden, admin) {
+  if (hidden || !q) return null;
+  const withheld = q.deleted && !admin;
+  return {
+    id: idOf(q.message),
+    seq: q.seq,
+    by: q.by,
+    preview: withheld ? '' : q.preview,
+    deleted: !!q.deleted,
   };
 }
 
@@ -313,7 +365,7 @@ export async function listMessages(user, channelId, { before, after, limit } = {
 
   const oldest = docs[0] ? (docs[0].activitySeq ?? docs[0].seq) : null;
   return {
-    messages: docs.map((m) => shapeMessage(m)),
+    messages: docs.map((m) => shapeMessage(m, null, user)),
     // Cursor for the next older page (an activitySeq), or null at the beginning.
     nextBefore: after == null || after === '' ? (docs.length === size && oldest > 1 ? oldest : null) : undefined,
   };
@@ -336,8 +388,8 @@ export async function getThread(user, rootId, { after, limit } = {}) {
   const from = after != null && after !== '' ? Number(after) : null;
   const replies = await chatRepository.findThreadReplies(root._id, from, size);
   return {
-    root: shapeMessage(root),
-    replies: replies.map((m) => shapeMessage(m)),
+    root: shapeMessage(root, null, user),
+    replies: replies.map((m) => shapeMessage(m, null, user)),
     nextAfter: replies.length === size ? replies[replies.length - 1].seq : null,
   };
 }
@@ -460,7 +512,7 @@ export async function searchMessages(user, { q, channelId, before, limit } = {})
 
   return {
     messages: docs.map((m) => ({
-      ...shapeMessage(m),
+      ...shapeMessage(m, null, user),
       channel: String(m.channel),
       channelName: names.get(String(m.channel))?.name ?? '',
       channelKind: names.get(String(m.channel))?.kind ?? 'space',
@@ -499,12 +551,14 @@ export async function listRecentOrders(q) {
 export async function listFiles(user, channelId, { before, limit } = {}) {
   const channel = await loadAccessible(user, channelId);
   const size = Math.min(Math.max(parseInt(limit, 10) || 30, 1), PAGE_SIZE_MAX);
-  const docs = await chatRepository.findMessagesWithFiles(channel._id, before, size);
+  const docs = await chatRepository.findMessagesWithFiles(channel._id, before, size, { includeDeleted: isAdmin(user) });
   const files = docs.flatMap((m) =>
     (m.attachments || []).map((a, i) => ({
       id: `${idOf(m)}-${i}`,
       messageId: idOf(m),
       seq: m.seq,
+      // Only ever true for an admin — nobody else is shown a deleted file.
+      deleted: !!m.deletedAt,
       url: a.url,
       kind: a.kind,
       name: a.name,
@@ -728,13 +782,141 @@ export async function markChannelRead(user, channelId, seq) {
   return { lastReadSeq: upTo };
 }
 
+// ── editing and deleting your own message ────────────────────────────────────
+/*
+  The author may edit or delete their own message for CHAT_EDIT_WINDOW_MS after
+  sending it. Nobody may change anyone else's — not a head, not an admin: one
+  person erasing another's words is not what this is for.
+
+  Chat stays part of the company record (the reason deleting was switched off
+  in the first place): both actions are SOFT. The row and its earlier text stay,
+  and an admin reading the conversation sees them. What changes is what
+  everyone else sees — "edited", or "This message was deleted".
+
+  A snapshot of the old words also lives in two other places, and both are
+  handled here, or the delete would only be cosmetic:
+    - the `quote` of every reply that quoted it (flagged / refreshed);
+    - the thread root's "last reply" summary, when this was the newest reply.
+*/
+
+const windowStart = (now = Date.now()) => new Date(now - CHAT_EDIT_WINDOW_MS);
+const previewOf = (m) => (m.text || ((m.attachments || []).length ? 'Shared a file' : '')).slice(0, 200);
+const EDIT_WINDOW_MINUTES = Math.round(CHAT_EDIT_WINDOW_MS / 60000);
+
 /**
- * Chat messages cannot be deleted — by anyone, admins included. Chat is part of
- * the company record: whoever joins a team later reads what came before. Messages
- * hidden before this rule stay hidden (the read path still honours `deletedAt`).
+ * Load a message the user is about to change, and say plainly why not when
+ * they may not. Order matters: "not a channel you can see" (404) before "not
+ * yours" before "too late", so nobody learns anything about a message they
+ * could not read, and a non-author is not told how old someone else's is.
  */
-export async function deleteMessage() {
-  throw fail('Chat messages cannot be deleted', 403);
+async function loadOwnMessage(user, messageId) {
+  if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
+  const m = await chatRepository.findMessageWithSender(messageId);
+  if (!m) throw fail('Message not found', 404);
+  const channel = await loadAccessible(user, m.channel);
+  if (m.kind !== 'user' || idOf(m.sender) !== idOf(user._id)) {
+    throw fail('You can only change your own messages', 403);
+  }
+  return { m, channel };
+}
+
+function assertWithinWindow(m) {
+  if (new Date(m.createdAt).getTime() < windowStart().getTime()) {
+    throw fail(`Messages can only be edited or deleted within ${EDIT_WINDOW_MINUTES} minutes of sending`, 403);
+  }
+}
+
+/**
+ * If `m` is its thread's newest reply, rewrite the thread's summary from the
+ * newest reply everyone can still see. Returns the root shaped for broadcast
+ * (no viewer), or null when the thread did not change.
+ */
+async function refreshThreadSummaryFor(m) {
+  if (!m.threadRoot) return null;
+  const root = await chatRepository.findMessageById(m.threadRoot);
+  if (!root || root.activitySeq !== m.seq) return null; // a newer reply leads the summary
+  const latest = await chatRepository.findLatestLiveReply(root._id);
+  const updated = await chatRepository.setThreadSummary(root._id, latest
+    ? {
+      preview: previewOf(latest),
+      by: latest.kind === 'system' ? 'Roavion updates' : latest.sender?.name || '',
+      mentions: latest.mentions || [],
+    }
+    : { preview: '', by: '', mentions: [] });
+  return updated ? shapeMessage(updated) : null;
+}
+
+/**
+ * Edit your own message's text. Attachments, mentions and references stay as
+ * they were — and nobody is emailed again: a mention notification is about the
+ * moment you were addressed, and re-sending it on every typo fix would teach
+ * people to ignore them.
+ */
+export async function editMessage(user, messageId, { text } = {}) {
+  const { m, channel } = await loadOwnMessage(user, messageId);
+  if (m.deletedAt) throw fail('This message was deleted', 409);
+  assertWithinWindow(m);
+
+  const body = cleanText(text).slice(0, MESSAGE_MAX_LENGTH);
+  if (!body && !(m.attachments || []).length) {
+    throw fail('A message needs some text — delete it instead', 400);
+  }
+  if (body === m.text) return { message: shapeMessage(m, null, user), thread: null };
+
+  const updated = await chatRepository.editOwnMessage(m._id, user._id, {
+    fromText: m.text, toText: body, notBefore: windowStart(),
+  });
+  if (!updated) {
+    // Lost a race: the window closed between the check and the write, or a
+    // second edit landed first. Re-read to give the real reason.
+    const now = await chatRepository.findMessageById(m._id);
+    if (now?.deletedAt) throw fail('This message was deleted', 409);
+    assertWithinWindow(now);
+    throw fail('This message was changed at the same time — please try again', 409);
+  }
+
+  await chatRepository.refreshQuotePreviews(channel._id, updated._id, previewOf(updated));
+  const thread = await refreshThreadSummaryFor(updated);
+  await publishChatEvent({
+    type: 'message_edited',
+    channelId: idOf(channel),
+    route: audienceOf(channel),
+    message: shapeMessage(updated), // broadcast: no viewer, never the history
+    ...(thread ? { thread } : {}),
+  });
+  return { message: shapeMessage(updated, null, user), thread };
+}
+
+/**
+ * Delete your own message. Deleting one that is already deleted is a success,
+ * not an error: the person wanted it gone, and it is — a double click or a
+ * retried request should not show them a failure.
+ */
+export async function deleteMessage(user, messageId) {
+  const { m, channel } = await loadOwnMessage(user, messageId);
+  if (m.deletedAt) return { deleted: true, messageId: idOf(m), thread: null };
+  assertWithinWindow(m);
+
+  const updated = await chatRepository.deleteOwnMessage(m._id, user._id, { notBefore: windowStart() });
+  if (!updated) {
+    const now = await chatRepository.findMessageById(m._id);
+    if (now?.deletedAt) return { deleted: true, messageId: idOf(m), thread: null };
+    assertWithinWindow(now);
+    throw fail('Could not delete the message — please try again', 409);
+  }
+
+  await chatRepository.markQuotesDeleted(channel._id, updated._id);
+  const thread = await refreshThreadSummaryFor(updated);
+  // Only the id goes out. The words stay in the database for admins, and the
+  // live stream reaches everyone in the channel.
+  await publishChatEvent({
+    type: 'message_deleted',
+    channelId: idOf(channel),
+    route: audienceOf(channel),
+    messageId: idOf(updated),
+    ...(thread ? { thread } : {}),
+  });
+  return { deleted: true, messageId: idOf(updated), thread };
 }
 
 /** New custom space. Admins and team heads only; the creator is always a member. */
