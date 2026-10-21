@@ -11,9 +11,10 @@ import {
 } from '@/lib/authStorage';
 import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
 import { identifyUser, resetAnalytics, trackSignUp, trackLogin } from '@/lib/analytics';
+import type { StaffTeam } from '@/lib/staffTeams';
 
 export interface StaffProfile {
-  team: 'sales' | 'procurement' | 'accounts' | 'marketing' | 'operations';
+  team: StaffTeam;
   teamLabel: string;
   isHead: boolean;
   /** GTM only: 'head' | 'lead' | 'executive' | 'support' (null on other teams). */

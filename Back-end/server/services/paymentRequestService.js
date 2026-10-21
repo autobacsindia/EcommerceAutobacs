@@ -34,7 +34,7 @@ import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage
 import { detectKind, KIND } from './storage/contentSniff.js';
 import { postSystemMessage } from './chatService.js';
 import { orderNumber } from './invoiceService.js';
-import { STAFF_TEAMS, STAFF_TEAM_LABELS } from '../config/staff.js';
+import { STAFF_TEAMS, STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import { workflowView, STAGE } from '../utils/teamWorkflow.js';
 import { variantDisplayName } from '../utils/orderLines.js';
 
@@ -45,7 +45,19 @@ export const PAYMENT_FILES_FOLDER = 'payment-requests'; // a PRIVATE prefix (sto
 export const MAX_PAYMENT_FILE_BYTES = 8 * 1024 * 1024;
 export const MAX_AMOUNT = 10000000; // ₹1 crore: a typo guard, not a business limit
 export const EXPENSE_CATEGORIES = Object.freeze(['fuel', 'travel', 'food', 'purchase', 'other']);
-export const EXPENSE_TEAMS = Object.freeze([STAFF_TEAMS.OPERATIONS, STAFF_TEAMS.MARKETING]);
+/**
+ * Which teams may raise an expense: every one of them.
+ *
+ * It started as Operations and Marketing only, which meant GTM paid for its own
+ * fuel and Procurement had no way to claim a courier charge — the rule did not
+ * match how the company actually spends. Derived from STAFF_TEAM_VALUES rather
+ * than listed, so a team added to config/staff.js can claim from the day it
+ * exists instead of waiting for someone to remember this line.
+ *
+ * Who APPROVES and who PAYS is unchanged and lives below: accounts approves,
+ * the admin pays. Widening who may ask does not widen who may decide.
+ */
+export const EXPENSE_TEAMS = Object.freeze([...STAFF_TEAM_VALUES]);
 export const OPEN_STATUSES = Object.freeze(['submitted', 'approved', 'on_hold']);
 const PAGE_SIZE = 25;
 
@@ -68,8 +80,8 @@ const seesAll = (u) => isAdmin(u) || isAccounts(u);
 const roleOf = (u) => (isAdmin(u) ? 'admin' : u?.staff?.team || '');
 
 /**
- * One rule for every request — Operations and Marketing expenses, Procurement
- * supplier payments alike: ACCOUNTS approves or declines, the ADMIN pays.
+ * One rule for every request — any team's expense and Procurement's supplier
+ * payments alike: ACCOUNTS approves or declines, the ADMIN pays.
  */
 const mayDecide = (u) => isAdmin(u) || isAccounts(u);
 const mayPay = (u) => isAdmin(u);
@@ -258,11 +270,11 @@ export function shape(r, viewer) {
 
 // ── Raise ────────────────────────────────────────────────────────────────────
 
-/** An expense for operations or marketing (or an admin on their behalf). */
+/** An expense for any team (or an admin raising it on a team's behalf). */
 export async function createExpense(actor, input, uploaded, req) {
   const team = isAdmin(actor) ? String(input.team || '') : actor?.staff?.team;
   if (!isAdmin(actor) && !(isActiveStaff(actor) && EXPENSE_TEAMS.includes(team))) {
-    throw fail('Only operations and marketing raise expense requests.', 403);
+    throw fail('Only active staff raise expense requests.', 403);
   }
   if (!EXPENSE_TEAMS.includes(team)) throw fail('Choose the team the expense is for.', 400);
   const category = String(input.category || '');

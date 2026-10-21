@@ -6,14 +6,21 @@ import mongoose from 'mongoose';
  *
  * The life of a request (services/paymentRequestService.js enforces it):
  *
- *   submitted ──admin approves──▶ approved ──accounts pays──▶ paid
- *       │                            │  ▲
- *       │                            ▼  │ accounts pays later
- *       │                         on_hold (accounts: e.g. not enough funds yet)
- *       ├──admin declines──▶ declined
+ *   submitted ──accounts approves──▶ approved ──admin pays──▶ paid
+ *       │                               │  ▲
+ *       │                               ▼  │ paid later
+ *       │                            on_hold (parked: a queried bill, funds not
+ *       │                                     in yet — accounts OR the admin)
+ *       ├──accounts declines──▶ declined
  *       └──requester cancels──▶ cancelled
  *
- * The website never moves money here: accounts pays (Razorpay / bank / UPI) and
+ * ACCOUNTS approves, the ADMIN pays — one rule for every team's expense and for
+ * procurement's supplier payments alike. (This diagram had the two swapped: it
+ * described an earlier flow where the admin approved and accounts paid.) The
+ * admin is not asked anything until accounts has approved, which is the point —
+ * every payment goes through accounts first.
+ *
+ * The website never moves money here: the admin pays (Razorpay / bank / UPI) and
  * records the reference and a screenshot. Every change is a compare-and-set on
  * the current status, so a double click or two people at once cannot approve or
  * pay twice; every change is appended to `history`.
@@ -25,7 +32,7 @@ import mongoose from 'mongoose';
 const FileSchema = new mongoose.Schema(
   {
     // 'bill' — supplier invoice / receipt; 'qr' — the payee's payment QR;
-    // 'proof' — accounts' payment screenshot.
+    // 'proof' — the payment screenshot, uploaded by whoever paid (the admin).
     kind: { type: String, enum: ['bill', 'qr', 'proof'], required: true },
     publicId: { type: String, required: true },
     provider: { type: String, required: true },

@@ -10,8 +10,17 @@ import * as dbHandler from './db-handler.js';
 import { API, accessTokenFrom } from './helpers/api.js';
 import bcrypt from 'bcryptjs';
 
-// Increase timeout for this test file
-jest.setTimeout(30000);
+/*
+  120s, matching every other heavy integration suite here (campaign*, buyer*,
+  affiliate*). This one sat at 30s while its `beforeEach` hashes a password at
+  bcrypt cost 10 — deliberately slow work — and then writes several documents,
+  for each of 24 tests. Run alone it finishes in ~18s; sharing workers with the
+  full suite it took 80-110s and tripped the 30s hook timeout intermittently.
+
+  The timeout was the only thing marginal here: the suite passes, it was simply
+  not given the room the rest of its neighbours get.
+*/
+jest.setTimeout(120000);
 
 describe('Orders Integration API', () => {
   let userToken;

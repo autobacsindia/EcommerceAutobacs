@@ -1,6 +1,7 @@
 'use client';
 
 import PaymentRequestList from '@/components/payments/PaymentRequestList';
+import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 
 /**
  * Admin: every payment request from every team. Approve or decline what is
@@ -12,15 +13,11 @@ export default function AdminPaymentsPage() {
     <div className="space-y-6 p-4 md:p-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
-        <p className="text-sm text-gray-600">Supplier payments and team expenses. You approve; accounts pays and records it.</p>
+        <p className="text-sm text-gray-600">Supplier payments and team expenses, from every team. Accounts approves them; you pay and record the reference and screenshot.</p>
       </div>
       <PaymentRequestList
         initial="to_pay"
-        teams={[
-          { value: 'procurement', label: 'Procurement' },
-          { value: 'operations', label: 'Operations' },
-          { value: 'marketing', label: 'Marketing' },
-        ]}
+        teams={STAFF_TEAM_OPTIONS}
         /* The admin opens on what they must PAY — accounts has already approved
            it and nothing moves until the money goes out. "Waiting for accounts"
            is there to look at, not to act on. */

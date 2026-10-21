@@ -7,19 +7,16 @@ import { useAuth } from '@/context/AuthContext';
 import PaymentRequestForm from '@/components/payments/PaymentRequestForm';
 import PaymentRequestList from '@/components/payments/PaymentRequestList';
 import { paymentKeys } from '@/components/payments/api';
+import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 
-const TEAMS = [
-  { value: 'procurement', label: 'Procurement' },
-  { value: 'operations', label: 'Operations' },
-  { value: 'marketing', label: 'Marketing' },
-];
+// Accounts filters by team — the shared list, so a new team appears at once.
 
 /**
  * Payments in the team panel.
- *   operations / marketing — raise expenses and follow them
- *   procurement           — follow supplier payments (raised from each order)
- *   accounts              — approve and pay everything except Operations purchases
- *                           (those wait for the admin's approval); see every team
+ *   every team  — raise expenses (fuel, travel, food, a purchase) and follow them
+ *   procurement — also follows supplier payments (raised from each order)
+ *   accounts    — approves or declines everything, and sees every team;
+ *                 the admin then pays
  */
 export default function TeamPaymentsPage() {
   const { user } = useAuth();
@@ -27,7 +24,12 @@ export default function TeamPaymentsPage() {
   const team = user?.staff?.team;
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState('');
-  const raisesExpenses = team === 'operations' || team === 'marketing';
+  /*
+    Any active staff member may claim an expense — the API is the authority
+    (EXPENSE_TEAMS in paymentRequestService), this only decides whether to show
+    the button. Admins use the admin panel, not this page.
+  */
+  const raisesExpenses = !!team;
   const isAccounts = team === 'accounts';
 
   return (
@@ -37,8 +39,8 @@ export default function TeamPaymentsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Payments</h1>
           <p className="text-sm text-gray-500">
             {isAccounts
-              ? 'Approve and pay requests, then record each payment with its reference and screenshot. Operations purchases need the admin\'s approval first.'
-              : 'Operations purchases go to the admin for approval; everything else to accounts. Accounts then pays it. Download the slip or receipt at any stage.'}
+              ? 'Approve or decline every request — from any team. The admin pays what you approve, and records the reference and screenshot.'
+              : 'Every request goes to accounts to approve, then to the admin to pay. Download the slip or receipt at any stage.'}
           </p>
         </div>
         {raisesExpenses && !adding && (
@@ -62,7 +64,7 @@ export default function TeamPaymentsPage() {
 
       <PaymentRequestList
         initial={isAccounts ? 'to_approve' : 'open'}
-        teams={isAccounts ? TEAMS : undefined}
+        teams={isAccounts ? STAFF_TEAM_OPTIONS : undefined}
         /* Accounts opens on its own job — the requests waiting for a decision.
            "With admin to pay" is the handover it can watch but not act on. */
         filters={isAccounts

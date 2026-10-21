@@ -12,7 +12,7 @@ const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:
 const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50';
 
 const ACTION_LABELS: Record<string, string> = {
-  // Who acted is shown beside each entry: an admin, or accounts (everything except Operations purchases).
+  // Who acted is shown beside each entry: accounts (who approved) or the admin (who paid).
   submitted: 'Raised', approved: 'Approved', declined: 'Declined',
   on_hold: 'Put on hold', paid: 'Paid', cancelled: 'Cancelled',
 };

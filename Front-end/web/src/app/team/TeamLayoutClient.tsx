@@ -42,11 +42,14 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   if (team === 'accounts') nav.push({ href: '/team/refunds', label: 'Refund approvals', icon: Wallet }, paid, delivered);
   if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid, delivered);
   if (team === 'marketing') nav.push(...MARKETING_AREAS.map(({ href, label, icon }) => ({ href, label, icon })));
-  // Payment requests: supplier payments (procurement), expenses (operations,
-  // marketing), and paying them (accounts).
-  if (['procurement', 'accounts', 'operations', 'marketing'].includes(team)) {
-    nav.push({ href: '/team/payments', label: 'Payments', icon: Banknote });
-  }
+  /*
+    Payment requests: supplier payments (procurement), expenses (EVERY team —
+    anyone can need fuel, a courier or a tool), and approving them (accounts).
+    No list here: the API decides what each person may raise and see, and
+    hiding the menu from a team that is allowed to claim is how GTM ended up
+    paying its own fuel.
+  */
+  nav.push({ href: '/team/payments', label: 'Payments', icon: Banknote });
   nav.push({ href: '/team/members', label: 'My team', icon: Users });
   return nav;
 }
