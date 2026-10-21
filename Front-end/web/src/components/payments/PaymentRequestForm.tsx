@@ -3,6 +3,10 @@
 import { useState } from 'react';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import { EXPENSE_CATEGORIES, errorMessage, postForm, type PaymentRequest } from './api';
+import FilePicker from './FilePicker';
+
+/** The server takes up to five bills and one payee QR per request. */
+const MAX_BILLS = 5;
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
@@ -37,8 +41,8 @@ export default function PaymentRequestForm({
   const [description, setDescription] = useState('');
   const [method, setMethod] = useState<'upi' | 'bank'>('upi');
   const [payee, setPayee] = useState({ name: '', upiId: '', accountName: '', accountNumber: '', ifsc: '', bankName: '', phone: '' });
-  const [bill, setBill] = useState<File | null>(null);
-  const [qr, setQr] = useState<File | null>(null);
+  const [bills, setBills] = useState<File[]>([]);
+  const [qr, setQr] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -58,8 +62,8 @@ export default function PaymentRequestForm({
     } else {
       form.append('category', category);
     }
-    if (bill) form.append('bill', bill);
-    if (qr) form.append('qr', qr);
+    for (const f of bills) form.append('bill', f);
+    for (const f of qr) form.append('qr', f);
     setBusy(true);
     try {
       const res = await postForm<{ request: PaymentRequest }>(supplier ? '/payment-requests/supplier' : '/payment-requests/expenses', form);
@@ -146,14 +150,10 @@ export default function PaymentRequestForm({
       </div>
 
       <div className="flex flex-wrap gap-3 text-sm">
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-gray-700 hover:bg-gray-50">
-          <Paperclip className="h-4 w-4" /> {bill ? bill.name : 'Attach bill / invoice'}
-          <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="sr-only" aria-label="Bill" onChange={(e) => setBill(e.target.files?.[0] ?? null)} />
-        </label>
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-gray-700 hover:bg-gray-50">
-          <QrCode className="h-4 w-4" /> {qr ? qr.name : 'Attach their payment QR'}
-          <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" aria-label="Payment QR" onChange={(e) => setQr(e.target.files?.[0] ?? null)} />
-        </label>
+        <FilePicker files={bills} onChange={setBills} max={MAX_BILLS} accept="image/jpeg,image/png,image/webp,application/pdf"
+          label="Attach bills / invoices" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+        <FilePicker files={qr} onChange={setQr} max={1} accept="image/jpeg,image/png,image/webp"
+          label="Attach their payment QR" icon={<QrCode className="h-4 w-4" />} onError={setError} />
       </div>
 
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

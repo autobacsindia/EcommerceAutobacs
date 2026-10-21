@@ -102,6 +102,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/staff', label: 'Staff & Teams', icon: '🪪' },
       { href: '/admin/team-activity', label: 'Team activity', icon: '⏱️' },
       { href: '/admin/payments', label: 'Payments', icon: '💳' },
+      { href: '/admin/bank-transfers', label: 'Bank transfers', icon: '🏦' },
       { href: '/admin/workflows', label: 'Workflows', icon: '⚡' },
     ],
   },

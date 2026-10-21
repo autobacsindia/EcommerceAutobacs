@@ -185,6 +185,11 @@ export const staffKeys = {
   paidOrders: (stage?: 'processing' | 'delivered') =>
     [...staffKeys.orders(), 'paid', stage ?? 'all'] as const,
   salesProducts: (q: string) => [...staffKeys.all, 'sales-products', q.trim().toLowerCase()] as const,
+  /**
+   * Bank transfers waiting for / checked by accounts. Under orders(): confirming one
+   * pays its order, so the order lists must refresh with it (and the other way round).
+   */
+  bankTransfers: (status: string) => [...staffKeys.orders(), 'bank-transfers', status] as const,
   /** One sales order (its payment requests). Under orders(), so list invalidation refreshes it too. */
   salesOrder: (id: string) => [...staffKeys.orders(), 'sales-order', id] as const,
   /** GTM quotations — invalidate after create, edit, cancel or accept. */
@@ -205,6 +210,14 @@ export const teamActivityKeys = {
   waiting: () => [...teamActivityKeys.all, 'waiting'] as const,
   performance: (days: number) => [...teamActivityKeys.all, 'performance', days] as const,
   order: (orderId: string) => [...teamActivityKeys.all, 'order', orderId] as const,
+};
+
+/** `/staff/attribution/*` — crediting a paid website order to a salesman (admin, marketing). */
+export const attributionKeys = {
+  all: ['attribution'] as const,
+  lists: () => [...attributionKeys.all, 'list'] as const,
+  order: (orderId: string) => [...attributionKeys.all, 'order', orderId] as const,
+  sellers: () => [...attributionKeys.all, 'sellers'] as const,
 };
 
 /** `/admin/overview` — the admin's Company overview (teams, money waiting, activity). */

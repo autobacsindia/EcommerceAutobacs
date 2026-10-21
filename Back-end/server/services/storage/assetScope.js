@@ -35,6 +35,8 @@ export const PRIVATE_PREFIXES = [
   'invoices',
   // Bills, payee QR codes and payment screenshots (services/paymentRequestService.js).
   'payment-requests',
+  // Customers' bank-transfer screenshots (services/bankTransferService.js).
+  'bank-transfers',
 ];
 
 /** Prefixes that are public storefront/marketing imagery. */

@@ -38,7 +38,45 @@ beforeEach(() => {
   global.fetch = fetchMock as unknown as typeof fetch;
 });
 
+const shot = (name: string, type = 'image/jpeg', size = 10) => new File([new Uint8Array(size)], name, { type });
+
 describe('raising', () => {
+  const fillExpense = () => {
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '840' } });
+    fireEvent.change(screen.getByLabelText('Pay to'), { target: { value: 'Kerala Taxi' } });
+    fireEvent.change(screen.getByLabelText('UPI ID'), { target: { value: 'taxi@okicici' } });
+    fireEvent.change(screen.getByLabelText('Details'), { target: { value: 'Airport pickup' } });
+  };
+  const bills = () => screen.getByLabelText(/Attach bills \/ invoices/);
+
+  it('sends several bills, adding across picks, minus any removed', async () => {
+    const onDone = jest.fn();
+    wrap(<PaymentRequestForm onDone={onDone} />);
+    fillExpense();
+    fireEvent.change(bills(), { target: { files: [shot('one.jpg'), shot('two.pdf', 'application/pdf')] } });
+    fireEvent.change(bills(), { target: { files: [shot('three.jpg')] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove two.pdf' }));
+    fireEvent.change(screen.getByLabelText('Attach their payment QR'), { target: { files: [shot('qr.png', 'image/png')] } });
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.getAll('bill').map((f) => (f as File).name)).toEqual(['one.jpg', 'three.jpg']);
+    expect(form.getAll('qr').map((f) => (f as File).name)).toEqual(['qr.png']);
+  });
+
+  it('stops at five bills and refuses a file over 8 MB, saying why', () => {
+    wrap(<PaymentRequestForm onDone={() => {}} />);
+    fireEvent.change(bills(), { target: { files: [1, 2, 3, 4].map((i) => shot(`b${i}.jpg`)) } });
+    fireEvent.change(bills(), { target: { files: [shot('b5.jpg'), shot('b6.jpg')] } });
+    expect(screen.getByRole('alert')).toHaveTextContent('up to 5 files');
+    expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(4);
+    fireEvent.change(bills(), { target: { files: [shot('huge.jpg', 'image/jpeg', 8 * 1024 * 1024 + 1)] } });
+    expect(screen.getByRole('alert')).toHaveTextContent('"huge.jpg" is too large');
+    fireEvent.change(bills(), { target: { files: [shot('b5.jpg')] } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByLabelText(/Attach bills/)).toBeNull(); // full
+  });
+
   it('sends an expense as multipart with the payee as JSON', async () => {
     const onDone = jest.fn();
     wrap(<PaymentRequestForm onDone={onDone} />);
@@ -98,6 +136,23 @@ describe('detail', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/payment-requests/r1/pay', expect.anything()));
     expect((fetchMock.mock.calls[0][1].body as FormData).get('reference')).toBe('pout_1');
     expect(await within(panel).findByRole('link', { name: /Payment receipt/ })).toBeInTheDocument();
+  });
+
+  it('sends every payment screenshot attached, up to three', async () => {
+    get.mockResolvedValue({ request: base });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    const panel = await screen.findByRole('complementary', { name: 'Payment request' });
+    await within(panel).findByText('PR-0007');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Record payment' }));
+    const pick = () => within(panel).getByLabelText(/Attach payment screenshots/);
+    fireEvent.change(pick(), { target: { files: [shot('a.jpg'), shot('b.pdf', 'application/pdf')] } });
+    fireEvent.change(pick(), { target: { files: [shot('c.jpg')] } });
+    // Full: the picker hides rather than letting a fourth through.
+    expect(within(panel).queryByLabelText(/Attach payment screenshots/)).toBeNull();
+    fireEvent.change(within(panel).getByLabelText('Payment reference'), { target: { value: 'UTR12345' } });
+    fireEvent.click(within(panel).getByRole('button', { name: /Mark as paid/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect((fetchMock.mock.calls[0][1].body as FormData).getAll('proof').map((f) => (f as File).name)).toEqual(['a.jpg', 'b.pdf', 'c.jpg']);
   });
 
   it('declining asks for a reason first', async () => {

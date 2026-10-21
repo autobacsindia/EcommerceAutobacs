@@ -7,6 +7,10 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import {
   actOn, errorMessage, fileHref, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest,
 } from './api';
+import FilePicker from './FilePicker';
+
+/** The server takes up to three payment screenshots per payment. */
+const MAX_PROOFS = 3;
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50';
@@ -39,14 +43,14 @@ export default function PaymentRequestDetail({ id, onClose }: { id: string; onCl
   const [note, setNote] = useState('');
   const [mode, setMode] = useState<null | 'decline' | 'hold' | 'pay'>(null);
   const [pay, setPay] = useState({ method: 'razorpay', reference: '' });
-  const [proof, setProof] = useState<File | null>(null);
+  const [proof, setProof] = useState<File[]>([]);
   const [error, setError] = useState('');
 
   const done = (r: PaymentRequest) => {
     qc.setQueryData(paymentKeys.one(id), { request: r });
     qc.invalidateQueries({ queryKey: [...paymentKeys.all, 'list'] });
     if (r.order) qc.invalidateQueries({ queryKey: paymentKeys.forOrder(r.order.id) });
-    setMode(null); setNote(''); setError(''); setProof(null);
+    setMode(null); setNote(''); setError(''); setProof([]);
   };
   const act = useMutation({
     mutationFn: async (a: 'approve' | 'decline' | 'hold' | 'cancel' | 'pay') => {
@@ -55,7 +59,7 @@ export default function PaymentRequestDetail({ id, onClose }: { id: string; onCl
       form.append('method', pay.method);
       form.append('reference', pay.reference.trim());
       if (note.trim()) form.append('note', note.trim());
-      if (proof) form.append('proof', proof);
+      for (const f of proof) form.append('proof', f);
       return (await postForm<{ request: PaymentRequest }>(`/payment-requests/${id}/pay`, form)).request;
     },
     onSuccess: done,
@@ -147,10 +151,10 @@ export default function PaymentRequestDetail({ id, onClose }: { id: string; onCl
                       </select>
                       <input aria-label="Payment reference" className={input} value={pay.reference} onChange={(e) => setPay({ ...pay, reference: e.target.value })} placeholder="Payout ID / UTR" />
                     </div>
-                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                      <Paperclip className="h-4 w-4" /> {proof ? proof.name : 'Attach payment screenshot'}
-                      <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="sr-only" aria-label="Payment screenshot" onChange={(e) => setProof(e.target.files?.[0] ?? null)} />
-                    </label>
+                    <div className="text-sm">
+                      <FilePicker files={proof} onChange={setProof} max={MAX_PROOFS} accept="image/jpeg,image/png,image/webp,application/pdf"
+                        label="Attach payment screenshots" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+                    </div>
                     <textarea aria-label="Note" className={input} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
                     <div className="flex gap-2">
                       <button type="button" disabled={act.isPending || pay.reference.trim().length < 4} onClick={() => act.mutate('pay')} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>

@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { protect, staffOrAdmin } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
@@ -21,6 +22,12 @@ import {
   validateSalesProductSearch,
   validateCursorQuery,
   validatePaidOrdersQuery,
+  validateAttributionList,
+  validateBankTransferList,
+  validateBankTransferId,
+  validateBankTransferFile,
+  validateBankTransferReject,
+  validateSetSeller,
   validateOrderIdParam,
   validateSalesOrder,
   validateQuotationIdParam,
@@ -41,7 +48,7 @@ import {
   validateCustomerBankRemove,
   validateMarkDelivered,
 } from '../validators/staff.validator.js';
-import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard } from '../middleware/uploadMiddleware.js';
+import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard, uploadPaymentProof } from '../middleware/uploadMiddleware.js';
 import {
   listQueue,
   getOrder as getWorkOrder,
@@ -89,6 +96,10 @@ import {
 } from '../services/salesQuotationService.js';
 import { requestPayment, cancelPart, getPaymentRequestPdf } from '../services/salesPaymentService.js';
 import { canSell } from '../config/staff.js';
+import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller } from '../services/orderAttributionService.js';
+import {
+  recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, getBankTransfer, getTransferFile,
+} from '../services/bankTransferService.js';
 
 /**
  * Staff panel API (/api/v1/staff). Two halves:
@@ -291,6 +302,79 @@ router.post('/sales/orders/:id/cancel', validateOrderIdParam, validateRequest, a
 //         orders (accounts, procurement, operations, sales head). No stage = all.
 router.get('/orders/paid', validatePaidOrdersQuery, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listPaidSalesOrders(req.user, { cursor: req.query.cursor, stage: req.query.stage })) });
+}));
+
+// ── Crediting a website order to a salesman (admin, marketing) ──────────────
+
+// @route  GET /staff/attribution/orders?cursor= — paid website orders, newest first
+router.get('/attribution/orders', validateAttributionList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listWebsiteOrders(req.user, { cursor: req.query.cursor })) });
+}));
+
+// @route  GET /staff/attribution/sellers — who an order can be credited to
+router.get('/attribution/sellers', asyncHandler(async (req, res) => {
+  res.json({ success: true, sellers: await listSellers(req.user) });
+}));
+
+// @route  GET /staff/attribution/orders/:id — one order (null when not a paid website order)
+router.get('/attribution/orders/:id', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await getWebsiteOrder(req.user, req.params.id) });
+}));
+
+// @route  PUT /staff/attribution/orders/:id — { salesUserId|null, expectedSalesUserId|null, note? }
+router.put('/attribution/orders/:id', validateSetSeller, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await setSeller(req.user, req.params.id, req.body, req) });
+}));
+
+// ── Bank transfers (scope enforced in bankTransferService) ──────────────────
+
+/** Multer errors on the screenshot upload → a 400 with words, not a 500. */
+const transferFileErrors = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'A file is too large (8 MB maximum).'
+      : err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE' ? 'Attach at most 3 screenshots (photos or PDFs).'
+        : err.message;
+    return res.status(400).json({ success: false, message });
+  }
+  return next(err);
+};
+
+// @route  POST /staff/sales/orders/:id/bank-transfer — multipart: amount, reference, paidOn, note?, proof (1–3)
+router.post('/sales/orders/:id/bank-transfer', concurrentUploadGuard, uploadPaymentProof, transferFileErrors,
+  validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+    res.status(201).json({ success: true, transfer: await recordBankTransfer(req.user, req.params.id, req.body, req.files || [], req) });
+  }));
+
+// @route  GET /staff/bank-transfers?status=pending|confirmed|rejected|all&cursor=
+router.get('/bank-transfers', validateBankTransferList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listBankTransfers(req.user, { status: req.query.status || 'pending', cursor: req.query.cursor })) });
+}));
+
+// @route  GET /staff/bank-transfers/:id
+router.get('/bank-transfers/:id', validateBankTransferId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, transfer: await getBankTransfer(req.user, req.params.id) });
+}));
+
+// @route  GET /staff/bank-transfers/:id/files/:fileId — a screenshot (private)
+router.get('/bank-transfers/:id/files/:fileId', validateBankTransferFile, validateRequest, asyncHandler(async (req, res) => {
+  const { buffer, contentType, name } = await getTransferFile(req.user, req.params.id, req.params.fileId);
+  res.set({
+    'Content-Type': contentType,
+    'Content-Disposition': `inline; filename="${String(name).replace(/[^\w.-]+/g, '_')}"`,
+    'Cache-Control': 'private, no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.send(buffer);
+}));
+
+// @route  POST /staff/bank-transfers/:id/confirm — accounts, admin: the money is in the bank
+router.post('/bank-transfers/:id/confirm', validateBankTransferId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, transfer: await confirmBankTransfer(req.user, req.params.id, req) });
+}));
+
+// @route  POST /staff/bank-transfers/:id/reject { note } — accounts, admin
+router.post('/bank-transfers/:id/reject', validateBankTransferReject, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, transfer: await rejectBankTransfer(req.user, req.params.id, req.body, req) });
 }));
 
 // ── Team workflow (scope enforced in teamWorkflowService) ───────────────────

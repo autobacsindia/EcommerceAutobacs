@@ -16,6 +16,7 @@ import { formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
 import EmiPaymentNotice from '@/components/orders/EmiPaymentNotice';
 import { buildOrderLines, variantDisplayName } from '@/lib/orderLines';
 import OrderShipments from '@/components/admin/OrderShipments';
+import OrderSellerCredit from '@/components/admin/OrderSellerCredit';
 import OrderCancellations from '@/components/admin/OrderCancellations';
 import RefundAllPanel from '@/components/admin/RefundAllPanel';
 import { cancelledQuantityForItem } from '@/lib/orderFulfilment';
@@ -908,6 +909,9 @@ function AdminOrderDetailPageInner() {
             </div>
           </div>
           
+          {/* Website sale closed by a salesman: admin and marketing credit it (server re-checks). */}
+          {order.paymentStatus === 'paid' && <OrderSellerCredit orderId={orderId} />}
+
           {/* Order Status */}
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b">

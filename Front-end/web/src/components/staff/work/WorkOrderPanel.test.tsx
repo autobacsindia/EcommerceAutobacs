@@ -134,6 +134,32 @@ describe('WorkOrderPanel', () => {
     expect(form.get('photo')).toBeInstanceOf(Blob);
   });
 
+  it('starts with every item ticked ("ship all"), including unchecked ones, and can send part', async () => {
+    const two = {
+      ...base, canShip: true, lines: [
+        { ...base.lines[0], stage: 'with_supplier' as const, actions: ['ship' as const] },
+        { ...base.lines[0], itemId: 'i2', name: 'Floor mat', stage: 'stock_check' as const, actions: ['in_stock' as const, 'ship' as const] },
+      ],
+    };
+    get.mockResolvedValue({ success: true, order: two });
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, order: base }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderPanel();
+
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'proof.jpg', { type: 'image/jpeg' });
+    fireEvent.change(await screen.findByLabelText('Supplier photo'), { target: { files: [file] } });
+    expect(screen.getByText(/not stock-checked — will be marked in stock/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Upload proof & ship all items' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'All items' }));
+    expect(screen.getByRole('button', { name: /ship 0 of 2/ })).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Floor mat/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload proof & ship 1 of 2 items' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse((fetchMock.mock.calls[0][1].body as FormData).get('itemIds') as string)).toEqual(['i2']);
+  });
+
   it('gives the sales person a WhatsApp message with the tracking number', async () => {
     get.mockResolvedValue({
       success: true,

@@ -175,6 +175,33 @@ describe('Payment requests', () => {
       // A PDF bill is fine.
       expect((await expense(ops.session, {}, [{ field: 'bill', buffer: PDF, name: 'bill.pdf', type: 'application/pdf' }])).status).toBe(201);
     });
+
+    const bills = (count) => Array.from({ length: count }, (_, i) => ({ field: 'bill', buffer: i % 2 ? PDF : JPEG, name: `bill-${i}.${i % 2 ? 'pdf' : 'jpg'}`, type: i % 2 ? 'application/pdf' : 'image/jpeg' }));
+
+    it('takes up to five bills plus the payee QR, in the order they were attached', async () => {
+      const res = await expense(ops.session, {}, [...bills(5), { field: 'qr', buffer: JPEG, name: 'qr.jpg', type: 'image/jpeg' }]);
+      expect(res.status).toBe(201);
+      expect(res.body.request.files.map((f) => [f.kind, f.name])).toEqual([
+        ['bill', 'bill-0.jpg'], ['bill', 'bill-1.pdf'], ['bill', 'bill-2.jpg'], ['bill', 'bill-3.pdf'], ['bill', 'bill-4.jpg'], ['qr', 'qr.jpg'],
+      ]);
+    });
+
+    it('refuses a sixth bill — and stores none of them', async () => {
+      const before = stored.size;
+      const res = await expense(ops.session, {}, bills(6));
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/up to 5 bills/);
+      expect(stored.size).toBe(before);
+    });
+
+    it('one bad file among several stores nothing (no half-saved request)', async () => {
+      const before = stored.size;
+      const count = await PaymentRequest.countDocuments();
+      const res = await expense(ops.session, {}, [...bills(2), { field: 'bill', buffer: Buffer.from('not a file at all'), name: 'x.jpg', type: 'image/jpeg' }]);
+      expect(res.status).toBe(400);
+      expect(stored.size).toBe(before);
+      expect(await PaymentRequest.countDocuments()).toBe(count);
+    });
   });
 
   describe('approval and payment', () => {
@@ -206,6 +233,33 @@ describe('Payment requests', () => {
       const saved = await PaymentRequest.findById(id).lean();
       expect(saved.history.map((h) => [h.action, h.byName])).toEqual([['submitted', 'Omar'], ['approved', 'Anu'], ['paid', 'Owner']]);
       expect((await ops.session.get(`/payment-requests/${id}`)).body.request.status).toBe('paid');
+    });
+
+    it('the admin can attach up to three payment screenshots; a fourth is refused', async () => {
+      const id = await raise();
+      const shot = (i) => ({ field: 'proof', buffer: i === 1 ? PDF : JPEG, name: `paid-${i}.${i === 1 ? 'pdf' : 'jpg'}`, type: i === 1 ? 'application/pdf' : 'image/jpeg' });
+      const before = stored.size;
+      const tooMany = await admin.session.form(`/payment-requests/${id}/pay`, { method: 'bank', reference: 'UTR99887766' }, [0, 1, 2, 3].map(shot));
+      expect(tooMany.status).toBe(400);
+      expect(stored.size).toBe(before);
+      expect((await PaymentRequest.findById(id).lean()).status).toBe('submitted');
+
+      const paid = await admin.session.form(`/payment-requests/${id}/pay`, { method: 'bank', reference: 'UTR99887766' }, [0, 1, 2].map(shot));
+      expect(paid.status).toBe(200);
+      expect(paid.body.request.files.map((f) => [f.kind, f.name])).toEqual([
+        ['bill', 'bill.jpg'], ['proof', 'paid-0.jpg'], ['proof', 'paid-1.pdf'], ['proof', 'paid-2.jpg'],
+      ]);
+      expect(stored.size).toBe(before + 3);
+    });
+
+    it('screenshots sent with a payment that lost the race are removed again', async () => {
+      const id = await raise();
+      expect((await admin.session.form(`/payment-requests/${id}/pay`, { method: 'bank', reference: 'UTR11112222' })).status).toBe(200);
+      const before = stored.size;
+      const late = await admin.session.form(`/payment-requests/${id}/pay`, { method: 'bank', reference: 'UTR33334444' },
+        [{ field: 'proof', buffer: JPEG, name: 'a.jpg', type: 'image/jpeg' }, { field: 'proof', buffer: PDF, name: 'b.pdf', type: 'application/pdf' }]);
+      expect(late.status).toBe(409);
+      expect(stored.size).toBe(before);
     });
 
     it('an admin may pay a waiting request straight away — that approves it too', async () => {

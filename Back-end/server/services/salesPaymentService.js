@@ -75,6 +75,10 @@ async function loadForPayment(actor, orderId) {
   if (order.paymentLinkId) {
     throw fail('This order already has a payment link from the old flow — manage it from the order list.', 409);
   }
+  // Recorded as paid by bank transfer: no new link while accounts checks.
+  if (order.bankTransferPendingAt) {
+    throw fail('A bank transfer is waiting for accounts to check on this order. Wait until they confirm or reject it.', 409);
+  }
   return order;
 }
 

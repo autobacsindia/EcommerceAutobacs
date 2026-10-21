@@ -27,7 +27,7 @@ const json = (v, fallback) => {
 const fileErrors = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     const message = err.code === 'LIMIT_FILE_SIZE' ? 'A file is too large (8 MB maximum).'
-      : err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE' ? (err.field && err.field.includes(' ') ? err.field : 'Too many files, or a file in the wrong place.')
+      : err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE' ? (err.field && err.field.includes(' ') ? err.field : 'Too many files: up to 5 bills, 1 payment QR, and 3 payment screenshots.')
         : err.message;
     return res.status(400).json({ success: false, message });
   }
@@ -97,7 +97,7 @@ router.post('/:id/hold', asyncHandler(async (req, res) => {
 }));
 // POST /payment-requests/:id/pay — multipart: method, reference, note?, proof
 router.post('/:id/pay', concurrentUploadGuard, uploadPaymentProof, fileErrors, asyncHandler(async (req, res) => {
-  res.json({ success: true, request: await pr.markPaid(req.user, req.params.id, req.body, req.file || null, req) });
+  res.json({ success: true, request: await pr.markPaid(req.user, req.params.id, req.body, req.files || [], req) });
 }));
 router.post('/:id/cancel', asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.cancel(req.user, req.params.id, req.body, req) });

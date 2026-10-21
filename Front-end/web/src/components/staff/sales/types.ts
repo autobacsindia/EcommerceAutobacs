@@ -64,6 +64,10 @@ export type SalesOrder = {
   /** 'parts': quotation-first order, paid through payment requests; 'link': older single link. */
   paymentFlow?: 'link' | 'parts';
   payment?: PaymentSummary;
+  /** A bank transfer is recorded and waiting for accounts to find it in the bank. */
+  bankTransferPending?: boolean;
+  /** Paid by bank transfer: what accounts confirmed. */
+  offlinePayment?: { method: 'bank_transfer'; reference: string; confirmedBy: string } | null;
 };
 
 export type QuotationLine = {
