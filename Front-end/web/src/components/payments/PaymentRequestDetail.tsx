@@ -38,11 +38,11 @@ function Row({ k, v }: { k: string; v?: string | null }) {
  * may press now (`request.can`, decided by the server). Used by the team panel
  * and the admin page.
  */
-export default function PaymentRequestDetail({ id, onClose }: { id: string; onClose: () => void }) {
+export default function PaymentRequestDetail({ id, onClose, startEditing = false }: { id: string; onClose: () => void; startEditing?: boolean }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: paymentKeys.one(id), queryFn: () => getRequest(id) });
   const [note, setNote] = useState('');
-  const [mode, setMode] = useState<null | 'decline' | 'hold' | 'pay' | 'edit'>(null);
+  const [mode, setMode] = useState<null | 'decline' | 'hold' | 'pay' | 'edit'>(startEditing ? 'edit' : null);
   const [pay, setPay] = useState({ method: 'razorpay', reference: '' });
   const [proof, setProof] = useState<File[]>([]);
   const [error, setError] = useState('');

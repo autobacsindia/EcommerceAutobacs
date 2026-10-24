@@ -30,7 +30,7 @@ const channel = (over: Partial<ChatChannel>): ChatChannel => ({
 });
 
 describe('messages', () => {
-  // Edit and delete are your-own-message-within-15-minutes only (chatEditDelete.test.tsx).
+  // Edit and delete are your-own-message-within-30-minutes only (chatEditDelete.test.tsx).
   it('have no delete button on someone else\'s message', () => {
     item(msg, { onOpenThread: () => {}, onQuote: () => {} });
     expect(screen.queryByRole('button', { name: /delete/i })).toBeNull();

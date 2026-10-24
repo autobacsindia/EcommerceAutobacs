@@ -342,15 +342,15 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const { files, kinds } = filesFrom(uploaded);
   requireUpiOrQr(payee, kinds);
 
-  // Items at their stock check: record "ordered from <supplier>" first, through
-  // the workflow's own step (its checks, history and chat update). If the payment
-  // below then fails, the item simply shows as ordered and can be paid again.
-  const toOrder = wanted.filter((id) => atCheck.has(id));
-  if (toOrder.length) {
-    const wf = await import('./teamWorkflowService.js'); // lazy: that module imports this one
-    for (const itemId of toOrder) {
-      await wf.setStock(actor, idOf(order._id), itemId, { stock: 'ordered', supplierName: payee.name }, req);
-    }
+  // Raising a supplier payment IS ordering from that supplier: the items move
+  // to "ordered from <supplier>" (from stock check or in stock), or take the new
+  // supplier's name if a cancelled payment is being replaced. Recorded first,
+  // through the workflow's own compare-and-set; if the payment below then fails,
+  // the item simply shows as ordered and can be paid again.
+  const wf = await import('./teamWorkflowService.js'); // lazy: that module imports this one
+  for (const itemId of wanted) {
+    // eslint-disable-next-line no-await-in-loop -- one line at a time, each its own compare-and-set
+    await wf.markOrderedForPayment(actor, idOf(order._id), itemId, payee.name, req);
   }
   const stored = await storeFiles(files, kinds, actor);
 
@@ -600,6 +600,8 @@ export async function forOrder(actor, orderId) {
     id: idOf(r._id), number: r.number, status: r.status, statusLabel: STATUS_LABELS[r.status],
     amount: r.amount, itemIds: (r.itemIds || []).map(idOf), itemNames: r.itemNames || [],
     payee: r.payee?.name || '', paidAt: r.payment?.paidAt || null, createdAt: r.createdAt,
+    // Shown as an Edit button on the product line (the edit itself re-checks).
+    canEdit: mayEdit(actor, r),
   }));
 }
 

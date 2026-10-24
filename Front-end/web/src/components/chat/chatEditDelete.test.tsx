@@ -2,7 +2,7 @@
  * Editing and deleting your own message, on screen.
  *
  * The rule (enforced by the API — these buttons are a convenience): the author,
- * within 15 minutes of sending. An admin is sent a deleted message's words and
+ * within 30 minutes of sending. An admin is sent a deleted message's words and
  * every earlier version of an edited one; everyone else is not, and this
  * component must draw whichever version it was given without guessing.
  */
@@ -57,7 +57,7 @@ describe('who sees Edit and Delete', () => {
     The buttons must not stay up after the window closes and then fail when
     clicked — they disappear at the moment the server would start refusing.
   */
-  it('the buttons go away by themselves when the 15 minutes run out', () => {
+  it('the buttons go away by themselves when the 30 minutes run out', () => {
     jest.useFakeTimers();
     try {
       render_(base({ editableUntil: new Date(Date.now() + 2000).toISOString() }));

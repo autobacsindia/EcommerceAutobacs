@@ -102,7 +102,8 @@ import { requestPayment, cancelPart, getPaymentRequestPdf } from '../services/sa
 import { canSell } from '../config/staff.js';
 import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller } from '../services/orderAttributionService.js';
 import {
-  recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, getBankTransfer, getTransferFile,
+  recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, getBankTransfer,
+  editBankTransfer, getTransferFile,
 } from '../services/bankTransferService.js';
 
 /**
@@ -372,6 +373,11 @@ router.post('/sales/orders/:id/bank-transfer', concurrentUploadGuard, uploadPaym
 // @route  GET /staff/bank-transfers?status=pending|confirmed|rejected|all&cursor=
 router.get('/bank-transfers', validateBankTransferList, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listBankTransfers(req.user, { status: req.query.status || 'pending', cursor: req.query.cursor })) });
+}));
+
+// @route  PUT /staff/bank-transfers/:id { reference?, paidOn?, note? } — correct a pending one
+router.put('/bank-transfers/:id', validateBankTransferId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, transfer: await editBankTransfer(req.user, req.params.id, req.body, req) });
 }));
 
 // @route  GET /staff/bank-transfers/:id

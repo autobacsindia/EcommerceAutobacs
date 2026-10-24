@@ -39,7 +39,7 @@ const paymentRequestRepository = {
   /** Every supplier request for an order, for the order panel. */
   findForOrder: (orderId) => PaymentRequest.find({ order: orderId })
     .sort({ createdAt: -1 })
-    .select('number status amount itemIds itemNames payee.name payment createdAt')
+    .select('number status amount itemIds itemNames payee.name payment createdAt requestedBy')
     .lean(),
 
   /**

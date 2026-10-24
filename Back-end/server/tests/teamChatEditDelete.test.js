@@ -2,7 +2,7 @@
  * Editing and deleting your own chat message (services/chatService.js,
  * "editing and deleting your own message").
  *
- * The rule: the AUTHOR may edit or delete their own message within 15 minutes
+ * The rule: the AUTHOR may edit or delete their own message within 30 minutes
  * of sending it. Nobody may change anyone else's. Both are soft — an admin still
  * sees the original words and every earlier version; everyone else sees
  * "edited" or "This message was deleted".
@@ -144,19 +144,19 @@ describe('Editing and deleting your own chat message', () => {
     });
   });
 
-  describe('the 15-minute window', () => {
-    it('is open just inside 15 minutes', async () => {
+  describe('the 30-minute window', () => {
+    it('is open just inside 30 minutes', async () => {
       const m = await send(salesMember, company, { text: 'almost' });
       await ageMessage(m.id, CHAT_EDIT_WINDOW_MS - 60_000);
       expect((await salesMember.patch(`/chat/messages/${m.id}`, { text: 'just in time' })).status).toBe(200);
     });
 
-    it('is closed after 15 minutes, for editing and deleting alike', async () => {
+    it('is closed after 30 minutes, for editing and deleting alike', async () => {
       const m = await send(salesMember, company, { text: 'too late' });
       await ageMessage(m.id);
       const edit = await salesMember.patch(`/chat/messages/${m.id}`, { text: 'changed' });
       expect(edit.status).toBe(403);
-      expect(edit.body.message).toMatch(/15 minutes/);
+      expect(edit.body.message).toMatch(/30 minutes/);
       expect((await salesMember.del(`/chat/messages/${m.id}`)).status).toBe(403);
       expect(await find(accounts, company, m.id)).toMatchObject({ text: 'too late', deleted: false });
     });
