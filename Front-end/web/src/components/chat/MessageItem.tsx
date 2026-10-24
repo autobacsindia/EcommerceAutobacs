@@ -191,7 +191,7 @@ function useStillEditable(until: string | null | undefined): boolean {
     const left = end - Date.now();
     setOpen(left > 0);
     if (left <= 0) return undefined;
-    // setTimeout tops out at ~24.8 days; the window is 15 minutes, so no clamp.
+    // setTimeout tops out at ~24.8 days; the window is 30 minutes, so no clamp.
     const t = setTimeout(() => setOpen(false), left);
     return () => clearTimeout(t);
   }, [end]);
@@ -228,7 +228,7 @@ function EditHistory({ history }: { history: NonNullable<ChatMessage['editHistor
 /**
  * One message, Google Chat style: round avatar, name + team + time, the text
  * below, and a small action bar on hover (quote it, reply in a thread — and,
- * on your own message for 15 minutes, edit or delete it).
+ * on your own message for 30 minutes, edit or delete it).
  *
  * A deleted message reads "This message was deleted" for everyone except an
  * admin, who is sent its words and sees them marked as deleted. Which version
@@ -486,7 +486,7 @@ export default function MessageItem({
                 onClick={startEdit}
                 className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
                 aria-label="Edit message"
-                title="Edit (within 15 minutes of sending)"
+                title="Edit (within 30 minutes of sending)"
               >
                 <Pencil className="h-4 w-4" />
               </button>
@@ -497,7 +497,7 @@ export default function MessageItem({
                 onClick={() => { setChangeError(''); setConfirmDelete(true); }}
                 className="rounded-full p-1.5 text-gray-600 hover:bg-red-50 hover:text-red-700"
                 aria-label="Delete message"
-                title="Delete (within 15 minutes of sending)"
+                title="Delete (within 30 minutes of sending)"
               >
                 <Trash2 className="h-4 w-4" />
               </button>

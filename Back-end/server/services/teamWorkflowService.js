@@ -383,6 +383,40 @@ const SHIP_STAGES = new Set([STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.WITH_SUPPLI
  * Procurement: record the stock check for one item.
  * @param {'in_stock'|'ordered'|'out_of_stock'} stock
  */
+/**
+ * A supplier payment was raised for this item: it is now "ordered from"
+ * that supplier. Called by the payment request itself (paymentRequestService),
+ * so raising a payment and the item's stage can never disagree:
+ *   needs stock check / in stock  → ordered from <supplier>
+ *   already ordered (e.g. the first payment was cancelled and another raised)
+ *                                  → the supplier name follows the new payment
+ * Any other stage (shipped, out of stock, refund) is left alone — the payment
+ * request refuses those items anyway. The "Supplier payment initiated" mark is
+ * dropped: the real payment request replaces it.
+ */
+export async function markOrderedForPayment(actor, orderId, itemId, supplierName, req) {
+  if (!can.procurement(actor)) throw fail('Only the procurement team can update stock.', 403);
+  const supplier = String(supplierName || '').trim().slice(0, 120);
+  if (!supplier) return;
+  const { line } = await loadLine(orderId, itemId);
+  if (![STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.WITH_SUPPLIER].includes(line.stage)) return;
+  if (line.stock === STOCK.ORDERED && line.supplierName === supplier) return;
+
+  const updated = await orderRepository.updateWorkflowLineIf(
+    orderId, itemId,
+    { stock: line.stock, refundRequestedAt: line.refundRequestedAt || null, accountsApprovedAt: null },
+    {
+      set: { stock: STOCK.ORDERED, stockBy: actor._id, stockAt: new Date(), supplierName: supplier },
+      unset: line.paymentInitiatedAt ? ['paymentInitiatedBy', 'paymentInitiatedAt'] : [],
+    },
+    event(actor, 'stock_ordered', { itemId: line.itemId, note: `Supplier: ${supplier} (supplier payment raised)` }),
+  );
+  if (!updated) throw fail(RACE, 409);
+  await refreshOpen(orderId);
+  enqueue(WORKFLOW_CHAT_JOB, { event: 'ordered', orderId: String(orderId), itemId: String(itemId), supplier, by: actor.name });
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_stock', itemId: String(itemId), stock: STOCK.ORDERED, via: 'supplier_payment' });
+}
+
 export async function setStock(actor, orderId, itemId, { stock, supplierName } = {}, req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can update stock.', 403);
   if (![STOCK.IN_STOCK, STOCK.ORDERED, STOCK.OUT_OF_STOCK].includes(stock)) throw fail('Unknown stock status.', 400);

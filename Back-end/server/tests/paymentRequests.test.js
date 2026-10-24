@@ -385,6 +385,22 @@ describe('Payment requests', () => {
   });
 
   describe('supplier payments', () => {
+    it('raising one marks the item "ordered from" that supplier — from in stock too; a replacement renames it', async () => {
+      const order = await paidOrder();
+      const [kit] = order.items.map((i) => String(i._id));
+      await wf.setStock(procurement.user, String(order._id), kit, { stock: 'in_stock' }, req);
+      await wf.setPaymentInitiated(procurement.user, String(order._id), kit, { initiated: true }, req).catch(() => {});
+      const first = await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [kit], amount: 100, payee: BANK });
+      expect(first.status).toBe(201);
+      const lineOf = async () => (await Order.findById(order._id).lean()).workflow.lines.find((l) => String(l.itemId) === kit);
+      expect(await lineOf()).toMatchObject({ stock: 'ordered', supplierName: 'ARB Supplies' });
+      expect((await lineOf()).paymentInitiatedAt).toBeFalsy();
+      expect((await procurement.session.post(`/payment-requests/${first.body.request.id}/cancel`)).status).toBe(200);
+      const second = await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [kit], amount: 90, payee: { ...BANK, name: 'India Motor Stores' } });
+      expect(second.status).toBe(201);
+      expect(await lineOf()).toMatchObject({ stock: 'ordered', supplierName: 'India Motor Stores' });
+    });
+
     it('procurement raises one for in-stock items, with the customer and who closed the sale', async () => {
       const order = await paidOrder(gtmLead.user._id);
       const [kit] = order.items.map((i) => String(i._id));

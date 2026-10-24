@@ -138,6 +138,17 @@ async function storeFiles(checked) {
 
 // ── Shape ───────────────────────────────────────────────────────────────────
 
+/*
+  Correcting a typo (UTR, date, note): whoever recorded it, for EDIT_WINDOW_MINUTES,
+  while accounts has not checked it yet; the admin while it is pending. The amount
+  is always the order total, so it is never edited.
+*/
+export const EDIT_WINDOW_MINUTES = 30;
+const editDeadline = (t) => new Date(new Date(t.createdAt).getTime() + EDIT_WINDOW_MINUTES * 60 * 1000);
+const mayEdit = (u, t, now = Date.now()) => t.status === 'pending' && (
+  isAdmin(u) || (idOf(t.recordedBy) === idOf(u?._id) && now < editDeadline(t).getTime())
+);
+
 export function shape(t, viewer) {
   const open = t.status === 'pending' && mayVerify(viewer);
   return {
@@ -158,7 +169,8 @@ export function shape(t, viewer) {
     reviewedAt: t.reviewedAt || null,
     reviewNote: t.reviewNote || '',
     files: (t.files || []).map((f) => ({ id: idOf(f._id), name: f.name || '', contentType: f.contentType, bytes: f.bytes })),
-    can: { confirm: open, reject: open },
+    can: { confirm: open, reject: open, edit: mayEdit(viewer, t) },
+    editableUntil: !isAdmin(viewer) && mayEdit(viewer, t) ? editDeadline(t) : null,
   };
 }
 
@@ -170,7 +182,7 @@ async function tellChat(t, action, text, { mentionSeller = false } = {}) {
     const admins = (await userRepository.findChatUsers()).filter((u) => u.role === 'admin').map((u) => idOf(u));
     const mentions = [...admins, ...(mentionSeller && t.salesUser ? [idOf(t.salesUser)] : [])];
     await Promise.all(['team:accounts', 'team:sales'].map((space) => postSystemMessage(space, text, {
-      key: `banktransfer-${idOf(t._id)}-${action}`,
+      key: `banktransfer-${idOf(t._id)}-${action}${action === 'edited' ? `-${(t.history || []).length}` : ''}`,
       mentions,
       threadOrder: idOf(t.order),
       orderIds: [idOf(t.order)],
@@ -285,6 +297,47 @@ export async function recordBankTransfer(actor, orderId, input = {}, files = [],
     + `(UTR ${reference}, ${paidOn.toISOString().slice(0, 10)}), recorded by ${actor.name}. Not paid on the website — `
     + 'the payment links were cancelled. Accounts: please check the bank and confirm or reject it.');
   return shape(doc, actor);
+}
+
+/** Fix the UTR, the date paid or the note on a transfer accounts has not checked yet. */
+export async function editBankTransfer(actor, id, input = {}, req) {
+  const t0 = await loadVisible(actor, id);
+  if (!mayEdit(actor, t0)) {
+    throw fail(t0.status !== 'pending'
+      ? 'Accounts has already checked this transfer, so it can no longer be edited.'
+      : `You can edit a transfer you recorded for ${EDIT_WINDOW_MINUTES} minutes. Ask accounts to reject it, then record it again.`, 403);
+  }
+  const set = {};
+  const changes = [];
+  if (input.reference != null && String(input.reference).trim() !== t0.reference) {
+    const { reference, referenceKey } = cleanReference(input.reference);
+    const dup = await bankTransferRepository.findActiveByReference(referenceKey);
+    if (dup && idOf(dup._id) !== idOf(t0._id)) throw fail(`This UTR is already recorded on order ${dup.orderNumber}.`, 409);
+    Object.assign(set, { reference, referenceKey });
+    changes.push(`UTR ${t0.reference} → ${reference}`);
+  }
+  if (input.paidOn != null && input.paidOn !== '') {
+    const paidOn = cleanPaidOn(input.paidOn);
+    if (new Date(paidOn).getTime() !== new Date(t0.paidOn).getTime()) { set.paidOn = paidOn; changes.push('date paid'); }
+  }
+  if (input.note != null && String(input.note).trim().slice(0, 500) !== (t0.note || '')) {
+    set.note = String(input.note).trim().slice(0, 500);
+    changes.push('note');
+  }
+  if (!changes.length) return shape(t0, actor);
+
+  let t;
+  try {
+    t = await bankTransferRepository.updatePendingIf(t0._id, t0.updatedAt, set,
+      { at: new Date(), by: actor._id, byName: actor.name || '', action: 'edited', note: changes.join(', ') });
+  } catch (err) {
+    if (err?.code === 11000) throw fail('This UTR was just recorded on another order.', 409);
+    throw err;
+  }
+  if (!t) throw fail('This transfer was just updated — refresh and try again.', 409);
+  auditLogger.logAction(req, 'UPDATE', 'BankTransfer', idOf(t._id), { change: 'edited', fields: changes });
+  await tellChat(t, 'edited', `✏️ ${t.orderNumber} — ${actor.name} corrected the bank transfer: ${changes.join(', ')}.`);
+  return shape(t, actor);
 }
 
 // ── Confirm / reject (accounts, admin) ──────────────────────────────────────

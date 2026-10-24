@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Banknote, FileText } from 'lucide-react';
+import { Banknote, FileText, Pencil } from 'lucide-react';
 import type { WorkOrder } from '@/components/staff/work/types';
 import apiClient from '@/lib/api-client';
 import { paymentKeys, rupees, slipHref, STATUS_TONE, type OrderPayment } from './api';
@@ -31,7 +31,7 @@ export function useOrderSupplierPayments(orderId: string) {
 export default function LineSupplierPayment({ order, line, requests }: { order: WorkOrder; line: Line; requests: OrderPayment[] }) {
   const qc = useQueryClient();
   const [raising, setRaising] = useState(false);
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<{ id: string; edit: boolean } | null>(null);
   const mine = requests.filter((r) => r.itemIds.includes(line.itemId));
   const covered = mine.some(live);
   const payableStage = line.stage === 'to_ship' || line.stage === 'with_supplier'
@@ -47,10 +47,16 @@ export default function LineSupplierPayment({ order, line, requests }: { order: 
       {mine.map((r) => (
         <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
           <Banknote className="h-4 w-4 text-emerald-700" />
-          <button type="button" onClick={() => setOpen(r.id)} className="font-medium text-blue-700 hover:underline">{r.number}</button>
+          <button type="button" onClick={() => setOpen({ id: r.id, edit: false })} className="font-medium text-blue-700 hover:underline">{r.number}</button>
           <span className="text-gray-700">{rupees(r.amount)} to {r.payee}</span>
           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
-          <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-gray-600 hover:underline">
+          {r.canEdit && (
+            <button type="button" onClick={() => setOpen({ id: r.id, edit: true })} aria-label={`Edit ${r.number}`}
+              className="ml-auto inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+              <Pencil className="h-3 w-3" /> Edit
+            </button>
+          )}
+          <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className={`${r.canEdit ? '' : 'ml-auto '}inline-flex items-center gap-1 text-xs text-gray-600 hover:underline`}>
             <FileText className="h-3.5 w-3.5" /> {r.status === 'paid' ? 'Receipt' : 'Slip'}
           </a>
         </div>
@@ -79,7 +85,7 @@ export default function LineSupplierPayment({ order, line, requests }: { order: 
           }}
         />
       )}
-      {open && <PaymentRequestDetail id={open} onClose={() => { setOpen(null); refresh(); }} />}
+      {open && <PaymentRequestDetail id={open.id} startEditing={open.edit} onClose={() => { setOpen(null); refresh(); }} />}
     </div>
   );
 }

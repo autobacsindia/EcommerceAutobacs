@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, FileText, Loader2, X } from 'lucide-react';
+import { Check, FileText, Loader2, Pencil, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
@@ -28,7 +28,9 @@ export type BankTransfer = {
   reviewedAt: string | null;
   reviewNote: string;
   files: { id: string; name: string; contentType: string; bytes: number }[];
-  can: { confirm: boolean; reject: boolean };
+  can: { confirm: boolean; reject: boolean; edit?: boolean };
+  /** Whoever recorded it may correct it until then (null for admins / once closed). */
+  editableUntil?: string | null;
 };
 
 type Page = { transfers: BankTransfer[]; nextCursor: string | null };
@@ -54,6 +56,8 @@ function TransferCard({ t }: { t: BankTransfer }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [fix, setFix] = useState({ reference: t.reference, paidOn: String(t.paidOn || '').slice(0, 10), note: t.note || '' });
   // Confirming pays the order, so every order list refreshes with the transfer lists.
   const refresh = () => queryClient.invalidateQueries({ queryKey: staffKeys.orders() });
 
@@ -67,7 +71,14 @@ function TransferCard({ t }: { t: BankTransfer }) {
     onSuccess: () => { setError(''); setRejecting(false); refresh(); },
     onError: (e) => setError(errorMessage(e, 'Could not reject this transfer.')),
   });
-  const busy = confirm.isPending || reject.isPending;
+  const edit = useMutation({
+    mutationFn: () => apiClient.put(`/staff/bank-transfers/${encodeURIComponent(t.id)}`, {
+      reference: fix.reference.trim(), paidOn: fix.paidOn, note: fix.note.trim(),
+    }),
+    onSuccess: () => { setError(''); setEditing(false); refresh(); },
+    onError: (e) => setError(errorMessage(e, 'Could not save the changes.')),
+  });
+  const busy = confirm.isPending || reject.isPending || edit.isPending;
 
   return (
     <li className="rounded-xl border border-gray-200 bg-white p-4">
@@ -110,6 +121,32 @@ function TransferCard({ t }: { t: BankTransfer }) {
       )}
 
       {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+
+      {t.can.edit && !editing && (
+        <button type="button" onClick={() => setEditing(true)}
+          title={t.editableUntil ? `You can edit until ${formatDateTimeIST(t.editableUntil)}` : undefined}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          <Pencil className="h-4 w-4" /> Edit
+        </button>
+      )}
+      {editing && (
+        <form className="mt-3 space-y-2" aria-label="Edit bank transfer" onSubmit={(e) => { e.preventDefault(); edit.mutate(); }}>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block text-sm"><span className="mb-1 block font-medium text-gray-800">UTR / bank reference</span>
+              <input value={fix.reference} onChange={(e) => setFix({ ...fix, reference: e.target.value })} required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+            <label className="block text-sm"><span className="mb-1 block font-medium text-gray-800">Date paid</span>
+              <input type="date" value={fix.paidOn} onChange={(e) => setFix({ ...fix, paidOn: e.target.value })} required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+          </div>
+          <label className="block text-sm"><span className="mb-1 block font-medium text-gray-800">Note</span>
+            <textarea value={fix.note} onChange={(e) => setFix({ ...fix, note: e.target.value })} rows={2} maxLength={500} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" /></label>
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+              {edit.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Save changes
+            </button>
+            <button type="button" onClick={() => setEditing(false)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700">Cancel</button>
+          </div>
+        </form>
+      )}
 
       {t.can.confirm && !rejecting && (
         <div className="mt-4 flex flex-wrap gap-2">

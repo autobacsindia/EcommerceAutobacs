@@ -33,7 +33,7 @@ const HistorySchema = new mongoose.Schema(
     at: { type: Date, required: true },
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     byName: { type: String },
-    action: { type: String, enum: ['recorded', 'confirmed', 'rejected'], required: true },
+    action: { type: String, enum: ['recorded', 'edited', 'confirmed', 'rejected'], required: true },
     note: { type: String },
   },
   { _id: false },

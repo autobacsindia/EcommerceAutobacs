@@ -37,7 +37,7 @@ export const MESSAGE_MAX_LENGTH = 4000;
  * under them. Enforced by the database write itself (chatRepository
  * editOwnMessage / deleteOwnMessage), not by a check that could race the clock.
  */
-export const CHAT_EDIT_WINDOW_MS = 15 * 60 * 1000;
+export const CHAT_EDIT_WINDOW_MS = 30 * 60 * 1000;
 export const PAGE_SIZE_DEFAULT = 50;
 export const PAGE_SIZE_MAX = 100;
 
