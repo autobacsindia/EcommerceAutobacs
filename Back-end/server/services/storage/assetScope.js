@@ -37,6 +37,8 @@ export const PRIVATE_PREFIXES = [
   'payment-requests',
   // Customers' bank-transfer screenshots (services/bankTransferService.js).
   'bank-transfers',
+  // Team chat attachments (services/chatAttachmentService.js), one folder per channel.
+  'chat',
 ];
 
 /** Prefixes that are public storefront/marketing imagery. */

@@ -7,6 +7,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PaymentRequestForm from './PaymentRequestForm';
+import { SupplierSuggestions } from './SupplierPicker';
 import SupplierDirectory from './SupplierDirectory';
 import SupplierPayQueue from './SupplierPayQueue';
 import { sumRupees, type Supplier } from './suppliers';
@@ -54,6 +55,9 @@ describe('raising a supplier payment', () => {
   it('a picked supplier is sent by id — no bank details leave the browser', async () => {
     get.mockResolvedValue({ suppliers: [ARB], nextAfter: null });
     wrap(<PaymentRequestForm supplier={SUPPLIER_CTX} onDone={jest.fn()} />);
+    // Typing in the name box IS the search: saved suppliers appear right under it.
+    fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: 'ar' } });
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/suppliers?status=active&q=ar'));
     fireEvent.click(await screen.findByRole('option', { name: /ARB Supplies/ }));
     expect(screen.queryByLabelText('Account number')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '1000' } });
@@ -77,6 +81,22 @@ describe('raising a supplier payment', () => {
     const form = fetchMock.mock.calls[0][1].body as FormData;
     expect(form.get('saveSupplier')).toBe('true');
     expect(JSON.parse(form.get('payee') as string)).toMatchObject({ name: 'Tyre World', method: 'upi', upiId: 'tyre@okaxis' });
+  });
+});
+
+describe('supplier suggestions (also on "Ordered from supplier")', () => {
+  it('nothing until a name is typed; picking fills it; an exact single match hides the list', async () => {
+    get.mockResolvedValue({ suppliers: [ARB], nextAfter: null });
+    const onPick = jest.fn();
+    const { rerender } = wrap(<SupplierSuggestions query="" onPick={onPick} />);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(get).not.toHaveBeenCalled();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    rerender(<QueryClientProvider client={qc}><SupplierSuggestions query="arb" onPick={onPick} /></QueryClientProvider>);
+    fireEvent.click(await screen.findByRole('option', { name: /ARB Supplies/ }));
+    expect(onPick).toHaveBeenCalledWith(ARB);
+    rerender(<QueryClientProvider client={qc}><SupplierSuggestions query="ARB Supplies" onPick={onPick} /></QueryClientProvider>);
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
   });
 });
 

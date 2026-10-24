@@ -16,10 +16,13 @@
  * Images go to Cloudinary as `image` (so thumbnails work); everything else as
  * `raw`, which is served as an opaque download and never executed or rendered.
  */
+import crypto from 'crypto';
 import multer from 'multer';
 import path from 'path';
 import AppError from '../utils/AppError.js';
 import { uploadToCloudinary, uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
+import { putPrivateAsset, deletePrivateAsset } from './storage/privateUploads.js';
+import { storageProvider } from '../config/storage.js';
 
 export const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10 MB
 export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
@@ -113,6 +116,13 @@ export async function uploadChatAttachments(files, { channelId }) {
     }
   }
 
+  // On R2 (STORAGE_PROVIDER=r2, as the rest of the site): PRIVATE objects, read
+  // back through GET /chat/channels/:id/files/:name, which checks the reader may
+  // see the channel. Chat carries customer details and bank screenshots, so a
+  // guessable public URL would be the wrong home. Cloudinary stays as the
+  // fallback only while STORAGE_PROVIDER says so.
+  if (storageProvider() === 'r2') return uploadToR2(files, channelId);
+
   const done = [];
   try {
     for (const file of files) {
@@ -143,6 +153,45 @@ export async function uploadChatAttachments(files, { channelId }) {
     await Promise.all(
       done.map((a) => deleteFromCloudinary(a.publicId, a.kind === 'image' ? 'image' : 'raw').catch(() => {})),
     );
+    throw err;
+  }
+  return done;
+}
+
+/** Where a channel's files live in the private bucket. */
+export const chatFolder = (channelId) => `chat/${channelId}`;
+/** A stored file name: random prefix (unguessable, unique) + the cleaned original. */
+export const CHAT_FILE_NAME = /^[0-9]{13}-[a-z0-9]{8}-[\w\-. ]{1,90}$/;
+export const chatFileUrl = (channelId, basename) => `/api/v1/chat/channels/${channelId}/files/${encodeURIComponent(basename)}`;
+
+/** The content type to serve a stored chat file with, from its (server-chosen) extension. */
+export function chatFileType(basename) {
+  const ext = String(basename).split('.').pop().toLowerCase();
+  const found = Object.entries(TYPES).find(([mime, t]) => t.ext === ext && mime !== 'image/jpg');
+  return found ? { mime: found[0], kind: found[1].kind } : null;
+}
+
+async function uploadToR2(files, channelId) {
+  const done = [];
+  try {
+    for (const file of files) {
+      const type = TYPES[file.mimetype];
+      const basename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${safeName(file.originalname, type.ext)}`;
+      const stored = await putPrivateAsset({ buffer: file.buffer, folder: chatFolder(channelId), basename, contentType: file.mimetype });
+      done.push({
+        url: chatFileUrl(channelId, basename),
+        publicId: stored.publicId,
+        provider: 'r2',
+        kind: type.kind,
+        name: safeName(file.originalname, type.ext),
+        mime: file.mimetype,
+        size: file.size,
+        width: null,
+        height: null,
+      });
+    }
+  } catch (err) {
+    await Promise.all(done.map((a) => deletePrivateAsset({ publicId: a.publicId, provider: 'r2' })));
     throw err;
   }
   return done;

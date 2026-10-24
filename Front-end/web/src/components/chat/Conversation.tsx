@@ -15,6 +15,8 @@ import {
   useDeleteMessage,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, SendVars } from '@/hooks/queries/useTeamChat';
+import { useResendStore } from './resend';
+import MembersPanel from './MembersPanel';
 import { Avatar, ChannelIcon, FileKindIcon, fileSize, timeOf } from './chatUi';
 import Composer, { mentionableTeams } from './Composer';
 import MessageItem, { messageDomId } from './MessageItem';
@@ -121,7 +123,9 @@ export default function Conversation({
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
   const markRead = useMarkRead();
-  const [tab, setTab] = useState<'messages' | 'files'>('messages');
+  const [tab, setTab] = useState<'messages' | 'files' | 'members'>('messages');
+  // Custom groups have a member list; team spaces and DMs do not.
+  const isGroup = channel.kind === 'space' && channel.audience === 'members';
   const [quote, setQuote] = useState<ChatMessage | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [thread, setThread] = useState<string | null>(null);
@@ -222,7 +226,11 @@ export default function Conversation({
   };
 
   /** Show the message immediately, then reconcile with what the server stored. */
+  const resend = useResendStore();
+  const retry = (msg: ChatMessage) => doSend(resend.varsFor(msg));
+
   const doSend = (vars: SendVars) => {
+    resend.remember(vars);
     const optimistic: ChatMessage = {
       id: `pending-${vars.clientId}`,
       channelId: channel.id,
@@ -245,6 +253,7 @@ export default function Conversation({
     stickToBottom.current = true;
     qc.setQueryData<Pages>(chatKeys.messages(channel.id), (d) => upsertMessage(d, optimistic));
     send.mutate(vars, {
+      onSuccess: () => resend.forget(vars.clientId),
       onError: () =>
         qc.setQueryData<Pages>(chatKeys.messages(channel.id), (d) =>
           upsertMessage(d, { ...optimistic, pending: false, failed: true }),
@@ -273,9 +282,9 @@ export default function Conversation({
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1">
               {channel.kind === 'space' && channel.memberCount != null && (
-                <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                <button type="button" onClick={() => setTab('members')} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-gray-600 hover:bg-gray-100" aria-label={`${channel.memberCount} members — open member list`}>
                   <Users className="h-4 w-4" /> {channel.memberCount}
-                </span>
+                </button>
               )}
               {onSearch && (
                 <button
@@ -291,7 +300,7 @@ export default function Conversation({
             </div>
           </div>
           <div className="mt-2 flex gap-4" role="tablist" aria-label="Conversation sections">
-            {(['messages', 'files'] as const).map((key) => (
+            {(isGroup ? (['messages', 'files', 'members'] as const) : (['messages', 'files'] as const)).map((key) => (
               <button
                 key={key}
                 type="button"
@@ -302,13 +311,15 @@ export default function Conversation({
                   tab === key ? 'border-emerald-700 text-emerald-800' : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {key === 'messages' ? 'Chat' : 'Files'}
+                {key === 'messages' ? 'Chat' : key === 'files' ? 'Files' : 'Members'}
               </button>
             ))}
           </div>
         </header>
 
-        {tab === 'files' ? (
+        {tab === 'members' && isGroup ? (
+          <MembersPanel channelId={channel.id} />
+        ) : tab === 'files' ? (
           <FilesPanel channelId={channel.id} />
         ) : (
           <>
@@ -348,7 +359,7 @@ export default function Conversation({
                     meName={meName}
                     peopleById={peopleById}
                     orderHref={orderHref}
-                    onRetry={(msg) => doSend({ text: msg.text, clientId: msg.clientId ?? '', mentions: msg.mentions, quoteId: msg.quote?.id })}
+                    onRetry={retry}
                     onOpenThread={(msg) => setThread(msg.id)}
                     onQuote={setQuote}
                     onJumpTo={jumpTo}

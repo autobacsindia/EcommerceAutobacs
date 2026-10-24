@@ -18,6 +18,17 @@ const chatRepository = {
   findChannelByKey: (key) => ChatChannel.findOne({ key }).lean(),
   spaceNameTaken: (name) => ChatChannel.exists({ kind: 'space', archived: false, name }),
   createChannel: async (doc) => (await ChatChannel.create(doc)).toObject(),
+  /** Add / remove members of a custom space; returns the updated channel (null if not one). */
+  addMembers: (id, userIds) => ChatChannel.findOneAndUpdate(
+    { _id: id, kind: 'space', audience: 'members', archived: false },
+    { $addToSet: { members: { $each: userIds } } },
+    { new: true },
+  ).lean(),
+  removeMember: (id, userId) => ChatChannel.findOneAndUpdate(
+    { _id: id, kind: 'space', audience: 'members', archived: false },
+    { $pull: { members: userId } },
+    { new: true },
+  ).lean(),
   /** Atomically take the next message number in a channel. */
   nextSeq: async (channelId, at) => {
     const updated = await ChatChannel.findOneAndUpdate(
