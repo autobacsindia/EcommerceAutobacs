@@ -11,6 +11,7 @@ import { getNotificationsQueue, enqueueVariantGeneration, variantJobId } from '.
 import { findOriginalsMissingVariants } from './storage/variantSweep.js';
 import { storageProvider } from '../config/storage.js';
 import { postStuckDigests } from './chatStuckDigest.js';
+import { sendOverdueReport } from './overdueReportService.js';
 
 class CronService {
   constructor() {
@@ -63,6 +64,7 @@ class CronService {
     this.scheduleAffiliateMaturation();
     this.scheduleVariantSweep();
     this.scheduleChatStuckDigest();
+    this.scheduleOverdueReport();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -360,6 +362,60 @@ class CronService {
     });
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[CronService] Chat stuck-order digest scheduled: "${schedule}"`);
+    }
+  }
+
+  /**
+   * Morning "Overdue orders" email (services/overdueReportService.js): the whole
+   * report to OVERDUE_REPORT_TO (info@), each team's section to its head and
+   * members. 09:00 IST Monday–Saturday, before the 09:30 stand-up.
+   *
+   * Once per day across replicas: the run lock stops two at the same moment, and
+   * a per-day marker (kept 36 h) stops a second run later the same day — a
+   * restart near 09:00 must not email everyone twice.
+   */
+  scheduleOverdueReport() {
+    const schedule = process.env.OVERDUE_REPORT_CRON || '0 9 * * 1-6';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid OVERDUE_REPORT_CRON "${schedule}" — overdue email NOT scheduled`);
+      return;
+    }
+    const tz = process.env.OVERDUE_REPORT_TZ || 'Asia/Kolkata';
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:overdueReport', 15 * 60, () => this.runOverdueReportOnce()),
+      { scheduled: true, timezone: tz }
+    );
+    this.scheduledTasks.push({
+      name: 'overdueReport',
+      task,
+      schedule,
+      description: 'Email: morning overdue-orders report to info@ and each team',
+    });
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[CronService] Overdue-orders email scheduled: "${schedule}"`);
+    }
+  }
+
+  /** One send per IST day (see scheduleOverdueReport). Never throws. */
+  async runOverdueReportOnce(now = Date.now()) {
+    const day = new Date(now + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const marker = `cron:done:overdueReport:${day}`;
+    try {
+      if (this.redis) {
+        const first = await this.redis.set(marker, '1', 'NX', 'EX', 36 * 60 * 60).catch(() => 'OK');
+        if (!first) {
+          console.log(`[CronService] Overdue-orders email already sent for ${day} — skipping`);
+          return null;
+        }
+      }
+      const result = await sendOverdueReport(now);
+      console.log(`[CronService] Overdue-orders email: total=${result.total} summarySent=${result.summarySent} teams=${JSON.stringify(result.teams)}`);
+      return result;
+    } catch (err) {
+      console.error('[CronService] Overdue-orders email failed:', err.message);
+      // Let a later run today try again.
+      if (this.redis) await this.redis.del(marker).catch(() => {});
+      return null;
     }
   }
 
