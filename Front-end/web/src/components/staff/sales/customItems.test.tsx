@@ -105,3 +105,38 @@ it('blocks a wrong mobile number and says why', async () => {
   expect(screen.getByLabelText(/Mobile/)).toHaveAttribute('aria-invalid', 'true');
   expect(post).not.toHaveBeenCalled();
 });
+
+describe('"Payment first"', () => {
+  const renderPayFirst = () => render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <NewSalesOrderForm payFirst />
+    </QueryClientProvider>,
+  );
+  const addCustom = async () => {
+    fireEvent.change(screen.getByLabelText('Search products'), { target: { value: 'Fitting labour' } });
+    fireEvent.click(await screen.findByRole('button', { name: /Add .Fitting labour. as a custom item/ }));
+    fireEvent.change(screen.getByLabelText(/Price for Fitting labour/), { target: { value: '1500' } });
+  };
+
+  it('creates the quotation, accepts it (same server pricing), and opens the payment details', async () => {
+    post.mockImplementation((url: string) => Promise.resolve(url.endsWith('/accept') ? { orderId: 'o7' } : { quotation: { id: 'q1' } }));
+    renderPayFirst();
+    fillCustomer('9876543210');
+    await addCustom();
+    fireEvent.click(screen.getByRole('button', { name: /Create order & add payment details/ }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/team/sales/orders/o7?pay=details'));
+    expect(post.mock.calls.map((c) => c[0])).toEqual(['/staff/sales/quotations', '/staff/sales/quotations/q1/accept']);
+  });
+
+  it('if the order cannot be created, says the quotation was kept', async () => {
+    post.mockImplementation((url: string) => (url.endsWith('/accept')
+      ? Promise.reject(Object.assign(new Error('x'), { rawData: { message: 'Prices changed since this quotation.' } }))
+      : Promise.resolve({ quotation: { id: 'q1' } })));
+    renderPayFirst();
+    fillCustomer('9876543210');
+    await addCustom();
+    fireEvent.click(screen.getByRole('button', { name: /Create order & add payment details/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Saved as a quotation.*Prices changed/);
+    expect(push).not.toHaveBeenCalled();
+  });
+});

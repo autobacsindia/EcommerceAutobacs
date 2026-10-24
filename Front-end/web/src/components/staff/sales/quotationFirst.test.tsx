@@ -61,6 +61,8 @@ it('requests payment in parts only when they add up to the total', async () => {
   post.mockResolvedValue({ payment: {} });
   wrap(<SalesOrderPayment id="o1" />);
 
+  // A Razorpay link is one of the ways to pay now, chosen first.
+  fireEvent.click(await screen.findByRole('button', { name: /Razorpay payment link/ }));
   fireEvent.click(await screen.findByRole('button', { name: '4 parts' }));
   expect(screen.getByText(/Adds up to/)).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Amount for part 4'), { target: { value: '100' } });

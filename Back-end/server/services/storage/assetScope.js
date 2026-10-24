@@ -39,6 +39,8 @@ export const PRIVATE_PREFIXES = [
   'bank-transfers',
   // Team chat attachments (services/chatAttachmentService.js), one folder per channel.
   'chat',
+  // The GPay / UPI QR a GTM lead shares with a customer (services/salesPayDetailsService.js).
+  'sales-pay-details',
 ];
 
 /** Prefixes that are public storefront/marketing imagery. */

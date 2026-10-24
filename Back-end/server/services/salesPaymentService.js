@@ -233,7 +233,20 @@ export async function getPaymentRequestPdf(actor, orderId) {
   const order = await loadForPayment(actor, orderId);
   if (order.status === 'cancelled') throw fail('This order was cancelled.', 409);
   const summary = paymentSummary(order);
-  if (summary.parts.length === 0) throw fail('Request payment first — there are no payment links yet.', 409);
+  const details = order.salesPayDetails?.method ? order.salesPayDetails : null;
+  if (summary.parts.length === 0 && !details) {
+    throw fail('Add the payment details (bank / GPay QR / other) or request a payment link first.', 409);
+  }
+  const { QR_LIMIT, QR_LIMIT_NOTE } = await import('../utils/salesPayDetails.js');
+  let qrImage = null;
+  if (details?.method === 'upi_qr' && details.qr?.publicId) {
+    try {
+      const { readPrivateAsset } = await import('./storage/privateUploads.js');
+      qrImage = await readPrivateAsset(details.qr);
+    } catch (err) {
+      console.error('[PaymentRequestPdf] QR image could not be read:', err.message);
+    }
+  }
 
   const [{ default: PDFDocument }, { default: QRCode }, invoice, { companyInfo }, { formatLongDateIST }] = await Promise.all([
     import('pdfkit'), import('qrcode'), import('./invoiceService.js'), import('../config/company.js'), import('../utils/datetime.js'),
@@ -276,9 +289,12 @@ export async function getPaymentRequestPdf(actor, orderId) {
       const name = order.shippingAddress?.fullName || order.user?.name || 'Customer';
       doc.font(FONT_BOLD).fontSize(12).fillColor('#111a16').text(`Dear ${name},`, L, y);
       doc.font(FONT).fontSize(9.5).fillColor('#3b4641').text(
-        `Thank you for confirming your order. The total of ${money(order.totalAmount)} is collected in `
-        + `${summary.parts.length === 1 ? 'one payment' : `${summary.parts.length} payments`}, each a secure Razorpay link `
-        + '(UPI, cards and net banking). Please pay each waiting part below — scan its code or open its link.',
+        summary.parts.length
+          ? `Thank you for confirming your order. The total of ${money(order.totalAmount)} is collected in `
+            + `${summary.parts.length === 1 ? 'one payment' : `${summary.parts.length} payments`}, each a secure Razorpay link `
+            + '(UPI, cards and net banking). Please pay each waiting part below — scan its code or open its link.'
+          : `Thank you for confirming your order. Please pay the total of ${money(order.totalAmount)} as shown below, `
+            + 'then send the payment screenshot or the UTR / transaction number to your sales contact.',
         L, doc.y + 6, { width: R - L },
       );
       y = doc.y + 16;
@@ -292,6 +308,57 @@ export async function getPaymentRequestPdf(actor, orderId) {
         .text(money(summary.amountPaid), L + 190, y + 21)
         .text(money(Math.max(0, order.totalAmount - summary.amountPaid)), L + 360, y + 21);
       y += 58;
+
+      // How to pay: bank / GPay QR / other (Order.salesPayDetails).
+      if (details) {
+        const bankRows = (b) => [['Account name', b.accountName], ['Account number', b.accountNumber], ['IFSC', b.ifsc], ...(b.bankName ? [['Bank', b.bankName]] : [])];
+        const over = Number(order.totalAmount) > QR_LIMIT;
+        const rowsH = (b) => (b ? bankRows(b).length * 15 + 22 : 0);
+        let boxH = 46;
+        if (details.method === 'bank') boxH += rowsH(details.bank);
+        if (details.method === 'upi_qr') boxH = Math.max(boxH + 10, 150) + (over ? 30 : 0) + rowsH(details.bank);
+        if (details.note) boxH += 26;
+        if (y + boxH > H - 80) { doc.addPage(); y = 50; }
+        doc.roundedRect(L, y, R - L, boxH, 8).lineWidth(0.8).strokeColor('#0a5c33').stroke();
+        let cy = y + 14;
+        const title = { bank: 'Pay by bank transfer (NEFT / RTGS / IMPS)', upi_qr: 'Pay by GPay / UPI', other: 'How to pay' }[details.method];
+        doc.font(FONT_BOLD).fontSize(11).fillColor('#111a16').text(title, L + 16, cy);
+        cy = doc.y + 6;
+        const printBank = (b, x, top) => {
+          let ry = top;
+          for (const [k, v] of bankRows(b)) {
+            doc.font(FONT).fontSize(9).fillColor('#6b7671').text(k, x, ry, { width: 110 });
+            doc.font(FONT_BOLD).fontSize(9.5).fillColor('#111a16').text(String(v), x + 115, ry, { width: R - x - 130 });
+            ry += 15;
+          }
+          return ry;
+        };
+        if (details.method === 'bank') cy = printBank(details.bank, L + 16, cy);
+        if (details.method === 'upi_qr') {
+          if (qrImage) {
+            try { doc.image(qrImage, L + 16, cy, { fit: [110, 110] }); } catch { /* text below still says how to pay */ }
+          }
+          const tx = L + 140;
+          doc.font(FONT).fontSize(9.5).fillColor('#3b4641')
+            .text('Scan this QR with GPay, PhonePe, Paytm or any UPI app.', tx, cy, { width: R - tx - 16 });
+          if (details.upiId) doc.text(`UPI ID: ${details.upiId}`, tx, doc.y + 4, { width: R - tx - 16 });
+          doc.text(`Amount: ${money(order.totalAmount)}`, tx, doc.y + 4, { width: R - tx - 16 });
+          cy = Math.max(doc.y, cy + 112) + 8;
+          if (over) {
+            doc.roundedRect(L + 16, cy, R - L - 32, 22, 4).fill('#fef3c7');
+            doc.font(FONT_BOLD).fontSize(9.5).fillColor('#92400e').text(QR_LIMIT_NOTE, L + 26, cy + 6, { width: R - L - 52 });
+            cy += 30;
+          }
+          if (details.bank) {
+            doc.font(FONT_BOLD).fontSize(9.5).fillColor('#111a16').text('Bank transfer', L + 16, cy);
+            cy = printBank(details.bank, L + 16, doc.y + 4);
+          }
+        }
+        if (details.note) {
+          doc.font(FONT).fontSize(9).fillColor('#3b4641').text(details.note, L + 16, cy + 4, { width: R - L - 32 });
+        }
+        y += boxH + 14;
+      }
 
       summary.parts.forEach((p, i) => {
         const boxH = qrs[i] ? 128 : 54;
@@ -316,8 +383,11 @@ export async function getPaymentRequestPdf(actor, orderId) {
 
       if (y + 60 > H - 80) { doc.addPage(); y = 50; }
       doc.font(FONT).fontSize(8.5).fillColor('#6b7671').text(
-        'Your order is confirmed and prepared once every part is paid. You receive a payment receipt by SMS/email '
-        + `from Razorpay for each part. Questions? Call ${companyInfo.phone || 'our sales team'}.`,
+        (summary.parts.length
+          ? 'Your order is confirmed and prepared once every part is paid. You receive a payment receipt by SMS/email '
+            + 'from Razorpay for each part.'
+          : 'Your order is prepared once our accounts team sees the payment in our bank.')
+        + ` Questions? Call ${companyInfo.phone || 'our sales team'}.`,
         L, y + 6, { width: R - L },
       );
 

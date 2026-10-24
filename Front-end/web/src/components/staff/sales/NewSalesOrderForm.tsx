@@ -63,10 +63,17 @@ let customSeq = 0;
 export default function NewSalesOrderForm({
   fromOrderId = null,
   quotation = null,
+  payFirst = false,
 }: {
   fromOrderId?: string | null;
   /** Editing this quotation (saves a new version) instead of creating one. */
   quotation?: Quotation | null;
+  /**
+   * "Payment first": the customer is ready to pay now. The quotation is created
+   * and accepted in one go (same pricing and checks), and the order page opens
+   * on the payment details form.
+   */
+  payFirst?: boolean;
 } = {}) {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -206,7 +213,7 @@ export default function NewSalesOrderForm({
   const hasProblem = lines.some((l) => lineProblem(l));
 
   const create = useMutation({
-    mutationFn: () => {
+    mutationFn: async (): Promise<{ quotation: Quotation; orderId?: string }> => {
       const body = {
       customer: { name: customer.name.trim(), email: customer.email.trim(), phone: normalizeMobile(customer.phone) },
       shippingAddress: { ...address, fullName: customer.name.trim(), phone: normalizeMobile(customer.phone) },
@@ -220,15 +227,30 @@ export default function NewSalesOrderForm({
         })),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
       };
-      return editing
-        ? apiClient.put<{ quotation: Quotation }>(`/staff/sales/quotations/${quotation!.id}`, body)
-        : apiClient.post<{ quotation: Quotation }>('/staff/sales/quotations', body);
+      if (editing) return apiClient.put<{ quotation: Quotation }>(`/staff/sales/quotations/${quotation!.id}`, body);
+      const created = await apiClient.post<{ quotation: Quotation }>('/staff/sales/quotations', body);
+      if (!payFirst) return created;
+      try {
+        const accepted = await apiClient.post<{ orderId: string }>(`/staff/sales/quotations/${encodeURIComponent(created.quotation.id)}/accept`, {});
+        return { quotation: created.quotation, orderId: accepted.orderId };
+      } catch (err) {
+        // The quotation exists; send them to it with the reason, rather than lose it.
+        throw Object.assign(new Error('accept failed'), { quotationId: created.quotation.id, cause: err });
+      }
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: staffKeys.quotations() });
-      router.push(`/team/sales/quotations/${res.quotation.id}`);
+      queryClient.invalidateQueries({ queryKey: staffKeys.orders() });
+      router.push(res.orderId ? `/team/sales/orders/${res.orderId}?pay=details` : `/team/sales/quotations/${res.quotation.id}`);
     },
-    onError: (e) => setError(errorMessage(e, editing ? 'Could not save the quotation. Please try again.' : 'Could not create the quotation. Please try again.')),
+    onError: (e) => {
+      const stuck = (e as { quotationId?: string; cause?: unknown }).quotationId;
+      if (stuck) {
+        setError(`Saved as a quotation, but the order could not be created: ${errorMessage((e as { cause?: unknown }).cause, 'please try again')} Open Quotations to accept it.`);
+        return;
+      }
+      setError(errorMessage(e, editing ? 'Could not save the quotation. Please try again.' : 'Could not create the quotation. Please try again.'));
+    },
   });
 
   function submit(e: React.FormEvent) {
@@ -515,7 +537,7 @@ export default function NewSalesOrderForm({
         {error && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs text-gray-500">Quotation total</p>
+            <p className="text-xs text-gray-500">{payFirst ? 'Amount to pay' : 'Quotation total'}</p>
             <p className="text-2xl font-bold text-gray-900">{rupees(total)}</p>
             {saving > 0 && <p className="text-xs font-medium text-green-700">Offer saves {rupees(saving)} on {rupees(fullTotal)}</p>}
           </div>
@@ -524,7 +546,7 @@ export default function NewSalesOrderForm({
             disabled={create.isPending || lines.length === 0}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />} {editing ? 'Save new version' : 'Create quotation'}
+            {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />} {editing ? 'Save new version' : payFirst ? 'Create order & add payment details' : 'Create quotation'}
           </button>
         </div>
       </div>

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, Loader2, Plus, Split, Trash2, X } from 'lucide-react';
+import { Banknote, FileText, Link2, Loader2, Plus, Split, Trash2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
@@ -11,6 +11,7 @@ import BankTransferForm from './BankTransferForm';
 import CustomerBankCard from './CustomerBankCard';
 import HoldControl from './HoldControl';
 import PaymentLinkCard from './PaymentLinkCard';
+import { PayDetailsCard, PayDetailsForm } from './PayDetails';
 import { errorMessage, paymentRequestHref, rupees, type PaymentPart, type SalesOrder } from './types';
 
 const PART_STATUS: Record<PaymentPart['status'], { text: string; cls: string }> = {
@@ -113,9 +114,11 @@ function RequestPayment({ order, onDone }: { order: SalesOrder; onDone: () => vo
  * send. Money is confirmed only by Razorpay (webhook / reconciliation) — nothing
  * on this screen marks anything paid.
  */
-export default function SalesOrderPayment({ id }: { id: string }) {
+export default function SalesOrderPayment({ id, startWithDetails = false }: { id: string; startWithDetails?: boolean }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState('');
+  // How the customer is asked to pay: bank / GPay QR / other details, or a Razorpay link.
+  const [choice, setChoice] = useState<null | 'details' | 'link'>(startWithDetails ? 'details' : null);
   const q = useQuery({
     queryKey: staffKeys.salesOrder(id),
     queryFn: () => apiClient.get<{ order: SalesOrder }>(`/staff/sales/orders/${encodeURIComponent(id)}`),
@@ -188,7 +191,37 @@ export default function SalesOrderPayment({ id }: { id: string }) {
         <HoldControl base={`/staff/sales/orders/${encodeURIComponent(o.id)}`} hold={o.hold} what="order" onDone={refresh} />
       )}
 
-      {canPay && pay && pay.amountToRequest > 0 && <RequestPayment key={pay.amountToRequest} order={o} onDone={refresh} />}
+      {/* How to pay: nothing chosen yet → ask; details saved → the card to share; Razorpay link → as before. */}
+      {canPay && !o.payDetails && parts.length === 0 && choice === null && (
+        <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <h2 className="text-sm font-semibold text-gray-900">How will the customer pay?</h2>
+          <p className="mb-3 text-xs text-gray-500">You can change this until the payment is recorded.</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setChoice('details')}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              <Banknote className="h-4 w-4" /> Bank transfer / GPay QR / other
+            </button>
+            <button type="button" onClick={() => setChoice('link')}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">
+              <Link2 className="h-4 w-4" /> Razorpay payment link
+            </button>
+          </div>
+        </section>
+      )}
+      {canPay && choice === 'details' && (
+        <PayDetailsForm order={o} onCancel={() => setChoice(null)} onDone={() => { setChoice(null); refresh(); }} />
+      )}
+      {o.payDetails && choice !== 'details' && (
+        <PayDetailsCard order={o} details={o.payDetails} canChange={canPay} onChange={() => setChoice('details')} />
+      )}
+      {canPay && o.payDetails && parts.length === 0 && choice === null && pay && pay.amountToRequest > 0 && (
+        <button type="button" onClick={() => setChoice('link')} className="text-sm font-medium text-blue-700 hover:underline">
+          Also send a Razorpay payment link
+        </button>
+      )}
+      {canPay && pay && pay.amountToRequest > 0 && (choice === 'link' || parts.length > 0) && (
+        <RequestPayment key={pay.amountToRequest} order={o} onDone={() => { setChoice(null); refresh(); }} />
+      )}
 
       {canPay && !anyPaid && <BankTransferForm order={o} onDone={refresh} />}
 

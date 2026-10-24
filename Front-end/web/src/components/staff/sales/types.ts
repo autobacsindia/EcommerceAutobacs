@@ -32,6 +32,41 @@ export type PaymentSummary = {
   amountToRequest: number;
 };
 
+export type PayMethod = 'bank' | 'upi_qr' | 'other';
+export type PayDetails = {
+  method: PayMethod;
+  bank: { accountName: string; accountNumber: string; ifsc: string; bankName: string } | null;
+  upiId: string;
+  hasQr: boolean;
+  note: string;
+  setBy: string;
+  setAt: string | null;
+};
+
+/** Above this, a GPay / UPI payment is asked to come by bank transfer (the server prints the same). */
+export const QR_LIMIT = 50000;
+export const QR_LIMIT_NOTE = 'For amounts above ₹50,000, please pay by bank transfer.';
+export const payDetailsQrHref = (orderId: string) => `/api/v1/staff/sales/orders/${encodeURIComponent(orderId)}/pay-details/qr`;
+
+/** The WhatsApp text: the same lines the PDF and #accounts get (utils/salesPayDetails.js). */
+export function payDetailsMessage(o: { orderNumber: string; totalAmount: number; customer: { name: string } }, d: PayDetails, fmt: (n: number) => string): string {
+  const first = o.customer.name.trim().split(/\s+/)[0] || 'there';
+  const bank = (b: NonNullable<PayDetails['bank']>) => [
+    `Account name: ${b.accountName}`, `Account number: ${b.accountNumber}`, `IFSC: ${b.ifsc}`, ...(b.bankName ? [`Bank: ${b.bankName}`] : []),
+  ];
+  const lines = [`Hi ${first}, thank you for your order ${o.orderNumber}. Amount to pay: ${fmt(o.totalAmount)}.`, ''];
+  if (d.method === 'bank' && d.bank) lines.push('Pay by bank transfer (NEFT / RTGS / IMPS):', ...bank(d.bank));
+  if (d.method === 'upi_qr') {
+    lines.push(`Pay by GPay / UPI: scan the QR we sent${d.upiId ? ` or pay to ${d.upiId}` : ''}.`);
+    if (o.totalAmount > QR_LIMIT) lines.push(QR_LIMIT_NOTE);
+    if (d.bank) lines.push('', 'Bank transfer:', ...bank(d.bank));
+  }
+  if (d.method === 'other') lines.push(d.note);
+  else if (d.note) lines.push('', d.note);
+  lines.push('', 'After paying, please send us the payment screenshot or the UTR / transaction number.');
+  return lines.join('\n');
+}
+
 export type SalesOrder = {
   id: string;
   orderNumber: string;
@@ -68,6 +103,8 @@ export type SalesOrder = {
   bankTransferPending?: boolean;
   /** Paid by bank transfer: what accounts confirmed. */
   offlinePayment?: { method: 'bank_transfer'; reference: string; confirmedBy: string } | null;
+  /** How the customer is told to pay besides (or instead of) a Razorpay link. */
+  payDetails?: PayDetails | null;
   hold?: SalesHold | null;
 };
 

@@ -32,6 +32,7 @@ import { buildHold, shapeHold, heldFilter } from '../utils/salesHold.js';
 import { workflowView } from '../utils/teamWorkflow.js';
 import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
 import { paymentSummary, retireAllParts } from './salesPaymentService.js';
+import { shapePayDetails } from '../utils/salesPayDetails.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -136,6 +137,8 @@ function shape(o) {
     bankTransferPending: !!o.bankTransferPendingAt,
     // Paid by bank transfer: what accounts confirmed.
     offlinePayment: o.offlinePayment ? { method: o.offlinePayment.method, reference: o.offlinePayment.reference, confirmedBy: o.offlinePayment.confirmedByName || '' } : null,
+    // Bank / GPay QR / other payment details shown to the customer (salesPayDetailsService).
+    payDetails: shapePayDetails(o.salesPayDetails),
     // "On hold — customer thinking": only meaningful while the order is unpaid.
     hold: o.status === 'awaiting_payment' && o.paymentStatus === 'pending' ? shapeHold(o.salesHold) : null,
   };
@@ -423,7 +426,7 @@ export async function resumeSalesOrder(actor, orderId, req) {
 }
 
 /** Load an unpaid sales order the actor may act on. */
-async function loadOwnUnpaid(actor, orderId) {
+export async function loadOwnUnpaid(actor, orderId) {
   if (!canSell(actor)) throw fail('Not authorized.', 403);
   const order = await orderRepository.findById(orderId);
   if (!order || !order.salesUser) throw fail('Order not found.', 404);
