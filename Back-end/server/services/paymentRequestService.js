@@ -37,6 +37,8 @@ import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import { workflowView, STAGE } from '../utils/teamWorkflow.js';
 import { variantDisplayName } from '../utils/orderLines.js';
+import { cleanPayee, maskAccount, payKeyOf } from '../utils/payee.js';
+import * as suppliers from './supplierService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
@@ -117,35 +119,7 @@ function cleanAmount(value) {
   return n;
 }
 
-const UPI = /^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$/;
-const IFSC = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-const ACCOUNT = /^\d{6,18}$/;
-
-/** The payee's details, checked for the shape a payment actually needs. */
-export function cleanPayee(p = {}) {
-  const name = String(p.name || '').trim().slice(0, 120);
-  if (name.length < 2) throw fail('Enter who is being paid.', 400);
-  const method = p.method === 'bank' ? 'bank' : p.method === 'upi' ? 'upi' : null;
-  if (!method) throw fail('Choose UPI or bank transfer.', 400);
-  const payee = { name, method, phone: String(p.phone || '').trim().slice(0, 20) };
-  if (method === 'upi') {
-    const upiId = String(p.upiId || '').trim();
-    if (!UPI.test(upiId)) throw fail('Enter a valid UPI ID (e.g. name@okaxis).', 400);
-    payee.upiId = upiId;
-  } else {
-    const accountNumber = String(p.accountNumber || '').replace(/\s+/g, '');
-    const ifsc = String(p.ifsc || '').trim().toUpperCase();
-    const accountName = String(p.accountName || '').trim().slice(0, 120);
-    if (!ACCOUNT.test(accountNumber)) throw fail('Enter a valid bank account number (6–18 digits).', 400);
-    if (!IFSC.test(ifsc)) throw fail('Enter a valid IFSC code (e.g. HDFC0001234).', 400);
-    if (accountName.length < 2) throw fail('Enter the account holder\'s name.', 400);
-    Object.assign(payee, { accountNumber, ifsc, accountName, bankName: String(p.bankName || '').trim().slice(0, 120) });
-  }
-  return payee;
-}
-
-/** "XXXXXX4321" — for lists and chat, where the full number is not needed. */
-export const maskAccount = (n) => (n ? `${'X'.repeat(Math.max(0, String(n).length - 4))}${String(n).slice(-4)}` : '');
+export { cleanPayee, maskAccount };
 
 /** Cloudinary keeps PDFs as 'raw' and photos as 'image' — deletes must say which. */
 const resourceTypeOf = (f) => (f.contentType === 'application/pdf' ? 'raw' : 'image');
@@ -253,6 +227,8 @@ export function shape(r, viewer) {
     itemNames: r.itemNames || [],
     customer: r.customer || null,
     closedBy: r.closedBy || '',
+    supplier: r.supplier ? { id: idOf(r.supplier) } : null,
+    bankNotice: r.bankNotice?.at ? { at: r.bankNotice.at, byName: r.bankNotice.byName || '' } : null,
     files: (r.files || []).map((f) => ({ id: idOf(f._id), kind: f.kind, name: f.name, contentType: f.contentType, bytes: f.bytes })),
     payment: r.status === 'paid' ? r.payment : null,
     decisionNote: r.decisionNote || '',
@@ -328,7 +304,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   if (busy) throw fail(`${busy.number} for this item is already ${STATUS_LABELS[busy.status].toLowerCase()}.`, 409);
 
   const amount = cleanAmount(input.amount);
-  const payee = cleanPayee(input.payee);
+  const { payee, supplierId, bankNotice } = await supplierPayee(actor, input, req);
   const description = String(input.description || '').trim().slice(0, 2000);
   const { files, kinds } = filesFrom(uploaded);
   const stored = await storeFiles(files, kinds, actor);
@@ -355,12 +331,35 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
       city: [order.shippingAddress?.city, order.shippingAddress?.state].filter(Boolean).join(', '),
     },
     closedBy: order.salesUser ? `GTM lead: ${order.salesUser.name || 'GTM'}` : 'Website',
+    supplier: supplierId,
+    bankNotice,
     files: stored,
     history: [entry(actor, 'submitted')],
   });
   auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', amount, orderId: idOf(order._id) });
-  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}. Accounts: please approve or decline.`);
+  const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
+  await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}. Accounts: please approve or decline.${warn}`);
   return shape(doc, actor);
+}
+
+const truthy = (v) => v === true || v === 'true' || v === '1' || v === 1;
+
+/**
+ * Who a supplier payment pays: a saved supplier (`supplierId` — its details are
+ * copied, the client's `payee` is ignored), or details typed for this payment,
+ * optionally saved as a new supplier (`saveSupplier`).
+ */
+async function supplierPayee(actor, input, req) {
+  if (input.supplierId) {
+    const { supplier, payee, bankNotice } = await suppliers.payeeFor(input.supplierId);
+    return { payee, supplierId: supplier._id, bankNotice };
+  }
+  const payee = cleanPayee(input.payee);
+  if (truthy(input.saveSupplier)) {
+    const saved = await suppliers.create(actor, { name: payee.name, phone: payee.phone, payment: payee }, req);
+    return { payee, supplierId: saved.id, bankNotice: null };
+  }
+  return { payee, supplierId: null, bankNotice: null };
 }
 
 // ── Decide / pay ─────────────────────────────────────────────────────────────
@@ -538,4 +537,125 @@ export async function assertNoPendingSupplierPayment(orderId, itemIds) {
   if (pending) {
     throw fail(`Supplier payment ${pending.number} is ${STATUS_LABELS[pending.status].toLowerCase()} — ship once it is paid.`, 409);
   }
+}
+
+// ── Pay a supplier in one transfer ───────────────────────────────────────────
+
+/** How many open supplier payments the grouped view reads — far above a real queue. */
+export const TO_PAY_CAP = 500;
+export const MAX_BATCH = 50;
+const TO_PAY = ['approved', 'on_hold'];
+
+/** An opaque id for a pay destination: the key itself holds the account number. */
+const groupIdOf = (payee) => crypto.createHash('sha256').update(payKeyOf(payee)).digest('hex').slice(0, 16);
+
+const destinationLabel = (p = {}) => (p.method === 'upi' ? `UPI ${p.upiId}` : `${p.bankName || 'Bank'} ${maskAccount(p.accountNumber)} · ${p.ifsc}`);
+
+/**
+ * Approved supplier payments, one row per place the money goes (same bank account
+ * or UPI ID): how many, and the total. Admin and accounts.
+ */
+export async function supplierPayGroups(actor) {
+  if (!seesAll(actor)) throw fail('Not authorized.', 403);
+  const rows = await paymentRequestRepository.findSupplierToPay(TO_PAY_CAP);
+  const groups = new Map();
+  for (const r of rows) {
+    const id = groupIdOf(r.payee);
+    const g = groups.get(id) || {
+      id, name: r.payee.name, method: r.payee.method, destination: destinationLabel(r.payee),
+      count: 0, total: 0, onHold: 0, bankNotice: false, oldestAt: r.createdAt,
+    };
+    g.name = r.payee.name; // newest name wins (rows are oldest first)
+    g.count += 1;
+    g.total = round2(g.total + r.amount);
+    if (r.status === 'on_hold') g.onHold += 1;
+    if (r.bankNotice?.at) g.bankNotice = true;
+    groups.set(id, g);
+  }
+  return {
+    groups: [...groups.values()].sort((a, b) => new Date(a.oldestAt) - new Date(b.oldestAt)),
+    truncated: rows.length >= TO_PAY_CAP,
+  };
+}
+
+/** One destination's approved supplier payments, oldest first. */
+export async function supplierPayGroup(actor, groupId) {
+  if (!seesAll(actor)) throw fail('Not authorized.', 403);
+  const rows = (await paymentRequestRepository.findSupplierToPay(TO_PAY_CAP)).filter((r) => groupIdOf(r.payee) === String(groupId));
+  if (!rows.length) throw fail('Nothing left to pay for this supplier.', 404);
+  return {
+    id: String(groupId),
+    name: rows[rows.length - 1].payee.name,
+    destination: destinationLabel(rows[0].payee),
+    total: round2(rows.reduce((n, r) => n + r.amount, 0)),
+    requests: rows.map((r) => shape(r, actor)),
+  };
+}
+
+/**
+ * The admin records ONE transfer that paid several approved supplier requests to
+ * the same account. All of them become paid together, or none does: they are
+ * moved in one transaction, each by the same compare-and-set as a single payment.
+ * `expectedTotal` is the total the admin saw and sent; if the requests no longer
+ * add up to it (one was held or paid meanwhile), nothing changes.
+ * Unticked requests are untouched and stay in the queue.
+ */
+export async function payBatch(actor, { ids, expectedTotal, method, reference, note } = {}, proofFiles = [], req) {
+  if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
+  let list = ids;
+  if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = [list]; } }
+  const wanted = [...new Set((Array.isArray(list) ? list : []).map(String))];
+  if (!wanted.length) throw fail('Tick the payments you are paying.', 400);
+  if (wanted.length > MAX_BATCH) throw fail(`Pay at most ${MAX_BATCH} at a time.`, 400);
+  if (wanted.some((id) => !/^[a-f0-9]{24}$/i.test(id))) throw fail('Request not found.', 404);
+  const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
+  if (!how) throw fail('Choose how it was paid.', 400);
+  const ref = String(reference || '').trim();
+  if (ref.length < 4) throw fail('Enter the payment reference (Razorpay payout ID or bank UTR).', 400);
+
+  const rows = await paymentRequestRepository.findByIds(wanted);
+  if (rows.length !== wanted.length) throw fail('Request not found.', 404);
+  const notReady = rows.filter((r) => r.kind !== 'supplier' || !TO_PAY.includes(r.status));
+  if (notReady.length) {
+    throw fail(`${notReady.map((r) => r.number).join(', ')} ${notReady.length === 1 ? 'is' : 'are'} not waiting to be paid — refresh the list.`, 409);
+  }
+  if (new Set(rows.map((r) => payKeyOf(r.payee))).size !== 1) {
+    throw fail('These payments go to different accounts — pay one supplier at a time.', 400);
+  }
+  const total = round2(rows.reduce((n, r) => n + r.amount, 0));
+  if (round2(expectedTotal) !== total) {
+    throw fail(`The total is now ${inr(total)}, not ${inr(round2(expectedTotal) || 0)} — refresh and check before paying.`, 409);
+  }
+
+  const uploads = (Array.isArray(proofFiles) ? proofFiles : [proofFiles]).filter(Boolean);
+  const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor) : [];
+  const batch = `PB-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
+  const now = new Date();
+  const payment = { method: how, reference: ref.slice(0, 120), paidAt: now, paidBy: actor._id, paidByName: actor.name || '', batch };
+  const together = `one transfer for ${rows.length} payment${rows.length === 1 ? '' : 's'}, ${inr(total)}`;
+  const log = entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`, together, note].filter(Boolean).join(' — '));
+
+  let paid;
+  try {
+    paid = await paymentRequestRepository.inTransaction(async (session) => {
+      const out = [];
+      for (const r of rows) {
+        const next = await paymentRequestRepository.transitionInSession(r._id, TO_PAY, { kind: 'supplier' },
+          { status: 'paid', payment }, log, proof.length ? { files: { $each: proof } } : {}, session);
+        if (!next) throw fail(MOVED, 409); // aborts: none of them is marked paid
+        out.push(next);
+      }
+      return out;
+    });
+  } catch (err) {
+    // Nothing was recorded, so the screenshot belongs to no payment.
+    await Promise.all(proof.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+    throw err;
+  }
+
+  for (const r of paid) {
+    auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', idOf(r._id), { change: 'paid', method: how, reference: ref, batch });
+    await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()} ref ${ref} (${together}). Procurement: get the shipping details from the supplier and upload them.`, { mentionRequester: true });
+  }
+  return { batch, total, count: paid.length, requests: paid.map((r) => shape(r, actor)) };
 }

@@ -84,6 +84,7 @@ import adminStatsRoutes from './adminStats.js';
 import adminTeamActivityRoutes from './adminTeamActivity.js';
 import adminOverviewRoutes from './adminOverview.js';
 import paymentRequestRoutes from './paymentRequests.js';
+import supplierRoutes from './suppliers.js';
 import notificationRoutes from './notifications.js';
 
 const apiRouter = express.Router();
@@ -201,6 +202,7 @@ apiRouter.use('/admin/redis', redisMonitorRoutes);
 apiRouter.use('/admin/team-activity', adminTeamActivityRoutes);
 apiRouter.use('/admin/overview', adminOverviewRoutes);
 apiRouter.use('/payment-requests', paymentRequestRoutes);
+apiRouter.use('/suppliers', supplierRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/admin', adminStatsRoutes);
 

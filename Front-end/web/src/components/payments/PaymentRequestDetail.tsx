@@ -88,6 +88,11 @@ export default function PaymentRequestDetail({ id, onClose }: { id: string; onCl
               <p className="text-sm text-gray-600">to {r.payee.name}</p>
             </div>
 
+            {r.bankNotice && r.status !== 'paid' && (
+              <p role="status" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                ⚠️ This supplier&apos;s bank details were changed on {formatDateTimeIST(r.bankNotice.at)} by {r.bankNotice.byName || 'someone'}. Confirm them with the supplier by phone before paying.
+              </p>
+            )}
             <dl>
               <Row k="Raised by" v={`${r.requestedBy} · ${formatDateTimeIST(r.createdAt)}`} />
               <Row k="Order" v={r.order?.number} />
