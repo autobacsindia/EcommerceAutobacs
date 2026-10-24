@@ -40,7 +40,7 @@ jobs:
   # so the full suite runs rather than skipping the gate.
   changes:
     name: Detect changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       run: ${{ steps.detect.outputs.run }}
@@ -79,7 +79,7 @@ jobs:
   lint:
     name: Lint
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
@@ -109,7 +109,7 @@ jobs:
   test:
     name: Unit Tests
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
@@ -152,7 +152,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     needs: [changes, lint, test]
     # Always run (unless the run was cancelled) so the required "Build" context
