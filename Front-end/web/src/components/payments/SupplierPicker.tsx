@@ -1,28 +1,53 @@
 'use client';
 
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Loader2, Search } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { listSuppliers, supplierKeys, type Supplier } from './suppliers';
-
-const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
 export const payLine = (s: Supplier) => (s.payment.method === 'upi'
   ? `UPI · ${s.payment.upiId}`
   : `${s.payment.bankName || 'Bank'} · ${s.payment.accountName} · A/c ${s.payment.accountNumber || s.payment.accountMasked} · ${s.payment.ifsc}`);
 
 /**
- * Pick a saved supplier for a payment. Only the id is sent — the server copies
+ * Saved suppliers whose name starts with what is being typed, shown right under
+ * the name box (so typing the name IS the search). Empty until something is
+ * typed; hidden once the typed text exactly matches the only result. Silent on
+ * error — the box still works as plain text.
+ */
+export function SupplierSuggestions({ query, onPick, label = 'Saved suppliers' }: {
+  query: string;
+  onPick: (s: Supplier) => void;
+  label?: string;
+}) {
+  const q = query.trim();
+  const results = useQuery({
+    queryKey: supplierKeys.list(q.toLowerCase(), 'active'),
+    queryFn: () => listSuppliers(q, 'active'),
+    enabled: q.length >= 1,
+    staleTime: 30_000,
+  });
+  const rows = (results.data?.suppliers ?? []).slice(0, 8);
+  if (!q || !rows.length) return null;
+  if (rows.length === 1 && rows[0].name.toLowerCase() === q.toLowerCase()) return null;
+  return (
+    <ul role="listbox" aria-label={label} className="mt-1 max-h-56 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-blue-200 bg-white shadow-sm">
+      {rows.map((s) => (
+        <li key={s.id}>
+          <button type="button" role="option" aria-selected={false} onClick={() => onPick(s)} className="w-full px-3 py-2 text-left text-sm hover:bg-blue-50">
+            <span className="font-medium text-gray-900">{s.name}</span>
+            <span className="block text-xs text-gray-500">{payLine(s)}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The saved supplier picked for a payment. Only the id is sent — the server copies
  * the supplier's bank details itself, so what shows here is for checking only.
  */
 export default function SupplierPicker({ picked, onPick }: { picked: Supplier | null; onPick: (s: Supplier | null) => void }) {
-  const [q, setQ] = useState('');
-  const results = useQuery({
-    queryKey: supplierKeys.list(q.trim().toLowerCase(), 'active'),
-    queryFn: () => listSuppliers(q.trim(), 'active'),
-    enabled: !picked,
-  });
-
   if (picked) {
     const recent = picked.bankChangedAt && Date.now() - new Date(picked.bankChangedAt).getTime() < 30 * 86400000;
     return (
@@ -45,28 +70,5 @@ export default function SupplierPicker({ picked, onPick }: { picked: Supplier | 
     );
   }
 
-  const rows = results.data?.suppliers ?? [];
-  return (
-    <div className="space-y-2">
-      <label className="relative block">
-        <span className="sr-only">Search saved suppliers</span>
-        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-        <input className={`${input} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search saved suppliers by name" />
-      </label>
-      {results.isPending && <p className="flex items-center gap-2 text-xs text-gray-500"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading suppliers…</p>}
-      {results.isSuccess && rows.length === 0 && <p className="text-xs text-gray-500">No saved supplier{q ? ' with that name' : ' yet'} — type their details below.</p>}
-      {rows.length > 0 && (
-        <ul role="listbox" aria-label="Saved suppliers" className="max-h-56 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 bg-white">
-          {rows.map((s) => (
-            <li key={s.id}>
-              <button type="button" role="option" aria-selected={false} onClick={() => onPick(s)} className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">
-                <span className="font-medium text-gray-900">{s.name}</span>
-                <span className="block text-xs text-gray-500">{payLine(s)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+  return null;
 }

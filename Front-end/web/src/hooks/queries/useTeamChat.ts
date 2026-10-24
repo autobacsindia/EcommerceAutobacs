@@ -32,6 +32,8 @@ export interface ChatChannel {
   system: boolean;
   partner: ChatPerson | null;
   memberCount: number | null;
+  /** Custom group: may I add / remove members? (admin, or whoever created it) */
+  canManageMembers?: boolean;
   lastMessageSeq: number;
   lastMessageAt: string | null;
   lastReadSeq: number;

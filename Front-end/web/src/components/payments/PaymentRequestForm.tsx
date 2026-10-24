@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import { EXPENSE_CATEGORIES, errorMessage, postForm, type PaymentRequest } from './api';
 import FilePicker from './FilePicker';
-import SupplierPicker from './SupplierPicker';
+import SupplierPicker, { SupplierSuggestions } from './SupplierPicker';
 import type { Supplier } from './suppliers';
 
 /** The server takes up to five bills and one payee QR per request. */
@@ -122,12 +122,13 @@ export default function PaymentRequestForm({
         {!picked && (
           <div>
             <label className={label} htmlFor="pr-payee">{supplier ? 'Supplier' : 'Pay to'}</label>
-            <input id="pr-payee" className={input} required minLength={2} maxLength={120} value={payee.name} onChange={set('name')} placeholder={supplier ? 'Supplier name' : 'Shop / person'} />
+            <input id="pr-payee" className={input} required minLength={2} maxLength={120} value={payee.name} onChange={set('name')} placeholder={supplier ? 'Type the supplier name' : 'Shop / person'} autoComplete="off" />
+            {supplier && <SupplierSuggestions query={payee.name} onPick={setPicked} />}
           </div>
         )}
       </div>
 
-      {supplier && (
+      {supplier && picked && (
         <div>
           <span className={label}>Saved supplier</span>
           <SupplierPicker picked={picked} onPick={setPicked} />

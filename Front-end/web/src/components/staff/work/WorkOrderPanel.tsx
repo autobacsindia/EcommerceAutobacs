@@ -12,6 +12,7 @@ import { whatsappNumber } from '@/components/staff/sales/PaymentLinkCard';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import { shrinkPhoto, STAGE_TONE, type LineAction, type WorkOrder } from './types';
 import OrderSupplierPayments from '@/components/payments/OrderSupplierPayments';
+import { SupplierSuggestions } from '@/components/payments/SupplierPicker';
 import { displayEmail } from '@/lib/internalEmail';
 
 type OrderResponse = { success: boolean; order: WorkOrder };
@@ -188,7 +189,10 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
               {line.actions.length > 0 && lineButtons(line)}
               {supplierFor === line.itemId && (
                 <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); act.mutate({ path: `/lines/${line.itemId}/stock`, body: { stock: 'ordered', supplierName: supplier.trim() } }); }}>
-                  <input className={`${input} max-w-xs`} autoFocus required maxLength={120} placeholder="Supplier name" value={supplier} onChange={(e) => setSupplier(e.target.value)} aria-label="Supplier name" />
+                  <div className="w-full max-w-xs">
+                    <input className={input} autoFocus required maxLength={120} placeholder="Type the supplier name" value={supplier} onChange={(e) => setSupplier(e.target.value)} aria-label="Supplier name" autoComplete="off" />
+                    <SupplierSuggestions query={supplier} onPick={(s) => setSupplier(s.name)} />
+                  </div>
                   <button type="submit" disabled={busy || !supplier.trim()} className={primary}>Save</button>
                   <button type="button" className={secondary} onClick={() => setSupplierFor(null)}>Cancel</button>
                 </form>

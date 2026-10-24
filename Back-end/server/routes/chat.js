@@ -20,6 +20,10 @@ import {
 import {
   listChannels,
   listFiles,
+  readChatFile,
+  listSpaceMembers,
+  addSpaceMembers,
+  removeSpaceMember,
   listMessages,
   getThread,
   searchMessages,
@@ -134,6 +138,18 @@ router.post('/channels', validateCreateSpace, validateRequest, asyncHandler(asyn
   res.status(201).json({ success: true, channel });
 }));
 
+// Custom groups: GET members (anyone in it), POST { userIds } to add, DELETE /:userId to remove
+// (the admin, or the person who created the group).
+router.get('/channels/:id/members', validateChannelIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listSpaceMembers(req.user, req.params.id)) });
+}));
+router.post('/channels/:id/members', validateChannelIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await addSpaceMembers(req.user, req.params.id, req.body?.userIds)) });
+}));
+router.delete('/channels/:id/members/:userId', validateChannelIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await removeSpaceMember(req.user, req.params.id, req.params.userId)) });
+}));
+
 // POST /chat/dm { userId } — open (or reuse) a direct message
 router.post('/dm', validateOpenDm, validateRequest, asyncHandler(async (req, res) => {
   const channel = await openDirectMessage(req.user, req.body.userId);
@@ -205,6 +221,20 @@ router.get('/channels/:id/files', validateChannelIdParam, validateFilePage, vali
   asyncHandler(async (req, res) => {
     res.json({ success: true, ...(await listFiles(req.user, req.params.id, req.query)) });
   }));
+
+// GET /chat/channels/:id/files/:name — a shared file's bytes, for people in the channel
+router.get('/channels/:id/files/:name', validateChannelIdParam, validateRequest, asyncHandler(async (req, res) => {
+  const { buffer, mime, inline } = await readChatFile(req.user, req.params.id, req.params.name);
+  res.set({
+    'Content-Type': mime,
+    'Content-Length': buffer.length,
+    'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${String(req.params.name).replace(/^\d+-[a-z0-9]+-/, '').replace(/[^\w.-]+/g, '_')}"`,
+    'X-Content-Type-Options': 'nosniff',
+    // The bytes never change; private so no shared cache keeps them.
+    'Cache-Control': 'private, max-age=86400',
+  });
+  res.send(buffer);
+}));
 
 // GET /chat/orders/recent?q= — the order picker (recent orders, bounded)
 router.get('/orders/recent', validateOrderPick, validateRequest, asyncHandler(async (req, res) => {

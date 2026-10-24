@@ -19,7 +19,8 @@ import userRepository from '../repositories/userRepository.js';
 import { STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import { publishChatEvent } from './chatEvents.js';
 import { onlineAmong } from './chatPresence.js';
-import { uploadChatAttachments, MAX_ATTACHMENTS_PER_MESSAGE } from './chatAttachmentService.js';
+import { uploadChatAttachments, MAX_ATTACHMENTS_PER_MESSAGE, CHAT_FILE_NAME, chatFolder, chatFileType } from './chatAttachmentService.js';
+import { readPrivateAsset } from './storage/privateUploads.js';
 import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 import { orderNumber } from './invoiceService.js';
@@ -322,6 +323,8 @@ export async function listChannels(user) {
         system: !!c.system,
         partner: c.kind === 'dm' ? personOf(partner) : null,
         memberCount: c.audience === 'members' ? c.members.length : null,
+        // Custom group: may this person add / remove members? (the admin, or whoever created it)
+        canManageMembers: c.kind === 'space' && c.audience === 'members' && mayManageMembers(user, c),
         lastMessageSeq: c.lastMessageSeq,
         lastMessageAt: c.lastMessageAt,
         lastReadSeq: lastRead,
@@ -343,6 +346,23 @@ async function loadAccessible(user, channelId) {
   // 404 for "exists but not yours" too — never confirm a private channel exists.
   if (!channel || !canAccess(user, channel)) throw fail('Channel not found', 404);
   return channel;
+}
+
+/**
+ * The bytes of a file shared in a channel (private storage). Same rule as
+ * reading the messages: 404 unless the reader may see the channel.
+ */
+export async function readChatFile(user, channelId, name) {
+  const channel = await loadAccessible(user, channelId);
+  const type = CHAT_FILE_NAME.test(String(name)) ? chatFileType(name) : null;
+  if (!type) throw fail('File not found', 404);
+  let buffer;
+  try {
+    buffer = await readPrivateAsset({ publicId: `${chatFolder(idOf(channel))}/${name}`, provider: 'r2' });
+  } catch {
+    throw fail('File not found', 404);
+  }
+  return { buffer, mime: type.mime, inline: type.kind === 'image' || type.mime === 'application/pdf' };
 }
 
 /**
@@ -917,6 +937,54 @@ export async function deleteMessage(user, messageId) {
     ...(thread ? { thread } : {}),
   });
   return { deleted: true, messageId: idOf(updated), thread };
+}
+
+/** The admin, or the person who created the group, manages a custom group's members. */
+export const mayManageMembers = (user, channel) => isAdmin(user) || (!!channel.createdBy && idOf(channel.createdBy) === idOf(user));
+
+async function loadManageable(user, channelId) {
+  const channel = await loadAccessible(user, channelId);
+  if (channel.kind !== 'space' || channel.audience !== 'members') {
+    throw fail('Members are set automatically for this space (by team) — only custom groups have a member list', 400);
+  }
+  if (!mayManageMembers(user, channel)) throw fail('Only an admin or the person who created this group can change its members', 403);
+  return channel;
+}
+
+const memberList = async (channel) => (await userRepository.findDisplayByIds((channel.members || []).map(idOf))).map(personOf);
+
+/** The members of a custom group, for its member panel. Anyone in the group may look. */
+export async function listSpaceMembers(user, channelId) {
+  const channel = await loadAccessible(user, channelId);
+  if (channel.kind !== 'space' || channel.audience !== 'members') throw fail('This space has no member list', 400);
+  return { members: await memberList(channel), canManage: mayManageMembers(user, channel), createdBy: idOf(channel.createdBy) || null };
+}
+
+/** Add people to a custom group. Only active staff and admins can be added. */
+export async function addSpaceMembers(user, channelId, userIds) {
+  const channel = await loadManageable(user, channelId);
+  const requested = [...new Set((Array.isArray(userIds) ? userIds : []).map(String).filter((id) => mongoose.isValidObjectId(id)))];
+  if (!requested.length) throw fail('Choose who to add', 400);
+  const valid = await userRepository.findChatUsersByIds(requested);
+  if (!valid.length) throw fail('Those people cannot use team chat', 400);
+  const updated = await chatRepository.addMembers(channel._id, valid.map((u) => u._id));
+  if (!updated) throw fail('Channel not found', 404);
+  // The new members' channel lists refresh; the stream reaches them by membership.
+  await publishChatEvent({ type: 'channel', channelId: idOf(updated), route: audienceOf(updated) });
+  return { members: await memberList(updated), added: valid.length };
+}
+
+/** Remove someone from a custom group. The group's creator stays (it would be left with no manager). */
+export async function removeSpaceMember(user, channelId, memberId) {
+  const channel = await loadManageable(user, channelId);
+  if (!mongoose.isValidObjectId(memberId)) throw fail('Person not found', 404);
+  if (channel.createdBy && idOf(channel.createdBy) === String(memberId)) throw fail('The person who created the group cannot be removed', 400);
+  const before = audienceOf(channel);
+  const updated = await chatRepository.removeMember(channel._id, memberId);
+  if (!updated) throw fail('Channel not found', 404);
+  // Tell the removed person's list too (route computed before the removal).
+  await publishChatEvent({ type: 'channel', channelId: idOf(updated), route: before });
+  return { members: await memberList(updated) };
 }
 
 /** New custom space. Admins and team heads only; the creator is always a member. */

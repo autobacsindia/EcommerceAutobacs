@@ -50,6 +50,8 @@ export const chatKeys = {
   /** `/chat/channels/:id/messages` — infinite, newest page first. */
   messages: (channelId: string) => [...chatKeys.all, 'messages', channelId] as const,
   people: () => [...chatKeys.all, 'people'] as const,
+  /** `/chat/channels/:id/members` — a custom group's member list. */
+  members: (channelId: string) => [...chatKeys.all, 'members', channelId] as const,
   /** `/chat/channels/:id/files` — everything shared in one channel. */
   files: (channelId: string) => [...chatKeys.all, 'files', channelId] as const,
   /** `/chat/messages/:id/thread` — one thread: its root and replies. */

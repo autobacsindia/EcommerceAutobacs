@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { chatKeys } from '@/hooks/queries/keys';
 import { upsertReply, useDeleteMessage, useEditMessage, useSendMessage, useThread } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, SendVars, ThreadData } from '@/hooks/queries/useTeamChat';
+import { useResendStore } from './resend';
 import Composer, { mentionableTeams } from './Composer';
 import MessageItem from './MessageItem';
 
@@ -59,7 +60,11 @@ export default function ThreadPanel({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const resend = useResendStore();
+  const retry = (msg: ChatMessage) => doSend(resend.varsFor(msg));
+
   const doSend = (vars: SendVars) => {
+    resend.remember(vars);
     const optimistic: ChatMessage = {
       id: `pending-${vars.clientId}`,
       channelId: channel.id,
@@ -83,6 +88,7 @@ export default function ThreadPanel({
     const key = chatKeys.thread(rootId);
     qc.setQueryData<ThreadData>(key, (d) => upsertReply(d, optimistic));
     send.mutate({ ...vars, threadRoot: rootId }, {
+      onSuccess: () => resend.forget(vars.clientId),
       onError: () => qc.setQueryData<ThreadData>(key, (d) => upsertReply(d, { ...optimistic, pending: false, failed: true })),
     });
   };
@@ -96,7 +102,7 @@ export default function ThreadPanel({
       meName={meName}
       peopleById={peopleById}
       orderHref={orderHref}
-      onRetry={(msg) => doSend({ text: msg.text, clientId: msg.clientId ?? '', mentions: msg.mentions, quoteId: msg.quote?.id })}
+      onRetry={retry}
       onQuote={setQuote}
       onJumpTo={(id) => document.getElementById(`chat-msg-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
       onEdit={(msg, text) => edit.mutateAsync({ id: msg.id, text })}
