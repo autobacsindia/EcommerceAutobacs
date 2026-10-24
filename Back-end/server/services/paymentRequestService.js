@@ -96,6 +96,22 @@ const mayPay = (u) => isAdmin(u);
 */
 const mayHold = (u) => mayDecide(u) || mayPay(u);
 
+/*
+  Editing. The person who raised a request may correct it for EDIT_WINDOW_HOURS,
+  while it still waits for accounts (an approved amount is not changed under
+  accounts' feet). The admin may edit anything not yet finished; if that changes
+  the money (amount or who is paid) on an approved / held request, it goes back
+  to accounts to approve again. Paid, declined and cancelled requests are
+  financial records and are never edited.
+*/
+export const EDIT_WINDOW_HOURS = 24;
+const EDITABLE = Object.freeze(['submitted', 'approved', 'on_hold']);
+const editDeadline = (r) => new Date(new Date(r.createdAt).getTime() + EDIT_WINDOW_HOURS * 3600 * 1000);
+const mayEdit = (u, r, now = Date.now()) => EDITABLE.includes(r.status) && (
+  isAdmin(u)
+  || (r.status === 'submitted' && idOf(r.requestedBy) === idOf(u?._id) && now < editDeadline(r).getTime())
+);
+
 /** May `user` see this request? */
 const canSee = (user, req) => seesAll(user) || (isActiveStaff(user) && user.staff.team === req.team);
 
@@ -163,6 +179,13 @@ const filesFrom = (uploaded = {}) => {
   return { files: out.map(([, f]) => f), kinds: out.map(([k]) => k) };
 };
 
+/** A UPI payee needs their UPI ID or a payment QR — one way or the other to pay them. */
+function requireUpiOrQr(payee, kinds) {
+  if (payee.method === 'upi' && !payee.upiId && !kinds.includes('qr')) {
+    throw fail('Enter their UPI ID, or attach their payment QR.', 400);
+  }
+}
+
 const nextNumber = async () => `PR-${String(await counterRepository.next('payment_request')).padStart(4, '0')}`;
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
@@ -204,7 +227,10 @@ const what = (r) => (r.kind === 'supplier'
 
 /** What the panel shows, and what this person may do with it now. */
 export function shape(r, viewer) {
-  const full = seesAll(viewer) || idOf(r.requestedBy) === idOf(viewer?._id);
+  // Procurement as a team sees its suppliers' bank details anyway (the directory),
+  // and needs them to raise the next payment to the same supplier.
+  const full = seesAll(viewer) || idOf(r.requestedBy) === idOf(viewer?._id)
+    || (r.kind === 'supplier' && onTeam(viewer, STAFF_TEAMS.PROCUREMENT));
   const isHeadOfTeam = isActiveStaff(viewer) && viewer.staff.isHead && viewer.staff.team === r.team;
   return {
     id: idOf(r._id),
@@ -243,7 +269,10 @@ export function shape(r, viewer) {
       pay: mayPay(viewer) && ['submitted', 'approved', 'on_hold'].includes(r.status),
       hold: mayHold(viewer) && r.status === 'approved',
       cancel: r.status === 'submitted' && (idOf(r.requestedBy) === idOf(viewer?._id) || isHeadOfTeam || isAdmin(viewer)),
+      edit: mayEdit(viewer, r),
     },
+    // For the requester: until when they may still edit (admins have no limit).
+    editableUntil: !isAdmin(viewer) && mayEdit(viewer, r) ? editDeadline(r) : null,
   };
 }
 
@@ -264,6 +293,7 @@ export async function createExpense(actor, input, uploaded, req) {
   const payee = cleanPayee(input.payee);
 
   const { files, kinds } = filesFrom(uploaded);
+  requireUpiOrQr(payee, kinds);
   const stored = await storeFiles(files, kinds, actor);
   const doc = await paymentRequestRepository.create({
     number: await nextNumber(),
@@ -296,8 +326,11 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const wanted = [...new Set((Array.isArray(input.itemIds) ? input.itemIds : [input.itemIds]).filter(Boolean).map(String))];
   if (!wanted.length) throw fail('Choose the item(s) this payment is for.', 400);
   const payable = new Set(view.lines.filter((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER).map((l) => l.itemId));
-  if (wanted.some((id) => !payable.has(id))) {
-    throw fail('A supplier can only be paid for items marked in stock or ordered from the supplier, and not yet shipped.', 409);
+  // An item still at its stock check can be paid for too: raising the payment IS
+  // "ordered from this supplier" (recorded below, once everything else checks out).
+  const atCheck = new Set(view.lines.filter((l) => l.stage === STAGE.STOCK_CHECK).map((l) => l.itemId));
+  if (wanted.some((id) => !payable.has(id) && !atCheck.has(id))) {
+    throw fail('A supplier can only be paid for items not yet shipped (and not out of stock or being refunded).', 409);
   }
   const open = await paymentRequestRepository.findOpenForOrder(order._id);
   const busy = open.find((r) => (r.itemIds || []).some((id) => wanted.includes(idOf(id))));
@@ -307,6 +340,18 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const { payee, supplierId, bankNotice } = await supplierPayee(actor, input, req);
   const description = String(input.description || '').trim().slice(0, 2000);
   const { files, kinds } = filesFrom(uploaded);
+  requireUpiOrQr(payee, kinds);
+
+  // Items at their stock check: record "ordered from <supplier>" first, through
+  // the workflow's own step (its checks, history and chat update). If the payment
+  // below then fails, the item simply shows as ordered and can be paid again.
+  const toOrder = wanted.filter((id) => atCheck.has(id));
+  if (toOrder.length) {
+    const wf = await import('./teamWorkflowService.js'); // lazy: that module imports this one
+    for (const itemId of toOrder) {
+      await wf.setStock(actor, idOf(order._id), itemId, { stock: 'ordered', supplierName: payee.name }, req);
+    }
+  }
   const stored = await storeFiles(files, kinds, actor);
 
   const items = (order.items || []).filter((i) => wanted.includes(idOf(i._id)));
@@ -416,8 +461,8 @@ export async function markPaid(actor, id, { method, reference, note } = {}, proo
   if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
   const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
   if (!how) throw fail('Choose how it was paid.', 400);
+  // Optional: not every payment has one to hand (cash, some UPI apps).
   const ref = String(reference || '').trim();
-  if (ref.length < 4) throw fail('Enter the payment reference (Razorpay payout ID or bank UTR).', 400);
   const r0 = await loadVisible(actor, id);
   // The admin paying a request still waiting for approval approves it in the same step.
   const from = ['submitted', 'approved', 'on_hold'];
@@ -428,7 +473,7 @@ export async function markPaid(actor, id, { method, reference, note } = {}, proo
     ...(r0.status === 'submitted' ? { approvedBy: actor._id, approvedAt: now } : {}),
     status: 'paid',
     payment: { method: how, reference: ref.slice(0, 120), paidAt: now, paidBy: actor._id, paidByName: actor.name || '' },
-  }, entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`, note].filter(Boolean).join(' — ')), proof.length ? { files: { $each: proof } } : {});
+  }, entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`.trim(), note].filter(Boolean).join(' — ')), proof.length ? { files: { $each: proof } } : {});
   if (!r) {
     // Lost the race: the screenshot belongs to no payment.
     await Promise.all(proof.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
@@ -436,7 +481,7 @@ export async function markPaid(actor, id, { method, reference, note } = {}, proo
   }
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'paid', method: how, reference: ref });
   const next = r.kind === 'supplier' ? ' Procurement: get the shipping details from the supplier and upload them.' : '';
-  await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()} ref ${ref}.${next}`, { mentionRequester: true });
+  await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()}${ref ? ` ref ${ref}` : ''}.${next}`, { mentionRequester: true });
   return shape(r, actor);
 }
 
@@ -451,6 +496,60 @@ export async function cancel(actor, id, { note } = {}, req) {
   if (!r) throw fail('Only a request still waiting for approval can be cancelled.', 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'cancelled' });
   await tellChat(r, 'cancelled', `↩️ ${r.requestedByName} cancelled ${what(r)}.`);
+  return shape(r, actor);
+}
+
+/**
+ * Correct a request: amount, details, who is paid (a saved supplier or typed
+ * details) and, for an expense, what it was for. Items and files stay as they
+ * are. Compare-and-set on the version read, so two edits at once cannot both land.
+ */
+export async function update(actor, id, input = {}, req) {
+  const r0 = await loadVisible(actor, id);
+  if (!mayEdit(actor, r0)) {
+    throw fail(!EDITABLE.includes(r0.status)
+      ? 'A paid, declined or cancelled request cannot be edited.'
+      : `You can edit a request you raised for ${EDIT_WINDOW_HOURS} hours, until accounts approves it. Ask an admin to change it now.`, 403);
+  }
+  const amount = input.amount != null && input.amount !== '' ? cleanAmount(input.amount) : r0.amount;
+  const description = input.description != null ? String(input.description).trim().slice(0, 2000) : r0.description || '';
+  let { category } = r0;
+  if (r0.kind === 'expense' && input.category != null) {
+    category = String(input.category);
+    if (!EXPENSE_CATEGORIES.includes(category)) throw fail('Choose what the expense is for.', 400);
+  }
+
+  let payee = r0.payee;
+  let supplier = r0.supplier ?? null;
+  let bankNotice = r0.bankNotice ?? null;
+  if (r0.kind === 'supplier' && input.supplierId) {
+    const picked = await suppliers.payeeFor(input.supplierId);
+    ({ payee, bankNotice } = picked);
+    supplier = picked.supplier._id;
+  } else if (input.payee) {
+    payee = cleanPayee(input.payee);
+    if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) { supplier = null; bankNotice = null; }
+  }
+  requireUpiOrQr(payee, (r0.files || []).map((f) => f.kind));
+
+  const changes = [];
+  if (amount !== r0.amount) changes.push(`amount ${inr(r0.amount)} → ${inr(amount)}`);
+  if (payee.name !== r0.payee.name) changes.push(`payee ${r0.payee.name} → ${payee.name}`);
+  if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) changes.push('payment details');
+  if (description !== (r0.description || '')) changes.push('details');
+  if (category !== r0.category) changes.push(`for ${category}`);
+  if (!changes.length) return shape(r0, actor);
+
+  const moneyChanged = amount !== r0.amount || payee.name !== r0.payee.name || payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x');
+  const backToAccounts = r0.status !== 'submitted' && moneyChanged;
+  const note = changes.join(', ') + (backToAccounts ? ' — back to accounts to approve again' : '');
+  const r = await paymentRequestRepository.transitionInSession(id, [r0.status], { updatedAt: r0.updatedAt }, {
+    amount, description, category, payee, supplier, bankNotice,
+    ...(backToAccounts ? { status: 'submitted', approvedBy: null, approvedAt: null, decisionNote: '' } : {}),
+  }, entry(actor, 'edited', note), {}, undefined);
+  if (!r) throw fail(MOVED, 409);
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'edited', fields: changes, backToAccounts });
+  await tellChat(r, 'edited', `✏️ ${actor.name || 'Someone'} edited ${what(r)}: ${note}.`, { mentionAdmins: false, mentionRequester: idOf(r.requestedBy) !== idOf(actor._id) });
   return shape(r, actor);
 }
 
@@ -547,9 +646,9 @@ export const MAX_BATCH = 50;
 const TO_PAY = ['approved', 'on_hold'];
 
 /** An opaque id for a pay destination: the key itself holds the account number. */
-const groupIdOf = (payee) => crypto.createHash('sha256').update(payKeyOf(payee)).digest('hex').slice(0, 16);
+const groupIdOf = (r) => crypto.createHash('sha256').update(payKeyOf(r.payee, idOf(r._id))).digest('hex').slice(0, 16);
 
-const destinationLabel = (p = {}) => (p.method === 'upi' ? `UPI ${p.upiId}` : `${p.bankName || 'Bank'} ${maskAccount(p.accountNumber)} · ${p.ifsc}`);
+const destinationLabel = (p = {}) => (p.method === 'upi' ? (p.upiId ? `UPI ${p.upiId}` : 'UPI by QR (see the request)') : `${p.bankName || 'Bank'} ${maskAccount(p.accountNumber)} · ${p.ifsc}`);
 
 /**
  * Approved supplier payments, one row per place the money goes (same bank account
@@ -560,7 +659,7 @@ export async function supplierPayGroups(actor) {
   const rows = await paymentRequestRepository.findSupplierToPay(TO_PAY_CAP);
   const groups = new Map();
   for (const r of rows) {
-    const id = groupIdOf(r.payee);
+    const id = groupIdOf(r);
     const g = groups.get(id) || {
       id, name: r.payee.name, method: r.payee.method, destination: destinationLabel(r.payee),
       count: 0, total: 0, onHold: 0, bankNotice: false, oldestAt: r.createdAt,
@@ -581,7 +680,7 @@ export async function supplierPayGroups(actor) {
 /** One destination's approved supplier payments, oldest first. */
 export async function supplierPayGroup(actor, groupId) {
   if (!seesAll(actor)) throw fail('Not authorized.', 403);
-  const rows = (await paymentRequestRepository.findSupplierToPay(TO_PAY_CAP)).filter((r) => groupIdOf(r.payee) === String(groupId));
+  const rows = (await paymentRequestRepository.findSupplierToPay(TO_PAY_CAP)).filter((r) => groupIdOf(r) === String(groupId));
   if (!rows.length) throw fail('Nothing left to pay for this supplier.', 404);
   return {
     id: String(groupId),
@@ -610,8 +709,7 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   if (wanted.some((id) => !/^[a-f0-9]{24}$/i.test(id))) throw fail('Request not found.', 404);
   const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
   if (!how) throw fail('Choose how it was paid.', 400);
-  const ref = String(reference || '').trim();
-  if (ref.length < 4) throw fail('Enter the payment reference (Razorpay payout ID or bank UTR).', 400);
+  const ref = String(reference || '').trim(); // optional, as for a single payment
 
   const rows = await paymentRequestRepository.findByIds(wanted);
   if (rows.length !== wanted.length) throw fail('Request not found.', 404);
@@ -619,7 +717,7 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   if (notReady.length) {
     throw fail(`${notReady.map((r) => r.number).join(', ')} ${notReady.length === 1 ? 'is' : 'are'} not waiting to be paid — refresh the list.`, 409);
   }
-  if (new Set(rows.map((r) => payKeyOf(r.payee))).size !== 1) {
+  if (new Set(rows.map((r) => payKeyOf(r.payee, idOf(r._id)))).size !== 1) {
     throw fail('These payments go to different accounts — pay one supplier at a time.', 400);
   }
   const total = round2(rows.reduce((n, r) => n + r.amount, 0));
@@ -633,7 +731,7 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   const now = new Date();
   const payment = { method: how, reference: ref.slice(0, 120), paidAt: now, paidBy: actor._id, paidByName: actor.name || '', batch };
   const together = `one transfer for ${rows.length} payment${rows.length === 1 ? '' : 's'}, ${inr(total)}`;
-  const log = entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`, together, note].filter(Boolean).join(' — '));
+  const log = entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`.trim(), together, note].filter(Boolean).join(' — '));
 
   let paid;
   try {
@@ -655,7 +753,7 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
 
   for (const r of paid) {
     auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', idOf(r._id), { change: 'paid', method: how, reference: ref, batch });
-    await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()} ref ${ref} (${together}). Procurement: get the shipping details from the supplier and upload them.`, { mentionRequester: true });
+    await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()}${ref ? ` ref ${ref}` : ''} (${together}). Procurement: get the shipping details from the supplier and upload them.`, { mentionRequester: true });
   }
   return { batch, total, count: paid.length, requests: paid.map((r) => shape(r, actor)) };
 }

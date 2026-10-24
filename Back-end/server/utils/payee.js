@@ -18,8 +18,10 @@ export function cleanPayee(p = {}) {
   if (!method) throw fail('Choose UPI or bank transfer.', 400);
   const payee = { name, method, phone: String(p.phone || '').trim().slice(0, 20) };
   if (method === 'upi') {
+    // Optional: a payment QR can stand in for it (checked where files are known —
+    // see requireUpiOrQr in services/paymentRequestService.js).
     const upiId = String(p.upiId || '').trim();
-    if (!UPI.test(upiId)) throw fail('Enter a valid UPI ID (e.g. name@okaxis).', 400);
+    if (upiId && !UPI.test(upiId)) throw fail('That UPI ID does not look right (e.g. name@okaxis) — or leave it empty and attach their QR.', 400);
     payee.upiId = upiId;
   } else {
     const accountNumber = String(p.accountNumber || '').replace(/\s+/g, '');
@@ -42,6 +44,8 @@ export const maskAccount = (n) => (n ? `${'X'.repeat(Math.max(0, String(n).lengt
  * Grouping by destination rather than by name is deliberate — a name typed two
  * ways is still one account, and two suppliers sharing a name are not.
  */
-export const payKeyOf = (payee = {}) => (payee.method === 'upi'
-  ? `upi:${String(payee.upiId || '').trim().toLowerCase()}`
+export const payKeyOf = (payee = {}, ownId = '') => (payee.method === 'upi'
+  // No UPI ID (paid by QR): nothing proves two such payees are one account, so
+  // each stays on its own (`ownId` = the request id) and is never batched.
+  ? (String(payee.upiId || '').trim() ? `upi:${String(payee.upiId).trim().toLowerCase()}` : `upi-qr:${ownId}`)
   : `bank:${String(payee.accountNumber || '').replace(/\s+/g, '')}:${String(payee.ifsc || '').trim().toUpperCase()}`);

@@ -222,7 +222,7 @@ describe('Payment requests', () => {
 
       // Approving is NOT paying: the money leaves on the admin's action alone.
       expect((await accounts.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_ABC123' })).status).toBe(403);
-      expect((await admin.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: '' })).status).toBe(400);
+      expect((await admin.session.form(`/payment-requests/${id}/pay`, { method: 'nope', reference: '' })).status).toBe(400);
       const paid = await admin.session.form(`/payment-requests/${id}/pay`, { method: 'razorpay', reference: 'pout_ABC123' },
         [{ field: 'proof', buffer: JPEG, name: 'paid.jpg', type: 'image/jpeg' }]);
       expect(paid.status).toBe(200);
@@ -402,9 +402,11 @@ describe('Payment requests', () => {
 
       // A second request for the same item while one is in flight.
       expect((await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [kit], amount: 1, payee: BANK })).status).toBe(409);
-      // An item still waiting for its stock check cannot be paid for yet.
+      // An item still at its stock check CAN be paid for: that records "ordered from" the supplier.
       const [, mat] = order.items.map((i) => String(i._id));
-      expect((await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [mat], amount: 1, payee: BANK })).status).toBe(409);
+      expect((await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [mat], amount: 1, payee: BANK })).status).toBe(201);
+      const matLine = (await Order.findById(order._id).lean()).workflow.lines.find((l) => String(l.itemId) === mat);
+      expect(matLine).toMatchObject({ stock: 'ordered', supplierName: 'ARB Supplies' });
       // Only procurement raises them.
       expect((await ops.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [kit], amount: 1, payee: BANK })).status).toBe(403);
       // A website order says so.

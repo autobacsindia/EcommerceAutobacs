@@ -101,6 +101,11 @@ router.get('/:id/files/:fileId', asyncHandler(async (req, res) => {
   res.send(buffer);
 }));
 
+// PUT /payment-requests/:id { amount?, description?, category?, payee? | supplierId? } — correct it
+router.put('/:id', asyncHandler(async (req, res) => {
+  res.json({ success: true, request: await pr.update(req.user, req.params.id, req.body, req) });
+}));
+
 router.post('/:id/approve', asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.approve(req.user, req.params.id, req.body, req) });
 }));

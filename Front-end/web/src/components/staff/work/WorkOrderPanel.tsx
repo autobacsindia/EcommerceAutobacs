@@ -11,8 +11,7 @@ import CustomerBankCard from '@/components/staff/sales/CustomerBankCard';
 import { whatsappNumber } from '@/components/staff/sales/PaymentLinkCard';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import { shrinkPhoto, STAGE_TONE, type LineAction, type WorkOrder } from './types';
-import OrderSupplierPayments from '@/components/payments/OrderSupplierPayments';
-import { SupplierSuggestions } from '@/components/payments/SupplierPicker';
+import LineSupplierPayment, { useOrderSupplierPayments } from '@/components/payments/OrderSupplierPayments';
 import { displayEmail } from '@/lib/internalEmail';
 
 type OrderResponse = { success: boolean; order: WorkOrder };
@@ -74,8 +73,7 @@ async function sharePhoto(url: string, name: string) {
 export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState('');
-  const [supplierFor, setSupplierFor] = useState<string | null>(null);
-  const [supplier, setSupplier] = useState('');
+  const supplierPayments = useOrderSupplierPayments(orderId);
   const [noteFor, setNoteFor] = useState<{ itemId: string; kind: 'reject' } | null>(null);
   const [note, setNote] = useState('');
 
@@ -98,7 +96,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const act = useMutation({
     mutationFn: ({ path, body }: { path: string; body: unknown }) =>
       apiClient.post<OrderResponse>(`/staff/work/orders/${orderId}${path}`, body),
-    onSuccess: (res) => { done(res); setSupplierFor(null); setSupplier(''); setNoteFor(null); setNote(''); },
+    onSuccess: (res) => { done(res); setNoteFor(null); setNote(''); },
     onError: (e) => setError(errorMessage(e, 'That did not work. Please try again.')),
   });
 
@@ -115,8 +113,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
       <div className="flex flex-wrap gap-2">
         {has('in_stock') && <button type="button" disabled={busy} className={secondary}
           onClick={() => act.mutate({ path: `${path}/stock`, body: { stock: 'in_stock' } })}>In stock</button>}
-        {has('ordered') && <button type="button" disabled={busy} className={secondary}
-          onClick={() => { setSupplierFor(line.itemId); setSupplier(line.supplierName || ''); }}>Ordered from supplier</button>}
+        {/* "Ordered from supplier" is now part of "Request supplier payment" on the line (LineSupplierPayment). */}
         {has('out_of_stock') && <button type="button" disabled={busy} className={danger}
           onClick={() => { if (window.confirm(`Mark "${line.name}" out of stock? The sales team will ask the customer to wait or take a refund.`)) act.mutate({ path: `${path}/stock`, body: { stock: 'out_of_stock' } }); }}>Out of stock</button>}
         {has('payment_initiated') && <button type="button" disabled={busy} className={primary}
@@ -187,16 +184,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                 {line.stage && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STAGE_TONE[line.stage]}`}>{line.stageLabel}</span>}
               </div>
               {line.actions.length > 0 && lineButtons(line)}
-              {supplierFor === line.itemId && (
-                <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); act.mutate({ path: `/lines/${line.itemId}/stock`, body: { stock: 'ordered', supplierName: supplier.trim() } }); }}>
-                  <div className="w-full max-w-xs">
-                    <input className={input} autoFocus required maxLength={120} placeholder="Type the supplier name" value={supplier} onChange={(e) => setSupplier(e.target.value)} aria-label="Supplier name" autoComplete="off" />
-                    <SupplierSuggestions query={supplier} onPick={(s) => setSupplier(s.name)} />
-                  </div>
-                  <button type="submit" disabled={busy || !supplier.trim()} className={primary}>Save</button>
-                  <button type="button" className={secondary} onClick={() => setSupplierFor(null)}>Cancel</button>
-                </form>
-              )}
+              <LineSupplierPayment order={o} line={line} requests={supplierPayments.data?.requests ?? []} />
               {noteFor?.itemId === line.itemId && (
                 <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); act.mutate({ path: `/lines/${line.itemId}/refund`, body: { approve: false, note: note.trim() } }); }}>
                   <textarea className={input} rows={2} required maxLength={500} placeholder="Why are you sending it back? (sales will see this)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Reason" />
@@ -210,8 +198,6 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
           ))}
         </ul>
       </div>
-
-      <OrderSupplierPayments order={o} />
 
       {o.canShip && (
         // Keyed on the lines' stages so the form starts fresh whenever the order moves.

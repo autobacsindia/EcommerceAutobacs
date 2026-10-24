@@ -99,8 +99,8 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
                   <select id="pb-method" className={input} value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>
                     <option value="bank">Bank transfer</option><option value="upi">UPI</option><option value="razorpay">Razorpay payout</option><option value="other">Other</option>
                   </select></div>
-                <div><label className={label} htmlFor="pb-ref">Reference (UTR / payout ID)</label>
-                  <input id="pb-ref" className={input} required minLength={4} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} /></div>
+                <div><label className={label} htmlFor="pb-ref">Reference (UTR / payout ID) — optional</label>
+                  <input id="pb-ref" className={input} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} /></div>
               </div>
               <FilePicker files={proof} onChange={setProof} max={3} accept="image/jpeg,image/png,image/webp,application/pdf" label="Attach payment screenshot" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
               {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

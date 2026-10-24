@@ -9,50 +9,55 @@ import { paymentKeys, rupees, slipHref, STATUS_TONE, type OrderPayment } from '.
 import PaymentRequestForm from './PaymentRequestForm';
 import PaymentRequestDetail from './PaymentRequestDetail';
 
+type Line = WorkOrder['lines'][number];
+const live = (r: OrderPayment) => r.status !== 'declined' && r.status !== 'cancelled';
+
+/** The supplier payments raised on one order (one query, shared by every line). */
+export function useOrderSupplierPayments(orderId: string) {
+  return useQuery({
+    queryKey: paymentKeys.forOrder(orderId),
+    queryFn: () => apiClient.get<{ requests: OrderPayment[] }>(`/payment-requests/order/${orderId}`),
+  });
+}
+
 /**
- * Supplier payments on one order (procurement's order panel): what has been
- * asked for, where each stands, and a button to ask for the next. An item with
- * a payment still in flight cannot ship until it is paid — the server enforces
- * that; this only says so.
+ * One product's supplier payment, on its own line of the order: what was asked
+ * for and where it stands, or a "Request supplier payment" button. For a product
+ * still at its stock check, raising the payment also records "ordered from this
+ * supplier" (the server does both). "Same supplier as …" refills the last
+ * supplier used on this order. A product with a payment in flight cannot ship
+ * until it is paid — the server enforces that.
  */
-export default function OrderSupplierPayments({ order }: { order: WorkOrder }) {
+export default function LineSupplierPayment({ order, line, requests }: { order: WorkOrder; line: Line; requests: OrderPayment[] }) {
   const qc = useQueryClient();
   const [raising, setRaising] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const q = useQuery({
-    queryKey: paymentKeys.forOrder(order.id),
-    queryFn: () => apiClient.get<{ requests: OrderPayment[] }>(`/payment-requests/order/${order.id}`),
-  });
-  const requests = q.data?.requests ?? [];
-  const covered = new Set(requests.filter((r) => r.status !== 'declined' && r.status !== 'cancelled').flatMap((r) => r.itemIds));
-  const payable = order.lines
-    .filter((l) => (l.stage === 'to_ship' || l.stage === 'with_supplier') && !covered.has(l.itemId))
-    .map((l) => ({ itemId: l.itemId, name: l.variantLabel ? `${l.name} — ${l.variantLabel}` : l.name }));
-  // `canShip` is the server's "procurement (or admin) may act on shipping here" —
-  // exactly who raises supplier payments.
-  const canRaise = order.canShip && payable.length > 0;
+  const mine = requests.filter((r) => r.itemIds.includes(line.itemId));
+  const covered = mine.some(live);
+  const payableStage = line.stage === 'to_ship' || line.stage === 'with_supplier'
+    || (line.stage === 'stock_check' && line.actions.includes('ordered'));
+  // `canShip`: the server's "procurement (or admin) may act here" — exactly who raises supplier payments.
+  const canRaise = order.canShip && payableStage && !covered;
+  const previous = [...requests].filter(live).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))[0];
+  const refresh = () => qc.invalidateQueries({ queryKey: paymentKeys.forOrder(order.id) });
 
-  if (!requests.length && !canRaise) return null;
+  if (!mine.length && !canRaise) return null;
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Supplier payments</p>
-      {requests.length > 0 && (
-        <ul className="divide-y rounded-lg border border-gray-200">
-          {requests.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-              <button type="button" onClick={() => setOpen(r.id)} className="font-medium text-blue-700 hover:underline">{r.number}</button>
-              <span className="text-gray-700">{rupees(r.amount)} to {r.payee} · {r.itemNames.join(', ')}</span>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
-              <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-gray-600 hover:underline">
-                <FileText className="h-3.5 w-3.5" /> {r.status === 'paid' ? 'Receipt' : 'Slip'}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
+      {mine.map((r) => (
+        <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+          <Banknote className="h-4 w-4 text-emerald-700" />
+          <button type="button" onClick={() => setOpen(r.id)} className="font-medium text-blue-700 hover:underline">{r.number}</button>
+          <span className="text-gray-700">{rupees(r.amount)} to {r.payee}</span>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
+          <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-gray-600 hover:underline">
+            <FileText className="h-3.5 w-3.5" /> {r.status === 'paid' ? 'Receipt' : 'Slip'}
+          </a>
+        </div>
+      ))}
       {canRaise && !raising && (
-        <button type="button" onClick={() => setRaising(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50">
-          <Banknote className="h-4 w-4 text-emerald-700" /> Request supplier payment
+        <button type="button" onClick={() => setRaising(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-50">
+          <Banknote className="h-4 w-4" /> Request supplier payment
         </button>
       )}
       {raising && (
@@ -62,13 +67,19 @@ export default function OrderSupplierPayments({ order }: { order: WorkOrder }) {
             orderNumber: order.orderNumber,
             customer: order.customer.name,
             closedBy: order.source === 'sales' ? `GTM lead: ${order.soldBy}` : 'Website',
-            lines: payable,
+            lines: [{ itemId: line.itemId, name: line.variantLabel ? `${line.name} — ${line.variantLabel}` : line.name }],
           }}
+          sameAs={previous ? { id: previous.id, name: previous.payee } : undefined}
           onCancel={() => setRaising(false)}
-          onDone={() => { setRaising(false); qc.invalidateQueries({ queryKey: paymentKeys.forOrder(order.id) }); }}
+          onDone={() => {
+            setRaising(false);
+            refresh();
+            // The line may have moved to "ordered from supplier".
+            qc.invalidateQueries({ predicate: (query) => JSON.stringify(query.queryKey).includes(order.id) });
+          }}
         />
       )}
-      {open && <PaymentRequestDetail id={open} onClose={() => { setOpen(null); qc.invalidateQueries({ queryKey: paymentKeys.forOrder(order.id) }); }} />}
+      {open && <PaymentRequestDetail id={open} onClose={() => { setOpen(null); refresh(); }} />}
     </div>
   );
 }

@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
-import { EXPENSE_CATEGORIES, errorMessage, postForm, type PaymentRequest } from './api';
+import apiClient from '@/lib/api-client';
+import { EXPENSE_CATEGORIES, errorMessage, getRequest, postForm, type PaymentRequest } from './api';
 import FilePicker from './FilePicker';
 import SupplierPicker, { SupplierSuggestions } from './SupplierPicker';
 import type { Supplier } from './suppliers';
@@ -29,11 +30,14 @@ export type SupplierContext = {
  */
 export default function PaymentRequestForm({
   supplier,
+  sameAs,
   onDone,
   onCancel,
 }: {
   /** Present for a supplier payment; absent for an expense. */
   supplier?: SupplierContext;
+  /** The last supplier payment on this order: offers "Same supplier as …" to refill it. */
+  sameAs?: { id: string; name: string };
   onDone: (r: PaymentRequest) => void;
   onCancel?: () => void;
 }) {
@@ -49,11 +53,40 @@ export default function PaymentRequestForm({
   const [saveSupplier, setSaveSupplier] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [filling, setFilling] = useState(false);
+
+  /** Refill from the previous payment: its saved supplier, or the details typed then. */
+  async function fillSame() {
+    if (!sameAs) return;
+    setFilling(true);
+    setError('');
+    try {
+      const { request: prev } = await getRequest(sameAs.id);
+      if (prev.supplier?.id) {
+        try {
+          const { supplier: saved } = await apiClient.get<{ supplier: Supplier }>(`/suppliers/${encodeURIComponent(prev.supplier.id)}`);
+          if (saved.active) { setPicked(saved); return; }
+        } catch { /* fall back to the details on the payment */ }
+      }
+      const p = prev.payee;
+      setPicked(null);
+      setMethod(p.method);
+      setPayee({
+        name: p.name, upiId: p.upiId || '', accountName: p.accountName || '', accountNumber: /X/.test(p.accountNumber || '') ? '' : p.accountNumber || '',
+        ifsc: p.ifsc || '', bankName: p.bankName || '', phone: p.phone || '',
+      });
+    } catch (err) {
+      setError(errorMessage(err, 'Could not load the previous supplier.'));
+    } finally {
+      setFilling(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (supplier && itemIds.length === 0) { setError('Choose the item(s) this payment is for.'); return; }
+    if (!picked && method === 'upi' && !payee.upiId.trim() && qr.length === 0) { setError('Enter their UPI ID, or attach their payment QR.'); return; }
     const form = new FormData();
     form.append('amount', amount);
     form.append('description', description.trim());
@@ -128,6 +161,13 @@ export default function PaymentRequestForm({
         )}
       </div>
 
+      {supplier && sameAs && !picked && (
+        <button type="button" disabled={filling} onClick={fillSame}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-800 hover:bg-blue-100 disabled:opacity-50">
+          {filling && <Loader2 className="h-4 w-4 animate-spin" />} Same supplier as before ({sameAs.name})
+        </button>
+      )}
+
       {supplier && picked && (
         <div>
           <span className={label}>Saved supplier</span>
@@ -148,7 +188,7 @@ export default function PaymentRequestForm({
         </div>
         {method === 'upi' ? (
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
-            <input aria-label="UPI ID" className={input} required value={payee.upiId} onChange={set('upiId')} placeholder="UPI ID, e.g. name@okaxis" autoCapitalize="none" />
+            <input aria-label="UPI ID" className={input} value={payee.upiId} onChange={set('upiId')} placeholder="UPI ID (optional if you attach their QR)" autoCapitalize="none" />
             <input aria-label="Payee phone" className={input} value={payee.phone} onChange={set('phone')} placeholder="Phone (optional)" inputMode="tel" />
           </div>
         ) : (

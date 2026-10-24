@@ -130,7 +130,7 @@ describe('detail', () => {
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Record payment' }));
     const mark = within(panel).getByRole('button', { name: /Mark as paid/ });
-    expect(mark).toBeDisabled(); // no reference yet
+    expect(mark).toBeEnabled(); // the reference is optional
     fireEvent.change(within(panel).getByLabelText('Payment reference'), { target: { value: 'pout_1' } });
     fireEvent.click(mark);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/payment-requests/r1/pay', expect.anything()));
@@ -168,24 +168,33 @@ describe('detail', () => {
   });
 });
 
-describe('order panel', () => {
+describe('a product line', () => {
   const order = {
     id: 'o1', orderNumber: '#AB12', canShip: true, source: 'website', soldBy: 'Website',
-    customer: { name: 'Ravi', email: '', phone: '' },
-    lines: [
-      { itemId: 'i1', name: 'Lift kit', variantLabel: null, stage: 'to_ship' },
-      { itemId: 'i2', name: 'Mat', variantLabel: null, stage: 'to_ship' },
-      { itemId: 'i3', name: 'Cover', variantLabel: null, stage: 'stock_check' },
-    ],
+    customer: { name: 'Ravi', email: '', phone: '' }, lines: [],
   } as never;
+  const line = (itemId: string, name: string, stage: string, actions: string[] = []) => ({ itemId, name, variantLabel: null, stage, actions }) as never;
+  const requests = [{ id: 'r9', number: 'PR-0009', status: 'submitted' as const, statusLabel: 'Waiting for accounts', amount: 38000, itemIds: ['i1'], itemNames: ['Lift kit'], payee: 'ARB', paidAt: null, createdAt: '2026-10-20T05:00:00Z' }];
 
-  it('lists requests and offers a new one only for payable items not already covered', async () => {
-    get.mockResolvedValue({ requests: [{ id: 'r9', number: 'PR-0009', status: 'submitted', statusLabel: 'Waiting for admin approval', amount: 38000, itemIds: ['i1'], itemNames: ['Lift kit'], payee: 'ARB', paidAt: null, createdAt: '' }] });
-    wrap(<OrderSupplierPayments order={order} />);
-    expect(await screen.findByText('PR-0009')).toBeInTheDocument();
+  it('shows the payment already raised for it, and no second button', () => {
+    wrap(<OrderSupplierPayments order={order} line={line('i1', 'Lift kit', 'to_ship')} requests={requests} />);
+    expect(screen.getByText('PR-0009')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Request supplier payment/ })).toBeNull();
+  });
+
+  it('offers "Request supplier payment" for this product only, with "Same supplier as before"', () => {
+    wrap(<OrderSupplierPayments order={order} line={line('i2', 'Mat', 'to_ship')} requests={requests} />);
     fireEvent.click(screen.getByRole('button', { name: /Request supplier payment/ }));
-    expect(screen.getByLabelText('Mat')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Lift kit')).toBeNull(); // in flight already
-    expect(screen.queryByLabelText('Cover')).toBeNull(); // still at stock check
+    expect(screen.getByLabelText('Mat')).toBeChecked();
+    expect(screen.queryByLabelText('Lift kit')).toBeNull();
+    expect(screen.getByRole('button', { name: /Same supplier as before \(ARB\)/ })).toBeInTheDocument();
+  });
+
+  it('a product at its stock check can be paid for (that records "ordered"), unless the server says no', () => {
+    const { unmount } = wrap(<OrderSupplierPayments order={order} line={line('i3', 'Cover', 'stock_check', ['in_stock', 'ordered'])} requests={[]} />);
+    expect(screen.getByRole('button', { name: /Request supplier payment/ })).toBeInTheDocument();
+    unmount();
+    wrap(<OrderSupplierPayments order={order} line={line('i3', 'Cover', 'stock_check', [])} requests={[]} />);
+    expect(screen.queryByRole('button', { name: /Request supplier payment/ })).toBeNull();
   });
 });
