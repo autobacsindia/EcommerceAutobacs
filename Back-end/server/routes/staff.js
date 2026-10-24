@@ -50,7 +50,7 @@ import {
   validateCustomerBankRemove,
   validateMarkDelivered,
 } from '../validators/staff.validator.js';
-import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard, uploadPaymentProof } from '../middleware/uploadMiddleware.js';
+import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard, uploadPaymentProof, uploadPaymentRequestFiles } from '../middleware/uploadMiddleware.js';
 import {
   listQueue,
   getOrder as getWorkOrder,
@@ -99,6 +99,7 @@ import {
   getQuotation, listQuotations, getQuotationDocument,
 } from '../services/salesQuotationService.js';
 import { requestPayment, cancelPart, getPaymentRequestPdf } from '../services/salesPaymentService.js';
+import { setPayDetails, readPayDetailsQr } from '../services/salesPayDetailsService.js';
 import { canSell } from '../config/staff.js';
 import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller } from '../services/orderAttributionService.js';
 import {
@@ -363,6 +364,21 @@ const transferFileErrors = (err, req, res, next) => {
   }
   return next(err);
 };
+
+// @route  POST /staff/sales/orders/:id/pay-details — multipart: method (bank|upi_qr|other), bank(JSON)?, upiId?, note?, qr(image)?
+//         The bank / GPay QR / other way the customer is told to pay. Unpaid orders only.
+router.post('/sales/orders/:id/pay-details', concurrentUploadGuard, uploadPaymentRequestFiles, transferFileErrors,
+  validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+    const qr = req.files?.qr?.[0] || null;
+    res.json({ success: true, order: await setPayDetails(req.user, req.params.id, req.body, qr, req) });
+  }));
+
+// @route  GET /staff/sales/orders/:id/pay-details/qr — the saved QR image (private)
+router.get('/sales/orders/:id/pay-details/qr', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  const { buffer, contentType } = await readPayDetailsQr(req.user, req.params.id);
+  res.set({ 'Content-Type': contentType, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+  res.send(buffer);
+}));
 
 // @route  POST /staff/sales/orders/:id/bank-transfer — multipart: amount, reference, paidOn, note?, proof (1–3)
 router.post('/sales/orders/:id/bank-transfer', concurrentUploadGuard, uploadPaymentProof, transferFileErrors,

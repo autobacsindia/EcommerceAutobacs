@@ -27,7 +27,7 @@ export function quotationMessage(q: Quotation) {
     `Hi ${first}, thank you for your interest in Autobacs India.`,
     `Please find our quotation ${q.number} for ${rupees(q.totalAmount)}.`,
     `Prices are held until ${formatDateTimeIST(q.validUntil)}.`,
-    'Once you confirm, we will share the secure payment link.',
+    'Once you confirm, we will share the payment details.',
   ].join('\n');
 }
 
@@ -124,7 +124,7 @@ export default function QuotationDetail({ id }: { id: string }) {
             <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-4">
               <p className="text-sm font-semibold text-green-900">Has the client agreed?</p>
               <p className="mb-3 text-sm text-green-800">
-                This creates the order at these prices (stock and prices are re-checked first). You then send the payment link — in one go or split into parts.
+                This creates the order at these prices (stock and prices are re-checked first). You then share how to pay — bank details, a GPay / UPI QR, or a Razorpay payment link.
               </p>
               <button type="button" disabled={busy}
                 onClick={() => {

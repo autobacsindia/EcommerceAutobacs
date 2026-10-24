@@ -296,7 +296,7 @@ export async function renderQuotationPdf(q) {
       } else {
         doc.font(FONT_BOLD).fontSize(10.5).fillColor(C.ink).text('Ready to order?', L + 16, py + 22, { width: pw - 32 });
         doc.font(FONT).fontSize(8.8).fillColor(C.body)
-          .text(`Contact our sales team${companyInfo.phone ? ` on ${companyInfo.phone}` : ''} for a secure payment link.`, L + 16, doc.y + 4, { width: pw - 32 });
+          .text(`Once you confirm, our sales team${companyInfo.phone ? ` (${companyInfo.phone})` : ''} will share the payment details.`, L + 16, doc.y + 4, { width: pw - 32 });
       }
 
       // ── Remarks ─────────────────────────────────────────────────────────────

@@ -61,6 +61,40 @@ const OrderSchema = new mongoose.Schema({
   bankTransferPendingAt: { type: Date, default: undefined },
   // Paid outside Razorpay: what accounts confirmed. Refunds of such an order are
   // made by bank, not through Razorpay (there is no gateway payment to refund).
+  /*
+    How a GTM-sold order's customer was told to pay, when it is not (only) a
+    Razorpay link: the company bank account, a GPay / UPI QR, or another way
+    (services/salesPayDetailsService.js). What the customer was shown — printed
+    on the payment request PDF. Set and changed only while the order is unpaid;
+    the payment itself is still recorded as a bank transfer and confirmed by
+    accounts. The QR image is a PRIVATE file.
+  */
+  salesPayDetails: {
+    type: new mongoose.Schema({
+      method: { type: String, enum: ["bank", "upi_qr", "other"], required: true },
+      bank: {
+        type: new mongoose.Schema({
+          accountName: { type: String, maxlength: 120 },
+          accountNumber: { type: String, maxlength: 34 },
+          ifsc: { type: String, maxlength: 11 },
+          bankName: { type: String, maxlength: 120 },
+        }, { _id: false }),
+        default: null,
+      },
+      upiId: { type: String, default: "", maxlength: 100 },
+      qr: {
+        type: new mongoose.Schema({
+          publicId: String, provider: String, contentType: String, bytes: Number,
+        }, { _id: false }),
+        default: null,
+      },
+      note: { type: String, default: "", maxlength: 500 },
+      setBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      setByName: String,
+      setAt: Date,
+    }, { _id: false }),
+    default: undefined,
+  },
   offlinePayment: {
     type: new mongoose.Schema({
       method: { type: String, enum: ["bank_transfer"], required: true },
