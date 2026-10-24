@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import PaymentRequest from '../models/PaymentRequest.js';
 
 /**
@@ -40,6 +41,42 @@ const paymentRequestRepository = {
     .sort({ createdAt: -1 })
     .select('number status amount itemIds itemNames payee.name payment createdAt')
     .lean(),
+
+  /**
+   * Supplier requests waiting for the admin to pay (approved or on hold), oldest
+   * first, for the "To pay, by supplier" view. Bounded: the open queue is small,
+   * and `limit` caps it (index payment_request_status).
+   */
+  findSupplierToPay: (limit) => PaymentRequest.find({ status: { $in: ['approved', 'on_hold'] }, kind: 'supplier' })
+    .sort({ createdAt: 1, _id: 1 })
+    .limit(limit)
+    .select('-history -files.publicId -files.provider')
+    .lean(),
+
+  findByIds: (ids) => PaymentRequest.find({ _id: { $in: ids } }).select('-history').lean(),
+
+  /**
+   * Run `fn(session)` in one transaction: every write in it lands, or none does.
+   * withTransaction may re-run `fn` on a transient conflict, so `fn` must not
+   * keep state between attempts.
+   */
+  inTransaction: async (fn) => {
+    const session = await mongoose.startSession();
+    try {
+      let out;
+      await session.withTransaction(async () => { out = await fn(session); });
+      return out;
+    } finally {
+      await session.endSession();
+    }
+  },
+
+  /** The same compare-and-set as `transition`, inside a caller's transaction session. */
+  transitionInSession: (id, from, filter, set, entry, push, session) => PaymentRequest.findOneAndUpdate(
+    { _id: id, status: { $in: from }, ...filter },
+    { $set: set, $push: { history: entry, ...push } },
+    { new: true, session },
+  ).lean(),
 
   countByStatus: () => PaymentRequest.aggregate([{ $group: { _id: '$status', n: { $sum: 1 }, amount: { $sum: '$amount' } } }]),
 

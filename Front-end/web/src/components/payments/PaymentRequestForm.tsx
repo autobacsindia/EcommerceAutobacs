@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import { EXPENSE_CATEGORIES, errorMessage, postForm, type PaymentRequest } from './api';
 import FilePicker from './FilePicker';
+import SupplierPicker from './SupplierPicker';
+import type { Supplier } from './suppliers';
 
 /** The server takes up to five bills and one payee QR per request. */
 const MAX_BILLS = 5;
@@ -43,6 +45,8 @@ export default function PaymentRequestForm({
   const [payee, setPayee] = useState({ name: '', upiId: '', accountName: '', accountNumber: '', ifsc: '', bankName: '', phone: '' });
   const [bills, setBills] = useState<File[]>([]);
   const [qr, setQr] = useState<File[]>([]);
+  const [picked, setPicked] = useState<Supplier | null>(null);
+  const [saveSupplier, setSaveSupplier] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -53,12 +57,15 @@ export default function PaymentRequestForm({
     const form = new FormData();
     form.append('amount', amount);
     form.append('description', description.trim());
-    form.append('payee', JSON.stringify(method === 'upi'
+    // A saved supplier is sent by id: the server copies its details itself.
+    if (picked) form.append('supplierId', picked.id);
+    else form.append('payee', JSON.stringify(method === 'upi'
       ? { name: payee.name.trim(), method, upiId: payee.upiId.trim(), phone: payee.phone.trim() }
       : { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ifsc: payee.ifsc.trim().toUpperCase(), bankName: payee.bankName.trim(), phone: payee.phone.trim() }));
     if (supplier) {
       form.append('orderId', supplier.orderId);
       form.append('itemIds', JSON.stringify(itemIds));
+      if (!picked && saveSupplier) form.append('saveSupplier', 'true');
     } else {
       form.append('category', category);
     }
@@ -112,12 +119,22 @@ export default function PaymentRequestForm({
           <label className={label} htmlFor="pr-amount">Amount (₹)</label>
           <input id="pr-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 1250" />
         </div>
-        <div>
-          <label className={label} htmlFor="pr-payee">{supplier ? 'Supplier' : 'Pay to'}</label>
-          <input id="pr-payee" className={input} required minLength={2} maxLength={120} value={payee.name} onChange={set('name')} placeholder={supplier ? 'Supplier name' : 'Shop / person'} />
-        </div>
+        {!picked && (
+          <div>
+            <label className={label} htmlFor="pr-payee">{supplier ? 'Supplier' : 'Pay to'}</label>
+            <input id="pr-payee" className={input} required minLength={2} maxLength={120} value={payee.name} onChange={set('name')} placeholder={supplier ? 'Supplier name' : 'Shop / person'} />
+          </div>
+        )}
       </div>
 
+      {supplier && (
+        <div>
+          <span className={label}>Saved supplier</span>
+          <SupplierPicker picked={picked} onPick={setPicked} />
+        </div>
+      )}
+
+      {!picked && (
       <div>
         <span className={label}>How to pay them</span>
         <div className="flex gap-2" role="radiogroup" aria-label="Payment method">
@@ -141,7 +158,14 @@ export default function PaymentRequestForm({
             <input aria-label="Bank name" className={input} value={payee.bankName} onChange={set('bankName')} placeholder="Bank (optional)" />
           </div>
         )}
+        {supplier && (
+          <label className="mt-2 flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={saveSupplier} onChange={(e) => setSaveSupplier(e.target.checked)} />
+            Save as a new supplier for next time
+          </label>
+        )}
       </div>
+      )}
 
       <div>
         <label className={label} htmlFor="pr-desc">Details</label>

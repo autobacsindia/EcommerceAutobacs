@@ -104,6 +104,16 @@ const PaymentRequestSchema = new mongoose.Schema(
     // Who closed the sale: a GTM lead's name, or 'Website'.
     closedBy: { type: String, default: '' },
 
+    // Supplier requests raised from the supplier directory (models/Supplier.js).
+    // `payee` above is still the copy that is paid — editing the supplier never
+    // rewrites it. `bankNotice` is set when the supplier's bank details changed
+    // shortly before this was raised: shown to accounts and the admin.
+    supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', default: null },
+    bankNotice: {
+      type: new mongoose.Schema({ at: Date, byName: { type: String, default: '' } }, { _id: false }),
+      default: null,
+    },
+
     files: { type: [FileSchema], default: [] },
 
     // Filled when accounts records the payment.
@@ -113,6 +123,8 @@ const PaymentRequestSchema = new mongoose.Schema(
       paidAt: { type: Date, default: null },
       paidBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
       paidByName: { type: String, default: '' },
+      // Set when several requests to one payee were paid in one transfer.
+      batch: { type: String, default: '' },
     },
 
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

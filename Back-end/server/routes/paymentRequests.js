@@ -58,6 +58,21 @@ router.get('/order/:orderId', asyncHandler(async (req, res) => {
   res.json({ success: true, requests: await pr.forOrder(req.user, req.params.orderId) });
 }));
 
+// GET /payment-requests/to-pay/suppliers — approved supplier payments, one row per account
+router.get('/to-pay/suppliers', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await pr.supplierPayGroups(req.user)) });
+}));
+
+// GET /payment-requests/to-pay/suppliers/:groupId — that account's payments
+router.get('/to-pay/suppliers/:groupId', asyncHandler(async (req, res) => {
+  res.json({ success: true, group: await pr.supplierPayGroup(req.user, req.params.groupId) });
+}));
+
+// POST /payment-requests/pay-batch — multipart: ids(JSON), expectedTotal, method, reference, note?, proof
+router.post('/pay-batch', concurrentUploadGuard, uploadPaymentProof, fileErrors, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await pr.payBatch(req.user, req.body, req.files || [], req)) });
+}));
+
 // GET /payment-requests/:id
 router.get('/:id', asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.get(req.user, req.params.id) });

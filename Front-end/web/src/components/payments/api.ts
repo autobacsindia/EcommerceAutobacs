@@ -27,6 +27,10 @@ export type PaymentRequest = {
   itemNames: string[];
   customer: { name: string; phone: string; city: string } | null;
   closedBy: string;
+  /** Raised from the supplier directory. */
+  supplier?: { id: string } | null;
+  /** The supplier's bank details changed shortly before this was raised. */
+  bankNotice?: { at: string; byName: string } | null;
   files: { id: string; kind: 'bill' | 'qr' | 'proof'; name: string; contentType: string; bytes: number }[];
   payment: { method: string; reference: string; paidAt: string; paidByName: string } | null;
   decisionNote: string;
