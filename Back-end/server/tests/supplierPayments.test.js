@@ -309,7 +309,82 @@ describe('Supplier directory and one-transfer payments', () => {
       expect((await payBatch(admin.session, [a.id, other.id], 1999)).status).toBe(400);
       expect((await payBatch(accounts.session, [a.id], 1000)).status).toBe(403);
       expect((await payBatch(admin.session, [], 0)).status).toBe(400);
-      expect((await payBatch(admin.session, [a.id], 1000, { reference: '' })).status).toBe(400);
+    });
+  });
+
+  describe('editing, optional UPI ID and reference', () => {
+    const QR = { field: 'qr', buffer: JPEG, name: 'qr.jpg', type: 'image/jpeg' };
+    async function raised(fields, files = []) {
+      const order = await paidOrder();
+      const item = String(order.items[0]._id);
+      await wf.setStock(procurement.user, String(order._id), item, { stock: 'in_stock' }, req);
+      const res = await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [item], ...fields }, files);
+      return res;
+    }
+
+    it('the requester corrects it while it waits for accounts; a teammate cannot; history says what changed', async () => {
+      const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
+      expect(r.can.edit).toBe(true);
+      expect(r.editableUntil).toBeTruthy();
+      const res = await procurement.session.put(`/payment-requests/${r.id}`, { amount: 1200, description: 'Invoice 77' });
+      expect(res.status).toBe(200);
+      expect(res.body.request).toMatchObject({ amount: 1200, description: 'Invoice 77', status: 'submitted' });
+      expect(res.body.request.history.at(-1)).toMatchObject({ action: 'edited', note: expect.stringContaining('₹1,000 → ₹1,200') });
+      const mate = await makeUser('Pavan', 'staff', staff('procurement'));
+      expect((await mate.session.put(`/payment-requests/${r.id}`, { amount: 5 })).status).toBe(403);
+    });
+
+    it('the time limit: not after accounts approves, nor after 24 hours', async () => {
+      const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
+      await PaymentRequest.collection.updateOne({ _id: new mongoose.Types.ObjectId(r.id) }, { $set: { createdAt: new Date(Date.now() - 25 * 3600 * 1000) } });
+      expect((await procurement.session.put(`/payment-requests/${r.id}`, { amount: 1100 })).status).toBe(403);
+      const r2 = (await raised({ amount: 500, payee: OTHER_BANK })).body.request;
+      await accounts.session.post(`/payment-requests/${r2.id}/approve`);
+      expect((await procurement.session.put(`/payment-requests/${r2.id}`, { amount: 600 })).status).toBe(403);
+    });
+
+    it('the admin edits any unpaid one; changing the money sends it back to accounts; paid is never edited', async () => {
+      const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
+      await accounts.session.post(`/payment-requests/${r.id}/approve`);
+      const words = await admin.session.put(`/payment-requests/${r.id}`, { description: 'typo fixed' });
+      expect(words.body.request.status).toBe('approved');
+      const money = await admin.session.put(`/payment-requests/${r.id}`, { amount: 900 });
+      expect(money.body.request).toMatchObject({ status: 'submitted', amount: 900 });
+      await accounts.session.post(`/payment-requests/${r.id}/approve`);
+      await admin.session.form(`/payment-requests/${r.id}/pay`, { method: 'bank' });
+      expect((await admin.session.put(`/payment-requests/${r.id}`, { amount: 1 })).status).toBe(403);
+    });
+
+    it('switching to a saved supplier copies its details; two edits at once land once', async () => {
+      const s = await addSupplier();
+      const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
+      const res = await procurement.session.put(`/payment-requests/${r.id}`, { supplierId: s.id });
+      expect(res.body.request.payee).toMatchObject({ name: 'ARB Supplies', accountNumber: '123456789012' });
+      const both = await Promise.all([
+        procurement.session.put(`/payment-requests/${r.id}`, { amount: 1500 }),
+        procurement.session.put(`/payment-requests/${r.id}`, { amount: 1600 }),
+      ]);
+      expect(both.map((x) => x.status).sort()).toEqual([200, 409]);
+    });
+
+    it('UPI ID is optional when their QR is attached; without either it is refused', async () => {
+      expect((await raised({ amount: 300, payee: { name: 'Kumar Tyres', method: 'upi' } })).status).toBe(400);
+      const ok = await raised({ amount: 300, payee: { name: 'Kumar Tyres', method: 'upi' } }, [QR]);
+      expect(ok.status).toBe(201);
+      expect(ok.body.request.payee.upiId).toBe('');
+    });
+
+    it('two QR-only payees are never grouped as one account, and pay without a reference', async () => {
+      const a = (await raised({ amount: 300, payee: { name: 'Kumar Tyres', method: 'upi' } }, [QR])).body.request;
+      const b = (await raised({ amount: 400, payee: { name: 'Kumar Tyres', method: 'upi' } }, [QR])).body.request;
+      await accounts.session.post(`/payment-requests/${a.id}/approve`);
+      await accounts.session.post(`/payment-requests/${b.id}/approve`);
+      const groups = (await admin.session.get('/payment-requests/to-pay/suppliers')).body.groups;
+      expect(groups.map((g) => g.count)).toEqual([1, 1]);
+      expect((await payBatch(admin.session, [a.id, b.id], 700)).status).toBe(400);
+      const paid = await payBatch(admin.session, [a.id], 300, { reference: '' });
+      expect(paid.status).toBe(200);
+      expect((await PaymentRequest.findById(a.id).lean()).payment.reference).toBe('');
     });
   });
 });

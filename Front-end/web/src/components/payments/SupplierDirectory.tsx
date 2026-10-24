@@ -97,7 +97,7 @@ export function SupplierForm({ supplier, onDone, onCancel }: {
             <input aria-label="Bank name" className={input} value={v.payment.bankName} onChange={setPay('bankName')} placeholder="Bank (optional)" />
           </div>
         ) : (
-          <div className="mt-2"><input aria-label="UPI ID" className={input} required value={v.payment.upiId} onChange={setPay('upiId')} placeholder="UPI ID, e.g. name@okaxis" autoCapitalize="none" /></div>
+          <div className="mt-2"><input aria-label="UPI ID" className={input} value={v.payment.upiId} onChange={setPay('upiId')} placeholder="UPI ID (optional — or attach their QR on each payment)" autoCapitalize="none" /></div>
         )}
         {bankEdited && (
           <p role="status" className="mt-2 flex items-start gap-2 rounded-lg bg-amber-50 p-2 text-sm text-amber-800">

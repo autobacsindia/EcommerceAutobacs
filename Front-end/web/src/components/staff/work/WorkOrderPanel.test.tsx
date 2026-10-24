@@ -51,16 +51,13 @@ describe('WorkOrderPanel', () => {
     expect(await screen.findByText('In stock — to ship')).toBeInTheDocument();
   });
 
-  it('asks for the supplier name before marking "ordered"', async () => {
-    get.mockResolvedValue({ success: true, order: base });
-    post.mockResolvedValue({ success: true, order: base });
+  it('no separate "Ordered from supplier" button: the product offers "Request supplier payment" instead', async () => {
+    get.mockImplementation((url: string) => Promise.resolve(url.startsWith('/payment-requests/order/')
+      ? { requests: [] }
+      : { success: true, order: { ...base, canShip: true } }));
     renderPanel();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Ordered from supplier' }));
-    fireEvent.change(screen.getByLabelText('Supplier name'), { target: { value: 'Ram Traders' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/lines/i1/stock', { stock: 'ordered', supplierName: 'Ram Traders' }));
+    expect(await screen.findByRole('button', { name: /Request supplier payment/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ordered from supplier' })).not.toBeInTheDocument();
   });
 
   it('shows nothing to press when the server grants no actions', async () => {
