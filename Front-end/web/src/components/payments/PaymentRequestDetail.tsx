@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, Loader2, Paperclip, X } from 'lucide-react';
+import { FileText, Loader2, Paperclip, Pencil, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
 import {
   actOn, errorMessage, fileHref, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest,
 } from './api';
 import FilePicker from './FilePicker';
+import EditPaymentRequest from './EditPaymentRequest';
 
 /** The server takes up to three payment screenshots per payment. */
 const MAX_PROOFS = 3;
@@ -18,7 +19,7 @@ const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-
 const ACTION_LABELS: Record<string, string> = {
   // Who acted is shown beside each entry: accounts (who approved) or the admin (who paid).
   submitted: 'Raised', approved: 'Approved', declined: 'Declined',
-  on_hold: 'Put on hold', paid: 'Paid', cancelled: 'Cancelled',
+  on_hold: 'Put on hold', paid: 'Paid', cancelled: 'Cancelled', edited: 'Edited',
 };
 const FILE_LABELS = { bill: 'Bill / invoice', qr: 'Payment QR', proof: 'Payment screenshot' } as const;
 
@@ -41,7 +42,7 @@ export default function PaymentRequestDetail({ id, onClose }: { id: string; onCl
   const qc = useQueryClient();
   const q = useQuery({ queryKey: paymentKeys.one(id), queryFn: () => getRequest(id) });
   const [note, setNote] = useState('');
-  const [mode, setMode] = useState<null | 'decline' | 'hold' | 'pay'>(null);
+  const [mode, setMode] = useState<null | 'decline' | 'hold' | 'pay' | 'edit'>(null);
   const [pay, setPay] = useState({ method: 'razorpay', reference: '' });
   const [proof, setProof] = useState<File[]>([]);
   const [error, setError] = useState('');
@@ -100,9 +101,9 @@ export default function PaymentRequestDetail({ id, onClose }: { id: string; onCl
               <Row k="Customer" v={r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.city].filter(Boolean).join(' · ') : null} />
               <Row k="Sale closed by" v={r.closedBy} />
               <Row k="Details" v={r.description} />
-              <Row k="Pay by" v={r.payee.method === 'upi' ? `UPI · ${r.payee.upiId}` : `Bank · ${r.payee.accountName}, A/c ${r.payee.accountNumber}, IFSC ${r.payee.ifsc}${r.payee.bankName ? ` (${r.payee.bankName})` : ''}`} />
+              <Row k="Pay by" v={r.payee.method === 'upi' ? `UPI · ${r.payee.upiId || 'scan their QR (attached)'}` : `Bank · ${r.payee.accountName}, A/c ${r.payee.accountNumber}, IFSC ${r.payee.ifsc}${r.payee.bankName ? ` (${r.payee.bankName})` : ''}`} />
               <Row k="Payee phone" v={r.payee.phone} />
-              {r.payment && <Row k="Paid" v={`${r.payment.method.toUpperCase()} · ref ${r.payment.reference} · ${formatDateTimeIST(r.payment.paidAt)} · by ${r.payment.paidByName}`} />}
+              {r.payment && <Row k="Paid" v={`${r.payment.method.toUpperCase()}${r.payment.reference ? ` · ref ${r.payment.reference}` : ''} · ${formatDateTimeIST(r.payment.paidAt)} · by ${r.payment.paidByName}`} />}
               {r.decisionNote && ['declined', 'on_hold'].includes(r.status) && <Row k={r.status === 'declined' ? 'Reason' : 'On hold'} v={r.decisionNote} />}
             </dl>
 
@@ -118,10 +119,16 @@ export default function PaymentRequestDetail({ id, onClose }: { id: string; onCl
             </div>
 
             {/* Actions — only what the server says this person may do now. */}
-            {(r.can.approve || r.can.decline || r.can.pay || r.can.hold || r.can.cancel) && (
+            {(r.can.approve || r.can.decline || r.can.pay || r.can.hold || r.can.cancel || r.can.edit) && (
               <div className="space-y-3 rounded-xl border border-gray-200 p-4">
                 {mode === null && (
                   <div className="flex flex-wrap gap-2">
+                    {r.can.edit && (
+                      <button type="button" onClick={() => setMode('edit')} className={`${btn} border border-gray-300 text-gray-800 hover:bg-gray-50`}
+                        title={r.editableUntil ? `You can edit until ${formatDateTimeIST(r.editableUntil)}` : undefined}>
+                        <Pencil className="h-4 w-4" /> Edit
+                      </button>
+                    )}
                     {r.can.approve && <button type="button" disabled={act.isPending} onClick={() => act.mutate('approve')} className={`${btn} bg-green-600 text-white hover:bg-green-700`}>Approve</button>}
                     {r.can.pay && <button type="button" onClick={() => setMode('pay')} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>Record payment</button>}
                     {r.can.hold && <button type="button" onClick={() => setMode('hold')} className={`${btn} border border-orange-300 text-orange-800 hover:bg-orange-50`}>Put on hold</button>}
@@ -144,6 +151,9 @@ export default function PaymentRequestDetail({ id, onClose }: { id: string; onCl
                     </div>
                   </div>
                 )}
+                {mode === 'edit' && (
+                  <EditPaymentRequest r={r} onCancel={() => setMode(null)} onDone={(next) => { setMode(null); done(next); }} />
+                )}
                 {mode === 'pay' && (
                   <div className="space-y-2">
                     <p className="text-sm text-gray-700">Pay <strong>{rupees(r.amount)}</strong> to {r.payee.name} from the company Razorpay / bank, then record it here.</p>
@@ -154,7 +164,7 @@ export default function PaymentRequestDetail({ id, onClose }: { id: string; onCl
                         <option value="upi">UPI</option>
                         <option value="other">Other</option>
                       </select>
-                      <input aria-label="Payment reference" className={input} value={pay.reference} onChange={(e) => setPay({ ...pay, reference: e.target.value })} placeholder="Payout ID / UTR" />
+                      <input aria-label="Payment reference" className={input} value={pay.reference} onChange={(e) => setPay({ ...pay, reference: e.target.value })} placeholder="Payout ID / UTR (optional)" />
                     </div>
                     <div className="text-sm">
                       <FilePicker files={proof} onChange={setProof} max={MAX_PROOFS} accept="image/jpeg,image/png,image/webp,application/pdf"
@@ -162,7 +172,7 @@ export default function PaymentRequestDetail({ id, onClose }: { id: string; onCl
                     </div>
                     <textarea aria-label="Note" className={input} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
                     <div className="flex gap-2">
-                      <button type="button" disabled={act.isPending || pay.reference.trim().length < 4} onClick={() => act.mutate('pay')} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>
+                      <button type="button" disabled={act.isPending} onClick={() => act.mutate('pay')} className={`${btn} bg-blue-600 text-white hover:bg-blue-700`}>
                         {act.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Mark as paid
                       </button>
                       <button type="button" onClick={() => setMode(null)} className={`${btn} text-gray-700 hover:bg-gray-100`}>Back</button>

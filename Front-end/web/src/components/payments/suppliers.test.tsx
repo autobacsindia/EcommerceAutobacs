@@ -10,6 +10,7 @@ import PaymentRequestForm from './PaymentRequestForm';
 import { SupplierSuggestions } from './SupplierPicker';
 import SupplierDirectory from './SupplierDirectory';
 import SupplierPayQueue from './SupplierPayQueue';
+import EditPaymentRequest from './EditPaymentRequest';
 import { sumRupees, type Supplier } from './suppliers';
 import type { PaymentRequest } from './api';
 
@@ -165,5 +166,43 @@ describe('the admin pays by supplier', () => {
   it('adds money in paise, so the total matches the server exactly', () => {
     expect(sumRupees([0.1, 0.2])).toBe(0.3);
     expect(sumRupees([1000, 2500.5])).toBe(3500.5);
+  });
+});
+
+describe('editing a payment request', () => {
+  it('sends only what the API needs: amount, details and the typed payee', async () => {
+    put.mockResolvedValue({ request: request('r1', 1200) });
+    const onDone = jest.fn();
+    wrap(<EditPaymentRequest r={{ ...request('r1', 1000), status: 'submitted', payee: { name: 'Kumar', method: 'upi', upiId: '' } }} onDone={onDone} onCancel={jest.fn()} />);
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '1200' } });
+    fireEvent.change(screen.getByLabelText('Details'), { target: { value: 'Invoice 77' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/payment-requests/r1', {
+      amount: '1200', description: 'Invoice 77', payee: { name: 'Kumar', method: 'upi', upiId: '', phone: '' },
+    }));
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('picking a saved supplier sends its id, not typed details', async () => {
+    get.mockResolvedValue({ suppliers: [ARB], nextAfter: null });
+    put.mockResolvedValue({ request: request('r1', 1000) });
+    wrap(<EditPaymentRequest r={{ ...request('r1', 1000), status: 'approved', payee: { name: 'ar', method: 'upi', upiId: 'x@okaxis' } }} onDone={jest.fn()} onCancel={jest.fn()} />);
+    expect(screen.getByText(/sends it back to accounts/)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('option', { name: /ARB Supplies/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/payment-requests/r1', { amount: '1000', description: '', supplierId: 's1' }));
+  });
+});
+
+describe('"Same supplier as before"', () => {
+  it('refills the saved supplier used on the previous product', async () => {
+    get.mockImplementation((url: string) => Promise.resolve(
+      url === '/payment-requests/r9' ? { request: { ...request('r9', 500), supplier: { id: 's1' } } }
+        : url === '/suppliers/s1' ? { supplier: ARB } : { suppliers: [], nextAfter: null },
+    ));
+    wrap(<PaymentRequestForm supplier={SUPPLIER_CTX} sameAs={{ id: 'r9', name: 'ARB Supplies' }} onDone={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /Same supplier as before/ }));
+    expect(await screen.findByText(/HDFC · ARB Pvt Ltd/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Supplier')).not.toBeInTheDocument();
   });
 });

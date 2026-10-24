@@ -36,7 +36,9 @@ export type PaymentRequest = {
   decisionNote: string;
   history: { at: string; byName: string; role: string; action: string; note: string }[];
   createdAt: string;
-  can: { approve: boolean; decline: boolean; pay: boolean; hold: boolean; cancel: boolean };
+  can: { approve: boolean; decline: boolean; pay: boolean; hold: boolean; cancel: boolean; edit?: boolean };
+  /** The requester may edit until then (null for admins, or once it can no longer be edited). */
+  editableUntil?: string | null;
 };
 
 export type OrderPayment = {
