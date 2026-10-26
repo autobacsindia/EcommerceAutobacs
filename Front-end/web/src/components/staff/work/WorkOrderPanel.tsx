@@ -102,7 +102,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
     onSuccess: (res) => { done(res); setNoteFor(null); setNote(''); },
     onError: (e) => setError(errorMessage(e, 'That did not work. Please try again.')),
   });
-  // Correct a parcel's dispatch details (the server allows 30 minutes after upload).
+  // Correct a parcel's dispatch details (any time while it is in transit).
   const editParcelMutation = useMutation({
     mutationFn: async (shipmentId: string) => {
       const form = new FormData();
@@ -131,11 +131,11 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
         {/* "Ordered from supplier" is now part of "Request supplier payment" on the line (LineSupplierPayment). */}
         {has('out_of_stock') && <button type="button" disabled={busy} className={danger}
           onClick={() => { if (window.confirm(`Mark "${line.name}" out of stock? The sales team will ask the customer to wait or take a refund.`)) act.mutate({ path: `${path}/stock`, body: { stock: 'out_of_stock' } }); }}>Out of stock</button>}
-        {has('stock_undo') && <button type="button" disabled={busy} className={secondary} title="Within 30 minutes of marking it"
+        {has('stock_undo') && <button type="button" disabled={busy} className={secondary} title="Undo this stock decision"
           onClick={() => { if (window.confirm(`Undo the stock decision on "${line.name}"? It goes back to New Order.`)) act.mutate({ path: `${path}/undo-stock`, body: {} }); }}>
           <Undo2 className="h-3.5 w-3.5" /> Undo
         </button>}
-        {has('decision_undo') && <button type="button" disabled={busy} className={secondary} title="Within 30 minutes, until accounts acts"
+        {has('decision_undo') && <button type="button" disabled={busy} className={secondary} title="Until accounts acts on it"
           onClick={() => { if (window.confirm(`Undo the customer's decision on "${line.name}"?`)) act.mutate({ path: `${path}/undo-decision`, body: {} }); }}>
           <Undo2 className="h-3.5 w-3.5" /> Undo decision
         </button>}
@@ -259,7 +259,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                       </button>
                     )}
                     {p.canEdit && editParcel !== p.id && (
-                      <button type="button" className={secondary} title="Within 30 minutes of uploading"
+                      <button type="button" className={secondary} title="While the parcel is in transit"
                         onClick={() => { setEditParcel(p.id); setParcelFix({ courier: p.courier, tracking: p.trackingNumber }); setParcelPhoto(null); }}>
                         <Pencil className="h-3.5 w-3.5" /> Edit dispatch details
                       </button>

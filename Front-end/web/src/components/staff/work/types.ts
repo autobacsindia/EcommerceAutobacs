@@ -66,7 +66,7 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     items: { name: string; quantity: number }[];
     photoUrl: string | null;
     canMarkDelivered: boolean;
-    /** Dispatch details can still be corrected (30 minutes after upload). */
+    /** Dispatch details can still be corrected (any time while the parcel is in transit). */
     canEdit?: boolean;
   }[];
   cancellations: {

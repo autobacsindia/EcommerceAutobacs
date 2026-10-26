@@ -608,7 +608,7 @@ describe('the old "payment initiated" mark', () => {
   });
 });
 
-describe('undo and correct, for 30 minutes', () => {
+describe('undo and correct — no time limit, the owning team', () => {
   const lineOf = (view, itemId) => view.lines.find((l) => l.itemId === itemId);
   const age = async (orderId, field, minutes) => {
     const o = await Order.findById(orderId).lean();
@@ -616,23 +616,27 @@ describe('undo and correct, for 30 minutes', () => {
     await Order.collection.updateOne({ _id: o._id }, { $set: { 'workflow.lines': lines } });
   };
 
-  it("procurement undoes its own \"In Stock\" (a New Order again); not someone else's, not after 30 min", async () => {
+  it('anyone in procurement undoes "In Stock" (a New Order again), days later too; other teams cannot', async () => {
     const p = await staff('procurement', { name: 'Priya P' });
     const p2 = await staff('procurement', { name: 'Pavan' });
+    const ops = await staff('operations');
     const order = await paidOrder();
     const id = String(order._id);
     const [cover] = ids(order);
     let view = await wf.setStock(p, id, cover, { stock: 'in_stock' }, req);
     expect(lineOf(view, cover).actions).toContain('stock_undo');
-    expect(lineOf(await wf.getOrder(p2, id), cover).actions).not.toContain('stock_undo');
-    await expect(wf.undoStock(p2, id, cover, req)).rejects.toMatchObject({ statusCode: 409 });
-    view = await wf.undoStock(p, id, cover, req);
+    // A teammate can fix it too.
+    expect(lineOf(await wf.getOrder(p2, id), cover).actions).toContain('stock_undo');
+    await expect(wf.undoStock(ops, id, cover, req)).rejects.toMatchObject({ statusCode: 409 });
+    view = await wf.undoStock(p2, id, cover, req);
     expect(lineOf(view, cover)).toMatchObject({ stage: 'stock_check', stageLabel: 'New Order' });
     expect(view.history[0].action).toBe('Stock decision undone');
 
+    // No clock: marked out of stock five days ago, still undoable.
     await wf.setStock(p, id, cover, { stock: 'out_of_stock' }, req);
-    await age(id, 'stockAt', 31);
-    await expect(wf.undoStock(p, id, cover, req)).rejects.toMatchObject({ statusCode: 409 });
+    await age(id, 'stockAt', 5 * 24 * 60);
+    view = await wf.undoStock(p, id, cover, req);
+    expect(lineOf(view, cover).stage).toBe('stock_check');
   });
 
   it('cannot undo once something else happened (a supplier payment raised)', async () => {
@@ -665,7 +669,7 @@ describe('undo and correct, for 30 minutes', () => {
     expect(lineOf(view, cover).stage).toBe('customer_decision');
   });
 
-  it('procurement corrects the dispatch details while in transit, for 30 minutes', async () => {
+  it('procurement corrects the dispatch details while in transit — any time, any teammate; not once delivered', async () => {
     const p = await staff('procurement');
     const order = await paidOrder();
     const id = String(order._id);
@@ -676,8 +680,13 @@ describe('undo and correct, for 30 minutes', () => {
     expect(view.parcels[0]).toMatchObject({ courier: 'Blue Dart', trackingNumber: 'BD999' });
     expect(view.history[0]).toMatchObject({ action: 'Dispatch details corrected' });
     const o = await Order.findById(id).lean();
-    const shipments = o.shipments.map((s) => ({ ...s, proofPhoto: { ...s.proofPhoto, uploadedAt: new Date(Date.now() - 31 * 60000) } }));
+    const shipments = o.shipments.map((s) => ({ ...s, proofPhoto: { ...s.proofPhoto, uploadedAt: new Date(Date.now() - 5 * 24 * 3600000) } }));
     await Order.collection.updateOne({ _id: o._id }, { $set: { shipments } });
+    const teammate = await staff('procurement', { name: 'Pavan' });
+    view = await wf.editShipment(teammate, id, parcel.id, { trackingNumber: 'BD1000' }, null, req);
+    expect(view.parcels[0].trackingNumber).toBe('BD1000');
+    await expect(wf.editShipment(await staff('operations'), id, parcel.id, { trackingNumber: 'X' }, null, req)).rejects.toMatchObject({ statusCode: 403 });
+    await wf.markDelivered(await staff('operations'), id, {}, req);
     await expect(wf.editShipment(p, id, parcel.id, { trackingNumber: 'X' }, null, req)).rejects.toMatchObject({ statusCode: 409 });
   });
 

@@ -328,22 +328,24 @@ describe('Supplier directory and one-transfer payments', () => {
       return res;
     }
 
-    it('the requester corrects it while it waits for accounts; a teammate cannot; history says what changed', async () => {
+    it('the requester (or their team head) corrects it while it waits for accounts; a teammate cannot; history says what changed', async () => {
       const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
       expect(r.can.edit).toBe(true);
-      expect(r.editableUntil).toBeTruthy();
+      expect(r.editableUntil).toBeNull(); // no time limit
       const res = await procurement.session.put(`/payment-requests/${r.id}`, { amount: 1200, description: 'Invoice 77' });
       expect(res.status).toBe(200);
       expect(res.body.request).toMatchObject({ amount: 1200, description: 'Invoice 77', status: 'submitted' });
       expect(res.body.request.history.at(-1)).toMatchObject({ action: 'edited', note: expect.stringContaining('₹1,000 → ₹1,200') });
       const mate = await makeUser('Pavan', 'staff', staff('procurement'));
       expect((await mate.session.put(`/payment-requests/${r.id}`, { amount: 5 })).status).toBe(403);
+      const head = await makeUser('Hema', 'staff', staff('procurement', true));
+      expect((await head.session.put(`/payment-requests/${r.id}`, { description: 'Invoice 77 (head)' })).status).toBe(200);
     });
 
-    it('the time limit: not after accounts approves, nor after 24 hours', async () => {
+    it('no time limit — still editable days later — but not once accounts approves', async () => {
       const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
-      await PaymentRequest.collection.updateOne({ _id: new mongoose.Types.ObjectId(r.id) }, { $set: { createdAt: new Date(Date.now() - 25 * 3600 * 1000) } });
-      expect((await procurement.session.put(`/payment-requests/${r.id}`, { amount: 1100 })).status).toBe(403);
+      await PaymentRequest.collection.updateOne({ _id: new mongoose.Types.ObjectId(r.id) }, { $set: { createdAt: new Date(Date.now() - 5 * 24 * 3600 * 1000) } });
+      expect((await procurement.session.put(`/payment-requests/${r.id}`, { amount: 1100 })).status).toBe(200);
       const r2 = (await raised({ amount: 500, payee: OTHER_BANK })).body.request;
       await accounts.session.post(`/payment-requests/${r2.id}/approve`);
       expect((await procurement.session.put(`/payment-requests/${r2.id}`, { amount: 600 })).status).toBe(403);
