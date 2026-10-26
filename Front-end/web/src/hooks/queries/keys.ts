@@ -166,6 +166,8 @@ export const adminKeys = {
     [...adminKeys.resource(resource), normalizeParams(params)] as const,
   /** Header counters (pending orders / revenue) — polled, shared by every admin screen. */
   stats: () => [...adminKeys.all, 'stats'] as const,
+  /** GTM head + leads an order can be credited to ("Sold by"). */
+  sellers: () => [...adminKeys.all, 'sellers'] as const,
 };
 
 /**

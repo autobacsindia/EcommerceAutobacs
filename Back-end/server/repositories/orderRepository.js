@@ -762,6 +762,7 @@ class OrderRepository extends BaseRepository {
     } = options;
     let q = Order.find(query)
       .populate('user', 'name email')
+      .populate('salesUser', 'name') // "Sold by" — Website when empty
       .populate('items.product', 'name')
       .sort(sort)
       .skip(skip)
