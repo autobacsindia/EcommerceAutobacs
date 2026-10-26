@@ -15,11 +15,13 @@ import { render, screen, act, fireEvent, waitFor } from '@testing-library/react'
 import NotificationBell from './NotificationBell';
 
 const chime = jest.fn();
+const workAlert = jest.fn();
 const armed = jest.fn();
 let mutedValue = false;
 
 jest.mock('@/lib/notificationChime', () => ({
   chime: () => chime(),
+  alert: () => workAlert(),
   arm: () => armed(),
   muted: () => mutedValue,
   setMuted: (v: boolean) => { mutedValue = v; },
@@ -37,6 +39,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
 
 beforeEach(() => {
   chime.mockClear();
+  workAlert.mockClear();
   armed.mockClear();
   mutedValue = false;
   chatUnread = 0;
@@ -63,18 +66,35 @@ describe('NotificationBell', () => {
     expect(chime).not.toHaveBeenCalled();
   });
 
-  it('chimes when the count rises, and stays silent when it falls', () => {
+  it('new WORK plays the work alert (not the chat chime); work finishing is silent', () => {
     waiting = { items: [], total: 1 };
     const { rerender } = render(<NotificationBell chatHref="/team/chat" />);
-    expect(chime).not.toHaveBeenCalled();
+    expect(workAlert).not.toHaveBeenCalled();
 
     waiting = { items: [], total: 3 };
     rerender(<NotificationBell chatHref="/team/chat" />);
-    expect(chime).toHaveBeenCalledTimes(1);
+    expect(workAlert).toHaveBeenCalledTimes(1);
+    expect(chime).not.toHaveBeenCalled();
 
     // Work being finished is not an event worth a noise.
     waiting = { items: [], total: 0 };
     rerender(<NotificationBell chatHref="/team/chat" />);
+    expect(workAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('a new CHAT message plays the chat chime; both at once plays the work alert only', () => {
+    waiting = { items: [], total: 0 };
+    chatUnread = 0;
+    const { rerender } = render(<NotificationBell chatHref="/team/chat" />);
+    chatUnread = 2;
+    rerender(<NotificationBell chatHref="/team/chat" />);
+    expect(chime).toHaveBeenCalledTimes(1);
+    expect(workAlert).not.toHaveBeenCalled();
+
+    chatUnread = 3;
+    waiting = { items: [], total: 1 };
+    rerender(<NotificationBell chatHref="/team/chat" />);
+    expect(workAlert).toHaveBeenCalledTimes(1);
     expect(chime).toHaveBeenCalledTimes(1);
   });
 
