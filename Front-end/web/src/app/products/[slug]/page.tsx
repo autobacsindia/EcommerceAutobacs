@@ -1,12 +1,12 @@
 import { Metadata } from 'next';
-import { permanentRedirect } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { cache } from 'react';
 import ClientPage from './ClientPage';
 import { getServerApiBase, fetchEntityOrNull, internalApiHeaders } from '@/lib/server-api';
 import { isOutOfStock, getStockStatus } from '@/lib/stock';
 import { resolveSeo } from '@/lib/seo';
 import { SITE_URL } from '@/lib/siteUrl';
-import { legacySearchPath } from '@/lib/legacySearchRedirect';
+import { resolveLegacyTarget } from '@/lib/legacyTargetServer';
 
 import { productSlugsForPrerender } from '@/lib/staticParams';
 
@@ -66,6 +66,17 @@ const getProductForMetadata = cache(async (slug: string) => {
   }
 });
 
+/**
+ * A product slug the API confirmed does not exist: send it to the page it became
+ * (a renamed product, or the vehicle it names) or 404. Never to /products/search —
+ * that page is robots-blocked, so a redirect into it left Google with a dead end.
+ */
+async function leaveDeadSlug(slug: string): Promise<never> {
+  const target = await resolveLegacyTarget(slug, 'product');
+  if (target) permanentRedirect(target);
+  notFound();
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const product = await getProductForMetadata(slug);
@@ -76,8 +87,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   // and any uptime/link check keyed on status reports a dead PDP as healthy.
   //
   // A missing product is almost always a renamed or retired one still linked from
-  // ads, chats and old search results, so the visitor is sent to a product search
-  // for the same words (permanent redirect) instead of a dead end. `product` is
+  // ads, chats and old search results, so it is sent to the product it became, or
+  // the vehicle it names (permanent redirect) — else a real 404. Not to a product
+  // search: robots.txt blocks /products/search (lib/legacyTarget.ts). `product` is
   // null ONLY on a confirmed API 404 — a failed fetch throws above (error.tsx), so
   // an outage can never cache a redirect away from a live product.
   //
@@ -85,7 +97,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   // Suspense boundary above this segment. A `loading.tsx` at `/products/[slug]`,
   // at `/products`, or at the app root makes Next flush the shell — committing
   // HTTP 200 — before this ever throws. See src/app/soft404.test.ts.
-  if (!product) permanentRedirect(legacySearchPath(slug));
+  if (!product) await leaveDeadSlug(slug);
 
   // Build canonical URL — slug is the only identifier; no _id fallback
   const url = product.slug ? `${SITE_URL}/products/${product.slug}` : null;
@@ -174,7 +186,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   // Unknown slug => search redirect (see the note in generateMetadata). Previously
   // this fell through to <ClientPage initialProduct={null}>, which refetched on
   // the client and rendered its own "not found" state under a 200.
-  if (!product) permanentRedirect(legacySearchPath(slug));
+  if (!product) await leaveDeadSlug(slug);
 
   // Build JSON-LD structured data for Google rich results
   const jsonLd = product?.slug ? {
