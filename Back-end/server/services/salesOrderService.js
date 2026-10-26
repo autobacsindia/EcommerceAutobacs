@@ -30,6 +30,7 @@ import { isPurchasable } from '../utils/stockStatus.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { buildHold, shapeHold, heldFilter } from '../utils/salesHold.js';
 import { workflowView } from '../utils/teamWorkflow.js';
+import { readListFilters, orderQueryFor } from '../utils/orderListFilters.js';
 import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
 import { paymentSummary, retireAllParts } from './salesPaymentService.js';
 import { shapePayDetails } from '../utils/salesPayDetails.js';
@@ -64,12 +65,13 @@ function decodeCursor(cursor) {
   }
 }
 
-async function page(baseQuery, cursor, { includePayment = false } = {}) {
+async function page(baseQuery, cursor, { includePayment = false, oldestFirst = false } = {}) {
   const c = decodeCursor(cursor);
+  const past = oldestFirst ? '$gt' : '$lt';
   // $and, not a spread: the base query may carry its own $or, which a spread would
   // silently replace with the cursor's — page 2 would then ignore the filter.
   const query = c
-    ? { $and: [baseQuery, { $or: [{ createdAt: { $lt: c.createdAt } }, { createdAt: c.createdAt, _id: { $lt: c.id } }] }] }
+    ? { $and: [baseQuery, { $or: [{ createdAt: { [past]: c.createdAt } }, { createdAt: c.createdAt, _id: { [past]: c.id } }] }] }
     : baseQuery;
   const populate = [
     { path: 'user', select: 'name email phone' },
@@ -78,7 +80,7 @@ async function page(baseQuery, cursor, { includePayment = false } = {}) {
   if (includePayment) populate.push({ path: 'payment', select: 'gatewayPaymentId method status amount createdAt' });
   const rows = await orderRepository.find(query, {
     limit: PAGE_SIZE + 1,
-    sort: { createdAt: -1, _id: -1 },
+    sort: oldestFirst ? { createdAt: 1, _id: 1 } : { createdAt: -1, _id: -1 },
     select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
       + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
       + 'bankTransferPendingAt offlinePayment salesHold',
@@ -351,7 +353,7 @@ export const PAID_ORDER_STAGES = Object.freeze({
   delivered: ['delivered'],
 });
 
-export async function listPaidSalesOrders(actor, { cursor, stage } = {}) {
+export async function listPaidSalesOrders(actor, { cursor, stage, ...filters } = {}) {
   const allowed = actor?.role === 'admin'
     || onTeam(actor, STAFF_TEAMS.ACCOUNTS)
     || onTeam(actor, STAFF_TEAMS.PROCUREMENT)
@@ -360,8 +362,11 @@ export async function listPaidSalesOrders(actor, { cursor, stage } = {}) {
   if (!allowed) throw fail('Not authorized.', 403);
   // No stage (or an unknown one) keeps the old behaviour: every paid order.
   const stageStatuses = PAID_ORDER_STAGES[stage];
+  const f = readListFilters(filters);
+  const narrow = orderQueryFor(f);
   const { items, nextCursor } = await page(
     {
+      ...(narrow.$and ? { $and: narrow.$and } : {}),
       // `refunded` stays listed so Accounts can still see an order after its refund.
       paymentStatus: { $in: ['paid', 'refunded'] },
       ...(stageStatuses ? { status: { $in: stageStatuses } } : {}),
@@ -371,7 +376,7 @@ export async function listPaidSalesOrders(actor, { cursor, stage } = {}) {
       ],
     },
     cursor,
-    { includePayment: true },
+    { includePayment: true, oldestFirst: f.sort === 'oldest' },
   );
   return { orders: items.map(shape), nextCursor };
 }

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import OrderListFilters, { NO_FILTERS, filterQuery, isFiltered, type ListFilters } from '@/components/staff/OrderListFilters';
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { ChevronDown, Loader2, RefreshCw } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
@@ -51,30 +52,37 @@ function Row({ order }: { order: WorkRow }) {
 
 /** One team's work list, newest first. */
 export default function WorkQueueList({ queue }: { queue: WorkQueue }) {
+  const [filters, setFilters] = useState<ListFilters>(NO_FILTERS);
   const q = useInfiniteQuery({
-    queryKey: staffKeys.workQueue(queue),
+    queryKey: staffKeys.workQueue(queue, filters),
     queryFn: ({ pageParam }) =>
-      apiClient.get<Page>(`/staff/work?queue=${queue}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`),
+      apiClient.get<Page>(`/staff/work?queue=${queue}${filterQuery(filters)}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`),
+    // Keep the old list on screen while a new search loads (no flash of "Loading…").
+    placeholderData: keepPreviousData,
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor || undefined,
     refetchInterval: 60_000,
   });
   const orders = q.data?.pages.flatMap((p) => p.orders) ?? [];
 
-  if (q.isPending) return <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>;
-  if (q.isError) return <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load the list.')}</p>;
+  const bar = <OrderListFilters value={filters} onChange={setFilters} showStage />;
+  if (q.isPending) return <div className="space-y-3">{bar}<p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p></div>;
+  if (q.isError) return <div className="space-y-3">{bar}<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load the list.')}</p></div>;
 
   return (
     <div className="space-y-3">
+      {bar}
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">{orders.length ? `${orders.length}${q.hasNextPage ? '+' : ''} waiting · newest first` : ''}</p>
+        <p className="text-xs text-gray-500">{orders.length ? `${orders.length}${q.hasNextPage ? '+' : ''} waiting · ${filters.sort === 'oldest' ? 'oldest' : 'newest'} first` : ''}</p>
         <button type="button" onClick={() => q.refetch()} disabled={q.isFetching}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? 'animate-spin' : ''}`} /> Refresh
         </button>
       </div>
       {orders.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">{EMPTY[queue]}</p>
+        <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
+          {isFiltered(filters) ? 'No orders match these filters.' : EMPTY[queue]}
+        </p>
       ) : (
         <ul className="space-y-3">{orders.map((o) => <Row key={o.id} order={o} />)}</ul>
       )}

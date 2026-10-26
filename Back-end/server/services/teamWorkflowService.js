@@ -45,6 +45,7 @@ import { detectKind, KIND } from './storage/contentSniff.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
+import { readListFilters, rowMatches } from '../utils/orderListFilters.js';
 import { SHIPMENT_STATUS } from '../utils/orderFulfilment.js';
 import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
 import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
@@ -289,11 +290,13 @@ function decodeCursor(cursor) {
  * turns out to have nothing left (an admin finished it from the admin panel) is
  * closed on the way past, so the queue heals itself.
  */
-export async function listQueue(actor, queue, { cursor } = {}) {
+export async function listQueue(actor, queue, { cursor, ...filters } = {}) {
   const q = QUEUES[queue];
   if (!q) throw fail('Unknown work list.', 400);
   if (!q.allowed(actor)) throw fail('Not authorized.', 403);
 
+  const f = readListFilters(filters);
+  const newestFirst = f.sort !== 'oldest';
   const decoded = decodeCursor(cursor);
   let after = decoded ? { enteredAt: decoded.at, id: decoded.id } : null;
   const orders = [];
@@ -301,7 +304,7 @@ export async function listQueue(actor, queue, { cursor } = {}) {
   let nextCursor = null;
 
   for (;;) {
-    const batch = await orderRepository.findOpenWorkflowPage({ after, limit: SCAN_BATCH, newestFirst: true });
+    const batch = await orderRepository.findOpenWorkflowPage({ after, limit: SCAN_BATCH, newestFirst });
     let last = null;
     for (const o of batch) {
       scanned += 1;
@@ -313,7 +316,9 @@ export async function listQueue(actor, queue, { cursor } = {}) {
       }
       if (!view.needs.includes(q.team)) continue;
       if (q.team === 'sales' && !can.decide(actor, o)) continue;
-      orders.push(row(o, view));
+      const r = row(o, view);
+      if (!rowMatches(r, f)) continue;
+      orders.push(r);
       if (orders.length >= PAGE_SIZE) break;
     }
     if (!last) break;                                   // nothing more at all

@@ -334,7 +334,8 @@ router.post('/sales/orders/:id/cancel', validateOrderIdParam, validateRequest, a
 // @route  GET /staff/orders/paid?cursor=&stage=processing|delivered — paid sales
 //         orders (accounts, procurement, operations, sales head). No stage = all.
 router.get('/orders/paid', validatePaidOrdersQuery, validateRequest, asyncHandler(async (req, res) => {
-  res.json({ success: true, ...(await listPaidSalesOrders(req.user, { cursor: req.query.cursor, stage: req.query.stage })) });
+  const { cursor, stage, q, source, sort } = req.query;
+  res.json({ success: true, ...(await listPaidSalesOrders(req.user, { cursor, stage, q, source, sort })) });
 }));
 
 // ── Crediting a website order to a salesman (admin, marketing) ──────────────
@@ -439,7 +440,8 @@ router.post('/bank-transfers/:id/reject', validateBankTransferReject, validateRe
 
 // @route  GET /staff/work?queue=procurement|decisions|refunds|deliveries&cursor=
 router.get('/work', validateWorkQueue, validateRequest, asyncHandler(async (req, res) => {
-  res.json({ success: true, ...(await listQueue(req.user, req.query.queue, { cursor: req.query.cursor })) });
+  const { queue, cursor, q, step, source, sort } = req.query;
+  res.json({ success: true, ...(await listQueue(req.user, queue, { cursor, q, step, source, sort })) });
 }));
 
 // @route  GET /staff/work/orders/:id — one order, with the actions this person may take

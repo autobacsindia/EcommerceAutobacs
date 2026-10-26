@@ -188,8 +188,8 @@ export const staffKeys = {
    * orders(), so the existing `invalidateQueries(staffKeys.orders())` after any
    * workflow action already refreshes them.
    */
-  paidOrders: (stage?: 'processing' | 'delivered') =>
-    [...staffKeys.orders(), 'paid', stage ?? 'all'] as const,
+  paidOrders: (stage?: 'processing' | 'delivered', filters: object = {}) =>
+    [...staffKeys.orders(), 'paid', stage ?? 'all', filters] as const,
   salesProducts: (q: string) => [...staffKeys.all, 'sales-products', q.trim().toLowerCase()] as const,
   /**
    * Bank transfers waiting for / checked by accounts. Under orders(): confirming one
@@ -203,7 +203,7 @@ export const staffKeys = {
   quotationList: (status: string) => [...staffKeys.quotations(), 'list', status] as const,
   quotation: (id: string) => [...staffKeys.quotations(), 'one', id] as const,
   /** Team workflow — invalidate `orders()` after any action, since one action moves an order between lists. */
-  workQueue: (queue: string) => [...staffKeys.orders(), 'work', queue] as const,
+  workQueue: (queue: string, filters: object = {}) => [...staffKeys.orders(), 'work', queue, filters] as const,
   workOrder: (id: string) => [...staffKeys.orders(), 'work-order', id] as const,
   /** A customer's saved bank account, as seen from one quotation / order (masked). */
   customerBanks: () => [...staffKeys.all, 'customer-bank'] as const,
