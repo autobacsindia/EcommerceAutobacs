@@ -270,6 +270,8 @@ export function shape(r, viewer) {
       hold: mayHold(viewer) && r.status === 'approved',
       cancel: r.status === 'submitted' && (idOf(r.requestedBy) === idOf(viewer?._id) || isHeadOfTeam || isAdmin(viewer)),
       edit: mayEdit(viewer, r),
+      // After paying: the admin may correct how it was paid, the reference and the screenshots.
+      editPayment: mayPay(viewer) && r.status === 'paid',
     },
     // For the requester: until when they may still edit (admins have no limit).
     editableUntil: !isAdmin(viewer) && mayEdit(viewer, r) ? editDeadline(r) : null,
@@ -569,6 +571,65 @@ export async function update(actor, id, input = {}, req) {
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'edited', fields: changes, backToAccounts });
   await tellChat(r, 'edited', `✏️ ${actor.name || 'Someone'} edited ${what(r)}: ${note}.`, { mentionAdmins: false, mentionRequester: idOf(r.requestedBy) !== idOf(actor._id) });
   return shape(r, actor);
+}
+
+/**
+ * The admin corrects a PAID payment's record: how it was paid, the reference /
+ * UTR, the payment screenshots (add new, remove wrong ones) and a note. The
+ * amount and who was paid are NOT editable — the money has left; a wrong amount
+ * is a new payment or a refund. A request paid in one transfer with others
+ * (payBatch) is corrected together with them: it was one transfer. One
+ * transaction; every change is in each request's history.
+ */
+export async function editPayment(actor, id, { method, reference, note, removeFileIds } = {}, proofFiles = [], req) {
+  if (!mayPay(actor)) throw fail('Only the admin can edit a payment record.', 403);
+  const r0 = await loadVisible(actor, id);
+  if (r0.status !== 'paid') throw fail('Only a paid payment\'s details can be edited here.', 409);
+
+  const how = method ? (['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null) : r0.payment?.method;
+  if (!how) throw fail('Choose how it was paid.', 400);
+  const ref = reference != null ? String(reference).trim().slice(0, 120) : r0.payment?.reference || '';
+  let removeIds = removeFileIds;
+  if (typeof removeIds === 'string') { try { removeIds = JSON.parse(removeIds); } catch { removeIds = [removeIds]; } }
+  removeIds = new Set((Array.isArray(removeIds) ? removeIds : []).map(String));
+  const removing = (r0.files || []).filter((f) => f.kind === 'proof' && removeIds.has(idOf(f._id)));
+  const uploads = (Array.isArray(proofFiles) ? proofFiles : [proofFiles]).filter(Boolean);
+
+  const changes = [];
+  if (how !== r0.payment?.method) changes.push(`paid by ${String(r0.payment?.method || '—').toUpperCase()} → ${how.toUpperCase()}`);
+  if (ref !== (r0.payment?.reference || '')) changes.push(`reference ${r0.payment?.reference || '—'} → ${ref || '—'}`);
+  if (removing.length) changes.push(`${removing.length} screenshot${removing.length === 1 ? '' : 's'} removed`);
+  if (uploads.length) changes.push(`${uploads.length} screenshot${uploads.length === 1 ? '' : 's'} added`);
+  const extra = String(note || '').trim().slice(0, 500);
+  if (!changes.length && !extra) return shape(r0, actor);
+
+  const stored = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor) : [];
+  const batch = r0.payment?.batch || '';
+  const targets = batch ? (await paymentRequestRepository.findPaidBatch(batch)).map((r) => r._id) : [r0._id];
+  const publicIds = removing.map((f) => f.publicId);
+  const log = entry(actor, 'payment_edited', [changes.join(', ') || 'note', extra, batch && targets.length > 1 ? `(whole transfer ${batch}, ${targets.length} payments)` : ''].filter(Boolean).join(' — '));
+
+  let updated;
+  try {
+    updated = await paymentRequestRepository.inTransaction(async (session) => {
+      let mine = null;
+      for (const tid of targets) {
+        if (publicIds.length) await paymentRequestRepository.pullProofsInSession(tid, publicIds, session);
+        const next = await paymentRequestRepository.editPaidInSession(tid, { 'payment.method': how, 'payment.reference': ref }, log, stored, session);
+        if (!next) throw fail(MOVED, 409);
+        if (idOf(tid) === idOf(r0._id)) mine = next;
+      }
+      return mine;
+    });
+  } catch (err) {
+    await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+    throw err;
+  }
+  // Only now, with no request pointing at them any more, delete the removed screenshots.
+  await Promise.all(removing.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'payment_edited', fields: changes, batch: batch || undefined });
+  await tellChat(updated, 'payment_edited', `✏️ Admin corrected the payment record of ${what(updated)}: ${changes.join(', ') || extra}.`);
+  return shape(updated, actor);
 }
 
 // ── Read ─────────────────────────────────────────────────────────────────────

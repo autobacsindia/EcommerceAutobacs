@@ -9,6 +9,7 @@ import {
 } from './api';
 import FilePicker from './FilePicker';
 import EditPaymentRequest from './EditPaymentRequest';
+import EditPaidPayment from './EditPaidPayment';
 
 /** The server takes up to three payment screenshots per payment. */
 const MAX_PROOFS = 3;
@@ -19,7 +20,7 @@ const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-
 const ACTION_LABELS: Record<string, string> = {
   // Who acted is shown beside each entry: accounts (who approved) or the admin (who paid).
   submitted: 'Raised', approved: 'Approved', declined: 'Declined',
-  on_hold: 'Put on hold', paid: 'Paid', cancelled: 'Cancelled', edited: 'Edited',
+  on_hold: 'Put on hold', paid: 'Paid', cancelled: 'Cancelled', edited: 'Edited', payment_edited: 'Payment record corrected',
 };
 const FILE_LABELS = { bill: 'Bill / invoice', qr: 'Payment QR', proof: 'Payment screenshot' } as const;
 
@@ -42,7 +43,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
   const qc = useQueryClient();
   const q = useQuery({ queryKey: paymentKeys.one(id), queryFn: () => getRequest(id) });
   const [note, setNote] = useState('');
-  const [mode, setMode] = useState<null | 'decline' | 'hold' | 'pay' | 'edit'>(startEditing ? 'edit' : null);
+  const [mode, setMode] = useState<null | 'decline' | 'hold' | 'pay' | 'edit' | 'editPayment'>(startEditing ? 'edit' : null);
   const [pay, setPay] = useState({ method: 'razorpay', reference: '' });
   const [proof, setProof] = useState<File[]>([]);
   const [error, setError] = useState('');
@@ -119,10 +120,15 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
             </div>
 
             {/* Actions — only what the server says this person may do now. */}
-            {(r.can.approve || r.can.decline || r.can.pay || r.can.hold || r.can.cancel || r.can.edit) && (
+            {(r.can.approve || r.can.decline || r.can.pay || r.can.hold || r.can.cancel || r.can.edit || r.can.editPayment) && (
               <div className="space-y-3 rounded-xl border border-gray-200 p-4">
                 {mode === null && (
                   <div className="flex flex-wrap gap-2">
+                    {r.can.editPayment && (
+                      <button type="button" onClick={() => setMode('editPayment')} className={`${btn} border border-gray-300 text-gray-800 hover:bg-gray-50`}>
+                        <Pencil className="h-4 w-4" /> Edit payment
+                      </button>
+                    )}
                     {r.can.edit && (
                       <button type="button" onClick={() => setMode('edit')} className={`${btn} border border-gray-300 text-gray-800 hover:bg-gray-50`}
                         title={r.editableUntil ? `You can edit until ${formatDateTimeIST(r.editableUntil)}` : undefined}>
@@ -150,6 +156,9 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                       <button type="button" onClick={() => setMode(null)} className={`${btn} text-gray-700 hover:bg-gray-100`}>Back</button>
                     </div>
                   </div>
+                )}
+                {mode === 'editPayment' && (
+                  <EditPaidPayment r={r} onCancel={() => setMode(null)} onDone={(next) => { setMode(null); done(next); }} />
                 )}
                 {mode === 'edit' && (
                   <EditPaymentRequest r={r} onCancel={() => setMode(null)} onDone={(next) => { setMode(null); done(next); }} />

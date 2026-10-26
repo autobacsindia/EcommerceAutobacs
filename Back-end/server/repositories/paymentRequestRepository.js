@@ -53,6 +53,23 @@ const paymentRequestRepository = {
     .select('-history -files.publicId -files.provider')
     .lean(),
 
+  /** The paid requests recorded by one transfer (payBatch). */
+  findPaidBatch: (batch) => PaymentRequest.find({ status: 'paid', 'payment.batch': batch }).select('_id number').lean(),
+
+  /** Inside a transaction: drop payment screenshots (by stored file) from a paid request. */
+  pullProofsInSession: (id, publicIds, session) => PaymentRequest.findOneAndUpdate(
+    { _id: id, status: 'paid' },
+    { $pull: { files: { kind: 'proof', publicId: { $in: publicIds } } } },
+    { new: true, session },
+  ).lean(),
+
+  /** Inside a transaction: change a paid request's payment details, add screenshots, log it. */
+  editPaidInSession: (id, set, entry, newFiles, session) => PaymentRequest.findOneAndUpdate(
+    { _id: id, status: 'paid' },
+    { $set: set, $push: { history: entry, ...(newFiles.length ? { files: { $each: newFiles } } : {}) } },
+    { new: true, session },
+  ).lean(),
+
   findByIds: (ids) => PaymentRequest.find({ _id: { $in: ids } }).select('-history').lean(),
 
   /**
