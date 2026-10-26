@@ -72,3 +72,23 @@ it('is silent before the browser allows audio, and never throws', () => {
   expect(() => mod.chime()).not.toThrow();
   expect(oscillators).toHaveLength(0);
 });
+
+it('the work alert is a different sound: falling, played twice, triangle notes', () => {
+  const { mod, oscillators } = load();
+  mod.arm();
+  mod.alert();
+  // 2 rings × 2 notes × 3 partials
+  expect(oscillators).toHaveLength(12);
+  const fundamentals = [0, 3, 6, 9].map((i) => oscillators[i].frequency.value);
+  expect(fundamentals).toEqual([987.77, 783.99, 987.77, 783.99]); // ding-dong, ding-dong
+  expect(fundamentals[1]).toBeLessThan(fundamentals[0]); // falls, where the chat chime rises
+  expect((oscillators[0] as unknown as { type: string }).type).toBe('triangle');
+});
+
+it('the work alert respects mute and never throws', () => {
+  const { mod, oscillators } = load();
+  mod.setMuted(true);
+  mod.arm();
+  expect(() => mod.alert()).not.toThrow();
+  expect(oscillators).toHaveLength(0);
+});

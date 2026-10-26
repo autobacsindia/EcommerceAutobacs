@@ -1,5 +1,7 @@
 /**
- * The notification chime — a bright three-note "ding", synthesised, no audio file.
+ * The notification sounds — synthesised, no audio file. `chime` (a bright rising
+ * three-note "ding") is for team chat; `alert` (a falling "ding-dong", twice) is
+ * for everything else that needs the person — see the bottom of this file.
  *
  * ── Why not an mp3 ──────────────────────────────────────────────────────────
  * A file means a network fetch that can fail, a decode, a binary in the repo
@@ -90,11 +92,11 @@ function output(): AudioNode | null {
 }
 
 /** One partial of a note: a sine with a fast strike and a natural decay. */
-function partial(at: number, hz: number, seconds: number, peak: number, dest: AudioNode): void {
+function partial(at: number, hz: number, seconds: number, peak: number, dest: AudioNode, wave: OscillatorType = 'sine'): void {
   if (!ctx) return;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = 'sine';
+  osc.type = wave;
   osc.frequency.value = hz;
   gain.gain.setValueAtTime(0.0001, at);
   gain.gain.exponentialRampToValueAtTime(peak, at + 0.006);
@@ -105,10 +107,10 @@ function partial(at: number, hz: number, seconds: number, peak: number, dest: Au
 }
 
 /** One bell-like note: fundamental, octave and a faint twelfth. */
-function note(at: number, hz: number, seconds: number, peak: number): void {
+function note(at: number, hz: number, seconds: number, peak: number, wave: OscillatorType = 'sine'): void {
   const dest = output();
   if (!dest) return;
-  partial(at, hz, seconds, peak, dest);
+  partial(at, hz, seconds, peak, dest, wave);
   partial(at, hz * 2, seconds * 0.6, peak * 0.35, dest);
   partial(at, hz * 3, seconds * 0.35, peak * 0.12, dest);
 }
@@ -128,6 +130,31 @@ export function chime(): void {
     note(t, 880.0, 0.22, 0.5);
     note(t + 0.09, 1108.73, 0.22, 0.5);
     note(t + 0.18, 1318.51, 0.55, 0.55);
+  } catch {
+    // Nothing here is worth an error boundary.
+  }
+}
+
+/**
+ * The OTHER sound: new work (a payment to approve or pay, an order to handle, a
+ * refund) — never chat. It must be told apart from the chat chime without
+ * looking, so it differs in every way the ear uses:
+ *   • it FALLS (B5 → G5, a "ding-dong") where the chat chime rises;
+ *   • it is played TWICE, like a doorbell, where the chat chime plays once;
+ *   • its notes are fuller (a triangle wave, not a pure sine) and lower.
+ * Same limiter and volume as the chime, same mute switch, same rules about the
+ * first user gesture; never throws.
+ */
+export function alert(): void {
+  if (muted()) return;
+  try {
+    arm();
+    if (!ctx || ctx.state !== 'running') return;
+    const t = ctx.currentTime + 0.01;
+    for (const start of [t, t + 0.62]) {
+      note(start, 987.77, 0.28, 0.55, 'triangle'); // B5 — "ding"
+      note(start + 0.2, 783.99, 0.45, 0.55, 'triangle'); // G5 — "dong"
+    }
   } catch {
     // Nothing here is worth an error boundary.
   }
