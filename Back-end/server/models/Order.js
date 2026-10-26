@@ -169,6 +169,11 @@ const OrderSchema = new mongoose.Schema({
         // history entry) if the line stops being in stock.
         paymentInitiatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         paymentInitiatedAt: Date,
+        // A supplier payment request is raised for this line and not yet paid:
+        // the line reads "Payment Pending". Set when it is raised, cleared when it
+        // is paid (the line becomes "Ordered From Supplier") or cancelled / declined.
+        supplierPaymentAt: Date,
+        supplierPaymentRef: { type: String, trim: true, maxlength: 20 }, // the PR-0000 number
         // Out of stock: the sales person asked the customer and they want their money back.
         refundRequestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         refundRequestedAt: Date,

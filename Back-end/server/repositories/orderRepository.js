@@ -947,6 +947,19 @@ class OrderRepository extends BaseRepository {
    * @param {object} [extra] - additional $set fields, keyed WITHOUT the array prefix
    * @returns {Promise<object|null>} updated order, or null if it was not in `fromStatus`
    */
+  /**
+   * Change fields on one parcel (already-prefixed `shipments.$.…` keys) only if it
+   * still matches `expect` (e.g. still in transit); with a workflow history event.
+   */
+  async updateShipmentIf(orderId, shipmentId, expect, set, event) {
+    const match = Object.fromEntries(Object.entries(expect).map(([k, v]) => [k, v]));
+    return Order.findOneAndUpdate(
+      { _id: orderId, shipments: { $elemMatch: { _id: shipmentId, ...match } } },
+      { $set: set, ...(event ? { $push: { 'workflow.history': { $each: [event], $slice: -300 } } } : {}) },
+      { new: true },
+    ).lean();
+  }
+
   async transitionShipment(orderId, shipmentId, fromStatus, toStatus, extra = {}) {
     const stamp = { shipped: 'shippedAt', delivered: 'deliveredAt' }[toStatus];
     const set = { 'shipments.$.status': toStatus };

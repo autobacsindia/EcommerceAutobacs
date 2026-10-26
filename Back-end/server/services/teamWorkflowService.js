@@ -153,9 +153,9 @@ function lineActions(u, order, line) {
     switch (line.stage) {
       // 'ship' here too: "Ship all" sends lines nobody stock-checked yet — shipping them proves they were in stock.
       case STAGE.STOCK_CHECK: out.push('in_stock', 'ordered', 'out_of_stock', 'ship'); break;
-      case STAGE.TO_SHIP:
-        out.push('ordered', 'out_of_stock', 'ship', line.paymentInitiatedAt ? 'payment_undo' : 'payment_initiated');
-        break;
+      // "Ordered from supplier" comes from paying the supplier now (a supplier payment
+      // request), and the old manual "payment initiated" mark is replaced by it.
+      case STAGE.TO_SHIP: out.push('out_of_stock', 'ship'); break;
       case STAGE.WITH_SUPPLIER: out.push('in_stock', 'ordered', 'out_of_stock', 'ship'); break;
       case STAGE.CUSTOMER_DECISION: out.push('in_stock', 'ordered'); break;
       case STAGE.ACCOUNTS_APPROVAL: if (!line.accountsApprovedAt) out.push('in_stock', 'ordered'); break;
@@ -163,6 +163,8 @@ function lineActions(u, order, line) {
     }
   }
   if (line.stage === STAGE.CUSTOMER_DECISION && can.decide(u, order)) out.push('wait', 'refund');
+  if (mayUndoStock(u, line)) out.push('stock_undo');
+  if (undoableDecision(u, order, line)) out.push('decision_undo');
   if (line.stage === STAGE.ACCOUNTS_APPROVAL && !line.accountsApprovedAt && can.accounts(u)) out.push('approve', 'reject');
   return out;
 }
@@ -183,6 +185,11 @@ const HISTORY_LABELS = {
   refund_send_failed: 'Refund could not be sent — retry it',
   shipped: 'Supplier proof uploaded — shipped',
   delivered: 'Marked delivered',
+  payment_pending: 'Supplier payment requested — Payment Pending',
+  payment_cleared: 'Supplier payment cancelled',
+  stock_undone: 'Stock decision undone',
+  decision_undone: 'Customer decision undone',
+  dispatch_edited: 'Dispatch details corrected',
 };
 
 const photoPath = (orderId, shipmentId) => `/api/v1/staff/work/orders/${orderId}/parcels/${shipmentId}/photo`;
@@ -209,6 +216,7 @@ function detail(u, o) {
         stock: wl?.stock || null,
         supplierName: wl?.supplierName || '',
         paymentInitiatedAt: wl?.paymentInitiatedAt || null,
+        supplierPaymentRef: wl?.supplierPaymentAt ? wl.supplierPaymentRef || '' : '',
         refundRequestedAt: wl?.refundRequestedAt || null,
         accountsApprovedAt: wl?.accountsApprovedAt || null,
         unshipped: unshippedQuantity(o, l.itemId),
@@ -226,6 +234,7 @@ function detail(u, o) {
       items: (s.lines || []).map((l) => ({ name: names.get(idOf(l.itemId)) || 'Item', quantity: l.quantity })),
       photoUrl: s.proofPhoto?.publicId ? photoPath(idOf(o._id), idOf(s._id)) : null,
       canMarkDelivered: s.status === SHIPMENT_STATUS.SHIPPED && can.operations(u),
+      canEdit: mayEditShipment(u, s),
     })),
     cancellations: (o.cancellations || []).map((c) => ({
       id: idOf(c._id),
@@ -379,44 +388,220 @@ const RACE = 'Someone else just updated this item. Refresh and try again.';
 /** Lines a parcel may take: anything not out of stock, refunded, or already shipped. */
 const SHIP_STAGES = new Set([STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.WITH_SUPPLIER]);
 
-/**
- * Procurement: record the stock check for one item.
- * @param {'in_stock'|'ordered'|'out_of_stock'} stock
- */
-/**
- * A supplier payment was raised for this item: it is now "ordered from"
- * that supplier. Called by the payment request itself (paymentRequestService),
- * so raising a payment and the item's stage can never disagree:
- *   needs stock check / in stock  → ordered from <supplier>
- *   already ordered (e.g. the first payment was cancelled and another raised)
- *                                  → the supplier name follows the new payment
- * Any other stage (shipped, out of stock, refund) is left alone — the payment
- * request refuses those items anyway. The "Supplier payment initiated" mark is
- * dropped: the real payment request replaces it.
- */
-export async function markOrderedForPayment(actor, orderId, itemId, supplierName, req) {
-  if (!can.procurement(actor)) throw fail('Only the procurement team can update stock.', 403);
-  const supplier = String(supplierName || '').trim().slice(0, 120);
-  if (!supplier) return;
-  const { line } = await loadLine(orderId, itemId);
-  if (![STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.WITH_SUPPLIER].includes(line.stage)) return;
-  if (line.stock === STOCK.ORDERED && line.supplierName === supplier) return;
+/*
+  Supplier payments move the line (called by paymentRequestService, so a
+  payment request and the line's stage can never disagree):
+    raised            → "Payment Pending"          (markPaymentPending)
+    paid by the admin → "Ordered From Supplier"    (markPaidOrdered)
+    cancelled/declined→ back to where it was        (clearPaymentPending)
+  Each is a compare-and-set on the line; none moves money.
+*/
 
+/** A supplier payment was raised for these lines: they read "Payment Pending". */
+export async function markPaymentPending(actor, orderId, itemId, { supplierName, ref } = {}, req) {
+  if (!can.procurement(actor)) throw fail('Only the procurement team can update stock.', 403);
+  const { line } = await loadLine(orderId, itemId);
+  if (![STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.WITH_SUPPLIER, STAGE.PAYMENT_PENDING].includes(line.stage)) return;
+  const supplier = String(supplierName || '').trim().slice(0, 120);
   const updated = await orderRepository.updateWorkflowLineIf(
     orderId, itemId,
     { stock: line.stock, refundRequestedAt: line.refundRequestedAt || null, accountsApprovedAt: null },
     {
-      set: { stock: STOCK.ORDERED, stockBy: actor._id, stockAt: new Date(), supplierName: supplier },
+      set: { supplierPaymentAt: new Date(), supplierPaymentRef: String(ref || '').slice(0, 20), ...(supplier && { supplierName: supplier }) },
+      // The manual "payment initiated" mark is replaced by the real request.
       unset: line.paymentInitiatedAt ? ['paymentInitiatedBy', 'paymentInitiatedAt'] : [],
     },
-    event(actor, 'stock_ordered', { itemId: line.itemId, note: `Supplier: ${supplier} (supplier payment raised)` }),
+    event(actor, 'payment_pending', { itemId: line.itemId, note: [ref, supplier].filter(Boolean).join(' · ') }),
   );
   if (!updated) throw fail(RACE, 409);
   await refreshOpen(orderId);
-  enqueue(WORKFLOW_CHAT_JOB, { event: 'ordered', orderId: String(orderId), itemId: String(itemId), supplier, by: actor.name });
-  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_stock', itemId: String(itemId), stock: STOCK.ORDERED, via: 'supplier_payment' });
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_payment_pending', itemId: String(itemId), ref });
 }
 
+/**
+ * The admin paid the supplier: the lines are now "Ordered From Supplier".
+ * Best-effort by design — the payment is already recorded; a failure here is
+ * logged and the line can be moved by hand. Never throws.
+ */
+export async function markPaidOrdered(actor, orderId, itemIds, supplierName) {
+  for (const itemId of itemIds) {
+    try {
+      const { line } = await loadLine(orderId, itemId);
+      if (line.stage !== STAGE.PAYMENT_PENDING) continue;
+      const supplier = String(supplierName || line.supplierName || '').trim().slice(0, 120);
+      await orderRepository.updateWorkflowLineIf(
+        orderId, itemId,
+        { stock: line.stock, supplierPaymentAt: line.supplierPaymentAt },
+        {
+          set: { stock: STOCK.ORDERED, stockBy: actor._id, stockAt: new Date(), ...(supplier && { supplierName: supplier }) },
+          unset: ['supplierPaymentAt', 'supplierPaymentRef'],
+        },
+        event(actor, 'stock_ordered', { itemId: line.itemId, note: `Supplier paid${supplier ? ` · ${supplier}` : ''}` }),
+      );
+      enqueue(WORKFLOW_CHAT_JOB, { event: 'ordered', orderId: String(orderId), itemId: String(itemId), supplier, by: actor.name });
+    } catch (err) {
+      console.error(`[Workflow] could not mark ${orderId}/${itemId} ordered after payment (fix by hand):`, err.message);
+    }
+  }
+  await refreshOpen(orderId).catch(() => {});
+}
+
+/** The payment was cancelled or declined: the lines go back to where they were. Never throws. */
+export async function clearPaymentPending(actor, orderId, itemIds, reason) {
+  for (const itemId of itemIds) {
+    try {
+      const { line } = await loadLine(orderId, itemId);
+      if (!line.supplierPaymentAt) continue;
+      await orderRepository.updateWorkflowLineIf(
+        orderId, itemId,
+        { supplierPaymentAt: line.supplierPaymentAt },
+        { set: {}, unset: ['supplierPaymentAt', 'supplierPaymentRef'] },
+        event(actor, 'payment_cleared', { itemId: line.itemId, note: reason }),
+      );
+    } catch (err) {
+      console.error(`[Workflow] could not clear payment pending on ${orderId}/${itemId}:`, err.message);
+    }
+  }
+  await refreshOpen(orderId).catch(() => {});
+}
+
+/*
+  Undo, for UNDO_MINUTES after the step, by the person who took it (the admin at
+  any time) — and only while nothing has happened since. Steps that move money
+  (approving, paying, refunds, confirming a transfer) and "Delivered" (which
+  emails the customer, awards points and opens the return window) are not undone.
+*/
+export const UNDO_MINUTES = 30;
+const withinUndo = (at, now = Date.now()) => !!at && now - new Date(at).getTime() < UNDO_MINUTES * 60 * 1000;
+const byActor = (u, by) => isAdmin(u) || (!!by && idOf(by) === idOf(u?._id));
+
+/** May `u` undo this line's stock decision (In Stock / Out of Stock) now? */
+function mayUndoStock(u, line) {
+  if (!can.procurement(u) || line.supplierPaymentAt || line.refundRequestedAt) return false;
+  if (!((line.stage === STAGE.TO_SHIP && line.stock === STOCK.IN_STOCK)
+    || (line.stage === STAGE.CUSTOMER_DECISION && line.stock === STOCK.OUT_OF_STOCK))) return false;
+  return isAdmin(u) || (byActor(u, line.stockBy) && withinUndo(line.stockAt));
+}
+
+/** Procurement: take back "In Stock" / "Out of Stock" — the line is a New Order again. */
+export async function undoStock(actor, orderId, itemId, req) {
+  const { line } = await loadLine(orderId, itemId);
+  if (!mayUndoStock(actor, line)) {
+    throw fail(`You can undo your own stock decision for ${UNDO_MINUTES} minutes, while nothing else has happened on this item.`, 409);
+  }
+  const updated = await orderRepository.updateWorkflowLineIf(
+    orderId, itemId,
+    { stock: line.stock, stockAt: line.stockAt, refundRequestedAt: null, supplierPaymentAt: null },
+    { set: { stock: STOCK.PENDING }, unset: ['stockBy', 'stockAt', 'paymentInitiatedBy', 'paymentInitiatedAt'] },
+    event(actor, 'stock_undone', { itemId: line.itemId, note: `Was: ${STAGE_LABELS[line.stage]}` }),
+  );
+  if (!updated) throw fail(RACE, 409);
+  await refreshOpen(orderId);
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_stock_undone', itemId: String(itemId) });
+  return getOrder(actor, orderId);
+}
+
+/** The customer's last decision on this line, if it can still be taken back by `u`. */
+function undoableDecision(u, order, line) {
+  if (!can.decide(u, order)) return null;
+  if (line.stage === STAGE.ACCOUNTS_APPROVAL && !line.accountsApprovedAt && line.refundRequestedAt) {
+    return isAdmin(u) || (byActor(u, line.refundRequestedBy) && withinUndo(line.refundRequestedAt)) ? 'refund' : null;
+  }
+  if (line.stage === STAGE.STOCK_CHECK && line.stock === STOCK.PENDING) {
+    const last = [...(order.workflow?.history || [])].reverse().find((h) => h.itemId && idOf(h.itemId) === line.itemId);
+    if (last?.action === 'customer_waits' && (isAdmin(u) || (byActor(u, last.by) && withinUndo(last.at)))) return 'wait';
+  }
+  return null;
+}
+
+/** Sales: take back "Customer will wait" / "Customer wants refund" (before accounts acts). */
+export async function undoDecision(actor, orderId, itemId, req) {
+  const { order, line } = await loadLine(orderId, itemId);
+  const which = undoableDecision(actor, order, line);
+  if (!which) {
+    throw fail(`You can undo the customer's decision for ${UNDO_MINUTES} minutes, until accounts acts on it.`, 409);
+  }
+  const updated = which === 'refund'
+    ? await orderRepository.updateWorkflowLineIf(
+      orderId, itemId,
+      { refundRequestedAt: line.refundRequestedAt, accountsApprovedAt: null },
+      { set: {}, unset: ['refundRequestedBy', 'refundRequestedAt'] },
+      event(actor, 'decision_undone', { itemId: line.itemId, note: 'Refund request taken back' }),
+    )
+    : await orderRepository.updateWorkflowLineIf(
+      orderId, itemId,
+      { stock: STOCK.PENDING },
+      { set: { stock: STOCK.OUT_OF_STOCK, stockBy: actor._id, stockAt: new Date() }, unset: [] },
+      event(actor, 'decision_undone', { itemId: line.itemId, note: '"Customer will wait" taken back' }),
+    );
+  if (!updated) throw fail(RACE, 409);
+  await refreshOpen(orderId);
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_decision_undone', itemId: String(itemId), which });
+  return getOrder(actor, orderId);
+}
+
+/**
+ * Procurement: correct a parcel's dispatch details (courier, tracking number,
+ * proof photo) for UNDO_MINUTES after uploading them, while it is still in transit.
+ */
+export async function editShipment(actor, orderId, shipmentId, { courierName, trackingNumber } = {}, file, req) {
+  if (!can.procurement(actor)) throw fail('Only the procurement team can change dispatch details.', 403);
+  const o = await orderRepository.findForWorkflow(orderId);
+  if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
+  const parcel = (o.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
+  if (!parcel) throw fail('Parcel not found on this order.', 404);
+  if (!mayEditShipment(actor, parcel)) {
+    throw fail(`Dispatch details can be corrected for ${UNDO_MINUTES} minutes after uploading, while the parcel is in transit.`, 409);
+  }
+  const set = {};
+  const changes = [];
+  if (courierName != null) {
+    const c = String(courierName).trim().slice(0, 80);
+    if (c !== (parcel.carrier?.name || '')) { set['shipments.$.carrier.name'] = c; changes.push(`courier ${c || '—'}`); }
+  }
+  if (trackingNumber != null) {
+    const t = String(trackingNumber).trim().slice(0, 80);
+    if (t !== (parcel.trackingNumber || '')) { set['shipments.$.trackingNumber'] = t; changes.push(`tracking ${t || '—'}`); }
+  }
+  let stored = null;
+  if (file?.buffer?.length) {
+    if (file.buffer.length > MAX_PROOF_BYTES) throw fail('The photo is too large (8 MB maximum).', 400);
+    if (detectKind(file.buffer) !== KIND.IMAGE) throw fail('The proof must be a photo or screenshot (JPG, PNG or WebP).', 400);
+    const ext = { jpeg: 'jpg', png: 'png', webp: 'webp' }[String(file.mimetype || '').split('/')[1]] || 'jpg';
+    stored = await putPrivateAsset({
+      buffer: file.buffer, folder: PROOF_FOLDER, basename: `proof-${orderId}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
+      contentType: file.mimetype || 'image/jpeg', cloudinaryPrivate: true,
+    });
+    set['shipments.$.proofPhoto'] = {
+      publicId: stored.publicId, provider: stored.provider, url: stored.url || undefined,
+      contentType: file.mimetype || 'image/jpeg', bytes: stored.bytes, uploadedAt: new Date(), uploadedBy: actor._id,
+    };
+    changes.push('proof photo');
+  }
+  if (!changes.length) return getOrder(actor, orderId);
+
+  const updated = await orderRepository.updateShipmentIf(orderId, shipmentId, { status: SHIPMENT_STATUS.SHIPPED }, set,
+    event(actor, 'dispatch_edited', { note: `Parcel ${parcel.sequence}: ${changes.join(', ')}` }));
+  if (!updated) {
+    if (stored) await deletePrivateAsset({ publicId: stored.publicId, resourceType: 'image', provider: stored.provider });
+    throw fail('This parcel changed just now — refresh and try again.', 409);
+  }
+  if (stored && parcel.proofPhoto?.publicId) {
+    await deletePrivateAsset({ publicId: parcel.proofPhoto.publicId, resourceType: 'image', provider: parcel.proofPhoto.provider });
+  }
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_dispatch_edited', shipmentId: String(shipmentId), fields: changes });
+  return getOrder(actor, orderId);
+}
+
+function mayEditShipment(u, parcel) {
+  if (!can.procurement(u) || parcel.status !== SHIPMENT_STATUS.SHIPPED) return false;
+  return isAdmin(u) || (byActor(u, parcel.proofPhoto?.uploadedBy) && withinUndo(parcel.proofPhoto?.uploadedAt || parcel.shippedAt));
+}
+
+/**
+ * Procurement: record the stock check for one item.
+ * @param {'in_stock'|'ordered'|'out_of_stock'} stock
+ */
 export async function setStock(actor, orderId, itemId, { stock, supplierName } = {}, req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can update stock.', 403);
   if (![STOCK.IN_STOCK, STOCK.ORDERED, STOCK.OUT_OF_STOCK].includes(stock)) throw fail('Unknown stock status.', 400);
@@ -474,29 +659,10 @@ export async function setStock(actor, orderId, itemId, { stock, supplierName } =
  * Compare-and-set on the line's current mark, so a double press or two people at once
  * record it once; the loser is told to refresh.
  */
-export async function setPaymentInitiated(actor, orderId, itemId, { initiated } = {}, req) {
+export async function setPaymentInitiated(actor) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can update supplier payment.', 403);
-  const on = initiated === true || initiated === 'true';
-
-  const { order, line } = await loadLine(orderId, itemId);
-  if (!lineActions(actor, order, line).includes(on ? 'payment_initiated' : 'payment_undo')) {
-    throw fail(on
-      ? `Payment can only be marked on an in-stock item that has not shipped (this one is "${STAGE_LABELS[line.stage]}").`
-      : 'There is no payment mark to remove on this item.', 409);
-  }
-
-  const updated = await orderRepository.updateWorkflowLineIf(
-    orderId, itemId,
-    { stock: STOCK.IN_STOCK, paymentInitiatedAt: on ? null : line.paymentInitiatedAt },
-    on
-      ? { set: { paymentInitiatedBy: actor._id, paymentInitiatedAt: new Date() } }
-      : { unset: ['paymentInitiatedBy', 'paymentInitiatedAt'] },
-    event(actor, on ? 'payment_initiated' : 'payment_undone', { itemId: line.itemId }),
-  );
-  if (!updated) throw fail(RACE, 409);
-
-  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_supplier_payment', itemId: String(itemId), initiated: on });
-  return getOrder(actor, orderId);
+  // Replaced by real supplier payment requests ("Payment Pending" → "Ordered From Supplier").
+  throw fail('"Payment initiated" is replaced by "Request supplier payment" on the item.', 410);
 }
 
 /**

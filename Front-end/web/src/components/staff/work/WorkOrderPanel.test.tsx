@@ -196,46 +196,25 @@ describe('WorkOrderPanel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/Someone else just updated/);
   });
 
-  describe('supplier payment initiated', () => {
-    const inStock = (over: Partial<WorkOrder['lines'][number]> = {}): WorkOrder => ({
-      ...base,
-      lines: [{ ...base.lines[0], stage: 'to_ship', stageLabel: 'In stock — to ship', stock: 'in_stock', actions: ['ordered', 'out_of_stock', 'ship', 'payment_initiated'], ...over }],
-      canShip: true,
+  describe('undo and dispatch corrections', () => {
+    it('shows Undo when the server allows it, and asks before undoing the stock decision', async () => {
+      get.mockImplementation((url: string) => Promise.resolve(url.startsWith('/payment-requests/order/')
+        ? { requests: [] }
+        : { success: true, order: { ...base, lines: [{ ...base.lines[0], stage: 'to_ship', stageLabel: 'In Stock', stock: 'in_stock', actions: ['out_of_stock', 'ship', 'stock_undo'] }] } }));
+      post.mockResolvedValue({ success: true, order: base });
+      window.confirm = jest.fn(() => true);
+      renderPanel();
+      fireEvent.click(await screen.findByRole('button', { name: /^Undo$/ }));
+      await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/lines/i1/undo-stock', {}));
+      expect(screen.queryByRole('button', { name: /Payment initiated/ })).not.toBeInTheDocument();
     });
 
-    it('procurement marks it on an in-stock item, and the mark shows', async () => {
-      get.mockResolvedValue({ success: true, order: inStock() });
-      post.mockResolvedValue({ success: true, order: inStock({ paymentInitiatedAt: '2026-10-07T06:00:00Z', actions: ['ordered', 'out_of_stock', 'ship', 'payment_undo'] }) });
+    it('a stage shows its own colour: Payment Pending is red', async () => {
+      get.mockImplementation((url: string) => Promise.resolve(url.startsWith('/payment-requests/order/')
+        ? { requests: [] }
+        : { success: true, order: { ...base, lines: [{ ...base.lines[0], stage: 'payment_pending', stageLabel: 'Payment Pending', actions: [] }] } }));
       renderPanel();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Payment initiated' }));
-      await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/lines/i1/payment', { initiated: true }));
-      expect(await screen.findByText(/Supplier payment initiated/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Undo payment' })).toBeInTheDocument();
-      // Shipping is not blocked by it.
-      expect(screen.getByRole('button', { name: /Upload proof/ })).toBeInTheDocument();
-    });
-
-    it('undo asks first, then removes the mark', async () => {
-      const marked = inStock({ paymentInitiatedAt: '2026-10-07T06:00:00Z', actions: ['ordered', 'out_of_stock', 'ship', 'payment_undo'] });
-      get.mockResolvedValue({ success: true, order: marked });
-      post.mockResolvedValue({ success: true, order: inStock() });
-      renderPanel();
-
-      (window.confirm as jest.Mock).mockReturnValueOnce(false);
-      fireEvent.click(await screen.findByRole('button', { name: 'Undo payment' }));
-      expect(post).not.toHaveBeenCalled();
-
-      fireEvent.click(screen.getByRole('button', { name: 'Undo payment' }));
-      await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/lines/i1/payment', { initiated: false }));
-      expect(await screen.findByRole('button', { name: 'Payment initiated' })).toBeInTheDocument();
-    });
-
-    it('other teams see the mark but get no button', async () => {
-      get.mockResolvedValue({ success: true, order: { ...inStock({ paymentInitiatedAt: '2026-10-07T06:00:00Z', actions: [] }), canShip: false } });
-      renderPanel();
-      expect(await screen.findByText(/Supplier payment initiated/)).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /Payment initiated|Undo payment/ })).not.toBeInTheDocument();
+      expect((await screen.findByText('Payment Pending')).className).toMatch(/bg-red-100/);
     });
   });
 });

@@ -567,126 +567,100 @@ describe('Paid orders list', () => {
     expect(all).toHaveLength(27);
     expect(all.map((o) => o.id)).not.toContain(String(legacyWeb._id)); // paid before the workflow
     expect(all.filter((o) => o.source === 'sales')).toHaveLength(1);
-    expect(all[0].workflowSummary).toBe('Needs stock check (2 of 2)');
+    expect(all[0].workflowSummary).toBe('New Order (2 of 2)');
     await expect(listPaidSalesOrders(seller)).rejects.toMatchObject({ statusCode: 403 });
   });
 });
 
-describe('supplier payment initiated (in-stock items)', () => {
-  const lineOf = (view, itemId) => view.lines.find((l) => l.itemId === itemId);
-
-  it('procurement marks it, everyone viewing the order sees it, and it is in the history', async () => {
+describe('the old "payment initiated" mark', () => {
+  it('is no longer offered — a supplier payment request replaces it', async () => {
     const p = await staff('procurement', { name: 'Priya P' });
     const order = await paidOrder();
     const id = String(order._id);
     const [cover] = ids(order);
+    const view = await wf.setStock(p, id, cover, { stock: 'in_stock' }, req);
+    const line = view.lines.find((l) => l.itemId === cover);
+    expect(line.actions).not.toContain('payment_initiated');
+    await expect(wf.setPaymentInitiated(p, id, cover, { initiated: true }, req)).rejects.toMatchObject({ statusCode: 410 });
+  });
+});
 
+describe('undo and correct, for 30 minutes', () => {
+  const lineOf = (view, itemId) => view.lines.find((l) => l.itemId === itemId);
+  const age = async (orderId, field, minutes) => {
+    const o = await Order.findById(orderId).lean();
+    const lines = o.workflow.lines.map((l) => ({ ...l, [field]: new Date(Date.now() - minutes * 60000) }));
+    await Order.collection.updateOne({ _id: o._id }, { $set: { 'workflow.lines': lines } });
+  };
+
+  it("procurement undoes its own \"In Stock\" (a New Order again); not someone else's, not after 30 min", async () => {
+    const p = await staff('procurement', { name: 'Priya P' });
+    const p2 = await staff('procurement', { name: 'Pavan' });
+    const order = await paidOrder();
+    const id = String(order._id);
+    const [cover] = ids(order);
     let view = await wf.setStock(p, id, cover, { stock: 'in_stock' }, req);
-    expect(lineOf(view, cover).actions).toContain('payment_initiated');
-    expect(lineOf(view, cover).paymentInitiatedAt).toBeNull();
+    expect(lineOf(view, cover).actions).toContain('stock_undo');
+    expect(lineOf(await wf.getOrder(p2, id), cover).actions).not.toContain('stock_undo');
+    await expect(wf.undoStock(p2, id, cover, req)).rejects.toMatchObject({ statusCode: 409 });
+    view = await wf.undoStock(p, id, cover, req);
+    expect(lineOf(view, cover)).toMatchObject({ stage: 'stock_check', stageLabel: 'New Order' });
+    expect(view.history[0].action).toBe('Stock decision undone');
 
-    view = await wf.setPaymentInitiated(p, id, cover, { initiated: true }, req);
-    expect(lineOf(view, cover).paymentInitiatedAt).toBeTruthy();
-    expect(lineOf(view, cover).actions).toContain('payment_undo');
-    expect(lineOf(view, cover).actions).not.toContain('payment_initiated');
-    // A status marker only: the stage does not move, shipping stays available.
-    expect(lineOf(view, cover).stage).toBe(STAGE.TO_SHIP);
-    expect(view.canShip).toBe(true);
-    expect(view.history[0]).toMatchObject({ action: 'Supplier payment initiated', by: 'Priya P', item: 'Seat cover' });
-
-    // Other teams see it (read-only — no action for them).
-    for (const other of [await staff('operations'), await staff('accounts'), await staff('sales', { isHead: true }), await admin()]) {
-      const seen = lineOf(await wf.getOrder(other, id), cover);
-      expect(seen.paymentInitiatedAt).toBeTruthy();
-    }
-    const opsView = lineOf(await wf.getOrder(await staff('operations'), id), cover);
-    expect(opsView.actions).not.toContain('payment_undo');
+    await wf.setStock(p, id, cover, { stock: 'out_of_stock' }, req);
+    await age(id, 'stockAt', 31);
+    await expect(wf.undoStock(p, id, cover, req)).rejects.toMatchObject({ statusCode: 409 });
   });
 
-  it('can be undone, and the undo is recorded', async () => {
+  it('cannot undo once something else happened (a supplier payment raised)', async () => {
     const p = await staff('procurement');
     const order = await paidOrder();
     const id = String(order._id);
     const [cover] = ids(order);
     await wf.setStock(p, id, cover, { stock: 'in_stock' }, req);
-    await wf.setPaymentInitiated(p, id, cover, { initiated: true }, req);
-
-    const view = await wf.setPaymentInitiated(p, id, cover, { initiated: false }, req);
-    expect(lineOf(view, cover).paymentInitiatedAt).toBeNull();
-    expect(lineOf(view, cover).actions).toContain('payment_initiated');
-    expect(view.history.map((h) => h.action).slice(0, 2)).toEqual(['Supplier payment mark removed', 'Supplier payment initiated']);
+    await wf.markPaymentPending(p, id, cover, { supplierName: 'ARB', ref: 'PR-0001' }, req);
+    const view = await wf.getOrder(p, id);
+    expect(lineOf(view, cover)).toMatchObject({ stage: 'payment_pending', stageLabel: 'Payment Pending', supplierPaymentRef: 'PR-0001' });
+    expect(lineOf(view, cover).actions).not.toContain('stock_undo');
+    await expect(wf.undoStock(p, id, cover, req)).rejects.toMatchObject({ statusCode: 409 });
   });
 
-  it('pressed twice (or by two people at once) records it once', async () => {
+  it('sales undoes "wants a refund" before accounts acts, and "will wait"', async () => {
     const p = await staff('procurement');
+    const head = await staff('sales', { isHead: true });
     const order = await paidOrder();
     const id = String(order._id);
     const [cover] = ids(order);
-    await wf.setStock(p, id, cover, { stock: 'in_stock' }, req);
-
-    const results = await Promise.allSettled([
-      wf.setPaymentInitiated(p, id, cover, { initiated: true }, req),
-      wf.setPaymentInitiated(p, id, cover, { initiated: true }, req),
-    ]);
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.find((r) => r.status === 'rejected').reason).toMatchObject({ statusCode: 409 });
-    const fresh = await Order.findById(id).lean();
-    expect(fresh.workflow.history.filter((h) => h.action === 'payment_initiated')).toHaveLength(1);
+    await wf.setStock(p, id, cover, { stock: 'out_of_stock' }, req);
+    let view = await wf.recordDecision(head, id, cover, { decision: 'refund' }, req);
+    expect(lineOf(view, cover).actions).toContain('decision_undo');
+    view = await wf.undoDecision(head, id, cover, req);
+    expect(lineOf(view, cover).stage).toBe('customer_decision');
+    view = await wf.recordDecision(head, id, cover, { decision: 'wait' }, req);
+    expect(lineOf(view, cover).stage).toBe('stock_check');
+    view = await wf.undoDecision(head, id, cover, req);
+    expect(lineOf(view, cover).stage).toBe('customer_decision');
   });
 
-  it('is only for in-stock items, and only for procurement', async () => {
+  it('procurement corrects the dispatch details while in transit, for 30 minutes', async () => {
     const p = await staff('procurement');
     const order = await paidOrder();
     const id = String(order._id);
-    const [cover, mat] = ids(order);
-
-    // Not checked yet / ordered from supplier / out of stock: refused.
-    await expect(wf.setPaymentInitiated(p, id, cover, { initiated: true }, req)).rejects.toMatchObject({ statusCode: 409 });
-    await wf.setStock(p, id, cover, { stock: 'ordered', supplierName: 'Ram Traders' }, req);
-    await expect(wf.setPaymentInitiated(p, id, cover, { initiated: true }, req)).rejects.toMatchObject({ statusCode: 409 });
-    await wf.setStock(p, id, mat, { stock: 'out_of_stock' }, req);
-    await expect(wf.setPaymentInitiated(p, id, mat, { initiated: true }, req)).rejects.toMatchObject({ statusCode: 409 });
-
-    // Other teams cannot press it.
-    await wf.setStock(p, id, cover, { stock: 'in_stock' }, req);
-    for (const other of [await staff('operations'), await staff('accounts'), await staff('sales', { isHead: true })]) {
-      await expect(wf.setPaymentInitiated(other, id, cover, { initiated: true }, req)).rejects.toMatchObject({ statusCode: 403 });
-    }
-    // Nothing to undo when it was never marked.
-    await expect(wf.setPaymentInitiated(p, id, cover, { initiated: false }, req)).rejects.toMatchObject({ statusCode: 409 });
+    let view = await wf.shipWithProof(p, id, { courierName: 'Delhivery', trackingNumber: 'DL123' }, photo(), req);
+    const parcel = view.parcels[0];
+    expect(parcel.canEdit).toBe(true);
+    view = await wf.editShipment(p, id, parcel.id, { courierName: 'Blue Dart', trackingNumber: 'BD999' }, null, req);
+    expect(view.parcels[0]).toMatchObject({ courier: 'Blue Dart', trackingNumber: 'BD999' });
+    expect(view.history[0]).toMatchObject({ action: 'Dispatch details corrected' });
+    const o = await Order.findById(id).lean();
+    const shipments = o.shipments.map((s) => ({ ...s, proofPhoto: { ...s.proofPhoto, uploadedAt: new Date(Date.now() - 31 * 60000) } }));
+    await Order.collection.updateOne({ _id: o._id }, { $set: { shipments } });
+    await expect(wf.editShipment(p, id, parcel.id, { trackingNumber: 'X' }, null, req)).rejects.toMatchObject({ statusCode: 409 });
   });
 
-  it('is cleared, with a note, if the item stops being in stock', async () => {
-    const p = await staff('procurement');
-    const order = await paidOrder();
-    const id = String(order._id);
-    const [cover] = ids(order);
-    await wf.setStock(p, id, cover, { stock: 'in_stock' }, req);
-    await wf.setPaymentInitiated(p, id, cover, { initiated: true }, req);
-
-    let view = await wf.setStock(p, id, cover, { stock: 'out_of_stock' }, req);
-    expect(lineOf(view, cover).paymentInitiatedAt).toBeNull();
-    expect(view.history[0]).toMatchObject({ action: 'Marked out of stock', note: 'Supplier payment mark removed' });
-
-    // Back in stock: starts unmarked.
-    view = await wf.setStock(p, id, cover, { stock: 'in_stock' }, req);
-    expect(lineOf(view, cover).paymentInitiatedAt).toBeNull();
-  });
-
-  it('does not block shipping, and shipping keeps the mark in the history', async () => {
-    const p = await staff('procurement');
-    const order = await paidOrder();
-    const id = String(order._id);
-    const [cover, mat] = ids(order);
-    await wf.setStock(p, id, cover, { stock: 'in_stock' }, req);
-    await wf.setStock(p, id, mat, { stock: 'in_stock' }, req);
-    await wf.setPaymentInitiated(p, id, cover, { initiated: true }, req);
-
-    // `mat` was never marked — it ships anyway.
-    const view = await wf.shipWithProof(p, id, { courierName: 'Delhivery', trackingNumber: 'DL9' }, photo(), req);
-    expect(view.lines.every((l) => l.stage === STAGE.SHIPPED)).toBe(true);
-    // A shipped line offers no payment action any more.
-    expect(view.lines.every((l) => !l.actions.includes('payment_initiated') && !l.actions.includes('payment_undo'))).toBe(true);
-    await expect(wf.setPaymentInitiated(p, id, mat, { initiated: true }, req)).rejects.toMatchObject({ statusCode: 409 });
+  it('labels: the six stages', async () => {
+    const { STAGE_LABELS } = await import('../utils/teamWorkflow.js');
+    expect([STAGE_LABELS.stock_check, STAGE_LABELS.to_ship, STAGE_LABELS.payment_pending, STAGE_LABELS.with_supplier, STAGE_LABELS.shipped, STAGE_LABELS.delivered])
+      .toEqual(['New Order', 'In Stock', 'Payment Pending', 'Ordered From Supplier', 'Dispatched', 'Delivered']);
   });
 });

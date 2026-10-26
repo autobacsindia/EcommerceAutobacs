@@ -42,6 +42,10 @@ export function describeAction(a) {
       case 'team_customer_decision': return { text: d.decision === 'refund' ? 'Recorded: customer wants a refund' : 'Recorded: customer will wait', area: 'GTM' };
       case 'team_refund_approved': return { text: 'Approved an item refund', area: 'Accounts' };
       case 'team_refund_rejected': return { text: 'Sent a refund back to GTM', area: 'Accounts' };
+      case 'team_payment_pending': return { text: `Item set to Payment Pending${d.ref ? ` (${d.ref})` : ''}`, area: 'Procurement' };
+      case 'team_stock_undone': return { text: 'Undid a stock decision', area: 'Procurement' };
+      case 'team_decision_undone': return { text: 'Undid a customer decision', area: 'GTM' };
+      case 'team_dispatch_edited': return { text: 'Corrected dispatch details', area: 'Procurement' };
       default:
         if (a.action === 'CREATE' && d.via === 'sales_panel') return { text: `Created a sales order (₹${Number(d.totalAmount || 0).toLocaleString('en-IN')})`, area: 'GTM' };
         return { text: `${a.action === 'CREATE' ? 'Created' : 'Updated'} an order`, area: 'Orders' };
@@ -49,7 +53,7 @@ export function describeAction(a) {
   }
   if (a.resource === 'PaymentRequest') {
     if (a.action === 'CREATE') return { text: `Raised a ${d.kind === 'supplier' ? 'supplier payment' : 'expense'} (₹${Number(d.amount || 0).toLocaleString('en-IN')})`, area: 'Payments' };
-    const words = { approved: 'Approved a payment', declined: 'Declined a payment', on_hold: 'Put a payment on hold', paid: 'Paid a payment', cancelled: 'Cancelled a payment request' };
+    const words = { approved: 'Approved a payment', declined: 'Declined a payment', on_hold: 'Put a payment on hold', paid: 'Paid a payment', cancelled: 'Cancelled a payment request', edited: 'Edited a payment request' };
     return { text: words[d.change] || 'Updated a payment request', area: 'Payments' };
   }
   if (a.resource === 'User') {
@@ -61,6 +65,10 @@ export function describeAction(a) {
     return { text: words[d.change] || 'Updated a staff account', area: 'Staff' };
   }
   if (a.resource === 'StaffInvite') return { text: 'Invited someone to a team', area: 'Staff' };
+  if (a.resource === 'BankTransfer') {
+    const words = { edited: 'Corrected a bank transfer', withdrawn: 'Withdrew a bank transfer', confirmed: 'Confirmed a bank transfer', rejected: 'Rejected a bank transfer' };
+    return { text: a.action === 'CREATE' ? 'Recorded a bank transfer' : words[d.change] || 'Updated a bank transfer', area: 'Payments' };
+  }
   return { text: `${String(a.action || '').toLowerCase()} ${a.resource || ''}`.trim(), area: a.resource || 'Other' };
 }
 

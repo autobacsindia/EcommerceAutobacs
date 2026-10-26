@@ -102,7 +102,7 @@ describe('workflowView', () => {
     const o = orderWith({ stock: 'in_stock' });
     o.items.push({ _id: oid(), name: 'Cover', quantity: 1 });
     o.workflow.lines.push({ itemId: o.items[1]._id, stock: 'pending' });
-    expect(workflowView(o).summary).toBe('Needs stock check (1 of 2)');
+    expect(workflowView(o).summary).toBe('New Order (1 of 2)');
   });
 });
 
