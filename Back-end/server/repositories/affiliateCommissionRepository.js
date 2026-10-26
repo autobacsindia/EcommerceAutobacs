@@ -291,6 +291,18 @@ class AffiliateCommissionRepository extends BaseRepository {
    * Guarded on `maturesAt: null` so a re-delivered / re-run job cannot push the date
    * forward and delay a payment that was already due.
    */
+  /**
+   * Take back a maturity date stamped on delivery (the delivery was undone). Only a
+   * still-pending accrual — an approved / paid one is never touched here.
+   */
+  async clearMaturity(orderId) {
+    const res = await AffiliateCommission.updateOne(
+      { order: orderId, type: COMMISSION_TYPE.ACCRUAL, status: COMMISSION_STATUS.PENDING },
+      { $set: { maturesAt: null } }
+    );
+    return res.modifiedCount === 1;
+  }
+
   async stampMaturity(orderId, maturesAt) {
     const res = await AffiliateCommission.updateOne(
       {

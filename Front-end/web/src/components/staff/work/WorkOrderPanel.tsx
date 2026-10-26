@@ -270,6 +270,12 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                         <CheckCircle2 className="h-3.5 w-3.5" /> Mark delivered
                       </button>
                     )}
+                    {p.canUndoDelivered && (
+                      <button type="button" disabled={busy} className={secondary}
+                        onClick={() => { if (window.confirm(`Put parcel ${p.sequence} back in transit? Use this only if it was marked delivered by mistake. The customer keeps the email they already got; their loyalty points are not taken back, and no second points are given when it is delivered again.`)) act.mutate({ path: '/undo-delivered', body: { shipmentId: p.id } }); }}>
+                        <Undo2 className="h-3.5 w-3.5" /> Undo delivered
+                      </button>
+                    )}
                   </div>
                   {editParcel === p.id && (
                     <form className="space-y-2 pt-2" aria-label={`Edit dispatch details for parcel ${p.sequence}`}

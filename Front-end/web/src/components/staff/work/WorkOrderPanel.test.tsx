@@ -217,4 +217,23 @@ describe('WorkOrderPanel', () => {
       expect((await screen.findByText('Payment Pending')).className).toMatch(/bg-red-100/);
     });
   });
+
+  it('operations can put a parcel marked delivered by mistake back in transit, after confirming', async () => {
+    const delivered = { ...base, parcels: [{ id: 's1', sequence: 1, status: 'delivered' as const, courier: '', trackingNumber: '', shippedAt: null, deliveredAt: null, items: [], photoUrl: '/p', canMarkDelivered: false, canUndoDelivered: true }] };
+    get.mockResolvedValue({ success: true, order: delivered });
+    post.mockResolvedValue({ success: true, order: base });
+    renderPanel();
+    (window.confirm as jest.Mock).mockReturnValueOnce(false);
+    fireEvent.click(await screen.findByRole('button', { name: /Undo delivered/ }));
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Undo delivered/ }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/undo-delivered', { shipmentId: 's1' }));
+  });
+
+  it('no Undo delivered button without the permission', async () => {
+    get.mockResolvedValue({ success: true, order: { ...base, parcels: [{ id: 's1', sequence: 1, status: 'delivered' as const, courier: '', trackingNumber: '', shippedAt: null, deliveredAt: null, items: [], photoUrl: '/p', canMarkDelivered: false }] } });
+    renderPanel();
+    await screen.findByText(/Parcel 1/);
+    expect(screen.queryByRole('button', { name: /Undo delivered/ })).toBeNull();
+  });
 });

@@ -259,6 +259,22 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
     }
   };
 
+  // Marked delivered by mistake: back in transit (the server re-checks returns and affiliate payouts).
+  const handleUndoDelivered = async (shipment: Shipment) => {
+    if (!window.confirm(`Put parcel ${shipment.sequence} back in transit? Use this only if it was marked delivered by mistake. The customer keeps the email they already got; their loyalty points are not taken back, and no second points are given when it is delivered again.`)) return;
+    setBusyId(shipment._id);
+    try {
+      await apiClient.post(`/staff/work/orders/${encodeURIComponent(orderId)}/undo-delivered`, { shipmentId: shipment._id });
+      toast.success(`Parcel ${shipment.sequence} is back in transit.`);
+      await load();
+      onChanged?.();
+    } catch (err: any) {
+      toast.error(err?.rawData?.message || err?.message || 'Could not undo the delivery.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   /*
     {key, label} rather than bare strings: the label was being used as the React key, so
     two order lines that render identically (same product name, different variant) would
@@ -464,6 +480,15 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
                 >
                   <CheckCircle2 className="h-4 w-4" />
                   {busyId === shipment._id ? 'Saving…' : 'Mark delivered'}
+                </button>
+              )}
+              {canManage && shipment.status === 'delivered' && (
+                <button
+                  onClick={() => handleUndoDelivered(shipment)}
+                  disabled={busyId === shipment._id}
+                  className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {busyId === shipment._id ? 'Saving…' : 'Undo delivered'}
                 </button>
               )}
             </div>

@@ -64,6 +64,8 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     shippedAt: string | null;
     deliveredAt: string | null;
     items: { name: string; quantity: number }[];
+    /** Marked delivered by mistake: operations / admin can put it back in transit. */
+    canUndoDelivered?: boolean;
     photoUrl: string | null;
     canMarkDelivered: boolean;
     /** Dispatch details can still be corrected (any time while the parcel is in transit). */

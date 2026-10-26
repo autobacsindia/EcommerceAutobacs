@@ -186,6 +186,7 @@ const HISTORY_LABELS = {
   refund_send_failed: 'Refund could not be sent — retry it',
   shipped: 'Supplier proof uploaded — shipped',
   delivered: 'Marked delivered',
+  delivery_undone: 'Delivery undone — back in transit',
   payment_pending: 'Supplier payment requested — Payment Pending',
   payment_cleared: 'Supplier payment cancelled',
   stock_undone: 'Stock decision undone',
@@ -235,6 +236,8 @@ function detail(u, o) {
       items: (s.lines || []).map((l) => ({ name: names.get(idOf(l.itemId)) || 'Item', quantity: l.quantity })),
       photoUrl: s.proofPhoto?.publicId ? photoPath(idOf(o._id), idOf(s._id)) : null,
       canMarkDelivered: s.status === SHIPMENT_STATUS.SHIPPED && can.operations(u),
+      // Marked delivered by mistake: operations (or the admin) puts it back in transit.
+      canUndoDelivered: s.status === SHIPMENT_STATUS.DELIVERED && can.operations(u),
       canEdit: mayEditShipment(u, s),
     })),
     cancellations: (o.cancellations || []).map((c) => ({
@@ -919,6 +922,31 @@ export async function retryRefund(actor, orderId, cancellationId, req) {
 }
 
 /** Operations: the parcel (or every parcel in transit) has arrived. */
+/**
+ * Operations: undo "delivered" on one parcel marked by mistake — it is back in
+ * transit and the order back in the deliveries queue. See
+ * shipmentService.undoShipmentDelivered for what delivery started and how each
+ * part is handled (points kept, review email skipped, affiliate maturity cleared).
+ */
+export async function undoDelivered(actor, orderId, { shipmentId } = {}, req) {
+  if (!can.operations(actor)) throw fail('Only the operations team can undo a delivery.', 403);
+  const o = await orderRepository.findForWorkflow(orderId);
+  if (!o || !canView(actor, o)) throw fail('Order not found.', 404);
+  const parcel = (o.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
+  if (!parcel) throw fail('Parcel not found on this order.', 404);
+
+  const r = await shipmentService.undoShipmentDelivered(orderId, idOf(parcel._id), { userId: actor._id });
+  if (!r.success) throw fail(r.message, 409);
+  if (!r.alreadyUndone) {
+    if (o.workflow?.enteredAt) {
+      await orderRepository.pushWorkflowEvent(orderId, event(actor, 'delivery_undone', { note: `Parcel ${parcel.sequence}` }));
+    }
+    auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_delivery_undone', shipmentId: idOf(parcel._id) });
+  }
+  await refreshOpen(orderId);
+  return getOrder(actor, orderId);
+}
+
 export async function markDelivered(actor, orderId, { shipmentId } = {}, req) {
   if (!can.operations(actor)) throw fail('Only the operations team can mark deliveries.', 403);
   const o = await orderRepository.findForWorkflow(orderId);

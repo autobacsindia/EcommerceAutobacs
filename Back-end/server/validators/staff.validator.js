@@ -314,6 +314,11 @@ export const validateMarkDelivered = [
   body('shipmentId').optional({ values: 'falsy' }).custom(isObjectId).withMessage('Invalid parcel'),
 ];
 
+export const validateUndoDelivered = [
+  ...validateWorkOrder,
+  body('shipmentId').custom(isObjectId).withMessage('Choose the parcel'),
+];
+
 /** Admin edits a team member. Every field optional; at least one is checked in the service. */
 export const validateMemberUpdate = [
   param('id').custom(isObjectId).withMessage('Invalid member id'),

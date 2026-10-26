@@ -51,6 +51,10 @@ const { default: razorpayService } = await import('../services/razorpayService.j
 const { default: cancellationService } = await import('../services/cancellationService.js');
 const { default: Payment } = await import('../models/Payment.js');
 const wf = await import('../services/teamWorkflowService.js');
+const { default: karmaService } = await import('../services/karmaService.js');
+const { default: KarmaLedger } = await import('../models/KarmaLedger.js');
+const { default: affiliateCommissionRepository } = await import('../repositories/affiliateCommissionRepository.js');
+const { default: returnRequestRepository } = await import('../repositories/returnRequestRepository.js');
 const { listPaidSalesOrders } = await import('../services/salesOrderService.js');
 const { workflowView, STAGE } = await import('../utils/teamWorkflow.js');
 
@@ -694,5 +698,98 @@ describe('undo and correct — no time limit, the owning team', () => {
     const { STAGE_LABELS } = await import('../utils/teamWorkflow.js');
     expect([STAGE_LABELS.stock_check, STAGE_LABELS.to_ship, STAGE_LABELS.payment_pending, STAGE_LABELS.with_supplier, STAGE_LABELS.shipped, STAGE_LABELS.delivered])
       .toEqual(['New Order', 'In Stock', 'Payment Pending', 'Ordered From Supplier', 'Dispatched', 'Delivered']);
+  });
+});
+
+describe('undo delivered (operations, admin)', () => {
+
+  async function deliveredOrder() {
+    const p = await staff('procurement');
+    const ops = await staff('operations');
+    const order = await paidOrder();
+    const id = String(order._id);
+    await wf.shipWithProof(p, id, { courierName: 'Delhivery', trackingNumber: 'DL1' }, photo(), req);
+    const view = await wf.markDelivered(ops, id, {}, req);
+    return { id, ops, parcelId: view.parcels[0].id };
+  }
+
+  it('puts the parcel back in transit; the order back to shipped and into the deliveries queue — once', async () => {
+    const { id, ops, parcelId } = await deliveredOrder();
+    expect((await Order.findById(id).lean()).status).toBe('delivered');
+    expect((await wf.getOrder(ops, id)).parcels[0].canUndoDelivered).toBe(true);
+
+    let view = await wf.undoDelivered(ops, id, { shipmentId: parcelId }, req);
+    expect(view.parcels[0]).toMatchObject({ status: 'shipped', canMarkDelivered: true, canUndoDelivered: false });
+    expect(view.history[0].action).toBe('Delivery undone — back in transit');
+    const fresh = await Order.findById(id).lean();
+    expect(fresh.status).toBe('shipped');
+    expect(fresh.deliveredAt).toBeUndefined();
+    expect(fresh.shipments[0].deliveredAt).toBeUndefined();
+    expect(fresh.workflow.open).toBe(true);
+    expect((await wf.listQueue(ops, 'deliveries')).orders.map((r) => r.id)).toEqual([id]);
+
+    // Double click: no second event.
+    view = await wf.undoDelivered(ops, id, { shipmentId: parcelId }, req);
+    expect(view.history.filter((h) => h.action === 'Delivery undone — back in transit')).toHaveLength(1);
+
+    // And it can be delivered again.
+    await wf.markDelivered(ops, id, {}, req);
+    expect((await Order.findById(id).lean()).status).toBe('delivered');
+  });
+
+  it('only operations and the admin; not other teams', async () => {
+    const { id, parcelId } = await deliveredOrder();
+    for (const u of [await staff('procurement'), await staff('accounts'), await staff('sales', { isHead: true })]) {
+      await expect(wf.undoDelivered(u, id, { shipmentId: parcelId }, req)).rejects.toMatchObject({ statusCode: 403 });
+    }
+    await wf.undoDelivered(await admin(), id, { shipmentId: parcelId }, req);
+    expect((await Order.findById(id).lean()).status).toBe('shipped');
+  });
+
+  it('loyalty points: kept on undo, and never awarded twice on re-delivery', async () => {
+    const { id, ops, parcelId } = await deliveredOrder();
+    const buyer = await User.create({ name: 'Ravi', email: `ravi${Date.now()}@example.com`, passwordHash: 'x', role: 'customer' });
+    await Order.updateOne({ _id: id }, { $set: { user: buyer._id } });
+    const earn = jest.spyOn(karmaService, '_earnedPointsFor').mockReturnValue(50);
+    await karmaService.awardForDelivery(id);
+    expect((await User.findById(buyer._id).lean()).karmaPoints).toBe(50);
+
+    await wf.undoDelivered(ops, id, { shipmentId: parcelId }, req);
+    expect((await User.findById(buyer._id).lean()).karmaPoints).toBe(50); // kept
+    await wf.markDelivered(ops, id, {}, req);
+    await karmaService.awardForDelivery(id);
+    expect((await User.findById(buyer._id).lean()).karmaPoints).toBe(50); // not twice
+    expect(await KarmaLedger.countDocuments({ order: id, type: 'earn' })).toBe(1);
+    earn.mockRestore();
+  });
+
+  it('refused once an affiliate commission was approved / paid, or while a return is in progress', async () => {
+    const { id, ops, parcelId } = await deliveredOrder();
+    const accrual = jest.spyOn(affiliateCommissionRepository, 'findAccrual').mockResolvedValueOnce({ status: 'paid' });
+    await expect(wf.undoDelivered(ops, id, { shipmentId: parcelId }, req)).rejects.toMatchObject({ statusCode: 409, message: expect.stringMatching(/affiliate/) });
+    accrual.mockRestore();
+    const ret = jest.spyOn(returnRequestRepository, 'hasInFlightForOrder').mockResolvedValueOnce(true);
+    await expect(wf.undoDelivered(ops, id, { shipmentId: parcelId }, req)).rejects.toMatchObject({ statusCode: 409, message: expect.stringMatching(/return/) });
+    ret.mockRestore();
+    expect((await Order.findById(id).lean()).status).toBe('delivered');
+  });
+
+  it('clears a pending affiliate maturity date stamped on delivery', async () => {
+    const { id, ops, parcelId } = await deliveredOrder();
+    const clear = jest.spyOn(affiliateCommissionRepository, 'clearMaturity');
+    await wf.undoDelivered(ops, id, { shipmentId: parcelId }, req);
+    expect(clear).toHaveBeenCalledWith(id);
+    clear.mockRestore();
+  });
+
+  it('a parcel that is not delivered cannot be undone', async () => {
+    const p = await staff('procurement');
+    const ops = await staff('operations');
+    const order = await paidOrder();
+    const id = String(order._id);
+    const view = await wf.shipWithProof(p, id, {}, photo(), req);
+    const r = await wf.undoDelivered(ops, id, { shipmentId: view.parcels[0].id }, req);
+    expect(r.parcels[0].status).toBe('shipped'); // already in transit: nothing to do
+    await expect(wf.undoDelivered(ops, id, { shipmentId: new mongoose.Types.ObjectId() }, req)).rejects.toMatchObject({ statusCode: 404 });
   });
 });
