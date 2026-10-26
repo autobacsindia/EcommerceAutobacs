@@ -272,6 +272,15 @@ export const validatePaymentInitiated = [
   body('initiated').isBoolean().withMessage('initiated must be true or false').toBoolean(),
 ];
 
+export const validateWorkLineOnly = [...validateWorkLine];
+
+export const validateEditParcel = [
+  ...validateWorkOrder,
+  param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
+  body('courierName').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Courier name is too long'),
+  body('trackingNumber').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Tracking number is too long'),
+];
+
 export const validateShipWithProof = [
   ...validateWorkOrder,
   // Multipart fields arrive as strings; item ids as a JSON array or comma list.

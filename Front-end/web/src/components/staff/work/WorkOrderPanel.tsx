@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Camera, CheckCircle2, Gift, Loader2, MessageCircle, Share2, Truck } from 'lucide-react';
+import { Camera, CheckCircle2, Gift, Loader2, MessageCircle, Pencil, Share2, Truck, Undo2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { tokenManager } from '@/lib/http/tokenManager';
 import { staffKeys } from '@/hooks/queries/keys';
@@ -31,11 +31,11 @@ const REFUND_STATUS: Record<string, string> = {
 };
 
 /** Multipart POST (the JSON client can't send files), with the same CSRF header it uses. */
-async function postForm<T>(endpoint: string, form: FormData): Promise<T> {
+async function postForm<T>(endpoint: string, form: FormData, method: 'POST' | 'PUT' = 'POST'): Promise<T> {
   await tokenManager.ensureCsrfToken();
   const headers = tokenManager.getHeaders() as Record<string, string>;
   delete headers['Content-Type']; // the browser sets the multipart boundary
-  const res = await fetch(`/api/v1${endpoint}`, { method: 'POST', body: form, headers, credentials: 'include' });
+  const res = await fetch(`/api/v1${endpoint}`, { method, body: form, headers, credentials: 'include' });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(body?.message || 'Upload failed'), { rawData: body });
   return body as T;
@@ -74,6 +74,9 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState('');
   const supplierPayments = useOrderSupplierPayments(orderId);
+  const [editParcel, setEditParcel] = useState<string | null>(null);
+  const [parcelFix, setParcelFix] = useState({ courier: '', tracking: '' });
+  const [parcelPhoto, setParcelPhoto] = useState<File | null>(null);
   const [noteFor, setNoteFor] = useState<{ itemId: string; kind: 'reject' } | null>(null);
   const [note, setNote] = useState('');
 
@@ -99,6 +102,18 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
     onSuccess: (res) => { done(res); setNoteFor(null); setNote(''); },
     onError: (e) => setError(errorMessage(e, 'That did not work. Please try again.')),
   });
+  // Correct a parcel's dispatch details (the server allows 30 minutes after upload).
+  const editParcelMutation = useMutation({
+    mutationFn: async (shipmentId: string) => {
+      const form = new FormData();
+      form.append('courierName', parcelFix.courier.trim());
+      form.append('trackingNumber', parcelFix.tracking.trim());
+      if (parcelPhoto) form.append('photo', await shrinkPhoto(parcelPhoto), 'proof.jpg');
+      return postForm<OrderResponse>(`/staff/work/orders/${orderId}/parcels/${shipmentId}`, form, 'PUT');
+    },
+    onSuccess: (res) => { done(res); setEditParcel(null); setParcelPhoto(null); },
+    onError: (e) => setError(errorMessage(e, 'Could not save the dispatch details.')),
+  });
 
   if (q.isPending) return <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>;
   if (q.isError) return <p role="alert" className="text-sm text-red-700">{errorMessage(q.error, 'Could not load this order.')}</p>;
@@ -116,10 +131,14 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
         {/* "Ordered from supplier" is now part of "Request supplier payment" on the line (LineSupplierPayment). */}
         {has('out_of_stock') && <button type="button" disabled={busy} className={danger}
           onClick={() => { if (window.confirm(`Mark "${line.name}" out of stock? The sales team will ask the customer to wait or take a refund.`)) act.mutate({ path: `${path}/stock`, body: { stock: 'out_of_stock' } }); }}>Out of stock</button>}
-        {has('payment_initiated') && <button type="button" disabled={busy} className={primary}
-          onClick={() => act.mutate({ path: `${path}/payment`, body: { initiated: true } })}>Payment initiated</button>}
-        {has('payment_undo') && <button type="button" disabled={busy} className={secondary}
-          onClick={() => { if (window.confirm(`Remove the "Payment initiated" mark from "${line.name}"?`)) act.mutate({ path: `${path}/payment`, body: { initiated: false } }); }}>Undo payment</button>}
+        {has('stock_undo') && <button type="button" disabled={busy} className={secondary} title="Within 30 minutes of marking it"
+          onClick={() => { if (window.confirm(`Undo the stock decision on "${line.name}"? It goes back to New Order.`)) act.mutate({ path: `${path}/undo-stock`, body: {} }); }}>
+          <Undo2 className="h-3.5 w-3.5" /> Undo
+        </button>}
+        {has('decision_undo') && <button type="button" disabled={busy} className={secondary} title="Within 30 minutes, until accounts acts"
+          onClick={() => { if (window.confirm(`Undo the customer's decision on "${line.name}"?`)) act.mutate({ path: `${path}/undo-decision`, body: {} }); }}>
+          <Undo2 className="h-3.5 w-3.5" /> Undo decision
+        </button>}
         {has('wait') && <button type="button" disabled={busy} className={secondary}
           onClick={() => act.mutate({ path: `${path}/decision`, body: { decision: 'wait' } })}>Customer will wait</button>}
         {has('refund') && <button type="button" disabled={busy} className={danger}
@@ -239,6 +258,12 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                         <Share2 className="h-3.5 w-3.5" /> Share photo
                       </button>
                     )}
+                    {p.canEdit && editParcel !== p.id && (
+                      <button type="button" className={secondary} title="Within 30 minutes of uploading"
+                        onClick={() => { setEditParcel(p.id); setParcelFix({ courier: p.courier, tracking: p.trackingNumber }); setParcelPhoto(null); }}>
+                        <Pencil className="h-3.5 w-3.5" /> Edit dispatch details
+                      </button>
+                    )}
                     {p.canMarkDelivered && (
                       <button type="button" disabled={busy} className={primary}
                         onClick={() => { if (window.confirm(`Mark parcel ${p.sequence} delivered? The customer will get the delivered email.`)) act.mutate({ path: '/delivered', body: { shipmentId: p.id } }); }}>
@@ -246,6 +271,22 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                       </button>
                     )}
                   </div>
+                  {editParcel === p.id && (
+                    <form className="space-y-2 pt-2" aria-label={`Edit dispatch details for parcel ${p.sequence}`}
+                      onSubmit={(e) => { e.preventDefault(); editParcelMutation.mutate(p.id); }}>
+                      <div className="flex flex-wrap gap-2">
+                        <input className={`${input} max-w-[12rem]`} aria-label="Courier" maxLength={80} value={parcelFix.courier} onChange={(e) => setParcelFix({ ...parcelFix, courier: e.target.value })} placeholder="Courier" />
+                        <input className={`${input} max-w-[12rem]`} aria-label="Tracking number" maxLength={80} value={parcelFix.tracking} onChange={(e) => setParcelFix({ ...parcelFix, tracking: e.target.value })} placeholder="Tracking number" />
+                      </div>
+                      <label className="block text-xs text-gray-600">Replace the photo (optional)
+                        <input type="file" accept="image/jpeg,image/png,image/webp" className="mt-1 block text-xs" onChange={(e) => setParcelPhoto(e.target.files?.[0] || null)} />
+                      </label>
+                      <div className="flex gap-2">
+                        <button type="submit" disabled={editParcelMutation.isPending} className={primary}>Save</button>
+                        <button type="button" className={secondary} onClick={() => setEditParcel(null)}>Cancel</button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               </li>
             ))}

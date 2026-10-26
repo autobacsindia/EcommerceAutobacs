@@ -90,7 +90,7 @@ describe('overdue orders email', () => {
 
     const summary = sent.find((m) => m.to === DEFAULT_REPORT_TO);
     expect(summary.subject).toBe('Overdue orders — 1 item need action');
-    expect(summary.text).toMatch(/Procurement — 1 overdue\n {2}#\S+ · Rahul Menon · Profender Suspension Kit · Needs stock check · 1 day/);
+    expect(summary.text).toMatch(/Procurement — 1 overdue\n {2}#\S+ · Rahul Menon · Profender Suspension Kit · New Order · 1 day/);
     expect(summary.text).toMatch(/GTM — 0 overdue/);
     expect(summary.text).toMatch(/Operations — 0 overdue/);
 

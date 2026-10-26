@@ -27,12 +27,12 @@ export const DEFAULT_REPORT_TO = 'info@autobacsindia.com';
 /** Report sections, in stand-up order. Operations owns parcels in transit. */
 export const REPORT_TEAMS = Object.freeze(['sales', 'procurement', 'accounts', 'operations']);
 const STAGE_ORDER = [
-  STAGE.CUSTOMER_DECISION, STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.WITH_SUPPLIER,
+  STAGE.CUSTOMER_DECISION, STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.PAYMENT_PENDING, STAGE.WITH_SUPPLIER,
   STAGE.ACCOUNTS_APPROVAL, STAGE.SHIPPED,
 ];
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const stageLabel = (stage) => (stage === STAGE.SHIPPED ? 'In transit' : STAGE_LABELS[stage]);
+const stageLabel = (stage) => STAGE_LABELS[stage];
 const teamLabel = (team) => STAFF_TEAM_LABELS[team] || team;
 const validEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '')) && !/\.invalid$/i.test(String(e));
 
@@ -105,8 +105,8 @@ export function buildReport(rowsByTeam, teams, now = Date.now()) {
     : `Overdue orders — ${scope}nothing overdue today`;
   const day = dateLine(now);
   const footer = 'Sent automatically by the Autobacs India website every working morning. '
-    + 'Overdue = waiting at one step longer than its limit (stock check 1 day, customer decision 2 days, '
-    + 'to ship 2 days, with supplier 5 days, refund approval 1 day, in transit 7 days). Clear these before the 09:30 stand-up.';
+    + 'Overdue = waiting at one step longer than its limit (new order 1 day, customer decision 2 days, '
+    + 'in stock 2 days, payment pending 1 day, ordered from supplier 5 days, refund approval 1 day, dispatched 7 days). Clear these before the 09:30 stand-up.';
 
   const text = [
     'Overdue orders',

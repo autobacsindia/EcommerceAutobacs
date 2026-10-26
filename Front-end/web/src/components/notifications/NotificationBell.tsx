@@ -33,7 +33,7 @@ import { Bell, Volume2, VolumeX } from 'lucide-react';
 import { useWaitingWork } from '@/hooks/queries/useNotifications';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import PushToggle from './PushToggle';
-import { arm, chime, muted as isMuted, setMuted } from '@/lib/notificationChime';
+import { alert, arm, chime, muted as isMuted, setMuted } from '@/lib/notificationChime';
 
 export default function NotificationBell({
   chatHref,
@@ -74,11 +74,22 @@ export default function NotificationBell({
     };
   }, []);
 
+  /*
+    Two sounds, so you can tell without looking: new WORK (payments, orders,
+    refunds — `approvals`) plays the "ding-dong" alert; a new CHAT message plays
+    the chat chime. If both rise at once, the work alert wins — it is the one
+    that usually needs action.
+  */
+  const previousChat = useRef<number | undefined>(undefined);
   useEffect(() => {
     const before = previous.current;
-    previous.current = total;
-    if (before !== undefined && total > before) chime();
-  }, [total]);
+    const beforeChat = previousChat.current;
+    previous.current = approvals;
+    previousChat.current = chatUnread;
+    if (before === undefined || beforeChat === undefined) return;
+    if (approvals > before) alert();
+    else if (chatUnread > beforeChat) chime();
+  }, [approvals, chatUnread]);
 
   // Click-away. Pointerdown rather than click, so the panel is gone before the
   // thing underneath reacts.
@@ -148,6 +159,13 @@ export default function NotificationBell({
               {quiet ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </button>
           </div>
+          {!quiet && (
+            <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-1.5 text-xs text-gray-500">
+              <span>Hear the sounds:</span>
+              <button type="button" onClick={() => { arm(); chime(); }} className="rounded px-1.5 py-0.5 font-medium text-gray-700 hover:bg-gray-100">Chat</button>
+              <button type="button" onClick={() => { arm(); alert(); }} className="rounded px-1.5 py-0.5 font-medium text-gray-700 hover:bg-gray-100">New work</button>
+            </div>
+          )}
 
           {rows.length === 0 ? (
             <p className="px-3 py-6 text-center text-sm text-gray-500">Nothing waiting. You are all caught up.</p>

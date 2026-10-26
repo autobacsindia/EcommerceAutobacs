@@ -342,16 +342,6 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const { files, kinds } = filesFrom(uploaded);
   requireUpiOrQr(payee, kinds);
 
-  // Raising a supplier payment IS ordering from that supplier: the items move
-  // to "ordered from <supplier>" (from stock check or in stock), or take the new
-  // supplier's name if a cancelled payment is being replaced. Recorded first,
-  // through the workflow's own compare-and-set; if the payment below then fails,
-  // the item simply shows as ordered and can be paid again.
-  const wf = await import('./teamWorkflowService.js'); // lazy: that module imports this one
-  for (const itemId of wanted) {
-    // eslint-disable-next-line no-await-in-loop -- one line at a time, each its own compare-and-set
-    await wf.markOrderedForPayment(actor, idOf(order._id), itemId, payee.name, req);
-  }
   const stored = await storeFiles(files, kinds, actor);
 
   const items = (order.items || []).filter((i) => wanted.includes(idOf(i._id)));
@@ -382,6 +372,18 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     history: [entry(actor, 'submitted')],
   });
   auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', amount, orderId: idOf(order._id) });
+  // The items now read "Payment Pending" until the admin pays (then "Ordered From
+  // Supplier") or the request is cancelled / declined (then back where they were).
+  // The request is the record; if marking a line fails, it is logged, and the
+  // shipping guard still holds the item until the payment is made.
+  const wf = await import('./teamWorkflowService.js'); // lazy: that module imports this one
+  for (const itemId of doc.itemIds.map(idOf)) {
+    try {
+      await wf.markPaymentPending(actor, idOf(order._id), itemId, { supplierName: payee.name, ref: doc.number }, req);
+    } catch (err) {
+      console.error(`[PaymentRequest] ${doc.number}: could not mark ${itemId} payment pending:`, err.message);
+    }
+  }
   const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}. Accounts: please approve or decline.${warn}`);
   return shape(doc, actor);
@@ -405,6 +407,19 @@ async function supplierPayee(actor, input, req) {
     return { payee, supplierId: saved.id, bankNotice: null };
   }
   return { payee, supplierId: null, bankNotice: null };
+}
+
+/** After a supplier request is paid / cancelled / declined: move its order lines to match. Never throws. */
+async function followOnOrder(r, actor, outcome) {
+  if (r.kind !== 'supplier' || !r.order) return;
+  try {
+    const wf = await import('./teamWorkflowService.js');
+    const ids = (r.itemIds || []).map(idOf);
+    if (outcome === 'paid') await wf.markPaidOrdered(actor, idOf(r.order), ids, r.payee?.name);
+    else await wf.clearPaymentPending(actor, idOf(r.order), ids, `${r.number} ${outcome}`);
+  } catch (err) {
+    console.error(`[PaymentRequest] ${r.number}: order lines not updated after ${outcome}:`, err.message);
+  }
 }
 
 // ── Decide / pay ─────────────────────────────────────────────────────────────
@@ -439,6 +454,7 @@ export async function decline(actor, id, { note } = {}, req) {
     { status: 'declined', decisionNote: reason.slice(0, 1000) }, entry(actor, 'declined', reason));
   if (!r) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'declined' });
+  await followOnOrder(r, actor, 'declined');
   await tellChat(r, 'declined', `⛔ ${isAdmin(actor) ? 'Admin' : 'Accounts'} declined ${what(r)}: “${reason.slice(0, 200)}”.`, { mentionRequester: true });
   return shape(r, actor);
 }
@@ -480,6 +496,7 @@ export async function markPaid(actor, id, { method, reference, note } = {}, proo
     throw fail(MOVED, 409);
   }
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'paid', method: how, reference: ref });
+  await followOnOrder(r, actor, 'paid');
   const next = r.kind === 'supplier' ? ' Procurement: get the shipping details from the supplier and upload them.' : '';
   await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()}${ref ? ` ref ${ref}` : ''}.${next}`, { mentionRequester: true });
   return shape(r, actor);
@@ -495,6 +512,7 @@ export async function cancel(actor, id, { note } = {}, req) {
     { status: 'cancelled' }, entry(actor, 'cancelled', note));
   if (!r) throw fail('Only a request still waiting for approval can be cancelled.', 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'cancelled' });
+  await followOnOrder(r, actor, 'cancelled');
   await tellChat(r, 'cancelled', `↩️ ${r.requestedByName} cancelled ${what(r)}.`);
   return shape(r, actor);
 }
@@ -755,6 +773,7 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
 
   for (const r of paid) {
     auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', idOf(r._id), { change: 'paid', method: how, reference: ref, batch });
+    await followOnOrder(r, actor, 'paid');
     await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()}${ref ? ` ref ${ref}` : ''} (${together}). Procurement: get the shipping details from the supplier and upload them.`, { mentionRequester: true });
   }
   return { batch, total, count: paid.length, requests: paid.map((r) => shape(r, actor)) };

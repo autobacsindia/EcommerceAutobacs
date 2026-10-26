@@ -25,6 +25,7 @@ export const STOCK = Object.freeze({
 export const STAGE = Object.freeze({
   STOCK_CHECK: 'stock_check',           // procurement: is it available?
   TO_SHIP: 'to_ship',                   // procurement: in stock — order it / upload proof
+  PAYMENT_PENDING: 'payment_pending',   // supplier payment raised, waiting for accounts / admin to pay
   WITH_SUPPLIER: 'with_supplier',       // procurement: ordered, waiting for the supplier's proof
   CUSTOMER_DECISION: 'customer_decision', // sales: out of stock — wait or refund?
   ACCOUNTS_APPROVAL: 'accounts_approval', // accounts: approve the refund
@@ -34,12 +35,13 @@ export const STAGE = Object.freeze({
 });
 
 export const STAGE_LABELS = Object.freeze({
-  [STAGE.STOCK_CHECK]: 'Needs stock check',
-  [STAGE.TO_SHIP]: 'In stock — to ship',
-  [STAGE.WITH_SUPPLIER]: 'Ordered from supplier',
+  [STAGE.STOCK_CHECK]: 'New Order',
+  [STAGE.TO_SHIP]: 'In Stock',
+  [STAGE.PAYMENT_PENDING]: 'Payment Pending',
+  [STAGE.WITH_SUPPLIER]: 'Ordered From Supplier',
   [STAGE.CUSTOMER_DECISION]: 'Out of stock — ask customer',
   [STAGE.ACCOUNTS_APPROVAL]: 'Refund — waiting for accounts',
-  [STAGE.SHIPPED]: 'Shipped',
+  [STAGE.SHIPPED]: 'Dispatched',
   [STAGE.DELIVERED]: 'Delivered',
   [STAGE.CANCELLED]: 'Cancelled / refunded',
 });
@@ -48,6 +50,8 @@ export const STAGE_LABELS = Object.freeze({
 export const STAGE_TEAM = Object.freeze({
   [STAGE.STOCK_CHECK]: 'procurement',
   [STAGE.TO_SHIP]: 'procurement',
+  // Accounts approves and the admin pays, but procurement follows it up with them.
+  [STAGE.PAYMENT_PENDING]: 'procurement',
   [STAGE.WITH_SUPPLIER]: 'procurement',
   [STAGE.CUSTOMER_DECISION]: 'sales',
   [STAGE.ACCOUNTS_APPROVAL]: 'accounts',
@@ -89,6 +93,10 @@ export function lineStage(order, wfLine, quantities = null) {
   if (committed >= live) {
     return (q.delivered.get(id) || 0) >= live ? STAGE.DELIVERED : STAGE.SHIPPED;
   }
+
+  // A supplier payment raised and not yet paid (paymentRequestService sets and
+  // clears this). Once paid, the line is ordered from that supplier.
+  if (wfLine.supplierPaymentAt && wfLine.stock !== STOCK.OUT_OF_STOCK) return STAGE.PAYMENT_PENDING;
 
   switch (wfLine.stock) {
     case STOCK.IN_STOCK: return STAGE.TO_SHIP;
@@ -163,7 +171,7 @@ export function workflowView(order) {
 function summarise(lines, inTransit) {
   const order = [
     STAGE.STOCK_CHECK, STAGE.CUSTOMER_DECISION, STAGE.ACCOUNTS_APPROVAL,
-    STAGE.TO_SHIP, STAGE.WITH_SUPPLIER,
+    STAGE.TO_SHIP, STAGE.PAYMENT_PENDING, STAGE.WITH_SUPPLIER,
   ];
   for (const stage of order) {
     const n = lines.filter((l) => l.stage === stage).length;

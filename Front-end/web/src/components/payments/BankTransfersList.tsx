@@ -8,7 +8,7 @@ import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 
-export type BankTransferStatus = 'pending' | 'confirmed' | 'rejected';
+export type BankTransferStatus = 'pending' | 'confirmed' | 'rejected' | 'withdrawn';
 
 export type BankTransfer = {
   id: string;
@@ -28,7 +28,7 @@ export type BankTransfer = {
   reviewedAt: string | null;
   reviewNote: string;
   files: { id: string; name: string; contentType: string; bytes: number }[];
-  can: { confirm: boolean; reject: boolean; edit?: boolean };
+  can: { confirm: boolean; reject: boolean; edit?: boolean; withdraw?: boolean };
   /** Whoever recorded it may correct it until then (null for admins / once closed). */
   editableUntil?: string | null;
 };
@@ -46,6 +46,7 @@ const BADGE: Record<BankTransferStatus, string> = {
   pending: 'bg-amber-100 text-amber-800',
   confirmed: 'bg-green-100 text-green-800',
   rejected: 'bg-red-100 text-red-800',
+  withdrawn: 'bg-gray-200 text-gray-700',
 };
 
 export const transferFileHref = (id: string, fileId: string) =>
@@ -78,7 +79,12 @@ function TransferCard({ t }: { t: BankTransfer }) {
     onSuccess: () => { setError(''); setEditing(false); refresh(); },
     onError: (e) => setError(errorMessage(e, 'Could not save the changes.')),
   });
-  const busy = confirm.isPending || reject.isPending || edit.isPending;
+  const withdraw = useMutation({
+    mutationFn: () => apiClient.post(`/staff/bank-transfers/${encodeURIComponent(t.id)}/withdraw`, {}),
+    onSuccess: () => { setError(''); refresh(); },
+    onError: (e) => setError(errorMessage(e, 'Could not withdraw this transfer.')),
+  });
+  const busy = confirm.isPending || reject.isPending || edit.isPending || withdraw.isPending;
 
   return (
     <li className="rounded-xl border border-gray-200 bg-white p-4">
@@ -122,6 +128,13 @@ function TransferCard({ t }: { t: BankTransfer }) {
 
       {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
+      {t.can.withdraw && !editing && (
+        <button type="button" disabled={busy}
+          onClick={() => { if (window.confirm(`Withdraw this bank transfer on ${t.orderNumber}? Use this only if it was recorded by mistake — the order becomes unpaid again.`)) withdraw.mutate(); }}
+          className="mr-2 mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">
+          <X className="h-4 w-4" /> Withdraw
+        </button>
+      )}
       {t.can.edit && !editing && (
         <button type="button" onClick={() => setEditing(true)}
           title={t.editableUntil ? `You can edit until ${formatDateTimeIST(t.editableUntil)}` : undefined}
