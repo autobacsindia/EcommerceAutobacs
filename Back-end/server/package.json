@@ -158,6 +158,7 @@
     "sharp": "^0.33.5",
     "twilio": "^5.10.6",
     "uuid": "^13.0.2",
+    "web-push": "^3.6.7",
     "write-excel-file": "^4.1.1"
   },
   "devDependencies": {

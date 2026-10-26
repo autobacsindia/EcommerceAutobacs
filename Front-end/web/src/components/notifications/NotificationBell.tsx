@@ -32,6 +32,7 @@ import Link from 'next/link';
 import { Bell, Volume2, VolumeX } from 'lucide-react';
 import { useWaitingWork } from '@/hooks/queries/useNotifications';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
+import PushToggle from './PushToggle';
 import { alert, arm, chime, muted as isMuted, setMuted } from '@/lib/notificationChime';
 
 export default function NotificationBell({
@@ -191,6 +192,8 @@ export default function NotificationBell({
               ))}
             </ul>
           )}
+          {/* At the bottom: set once per device, then rarely needed. */}
+          <div className="border-t border-gray-100"><PushToggle /></div>
         </div>
       )}
     </div>
