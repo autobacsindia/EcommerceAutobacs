@@ -349,7 +349,7 @@ export default function Conversation({
         </header>
 
         {tab === 'members' && isGroup ? (
-          <MembersPanel channelId={channel.id} />
+          <MembersPanel channelId={channel.id} onDeleted={onBack} />
         ) : tab === 'files' ? (
           <FilesPanel channelId={channel.id} />
         ) : (

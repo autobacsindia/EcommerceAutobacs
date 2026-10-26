@@ -24,6 +24,12 @@ const chatRepository = {
     { $addToSet: { members: { $each: userIds } } },
     { new: true },
   ).lean(),
+  /** Delete (archive) a custom group: hidden from everyone, its messages kept as a record. */
+  archiveGroup: (id, by) => ChatChannel.findOneAndUpdate(
+    { _id: id, kind: 'space', audience: 'members', archived: false, system: { $ne: true } },
+    { $set: { archived: true, archivedAt: new Date(), archivedBy: by } },
+    { new: true },
+  ).lean(),
   removeMember: (id, userId) => ChatChannel.findOneAndUpdate(
     { _id: id, kind: 'space', audience: 'members', archived: false },
     { $pull: { members: userId } },

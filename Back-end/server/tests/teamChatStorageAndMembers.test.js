@@ -159,6 +159,34 @@ describe('Team chat — own storage and group members', () => {
       expect((await head.s.del(`/chat/channels/${id}/members/${head.user._id}`)).status).toBe(400);
     });
 
+    it('any team head in the group manages it too; a head outside it cannot even see it', async () => {
+      const { head, member, id } = await group();
+      const otherHead = await person('Asha', 'staff', staff('accounts', true));
+      expect((await otherHead.s.post(`/chat/channels/${id}/members`, { userIds: [String(otherHead.user._id)] })).status).toBe(404);
+      expect((await head.s.post(`/chat/channels/${id}/members`, { userIds: [String(otherHead.user._id)] })).status).toBe(200);
+      expect((await otherHead.s.get(`/chat/channels/${id}/members`)).body).toMatchObject({ canManage: true, canDelete: false });
+      expect((await otherHead.s.del(`/chat/channels/${id}/members/${member.user._id}`)).status).toBe(200);
+    });
+
+    it('only the admin deletes a group: it disappears for everyone, and its name is free again', async () => {
+      const { admin, head, member, id } = await group();
+      expect((await admin.s.get(`/chat/channels/${id}/members`)).body.canDelete).toBe(true);
+      expect((await head.s.del(`/chat/channels/${id}`)).status).toBe(403);
+      expect((await member.s.del(`/chat/channels/${id}`)).status).toBe(403);
+      expect((await admin.s.del(`/chat/channels/${id}`)).status).toBe(200);
+      for (const u of [admin, head, member]) expect((await channelsOf(u.s)).some((c) => c.id === id)).toBe(false);
+      expect((await member.s.get(`/chat/channels/${id}/messages`)).status).toBe(404);
+      expect((await admin.s.del(`/chat/channels/${id}`)).status).toBe(404); // already gone
+      expect((await head.s.post('/chat/channels', { name: 'supplier-calls' })).status).toBe(201);
+    });
+
+    it('team spaces cannot be deleted', async () => {
+      const { admin, head } = await group();
+      const team = (await channelsOf(head.s)).find((c) => c.key === 'team:procurement');
+      expect((await admin.s.del(`/chat/channels/${team.id}`)).status).toBe(400);
+      expect((await channelsOf(head.s)).some((c) => c.id === team.id)).toBe(true);
+    });
+
     it('team spaces have no member list to edit, and a customer account cannot be added', async () => {
       const { admin, head, id } = await group();
       const team = (await channelsOf(head.s)).find((c) => c.key === 'team:procurement');

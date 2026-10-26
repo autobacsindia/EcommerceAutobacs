@@ -48,4 +48,26 @@ it('an ordinary member sees the list but cannot add or remove', async () => {
   expect(screen.queryByText('Add people')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument();
   expect(get).not.toHaveBeenCalledWith('/chat/people');
+  expect(screen.queryByRole('button', { name: /Delete group/ })).not.toBeInTheDocument();
+});
+
+it('a head can add and remove but not delete; the admin can delete, after confirming', async () => {
+  get.mockImplementation((url: string) => Promise.resolve(url === '/chat/people'
+    ? { people: [] } : { members: [P('u1', 'Hari')], canManage: true, canDelete: false, createdBy: 'u1' }));
+  const { unmount } = wrap(<MembersPanel channelId="c1" />);
+  expect(await screen.findByText('Add people')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Delete group/ })).not.toBeInTheDocument();
+  unmount();
+
+  get.mockImplementation((url: string) => Promise.resolve(url === '/chat/people'
+    ? { people: [] } : { members: [P('u1', 'Hari')], canManage: true, canDelete: true, createdBy: 'u1' }));
+  del.mockResolvedValue({ deleted: true });
+  const onDeleted = jest.fn();
+  wrap(<MembersPanel channelId="c1" onDeleted={onDeleted} />);
+  (window.confirm as jest.Mock).mockReturnValueOnce(false);
+  fireEvent.click(await screen.findByRole('button', { name: /Delete group/ }));
+  expect(del).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: /Delete group/ }));
+  await waitFor(() => expect(del).toHaveBeenCalledWith('/chat/channels/c1'));
+  await waitFor(() => expect(onDeleted).toHaveBeenCalled());
 });
