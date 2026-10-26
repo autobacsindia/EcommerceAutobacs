@@ -33,7 +33,7 @@ it('on → send a test, or turn off', async () => {
   disable.mockResolvedValue('off');
   render(<PushToggle />);
   fireEvent.click(await screen.findByRole('button', { name: 'Send a test' }));
-  expect(await screen.findByRole('status')).toHaveTextContent(/Test sent/);
+  expect(await screen.findByRole('status')).toHaveTextContent(/Sent\. No pop-up.*System Settings/);
   fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
   expect(await screen.findByRole('button', { name: 'Turn on' })).toBeInTheDocument();
 });
@@ -54,4 +54,12 @@ it('iPhone without Home Screen → says how; no server keys → hidden', async (
   const { container } = render(<PushToggle />);
   await waitFor(() => expect(state).toHaveBeenCalledTimes(2));
   expect(container).toBeEmptyDOMElement();
+});
+
+it('says so when the server reached no device, instead of "sent"', async () => {
+  state.mockResolvedValue('on');
+  test.mockResolvedValue({ sent: 0 });
+  render(<PushToggle />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Send a test' }));
+  expect(await screen.findByRole('status')).toHaveTextContent(/could not be reached/);
 });

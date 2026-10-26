@@ -976,14 +976,16 @@ export async function deleteMessage(user, messageId) {
 }
 
 /** The admin, or the person who created the group, manages a custom group's members. */
-export const mayManageMembers = (user, channel) => isAdmin(user) || (!!channel.createdBy && idOf(channel.createdBy) === idOf(user));
+/** Who runs a custom group (adds and removes people): the admin, and any team head who is in it. */
+export const mayManageMembers = (user, channel) => isAdmin(user)
+  || (isChatUser(user) && user.staff?.isHead === true && (channel.members || []).some((m) => idOf(m) === idOf(user)));
 
 async function loadManageable(user, channelId) {
   const channel = await loadAccessible(user, channelId);
   if (channel.kind !== 'space' || channel.audience !== 'members') {
     throw fail('Members are set automatically for this space (by team) — only custom groups have a member list', 400);
   }
-  if (!mayManageMembers(user, channel)) throw fail('Only an admin or the person who created this group can change its members', 403);
+  if (!mayManageMembers(user, channel)) throw fail('Only the admin or a team head in this group can change its members', 403);
   return channel;
 }
 
@@ -993,7 +995,27 @@ const memberList = async (channel) => (await userRepository.findDisplayByIds((ch
 export async function listSpaceMembers(user, channelId) {
   const channel = await loadAccessible(user, channelId);
   if (channel.kind !== 'space' || channel.audience !== 'members') throw fail('This space has no member list', 400);
-  return { members: await memberList(channel), canManage: mayManageMembers(user, channel), createdBy: idOf(channel.createdBy) || null };
+  return {
+    members: await memberList(channel),
+    canManage: mayManageMembers(user, channel),
+    canDelete: isAdmin(user),
+    createdBy: idOf(channel.createdBy) || null,
+  };
+}
+
+/**
+ * Delete a custom group — the admin only. It disappears for everyone; its messages
+ * and files are kept (archived), not destroyed, so nothing said in it is lost.
+ */
+export async function deleteSpace(user, channelId) {
+  if (!isAdmin(user)) throw fail('Only the admin can delete a group', 403);
+  const channel = await loadManageable(user, channelId);
+  const before = audienceOf(channel);
+  const archived = await chatRepository.archiveGroup(channel._id, user._id);
+  if (!archived) throw fail('Channel not found', 404);
+  // Everyone who had it in their list drops it (route computed before archiving).
+  await publishChatEvent({ type: 'channel', channelId: idOf(archived), route: before });
+  return { deleted: true };
 }
 
 /** Add people to a custom group. Only active staff and admins can be added. */

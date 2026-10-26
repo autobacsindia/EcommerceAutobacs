@@ -2,21 +2,22 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, UserMinus, UserPlus } from 'lucide-react';
+import { Loader2, Trash2, UserMinus, UserPlus } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { chatKeys } from '@/hooks/queries/keys';
 import { useChatPeople, type ChatPerson } from '@/hooks/queries/useTeamChat';
 
-type Members = { members: ChatPerson[]; canManage: boolean; createdBy: string | null };
+type Members = { members: ChatPerson[]; canManage: boolean; canDelete?: boolean; createdBy: string | null };
 
 const errorText = (e: unknown, fallback: string) =>
   (e as { rawData?: { message?: string } })?.rawData?.message || fallback;
 
 /**
  * A custom group's members. Everyone in it can see who is there; the admin and
- * the person who created it can add and remove people (the API enforces this).
+ * any team head in it add and remove people, and only the admin deletes the
+ * group (the API enforces all of this).
  */
-export default function MembersPanel({ channelId }: { channelId: string }) {
+export default function MembersPanel({ channelId, onDeleted }: { channelId: string; onDeleted?: () => void }) {
   const qc = useQueryClient();
   const key = chatKeys.members(channelId);
   const q = useQuery({ queryKey: key, queryFn: () => apiClient.get<Members>(`/chat/channels/${channelId}/members`) });
@@ -45,9 +46,15 @@ export default function MembersPanel({ channelId }: { channelId: string }) {
     onError: (e) => setError(errorText(e, 'Could not remove them. Please try again.')),
   });
 
+  const removeGroup = useMutation({
+    mutationFn: () => apiClient.delete(`/chat/channels/${channelId}`),
+    onSuccess: async () => { setError(''); await qc.invalidateQueries({ queryKey: chatKeys.channels() }); onDeleted?.(); },
+    onError: (e) => setError(errorText(e, 'Could not delete the group. Please try again.')),
+  });
+
   if (q.isPending) return <p className="flex items-center gap-2 p-4 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading members…</p>;
   if (q.isError) return <p role="alert" className="m-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorText(q.error, 'Could not load the members.')}</p>;
-  const { members, canManage, createdBy } = q.data;
+  const { members, canManage, canDelete, createdBy } = q.data;
 
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
@@ -93,6 +100,16 @@ export default function MembersPanel({ channelId }: { channelId: string }) {
           <button type="button" disabled={!picked.length || add.isPending} onClick={() => add.mutate()}
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">
             {add.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Add {picked.length || ''} to group
+          </button>
+        </section>
+      )}
+
+      {canDelete && (
+        <section className="border-t border-gray-100 pt-4">
+          <button type="button" disabled={removeGroup.isPending}
+            onClick={() => { if (window.confirm('Delete this group for everyone? It disappears from everyone\'s chat list.')) removeGroup.mutate(); }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50">
+            {removeGroup.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />} Delete group
           </button>
         </section>
       )}

@@ -34,6 +34,7 @@ import {
   deleteMessage,
   editMessage,
   createSpace,
+  deleteSpace,
   openDirectMessage,
   canAccess,
   canCreateSpace,
@@ -136,6 +137,11 @@ router.get('/channels', asyncHandler(async (req, res) => {
 router.post('/channels', validateCreateSpace, validateRequest, asyncHandler(async (req, res) => {
   const channel = await createSpace(req.user, req.body);
   res.status(201).json({ success: true, channel });
+}));
+
+// DELETE /chat/channels/:id — delete (archive) a custom group. Admin only.
+router.delete('/channels/:id', validateChannelIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await deleteSpace(req.user, req.params.id)) });
 }));
 
 // Custom groups: GET members (anyone in it), POST { userIds } to add, DELETE /:userId to remove

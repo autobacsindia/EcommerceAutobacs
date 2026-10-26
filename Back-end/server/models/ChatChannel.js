@@ -36,6 +36,8 @@ const ChatChannelSchema = new mongoose.Schema(
     system: { type: Boolean, default: false }, // created by the app, cannot be archived
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     archived: { type: Boolean, default: false },
+    archivedAt: { type: Date },
+    archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     // Per-channel message counter. Messages take their `seq` from an atomic $inc
     // here, which gives gap-free ordering, cheap cursors and unread = last - read.
     lastMessageSeq: { type: Number, default: 0 },
