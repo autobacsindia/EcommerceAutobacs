@@ -158,3 +158,17 @@ describe('checking bank transfers (accounts / admin)', () => {
     await waitFor(() => expect(get).toHaveBeenCalledWith('/staff/bank-transfers?status=confirmed'));
   });
 });
+
+describe('taking back a transfer recorded by mistake', () => {
+  it('Withdraw asks first, then tells the server', async () => {
+    get.mockResolvedValue({ transfers: [TRANSFER({ can: { confirm: false, reject: false, edit: true, withdraw: true } })], nextCursor: null });
+    post.mockResolvedValue({ transfer: TRANSFER({ status: 'withdrawn' }) });
+    wrap(<BankTransfersList />);
+    const btn = await screen.findByRole('button', { name: /Withdraw/ });
+    (window.confirm as jest.Mock).mockReturnValueOnce(false);
+    fireEvent.click(btn);
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.click(btn);
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/bank-transfers/t1/withdraw', {}));
+  });
+});

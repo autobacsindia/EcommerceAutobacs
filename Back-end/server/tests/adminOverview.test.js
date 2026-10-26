@@ -131,10 +131,10 @@ it('shows what staff did, newest first, in words with a link', async () => {
   const id = String(order._id);
   await wf.setStock(procurement, id, itemIds(order)[0], { stock: 'in_stock' }, reqAs(procurement));
   await flush();
-  await wf.setStock(procurement, id, itemIds(order)[0], { stock: 'ordered', supplierName: 'ARB' }, reqAs(procurement));
+  await wf.undoStock(procurement, id, itemIds(order)[0], reqAs(procurement));
   await flush();
   const { feed, people } = await companyOverview(admin);
-  expect(feed.slice(0, 2).map((f) => f.text)).toEqual(['Marked an item ordered', 'Marked an item in stock']);
+  expect(feed.slice(0, 2).map((f) => f.text)).toEqual(['Undid a stock decision', 'Marked an item in stock']);
   expect(feed[0]).toMatchObject({ who: 'Priya', team: 'Procurement', area: 'Procurement', link: `/admin/orders/${id}` });
   expect(people.find((p) => p.name === 'Priya').actionsThisWeek).toBe(2);
 });
@@ -142,6 +142,8 @@ it('shows what staff did, newest first, in words with a link', async () => {
 it('describes payment and staff actions too', () => {
   expect(describeAction({ resource: 'PaymentRequest', action: 'CREATE', details: { kind: 'supplier', amount: 38000 } }).text).toBe('Raised a supplier payment (₹38,000)');
   expect(describeAction({ resource: 'PaymentRequest', action: 'UPDATE', details: { change: 'paid' } }).text).toBe('Paid a payment');
+  expect(describeAction({ resource: 'BankTransfer', action: 'UPDATE', details: { change: 'withdrawn' } }).text).toBe('Withdrew a bank transfer');
+  expect(describeAction({ resource: 'Order', action: 'UPDATE', details: { change: 'team_dispatch_edited' } }).text).toBe('Corrected dispatch details');
   expect(describeAction({ resource: 'User', action: 'UPDATE', details: { change: 'staff_password_reset' } }).text).toBe('Changed a staff password');
   expect(describeAction({ resource: 'Order', action: 'CREATE', details: { via: 'sales_panel', totalAmount: 9000 } }).text).toBe('Created a sales order (₹9,000)');
 });

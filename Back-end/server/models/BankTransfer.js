@@ -33,7 +33,7 @@ const HistorySchema = new mongoose.Schema(
     at: { type: Date, required: true },
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     byName: { type: String },
-    action: { type: String, enum: ['recorded', 'edited', 'confirmed', 'rejected'], required: true },
+    action: { type: String, enum: ['recorded', 'edited', 'withdrawn', 'confirmed', 'rejected'], required: true },
     note: { type: String },
   },
   { _id: false },
@@ -55,7 +55,7 @@ const BankTransferSchema = new mongoose.Schema(
     paidOn: { type: Date, required: true },
     note: { type: String },
     files: { type: [FileSchema], default: [] },
-    status: { type: String, enum: ['pending', 'confirmed', 'rejected'], default: 'pending', required: true },
+    status: { type: String, enum: ['pending', 'confirmed', 'rejected', 'withdrawn'], default: 'pending', required: true },
     /**
      * true while pending or confirmed. The UTR index is unique over active rows
      * only, so a REJECTED transfer (wrong UTR typed, say) does not block the right

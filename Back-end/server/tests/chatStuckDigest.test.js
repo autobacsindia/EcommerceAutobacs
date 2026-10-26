@@ -85,7 +85,7 @@ describe('who is reminded, and when', () => {
     const [post] = await digests();
     expect(post.space).toBe('team:procurement');
     expect(post.text).toMatch(/1 order waiting on this team longer than usual/);
-    expect(post.text).toMatch(/Needs stock check for over 24h: 1 — #\S+ \(2[45]h\)/);
+    expect(post.text).toMatch(/New Order for over 24h: 1 — #\S+ \(2[45]h\)/);
     expect(post.refs).toBe(1);
   });
 
@@ -141,7 +141,7 @@ describe('who is reminded, and when', () => {
     await postStuckDigests(Date.now() + 25 * H);
     const [post] = await digests();
     expect(post.text).toMatch(/— 1 order waiting/);
-    expect(post.text).toMatch(/Needs stock check for over 24h: 1 —/);
+    expect(post.text).toMatch(/New Order for over 24h: 1 —/);
   });
 
   it('lists the oldest first, caps the examples and the links', async () => {

@@ -55,6 +55,7 @@ const STATUS_LABELS = Object.freeze({
   pending: 'Waiting for accounts to check the bank',
   confirmed: 'Confirmed — order paid',
   rejected: 'Rejected',
+  withdrawn: 'Withdrawn by GTM',
 });
 
 const idOf = (v) => (v && v._id ? String(v._id) : v ? String(v) : null);
@@ -169,7 +170,7 @@ export function shape(t, viewer) {
     reviewedAt: t.reviewedAt || null,
     reviewNote: t.reviewNote || '',
     files: (t.files || []).map((f) => ({ id: idOf(f._id), name: f.name || '', contentType: f.contentType, bytes: f.bytes })),
-    can: { confirm: open, reject: open, edit: mayEdit(viewer, t) },
+    can: { confirm: open, reject: open, edit: mayEdit(viewer, t), withdraw: mayEdit(viewer, t) },
     editableUntil: !isAdmin(viewer) && mayEdit(viewer, t) ? editDeadline(t) : null,
   };
 }
@@ -337,6 +338,50 @@ export async function editBankTransfer(actor, id, input = {}, req) {
   if (!t) throw fail('This transfer was just updated — refresh and try again.', 409);
   auditLogger.logAction(req, 'UPDATE', 'BankTransfer', idOf(t._id), { change: 'edited', fields: changes });
   await tellChat(t, 'edited', `✏️ ${t.orderNumber} — ${actor.name} corrected the bank transfer: ${changes.join(', ')}.`);
+  return shape(t, actor);
+}
+
+/**
+ * Take back a transfer recorded by mistake (wrong order, customer had not
+ * really paid): whoever recorded it, for EDIT_WINDOW_MINUTES, while accounts
+ * has not checked it; the admin while pending. Same effect as a rejection —
+ * the order is unpaid again and the UTR is free — but nobody checked the bank,
+ * so it is recorded as "withdrawn", not "rejected". One transaction, like reject.
+ */
+export async function withdrawBankTransfer(actor, id, { note } = {}, req) {
+  const t0 = await loadVisible(actor, id);
+  if (!mayEdit(actor, t0)) {
+    throw fail(t0.status !== 'pending'
+      ? 'Accounts has already checked this transfer, so it can no longer be withdrawn.'
+      : `You can withdraw a transfer you recorded for ${EDIT_WINDOW_MINUTES} minutes. Ask accounts to reject it now.`, 403);
+  }
+  const reason = String(note || '').trim().slice(0, 500);
+  let withdrawnHere = false;
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      withdrawnHere = false;
+      const t = await bankTransferRepository.model.findById(id).session(session);
+      if (!t || t.status === 'withdrawn') return;
+      if (t.status !== 'pending') throw fail('Accounts has already checked this transfer, so it can no longer be withdrawn.', 409);
+      const now = new Date();
+      t.status = 'withdrawn';
+      t.active = false;
+      t.history.push({ at: now, by: actor._id, byName: actor.name || '', action: 'withdrawn', note: reason });
+      await t.save({ session });
+      await orderRepository.model.updateOne({ _id: t.order }, { $unset: { bankTransferPendingAt: '' } }, { session });
+      withdrawnHere = true;
+    });
+  } finally {
+    await session.endSession();
+  }
+  const t = await bankTransferRepository.findById(id);
+  if (withdrawnHere) {
+    auditLogger.logAction(req, 'UPDATE', 'BankTransfer', id, { change: 'withdrawn', orderId: idOf(t.order) });
+    await tellChat(t, 'withdrawn',
+      `↩️ ${t.orderNumber} — ${actor.name} withdrew the bank transfer of ${inr(t.amount)} (UTR ${t.reference})${reason ? `: ${reason}` : ''}. `
+      + 'Accounts: nothing to check. The order is unpaid again.');
+  }
   return shape(t, actor);
 }
 

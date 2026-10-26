@@ -385,20 +385,37 @@ describe('Payment requests', () => {
   });
 
   describe('supplier payments', () => {
-    it('raising one marks the item "ordered from" that supplier — from in stock too; a replacement renames it', async () => {
+    it('raised → Payment Pending; paid → Ordered From Supplier; cancelled → back where it was', async () => {
       const order = await paidOrder();
       const [kit] = order.items.map((i) => String(i._id));
       await wf.setStock(procurement.user, String(order._id), kit, { stock: 'in_stock' }, req);
-      await wf.setPaymentInitiated(procurement.user, String(order._id), kit, { initiated: true }, req).catch(() => {});
+      const lineOf = async () => (await Order.findById(order._id).lean()).workflow.lines.find((l) => String(l.itemId) === kit);
+      const stageOf = async () => (await wf.getOrder(procurement.user, String(order._id))).lines.find((l) => l.itemId === kit).stage;
+
       const first = await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [kit], amount: 100, payee: BANK });
       expect(first.status).toBe(201);
-      const lineOf = async () => (await Order.findById(order._id).lean()).workflow.lines.find((l) => String(l.itemId) === kit);
-      expect(await lineOf()).toMatchObject({ stock: 'ordered', supplierName: 'ARB Supplies' });
-      expect((await lineOf()).paymentInitiatedAt).toBeFalsy();
+      expect(await stageOf()).toBe('payment_pending');
+      expect(await lineOf()).toMatchObject({ supplierName: 'ARB Supplies', supplierPaymentRef: first.body.request.number });
       expect((await procurement.session.post(`/payment-requests/${first.body.request.id}/cancel`)).status).toBe(200);
+      expect(await stageOf()).toBe('to_ship'); // back to In Stock
+
       const second = await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [kit], amount: 90, payee: { ...BANK, name: 'India Motor Stores' } });
-      expect(second.status).toBe(201);
+      expect(await stageOf()).toBe('payment_pending');
+      await accounts.session.post(`/payment-requests/${second.body.request.id}/approve`);
+      expect(await stageOf()).toBe('payment_pending'); // approved is not paid
+      expect((await admin.session.form(`/payment-requests/${second.body.request.id}/pay`, { method: 'bank', reference: 'UTR12345' })).status).toBe(200);
+      expect(await stageOf()).toBe('with_supplier');
       expect(await lineOf()).toMatchObject({ stock: 'ordered', supplierName: 'India Motor Stores' });
+      expect((await lineOf()).supplierPaymentAt).toBeFalsy();
+    });
+
+    it('a declined payment puts the item back too', async () => {
+      const order = await paidOrder();
+      const [kit] = order.items.map((i) => String(i._id));
+      const r = await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [kit], amount: 100, payee: BANK });
+      expect((await wf.getOrder(procurement.user, String(order._id))).lines.find((l) => l.itemId === kit).stage).toBe('payment_pending');
+      await accounts.session.post(`/payment-requests/${r.body.request.id}/decline`, { note: 'Wrong supplier' });
+      expect((await wf.getOrder(procurement.user, String(order._id))).lines.find((l) => l.itemId === kit).stage).toBe('stock_check'); // New Order again
     });
 
     it('procurement raises one for in-stock items, with the customer and who closed the sale', async () => {
@@ -422,7 +439,8 @@ describe('Payment requests', () => {
       const [, mat] = order.items.map((i) => String(i._id));
       expect((await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [mat], amount: 1, payee: BANK })).status).toBe(201);
       const matLine = (await Order.findById(order._id).lean()).workflow.lines.find((l) => String(l.itemId) === mat);
-      expect(matLine).toMatchObject({ stock: 'ordered', supplierName: 'ARB Supplies' });
+      expect(matLine).toMatchObject({ supplierName: 'ARB Supplies' });
+      expect(matLine.supplierPaymentAt).toBeTruthy(); // Payment Pending until paid
       // Only procurement raises them.
       expect((await ops.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [kit], amount: 1, payee: BANK })).status).toBe(403);
       // A website order says so.

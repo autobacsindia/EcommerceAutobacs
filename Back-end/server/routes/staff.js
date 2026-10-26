@@ -42,6 +42,8 @@ import {
   validateStockUpdate,
   validatePaymentInitiated,
   validateShipWithProof,
+  validateWorkLineOnly,
+  validateEditParcel,
   validateCustomerDecision,
   validateRefundReview,
   validateRefundRetry,
@@ -57,6 +59,9 @@ import {
   getProofPhoto,
   setStock,
   setPaymentInitiated,
+  undoStock,
+  undoDecision,
+  editShipment,
   shipWithProof,
   recordDecision,
   reviewRefund,
@@ -104,7 +109,7 @@ import { canSell } from '../config/staff.js';
 import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller } from '../services/orderAttributionService.js';
 import {
   recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, getBankTransfer,
-  editBankTransfer, getTransferFile,
+  editBankTransfer, withdrawBankTransfer, getTransferFile,
 } from '../services/bankTransferService.js';
 
 /**
@@ -396,6 +401,11 @@ router.put('/bank-transfers/:id', validateBankTransferId, validateRequest, async
   res.json({ success: true, transfer: await editBankTransfer(req.user, req.params.id, req.body, req) });
 }));
 
+// @route  POST /staff/bank-transfers/:id/withdraw { note? } — GTM takes back one recorded by mistake (30 min)
+router.post('/bank-transfers/:id/withdraw', validateBankTransferId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, transfer: await withdrawBankTransfer(req.user, req.params.id, req.body, req) });
+}));
+
 // @route  GET /staff/bank-transfers/:id
 router.get('/bank-transfers/:id', validateBankTransferId, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, transfer: await getBankTransfer(req.user, req.params.id) });
@@ -454,6 +464,20 @@ router.post('/work/orders/:id/lines/:itemId/payment', validatePaymentInitiated, 
   res.json({ success: true, order: await setPaymentInitiated(req.user, req.params.id, req.params.itemId, req.body, req) });
 }));
 
+// @route  PUT /staff/work/orders/:id/parcels/:shipmentId  multipart: courierName?, trackingNumber?, photo? — correct dispatch details (30 min)
+router.put(
+  '/work/orders/:id/parcels/:shipmentId',
+  concurrentUploadGuard,
+  uploadProofPhoto,
+  handleProofPhotoError,
+  validateEditParcel,
+  validateRequest,
+  asyncHandler(async (req, res) => {
+    const { courierName, trackingNumber } = req.body;
+    res.json({ success: true, order: await editShipment(req.user, req.params.id, req.params.shipmentId, { courierName, trackingNumber }, req.file, req) });
+  }),
+);
+
 // @route  POST /staff/work/orders/:id/ship  multipart: photo, itemIds?, courierName?, trackingNumber? — procurement
 router.post(
   '/work/orders/:id/ship',
@@ -467,6 +491,16 @@ router.post(
     res.json({ success: true, order: await shipWithProof(req.user, req.params.id, { itemIds, courierName, trackingNumber }, req.file, req) });
   }),
 );
+
+// @route  POST /staff/work/orders/:id/lines/:itemId/undo-stock — take back In Stock / Out of Stock (30 min)
+router.post('/work/orders/:id/lines/:itemId/undo-stock', validateWorkLineOnly, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await undoStock(req.user, req.params.id, req.params.itemId, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/lines/:itemId/undo-decision — take back the customer's decision (30 min)
+router.post('/work/orders/:id/lines/:itemId/undo-decision', validateWorkLineOnly, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await undoDecision(req.user, req.params.id, req.params.itemId, req) });
+}));
 
 // @route  POST /staff/work/orders/:id/lines/:itemId/decision  { decision: wait|refund, note? } — sales
 router.post('/work/orders/:id/lines/:itemId/decision', validateCustomerDecision, validateRequest, asyncHandler(async (req, res) => {

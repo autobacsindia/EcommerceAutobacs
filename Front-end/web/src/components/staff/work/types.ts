@@ -3,12 +3,12 @@
 export type WorkQueue = 'procurement' | 'decisions' | 'refunds' | 'deliveries';
 
 export type LineStage =
-  | 'stock_check' | 'to_ship' | 'with_supplier' | 'customer_decision'
+  | 'stock_check' | 'to_ship' | 'payment_pending' | 'with_supplier' | 'customer_decision'
   | 'accounts_approval' | 'shipped' | 'delivered' | 'cancelled';
 
 export type LineAction =
   | 'in_stock' | 'ordered' | 'out_of_stock' | 'ship' | 'wait' | 'refund' | 'approve' | 'reject'
-  | 'payment_initiated' | 'payment_undo';
+  | 'payment_initiated' | 'payment_undo' | 'stock_undo' | 'decision_undo';
 
 export type WorkRow = {
   id: string;
@@ -64,6 +64,8 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     items: { name: string; quantity: number }[];
     photoUrl: string | null;
     canMarkDelivered: boolean;
+    /** Dispatch details can still be corrected (30 minutes after upload). */
+    canEdit?: boolean;
   }[];
   cancellations: {
     id: string;
@@ -85,14 +87,22 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
   canSeeCustomerBank?: boolean;
 };
 
+/*
+  The six stages procurement works through, each with its own colour:
+    New Order (orange) → In Stock (yellow) → Payment Pending (red)
+    → Ordered From Supplier (dark yellow) → Dispatched (green) → Delivered (dark green)
+  Out-of-stock / refund stages keep their own (pink / purple) so they never
+  read as a step of the normal flow.
+*/
 export const STAGE_TONE: Record<LineStage, string> = {
-  stock_check: 'bg-amber-100 text-amber-800',
-  to_ship: 'bg-blue-100 text-blue-800',
-  with_supplier: 'bg-indigo-100 text-indigo-800',
-  customer_decision: 'bg-red-100 text-red-800',
+  stock_check: 'bg-orange-100 text-orange-800 ring-1 ring-orange-300',
+  to_ship: 'bg-yellow-100 text-yellow-800 ring-1 ring-yellow-300',
+  payment_pending: 'bg-red-100 text-red-800 ring-1 ring-red-300',
+  with_supplier: 'bg-amber-300 text-amber-950 ring-1 ring-amber-500',
+  customer_decision: 'bg-pink-100 text-pink-800',
   accounts_approval: 'bg-purple-100 text-purple-800',
-  shipped: 'bg-sky-100 text-sky-800',
-  delivered: 'bg-green-100 text-green-800',
+  shipped: 'bg-green-100 text-green-800 ring-1 ring-green-300',
+  delivered: 'bg-green-700 text-white',
   cancelled: 'bg-gray-200 text-gray-700',
 };
 

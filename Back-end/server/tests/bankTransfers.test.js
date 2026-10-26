@@ -241,7 +241,7 @@ describe('confirming', () => {
 
   it('accounts confirms → the order is paid, enters the workflow, and the post-payment routine runs once', async () => {
     const { order, t } = await recorded();
-    expect((await bt.getBankTransfer(accounts, t.id)).can).toEqual({ confirm: true, reject: true, edit: false });
+    expect((await bt.getBankTransfer(accounts, t.id)).can).toEqual({ confirm: true, reject: true, edit: false, withdraw: false });
     const done = await bt.confirmBankTransfer(accounts, t.id, req);
     expect(done).toMatchObject({ status: 'confirmed', reviewedBy: 'Anu', can: { confirm: false, reject: false } });
 
@@ -395,5 +395,29 @@ describe('correcting a recorded transfer', () => {
     const a = await bt.recordBankTransfer(lead, (await salesOrder(lead))._id, input(), [shot()], req);
     const b = await bt.recordBankTransfer(lead, (await salesOrder(lead))._id, input({ reference: 'HDFCR52024102100000' }), [shot()], req);
     await expect(bt.editBankTransfer(lead, b.id, { reference: a.reference }, req)).rejects.toMatchObject({ statusCode: 409 });
+  });
+});
+
+describe('withdrawing a transfer recorded by mistake', () => {
+  it('the recorder withdraws it within 30 minutes: order unpaid again, UTR free, accounts told; not after accounts checked', async () => {
+    const order = await salesOrder(lead);
+    const t = await bt.recordBankTransfer(lead, order._id, input(), [shot()], req);
+    expect(t.can.withdraw).toBe(true);
+    await expect(bt.withdrawBankTransfer(lead2, t.id, {}, req)).rejects.toMatchObject({ statusCode: expect.any(Number) });
+    const w = await bt.withdrawBankTransfer(lead, t.id, { note: 'Wrong order' }, req);
+    expect(w).toMatchObject({ status: 'withdrawn', statusLabel: 'Withdrawn by GTM' });
+    expect((await Order.findById(order._id).lean()).bankTransferPendingAt).toBeFalsy();
+    // The UTR can be used again (on the right order).
+    const again = await bt.recordBankTransfer(lead, (await salesOrder(lead))._id, input(), [shot()], req);
+    expect(again.status).toBe('pending');
+    await bt.confirmBankTransfer(accounts, again.id, req);
+    await expect(bt.withdrawBankTransfer(lead, again.id, {}, req)).rejects.toMatchObject({ statusCode: 403 });
+  });
+
+  it('closed after 30 minutes for the recorder', async () => {
+    const order = await salesOrder(lead);
+    const t = await bt.recordBankTransfer(lead, order._id, input(), [shot()], req);
+    await BankTransfer.collection.updateOne({ _id: new mongoose.Types.ObjectId(t.id) }, { $set: { createdAt: new Date(Date.now() - 31 * 60 * 1000) } });
+    await expect(bt.withdrawBankTransfer(lead, t.id, {}, req)).rejects.toMatchObject({ statusCode: 403 });
   });
 });
