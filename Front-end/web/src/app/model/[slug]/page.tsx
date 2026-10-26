@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import VehicleModelListing from '@/components/vehicles/VehicleModelListing';
 import { buildVehicleMetadata, lookupVehicle } from '@/lib/vehicleMetadata';
-import { legacySearchPath } from '@/lib/legacySearchRedirect';
+import { resolveLegacyTarget } from '@/lib/legacyTargetServer';
 
 /**
  * An unknown slug used to render a full listing page titled after the slug
@@ -12,8 +12,9 @@ import { legacySearchPath } from '@/lib/legacySearchRedirect';
  * for a crawler.
  *
  * A slug the API confirms does not exist is almost always a WooCommerce-era
- * product-tag archive (/model/hilux-led-lights): those are sent on to a product
- * search for the same words instead of a dead end. A FAILED lookup still 404s —
+ * product-tag archive (/model/hilux-led-lights): those go to the vehicle they name
+ * (/model/toyota-hilux), or a matching product, else a real 404 — never to the
+ * robots-blocked product search (lib/legacyTarget.ts). A FAILED lookup still 404s —
  * it must never become a permanent redirect away from a real vehicle.
  *
  * lookupVehicle is cache()d, so this check and generateMetadata share one call.
@@ -24,7 +25,13 @@ import { legacySearchPath } from '@/lib/legacySearchRedirect';
  */
 async function resolveOrLeave(slug: string) {
   const result = await lookupVehicle(slug);
-  if (result.status === 'missing') permanentRedirect(legacySearchPath(slug));
+  if (result.status === 'missing') {
+    // A WooCommerce tag archive: to the vehicle it names (or a product), else 404 —
+    // never to /products/search, which robots.txt blocks.
+    const target = await resolveLegacyTarget(slug, 'model');
+    if (target && target !== `/model/${slug}`) permanentRedirect(target);
+    notFound();
+  }
   if (result.status !== 'found') notFound();
 }
 
