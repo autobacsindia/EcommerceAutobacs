@@ -130,6 +130,7 @@ function row(o, view) {
     customer: customerOf(o),
     city: [o.shippingAddress?.city, o.shippingAddress?.state].filter(Boolean).join(', '),
     summary: view?.summary || null,
+    summaryStage: view?.summaryStage || null,
     needs: view?.needs || [],
     lines: (o.items || []).map((it) => {
       const wl = view?.lines.find((l) => l.itemId === idOf(it._id));
@@ -280,7 +281,7 @@ function decodeCursor(cursor) {
 // ── Reads ──────────────────────────────────────────────────────────────────────
 
 /**
- * One team's work queue, oldest first. Reads only OPEN orders (indexed), works out
+ * One team's work queue, newest first (what the teams asked for). Reads only OPEN orders (indexed), works out
  * each one's current stages, and keeps the ones waiting on this team. An order that
  * turns out to have nothing left (an admin finished it from the admin panel) is
  * closed on the way past, so the queue heals itself.
@@ -297,7 +298,7 @@ export async function listQueue(actor, queue, { cursor } = {}) {
   let nextCursor = null;
 
   for (;;) {
-    const batch = await orderRepository.findOpenWorkflowPage({ after, limit: SCAN_BATCH });
+    const batch = await orderRepository.findOpenWorkflowPage({ after, limit: SCAN_BATCH, newestFirst: true });
     let last = null;
     for (const o of batch) {
       scanned += 1;
@@ -672,7 +673,7 @@ export async function setPaymentInitiated(actor) {
  */
 export async function shipWithProof(actor, orderId, { itemIds = [], courierName, trackingNumber } = {}, file, req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can upload shipping proof.', 403);
-  if (!file?.buffer?.length) throw fail('Add the supplier\'s photo or screenshot.', 400);
+  if (!file?.buffer?.length) throw fail('Add a photo of the parcel, the courier receipt, or the supplier\'s screenshot.', 400);
   if (file.buffer.length > MAX_PROOF_BYTES) throw fail('The photo is too large (8 MB maximum).', 400);
   if (detectKind(file.buffer) !== KIND.IMAGE) throw fail('The proof must be a photo or screenshot (JPG, PNG or WebP).', 400);
 

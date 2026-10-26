@@ -233,7 +233,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                 {p.photoUrl && (
                   <a href={p.photoUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.photoUrl} alt={`Supplier photo for parcel ${p.sequence}`} className="h-28 w-28 rounded-lg border border-gray-200 object-cover" loading="lazy" />
+                    <img src={p.photoUrl} alt={`Dispatch photo for parcel ${p.sequence}`} className="h-28 w-28 rounded-lg border border-gray-200 object-cover" loading="lazy" />
                   </a>
                 )}
                 <div className="min-w-0 flex-1 space-y-1">
@@ -361,7 +361,7 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) { onError('Add the supplier\'s photo or screenshot.'); return; }
+    if (!file) { onError('Add a photo of the parcel, the courier receipt, or the supplier\'s screenshot.'); return; }
     if (!selected.length) { onError('Choose at least one item in this parcel.'); return; }
     setBusy(true);
     try {
@@ -383,7 +383,8 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
   if (!shippable.length) return null;
   return (
     <form onSubmit={submit} className="space-y-3 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
-      <p className="flex items-center gap-2 font-semibold text-gray-900"><Truck className="h-4 w-4" /> Supplier has dispatched — upload proof</p>
+      <p className="flex items-center gap-2 font-semibold text-gray-900"><Truck className="h-4 w-4" /> Ready to dispatch — from our own stock or the supplier</p>
+      <p className="text-xs text-gray-600">Our own stock needs no supplier payment: add a photo of the packed parcel or the courier receipt and it is marked dispatched.</p>
       {shippable.length > 1 && (
         <fieldset className="space-y-1">
           <legend className="mb-1 text-xs font-medium text-gray-700">Items in this parcel</legend>
@@ -405,10 +406,10 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
         </fieldset>
       )}
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-700">Photo or screenshot from the supplier</span>
+        <span className="mb-1 block text-xs font-medium text-gray-700">Photo of the parcel / courier receipt, or the supplier&apos;s screenshot</span>
         <span className="flex items-center gap-2">
           <Camera className="h-4 w-4 text-gray-500" />
-          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" aria-label="Supplier photo" />
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" aria-label="Dispatch photo" />
         </span>
       </label>
       <div className="grid gap-3 sm:grid-cols-2">

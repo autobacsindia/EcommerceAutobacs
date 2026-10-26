@@ -1,4 +1,5 @@
 /** Shapes returned by the /staff sales endpoints (Back-end services/salesOrderService.js). */
+import type { LineStage } from '@/components/staff/work/types';
 
 export type SalesOrderItem = {
   name: string;
@@ -90,6 +91,8 @@ export type SalesOrder = {
   source?: 'sales' | 'website';
   /** Where the team workflow has got to; null for orders paid before it existed. */
   workflowSummary?: string | null;
+  /** The stage behind `workflowSummary`, for its colour. */
+  workflowStage?: LineStage | null;
   /** null once paid / closed. */
   linkState: 'active' | 'expired' | null;
   paymentLinkUrl: string | null;

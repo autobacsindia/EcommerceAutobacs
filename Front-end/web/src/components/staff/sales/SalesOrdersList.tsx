@@ -10,6 +10,7 @@ import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 import HoldControl from './HoldControl';
 import PaymentLinkCard from './PaymentLinkCard';
 import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
+import { STAGE_TONE } from '@/components/staff/work/types';
 import { errorMessage, quotationHref, rupees, type SalesOrder, type SalesOrderPage } from './types';
 
 type Mode = 'sales' | 'paid';
@@ -19,7 +20,9 @@ type Stage = 'processing' | 'delivered';
 /** One status pill per row, in words the team uses. */
 function statusOf(o: SalesOrder): { text: string; cls: string } {
   // Paid orders in the team workflow say where they are (stock check, shipped…).
+  // Coloured like the stage itself (the same palette as inside the order).
   if (o.paymentStatus !== 'pending' && o.workflowSummary) {
+    if (o.workflowStage) return { text: o.workflowSummary, cls: STAGE_TONE[o.workflowStage] };
     const done = /Delivered/.test(o.workflowSummary);
     return { text: o.workflowSummary, cls: done ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800' };
   }

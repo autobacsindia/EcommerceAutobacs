@@ -8,7 +8,7 @@ import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import WorkOrderPanel from './WorkOrderPanel';
-import type { WorkQueue, WorkRow } from './types';
+import { STAGE_TONE, type WorkQueue, type WorkRow } from './types';
 
 type Page = { success: boolean; orders: WorkRow[]; nextCursor: string | null };
 
@@ -36,7 +36,11 @@ function Row({ order }: { order: WorkRow }) {
             {order.lines.map((l) => `${l.name}${l.variantLabel ? ` (${l.variantLabel})` : ''} × ${l.quantity}`).join(', ')}
           </p>
         </div>
-        {order.summary && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">{order.summary}</span>}
+        {order.summary && (
+          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${order.summaryStage ? STAGE_TONE[order.summaryStage] : 'bg-amber-50 text-amber-800'}`}>
+            {order.summary}
+          </span>
+        )}
         <span className="ml-auto text-right text-sm font-bold text-gray-900 sm:ml-0 sm:w-28">{rupees(order.totalAmount)}</span>
         <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -45,7 +49,7 @@ function Row({ order }: { order: WorkRow }) {
   );
 }
 
-/** One team's work list, oldest first — the order that has waited longest is on top. */
+/** One team's work list, newest first. */
 export default function WorkQueueList({ queue }: { queue: WorkQueue }) {
   const q = useInfiniteQuery({
     queryKey: staffKeys.workQueue(queue),
@@ -63,7 +67,7 @@ export default function WorkQueueList({ queue }: { queue: WorkQueue }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">{orders.length ? `${orders.length}${q.hasNextPage ? '+' : ''} waiting · oldest first` : ''}</p>
+        <p className="text-xs text-gray-500">{orders.length ? `${orders.length}${q.hasNextPage ? '+' : ''} waiting · newest first` : ''}</p>
         <button type="button" onClick={() => q.refetch()} disabled={q.isFetching}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50">
           <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? 'animate-spin' : ''}`} /> Refresh

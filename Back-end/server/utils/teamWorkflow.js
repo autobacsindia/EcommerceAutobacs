@@ -164,21 +164,28 @@ export function workflowView(order) {
     inTransitShipmentIds: inTransit.map((s) => idOf(s._id)),
     open: needs.size > 0,
     summary: summarise(lines, inTransit.length),
+    summaryStage: summaryStage(lines, inTransit.length).stage,
   };
 }
 
 /** One short phrase for a list row: the most urgent thing about the order. */
-function summarise(lines, inTransit) {
+/** The stage that best describes the whole order — what its one pill shows (and is coloured by). */
+function summaryStage(lines, inTransit) {
   const order = [
     STAGE.STOCK_CHECK, STAGE.CUSTOMER_DECISION, STAGE.ACCOUNTS_APPROVAL,
     STAGE.TO_SHIP, STAGE.PAYMENT_PENDING, STAGE.WITH_SUPPLIER,
   ];
   for (const stage of order) {
     const n = lines.filter((l) => l.stage === stage).length;
-    if (n) return lines.length > 1 ? `${STAGE_LABELS[stage]} (${n} of ${lines.length})` : STAGE_LABELS[stage];
+    if (n) return { stage, n };
   }
-  if (inTransit) return STAGE_LABELS[STAGE.SHIPPED];
-  if (lines.length && lines.every((l) => l.stage === STAGE.CANCELLED)) return STAGE_LABELS[STAGE.CANCELLED];
-  if (lines.some((l) => l.stage === STAGE.DELIVERED)) return STAGE_LABELS[STAGE.DELIVERED];
-  return STAGE_LABELS[STAGE.SHIPPED];
+  if (inTransit) return { stage: STAGE.SHIPPED };
+  if (lines.length && lines.every((l) => l.stage === STAGE.CANCELLED)) return { stage: STAGE.CANCELLED };
+  if (lines.some((l) => l.stage === STAGE.DELIVERED)) return { stage: STAGE.DELIVERED };
+  return { stage: STAGE.SHIPPED };
+}
+
+function summarise(lines, inTransit) {
+  const { stage, n } = summaryStage(lines, inTransit);
+  return n && lines.length > 1 ? `${STAGE_LABELS[stage]} (${n} of ${lines.length})` : STAGE_LABELS[stage];
 }

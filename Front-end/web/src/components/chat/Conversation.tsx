@@ -123,7 +123,7 @@ export default function Conversation({
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
   const markRead = useMarkRead();
-  const [tab, setTab] = useState<'messages' | 'files' | 'members'>('messages');
+  const [tab, setTab] = useState<'messages' | 'updates' | 'files' | 'members'>('messages');
   // Custom groups have a member list; team spaces and DMs do not.
   const isGroup = channel.kind === 'space' && channel.audience === 'members';
   const [quote, setQuote] = useState<ChatMessage | null>(null);
@@ -138,6 +138,17 @@ export default function Conversation({
     () => (data?.pages ?? []).slice().reverse().flatMap((p) => p.messages),
     [data],
   );
+  /*
+    "Chat" is what people wrote; "Order updates" is what the system posted (orders,
+    payments, transfers, refunds). One loaded timeline, two views of it — so the
+    live stream, sending, editing and read-marking all keep working on one cache.
+  */
+  const visible = useMemo(
+    () => (tab === 'updates' ? messages.filter((m) => m.kind === 'system') : messages.filter((m) => m.kind !== 'system')),
+    [messages, tab],
+  );
+  // Team spaces get automatic updates; direct messages never do.
+  const hasUpdatesTab = channel.kind === 'space';
   // The newest thing on screen — a thread's activity counts, since replies are
   // read from the timeline's summary of them.
   const lastSeq = messages.reduce((n, m) => {
@@ -156,7 +167,22 @@ export default function Conversation({
     } else if (stickToBottom.current) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages.length, tab]);
+  }, [visible.length, tab]);
+
+  /*
+    A tab whose messages are sparse in the loaded pages (a busy updates channel can
+    fill 50 messages without one human line) would have nothing to scroll, so the
+    scroll-up "load older" never fires. Load older pages until there is a screenful,
+    or the history runs out — bounded, so it can never loop.
+  */
+  const autoLoads = useRef(0);
+  useEffect(() => { autoLoads.current = 0; }, [channel.id, tab]);
+  useEffect(() => {
+    if ((tab !== 'messages' && tab !== 'updates') || isLoading || isFetchingNextPage || !hasNextPage) return;
+    if (visible.length >= 20 || autoLoads.current >= 8) return;
+    autoLoads.current += 1;
+    fetchNextPage();
+  }, [tab, visible.length, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage]);
 
   useEffect(() => {
     stickToBottom.current = true;
@@ -300,7 +326,12 @@ export default function Conversation({
             </div>
           </div>
           <div className="mt-2 flex gap-4" role="tablist" aria-label="Conversation sections">
-            {(isGroup ? (['messages', 'files', 'members'] as const) : (['messages', 'files'] as const)).map((key) => (
+            {([
+              'messages',
+              ...(hasUpdatesTab ? (['updates'] as const) : []),
+              'files',
+              ...(isGroup ? (['members'] as const) : []),
+            ] as const).map((key) => (
               <button
                 key={key}
                 type="button"
@@ -311,7 +342,7 @@ export default function Conversation({
                   tab === key ? 'border-emerald-700 text-emerald-800' : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                {key === 'messages' ? 'Chat' : key === 'files' ? 'Files' : 'Members'}
+                {key === 'messages' ? 'Chat' : key === 'updates' ? 'Order updates' : key === 'files' ? 'Files' : 'Members'}
               </button>
             ))}
           </div>
@@ -326,7 +357,7 @@ export default function Conversation({
             <div className="relative min-h-0 flex-1">
               <div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-4 py-3" aria-live="polite">
                 {isFetchingNextPage && <p className="py-2 text-center text-xs text-gray-500">Loading older messages…</p>}
-                {!hasNextPage && !isLoading && messages.length > 0 && (
+                {!hasNextPage && !isLoading && visible.length > 0 && (
                   <p className="py-3 text-center text-xs text-gray-400">This is the beginning of {title}</p>
                 )}
                 {isLoading && <p className="py-10 text-center text-sm text-gray-500">Loading messages…</p>}
@@ -338,7 +369,13 @@ export default function Conversation({
                     </button>
                   </div>
                 )}
-                {!isLoading && !isError && messages.length === 0 && (
+                {!isLoading && !isError && visible.length === 0 && tab === 'updates' && (
+                  <div className="py-16 text-center">
+                    <p className="text-base font-semibold text-gray-800">No order updates here yet</p>
+                    <p className="text-sm text-gray-500">Automatic updates about orders, payments and refunds for this space appear here.</p>
+                  </div>
+                )}
+                {!isLoading && !isError && visible.length === 0 && tab === 'messages' && (
                   <div className="py-16 text-center">
                     <div className="mx-auto mb-3 w-fit"><ChannelIcon channel={channel} size="md" /></div>
                     <p className="text-base font-semibold text-gray-800">No messages yet</p>
@@ -350,11 +387,11 @@ export default function Conversation({
                   </div>
                 )}
 
-                {messages.map((m, i) => (
+                {visible.map((m, i) => (
                   <MessageItem
                     key={m.id}
                     message={m}
-                    previous={messages[i - 1]}
+                    previous={visible[i - 1]}
                     meId={meId}
                     meName={meName}
                     peopleById={peopleById}
@@ -380,6 +417,7 @@ export default function Conversation({
               )}
             </div>
 
+            {tab === 'messages' && (
             <Composer
               channelName={title}
               people={people.filter((p) => p.id !== meId)}
@@ -388,6 +426,7 @@ export default function Conversation({
               quote={quote}
               onClearQuote={() => setQuote(null)}
             />
+            )}
           </>
         )}
       </section>
