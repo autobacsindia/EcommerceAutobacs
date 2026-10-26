@@ -98,6 +98,19 @@ describe('NotificationBell', () => {
     expect(chime).toHaveBeenCalledTimes(1);
   });
 
+  it('opens on the side with room: right in the team sidebar, left in the admin header, full width on phones', () => {
+    waiting = { items: [], total: 0 };
+    const { unmount } = render(<NotificationBell chatHref="/team/chat" tone="dark" />);
+    fireEvent.click(screen.getByRole('button', { name: /waiting|notifications/i }));
+    const panel = screen.getByRole('menu');
+    expect(panel.className).toMatch(/\bleft-0\b/);
+    expect(panel.className).toMatch(/max-sm:fixed/);
+    unmount();
+    render(<NotificationBell chatHref="/admin/chat" />);
+    fireEvent.click(screen.getByRole('button', { name: /waiting|notifications/i }));
+    expect(screen.getByRole('menu').className).toMatch(/\bright-0\b/);
+  });
+
   it('arms the audio on the first click anywhere, not just on the bell', () => {
     render(<NotificationBell chatHref="/team/chat" />);
     expect(armed).not.toHaveBeenCalled();

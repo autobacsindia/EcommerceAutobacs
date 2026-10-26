@@ -143,7 +143,12 @@ export default function NotificationBell({
 
       {open && (
         <div
-          className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg"
+          className={`absolute z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg ${
+            // In the team sidebar the bell sits at the sidebar's right edge: open towards
+            // the page (right), or the panel is cut off by the screen's left edge. In the
+            // admin header (top right) open towards the left. On phones, span the screen.
+            tone === 'dark' ? 'left-0' : 'right-0'
+          } max-sm:fixed max-sm:inset-x-2 max-sm:top-16 max-sm:w-auto max-sm:max-w-none`}
           role="menu"
           aria-label="What is waiting"
         >
