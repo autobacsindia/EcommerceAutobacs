@@ -12,6 +12,7 @@ import {
 import { API_ENDPOINTS, AUTH_ERROR_MESSAGES } from '@/lib/constants';
 import { identifyUser, resetAnalytics, trackSignUp, trackLogin } from '@/lib/analytics';
 import type { StaffTeam } from '@/lib/staffTeams';
+import { disablePush } from '@/lib/push';
 
 export interface StaffProfile {
   team: StaffTeam;
@@ -362,6 +363,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
+      // Stop pop-ups on this device first (needs the session): a shared computer
+      // must not keep getting this person's notifications. Never throws.
+      await disablePush();
       await apiClient.post('/auth/logout', {});
     } catch (err) {
       console.error('Logout error:', err);
