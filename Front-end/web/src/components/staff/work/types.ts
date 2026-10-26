@@ -64,10 +64,10 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     shippedAt: string | null;
     deliveredAt: string | null;
     items: { name: string; quantity: number }[];
-    photoUrl: string | null;
-    canMarkDelivered: boolean;
     /** Marked delivered by mistake: operations / admin can put it back in transit. */
     canUndoDelivered?: boolean;
+    photoUrl: string | null;
+    canMarkDelivered: boolean;
     /** Dispatch details can still be corrected (30 minutes after upload). */
     canEdit?: boolean;
   }[];
