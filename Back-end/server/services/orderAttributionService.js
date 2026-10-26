@@ -8,8 +8,9 @@
  *
  * What this may change: `salesUser` and nothing else. Never price, payment or
  * status. Hence the limits:
- *   - website orders only (`source: 'web'`). Staff-made orders already carry their
- *     seller, and changing that is a different conversation.
+ *   - any PAID order — a website order credited to a salesman, a salesman's order
+ *     moved to another salesman, or either set back to "Website order" (the admin
+ *     orders list's "Sold by" dropdown).
  *   - paid orders only. An unpaid order still has live payment machinery keyed on
  *     `salesUser` (payment-link reconciliation in paymentReconciliationService),
  *     and the money truth for a paid order is already settled by the webhook.
@@ -139,8 +140,8 @@ export async function setSeller(actor, orderId, { salesUserId = null, expectedSa
   }
 
   const order = await orderRepository.findById(orderId, [{ path: 'salesUser', select: 'name' }]);
-  if (!order || order.source !== 'web') throw fail('Website order not found.', 404);
-  if (order.paymentStatus !== 'paid') throw fail('Only a paid website order can be credited to a salesman.', 409);
+  if (!order) throw fail('Order not found.', 404);
+  if (order.paymentStatus !== 'paid') throw fail('Only a paid order\'s salesman can be changed — an unpaid one still has payment links tied to its salesman.', 409);
 
   const entry = {
     at: new Date(),
@@ -153,7 +154,7 @@ export async function setSeller(actor, orderId, { salesUserId = null, expectedSa
     note: String(note || '').trim().slice(0, 300),
   };
   const updated = await orderRepository.model.findOneAndUpdate(
-    { _id: order._id, source: 'web', paymentStatus: 'paid', salesUser: expected },
+    { _id: order._id, paymentStatus: 'paid', salesUser: expected },
     {
       $set: { salesUser: to },
       $push: { salesAttribution: { $each: [entry], $slice: -HISTORY_KEEP } },

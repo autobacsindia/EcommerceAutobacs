@@ -5,6 +5,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import apiClient from '@/lib/api';
+import SoldByCell, { useSellers } from '@/components/orders/SoldByCell';
 import { adminKeys } from '@/hooks/queries/keys';
 import toast from 'react-hot-toast';
 import { API_ENDPOINTS, ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, CUSTOMER_NOTIFIED_STATUSES, PAYMENT_STATUS_COLORS, PAYMENT_STATUS_LABELS } from '@/lib/constants';
@@ -55,6 +56,10 @@ function getAdminNextStatuses(currentStatus: string): string[] {
 
 interface Order {
   _id: string;
+  /** 'web' (website checkout), 'offline' (GTM panel), 'woocommerce' (old shop). */
+  source?: string;
+  /** Who sold it — empty means a website order. */
+  salesUser?: { _id: string; name?: string } | null;
   orderNumber: string;
   createdAt: string;
   status: string;
@@ -183,6 +188,8 @@ function OrdersPagination({
 
 function AdminOrdersPageInner() {
   const { base: panelBase, isAdmin: canManage } = usePanel();
+  // "Sold by" dropdown: admin and marketing (the server checks; anyone else gets plain text).
+  const sellers = useSellers();
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -732,6 +739,9 @@ function AdminOrdersPageInner() {
                   Customer
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Sold by
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date
                   <SortIcon field="createdAt" />
                 </th>
@@ -776,6 +786,15 @@ function AdminOrdersPageInner() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{order.user?.name || 'N/A'}</div>
                     <div className="text-sm text-gray-500">{order.user?.email || 'N/A'}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <SoldByCell
+                      orderId={order._id}
+                      paid={order.paymentStatus === 'paid'}
+                      seller={order.salesUser}
+                      sellers={sellers.data}
+                      onChanged={() => {}}
+                    />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-500">

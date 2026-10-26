@@ -148,16 +148,34 @@ describe('Crediting a website order to a salesman', () => {
       expect(JSON.stringify(row)).not.toMatch(/9812345678|ravi@example\.com|1 Road/);
     });
 
-    it('refuses an unpaid website order, a staff-made order and a WooCommerce import', async () => {
+    it('refuses an unpaid order (its payment links are tied to the salesman) and an unknown one', async () => {
       const unpaid = await websiteOrder({ paid: false });
       expect((await credit(marketing.session, unpaid._id, lead.id)).status).toBe(409);
-      const offline = await websiteOrder({ source: 'offline', salesUser: lead.user._id });
-      expect((await credit(marketing.session, offline._id, lead2.id, lead.id)).status).toBe(404);
-      const woo = await websiteOrder({ source: 'woocommerce' });
-      expect((await credit(marketing.session, woo._id, lead.id)).status).toBe(404);
       expect((await credit(marketing.session, new mongoose.Types.ObjectId(), lead.id)).status).toBe(404);
       expect((await Order.findById(unpaid._id).lean()).salesUser).toBeNull();
-      expect(String((await Order.findById(offline._id).lean()).salesUser)).toBe(lead.id);
+    });
+
+    it("a paid salesman's order can move to another salesman, or back to Website order", async () => {
+      const offline = await websiteOrder({ source: 'offline', salesUser: lead.user._id });
+      expect((await credit(marketing.session, offline._id, lead2.id, lead.id)).status).toBe(200);
+      expect(String((await Order.findById(offline._id).lean()).salesUser)).toBe(lead2.id);
+      // The seller the person saw must still be the seller: a stale screen is refused.
+      expect((await credit(marketing.session, offline._id, null, lead.id)).status).toBe(409);
+      expect((await credit(marketing.session, offline._id, null, lead2.id)).status).toBe(200);
+      const back = await Order.findById(offline._id).lean();
+      expect(back.salesUser).toBeNull();
+      expect(back.salesAttribution.map((h) => h.toName)).toEqual(['Tara', '']);
+    });
+
+    it('the admin orders list says who sold each order (empty = Website order)', async () => {
+      const web = await websiteOrder();
+      const sold = await websiteOrder({ source: 'offline', salesUser: lead.user._id });
+      const res = await admin.session.get('/orders/admin/all?limit=50');
+      expect(res.status).toBe(200);
+      const byId = new Map(res.body.orders.map((o) => [String(o._id), o]));
+      expect(byId.get(String(sold._id)).salesUser).toMatchObject({ name: 'Sam' });
+      expect(byId.get(String(sold._id)).source).toBe('offline');
+      expect(byId.get(String(web._id)).salesUser).toBeFalsy();
     });
 
     it('pages with a cursor, 25 at a time, newest first, no repeats', async () => {
