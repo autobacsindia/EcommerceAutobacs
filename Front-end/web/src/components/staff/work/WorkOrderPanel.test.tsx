@@ -116,7 +116,7 @@ describe('WorkOrderPanel', () => {
     renderPanel();
 
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'proof.jpg', { type: 'image/jpeg' });
-    fireEvent.change(await screen.findByLabelText('Supplier photo'), { target: { files: [file] } });
+    fireEvent.change(await screen.findByLabelText('Dispatch photo'), { target: { files: [file] } });
     fireEvent.change(screen.getByPlaceholderText('e.g. Delhivery'), { target: { value: 'Delhivery' } });
     fireEvent.click(screen.getByRole('button', { name: /upload proof/i }));
 
@@ -144,7 +144,7 @@ describe('WorkOrderPanel', () => {
     renderPanel();
 
     const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'proof.jpg', { type: 'image/jpeg' });
-    fireEvent.change(await screen.findByLabelText('Supplier photo'), { target: { files: [file] } });
+    fireEvent.change(await screen.findByLabelText('Dispatch photo'), { target: { files: [file] } });
     expect(screen.getByText(/not stock-checked — will be marked in stock/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Upload proof & ship all items' })).toBeEnabled();
 
@@ -171,7 +171,7 @@ describe('WorkOrderPanel', () => {
     const href = decodeURIComponent(link.getAttribute('href') || '');
     expect(href).toMatch(/^https:\/\/wa\.me\/919876543210\?text=/);
     expect(href).toMatch(/Tracking number: DL123/);
-    expect(screen.getByRole('img', { name: /supplier photo/i })).toHaveAttribute('src', '/api/v1/staff/work/orders/o1/parcels/s1/photo');
+    expect(screen.getByRole('img', { name: /dispatch photo/i })).toHaveAttribute('src', '/api/v1/staff/work/orders/o1/parcels/s1/photo');
   });
 
   it('hides "Send to customer" from teams that do not contact customers', async () => {

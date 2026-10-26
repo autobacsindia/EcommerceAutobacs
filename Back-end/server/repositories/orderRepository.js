@@ -1328,22 +1328,25 @@ class OrderRepository extends BaseRepository {
     + 'shippingAddress user salesUser guestEmail shipments cancellations workflow payment spinReward';
 
   /**
-   * One page of the open work queue, oldest first, keyset-paged on
-   * (workflow.enteredAt, _id). Served by the partial `team_workflow_open` index.
+   * One page of the open work queue, keyset-paged on (workflow.enteredAt, _id) —
+   * oldest first by default, newest first with `newestFirst` (the team panel's
+   * lists). Both directions are served by the partial `team_workflow_open` index.
    */
-  async findOpenWorkflowPage({ after = null, limit = 50 } = {}) {
+  async findOpenWorkflowPage({ after = null, limit = 50, newestFirst = false } = {}) {
     const query = { 'workflow.open': true };
     if (after) {
+      const past = newestFirst ? '$lt' : '$gt';
       query.$or = [
-        { 'workflow.enteredAt': { $gt: after.enteredAt } },
-        { 'workflow.enteredAt': after.enteredAt, _id: { $gt: after.id } },
+        { 'workflow.enteredAt': { [past]: after.enteredAt } },
+        { 'workflow.enteredAt': after.enteredAt, _id: { [past]: after.id } },
       ];
     }
+    const dir = newestFirst ? -1 : 1;
     return Order.find(query)
       .select(OrderRepository.WORKFLOW_SELECT)
       .populate({ path: 'user', select: 'name email phone' })
       .populate({ path: 'salesUser', select: 'name email' })
-      .sort({ 'workflow.enteredAt': 1, _id: 1 })
+      .sort({ 'workflow.enteredAt': dir, _id: dir })
       .limit(limit)
       .lean();
   }

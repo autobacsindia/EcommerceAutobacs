@@ -478,11 +478,11 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={shipment.proofPhotoUrl}
-                  alt={`Supplier photo for parcel ${shipment.sequence}`}
+                  alt={`Dispatch photo for parcel ${shipment.sequence}`}
                   className="h-16 w-16 rounded object-cover"
                   loading="lazy"
                 />
-                Supplier photo — open full size
+                Dispatch photo — open full size
               </a>
             )}
 

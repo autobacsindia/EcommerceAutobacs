@@ -544,6 +544,29 @@ describe('queues heal themselves', () => {
     expect(second.orders).toHaveLength(2);
     expect(second.nextCursor).toBeNull();
     expect(new Set([...first.orders, ...second.orders].map((r) => r.id)).size).toBe(27);
+    // Newest first, across the page break too (the teams asked for this order).
+    const entered = [...first.orders, ...second.orders].map((r) => new Date(r.enteredAt).getTime());
+    expect(entered).toEqual([...entered].sort((a, b) => b - a));
+  });
+
+  it('newest first: the order paid last is on top', async () => {
+    const p = await staff('procurement');
+    const older = await paidOrder();
+    await new Promise((r) => setTimeout(r, 15));
+    const newer = await paidOrder();
+    expect((await wf.listQueue(p, 'procurement')).orders.map((r) => r.id)).toEqual([String(newer._id), String(older._id)]);
+  });
+
+  it('each order carries the stage behind its summary, so the pill can be coloured by it', async () => {
+    const p = await staff('procurement');
+    const order = await paidOrder();
+    const [cover, mat] = ids(order);
+    let row = (await wf.listQueue(p, 'procurement')).orders[0];
+    expect(row).toMatchObject({ summary: 'New Order (2 of 2)', summaryStage: STAGE.STOCK_CHECK });
+    await wf.setStock(p, String(order._id), cover, { stock: 'in_stock' }, req);
+    await wf.setStock(p, String(order._id), mat, { stock: 'in_stock' }, req);
+    row = (await wf.listQueue(p, 'procurement')).orders[0];
+    expect(row).toMatchObject({ summary: 'In Stock (2 of 2)', summaryStage: STAGE.TO_SHIP });
   });
 });
 

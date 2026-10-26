@@ -23,6 +23,8 @@ export type WorkRow = {
   customer: { name: string; email: string; phone: string };
   city: string;
   summary: string | null;
+  /** The stage behind `summary` — colours the order's pill like the stage itself. */
+  summaryStage?: LineStage | null;
   needs: string[];
   lines: {
     itemId: string;

@@ -125,6 +125,8 @@ function shape(o) {
     source: o.salesUser ? 'sales' : 'website',
     // Where the team workflow has got to (null for orders paid before it existed).
     workflowSummary: workflowView(o)?.summary || null,
+    // The stage key behind that label, so the panel colours it like the stage it is.
+    workflowStage: workflowView(o)?.summaryStage || null,
     linkState: linkState(o),
     paymentLinkUrl: linkState(o) === 'active' ? o.paymentLinkUrl : null,
     paymentLinkExpiresAt: o.paymentLinkExpiresAt || null,
