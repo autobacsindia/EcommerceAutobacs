@@ -961,6 +961,26 @@ class OrderRepository extends BaseRepository {
     ).lean();
   }
 
+  /**
+   * Put a delivered parcel back in transit (operations marked it delivered by
+   * mistake). Compare-and-set on `delivered`, so a double click acts once.
+   */
+  async undoShipmentDelivery(orderId, shipmentId) {
+    return Order.findOneAndUpdate(
+      { _id: orderId, shipments: { $elemMatch: { _id: shipmentId, status: 'delivered' } } },
+      { $set: { 'shipments.$.status': 'shipped' }, $unset: { 'shipments.$.deliveredAt': '' } },
+      { new: true },
+    );
+  }
+
+  /** The order is no longer fully delivered: drop its delivered date(s). */
+  async clearOrderDeliveredAt(orderId) {
+    return Order.updateOne(
+      { _id: orderId, status: { $ne: 'delivered' } },
+      { $unset: { deliveredAt: '', 'fulfillmentMetrics.deliveredAt': '' } },
+    );
+  }
+
   async transitionShipment(orderId, shipmentId, fromStatus, toStatus, extra = {}) {
     const stamp = { shipped: 'shippedAt', delivered: 'deliveredAt' }[toStatus];
     const set = { 'shipments.$.status': toStatus };

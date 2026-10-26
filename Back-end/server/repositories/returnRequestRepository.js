@@ -37,6 +37,11 @@ class ReturnRequestRepository {
    * @param {string} orderId
    * @returns {Promise<Map<string, number>>} productId → units already claimed
    */
+  /** Is a return for this order still being handled (not finished or rejected)? */
+  async hasInFlightForOrder(orderId, statuses) {
+    return !!(await ReturnRequest.exists({ order: orderId, status: { $in: statuses } }));
+  }
+
   async returnedQuantityByProduct(orderId) {
     const rows = await ReturnRequest.aggregate([
       { $match: { order: new mongoose.Types.ObjectId(String(orderId)),

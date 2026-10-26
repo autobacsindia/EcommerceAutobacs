@@ -24,6 +24,9 @@
 
 import orderRepository from '../repositories/orderRepository.js';
 import orderStatusService from './orderStatusService.js';
+import affiliateCommissionRepository from '../repositories/affiliateCommissionRepository.js';
+import returnRequestRepository from '../repositories/returnRequestRepository.js';
+import { IN_FLIGHT_RETURN_STATUSES } from '../config/returnPolicy.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import {
   SHIPMENT_STATUS,
@@ -221,6 +224,48 @@ class ShipmentService {
     this._enqueueShipmentEmail(orderId, String(shipmentId), 'delivered');
 
     return { success: true, message: 'Parcel marked delivered', order: updated };
+  }
+
+  /**
+   * Undo "delivered" on one parcel — it was marked by mistake. The parcel is back in
+   * transit and the order rolls back (delivered → shipped) through the same roll-up.
+   *
+   * What delivery started, and what happens to it here:
+   *   - return window: derived from parcel delivery dates → closes again by itself
+   *   - review-request email: re-checks `status === 'delivered'` when it fires → skipped
+   *   - affiliate maturity date: cleared here (pending accrual only)
+   *   - loyalty points: KEPT. awardForDelivery runs once per order (karmaAwarded +
+   *     a unique ledger row), so re-delivery cannot award twice, and a later refund
+   *     claws them back as it always has. Taking them here would need a second
+   *     award on re-delivery, which the ledger deliberately forbids.
+   *   - the "delivered" email already sent: cannot be unsent; nothing more is sent.
+   * Refused while a return is in progress, or once the affiliate commission has been
+   * approved or paid — those have moved money on the strength of the delivery.
+   */
+  async undoShipmentDelivered(orderId, shipmentId, opts = {}) {
+    const accrual = await affiliateCommissionRepository.findAccrual(orderId);
+    if (accrual && ['approved', 'paid'].includes(accrual.status)) {
+      return { success: false, message: 'The affiliate commission on this order has already been approved or paid, so its delivery cannot be undone. Ask the admin.' };
+    }
+    if (await returnRequestRepository.hasInFlightForOrder(orderId, IN_FLIGHT_RETURN_STATUSES)) {
+      return { success: false, message: 'The customer has a return in progress on this order, so its delivery cannot be undone.' };
+    }
+
+    const updated = await orderRepository.undoShipmentDelivery(orderId, shipmentId);
+    if (!updated) {
+      const order = await orderRepository.findById(orderId);
+      if (!order) return { success: false, message: 'Order not found' };
+      const parcel = (order.shipments || []).find((s) => String(s._id) === String(shipmentId));
+      if (!parcel) return { success: false, message: 'Parcel not found on this order' };
+      if (parcel.status === SHIPMENT_STATUS.SHIPPED) return { success: true, message: 'Parcel is already in transit', order, alreadyUndone: true };
+      return { success: false, message: `Parcel ${parcel.sequence} is '${parcel.status}' — only a delivered parcel can be put back in transit.` };
+    }
+
+    await affiliateCommissionRepository.clearMaturity(orderId).catch((err) =>
+      console.error(`[Shipment] could not clear affiliate maturity on ${orderId}:`, err.message));
+    await this._syncOrderStatus(updated, opts.userId);
+    await orderRepository.clearOrderDeliveredAt(orderId);
+    return { success: true, message: 'Parcel back in transit', order: await orderRepository.findById(orderId) };
   }
 
   /**

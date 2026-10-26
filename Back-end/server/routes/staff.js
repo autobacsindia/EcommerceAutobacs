@@ -51,6 +51,7 @@ import {
   validateCustomerBankSave,
   validateCustomerBankRemove,
   validateMarkDelivered,
+  validateUndoDelivered,
 } from '../validators/staff.validator.js';
 import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard, uploadPaymentProof, uploadPaymentRequestFiles } from '../middleware/uploadMiddleware.js';
 import {
@@ -67,6 +68,7 @@ import {
   reviewRefund,
   retryRefund,
   markDelivered,
+  undoDelivered,
 } from '../services/teamWorkflowService.js';
 import {
   describeStaff,
@@ -520,6 +522,11 @@ router.post('/work/orders/:id/refunds/:cancellationId/send', validateRefundRetry
 // @route  POST /staff/work/orders/:id/delivered  { shipmentId? } — operations
 router.post('/work/orders/:id/delivered', validateMarkDelivered, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, order: await markDelivered(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/undo-delivered  { shipmentId } — operations / admin: back in transit
+router.post('/work/orders/:id/undo-delivered', validateUndoDelivered, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await undoDelivered(req.user, req.params.id, req.body, req) });
 }));
 
 // ── Customer bank details for refunds / NEFT (never cards) ─────────────────────
