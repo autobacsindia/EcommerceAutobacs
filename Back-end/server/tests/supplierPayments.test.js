@@ -69,6 +69,12 @@ async function signIn(email) {
     get: (url) => agent.get(`${BASE}${url}`),
     post: (url, body = {}) => agent.post(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf).send(body),
     put: (url, body = {}) => agent.put(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf).send(body),
+    formPut: (url, fields = {}, files = []) => {
+      let r = agent.put(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf);
+      for (const [k, v] of Object.entries(fields)) r = r.field(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
+      for (const f of files) r = r.attach(f.field, f.buffer, { filename: f.name, contentType: f.type });
+      return r;
+    },
     form: (url, fields = {}, files = []) => {
       let r = agent.post(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf);
       for (const [k, v] of Object.entries(fields)) r = r.field(k, typeof v === 'object' ? JSON.stringify(v) : String(v));
@@ -385,6 +391,51 @@ describe('Supplier directory and one-transfer payments', () => {
       const paid = await payBatch(admin.session, [a.id], 300, { reference: '' });
       expect(paid.status).toBe(200);
       expect((await PaymentRequest.findById(a.id).lean()).payment.reference).toBe('');
+    });
+  });
+
+  describe('the admin corrects a paid payment record', () => {
+    const SHOT = { field: 'proof', buffer: JPEG, name: 'right.jpg', type: 'image/jpeg' };
+    async function paidOne() {
+      const r = await approvedPayment({ amount: 1000, payee: OTHER_BANK });
+      const paid = await admin.session.form(`/payment-requests/${r.id}/pay`, { method: 'upi', reference: 'WRONG123' }, [{ field: 'proof', buffer: JPEG, name: 'wrong.jpg', type: 'image/jpeg' }]);
+      expect(paid.status).toBe(200);
+      return paid.body.request;
+    }
+
+    it('changes how it was paid, the reference and the screenshots — never the amount or payee', async () => {
+      const r = await paidOne();
+      expect(r.can.editPayment).toBe(true);
+      const wrong = r.files.find((f) => f.kind === 'proof');
+      const res = await admin.session.formPut(`/payment-requests/${r.id}/payment`,
+        { method: 'bank', reference: 'UTR777888', removeFileIds: [wrong.id], amount: 1, note: 'Typed the wrong UTR' }, [SHOT]);
+      expect(res.status).toBe(200);
+      const doc = await PaymentRequest.findById(r.id).lean();
+      expect(doc.payment).toMatchObject({ method: 'bank', reference: 'UTR777888' });
+      expect(doc.amount).toBe(1000);
+      expect(doc.payee.accountNumber).toBe(OTHER_BANK.accountNumber);
+      expect(doc.files.filter((f) => f.kind === 'proof').map((f) => f.name)).toEqual(['right.jpg']);
+      expect(doc.history.at(-1)).toMatchObject({ action: 'payment_edited', note: expect.stringContaining('WRONG123 → UTR777888') });
+      expect([...stored.keys()].some((k) => k.includes('wrong'))).toBe(false); // old screenshot deleted
+    });
+
+    it('only the admin, only once paid', async () => {
+      const r = await paidOne();
+      expect((await accounts.session.formPut(`/payment-requests/${r.id}/payment`, { reference: 'X1234' })).status).toBe(403);
+      const notPaid = await approvedPayment({ amount: 500, payee: OTHER_BANK });
+      expect((await admin.session.formPut(`/payment-requests/${notPaid.id}/payment`, { reference: 'X1234' })).status).toBe(409);
+    });
+
+    it('a payment made in one transfer with others is corrected together', async () => {
+      const s = await addSupplier();
+      const a = await approvedPayment({ amount: 1000, supplierId: s.id });
+      const b = await approvedPayment({ amount: 2000, supplierId: s.id });
+      expect((await payBatch(admin.session, [a.id, b.id], 3000)).status).toBe(200);
+      const res = await admin.session.formPut(`/payment-requests/${a.id}/payment`, { reference: 'UTR-FIXED-1' });
+      expect(res.status).toBe(200);
+      const [da, db] = await Promise.all([PaymentRequest.findById(a.id).lean(), PaymentRequest.findById(b.id).lean()]);
+      expect([da.payment.reference, db.payment.reference]).toEqual(['UTR-FIXED-1', 'UTR-FIXED-1']);
+      expect(db.history.at(-1).note).toMatch(/whole transfer/);
     });
   });
 });

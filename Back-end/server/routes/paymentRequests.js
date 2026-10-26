@@ -119,6 +119,11 @@ router.post('/:id/hold', asyncHandler(async (req, res) => {
 router.post('/:id/pay', concurrentUploadGuard, uploadPaymentProof, fileErrors, asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.markPaid(req.user, req.params.id, req.body, req.files || [], req) });
 }));
+// PUT /payment-requests/:id/payment — multipart: method?, reference?, note?, removeFileIds(JSON)?, proof (new screenshots)
+// The admin corrects a paid payment's record (not the amount or the payee).
+router.put('/:id/payment', concurrentUploadGuard, uploadPaymentProof, fileErrors, asyncHandler(async (req, res) => {
+  res.json({ success: true, request: await pr.editPayment(req.user, req.params.id, req.body, req.files || [], req) });
+}));
 router.post('/:id/cancel', asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.cancel(req.user, req.params.id, req.body, req) });
 }));

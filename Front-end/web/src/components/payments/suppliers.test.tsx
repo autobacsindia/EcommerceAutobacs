@@ -206,3 +206,31 @@ describe('"Same supplier as before"', () => {
     expect(screen.queryByLabelText('Supplier')).not.toBeInTheDocument();
   });
 });
+
+describe('admin corrects a paid payment', () => {
+  it('sends method, reference, screenshots to remove and new ones — never the amount', async () => {
+    const { default: EditPaidPayment } = await import('./EditPaidPayment');
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ request: request('r1', 1000) }) });
+    const paid = {
+      ...request('r1', 1000), status: 'paid' as const,
+      payment: { method: 'upi', reference: 'WRONG123', paidAt: '2026-10-26T05:00:00Z', paidByName: 'Owner' },
+      files: [{ id: 'f9', kind: 'proof' as const, name: 'wrong.jpg', contentType: 'image/jpeg', bytes: 10 }],
+    };
+    const onDone = jest.fn();
+    wrap(<EditPaidPayment r={paid} onDone={onDone} onCancel={jest.fn()} />);
+    fireEvent.change(screen.getByLabelText('Paid by'), { target: { value: 'bank' } });
+    fireEvent.change(screen.getByLabelText('Reference / UTR'), { target: { value: 'UTR777888' } });
+    fireEvent.click(screen.getByLabelText('Remove wrong.jpg'));
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/v1/payment-requests/r1/payment');
+    expect(init.method).toBe('PUT');
+    const form = init.body as FormData;
+    expect(form.get('method')).toBe('bank');
+    expect(form.get('reference')).toBe('UTR777888');
+    expect(JSON.parse(form.get('removeFileIds') as string)).toEqual(['f9']);
+    expect(form.get('amount')).toBeNull();
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+  });
+});

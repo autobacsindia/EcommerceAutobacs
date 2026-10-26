@@ -36,7 +36,7 @@ export type PaymentRequest = {
   decisionNote: string;
   history: { at: string; byName: string; role: string; action: string; note: string }[];
   createdAt: string;
-  can: { approve: boolean; decline: boolean; pay: boolean; hold: boolean; cancel: boolean; edit?: boolean };
+  can: { approve: boolean; decline: boolean; pay: boolean; hold: boolean; cancel: boolean; edit?: boolean; editPayment?: boolean };
   /** The requester may edit until then (null for admins, or once it can no longer be edited). */
   editableUntil?: string | null;
 };
@@ -84,11 +84,11 @@ export const rupees = (n: number) =>
   `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
 
 /** Multipart POST (the JSON client can't send files), with the same CSRF header it uses. */
-export async function postForm<T>(endpoint: string, form: FormData): Promise<T> {
+export async function postForm<T>(endpoint: string, form: FormData, method: 'POST' | 'PUT' = 'POST'): Promise<T> {
   await tokenManager.ensureCsrfToken();
   const headers = tokenManager.getHeaders() as Record<string, string>;
   delete headers['Content-Type']; // the browser sets the multipart boundary
-  const res = await fetch(`/api/v1${endpoint}`, { method: 'POST', body: form, headers, credentials: 'include' });
+  const res = await fetch(`/api/v1${endpoint}`, { method, body: form, headers, credentials: 'include' });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(body?.message || 'That did not work'), { rawData: body });
   return body as T;
