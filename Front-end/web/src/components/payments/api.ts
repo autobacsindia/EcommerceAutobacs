@@ -43,7 +43,7 @@ export type PaymentRequest = {
 
 export type OrderPayment = {
   id: string; number: string; status: PaymentStatus; statusLabel: string; amount: number;
-  /** The viewer may still edit it (time limit for the requester; the admin until paid). */
+  /** The viewer may still edit it (the requester or their team head while it waits for accounts; the admin until paid). */
   canEdit?: boolean;
   itemIds: string[]; itemNames: string[]; payee: string; paidAt: string | null; createdAt: string;
 };

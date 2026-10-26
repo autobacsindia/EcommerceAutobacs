@@ -97,19 +97,18 @@ const mayPay = (u) => isAdmin(u);
 const mayHold = (u) => mayDecide(u) || mayPay(u);
 
 /*
-  Editing. The person who raised a request may correct it for EDIT_WINDOW_HOURS,
-  while it still waits for accounts (an approved amount is not changed under
+  Editing. The person who raised a request (or their team head) may correct it,
+  with no time limit, while it still waits for accounts (an approved amount is not changed under
   accounts' feet). The admin may edit anything not yet finished; if that changes
   the money (amount or who is paid) on an approved / held request, it goes back
   to accounts to approve again. Paid, declined and cancelled requests are
   financial records and are never edited.
 */
-export const EDIT_WINDOW_HOURS = 24;
 const EDITABLE = Object.freeze(['submitted', 'approved', 'on_hold']);
-const editDeadline = (r) => new Date(new Date(r.createdAt).getTime() + EDIT_WINDOW_HOURS * 3600 * 1000);
-const mayEdit = (u, r, now = Date.now()) => EDITABLE.includes(r.status) && (
+const mayEdit = (u, r) => EDITABLE.includes(r.status) && (
   isAdmin(u)
-  || (r.status === 'submitted' && idOf(r.requestedBy) === idOf(u?._id) && now < editDeadline(r).getTime())
+  || (r.status === 'submitted' && (idOf(r.requestedBy) === idOf(u?._id)
+    || (isActiveStaff(u) && u.staff.isHead === true && u.staff.team === r.team)))
 );
 
 /** May `user` see this request? */
@@ -274,7 +273,7 @@ export function shape(r, viewer) {
       editPayment: mayPay(viewer) && r.status === 'paid',
     },
     // For the requester: until when they may still edit (admins have no limit).
-    editableUntil: !isAdmin(viewer) && mayEdit(viewer, r) ? editDeadline(r) : null,
+    editableUntil: null, // no time limit any more
   };
 }
 
@@ -529,7 +528,7 @@ export async function update(actor, id, input = {}, req) {
   if (!mayEdit(actor, r0)) {
     throw fail(!EDITABLE.includes(r0.status)
       ? 'A paid, declined or cancelled request cannot be edited.'
-      : `You can edit a request you raised for ${EDIT_WINDOW_HOURS} hours, until accounts approves it. Ask an admin to change it now.`, 403);
+      : 'Only whoever raised it (or their team head) can edit it while it waits for accounts. Ask an admin to change it now.', 403);
   }
   const amount = input.amount != null && input.amount !== '' ? cleanAmount(input.amount) : r0.amount;
   const description = input.description != null ? String(input.description).trim().slice(0, 2000) : r0.description || '';

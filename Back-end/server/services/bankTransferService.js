@@ -140,14 +140,14 @@ async function storeFiles(checked) {
 // ── Shape ───────────────────────────────────────────────────────────────────
 
 /*
-  Correcting a typo (UTR, date, note): whoever recorded it, for EDIT_WINDOW_MINUTES,
-  while accounts has not checked it yet; the admin while it is pending. The amount
-  is always the order total, so it is never edited.
+  Correcting a typo (UTR, date, note), or withdrawing it: no time limit, while
+  accounts has not checked it yet — by whoever recorded it, the salesman on the
+  order, the GTM head, or the admin. The amount is always the order total, so it
+  is never edited.
 */
-export const EDIT_WINDOW_MINUTES = 30;
-const editDeadline = (t) => new Date(new Date(t.createdAt).getTime() + EDIT_WINDOW_MINUTES * 60 * 1000);
-const mayEdit = (u, t, now = Date.now()) => t.status === 'pending' && (
-  isAdmin(u) || (idOf(t.recordedBy) === idOf(u?._id) && now < editDeadline(t).getTime())
+const mayEdit = (u, t) => t.status === 'pending' && (
+  isAdmin(u) || isSalesHead(u)
+  || idOf(t.recordedBy) === idOf(u?._id) || (!!t.salesUser && idOf(t.salesUser) === idOf(u?._id))
 );
 
 export function shape(t, viewer) {
@@ -171,7 +171,7 @@ export function shape(t, viewer) {
     reviewNote: t.reviewNote || '',
     files: (t.files || []).map((f) => ({ id: idOf(f._id), name: f.name || '', contentType: f.contentType, bytes: f.bytes })),
     can: { confirm: open, reject: open, edit: mayEdit(viewer, t), withdraw: mayEdit(viewer, t) },
-    editableUntil: !isAdmin(viewer) && mayEdit(viewer, t) ? editDeadline(t) : null,
+    editableUntil: null, // no time limit any more
   };
 }
 
@@ -306,7 +306,7 @@ export async function editBankTransfer(actor, id, input = {}, req) {
   if (!mayEdit(actor, t0)) {
     throw fail(t0.status !== 'pending'
       ? 'Accounts has already checked this transfer, so it can no longer be edited.'
-      : `You can edit a transfer you recorded for ${EDIT_WINDOW_MINUTES} minutes. Ask accounts to reject it, then record it again.`, 403);
+      : 'Only whoever recorded it, the salesman on the order, the GTM head or the admin can edit it.', 403);
   }
   const set = {};
   const changes = [];
@@ -343,8 +343,8 @@ export async function editBankTransfer(actor, id, input = {}, req) {
 
 /**
  * Take back a transfer recorded by mistake (wrong order, customer had not
- * really paid): whoever recorded it, for EDIT_WINDOW_MINUTES, while accounts
- * has not checked it; the admin while pending. Same effect as a rejection —
+ * really paid): the same people who may edit it (mayEdit), with no time limit,
+ * while accounts has not checked it. Same effect as a rejection —
  * the order is unpaid again and the UTR is free — but nobody checked the bank,
  * so it is recorded as "withdrawn", not "rejected". One transaction, like reject.
  */
@@ -353,7 +353,7 @@ export async function withdrawBankTransfer(actor, id, { note } = {}, req) {
   if (!mayEdit(actor, t0)) {
     throw fail(t0.status !== 'pending'
       ? 'Accounts has already checked this transfer, so it can no longer be withdrawn.'
-      : `You can withdraw a transfer you recorded for ${EDIT_WINDOW_MINUTES} minutes. Ask accounts to reject it now.`, 403);
+      : 'Only whoever recorded it, the salesman on the order, the GTM head or the admin can withdraw it.', 403);
   }
   const reason = String(note || '').trim().slice(0, 500);
   let withdrawnHere = false;

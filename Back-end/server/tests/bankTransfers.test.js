@@ -369,11 +369,11 @@ describe('seeing them', () => {
 });
 
 describe('correcting a recorded transfer', () => {
-  it('the person who recorded it fixes the UTR / date / note for 30 minutes; history says what changed', async () => {
+  it('the person who recorded it fixes the UTR / date / note; history says what changed', async () => {
     const order = await salesOrder(lead);
     const t = await bt.recordBankTransfer(lead, order._id, input(), [shot()], req);
     expect(t.can.edit).toBe(true);
-    expect(t.editableUntil).toBeTruthy();
+    expect(t.editableUntil).toBeNull(); // no time limit
     const fixed = await bt.editBankTransfer(lead, t.id, { reference: 'HDFCR52024102199999', note: 'NEFT, corrected' }, req);
     expect(fixed).toMatchObject({ reference: 'HDFCR52024102199999', note: 'NEFT, corrected', status: 'pending' });
     const doc = await BankTransfer.findById(t.id).lean();
@@ -381,12 +381,14 @@ describe('correcting a recorded transfer', () => {
     await expect(bt.editBankTransfer(lead2, t.id, { note: 'x' }, req)).rejects.toMatchObject({ statusCode: expect.any(Number) });
   });
 
-  it('closed after 30 minutes and once accounts has checked it; the admin can still fix a pending one', async () => {
+  it('no time limit: still editable days later — by the recorder, the GTM head or the admin; closed once accounts has checked it', async () => {
     const order = await salesOrder(lead);
     const t = await bt.recordBankTransfer(lead, order._id, input(), [shot()], req);
-    await BankTransfer.collection.updateOne({ _id: new mongoose.Types.ObjectId(t.id) }, { $set: { createdAt: new Date(Date.now() - 31 * 60 * 1000) } });
-    await expect(bt.editBankTransfer(lead, t.id, { note: 'late' }, req)).rejects.toMatchObject({ statusCode: 403 });
+    await BankTransfer.collection.updateOne({ _id: new mongoose.Types.ObjectId(t.id) }, { $set: { createdAt: new Date(Date.now() - 5 * 24 * 3600 * 1000) } });
+    await expect(bt.editBankTransfer(lead, t.id, { note: 'days later' }, req)).resolves.toMatchObject({ note: 'days later' });
+    await expect(bt.editBankTransfer(head, t.id, { note: 'head fix' }, req)).resolves.toMatchObject({ note: 'head fix' });
     await expect(bt.editBankTransfer(admin, t.id, { note: 'admin fix' }, req)).resolves.toMatchObject({ note: 'admin fix' });
+    await expect(bt.editBankTransfer(ops, t.id, { note: 'other team' }, req)).rejects.toMatchObject({ statusCode: expect.any(Number) });
     await bt.confirmBankTransfer(accounts, t.id, req);
     await expect(bt.editBankTransfer(admin, t.id, { note: 'after' }, req)).rejects.toMatchObject({ statusCode: 403 });
   });
@@ -399,7 +401,7 @@ describe('correcting a recorded transfer', () => {
 });
 
 describe('withdrawing a transfer recorded by mistake', () => {
-  it('the recorder withdraws it within 30 minutes: order unpaid again, UTR free, accounts told; not after accounts checked', async () => {
+  it('the recorder withdraws it: order unpaid again, UTR free, accounts told; not after accounts checked', async () => {
     const order = await salesOrder(lead);
     const t = await bt.recordBankTransfer(lead, order._id, input(), [shot()], req);
     expect(t.can.withdraw).toBe(true);
@@ -414,10 +416,10 @@ describe('withdrawing a transfer recorded by mistake', () => {
     await expect(bt.withdrawBankTransfer(lead, again.id, {}, req)).rejects.toMatchObject({ statusCode: 403 });
   });
 
-  it('closed after 30 minutes for the recorder', async () => {
+  it('no time limit for the recorder: withdrawn days later, while still pending', async () => {
     const order = await salesOrder(lead);
     const t = await bt.recordBankTransfer(lead, order._id, input(), [shot()], req);
-    await BankTransfer.collection.updateOne({ _id: new mongoose.Types.ObjectId(t.id) }, { $set: { createdAt: new Date(Date.now() - 31 * 60 * 1000) } });
-    await expect(bt.withdrawBankTransfer(lead, t.id, {}, req)).rejects.toMatchObject({ statusCode: 403 });
+    await BankTransfer.collection.updateOne({ _id: new mongoose.Types.ObjectId(t.id) }, { $set: { createdAt: new Date(Date.now() - 5 * 24 * 3600 * 1000) } });
+    await expect(bt.withdrawBankTransfer(lead, t.id, {}, req)).resolves.toMatchObject({ status: 'withdrawn' });
   });
 });

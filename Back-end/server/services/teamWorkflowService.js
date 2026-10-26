@@ -467,28 +467,26 @@ export async function clearPaymentPending(actor, orderId, itemIds, reason) {
 }
 
 /*
-  Undo, for UNDO_MINUTES after the step, by the person who took it (the admin at
-  any time) — and only while nothing has happened since. Steps that move money
+  Undo, with no time limit, by anyone on the team that owns the step (and the
+  admin) — but only while nothing has happened since: the state checks below are
+  what keep stock and money right, not the clock. Steps that move money
   (approving, paying, refunds, confirming a transfer) and "Delivered" (which
   emails the customer, awards points and opens the return window) are not undone.
 */
-export const UNDO_MINUTES = 30;
-const withinUndo = (at, now = Date.now()) => !!at && now - new Date(at).getTime() < UNDO_MINUTES * 60 * 1000;
-const byActor = (u, by) => isAdmin(u) || (!!by && idOf(by) === idOf(u?._id));
 
 /** May `u` undo this line's stock decision (In Stock / Out of Stock) now? */
 function mayUndoStock(u, line) {
   if (!can.procurement(u) || line.supplierPaymentAt || line.refundRequestedAt) return false;
   if (!((line.stage === STAGE.TO_SHIP && line.stock === STOCK.IN_STOCK)
     || (line.stage === STAGE.CUSTOMER_DECISION && line.stock === STOCK.OUT_OF_STOCK))) return false;
-  return isAdmin(u) || (byActor(u, line.stockBy) && withinUndo(line.stockAt));
+  return true;
 }
 
 /** Procurement: take back "In Stock" / "Out of Stock" — the line is a New Order again. */
 export async function undoStock(actor, orderId, itemId, req) {
   const { line } = await loadLine(orderId, itemId);
   if (!mayUndoStock(actor, line)) {
-    throw fail(`You can undo your own stock decision for ${UNDO_MINUTES} minutes, while nothing else has happened on this item.`, 409);
+    throw fail('This stock decision can no longer be undone — something else has happened on this item since.', 409);
   }
   const updated = await orderRepository.updateWorkflowLineIf(
     orderId, itemId,
@@ -506,11 +504,11 @@ export async function undoStock(actor, orderId, itemId, req) {
 function undoableDecision(u, order, line) {
   if (!can.decide(u, order)) return null;
   if (line.stage === STAGE.ACCOUNTS_APPROVAL && !line.accountsApprovedAt && line.refundRequestedAt) {
-    return isAdmin(u) || (byActor(u, line.refundRequestedBy) && withinUndo(line.refundRequestedAt)) ? 'refund' : null;
+    return 'refund';
   }
   if (line.stage === STAGE.STOCK_CHECK && line.stock === STOCK.PENDING) {
     const last = [...(order.workflow?.history || [])].reverse().find((h) => h.itemId && idOf(h.itemId) === line.itemId);
-    if (last?.action === 'customer_waits' && (isAdmin(u) || (byActor(u, last.by) && withinUndo(last.at)))) return 'wait';
+    if (last?.action === 'customer_waits') return 'wait';
   }
   return null;
 }
@@ -520,7 +518,7 @@ export async function undoDecision(actor, orderId, itemId, req) {
   const { order, line } = await loadLine(orderId, itemId);
   const which = undoableDecision(actor, order, line);
   if (!which) {
-    throw fail(`You can undo the customer's decision for ${UNDO_MINUTES} minutes, until accounts acts on it.`, 409);
+    throw fail('The customer\'s decision can no longer be undone — accounts has already acted on it.', 409);
   }
   const updated = which === 'refund'
     ? await orderRepository.updateWorkflowLineIf(
@@ -543,7 +541,7 @@ export async function undoDecision(actor, orderId, itemId, req) {
 
 /**
  * Procurement: correct a parcel's dispatch details (courier, tracking number,
- * proof photo) for UNDO_MINUTES after uploading them, while it is still in transit.
+ * proof photo) at any time while it is still in transit.
  */
 export async function editShipment(actor, orderId, shipmentId, { courierName, trackingNumber } = {}, file, req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can change dispatch details.', 403);
@@ -552,7 +550,7 @@ export async function editShipment(actor, orderId, shipmentId, { courierName, tr
   const parcel = (o.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
   if (!parcel) throw fail('Parcel not found on this order.', 404);
   if (!mayEditShipment(actor, parcel)) {
-    throw fail(`Dispatch details can be corrected for ${UNDO_MINUTES} minutes after uploading, while the parcel is in transit.`, 409);
+    throw fail('Dispatch details can only be corrected while the parcel is in transit.', 409);
   }
   const set = {};
   const changes = [];
@@ -596,7 +594,7 @@ export async function editShipment(actor, orderId, shipmentId, { courierName, tr
 
 function mayEditShipment(u, parcel) {
   if (!can.procurement(u) || parcel.status !== SHIPMENT_STATUS.SHIPPED) return false;
-  return isAdmin(u) || (byActor(u, parcel.proofPhoto?.uploadedBy) && withinUndo(parcel.proofPhoto?.uploadedAt || parcel.shippedAt));
+  return true;
 }
 
 /**
