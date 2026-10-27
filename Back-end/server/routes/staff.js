@@ -85,6 +85,7 @@ import {
   acceptInvite,
   createCompanyAccount,
   resetCompanyPassword,
+  getMemberPassword,
   changeOwnPassword,
 } from '../services/staffService.js';
 import {
@@ -175,6 +176,12 @@ router.post('/accounts', validateCompanyAccount, validateRequest, asyncHandler(a
 router.post('/members/:id/password', validatePasswordReset, validateRequest, asyncHandler(async (req, res) => {
   const member = await resetCompanyPassword(req.user, req.params.id, req.body.password, req);
   res.json({ success: true, member });
+}));
+
+// @route  GET /staff/members/:id/password — the admin (anyone) or the head (own team's members). Logged.
+router.get('/members/:id/password', validateMemberIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, ...(await getMemberPassword(req.user, req.params.id, req)) });
 }));
 
 // @route  GET /staff/team?team= — members + open invites

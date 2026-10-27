@@ -17,6 +17,10 @@
  *     company owns: only an admin or head can reset its password, and removing
  *     access blocks its login. See config/staff.js.
  * Removing access revokes every session immediately.
+ *
+ * Passwords: an encrypted copy of every staff password is kept (staffPasswordView,
+ * utils/fieldEncryption.js) so the admin can look any of them up, and a head those
+ * of their own team's members — the owner's decision. Every look-up is audit-logged.
  */
 
 import bcrypt from 'bcryptjs';
@@ -27,6 +31,7 @@ import staffInviteRepository from '../repositories/staffInviteRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { generateTokenPair, hashToken } from '../utils/tokenUtils.js';
 import { revokeAllRefreshTokens } from '../utils/sessionManager.js';
+import { encryptField, decryptField } from '../utils/fieldEncryption.js';
 import { staffInviteEmail } from '../utils/emailTemplates.js';
 import {
   STAFF_TEAM_LABELS, STAFF_INVITE_TTL_MS, isStaffTeam,
@@ -50,6 +55,32 @@ const publicInvite = (invite) => ({
   expiresAt: invite.expiresAt,
   createdAt: invite.createdAt,
 });
+
+/**
+ * May `actor` look up `target`'s password? The admin: any staff member. A head: the
+ * members of their own team — not another head, and not their own (the admin's).
+ */
+export const canViewPassword = (actor, target) => {
+  if (!target || target.role !== 'staff' || target.staff?.active !== true) return false;
+  if (isAdmin(actor)) return true;
+  return isActiveHead(actor)
+    && target.staff.team === actor.staff.team
+    && !target.staff.isHead
+    && String(target._id) !== String(actor._id);
+};
+
+/**
+ * The encrypted copy to store beside a new password. Never blocks setting the
+ * password itself: without FIELD_ENCRYPTION_KEY no copy is kept and "Show" says so.
+ */
+const passwordCopy = (password) => {
+  try {
+    return encryptField(String(password)) || null;
+  } catch (err) {
+    console.error('[Staff] Password copy not stored:', err.message);
+    return null;
+  }
+};
 
 const publicMember = (user) => ({
   id: String(user._id),
@@ -109,7 +140,7 @@ export async function listTeam(actor, requestedTeam) {
     team,
     teamLabel: STAFF_TEAM_LABELS[team],
     canManage: isAdmin(actor) || isActiveHead(actor),
-    members: members.map(publicMember),
+    members: members.map((m) => ({ ...publicMember(m), canViewPassword: canViewPassword(actor, m) })),
     invites: invites.map((i) => ({ ...publicInvite(i), expired: new Date(i.expiresAt).getTime() <= now })),
   };
 }
@@ -349,6 +380,7 @@ export async function acceptInvite(token, password, req) {
 
   try {
     const passwordHash = await bcrypt.hash(password, await bcrypt.genSalt(10));
+    const passwordView = passwordCopy(password);
     const staff = {
       team: invite.team,
       isHead: invite.isHead,
@@ -363,7 +395,7 @@ export async function acceptInvite(token, password, req) {
     }
 
     if (user) {
-      user = await userRepository.grantStaff(user._id, { passwordHash, staff, phone: invite.phone });
+      user = await userRepository.grantStaff(user._id, { passwordHash, staff, phone: invite.phone, passwordView });
       if (!user) throw fail('This account cannot be added to a team.', 409);
       // A password just changed on an existing account: end every old session.
       await revokeAllRefreshTokens(user);
@@ -373,6 +405,7 @@ export async function acceptInvite(token, password, req) {
         email: invite.email,
         phone: invite.phone,
         passwordHash,
+        ...(passwordView && { staffPasswordView: passwordView }),
         role: 'staff',
         staff,
         isVerified: true,
@@ -427,6 +460,7 @@ export async function createCompanyAccount(actor, input, req) {
   const email = companyEmailFor(username);
   if (await userRepository.findByEmail(email)) throw fail('That username is already taken.', 409);
 
+  const passwordView = passwordCopy(input.password);
   let user;
   try {
     user = await userRepository.create({
@@ -435,6 +469,7 @@ export async function createCompanyAccount(actor, input, req) {
       username,
       phone,
       passwordHash: await hashPassword(input.password),
+      ...(passwordView && { staffPasswordView: passwordView }),
       role: 'staff',
       companyAccount: true,
       isVerified: true,
@@ -480,7 +515,7 @@ export async function resetCompanyPassword(actor, userId, password, req) {
     if (target.staff.isHead) throw fail('Only an administrator can reset a team head\'s password.', 403);
   }
 
-  const updated = await userRepository.setStaffPassword(target._id, await hashPassword(password));
+  const updated = await userRepository.setStaffPassword(target._id, await hashPassword(password), passwordCopy(password));
   if (!updated) throw fail('Staff member not found.', 404);
   await revokeAllRefreshTokens(updated);
 
@@ -504,10 +539,46 @@ export async function changeOwnPassword(actor, { currentPassword, newPassword },
   }
   if (String(currentPassword) === String(newPassword)) throw fail('Choose a password different from the current one.', 400);
 
-  const updated = await userRepository.setStaffPassword(user._id, await hashPassword(newPassword));
+  const updated = await userRepository.setStaffPassword(user._id, await hashPassword(newPassword), passwordCopy(newPassword));
   if (!updated) throw fail('Not authorized.', 403);
   // Other devices sign out; this one gets fresh cookies from the route.
   await revokeAllRefreshTokens(updated);
   auditLogger.logAction(req, 'UPDATE', 'User', user._id, { change: 'staff_password_changed' });
   return updated;
 }
+
+/**
+ * Look up a staff member's current password (team panel "Show"). The admin: anyone;
+ * a head: their own team's members (canViewPassword). Audit-logged every time.
+ *
+ * The copy is checked against the login password before it is shown, so a password
+ * set some other way since (a "forgot password" link, or before this existed) reads
+ * `{ password: null, reason: 'not_saved' }` — "set a new one" — never a stale value.
+ *
+ * @returns {Promise<{ password: string|null, reason: 'not_saved'|null }>}
+ */
+export async function getMemberPassword(actor, userId, req) {
+  const target = await userRepository.findStaffPasswordView(userId);
+  if (!target || target.role !== 'staff' || target.staff?.active !== true) throw fail('Staff member not found.', 404);
+  if (!canViewPassword(actor, target)) {
+    throw fail(isAdmin(actor) || isActiveHead(actor)
+      ? 'You can see passwords for your own team\'s members only.'
+      : 'Only an administrator or the team head can see passwords.', 403);
+  }
+
+  let password = null;
+  if (target.staffPasswordView && target.passwordHash) {
+    try {
+      const plain = decryptField(target.staffPasswordView);
+      if (await bcrypt.compare(String(plain), target.passwordHash)) password = String(plain);
+    } catch (err) {
+      console.error(`[Staff] Could not read the password copy for ${target._id}:`, err.message);
+    }
+  }
+
+  auditLogger.logAction(req, 'READ_SENSITIVE', 'User', target._id, {
+    change: 'staff_password_viewed', team: target.staff.team, shown: !!password,
+  });
+  return { password, reason: password ? null : 'not_saved' };
+}
+

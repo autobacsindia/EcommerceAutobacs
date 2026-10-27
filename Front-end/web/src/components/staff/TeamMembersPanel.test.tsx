@@ -101,6 +101,63 @@ describe('company logins', () => {
   });
 });
 
+describe('Password column', () => {
+  const urlOf = (u: unknown) => String(u);
+  const answer = (passwords: Record<string, string | null>) => (url: unknown) => {
+    const m = urlOf(url).match(/^\/staff\/members\/(\w+)\/password$/);
+    return Promise.resolve(m ? { success: true, password: passwords[m[1]] ?? null, reason: passwords[m[1]] ? null : 'not_saved' }
+      : team([{ ...sam, canViewPassword: true }, { ...ravi, canViewPassword: true }, { ...sam, id: 'u3', name: 'Hana Head', username: 'hana.head', isHead: true, canViewPassword: false }]));
+  };
+
+  it('hidden until "Show", fetched from the server each time; Hide puts it away', async () => {
+    get.mockImplementation(answer({ u1: 'Temporary#2026' }));
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    const samRow = (await screen.findByText('Sam Kumar')).closest('tr')!;
+    expect(screen.getByRole('columnheader', { name: 'Password' })).toBeInTheDocument();
+    expect(within(samRow).queryByText('Temporary#2026')).toBeNull();
+
+    fireEvent.click(within(samRow).getByRole('button', { name: "Show Sam Kumar's password" }));
+    expect(await within(samRow).findByText('Temporary#2026')).toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith('/staff/members/u1/password');
+
+    fireEvent.click(within(samRow).getByRole('button', { name: /Hide/ }));
+    expect(within(samRow).queryByText('Temporary#2026')).toBeNull();
+    fireEvent.click(within(samRow).getByRole('button', { name: "Show Sam Kumar's password" }));
+    await within(samRow).findByText('Temporary#2026');
+    expect(get.mock.calls.filter(([u]) => urlOf(u).endsWith('/password'))).toHaveLength(2);
+  });
+
+  it('a password that was never saved says how to get one; no button for people you may not see', async () => {
+    get.mockImplementation(answer({}));
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    const samRow = (await screen.findByText('Sam Kumar')).closest('tr')!;
+    fireEvent.click(within(samRow).getByRole('button', { name: "Show Sam Kumar's password" }));
+    expect(await within(samRow).findByText(/Not saved — use Change password/)).toBeInTheDocument();
+
+    const raviRow = screen.getByText('Ravi').closest('tr')!;
+    fireEvent.click(within(raviRow).getByRole('button', { name: "Show Ravi's password" }));
+    expect(await within(raviRow).findByText(/Not saved — set when they next change it/)).toBeInTheDocument();
+
+    const headRow = screen.getByText('Hana Head').closest('tr')!;
+    expect(within(headRow).queryByRole('button', { name: /Show/ })).toBeNull();
+  });
+
+  it('after Change password, a password shown earlier is hidden again', async () => {
+    get.mockImplementation(answer({ u1: 'Temporary#2026' }));
+    post.mockResolvedValue({ success: true, member: sam });
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    const samRow = (await screen.findByText('Sam Kumar')).closest('tr')!;
+    fireEvent.click(within(samRow).getByRole('button', { name: "Show Sam Kumar's password" }));
+    await within(samRow).findByText('Temporary#2026');
+
+    fireEvent.click(within(samRow).getByRole('button', { name: /Change password/ }));
+    fireEvent.change(screen.getByPlaceholderText(/New password/i), { target: { value: 'AdminChose#2026' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save password/ }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/members/u1/password', { password: 'AdminChose#2026' }));
+    await waitFor(() => expect(within(samRow).queryByText('Temporary#2026')).toBeNull());
+  });
+});
+
 describe('generateTempPassword', () => {
   it('is long, unambiguous and different every time', () => {
     const a = generateTempPassword();

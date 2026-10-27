@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, UserPlus, UserMinus, X, Mail, KeyRound, Copy, Building2, Pencil } from 'lucide-react';
+import { RefreshCw, UserPlus, UserMinus, X, Mail, KeyRound, Copy, Building2, Pencil, Eye, EyeOff } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
 import { formatDateIST } from '@/lib/datetime';
@@ -20,6 +20,8 @@ type Member = {
   subRole?: string | null;
   /** "GTM head", "GTM lead", "Procurement head", "Member"… */
   roleLabel?: string | null;
+  /** The admin (anyone) or this person's head may look their password up. */
+  canViewPassword?: boolean;
 };
 
 /** Roles inside GTM (the 'sales' team) — what each new GTM login can do. */
@@ -90,6 +92,8 @@ export default function TeamMembersPanel({
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   // The member whose password is being changed, and the new one being typed.
   const [changing, setChanging] = useState<{ member: Member; password: string } | null>(null);
+  // Bumped after a password change so every Password cell forgets what it showed.
+  const [passwordVersion, setPasswordVersion] = useState(0);
   // Admin: the member being edited (name, mobile, username, team, head, GTM role).
   const [editing, setEditing] = useState<{
     member: Member; name: string; phone: string; username: string; team: StaffTeam; isHead: boolean; subRole: string;
@@ -170,6 +174,7 @@ export default function TeamMembersPanel({
       await apiClient.post(`/staff/members/${member.id}/password`, { password });
       setCredentials({ name: member.name, username: member.username || '', password, reset: true });
       setChanging(null);
+      setPasswordVersion((v) => v + 1);
     } catch (err) {
       setError(errorMessage(err, 'Could not change the password.'));
     } finally {
@@ -533,13 +538,14 @@ export default function TeamMembersPanel({
               <th className="px-4 py-3">Login</th>
               <th className="px-4 py-3">Mobile</th>
               <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Password</th>
               <th className="px-4 py-3">Added</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading && !data ? (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-500">Loading…</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">Loading…</td></tr>
             ) : data?.members.length ? data.members.map((m) => (
               <tr key={m.id}>
                 <td className="px-4 py-3 font-medium text-gray-900">{m.name}</td>
@@ -556,6 +562,11 @@ export default function TeamMembersPanel({
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${m.isHead ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-700'}`}>
                     {m.roleLabel || (m.isHead ? 'Head' : 'Member')}
                   </span>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  {m.canViewPassword
+                    ? <PasswordCell key={`${m.id}:${passwordVersion}`} member={m} />
+                    : <span className="text-gray-400">—</span>}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-gray-500">{formatDateIST(m.addedAt)}</td>
                 <td className="space-x-2 whitespace-nowrap px-4 py-3 text-right">
@@ -595,7 +606,7 @@ export default function TeamMembersPanel({
                 </td>
               </tr>
             )) : (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-500">No one on this team yet.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">No one on this team yet.</td></tr>
             )}
           </tbody>
         </table>
@@ -656,3 +667,64 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     </button>
   );
 }
+
+/** How long a shown password stays on screen before it hides itself. */
+const SHOW_FOR_MS = 30_000;
+
+/**
+ * One staff member's password, hidden until asked for. "Show" fetches it from the
+ * server each time (every look-up is logged there) and it hides again after
+ * SHOW_FOR_MS. A password set before passwords were kept, or changed some other
+ * way since, cannot be shown: the cell says to set a new one.
+ */
+function PasswordCell({ member }: { member: Member }) {
+  const [state, setState] = useState<{ status: 'hidden' | 'loading' | 'shown' | 'missing' | 'error'; password?: string; message?: string }>({ status: 'hidden' });
+
+  useEffect(() => {
+    if (state.status !== 'shown') return;
+    const t = setTimeout(() => setState({ status: 'hidden' }), SHOW_FOR_MS);
+    return () => clearTimeout(t);
+  }, [state.status]);
+
+  async function show() {
+    setState({ status: 'loading' });
+    try {
+      const res = await apiClient.get<{ password: string | null }>(`/staff/members/${member.id}/password`);
+      setState(res.password ? { status: 'shown', password: res.password } : { status: 'missing' });
+    } catch (err) {
+      setState({ status: 'error', message: errorMessage(err, 'Could not load the password.') });
+    }
+  }
+
+  const button = 'inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50';
+  if (state.status === 'shown') {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="rounded bg-amber-50 px-1.5 py-0.5 font-mono text-gray-900" aria-label={`${member.name}'s password`}>{state.password}</span>
+        <button type="button" className={button} onClick={() => navigator.clipboard?.writeText(state.password || '').catch(() => {})}>
+          <Copy className="h-3.5 w-3.5" /> Copy
+        </button>
+        <button type="button" className={button} onClick={() => setState({ status: 'hidden' })}>
+          <EyeOff className="h-3.5 w-3.5" /> Hide
+        </button>
+      </span>
+    );
+  }
+  if (state.status === 'missing') {
+    return (
+      <span className="text-xs text-gray-500" title="Passwords set before this feature, or changed with a 'forgot password' link, are not kept.">
+        Not saved — {member.companyAccount ? 'use Change password' : 'set when they next change it'}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className="font-mono text-gray-400" aria-hidden>••••••••</span>
+      <button type="button" className={button} onClick={show} disabled={state.status === 'loading'} aria-label={`Show ${member.name}'s password`}>
+        <Eye className="h-3.5 w-3.5" /> {state.status === 'loading' ? 'Loading…' : 'Show'}
+      </button>
+      {state.status === 'error' && <span role="alert" className="text-xs text-red-700">{state.message}</span>}
+    </span>
+  );
+}
+
