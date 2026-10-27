@@ -272,7 +272,7 @@ export const validateWorkParcel = [
 
 export const validateStockUpdate = [
   ...validateWorkLine,
-  body('stock').isIn(['in_stock', 'ordered', 'out_of_stock']).withMessage('Unknown stock status'),
+  body('stock').isIn(['in_stock', 'own_stock', 'ordered', 'out_of_stock']).withMessage('Unknown stock status'),
   body('supplierName').optional({ values: 'falsy' }).isString().trim().isLength({ max: 120 })
     .withMessage('Supplier name is too long'),
 ];
@@ -291,15 +291,27 @@ export const validateEditParcel = [
   body('trackingNumber').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Tracking number is too long'),
 ];
 
+// Multipart fields arrive as strings; item ids as a JSON array or comma list.
+const parcelItemIds = () => body('itemIds').optional({ values: 'falsy' }).customSanitizer((v) => {
+  if (Array.isArray(v)) return v;
+  try { const parsed = JSON.parse(v); return Array.isArray(parsed) ? parsed : [v]; } catch { return String(v).split(','); }
+}).custom((v) => Array.isArray(v) && v.length <= 50 && v.every(isObjectId)).withMessage('Invalid items');
+
 export const validateShipWithProof = [
   ...validateWorkOrder,
-  // Multipart fields arrive as strings; item ids as a JSON array or comma list.
-  body('itemIds').optional({ values: 'falsy' }).customSanitizer((v) => {
-    if (Array.isArray(v)) return v;
-    try { const parsed = JSON.parse(v); return Array.isArray(parsed) ? parsed : [v]; } catch { return String(v).split(','); }
-  }).custom((v) => Array.isArray(v) && v.length <= 50 && v.every(isObjectId)).withMessage('Invalid items'),
+  parcelItemIds(),
   body('courierName').optional({ values: 'falsy' }).isString().trim().isLength({ max: 80 }).withMessage('Courier name is too long'),
   body('trackingNumber').optional({ values: 'falsy' }).isString().trim().isLength({ max: 80 }).withMessage('Tracking number is too long'),
+];
+
+/** Our own warehouse: no supplier proof, but the courier and tracking number are required. */
+export const validateDispatchOwnStock = [
+  ...validateWorkOrder,
+  parcelItemIds(),
+  body('courierName').isString().withMessage('Enter the courier name').trim().notEmpty().withMessage('Enter the courier name')
+    .isLength({ max: 80 }).withMessage('Courier name is too long'),
+  body('trackingNumber').isString().withMessage('Enter the tracking number').trim().notEmpty().withMessage('Enter the tracking number')
+    .isLength({ max: 80 }).withMessage('Tracking number is too long'),
 ];
 
 export const validateCustomerDecision = [

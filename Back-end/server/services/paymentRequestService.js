@@ -330,6 +330,10 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   // An item still at its stock check can be paid for too: raising the payment IS
   // "ordered from this supplier" (recorded below, once everything else checks out).
   const atCheck = new Set(view.lines.filter((l) => l.stage === STAGE.STOCK_CHECK).map((l) => l.itemId));
+  const ours = new Set(view.lines.filter((l) => l.stage === STAGE.OWN_STOCK).map((l) => l.itemId));
+  if (wanted.some((id) => ours.has(id))) {
+    throw fail('This item ships from our warehouse — there is no supplier to pay. Undo "Our Warehouse" first if a supplier is sending it.', 409);
+  }
   if (wanted.some((id) => !payable.has(id) && !atCheck.has(id))) {
     throw fail('A supplier can only be paid for items not yet shipped (and not out of stock or being refunded).', 409);
   }
@@ -710,12 +714,17 @@ export async function loadForSlip(actor, id) {
  * as they always have.
  */
 export async function assertNoPendingSupplierPayment(orderId, itemIds) {
-  const open = await paymentRequestRepository.findOpenForOrder(orderId);
-  const ids = itemIds.map(String);
-  const pending = open.find((r) => (r.itemIds || []).some((id) => ids.includes(idOf(id))));
+  const pending = await openSupplierPaymentFor(orderId, itemIds);
   if (pending) {
     throw fail(`Supplier payment ${pending.number} is ${STATUS_LABELS[pending.status].toLowerCase()} — ship once it is paid.`, 409);
   }
+}
+
+/** The open (not paid, cancelled or declined) supplier payment covering any of these items, if one exists. */
+export async function openSupplierPaymentFor(orderId, itemIds) {
+  const open = await paymentRequestRepository.findOpenForOrder(orderId);
+  const ids = itemIds.map(String);
+  return open.find((r) => (r.itemIds || []).some((id) => ids.includes(idOf(id)))) || null;
 }
 
 // ── Pay a supplier in one transfer ───────────────────────────────────────────

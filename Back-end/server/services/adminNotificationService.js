@@ -798,7 +798,7 @@ export const emailStaffSalesPaidAlert = async (orderId) => {
 };
 
 /** Procurement uploaded the supplier's proof: the sales side and operations heads are told. */
-export const emailTeamShippedAlert = async ({ orderId, shipmentId }) => {
+export const emailTeamShippedAlert = async ({ orderId, shipmentId, fromWarehouse = false }) => {
   const order = await teamOrder(orderId);
   if (!order) return { status: 'not-found' };
   const parcel = (order.shipments || []).find((s) => String(s._id) === String(shipmentId));
@@ -807,7 +807,9 @@ export const emailTeamShippedAlert = async ({ orderId, shipmentId }) => {
   const people = [...await salesContacts(order), ...await teamStaff('operations', { headsOnly: true })];
   const ref = orderRef(order);
   const subject = `Shipped: ${ref}${parcel.trackingNumber ? ` — ${parcel.trackingNumber}` : ''}`;
-  const intro = 'Procurement has uploaded the supplier\'s shipping proof. Sales: send the photo and tracking to the customer.';
+  const intro = fromWarehouse
+    ? 'Procurement has dispatched this from our own warehouse. Sales: send the tracking to the customer. Operations: follow it to delivery.'
+    : 'Procurement has uploaded the supplier\'s shipping proof. Sales: send the photo and tracking to the customer.';
   const link = teamPanelLink(order.salesUser ? '/team/sales' : '/team/orders');
   const rows = orderRows(order, [
     ['Courier', escapeHtml(parcel.carrier?.name || '')],

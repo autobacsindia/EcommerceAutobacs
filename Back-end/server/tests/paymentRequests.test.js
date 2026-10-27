@@ -409,6 +409,28 @@ describe('Payment requests', () => {
       expect((await lineOf()).supplierPaymentAt).toBeFalsy();
     });
 
+    it('our-warehouse items have no supplier to pay — and an open supplier payment keeps an item off "Our Warehouse"', async () => {
+      const order = await paidOrder();
+      const [kit, mat] = order.items.map((i) => String(i._id));
+      const id = String(order._id);
+
+      await wf.setStock(procurement.user, id, kit, { stock: 'own_stock' }, req);
+      const refused = await procurement.session.form('/payment-requests/supplier', { orderId: id, itemIds: [kit], amount: 100, payee: BANK });
+      expect(refused.status).toBe(409);
+      expect(refused.body.message).toMatch(/our warehouse/i);
+      expect(await PaymentRequest.countDocuments({ kind: 'supplier' })).toBe(0);
+
+      // A supplier payment raised for the other item: it is Payment Pending, so not switchable…
+      const r = await procurement.session.form('/payment-requests/supplier', { orderId: id, itemIds: [mat], amount: 100, payee: BANK });
+      expect(r.status).toBe(201);
+      await expect(wf.setStock(procurement.user, id, mat, { stock: 'own_stock' }, req)).rejects.toMatchObject({ statusCode: 409 });
+      // …and even if the line lost its "Payment Pending" mark, the open request itself still blocks it.
+      await Order.updateOne({ _id: order._id, 'workflow.lines.itemId': order.items[1]._id },
+        { $unset: { 'workflow.lines.$.supplierPaymentAt': 1, 'workflow.lines.$.supplierPaymentRef': 1 } });
+      await expect(wf.setStock(procurement.user, id, mat, { stock: 'own_stock' }, req))
+        .rejects.toMatchObject({ statusCode: 409, message: expect.stringMatching(/cancel it before/) });
+    });
+
     it('a declined payment puts the item back too', async () => {
       const order = await paidOrder();
       const [kit] = order.items.map((i) => String(i._id));

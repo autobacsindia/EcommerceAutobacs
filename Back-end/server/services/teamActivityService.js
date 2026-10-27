@@ -41,6 +41,7 @@ const thresholdMs = (stage) => (STUCK_AFTER_HOURS[stage] ? STUCK_AFTER_HOURS[sta
 /** What each recorded action does to the line it names. */
 const NEXT_STAGE = Object.freeze({
   stock_in_stock: STAGE.TO_SHIP,
+  stock_own_stock: STAGE.OWN_STOCK,
   stock_ordered: STAGE.WITH_SUPPLIER,
   stock_out_of_stock: STAGE.CUSTOMER_DECISION,
   customer_waits: STAGE.STOCK_CHECK,
@@ -52,11 +53,13 @@ const NEXT_STAGE = Object.freeze({
 export const ACTION_LABELS = Object.freeze({
   entered: 'Paid — entered the workflow',
   stock_in_stock: 'Marked in stock',
+  stock_own_stock: 'From our warehouse',
   stock_ordered: 'Ordered from supplier',
   stock_out_of_stock: 'Marked out of stock',
   payment_initiated: 'Supplier payment started',
   payment_undone: 'Supplier payment mark removed',
   shipped: 'Shipped (supplier proof uploaded)',
+  shipped_own: 'Dispatched from our warehouse',
   customer_waits: 'Customer will wait',
   refund_requested: 'Customer wants a refund',
   refund_rejected: 'Refund sent back to sales',
@@ -122,6 +125,9 @@ export function buildTimeline(order) {
       next = NEXT_STAGE[e.action];
     } else if (e.action === 'shipped') {
       affected = [...lines].filter(([, l]) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER).map(([id]) => id);
+      next = STAGE.SHIPPED;
+    } else if (e.action === 'shipped_own') {
+      affected = [...lines].filter(([, l]) => l.stage === STAGE.OWN_STOCK).map(([id]) => id);
       next = STAGE.SHIPPED;
     } else if (e.action === 'delivered') {
       affected = [...lines].filter(([, l]) => l.stage === STAGE.SHIPPED).map(([id]) => id);

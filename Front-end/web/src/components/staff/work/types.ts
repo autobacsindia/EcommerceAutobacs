@@ -3,11 +3,11 @@
 export type WorkQueue = 'procurement' | 'decisions' | 'refunds' | 'deliveries';
 
 export type LineStage =
-  | 'stock_check' | 'to_ship' | 'payment_pending' | 'with_supplier' | 'customer_decision'
+  | 'stock_check' | 'to_ship' | 'own_stock' | 'payment_pending' | 'with_supplier' | 'customer_decision'
   | 'accounts_approval' | 'shipped' | 'delivered' | 'cancelled';
 
 export type LineAction =
-  | 'in_stock' | 'ordered' | 'out_of_stock' | 'ship' | 'wait' | 'refund' | 'approve' | 'reject'
+  | 'in_stock' | 'own_stock' | 'ordered' | 'out_of_stock' | 'ship' | 'dispatch_own' | 'wait' | 'refund' | 'approve' | 'reject'
   | 'payment_initiated' | 'payment_undo' | 'stock_undo' | 'decision_undo';
 
 export type WorkRow = {
@@ -46,7 +46,7 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
   } | null;
   payment: { razorpayPaymentId: string | null; method: string | null } | null;
   lines: (WorkRow['lines'][number] & {
-    stock: 'pending' | 'in_stock' | 'ordered' | 'out_of_stock' | null;
+    stock: 'pending' | 'in_stock' | 'own_stock' | 'ordered' | 'out_of_stock' | null;
     supplierName: string;
     /** Procurement marked the supplier payment as started (in-stock items). Status only. */
     paymentInitiatedAt: string | null;
@@ -85,6 +85,8 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
   }[];
   history: { at: string; by: string; team: string; action: string; item: string; note: string }[];
   canShip: boolean;
+  /** Procurement may dispatch "Our Warehouse" items (courier + tracking, no supplier). */
+  canDispatchOwn: boolean;
   /** Seller, sales head or admin — shows the "Send to customer" WhatsApp button. */
   canContactCustomer: boolean;
   /** Accounts or admin — the customer's saved bank account for refunds / NEFT. */
@@ -95,12 +97,14 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
   The six stages procurement works through, each with its own colour:
     New Order (orange) → In Stock (yellow) → Payment Pending (red)
     → Ordered From Supplier (dark yellow) → Dispatched (green) → Delivered (dark green)
+  Our own warehouse (teal) skips the supplier steps: New Order → Our Warehouse → Dispatched.
   Out-of-stock / refund stages keep their own (pink / purple) so they never
   read as a step of the normal flow.
 */
 export const STAGE_TONE: Record<LineStage, string> = {
   stock_check: 'bg-orange-100 text-orange-800 ring-1 ring-orange-300',
   to_ship: 'bg-yellow-100 text-yellow-800 ring-1 ring-yellow-300',
+  own_stock: 'bg-teal-100 text-teal-800 ring-1 ring-teal-300',
   payment_pending: 'bg-red-100 text-red-800 ring-1 ring-red-300',
   with_supplier: 'bg-amber-300 text-amber-950 ring-1 ring-amber-500',
   customer_decision: 'bg-pink-100 text-pink-800',

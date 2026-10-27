@@ -172,3 +172,26 @@ it('the old "payment initiated" endpoint says it was replaced; other roles are r
   expect((await request(app).post(url).set(as(operations)).send({ initiated: true })).status).toBe(403);
   expect((await request(app).post(url).set(as(procurement)).send({ initiated: true })).status).toBe(410);
 });
+
+it('dispatches from our warehouse over HTTP: courier + tracking required, no photo needed', async () => {
+  const order = await paidOrder();
+  const itemId = String(order.items[0]._id);
+  const procurement = await login('staff', { team: 'procurement' });
+  const customer = await login('customer');
+  const path = `${BASE}/staff/work/orders/${order._id}/dispatch-own`;
+
+  await request(app).post(`${BASE}/staff/work/orders/${order._id}/lines/${itemId}/stock`)
+    .set(as(procurement)).send({ stock: 'own_stock' }).expect(200);
+
+  const noTracking = await request(app).post(path).set(as(procurement)).field('courierName', 'Delhivery');
+  expect(noTracking.status).toBe(400);
+  expect(JSON.stringify(noTracking.body)).toMatch(/Enter the tracking number/);
+  expect((await request(app).post(path).set(as(customer)).field('courierName', 'D').field('trackingNumber', 'T')).status).toBe(403);
+
+  const res = await request(app).post(path).set(as(procurement))
+    .field('courierName', 'Delhivery')
+    .field('trackingNumber', 'DL777')
+    .expect(200);
+  expect(res.body.order.parcels[0]).toMatchObject({ courier: 'Delhivery', trackingNumber: 'DL777', status: 'shipped', photoUrl: null });
+  expect(res.body.order.lines[0].stage).toBe('shipped');
+});
