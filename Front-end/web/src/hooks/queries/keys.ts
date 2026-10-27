@@ -68,6 +68,8 @@ export const chatKeys = {
   me: () => [...chatKeys.all, 'me'] as const,
   /** `/chat/starred` — my starred messages, newest first. */
   starred: () => [...chatKeys.all, 'starred'] as const,
+  /** `/chat/channels/:id/pins` — a conversation's pinned messages. */
+  pins: (channelId: string) => [...chatKeys.all, 'pins', channelId] as const,
 };
 
 export const brandKeys = {

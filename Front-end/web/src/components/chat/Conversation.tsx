@@ -19,6 +19,7 @@ import {
   useReactToMessage,
   useMarkUnread,
   useStarMessage,
+  usePinMessage,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
@@ -28,6 +29,7 @@ import Composer, { mentionableTeams } from './Composer';
 import MessageItem, { messageDomId } from './MessageItem';
 import NotifyMenu from './NotifyMenu';
 import ForwardDialog from './ForwardDialog';
+import PinnedStrip from './PinnedStrip';
 import ThreadPanel from './ThreadPanel';
 
 type Pages = InfiniteData<MessagePage, number>;
@@ -150,6 +152,7 @@ export default function Conversation({
   const remove = useDeleteMessage(channel.id);
   const react = useReactToMessage(channel.id, meId);
   const star = useStarMessage();
+  const pin = usePinMessage(channel.id);
   const unread = useMarkUnread();
   /*
     After "Mark as unread" the conversation must not mark itself read again the
@@ -443,6 +446,7 @@ export default function Conversation({
             ))}
           </div>
         </header>
+        <PinnedStrip channelId={channel.id} onJump={(id) => { setTab('messages'); setTimeout(() => jumpTo(id), 0); }} />
 
         {tab === 'members' && isGroup ? (
           <MembersPanel channelId={channel.id} onDeleted={onBack} />
@@ -506,6 +510,7 @@ export default function Conversation({
                     onReact={(msg, emoji, on) => react.mutate({ message: msg, emoji, on })}
                     onStar={(msg, on) => star.mutate({ id: msg.id, on })}
                     onForward={setForwarding}
+                    onPin={(msg, on) => pin.mutate({ id: msg.id, on })}
                     onMarkUnread={markUnread}
                   />
                   </div>
@@ -578,6 +583,7 @@ export default function Conversation({
           onClose={() => setThread(null)}
           onMarkUnread={markUnread}
           onForward={setForwarding}
+          onPin={(msg, on) => pin.mutate({ id: msg.id, on })}
         />
       )}
     </div>

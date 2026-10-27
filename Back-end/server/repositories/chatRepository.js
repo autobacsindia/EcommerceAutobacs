@@ -252,6 +252,26 @@ const chatRepository = {
       { new: true },
     ).populate('sender', SENDER_FIELDS).lean(),
 
+  // ── pins (shared per conversation) ──
+  /** Live pinned messages in a channel, newest pin first (index chat_pins). */
+  findPins: (channel, limit) =>
+    ChatMessage.find({ channel, pinnedAt: { $type: 'date' }, deletedAt: null })
+      .sort({ pinnedAt: -1 }).limit(limit).populate('sender', SENDER_FIELDS).lean(),
+  countPins: (channel) => ChatMessage.countDocuments({ channel, pinnedAt: { $type: 'date' }, deletedAt: null }),
+  /** Pin (only if not already pinned — the first pin's time and author stand). */
+  pin: (id, { by, byName, at = new Date() }) =>
+    ChatMessage.findOneAndUpdate(
+      { _id: id, deletedAt: null, pinnedAt: { $exists: false } },
+      { $set: { pinnedAt: at, pinnedBy: by, pinnedByName: byName } },
+      { new: true },
+    ).lean(),
+  unpin: (id) =>
+    ChatMessage.findOneAndUpdate(
+      { _id: id, pinnedAt: { $exists: true } },
+      { $unset: { pinnedAt: 1, pinnedBy: 1, pinnedByName: 1 } },
+      { new: true },
+    ).lean(),
+
   // ── stars (private per person) ──
   /** Star a message. Upsert on the unique { user, message }, so a retry is one star. */
   addStar: (user, message, channel) =>

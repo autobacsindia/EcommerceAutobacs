@@ -30,6 +30,7 @@ export default function ThreadPanel({
   onClose,
   onMarkUnread,
   onForward,
+  onPin,
 }: {
   channel: ChatChannel;
   rootId: string;
@@ -44,6 +45,7 @@ export default function ThreadPanel({
   onMarkUnread?: (m: ChatMessage) => void;
   /** Forward a message (the conversation owns the dialog). */
   onForward?: (m: ChatMessage) => void;
+  onPin?: (m: ChatMessage, on: boolean) => void;
 }) {
   const qc = useQueryClient();
   const { data, isLoading, isError, refetch } = useThread(rootId);
@@ -119,6 +121,7 @@ export default function ThreadPanel({
       onStar={(msg, on) => star.mutate({ id: msg.id, on })}
       onMarkUnread={onMarkUnread}
       onForward={onForward}
+      onPin={onPin}
     />
   );
 
