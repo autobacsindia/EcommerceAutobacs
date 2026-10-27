@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, LogOut, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -21,6 +21,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   const nav: NavItem[] = [
     { href: '/team', label: 'Dashboard', icon: LayoutDashboard },
     { href: '/team/chat', label: 'Team chat', icon: MessagesSquare },
+    // Every team: heads give tasks to their team, members keep their own.
+    { href: '/team/tasks', label: 'Tasks', icon: ListTodo },
   ];
   /*
     The paid list, split in two so "what still needs doing" is not buried under
@@ -92,8 +94,9 @@ export default function TeamLayoutClient({
   };
 
   const links = navFor(team, isHead, canSell).map(({ href, label, icon: Icon }) => {
-    // Marketing screens have detail pages (a coupon, a campaign) under them.
-    const active = pathname === href || (href.startsWith(`${MARKETING_BASE}/`) && pathname.startsWith(`${href}/`));
+    // Marketing screens and tasks have detail pages (a coupon, a campaign, one task) under them.
+    const active = pathname === href
+      || ((href.startsWith(`${MARKETING_BASE}/`) || href === '/team/tasks') && pathname.startsWith(`${href}/`));
     return (
       <Link
         key={href}

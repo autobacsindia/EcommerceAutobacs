@@ -556,6 +556,25 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ BankTransfer indexes confirmed');
 
+    // Staff tasks (models/StaffTask.js, StaffTaskComment.js) — same names as the
+    // schemas. Every list and the bell count is one range on one of these; the
+    // clientId indexes are what make a double-clicked create or comment land once.
+    await db.collection('stafftasks').createIndex({ number: 1 }, { unique: true, name: 'staff_task_number', background: true });
+    await db.collection('stafftasks').createIndex({ assignee: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_assignee', background: true });
+    await db.collection('stafftasks').createIndex({ team: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_team', background: true });
+    await db.collection('stafftasks').createIndex({ createdBy: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_creator', background: true });
+    await db.collection('stafftasks').createIndex({ bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_all', background: true });
+    await db.collection('stafftasks').createIndex(
+      { createdBy: 1, clientId: 1 },
+      { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_task_client_id', background: true }
+    );
+    await db.collection('stafftaskcomments').createIndex({ task: 1, _id: -1 }, { name: 'staff_task_comment_task', background: true });
+    await db.collection('stafftaskcomments').createIndex(
+      { by: 1, clientId: 1 },
+      { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_task_comment_client_id', background: true }
+    );
+    console.log('✓ Staff task indexes confirmed');
+
     // ── Affiliate program ──────────────────────────────────────────────────────
     // MONEY-CRITICAL: one commission accrual per order, forever.
     //

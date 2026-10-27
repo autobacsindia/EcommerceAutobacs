@@ -26,6 +26,7 @@ import paymentRequestRepository from '../repositories/paymentRequestRepository.j
 import orderRepository from '../repositories/orderRepository.js';
 import { STAFF_TEAMS } from '../config/staff.js';
 import { countPending as countPendingBankTransfers } from './bankTransferService.js';
+import { countDueForBell as countTasksDue } from './staffTaskService.js';
 
 const isAdmin = (u) => u?.role === 'admin';
 const isActiveStaff = (u) => u?.role === 'staff' && u?.staff?.active === true;
@@ -43,11 +44,13 @@ export async function summaryFor(user) {
 
   const wantsPayments = isAdmin(user) || isAccounts(user);
   // One aggregate covers both payment queues; refunds are a separate table.
-  const [byStatus, refunds, transfers] = await Promise.all([
+  const [byStatus, refunds, transfers, tasksDue] = await Promise.all([
     wantsPayments ? paymentRequestRepository.countByStatus() : Promise.resolve([]),
     isAdmin(user) || isAccounts(user) ? orderRepository.countPendingCancellationRefunds() : Promise.resolve(0),
     // A small collection (a handful of rows a week), so a count is cheap.
     wantsPayments ? countPendingBankTransfers() : Promise.resolve(0),
+    // One index range (staff_task_assignee): this person's open tasks due by today.
+    countTasksDue(user),
   ]);
   const n = (status) => byStatus.find((r) => r._id === status)?.n || 0;
 
@@ -85,6 +88,18 @@ export async function summaryFor(user) {
       label: 'Bank transfers to check',
       count: transfers,
       href: isAdmin(user) ? '/admin/bank-transfers' : '/team/bank-transfers',
+    });
+  }
+
+  // Tasks given to this person that are overdue or due today. Shown only when
+  // there are some: anyone can have tasks, so a permanent "0" row would sit in
+  // every dropdown and tell nobody anything.
+  if (tasksDue > 0) {
+    items.push({
+      key: 'tasks_due',
+      label: 'My tasks due or overdue',
+      count: tasksDue,
+      href: isAdmin(user) ? '/admin/tasks?due=late' : '/team/tasks?due=late',
     });
   }
 
