@@ -8,7 +8,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TaskList from './TaskList';
 import TaskDetail from './TaskDetail';
-import { formatDueDay, type Task } from './types';
+import { formatDueDay, isPastDay, todayIST, type Task } from './types';
 
 const get = jest.fn();
 const post = jest.fn();
@@ -58,6 +58,7 @@ function serve({ list = [task()], one = task(), assignees = people } = {}) {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   get.mockReset();
   post.mockReset();
   patch.mockReset();
@@ -76,15 +77,44 @@ describe('the task list', () => {
     expect(get).toHaveBeenCalledWith('/staff/tasks?view=mine&state=open');
   });
 
-  it('only heads and the admin get the Team tab', async () => {
+  it('plain tab names, each explained; only heads and the admin get the team list', async () => {
     serve();
     const { unmount } = wrap(<TaskList base="/team/tasks" canSeeTeam={false} />);
     await screen.findByText('Call Bosch');
-    expect(screen.queryByRole('tab', { name: 'Team tasks' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'For me' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText(/Jobs someone gave to you/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'I gave out' }));
+    expect(screen.getByText(/Jobs you gave to other people/)).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'My team' })).toBeNull();
     unmount();
+
+    const head = wrap(<TaskList base="/team/tasks" canSeeTeam />);
+    expect(await screen.findByRole('tab', { name: 'My team' })).toBeInTheDocument();
+    head.unmount();
+
     wrap(<TaskList base="/admin/tasks" canSeeTeam />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Team tasks' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'All teams' }));
+    expect(screen.getByText('Every job in every team.')).toBeInTheDocument();
     await waitFor(() => expect(get).toHaveBeenCalledWith('/staff/tasks?view=team&state=open'));
+  });
+
+  it('explains how tasks work until hidden, and remembers that', async () => {
+    serve();
+    const { unmount } = wrap(<TaskList base="/team/tasks" canSeeTeam={false} />);
+    expect(await screen.findByText('How tasks work')).toBeInTheDocument();
+    expect(screen.getByText(/you can add jobs for yourself/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide how tasks work' }));
+    expect(screen.queryByText('How tasks work')).toBeNull();
+    unmount();
+    wrap(<TaskList base="/team/tasks" canSeeTeam={false} />);
+    await screen.findByText('Call Bosch');
+    expect(screen.queryByText('How tasks work')).toBeNull();
+  });
+
+  it('says plainly when a list is empty', async () => {
+    serve({ list: [] });
+    wrap(<TaskList base="/team/tasks" canSeeTeam={false} />);
+    expect(await screen.findByText(/Nobody has given you a job yet/)).toBeInTheDocument();
   });
 
   it('opens on what is due now when the bell sends ?due=late', async () => {
@@ -141,6 +171,18 @@ describe('new task', () => {
     expect(first).toMatchObject({ title: 'Pack order 51234', assigneeId: 'u2', dueOn: '2026-10-30', priority: 'normal', orderId: null });
     expect(first.clientId).toBeTruthy();
     expect(second.clientId).toBe(first.clientId);
+  });
+
+  it('warns when the due date has already passed, not when it is today or later', async () => {
+    serve({ list: [] });
+    wrap(<TaskList base="/team/tasks" canSeeTeam />);
+    fireEvent.click(await screen.findByRole('button', { name: /New task/ }));
+    fireEvent.change(screen.getByLabelText('Due date'), { target: { value: '2020-01-01' } });
+    expect(screen.getByText(/This due date has already passed/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Due date'), { target: { value: todayIST() } });
+    expect(screen.queryByText(/This due date has already passed/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Due date'), { target: { value: '2099-01-01' } });
+    expect(screen.queryByText(/This due date has already passed/)).toBeNull();
   });
 
   it('a member can only add for themselves, and is told why', async () => {
@@ -205,6 +247,14 @@ describe('one task', () => {
 });
 
 describe('due days', () => {
+  it('"today" is the day in India, and only earlier days are past', () => {
+    // 20:00 UTC on 26 Oct is already 01:30 on 27 Oct in India.
+    expect(todayIST(new Date('2026-10-26T20:00:00Z'))).toBe('2026-10-27');
+    expect(isPastDay('2026-10-26', '2026-10-27')).toBe(true);
+    expect(isPastDay('2026-10-27', '2026-10-27')).toBe(false);
+    expect(isPastDay('', '2026-10-27')).toBe(false);
+  });
+
   it('reads a calendar day without shifting it by timezone', () => {
     expect(formatDueDay('2031-01-15')).toBe('15 Jan 2031');
     expect(formatDueDay(null)).toBe('');
