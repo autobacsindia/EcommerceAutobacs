@@ -28,6 +28,7 @@ export const isFiltered = (f: ListFilters) => !!(f.q.trim() || f.step || f.sourc
 const STEPS: { value: LineStage; label: string }[] = [
   { value: 'stock_check', label: 'New Order' },
   { value: 'to_ship', label: 'In Stock' },
+  { value: 'own_stock', label: 'Our Warehouse' },
   { value: 'payment_pending', label: 'Payment Pending' },
   { value: 'with_supplier', label: 'Ordered From Supplier' },
   { value: 'customer_decision', label: 'Out of stock — ask customer' },

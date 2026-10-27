@@ -160,7 +160,7 @@ const OrderSchema = new mongoose.Schema({
     lines: {
       type: [{
         itemId: { type: mongoose.Schema.Types.ObjectId, required: true }, // Order.items[]._id
-        stock: { type: String, enum: ['pending', 'in_stock', 'ordered', 'out_of_stock'], default: 'pending' },
+        stock: { type: String, enum: ['pending', 'in_stock', 'own_stock', 'ordered', 'out_of_stock'], default: 'pending' },
         supplierName: { type: String, trim: true, maxlength: 120 },
         stockBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         stockAt: Date,

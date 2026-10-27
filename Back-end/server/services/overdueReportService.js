@@ -27,7 +27,7 @@ export const DEFAULT_REPORT_TO = 'info@autobacsindia.com';
 /** Report sections, in stand-up order. Operations owns parcels in transit. */
 export const REPORT_TEAMS = Object.freeze(['sales', 'procurement', 'accounts', 'operations']);
 const STAGE_ORDER = [
-  STAGE.CUSTOMER_DECISION, STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.PAYMENT_PENDING, STAGE.WITH_SUPPLIER,
+  STAGE.CUSTOMER_DECISION, STAGE.STOCK_CHECK, STAGE.OWN_STOCK, STAGE.TO_SHIP, STAGE.PAYMENT_PENDING, STAGE.WITH_SUPPLIER,
   STAGE.ACCOUNTS_APPROVAL, STAGE.SHIPPED,
 ];
 

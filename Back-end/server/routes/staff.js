@@ -42,6 +42,7 @@ import {
   validateStockUpdate,
   validatePaymentInitiated,
   validateShipWithProof,
+  validateDispatchOwnStock,
   validateWorkLineOnly,
   validateEditParcel,
   validateCustomerDecision,
@@ -64,6 +65,7 @@ import {
   undoDecision,
   editShipment,
   shipWithProof,
+  dispatchOwnStock,
   recordDecision,
   reviewRefund,
   retryRefund,
@@ -493,6 +495,20 @@ router.post(
   asyncHandler(async (req, res) => {
     const { itemIds = [], courierName, trackingNumber } = req.body;
     res.json({ success: true, order: await shipWithProof(req.user, req.params.id, { itemIds, courierName, trackingNumber }, req.file, req) });
+  }),
+);
+
+// @route  POST /staff/work/orders/:id/dispatch-own  multipart: courierName, trackingNumber, itemIds?, photo? — procurement, our own warehouse
+router.post(
+  '/work/orders/:id/dispatch-own',
+  concurrentUploadGuard,
+  uploadProofPhoto,
+  handleProofPhotoError,
+  validateDispatchOwnStock,
+  validateRequest,
+  asyncHandler(async (req, res) => {
+    const { itemIds = [], courierName, trackingNumber } = req.body;
+    res.json({ success: true, order: await dispatchOwnStock(req.user, req.params.id, { itemIds, courierName, trackingNumber }, req.file, req) });
   }),
 );
 

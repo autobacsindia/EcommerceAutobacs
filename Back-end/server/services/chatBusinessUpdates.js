@@ -177,8 +177,8 @@ const UPDATES = {
     });
   },
 
-  // The supplier has dispatched. Operations follows the parcel from here.
-  'send-team-shipped-alert': async ({ orderId, shipmentId }) => {
+  // The supplier (or our own warehouse) has dispatched. Operations follows the parcel from here.
+  'send-team-shipped-alert': async ({ orderId, shipmentId, fromWarehouse = false }) => {
     const order = await loadOrder(orderId);
     if (!order) return null;
     const parcel = (order.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
@@ -186,7 +186,7 @@ const UPDATES = {
     return orderPost(order, {
       space: SPACE.operations,
       key: `shipped-${orderId}-${shipmentId}`,
-      text: `📦 Shipped ${orderNumber(order)}${parcel?.sequence ? ` (parcel ${parcel.sequence})` : ''} — ${detail}. Operations: please follow it to delivery.`,
+      text: `📦 Shipped ${orderNumber(order)}${parcel?.sequence ? ` (parcel ${parcel.sequence})` : ''}${fromWarehouse ? ' from our warehouse' : ''} — ${detail}. Operations: please follow it to delivery.`,
     });
   },
 

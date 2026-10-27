@@ -24,7 +24,7 @@ const base: WorkOrder = {
     stage: 'stock_check', stageLabel: 'Needs stock check', stock: 'pending', supplierName: '', paymentInitiatedAt: null,
     refundRequestedAt: null, accountsApprovedAt: null, unshipped: 1, actions: ['in_stock', 'ordered', 'out_of_stock'],
   }],
-  parcels: [], cancellations: [], history: [], canShip: false, canContactCustomer: true,
+  parcels: [], cancellations: [], history: [], canShip: false, canDispatchOwn: false, canContactCustomer: true,
 };
 
 const renderPanel = () => render(
@@ -155,6 +155,98 @@ describe('WorkOrderPanel', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(JSON.parse((fetchMock.mock.calls[0][1].body as FormData).get('itemIds') as string)).toEqual(['i2']);
+  });
+
+  it('records "Our warehouse" on an item', async () => {
+    get.mockResolvedValue({ success: true, order: { ...base, lines: [{ ...base.lines[0], actions: ['in_stock', 'own_stock', 'ordered', 'out_of_stock'] }] } });
+    post.mockResolvedValue({ success: true, order: base });
+    renderPanel();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Our warehouse/ }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/lines/i1/stock', { stock: 'own_stock' }));
+  });
+
+  describe('dispatch from our warehouse', () => {
+    const ours = (over: Partial<WorkOrder> = {}): WorkOrder => ({
+      ...base, canDispatchOwn: true, lines: [
+        { ...base.lines[0], stage: 'own_stock', stageLabel: 'Our Warehouse', stock: 'own_stock', actions: ['dispatch_own', 'out_of_stock', 'stock_undo'] },
+        { ...base.lines[0], itemId: 'i2', name: 'Floor mat', stage: 'own_stock', stageLabel: 'Our Warehouse', stock: 'own_stock', actions: ['dispatch_own', 'out_of_stock', 'stock_undo'] },
+      ],
+      ...over,
+    });
+
+    it('needs courier and tracking — no photo — and posts only those to dispatch-own', async () => {
+      get.mockImplementation((url: string) => Promise.resolve(url.startsWith('/payment-requests/order/') ? { requests: [] } : { success: true, order: ours() }));
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, order: base }) });
+      global.fetch = fetchMock as unknown as typeof fetch;
+      renderPanel();
+
+      expect(await screen.findByRole('form', { name: 'Dispatch from our warehouse' })).toBeInTheDocument();
+      // No supplier route on these items: no supplier parcel form, no supplier payment button.
+      expect(screen.queryByLabelText('Dispatch photo')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Request supplier payment/ })).not.toBeInTheDocument();
+
+      const send = screen.getByRole('button', { name: 'Dispatch all items' });
+      expect(send).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('Courier'), { target: { value: 'Delhivery' } });
+      expect(send).toBeDisabled(); // tracking still missing
+      fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: 'DL555' } });
+      expect(send).toBeEnabled();
+      fireEvent.click(screen.getByRole('checkbox', { name: /Floor mat/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Dispatch 1 of 2 items' }));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe('/api/v1/staff/work/orders/o1/dispatch-own');
+      expect(init.headers['X-XSRF-TOKEN']).toBe('t');
+      const body = init.body as FormData;
+      expect(body.get('courierName')).toBe('Delhivery');
+      expect(body.get('trackingNumber')).toBe('DL555');
+      expect(JSON.parse(body.get('itemIds') as string)).toEqual(['i1']);
+      expect(body.get('photo')).toBeNull();
+    });
+
+    it('sends the photo when one is added, and says to pack the free gift', async () => {
+      get.mockResolvedValue({ success: true, order: ours({ owesGoodie: true }) });
+      const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, order: base }) });
+      global.fetch = fetchMock as unknown as typeof fetch;
+      renderPanel();
+
+      expect(await screen.findByText(/Put the free gift in this box/)).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Courier'), { target: { value: 'Delhivery' } });
+      fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: 'DL555' } });
+      const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'parcel.jpg', { type: 'image/jpeg' });
+      fireEvent.change(screen.getByLabelText('Parcel photo (optional)'), { target: { files: [file] } });
+      fireEvent.click(screen.getByRole('button', { name: 'Dispatch all items' }));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect((fetchMock.mock.calls[0][1].body as FormData).get('photo')).toBeInstanceOf(Blob);
+    });
+
+    it('shows the server\'s refusal', async () => {
+      get.mockResolvedValue({ success: true, order: ours() });
+      global.fetch = jest.fn().mockResolvedValue({ ok: false, json: async () => ({ message: 'Only items marked "Our Warehouse" can go in this parcel. Refresh and choose again.' }) }) as unknown as typeof fetch;
+      renderPanel();
+
+      fireEvent.change(await screen.findByLabelText('Courier'), { target: { value: 'Delhivery' } });
+      fireEvent.change(screen.getByLabelText('Tracking number'), { target: { value: 'DL555' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Dispatch all items' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/Only items marked "Our Warehouse"/);
+    });
+
+    it('the WhatsApp message promises a photo only when the parcel has one', async () => {
+      get.mockResolvedValue({
+        success: true,
+        order: {
+          ...base,
+          parcels: [{ id: 's1', sequence: 1, status: 'shipped', courier: 'Delhivery', trackingNumber: 'DL555', shippedAt: null, deliveredAt: null, items: [{ name: 'Snorkel', quantity: 1 }], photoUrl: null, canMarkDelivered: false }],
+        },
+      });
+      renderPanel();
+      const href = decodeURIComponent((await screen.findByRole('link', { name: /send to customer/i })).getAttribute('href') || '');
+      expect(href).toMatch(/Tracking number: DL555/);
+      expect(href).not.toMatch(/photo/);
+    });
   });
 
   it('gives the sales person a WhatsApp message with the tracking number', async () => {

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Camera, CheckCircle2, Gift, Loader2, MessageCircle, Pencil, Share2, Truck, Undo2 } from 'lucide-react';
+import { Camera, CheckCircle2, Gift, Loader2, MessageCircle, Pencil, Share2, Truck, Undo2, Warehouse } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { tokenManager } from '@/lib/http/tokenManager';
 import { staffKeys } from '@/hooks/queries/keys';
@@ -46,7 +46,8 @@ function shippedMessage(o: WorkOrder, parcel: WorkOrder['parcels'][number]) {
   return [
     `Hi ${first}, your Autobacs India order ${o.orderNumber} has been shipped${parcel.courier ? ` via ${parcel.courier}` : ''}.`,
     parcel.trackingNumber ? `Tracking number: ${parcel.trackingNumber}` : null,
-    'We have shared a photo of your parcel. Thank you for shopping with us!',
+    // Our-warehouse parcels may have no photo: only promise one that exists.
+    parcel.photoUrl ? 'We have shared a photo of your parcel. Thank you for shopping with us!' : 'Thank you for shopping with us!',
   ].filter(Boolean).join('\n');
 }
 
@@ -128,6 +129,10 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
       <div className="flex flex-wrap gap-2">
         {has('in_stock') && <button type="button" disabled={busy} className={secondary}
           onClick={() => act.mutate({ path: `${path}/stock`, body: { stock: 'in_stock' } })}>In stock</button>}
+        {has('own_stock') && <button type="button" disabled={busy} className={secondary} title="We have it ourselves — no supplier, no supplier payment"
+          onClick={() => act.mutate({ path: `${path}/stock`, body: { stock: 'own_stock' } })}>
+          <Warehouse className="h-3.5 w-3.5" /> Our warehouse
+        </button>}
         {/* "Ordered from supplier" is now part of "Request supplier payment" on the line (LineSupplierPayment). */}
         {has('out_of_stock') && <button type="button" disabled={busy} className={danger}
           onClick={() => { if (window.confirm(`Mark "${line.name}" out of stock? The sales team will ask the customer to wait or take a refund.`)) act.mutate({ path: `${path}/stock`, body: { stock: 'out_of_stock' } }); }}>Out of stock</button>}
@@ -217,6 +222,10 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
           ))}
         </ul>
       </div>
+
+      {o.canDispatchOwn && (
+        <OwnStockForm key={`own-${o.lines.map((l) => `${l.itemId}:${l.stage}`).join('|')}`} order={o} onShipped={done} onError={setError} />
+      )}
 
       {o.canShip && (
         // Keyed on the lines' stages so the form starts fresh whenever the order moves.
@@ -389,8 +398,8 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
   if (!shippable.length) return null;
   return (
     <form onSubmit={submit} className="space-y-3 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
-      <p className="flex items-center gap-2 font-semibold text-gray-900"><Truck className="h-4 w-4" /> Ready to dispatch — from our own stock or the supplier</p>
-      <p className="text-xs text-gray-600">Our own stock needs no supplier payment: add a photo of the packed parcel or the courier receipt and it is marked dispatched.</p>
+      <p className="flex items-center gap-2 font-semibold text-gray-900"><Truck className="h-4 w-4" /> Ready to dispatch — from the supplier</p>
+      <p className="text-xs text-gray-600">Add the supplier&apos;s photo or the courier receipt and it is marked dispatched. Items from our own warehouse: press &ldquo;Our warehouse&rdquo; on the item instead.</p>
       {shippable.length > 1 && (
         <fieldset className="space-y-1">
           <legend className="mb-1 text-xs font-medium text-gray-700">Items in this parcel</legend>
@@ -432,6 +441,90 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
         {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
         {shippable.length > 1 && allChosen ? 'Upload proof & ship all items'
           : shippable.length > 1 ? `Upload proof & ship ${selected.length} of ${shippable.length} items` : 'Upload proof & mark shipped'}
+      </button>
+    </form>
+  );
+}
+
+/**
+ * Procurement (or admin): items from our own warehouse. No supplier, so no supplier
+ * payment: the courier and tracking number (and, if wanted, a photo of the packed
+ * parcel) and the chosen items are dispatched — operations follows them from there.
+ * Starts with every "Our Warehouse" item ticked, like the supplier form.
+ */
+function OwnStockForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: (r: OrderResponse) => void; onError: (m: string) => void }) {
+  const ours = order.lines.filter((l) => l.actions.includes('dispatch_own') && l.unshipped > 0);
+  const [selected, setSelected] = useState<string[]>(ours.map((l) => l.itemId));
+  const [file, setFile] = useState<File | null>(null);
+  const [courier, setCourier] = useState('');
+  const [tracking, setTracking] = useState('');
+  const [busy, setBusy] = useState(false);
+  const allChosen = ours.every((l) => selected.includes(l.itemId));
+  const ready = !!courier.trim() && !!tracking.trim() && selected.length > 0;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!courier.trim() || !tracking.trim()) { onError('Enter the courier name and the tracking number.'); return; }
+    if (!selected.length) { onError('Choose at least one item in this parcel.'); return; }
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append('courierName', courier.trim());
+      form.append('trackingNumber', tracking.trim());
+      form.append('itemIds', JSON.stringify(selected));
+      if (file) form.append('photo', await shrinkPhoto(file), 'parcel.jpg');
+      onShipped(await postForm<OrderResponse>(`/staff/work/orders/${order.id}/dispatch-own`, form));
+    } catch (err) {
+      onError(errorMessage(err, 'Could not dispatch. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!ours.length) return null;
+  return (
+    <form onSubmit={submit} className="space-y-3 rounded-lg border border-teal-200 bg-teal-50/40 p-4" aria-label="Dispatch from our warehouse">
+      <p className="flex items-center gap-2 font-semibold text-gray-900"><Warehouse className="h-4 w-4" /> Dispatch from our warehouse</p>
+      <p className="text-xs text-gray-600">Our own stock: no supplier and no supplier payment. Add the courier and tracking number — Operations follows it to delivery.</p>
+      {order.owesGoodie && <p className="text-xs text-amber-900">Put the free gift in this box — it is recorded as sent with it.</p>}
+      {ours.length > 1 && (
+        <fieldset className="space-y-1">
+          <legend className="mb-1 text-xs font-medium text-gray-700">Items in this parcel</legend>
+          <label className="flex items-center gap-2 border-b border-teal-100 pb-1 text-sm font-medium text-gray-900">
+            <input type="checkbox" checked={allChosen}
+              onChange={(e) => setSelected(e.target.checked ? ours.map((l) => l.itemId) : [])} />
+            All items
+          </label>
+          {ours.map((l) => (
+            <label key={l.itemId} className="flex items-center gap-2 text-sm text-gray-800">
+              <input type="checkbox" checked={selected.includes(l.itemId)}
+                onChange={(e) => setSelected(e.target.checked ? [...selected, l.itemId] : selected.filter((x) => x !== l.itemId))} />
+              <span>{l.name}{l.variantLabel ? ` — ${l.variantLabel}` : ''} × {l.unshipped}</span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-gray-700">Courier</span>
+          <input className={input} required maxLength={80} placeholder="e.g. Delhivery" value={courier} onChange={(e) => setCourier(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium text-gray-700">Tracking number</span>
+          <input className={input} required maxLength={80} value={tracking} onChange={(e) => setTracking(e.target.value)} />
+        </label>
+      </div>
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-gray-700">Photo of the packed parcel (optional)</span>
+        <span className="flex items-center gap-2">
+          <Camera className="h-4 w-4 text-gray-500" />
+          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" aria-label="Parcel photo (optional)" />
+        </span>
+      </label>
+      <button type="submit" disabled={busy || !ready} className={primary}>
+        {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+        {ours.length > 1 && allChosen ? 'Dispatch all items'
+          : ours.length > 1 ? `Dispatch ${selected.length} of ${ours.length} items` : 'Dispatch'}
       </button>
     </form>
   );

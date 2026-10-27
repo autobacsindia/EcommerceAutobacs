@@ -1,8 +1,11 @@
 /**
  * Team workflow — what each team does with a paid order, from the /team panel.
  *
- *   procurement : stock check per item (in stock / ordered from supplier / out of stock),
- *                 then uploads the supplier's photo + courier + tracking → shipped
+ *   procurement : stock check per item (in stock / ordered from supplier / our warehouse /
+ *                 out of stock), then uploads the supplier's photo + courier + tracking →
+ *                 shipped. Our own warehouse stock skips the supplier entirely: no supplier
+ *                 payment, so no accounts approval or admin payment — procurement packs it
+ *                 and adds courier + tracking (photo optional) → shipped
  *   sales       : out of stock → asks the customer: wait for stock, or refund
  *   accounts    : approves (or sends back) a refund the customer asked for, and an
  *                 approval SENDS it (Razorpay); a failed send is retried from here too
@@ -46,10 +49,10 @@ import { getNotificationsQueue } from '../queue/queues.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
 import { readListFilters, rowMatches } from '../utils/orderListFilters.js';
-import { SHIPMENT_STATUS } from '../utils/orderFulfilment.js';
+import { SHIPMENT_STATUS, rewardShipped } from '../utils/orderFulfilment.js';
 import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
 import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
-import { assertNoPendingSupplierPayment } from './paymentRequestService.js';
+import { assertNoPendingSupplierPayment, openSupplierPaymentFor } from './paymentRequestService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -154,13 +157,16 @@ function lineActions(u, order, line) {
   if (can.procurement(u)) {
     switch (line.stage) {
       // 'ship' here too: "Ship all" sends lines nobody stock-checked yet — shipping them proves they were in stock.
-      case STAGE.STOCK_CHECK: out.push('in_stock', 'ordered', 'out_of_stock', 'ship'); break;
+      case STAGE.STOCK_CHECK: out.push('in_stock', 'own_stock', 'ordered', 'out_of_stock', 'ship'); break;
       // "Ordered from supplier" comes from paying the supplier now (a supplier payment
       // request), and the old manual "payment initiated" mark is replaced by it.
-      case STAGE.TO_SHIP: out.push('out_of_stock', 'ship'); break;
+      case STAGE.TO_SHIP: out.push('own_stock', 'out_of_stock', 'ship'); break;
+      // Our warehouse ships only through its own dispatch (courier + tracking), never in a supplier parcel.
+      case STAGE.OWN_STOCK: out.push('out_of_stock', 'dispatch_own'); break;
+      // Not 'own_stock': the supplier is already paid for this one.
       case STAGE.WITH_SUPPLIER: out.push('in_stock', 'ordered', 'out_of_stock', 'ship'); break;
-      case STAGE.CUSTOMER_DECISION: out.push('in_stock', 'ordered'); break;
-      case STAGE.ACCOUNTS_APPROVAL: if (!line.accountsApprovedAt) out.push('in_stock', 'ordered'); break;
+      case STAGE.CUSTOMER_DECISION: out.push('in_stock', 'own_stock', 'ordered'); break;
+      case STAGE.ACCOUNTS_APPROVAL: if (!line.accountsApprovedAt) out.push('in_stock', 'own_stock', 'ordered'); break;
       default: break;
     }
   }
@@ -174,6 +180,7 @@ function lineActions(u, order, line) {
 const HISTORY_LABELS = {
   entered: 'Paid — waiting for a stock check',
   stock_in_stock: 'Marked in stock',
+  stock_own_stock: 'From our warehouse',
   stock_ordered: 'Ordered from supplier',
   stock_out_of_stock: 'Marked out of stock',
   payment_initiated: 'Supplier payment initiated',
@@ -186,6 +193,7 @@ const HISTORY_LABELS = {
   refund_sent: 'Refund sent to the customer',
   refund_send_failed: 'Refund could not be sent — retry it',
   shipped: 'Supplier proof uploaded — shipped',
+  shipped_own: 'Dispatched from our warehouse',
   delivered: 'Marked delivered',
   delivery_undone: 'Delivery undone — back in transit',
   payment_pending: 'Supplier payment requested — Payment Pending',
@@ -260,6 +268,7 @@ function detail(u, o) {
       note: h.note || '',
     })),
     canShip: can.procurement(u) && (view?.lines || []).some((l) => SHIP_STAGES.has(l.stage)),
+    canDispatchOwn: can.procurement(u) && (view?.lines || []).some((l) => l.stage === STAGE.OWN_STOCK),
     // Talking to the customer is the sales side's job: the seller, a sales head, or admin.
     canContactCustomer: can.decide(u, o),
     // The customer's saved bank account (refunds / NEFT): accounts and admin.
@@ -394,7 +403,10 @@ async function loadLine(orderId, itemId) {
 
 const RACE = 'Someone else just updated this item. Refresh and try again.';
 
-/** Lines a parcel may take: anything not out of stock, refunded, or already shipped. */
+/**
+ * Lines a supplier parcel may take: anything not out of stock, refunded, already
+ * shipped — or from our own warehouse, which has its own dispatch (dispatchOwnStock).
+ */
 const SHIP_STAGES = new Set([STAGE.STOCK_CHECK, STAGE.TO_SHIP, STAGE.WITH_SUPPLIER]);
 
 /*
@@ -482,15 +494,16 @@ export async function clearPaymentPending(actor, orderId, itemIds, reason) {
   emails the customer, awards points and opens the return window) are not undone.
 */
 
-/** May `u` undo this line's stock decision (In Stock / Out of Stock) now? */
+/** May `u` undo this line's stock decision (In Stock / Our Warehouse / Out of Stock) now? */
 function mayUndoStock(u, line) {
   if (!can.procurement(u) || line.supplierPaymentAt || line.refundRequestedAt) return false;
   if (!((line.stage === STAGE.TO_SHIP && line.stock === STOCK.IN_STOCK)
+    || (line.stage === STAGE.OWN_STOCK && line.stock === STOCK.OWN_STOCK)
     || (line.stage === STAGE.CUSTOMER_DECISION && line.stock === STOCK.OUT_OF_STOCK))) return false;
   return true;
 }
 
-/** Procurement: take back "In Stock" / "Out of Stock" — the line is a New Order again. */
+/** Procurement: take back "In Stock" / "Our Warehouse" / "Out of Stock" — the line is a New Order again. */
 export async function undoStock(actor, orderId, itemId, req) {
   const { line } = await loadLine(orderId, itemId);
   if (!mayUndoStock(actor, line)) {
@@ -607,11 +620,11 @@ function mayEditShipment(u, parcel) {
 
 /**
  * Procurement: record the stock check for one item.
- * @param {'in_stock'|'ordered'|'out_of_stock'} stock
+ * @param {'in_stock'|'own_stock'|'ordered'|'out_of_stock'} stock
  */
 export async function setStock(actor, orderId, itemId, { stock, supplierName } = {}, req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can update stock.', 403);
-  if (![STOCK.IN_STOCK, STOCK.ORDERED, STOCK.OUT_OF_STOCK].includes(stock)) throw fail('Unknown stock status.', 400);
+  if (![STOCK.IN_STOCK, STOCK.OWN_STOCK, STOCK.ORDERED, STOCK.OUT_OF_STOCK].includes(stock)) throw fail('Unknown stock status.', 400);
   const supplier = String(supplierName || '').trim();
   if (stock === STOCK.ORDERED && !supplier) throw fail('Enter the supplier you ordered from.', 400);
 
@@ -619,6 +632,13 @@ export async function setStock(actor, orderId, itemId, { stock, supplierName } =
   const allowed = lineActions(actor, order, line);
   if (!allowed.includes(stock)) {
     throw fail(`This item is "${STAGE_LABELS[line.stage]}" — it can't be changed to that now.`, 409);
+  }
+  if (stock === STOCK.OWN_STOCK) {
+    // The stage check above already rules out "Payment Pending"; this is the
+    // record itself, so a request that never reached the line still blocks it —
+    // we must not pay a supplier for something we send ourselves.
+    const open = await openSupplierPaymentFor(orderId, [itemId]);
+    if (open) throw fail(`Supplier payment ${open.number} is open for this item — cancel it before sending it from our warehouse.`, 409);
   }
 
   const backFromRefund = !!line.refundRequestedAt;
@@ -634,6 +654,8 @@ export async function setStock(actor, orderId, itemId, { stock, supplierName } =
         ...(stock === STOCK.ORDERED && { supplierName: supplier }),
       },
       unset: [
+        // Our own stock has no supplier: an old supplier name would mislead.
+        ...(stock === STOCK.OWN_STOCK && line.supplierName ? ['supplierName'] : []),
         ...(backFromRefund && stock !== STOCK.OUT_OF_STOCK ? ['refundRequestedBy', 'refundRequestedAt'] : []),
         // "Payment initiated" belongs to an in-stock line only; leaving in stock drops it.
         ...(clearsPayment ? ['paymentInitiatedBy', 'paymentInitiatedAt'] : []),
@@ -672,6 +694,76 @@ export async function setPaymentInitiated(actor) {
   throw fail('"Payment initiated" is replaced by "Request supplier payment" on the item.', 410);
 }
 
+/** Check a dispatch photo before anything is stored. */
+function assertProofPhoto(file) {
+  if (file.buffer.length > MAX_PROOF_BYTES) throw fail('The photo is too large (8 MB maximum).', 400);
+  if (detectKind(file.buffer) !== KIND.IMAGE) throw fail('The proof must be a photo or screenshot (JPG, PNG or WebP).', 400);
+}
+
+/**
+ * The lines a parcel will carry: the chosen items (or every eligible one), each with
+ * what is still owed. Only lines in `stages` may go; asking for any other is a 409.
+ */
+function parcelLines(o, stages, itemIds, refusal) {
+  const view = workflowView(o);
+  const eligible = view.lines.filter((l) => stages.has(l.stage));
+  const wanted = itemIds.length ? eligible.filter((l) => itemIds.map(String).includes(l.itemId)) : eligible;
+  if (itemIds.length && wanted.length !== new Set(itemIds.map(String)).size) throw fail(refusal, 409);
+  const lines = wanted
+    .map((l) => ({ itemId: l.itemId, quantity: unshippedQuantity(o, l.itemId) }))
+    .filter((l) => l.quantity > 0);
+  if (!lines.length) throw fail('Nothing on this order is left to ship.', 409);
+  return { wanted, lines };
+}
+
+/**
+ * Store the optional photo, create the parcel through shipmentService (which emails
+ * the customer exactly as an admin shipment does and rolls the order status up), and
+ * record it. The photo is removed again if the parcel cannot be recorded.
+ */
+async function createTeamParcel(actor, orderId, { lines, file, courier, tracking, includesReward, notes, action }) {
+  let stored = null;
+  let proofPhoto;
+  if (file) {
+    const ext = { jpeg: 'jpg', png: 'png', webp: 'webp' }[String(file.mimetype || '').split('/')[1]] || 'jpg';
+    stored = await putPrivateAsset({
+      buffer: file.buffer,
+      folder: PROOF_FOLDER,
+      basename: `proof-${orderId}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
+      contentType: file.mimetype || 'image/jpeg',
+      cloudinaryPrivate: true,
+    });
+    proofPhoto = {
+      publicId: stored.publicId,
+      provider: stored.provider,
+      url: stored.url || undefined,
+      contentType: file.mimetype || 'image/jpeg',
+      bytes: stored.bytes,
+      uploadedAt: new Date(),
+      uploadedBy: actor._id,
+    };
+  }
+
+  const result = await shipmentService.createShipment(orderId, {
+    lines,
+    trackingNumber: tracking || undefined,
+    carrier: courier ? { name: courier } : undefined,
+    proofPhoto,
+    includesReward,
+    notes,
+  }, { userId: actor._id });
+
+  if (!result.success) {
+    if (stored) await deletePrivateAsset({ publicId: stored.publicId, resourceType: 'image', provider: stored.provider });
+    throw fail(result.message || 'Could not record the shipment.', 409);
+  }
+
+  await orderRepository.pushWorkflowEvent(orderId, event(actor, action, {
+    note: [courier, tracking].filter(Boolean).join(' · ') || 'Photo only',
+  }));
+  return result.shipment;
+}
+
 /**
  * Procurement: the supplier has dispatched — upload their photo (+ courier and
  * tracking when known). Creates a parcel for the chosen items through
@@ -680,64 +772,28 @@ export async function setPaymentInitiated(actor) {
 export async function shipWithProof(actor, orderId, { itemIds = [], courierName, trackingNumber } = {}, file, req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can upload shipping proof.', 403);
   if (!file?.buffer?.length) throw fail('Add a photo of the parcel, the courier receipt, or the supplier\'s screenshot.', 400);
-  if (file.buffer.length > MAX_PROOF_BYTES) throw fail('The photo is too large (8 MB maximum).', 400);
-  if (detectKind(file.buffer) !== KIND.IMAGE) throw fail('The proof must be a photo or screenshot (JPG, PNG or WebP).', 400);
+  assertProofPhoto(file);
 
   const o = await orderRepository.findForWorkflow(orderId);
   if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
-  const view = workflowView(o);
-  const shippable = view.lines.filter((l) => SHIP_STAGES.has(l.stage));
-  const wanted = itemIds.length ? shippable.filter((l) => itemIds.map(String).includes(l.itemId)) : shippable;
-  if (itemIds.length && wanted.length !== new Set(itemIds.map(String)).size) {
-    throw fail('Items marked out of stock, refunded or already shipped can\'t go in a parcel. Refresh and choose again.', 409);
-  }
-  const lines = wanted
-    .map((l) => ({ itemId: l.itemId, quantity: unshippedQuantity(o, l.itemId) }))
-    .filter((l) => l.quantity > 0);
-  if (!lines.length) throw fail('Nothing on this order is left to ship.', 409);
+  const { wanted, lines } = parcelLines(o, SHIP_STAGES, itemIds,
+    'Items marked out of stock, refunded, already shipped or from our warehouse can\'t go in a supplier parcel. Refresh and choose again.');
   // A supplier payment still awaiting approval or payment holds its items back:
   // procurement asks the supplier for shipping once accounts has paid.
   await assertNoPendingSupplierPayment(orderId, lines.map((l) => l.itemId));
 
-  const ext = { jpeg: 'jpg', png: 'png', webp: 'webp' }[String(file.mimetype || '').split('/')[1]] || 'jpg';
-  const stored = await putPrivateAsset({
-    buffer: file.buffer,
-    folder: PROOF_FOLDER,
-    basename: `proof-${orderId}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
-    contentType: file.mimetype || 'image/jpeg',
-    cloudinaryPrivate: true,
-  });
-  const proofPhoto = {
-    publicId: stored.publicId,
-    provider: stored.provider,
-    url: stored.url || undefined,
-    contentType: file.mimetype || 'image/jpeg',
-    bytes: stored.bytes,
-    uploadedAt: new Date(),
-    uploadedBy: actor._id,
-  };
-
-  const courier = String(courierName || '').trim().slice(0, 80);
-  const tracking = String(trackingNumber || '').trim().slice(0, 80);
-  const result = await shipmentService.createShipment(orderId, {
+  const shipment = await createTeamParcel(actor, orderId, {
     lines,
-    trackingNumber: tracking || undefined,
-    carrier: courier ? { name: courier } : undefined,
-    proofPhoto,
+    file,
+    courier: String(courierName || '').trim().slice(0, 80),
+    tracking: String(trackingNumber || '').trim().slice(0, 80),
     // Drop-shipped by a supplier: any free gift owed on the order is NOT in this box.
     // The admin sends it separately, so it is never marked as shipped by mistake.
     includesReward: false,
     notes: `Supplier proof uploaded in the team panel by ${actor.name}`,
-  }, { userId: actor._id });
+    action: 'shipped',
+  });
 
-  if (!result.success) {
-    await deletePrivateAsset({ publicId: stored.publicId, resourceType: 'image', provider: stored.provider });
-    throw fail(result.message || 'Could not record the shipment.', 409);
-  }
-
-  await orderRepository.pushWorkflowEvent(orderId, event(actor, 'shipped', {
-    note: [courier, tracking].filter(Boolean).join(' · ') || 'Photo only',
-  }));
   // Lines shipped straight from the stock check were in stock — record it, so the
   // line's history reads true. Compare-and-set on "still unchecked": if someone else
   // set the stock meanwhile, theirs stands. The parcel itself already makes the line
@@ -752,9 +808,57 @@ export async function shipWithProof(actor, orderId, { itemIds = [], courierName,
     );
   }
   await refreshOpen(orderId);
-  enqueue('send-team-shipped-alert', { orderId: String(orderId), shipmentId: String(result.shipment._id) });
+  enqueue('send-team-shipped-alert', { orderId: String(orderId), shipmentId: String(shipment._id) });
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, {
-    change: 'team_shipped', shipmentId: String(result.shipment._id), lines: lines.length,
+    change: 'team_shipped', shipmentId: String(shipment._id), lines: lines.length,
+  });
+  return getOrder(actor, orderId);
+}
+
+const OWN_STOCK_STAGES = new Set([STAGE.OWN_STOCK]);
+
+/**
+ * Procurement: dispatch items from our own warehouse. No supplier and so no supplier
+ * payment, accounts approval or admin payment: courier + tracking number (and an
+ * optional parcel photo) and the items are shipped — operations follows them to
+ * delivery like any other parcel, and the customer gets the same shipped email.
+ *
+ * We pack this box ourselves, so a free gift still owed rides in it.
+ *
+ * A double press or two people at once create ONE parcel: shipmentService's
+ * compare-and-set re-validates against what is still owed, and the loser is refused.
+ */
+export async function dispatchOwnStock(actor, orderId, { itemIds = [], courierName, trackingNumber } = {}, file, req) {
+  if (!can.procurement(actor)) throw fail('Only the procurement team can dispatch from our warehouse.', 403);
+  const courier = String(courierName || '').trim().slice(0, 80);
+  const tracking = String(trackingNumber || '').trim().slice(0, 80);
+  if (!courier) throw fail('Enter the courier name.', 400);
+  if (!tracking) throw fail('Enter the tracking number.', 400);
+  const photo = file?.buffer?.length ? file : null;
+  if (photo) assertProofPhoto(photo);
+
+  const o = await orderRepository.findForWorkflow(orderId);
+  if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
+  const { lines } = parcelLines(o, OWN_STOCK_STAGES, itemIds,
+    'Only items marked "Our Warehouse" can go in this parcel. Refresh and choose again.');
+  // Belt and braces: an open supplier payment means someone is paying a supplier
+  // for this item — do not also send it ourselves.
+  await assertNoPendingSupplierPayment(orderId, lines.map((l) => l.itemId));
+
+  const shipment = await createTeamParcel(actor, orderId, {
+    lines,
+    file: photo,
+    courier,
+    tracking,
+    includesReward: owesGoodie(o) && !rewardShipped(o),
+    notes: `Dispatched from our warehouse in the team panel by ${actor.name}`,
+    action: 'shipped_own',
+  });
+
+  await refreshOpen(orderId);
+  enqueue('send-team-shipped-alert', { orderId: String(orderId), shipmentId: String(shipment._id), fromWarehouse: true });
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, {
+    change: 'team_dispatched_own', shipmentId: String(shipment._id), lines: lines.length,
   });
   return getOrder(actor, orderId);
 }
