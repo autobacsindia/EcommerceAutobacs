@@ -24,6 +24,7 @@ import MembersPanel from './MembersPanel';
 import { Avatar, ChannelIcon, FileKindIcon, fileSize, timeOf } from './chatUi';
 import Composer, { mentionableTeams } from './Composer';
 import MessageItem, { messageDomId } from './MessageItem';
+import NotifyMenu from './NotifyMenu';
 import ThreadPanel from './ThreadPanel';
 
 type Pages = InfiniteData<MessagePage, number>;
@@ -370,6 +371,7 @@ export default function Conversation({
                   <Users className="h-4 w-4" /> {channel.memberCount}
                 </button>
               )}
+              <NotifyMenu channel={channel} />
               {onSearch && (
                 <button
                   type="button"

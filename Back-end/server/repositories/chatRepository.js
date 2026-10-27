@@ -253,7 +253,19 @@ const chatRepository = {
 
   // ── read positions ──
   findReadStates: (user, channelIds) =>
-    ChatReadState.find({ user, channel: { $in: channelIds } }).select('channel lastReadSeq lastReadUpdatesSeq').lean(),
+    ChatReadState.find({ user, channel: { $in: channelIds } }).select('channel lastReadSeq lastReadUpdatesSeq notify').lean(),
+  /** Set one person's notification setting for a channel. Leaves read positions alone. */
+  setNotify: (user, channel, notify) =>
+    ChatReadState.updateOne({ user, channel }, { $set: { notify } }, { upsert: true }),
+  /**
+   * Who among `users` has quietened `channel` ('mentions' or 'off'). Point
+   * lookups on the { user, channel } index — one per person, and the people
+   * who can read a channel are a few dozen at most.
+   * @returns {Promise<{ user: ObjectId, notify: string }[]>}
+   */
+  findQuietened: (channel, users) =>
+    ChatReadState.find({ user: { $in: users }, channel, notify: { $in: ['mentions', 'off'] } })
+      .select('user notify').lean(),
   /**
    * Move a read position forward only (never backwards). `part`: 'chat',
    * 'updates', or 'all' (both — what a client from before the split sends).
@@ -273,6 +285,33 @@ const chatRepository = {
         },
       },
     ], { upsert: true });
+  },
+
+  /**
+   * Unread messages that address `user` — by name, or their `team` — per
+   * channel. Only asked for channels set to "@mentions only" that have unread,
+   * so it walks the same few unread rows as countUnreadByLane.
+   * @param {{ channel: ObjectId, chatFrom: number, updatesFrom: number }[]} positions
+   * @returns {Promise<{ _id: ObjectId, n: number }[]>}
+   */
+  countUnreadMentions: (positions, user, team) => {
+    if (!positions.length) return Promise.resolve([]);
+    const isUpdates = { $or: [{ kind: 'system' }, { lane: 'updates' }] };
+    const addressed = [{ mentions: user }, ...(team ? [{ mentionTeams: team }] : [])];
+    // Every branch keeps its own { channel, seq } prefix, so each one is an
+    // index range over that channel's unread rows; who is addressed is a filter
+    // on those rows (an $and around two $ors would hide the prefix from the planner).
+    return ChatMessage.aggregate([
+      {
+        $match: {
+          $or: positions.flatMap((p) => [
+            { channel: p.channel, seq: { $gt: p.chatFrom }, kind: { $ne: 'system' }, lane: { $ne: 'updates' }, $or: addressed },
+            { channel: p.channel, seq: { $gt: p.updatesFrom }, $and: [isUpdates, { $or: addressed }] },
+          ]),
+        },
+      },
+      { $group: { _id: '$channel', n: { $sum: 1 } } },
+    ]);
   },
 
   /**

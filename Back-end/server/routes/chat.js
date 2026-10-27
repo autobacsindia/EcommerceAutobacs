@@ -17,6 +17,7 @@ import {
   validateOpenDm,
   validateThreadPage,
   validateReaction,
+  validateNotify,
 } from '../validators/chat.validator.js';
 import {
   listChannels,
@@ -35,6 +36,7 @@ import {
   deleteMessage,
   editMessage,
   reactToMessage,
+  setChannelNotify,
   createSpace,
   deleteSpace,
   openDirectMessage,
@@ -254,6 +256,11 @@ router.post('/channels/:id/read', validateChannelIdParam, validateMarkRead, vali
   asyncHandler(async (req, res) => {
     res.json({ success: true, ...(await markChannelRead(req.user, req.params.id, req.body.seq, req.body.part)) });
   }));
+
+// PUT /chat/channels/:id/notify { notify: 'all' | 'mentions' | 'off' } — my notification setting here
+router.put('/channels/:id/notify', validateNotify, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await setChannelNotify(req.user, req.params.id, req.body.notify)) });
+}));
 
 // PATCH /chat/messages/:id { text } — edit your own message, within 15 minutes
 router.patch('/messages/:id', validateEditMessage, validateRequest, asyncHandler(async (req, res) => {

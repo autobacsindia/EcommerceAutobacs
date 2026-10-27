@@ -45,6 +45,27 @@ export interface ChatChannel {
   unreadChat?: number;
   unreadUpdates?: number;
   unread: number;
+  /** My notification setting here. Absent from an older server = 'all'. */
+  notify?: NotifyLevel;
+  /** On '@mentions only': the unread that @mentions me or my team. */
+  unreadMentions?: number;
+}
+
+/** How loudly a conversation reaches me, as in Google Chat. */
+export type NotifyLevel = 'all' | 'mentions' | 'off';
+
+export const notifyOf = (c: ChatChannel): NotifyLevel => c.notify ?? 'all';
+
+/**
+ * What a conversation adds to my badges and chime: everything on "All", only
+ * what @mentions me on "@mentions only", nothing on "Off". (Its own row still
+ * shows the plain unread count, greyed — see TeamChat.)
+ */
+export function countedUnread(c: ChatChannel): { chat: number; updates: number } {
+  const level = notifyOf(c);
+  if (level === 'off') return { chat: 0, updates: 0 };
+  if (level === 'mentions') return { chat: c.unreadMentions ?? 0, updates: 0 };
+  return { chat: unreadChatOf(c), updates: unreadUpdatesOf(c) };
 }
 
 /** Which tab of a conversation a read applies to. */
@@ -178,10 +199,10 @@ export function useChatChannels(options: { poll?: boolean } = {}) {
   });
 }
 
-/** Total unread across every channel — for the "Chat" nav badge. */
+/** Total unread across every channel — for the "Chat" nav badge. Muted conversations do not count. */
 export function useChatUnreadTotal(): number {
   const { data } = useChatChannels({ poll: true });
-  return (data ?? []).reduce((n, c) => n + c.unread, 0);
+  return (data ?? []).reduce((n, c) => { const u = countedUnread(c); return n + u.chat + u.updates; }, 0);
 }
 
 /**
@@ -192,11 +213,11 @@ export function useChatUnreadSplit(): { chat: number; updates: number; updatesCh
   const { data } = useChatChannels({ poll: true });
   const list = data ?? [];
   const withUpdates = list
-    .filter((c) => unreadUpdatesOf(c) > 0)
+    .filter((c) => countedUnread(c).updates > 0)
     .sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
   return {
-    chat: list.reduce((n, c) => n + unreadChatOf(c), 0),
-    updates: list.reduce((n, c) => n + unreadUpdatesOf(c), 0),
+    chat: list.reduce((n, c) => n + countedUnread(c).chat, 0),
+    updates: list.reduce((n, c) => n + countedUnread(c).updates, 0),
     updatesChannelId: withUpdates[0]?.id ?? null,
   };
 }
@@ -533,10 +554,26 @@ export function useMarkRead() {
           const next = part === 'updates'
             ? { ...c, lastReadUpdatesSeq: Math.max(seq, readUpdatesSeqOf(c)), unreadUpdates: 0 }
             : { ...c, lastReadSeq: Math.max(seq, c.lastReadSeq), unreadChat: 0 };
-          return { ...next, unread: unreadChatOf(next) + unreadUpdatesOf(next) };
+          const unread = unreadChatOf(next) + unreadUpdatesOf(next);
+          // The mention count is per channel, not per tab: exact on the next poll.
+          return { ...next, unread, unreadMentions: unread === 0 ? 0 : Math.min(c.unreadMentions ?? 0, unread) };
         }),
       );
     },
+  });
+}
+
+/** Set my notification setting for one conversation. Shown at once; the server's answer confirms it. */
+export function useSetNotify() {
+  const qc = useQueryClient();
+  const put = (channelId: string, notify: NotifyLevel) =>
+    qc.setQueryData<ChatChannel[]>(chatKeys.channels(), (list) => list?.map((c) => (c.id === channelId ? { ...c, notify } : c)));
+  return useMutation({
+    mutationFn: ({ channelId, notify }: { channelId: string; notify: NotifyLevel }) =>
+      apiClient.put<{ channelId: string; notify: NotifyLevel }>(`/chat/channels/${channelId}/notify`, { notify }),
+    onMutate: ({ channelId, notify }) => put(channelId, notify),
+    // The mention count only exists for "@mentions only" — fetch the real numbers.
+    onSettled: () => qc.invalidateQueries({ queryKey: chatKeys.channels() }),
   });
 }
 

@@ -303,8 +303,9 @@ export async function listChannels(user) {
   const readBy = new Map(reads.map((r) => [idOf(r.channel), {
     chat: r.lastReadSeq ?? 0,
     updates: r.lastReadUpdatesSeq ?? r.lastReadSeq ?? 0,
+    notify: r.notify ?? 'all',
   }]));
-  const readOf = (c) => readBy.get(idOf(c)) ?? { chat: 0, updates: 0 };
+  const readOf = (c) => readBy.get(idOf(c)) ?? { chat: 0, updates: 0, notify: 'all' };
   // Count only where something is past a read position — usually a handful of channels.
   const unreadRows = await chatRepository.countUnreadByLane(channels
     .filter((c) => c.lastMessageSeq > Math.min(readOf(c).chat, readOf(c).updates))
@@ -316,6 +317,13 @@ export async function listChannels(user) {
     u[r._id.updates ? 'updates' : 'chat'] += r.n;
     unreadBy.set(key, u);
   }
+
+  // "@mentions only" channels count what addresses this person, so the badge
+  // there means "someone asked you something", not "people are talking".
+  const mentionRows = await chatRepository.countUnreadMentions(channels
+    .filter((c) => readOf(c).notify === 'mentions' && unreadBy.has(idOf(c)))
+    .map((c) => ({ channel: c._id, chatFrom: readOf(c).chat, updatesFrom: readOf(c).updates })), user._id, teamOf(user));
+  const mentionsBy = new Map(mentionRows.map((r) => [idOf(r._id), r.n]));
 
   // Names for DM partners, resolved in one query.
   const uid = idOf(user);
@@ -358,6 +366,9 @@ export async function listChannels(user) {
         unreadChat: unread.chat,
         unreadUpdates: unread.updates,
         unread: unread.chat + unread.updates,
+        // Notification setting, and — when it is "@mentions only" — the unread that addresses me.
+        notify: read.notify,
+        unreadMentions: read.notify === 'mentions' ? mentionsBy.get(idOf(c)) ?? 0 : 0,
       };
     })
     .sort((a, b) => {
@@ -701,7 +712,12 @@ function notifyMentions(channel, sender, message, people, teams) {
           .filter((u) => u.role === 'staff' && teams.includes(u.staff?.team))
           .map((u) => idOf(u))
       : [];
-    const targets = [...new Set([...direct, ...fromTeams])].filter((id) => id !== idOf(sender));
+    const addressed = [...new Set([...direct, ...fromTeams])].filter((id) => id !== idOf(sender));
+    if (!addressed.length) return;
+    // Someone who switched this conversation off hears nothing from it — not even a mention.
+    const off = new Set((await chatRepository.findQuietened(channel._id, addressed))
+      .filter((r) => r.notify === 'off').map((r) => idOf(r.user)));
+    const targets = addressed.filter((id) => !off.has(id));
     if (!targets.length) return;
 
     const online = await onlineAmong(targets);
@@ -778,8 +794,19 @@ async function insertMessage(channel, {
     type: 'message', channelId: idOf(channel), route: audienceOf(channel), message, ...(thread ? { thread } : {}),
   });
   // A pop-up on the devices of everyone who can see it — not awaited: chat never waits for push.
-  void pushForMessage(channel, { kind, text, attachments, sender, updates });
+  void pushForMessage(channel, { kind, text, attachments, sender, updates, mentions, mentionTeams });
   return { message, thread, duplicate: false };
+}
+
+/**
+ * Does `user`, with notification setting `level` for a conversation, want to
+ * hear about a message addressed to `mentions` / `mentionTeams`?
+ */
+export function wantsNotification(level, user, { mentions = [], mentionTeams = [] } = {}) {
+  if (level === 'off') return false;
+  if (level !== 'mentions') return true;
+  const uid = idOf(user);
+  return mentions.some((m) => idOf(m) === uid) || (!!teamOf(user) && mentionTeams.includes(teamOf(user)));
 }
 
 /**
@@ -788,12 +815,19 @@ async function insertMessage(channel, {
  * space: the owner asked to hear about all of it, and it matches what their bell
  * already counts and chimes for in the page. Never throws.
  */
-async function pushForMessage(channel, { kind, text, attachments = [], sender, updates = false }) {
+async function pushForMessage(channel, {
+  kind, text, attachments = [], sender, updates = false, mentions = [], mentionTeams = [],
+}) {
   try {
     if (!pushConfigured()) return;
     const senderId = idOf(sender);
     const people = await userRepository.findChatUsers();
-    const recipients = people.filter((u) => idOf(u) !== senderId && canAccess(u, channel));
+    const readers = people.filter((u) => idOf(u) !== senderId && canAccess(u, channel));
+    if (!readers.length) return;
+    // Each reader's own setting for this conversation ("@mentions only", "off").
+    const quiet = new Map((await chatRepository.findQuietened(channel._id, readers.map((u) => u._id)))
+      .map((r) => [idOf(r.user), r.notify]));
+    const recipients = readers.filter((u) => wantsNotification(quiet.get(idOf(u)) ?? 'all', u, { mentions, mentionTeams }));
     if (!recipients.length) return;
     const where = channel.kind === 'dm' ? '' : (channel.team ? STAFF_TEAM_LABELS[channel.team] || channel.team : `#${channel.name || 'chat'}`);
     const body = (text || (attachments.length ? '📎 Shared a file' : '')).replace(/\s+/g, ' ').slice(0, 200);
@@ -1192,4 +1226,20 @@ export async function reactToMessage(user, messageId, { emoji, on = true } = {})
     });
   }
   return { messageId: idOf(m), reactions };
+}
+
+// ── notification settings ───────────────────────────────────────────────────
+
+export const NOTIFY_LEVELS = Object.freeze(['all', 'mentions', 'off']);
+
+/**
+ * Set how loudly a conversation reaches this person: 'all', 'mentions' (only
+ * when they or their team are @mentioned) or 'off'. Their own setting only —
+ * nobody can quieten a conversation for someone else.
+ */
+export async function setChannelNotify(user, channelId, level) {
+  if (!NOTIFY_LEVELS.includes(level)) throw fail('Choose all, mentions or off', 400);
+  const channel = await loadAccessible(user, channelId);
+  await chatRepository.setNotify(user._id, channel._id, level);
+  return { channelId: idOf(channel), notify: level };
 }

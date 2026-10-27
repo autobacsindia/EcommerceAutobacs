@@ -26,6 +26,12 @@ export const validateReaction = [
   body('on').optional().isBoolean({ strict: true }).withMessage('on must be true or false'),
 ];
 
+/** A conversation's notification setting, for the signed-in person. */
+export const validateNotify = [
+  param('id').custom(isObjectId).withMessage('Invalid channel id'),
+  body('notify').isIn(['all', 'mentions', 'off']).withMessage('Choose all, mentions or off'),
+];
+
 export const validateMessagePage = [
   query('before').optional().isInt({ min: 1 }).withMessage('Invalid cursor'),
   query('after').optional().isInt({ min: 0 }).withMessage('Invalid cursor'),
