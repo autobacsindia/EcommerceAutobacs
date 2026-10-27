@@ -291,7 +291,23 @@ export async function listChannels(user) {
 
   const ids = channels.map((c) => c._id);
   const reads = await chatRepository.findReadStates(user._id, ids);
-  const readBy = new Map(reads.map((r) => [idOf(r.channel), r.lastReadSeq]));
+  // Per tab: Chat and Order updates are read separately (models/ChatReadState.js).
+  const readBy = new Map(reads.map((r) => [idOf(r.channel), {
+    chat: r.lastReadSeq ?? 0,
+    updates: r.lastReadUpdatesSeq ?? r.lastReadSeq ?? 0,
+  }]));
+  const readOf = (c) => readBy.get(idOf(c)) ?? { chat: 0, updates: 0 };
+  // Count only where something is past a read position — usually a handful of channels.
+  const unreadRows = await chatRepository.countUnreadByLane(channels
+    .filter((c) => c.lastMessageSeq > Math.min(readOf(c).chat, readOf(c).updates))
+    .map((c) => ({ channel: c._id, chatFrom: readOf(c).chat, updatesFrom: readOf(c).updates })));
+  const unreadBy = new Map();
+  for (const r of unreadRows) {
+    const key = idOf(r._id.channel);
+    const u = unreadBy.get(key) ?? { chat: 0, updates: 0 };
+    u[r._id.updates ? 'updates' : 'chat'] += r.n;
+    unreadBy.set(key, u);
+  }
 
   // Names for DM partners, resolved in one query.
   const uid = idOf(user);
@@ -303,7 +319,8 @@ export async function listChannels(user) {
   const order = new Map(DEFAULT_SPACES.map((s, i) => [s.key, i]));
   return channels
     .map((c) => {
-      const lastRead = readBy.get(idOf(c)) ?? 0;
+      const read = readOf(c);
+      const unread = unreadBy.get(idOf(c)) ?? { chat: 0, updates: 0 };
       const partner = c.kind === 'dm'
         ? partnerById.get(c.members.map(idOf).find((m) => m !== uid) ?? '')
         : null;
@@ -328,8 +345,11 @@ export async function listChannels(user) {
         canManageMembers: c.kind === 'space' && c.audience === 'members' && mayManageMembers(user, c),
         lastMessageSeq: c.lastMessageSeq,
         lastMessageAt: c.lastMessageAt,
-        lastReadSeq: lastRead,
-        unread: Math.max(0, c.lastMessageSeq - lastRead),
+        lastReadSeq: read.chat,
+        lastReadUpdatesSeq: read.updates,
+        unreadChat: unread.chat,
+        unreadUpdates: unread.updates,
+        unread: unread.chat + unread.updates,
       };
     })
     .sort((a, b) => {
@@ -594,8 +614,8 @@ export async function listFiles(user, channelId, { before, limit } = {}) {
 
 // ── writes ───────────────────────────────────────────────────────────────────
 
-async function markRead(userId, channelId, seq) {
-  await chatRepository.advanceRead(userId, channelId, seq).catch((err) => {
+async function markRead(userId, channelId, seq, part = 'all') {
+  await chatRepository.advanceRead(userId, channelId, seq, part).catch((err) => {
     if (err?.code !== 11000) throw err; // concurrent first read — the other upsert won
   });
 }
@@ -698,6 +718,8 @@ async function insertMessage(channel, {
   const at = new Date();
   const seq = await chatRepository.nextSeq(channel._id, at);
   if (seq == null) throw fail('Channel not found', 404);
+  // Shown in the Order updates tab: an automatic post, or a reply in its thread.
+  const updates = kind === 'system' || threadRoot?.kind === 'system' || threadRoot?.lane === 'updates';
 
   let doc;
   try {
@@ -705,6 +727,7 @@ async function insertMessage(channel, {
       channel: channel._id,
       seq,
       kind,
+      ...(updates ? { lane: 'updates' } : {}),
       sender: sender?._id ?? null,
       text,
       attachments,
@@ -726,7 +749,8 @@ async function insertMessage(channel, {
     throw err;
   }
 
-  if (sender) await markRead(sender._id, channel._id, seq); // your own message is never "unread"
+  // Your own message is never "unread" — in the tab it was written in.
+  if (sender) await markRead(sender._id, channel._id, seq, updates ? 'updates' : 'chat');
 
   const message = shapeMessage(doc, sender);
   // A reply moves its thread: the root's summary and position travel with the
@@ -746,7 +770,7 @@ async function insertMessage(channel, {
     type: 'message', channelId: idOf(channel), route: audienceOf(channel), message, ...(thread ? { thread } : {}),
   });
   // A pop-up on the devices of everyone who can see it — not awaited: chat never waits for push.
-  void pushForMessage(channel, { kind, text, attachments, sender });
+  void pushForMessage(channel, { kind, text, attachments, sender, updates });
   return { message, thread, duplicate: false };
 }
 
@@ -756,7 +780,7 @@ async function insertMessage(channel, {
  * space: the owner asked to hear about all of it, and it matches what their bell
  * already counts and chimes for in the page. Never throws.
  */
-async function pushForMessage(channel, { kind, text, attachments = [], sender }) {
+async function pushForMessage(channel, { kind, text, attachments = [], sender, updates = false }) {
   try {
     if (!pushConfigured()) return;
     const senderId = idOf(sender);
@@ -766,11 +790,16 @@ async function pushForMessage(channel, { kind, text, attachments = [], sender })
     const where = channel.kind === 'dm' ? '' : (channel.team ? STAFF_TEAM_LABELS[channel.team] || channel.team : `#${channel.name || 'chat'}`);
     const body = (text || (attachments.length ? '📎 Shared a file' : '')).replace(/\s+/g, ' ').slice(0, 200);
     await sendToUsers(
-      recipients.map((u) => ({ userId: idOf(u), url: `${isAdmin(u) ? '/admin/chat' : '/team/chat'}?c=${idOf(channel)}` })),
+      // An order update opens that space's Order updates tab; a message opens Chat.
+      recipients.map((u) => ({
+        userId: idOf(u),
+        url: `${isAdmin(u) ? '/admin/chat' : '/team/chat'}?c=${idOf(channel)}${updates ? '&t=updates' : ''}`,
+      })),
       {
         title: kind === 'system' ? `Roavion update${where ? ` · ${where}` : ''}` : `${sender?.name || 'Message'}${where ? ` · ${where}` : ''}`,
         body,
-        tag: `chat-${idOf(channel)}`,
+        // Separate tags, so an order update never replaces a chat pop-up (or vice versa).
+        tag: `chat-${idOf(channel)}${updates ? '-updates' : ''}`,
       },
     );
   } catch (err) {
@@ -825,12 +854,18 @@ export async function postSystemMessage(spaceKey, text, { key, orderIds, mention
   }
 }
 
-/** Mark everything up to `seq` as read. */
-export async function markChannelRead(user, channelId, seq) {
+const READ_PARTS = ['chat', 'updates', 'all'];
+
+/**
+ * Mark one tab read up to `seq` — 'chat', 'updates', or 'all' (both; what a
+ * page loaded before the split still sends).
+ */
+export async function markChannelRead(user, channelId, seq, part = 'all') {
   const channel = await loadAccessible(user, channelId);
+  const which = READ_PARTS.includes(part) ? part : 'all';
   const upTo = Math.min(Math.max(Number(seq) || 0, 0), channel.lastMessageSeq);
-  await markRead(user._id, channel._id, upTo);
-  return { lastReadSeq: upTo };
+  await markRead(user._id, channel._id, upTo, which);
+  return { lastReadSeq: upTo, part: which };
 }
 
 // ── editing and deleting your own message ────────────────────────────────────

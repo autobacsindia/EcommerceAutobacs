@@ -29,12 +29,13 @@ jest.mock('@/lib/notificationChime', () => ({
 
 let waiting: { items: { key: string; label: string; count: number; href: string }[]; total: number };
 let chatUnread: number;
+let updatesUnread: number;
 
 jest.mock('@/hooks/queries/useNotifications', () => ({
   useWaitingWork: () => ({ data: waiting }),
 }));
 jest.mock('@/hooks/queries/useTeamChat', () => ({
-  useChatUnreadTotal: () => chatUnread,
+  useChatUnreadSplit: () => ({ chat: chatUnread, updates: updatesUnread, updatesChannelId: updatesUnread ? 'ch42' : null }),
 }));
 
 beforeEach(() => {
@@ -43,6 +44,7 @@ beforeEach(() => {
   armed.mockClear();
   mutedValue = false;
   chatUnread = 0;
+  updatesUnread = 0;
   waiting = { items: [], total: 0 };
 });
 
@@ -137,6 +139,26 @@ describe('NotificationBell', () => {
 
     expect(await screen.findByRole('menuitem', { name: /unread messages/i })).toHaveAttribute('href', '/team/chat');
     expect(screen.getByRole('menuitem', { name: /payments to approve/i })).toHaveAttribute('href', '/team/payments');
+  });
+
+  it('order updates are their own row, opening that space\'s Order updates tab; messages open Chat', async () => {
+    chatUnread = 1;
+    updatesUnread = 4;
+    render(<NotificationBell chatHref="/admin/chat" />);
+    fireEvent.click(screen.getByRole('button', { name: /5 waiting/i }));
+
+    expect(await screen.findByRole('menuitem', { name: /unread messages/i })).toHaveAttribute('href', '/admin/chat');
+    const updates = screen.getByRole('menuitem', { name: /unread order updates/i });
+    expect(updates).toHaveAttribute('href', '/admin/chat?c=ch42&t=updates');
+    expect(updates).toHaveTextContent('4');
+  });
+
+  it('only order updates waiting → no "Unread messages" row', async () => {
+    updatesUnread = 2;
+    render(<NotificationBell chatHref="/team/chat" />);
+    fireEvent.click(screen.getByRole('button', { name: /2 waiting/i }));
+    expect(await screen.findByRole('menuitem', { name: /unread order updates/i })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /unread messages/i })).toBeNull();
   });
 
   it('closes on Escape', async () => {

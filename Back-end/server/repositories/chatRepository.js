@@ -196,10 +196,54 @@ const chatRepository = {
 
   // ── read positions ──
   findReadStates: (user, channelIds) =>
-    ChatReadState.find({ user, channel: { $in: channelIds } }).select('channel lastReadSeq').lean(),
-  /** Move a read position forward only (never backwards). */
-  advanceRead: (user, channel, seq) =>
-    ChatReadState.updateOne({ user, channel }, { $max: { lastReadSeq: seq } }, { upsert: true }),
+    ChatReadState.find({ user, channel: { $in: channelIds } }).select('channel lastReadSeq lastReadUpdatesSeq').lean(),
+  /**
+   * Move a read position forward only (never backwards). `part`: 'chat',
+   * 'updates', or 'all' (both — what a client from before the split sends).
+   *
+   * An update pipeline, because the Order-updates position of an old row is
+   * implicit (= lastReadSeq): it is written down from the OLD lastReadSeq first,
+   * so moving Chat forward can never silently mark order updates read.
+   */
+  advanceRead: (user, channel, seq, part = 'all') => {
+    const chat = { $ifNull: ['$lastReadSeq', 0] };
+    const updates = { $ifNull: ['$lastReadUpdatesSeq', chat] };
+    return ChatReadState.updateOne({ user, channel }, [
+      {
+        $set: {
+          lastReadUpdatesSeq: part === 'chat' ? updates : { $max: [updates, seq] },
+          lastReadSeq: part === 'updates' ? chat : { $max: [chat, seq] },
+        },
+      },
+    ], { upsert: true });
+  },
+
+  /**
+   * Unread per tab, for the channels that have any: one aggregate over the
+   * { channel, seq } index, touching only messages past each read position.
+   * @param {{ channel: ObjectId, chatFrom: number, updatesFrom: number }[]} positions
+   * @returns {Promise<{ _id: { channel: ObjectId, updates: boolean }, n: number }[]>}
+   */
+  countUnreadByLane: (positions) => {
+    if (!positions.length) return Promise.resolve([]);
+    const isUpdates = { $or: [{ kind: 'system' }, { lane: 'updates' }] };
+    return ChatMessage.aggregate([
+      {
+        $match: {
+          $or: positions.flatMap((p) => [
+            { channel: p.channel, seq: { $gt: p.chatFrom }, kind: { $ne: 'system' }, lane: { $ne: 'updates' } },
+            { channel: p.channel, seq: { $gt: p.updatesFrom }, ...isUpdates },
+          ]),
+        },
+      },
+      {
+        $group: {
+          _id: { channel: '$channel', updates: { $or: [{ $eq: ['$kind', 'system'] }, { $eq: ['$lane', 'updates'] }] } },
+          n: { $sum: 1 },
+        },
+      },
+    ]);
+  },
 };
 
 export default chatRepository;

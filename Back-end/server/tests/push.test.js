@@ -142,7 +142,10 @@ describe('Push notifications', () => {
     expect(sent.map((x) => x.endpoint).sort()).toEqual([SUB(2).endpoint, SUB(4).endpoint].sort());
     const toAdmin = sent.find((x) => x.endpoint === SUB(4).endpoint).payload;
     expect(toAdmin.title).toBe('Roavion update · Procurement');
-    expect(toAdmin.url).toMatch(/^\/admin\/chat\?c=/);
+    // An order update opens the Order updates tab, with its own pop-up tag.
+    expect(toAdmin.url).toMatch(/^\/admin\/chat\?c=[a-f0-9]{24}&t=updates$/);
+    expect(toAdmin.tag).toMatch(/^chat-[a-f0-9]{24}-updates$/);
+    expect(sent.find((x) => x.endpoint === SUB(2).endpoint).payload.url).toMatch(/^\/team\/chat\?c=[a-f0-9]{24}&t=updates$/);
   });
 
   it('a device the push service says is gone is removed', async () => {

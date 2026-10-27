@@ -37,9 +37,23 @@ export interface ChatChannel {
   canManageMembers?: boolean;
   lastMessageSeq: number;
   lastMessageAt: string | null;
+  /** Read position of the Chat tab. */
   lastReadSeq: number;
+  /** Read position of the Order updates tab (read separately from Chat). */
+  lastReadUpdatesSeq?: number;
+  /** Unread per tab; `unread` is their sum. Optional only for an older server. */
+  unreadChat?: number;
+  unreadUpdates?: number;
   unread: number;
 }
+
+/** Which tab of a conversation a read applies to. */
+export type ReadPart = 'chat' | 'updates';
+
+/** Unread people's messages / order updates in a channel (an older server only sends `unread`). */
+export const unreadChatOf = (c: ChatChannel) => c.unreadChat ?? c.unread;
+export const unreadUpdatesOf = (c: ChatChannel) => c.unreadUpdates ?? 0;
+export const readUpdatesSeqOf = (c: ChatChannel) => c.lastReadUpdatesSeq ?? c.lastReadSeq;
 
 export interface ChatAttachment {
   url: string;
@@ -159,6 +173,23 @@ export function useChatChannels(options: { poll?: boolean } = {}) {
 export function useChatUnreadTotal(): number {
   const { data } = useChatChannels({ poll: true });
   return (data ?? []).reduce((n, c) => n + c.unread, 0);
+}
+
+/**
+ * Unread split by tab, for the bell: people's messages, and order updates with
+ * the space that most recently got one (where "Unread order updates" opens).
+ */
+export function useChatUnreadSplit(): { chat: number; updates: number; updatesChannelId: string | null } {
+  const { data } = useChatChannels({ poll: true });
+  const list = data ?? [];
+  const withUpdates = list
+    .filter((c) => unreadUpdatesOf(c) > 0)
+    .sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
+  return {
+    chat: list.reduce((n, c) => n + unreadChatOf(c), 0),
+    updates: list.reduce((n, c) => n + unreadUpdatesOf(c), 0),
+    updatesChannelId: withUpdates[0]?.id ?? null,
+  };
 }
 
 export function useChatPeople(enabled = true) {
@@ -415,14 +446,25 @@ export function useRecentOrders(enabled: boolean) {
   });
 }
 
+/**
+ * Mark one tab of a channel read up to `seq`. Chat and Order updates are read
+ * separately. A tab is read up to its newest message, so its badge clears at
+ * once; the next channel poll brings the server's exact counts.
+ */
 export function useMarkRead() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ channelId, seq }: { channelId: string; seq: number }) =>
-      apiClient.post(`/chat/channels/${channelId}/read`, { seq }),
-    onMutate: ({ channelId, seq }) => {
+    mutationFn: ({ channelId, seq, part }: { channelId: string; seq: number; part: ReadPart }) =>
+      apiClient.post(`/chat/channels/${channelId}/read`, { seq, part }),
+    onMutate: ({ channelId, seq, part }) => {
       qc.setQueryData<ChatChannel[]>(chatKeys.channels(), (list) =>
-        list?.map((c) => (c.id === channelId ? { ...c, lastReadSeq: seq, unread: Math.max(0, c.lastMessageSeq - seq) } : c)),
+        list?.map((c) => {
+          if (c.id !== channelId) return c;
+          const next = part === 'updates'
+            ? { ...c, lastReadUpdatesSeq: Math.max(seq, readUpdatesSeqOf(c)), unreadUpdates: 0 }
+            : { ...c, lastReadSeq: Math.max(seq, c.lastReadSeq), unreadChat: 0 };
+          return { ...next, unread: unreadChatOf(next) + unreadUpdatesOf(next) };
+        }),
       );
     },
   });

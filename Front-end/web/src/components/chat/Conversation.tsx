@@ -6,6 +6,9 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { ArrowDown, ArrowLeft, Download, Search, Users } from 'lucide-react';
 import { chatKeys } from '@/hooks/queries/keys';
 import {
+  readUpdatesSeqOf,
+  unreadChatOf,
+  unreadUpdatesOf,
   upsertMessage,
   useChannelFiles,
   useChatMessages,
@@ -14,7 +17,7 @@ import {
   useEditMessage,
   useDeleteMessage,
 } from '@/hooks/queries/useTeamChat';
-import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, SendVars } from '@/hooks/queries/useTeamChat';
+import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
 import MembersPanel from './MembersPanel';
 import { Avatar, ChannelIcon, FileKindIcon, fileSize, timeOf } from './chatUi';
@@ -23,6 +26,18 @@ import MessageItem, { messageDomId } from './MessageItem';
 import ThreadPanel from './ThreadPanel';
 
 type Pages = InfiniteData<MessagePage, number>;
+type Tab = 'messages' | 'updates' | 'files' | 'members';
+
+/** Where a top-level message sits by its latest activity (a thread's newest reply counts). */
+const activityOf = (m: ChatMessage) => m.activitySeq ?? m.seq;
+
+/** The newest activity among these top-level messages (pending sends excluded). */
+const newestOf = (list: ChatMessage[]) => list.reduce((n, m) => (!m.pending && activityOf(m) > n ? activityOf(m) : n), 0);
+
+/** Open on Order updates when that is the only thing waiting; otherwise on Chat. */
+function defaultTab(channel: ChatChannel): Tab {
+  return channel.kind === 'space' && unreadChatOf(channel) === 0 && unreadUpdatesOf(channel) > 0 ? 'updates' : 'messages';
+}
 
 /** Everything shared in this channel, newest first. */
 function FilesPanel({ channelId }: { channelId: string }) {
@@ -105,6 +120,7 @@ export default function Conversation({
   orderHref,
   onBack,
   onSearch,
+  initialTab,
 }: {
   channel: ChatChannel;
   meId: string;
@@ -115,6 +131,8 @@ export default function Conversation({
   onBack: () => void;
   /** Opens search already narrowed to this channel. */
   onSearch?: () => void;
+  /** From the link (?t=updates — an order-update pop-up); otherwise chosen by what is unread. */
+  initialTab?: 'messages' | 'updates';
 }) {
   const qc = useQueryClient();
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } =
@@ -123,7 +141,10 @@ export default function Conversation({
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
   const markRead = useMarkRead();
-  const [tab, setTab] = useState<'messages' | 'updates' | 'files' | 'members'>('messages');
+  const [tab, setTab] = useState<Tab>(() => {
+    if (initialTab === 'updates') return channel.kind === 'space' ? 'updates' : 'messages';
+    return initialTab ?? defaultTab(channel);
+  });
   // Custom groups have a member list; team spaces and DMs do not.
   const isGroup = channel.kind === 'space' && channel.audience === 'members';
   const [quote, setQuote] = useState<ChatMessage | null>(null);
@@ -143,19 +164,46 @@ export default function Conversation({
     payments, transfers, refunds). One loaded timeline, two views of it — so the
     live stream, sending, editing and read-marking all keep working on one cache.
   */
-  const visible = useMemo(
-    () => (tab === 'updates' ? messages.filter((m) => m.kind === 'system') : messages.filter((m) => m.kind !== 'system')),
-    [messages, tab],
+  const chatMessages = useMemo(() => messages.filter((m) => m.kind !== 'system'), [messages]);
+  // Order updates read newest first: the order that moved last is the one to look at.
+  const updateMessages = useMemo(
+    () => messages.filter((m) => m.kind === 'system').sort((a, b) => activityOf(b) - activityOf(a)),
+    [messages],
   );
+  const visible = tab === 'updates' ? updateMessages : chatMessages;
   // Team spaces get automatic updates; direct messages never do.
   const hasUpdatesTab = channel.kind === 'space';
-  // The newest thing on screen — a thread's activity counts, since replies are
-  // read from the timeline's summary of them.
-  const lastSeq = messages.reduce((n, m) => {
-    const at = m.activitySeq ?? m.seq;
-    return !m.pending && at > n ? at : n;
-  }, 0);
+  /*
+    The newest thing in each tab — a thread's activity counts, since replies are
+    read from the timeline's summary of them. Chat and Order updates are read
+    separately, so opening one never clears the other's unread.
+  */
+  const lastChatSeq = newestOf(chatMessages);
+  const lastUpdatesSeq = newestOf(updateMessages);
+
+  /*
+    "Unread" labels on Order updates: what was past the read position when the
+    tab was opened. Taken once per visit, so the labels stay while you look and
+    are gone the next time you open the tab — even though the tab is marked read
+    as soon as it is on screen. null until taken (no flash of labels).
+  */
+  const [unreadFrom, setUnreadFrom] = useState<number | null>(null);
+  useEffect(() => {
+    setUnreadFrom(tab === 'updates' ? readUpdatesSeqOf(channel) : null);
+    // Only on entering the tab: the read position moves while it is open, by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, channel.id]);
+
+  // A pop-up for an order update can land on this same conversation while it is open.
+  useEffect(() => {
+    if (initialTab === 'updates' && hasUpdatesTab) setTab('updates');
+  }, [initialTab, hasUpdatesTab]);
   const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
+
+  // Order updates start at the top, where the newest is.
+  useLayoutEffect(() => {
+    if (tab === 'updates' && scroller.current) scroller.current.scrollTop = 0;
+  }, [tab]);
 
   // Stay pinned to the newest message; hold position when older ones load above.
   useLayoutEffect(() => {
@@ -187,7 +235,6 @@ export default function Conversation({
   useEffect(() => {
     stickToBottom.current = true;
     setAtBottom(true);
-    setTab('messages');
     setThread(null);
     setQuote(null);
   }, [channel.id]);
@@ -204,43 +251,52 @@ export default function Conversation({
     setTimeout(() => el.classList.remove('chat-flash'), 1600);
   }, []);
 
+  const readUpdatesSeq = readUpdatesSeqOf(channel);
   const read = useCallback(
-    (seq: number) => {
-      if (seq > channel.lastReadSeq) markRead.mutate({ channelId: channel.id, seq });
+    (part: ReadPart, seq: number) => {
+      const from = part === 'updates' ? readUpdatesSeq : channel.lastReadSeq;
+      if (seq > from) markRead.mutate({ channelId: channel.id, seq, part });
     },
     // markRead is a stable mutation object; depending on it would re-create this every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [channel.id, channel.lastReadSeq],
+    [channel.id, channel.lastReadSeq, readUpdatesSeq],
   );
 
-  // Reading = the newest message is on screen and the tab is actually visible.
-  useEffect(() => {
-    if (!lastSeq || !stickToBottom.current) return;
+  /*
+    Reading = the tab is actually visible and: Chat — its newest message is on
+    screen (pinned to the bottom); Order updates — the tab is open (the newest
+    is at the top, so it is on screen the moment the tab is), after its
+    "Unread" labels were taken.
+  */
+  const readNow = useCallback(() => {
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-    read(lastSeq);
-  }, [lastSeq, read]);
+    if (tab === 'messages' && lastChatSeq && stickToBottom.current) read('chat', lastChatSeq);
+    if (tab === 'updates' && lastUpdatesSeq && unreadFrom !== null) read('updates', lastUpdatesSeq);
+  }, [tab, lastChatSeq, lastUpdatesSeq, unreadFrom, read]);
+  useEffect(() => { readNow(); }, [readNow]);
 
-  const latest = useRef({ lastSeq });
-  latest.current = { lastSeq };
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && stickToBottom.current) read(latest.current.lastSeq);
-    };
+    const onVisible = () => readNow();
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [read]);
+  }, [readNow]);
 
   const onScroll = () => {
     const el = scroller.current;
     if (!el) return;
     const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    // Order updates run newest first: older ones load at the bottom, nothing to hold.
+    if (tab === 'updates') {
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 120 && hasNextPage && !isFetchingNextPage) fetchNextPage();
+      return;
+    }
     stickToBottom.current = bottom;
     setAtBottom(bottom);
     if (el.scrollTop < 120 && hasNextPage && !isFetchingNextPage) {
       restoreFrom.current = el.scrollHeight - el.scrollTop;
       fetchNextPage();
     }
-    if (bottom) read(lastSeq);
+    if (bottom) read('chat', lastChatSeq);
   };
 
   const scrollToBottom = () => {
@@ -248,7 +304,7 @@ export default function Conversation({
     if (!el) return;
     stickToBottom.current = true;
     el.scrollTop = el.scrollHeight;
-    read(lastSeq);
+    read('chat', lastChatSeq);
   };
 
   /** Show the message immediately, then reconcile with what the server stored. */
@@ -343,6 +399,14 @@ export default function Conversation({
                 }`}
               >
                 {key === 'messages' ? 'Chat' : key === 'updates' ? 'Order updates' : key === 'files' ? 'Files' : 'Members'}
+                {(() => {
+                  const n = key === 'messages' ? unreadChatOf(channel) : key === 'updates' ? unreadUpdatesOf(channel) : 0;
+                  return n > 0 && (
+                    <span className="ml-1.5 rounded-full bg-emerald-600 px-1.5 text-[11px] font-bold leading-[18px] text-white" aria-label={`${n} unread`}>
+                      {n > 99 ? '99+' : n}
+                    </span>
+                  );
+                })()}
               </button>
             ))}
           </div>
@@ -356,8 +420,8 @@ export default function Conversation({
           <>
             <div className="relative min-h-0 flex-1">
               <div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-4 py-3" aria-live="polite">
-                {isFetchingNextPage && <p className="py-2 text-center text-xs text-gray-500">Loading older messages…</p>}
-                {!hasNextPage && !isLoading && visible.length > 0 && (
+                {tab === 'messages' && isFetchingNextPage && <p className="py-2 text-center text-xs text-gray-500">Loading older messages…</p>}
+                {tab === 'messages' && !hasNextPage && !isLoading && visible.length > 0 && (
                   <p className="py-3 text-center text-xs text-gray-400">This is the beginning of {title}</p>
                 )}
                 {isLoading && <p className="py-10 text-center text-sm text-gray-500">Loading messages…</p>}
@@ -388,8 +452,13 @@ export default function Conversation({
                 )}
 
                 {visible.map((m, i) => (
+                  <div key={m.id}>
+                  {tab === 'updates' && unreadFrom !== null && activityOf(m) > unreadFrom && (
+                    <span className="mt-2 inline-block rounded-full bg-red-600 px-2 text-[11px] font-bold uppercase leading-5 tracking-wide text-white">
+                      Unread
+                    </span>
+                  )}
                   <MessageItem
-                    key={m.id}
                     message={m}
                     previous={visible[i - 1]}
                     meId={meId}
@@ -403,10 +472,15 @@ export default function Conversation({
                     onEdit={(msg, text) => edit.mutateAsync({ id: msg.id, text })}
                     onDelete={(msg) => remove.mutateAsync(msg.id)}
                   />
+                  </div>
                 ))}
+                {tab === 'updates' && isFetchingNextPage && <p className="py-2 text-center text-xs text-gray-500">Loading older updates…</p>}
+                {tab === 'updates' && !hasNextPage && !isLoading && visible.length > 0 && (
+                  <p className="py-3 text-center text-xs text-gray-400">No older updates in {title}</p>
+                )}
               </div>
 
-              {!atBottom && (
+              {tab === 'messages' && !atBottom && (
                 <button
                   type="button"
                   onClick={scrollToBottom}
