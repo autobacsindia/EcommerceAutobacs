@@ -746,27 +746,22 @@ async function insertMessage(channel, {
     type: 'message', channelId: idOf(channel), route: audienceOf(channel), message, ...(thread ? { thread } : {}),
   });
   // A pop-up on the devices of everyone who can see it — not awaited: chat never waits for push.
-  void pushForMessage(channel, { kind, text, attachments, sender, mentions });
+  void pushForMessage(channel, { kind, text, attachments, sender });
   return { message, thread, duplicate: false };
 }
 
 /**
  * Push notification for a new message (services/pushService.js). Everyone who
- * can read the channel, except the sender. Admins see every team's space, so to
- * keep their phone usable they get: direct messages, groups they are in, the
- * company space, automatic work updates, and anything that @mentions them —
- * not every team's conversation. Never throws.
+ * can read the channel, except the sender — admins included, for every team's
+ * space: the owner asked to hear about all of it, and it matches what their bell
+ * already counts and chimes for in the page. Never throws.
  */
-async function pushForMessage(channel, { kind, text, attachments = [], sender, mentions = [] }) {
+async function pushForMessage(channel, { kind, text, attachments = [], sender }) {
   try {
     if (!pushConfigured()) return;
     const senderId = idOf(sender);
-    const mentioned = new Set(mentions.map(idOf));
     const people = await userRepository.findChatUsers();
-    const recipients = people.filter((u) => idOf(u) !== senderId && canAccess(u, channel) && (
-      !isAdmin(u) || channel.kind === 'dm' || channel.audience === 'all' || channel.audience === 'members'
-      || kind === 'system' || mentioned.has(idOf(u))
-    ));
+    const recipients = people.filter((u) => idOf(u) !== senderId && canAccess(u, channel));
     if (!recipients.length) return;
     const where = channel.kind === 'dm' ? '' : (channel.team ? STAFF_TEAM_LABELS[channel.team] || channel.team : `#${channel.name || 'chat'}`);
     const body = (text || (attachments.length ? '📎 Shared a file' : '')).replace(/\s+/g, ' ').slice(0, 200);

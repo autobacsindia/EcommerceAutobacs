@@ -5,8 +5,13 @@
  * connection a tab is allowed, and these counts are a handful of integers that
  * change a few times an hour — a second long-lived connection per tab to carry
  * them would cost more than it saves. The interval is short enough that nobody
- * sits on stale work, and polling stops while the tab is hidden so a laptop
- * full of forgotten tabs is not quietly hammering the API all night.
+ * sits on stale work.
+ *
+ * It keeps polling while the tab is hidden, slower. It used to stop, which
+ * meant the "new work" sound could never play for someone working in another
+ * tab or app — exactly when they need it. Only staff and admins run this (a
+ * handful of people), so one tiny request a minute per hidden tab is nothing;
+ * browsers throttle hidden-tab timers to about once a minute anyway.
  */
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
@@ -21,6 +26,11 @@ export interface WaitingItem {
 }
 
 const POLL_MS = 20_000;
+export const HIDDEN_POLL_MS = 60_000;
+
+/** Visible tab: every 20 s. Hidden tab: every minute (re-read after each fetch). */
+export const pollInterval = (visibleMs: number) => () =>
+  (typeof document !== 'undefined' && document.visibilityState === 'hidden' ? HIDDEN_POLL_MS : visibleMs);
 
 export function useWaitingWork() {
   const { user } = useAuth();
@@ -34,9 +44,8 @@ export function useWaitingWork() {
     },
     enabled,
     staleTime: 10_000,
-    refetchInterval: POLL_MS,
-    // A hidden tab is not being read, so it does not need fresh counts; it
-    // refetches the moment it comes back to the front.
-    refetchIntervalInBackground: false,
+    refetchInterval: pollInterval(POLL_MS),
+    // A hidden tab still needs to hear about new work (see the top of the file).
+    refetchIntervalInBackground: true,
   });
 }

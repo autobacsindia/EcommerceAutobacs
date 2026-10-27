@@ -3,16 +3,41 @@ import apiClient from '@/lib/api-client';
 /**
  * Pop-up notifications on this device, even when the website is closed (the
  * browser must be running). The server keeps the device (POST /push/subscriptions)
- * and pushes for new chat messages and work updates; /push-sw.js shows them.
+ * and pushes for new chat messages and work updates (posted to chat as automatic
+ * updates); /push-sw.js shows them.
  *
  *   unsupported — this browser can't (or, on iPhone, the site is not on the Home Screen)
  *   unavailable — the server has no push keys yet
  *   blocked     — the person said "Block" in the browser; only they can undo it there
  *   off / on    — this device, for this person
+ *
+ * Once the browser has said "Allow", the panel keeps this device signed up by
+ * itself (`resyncPush`): logging out, a cleared server row or a new key would
+ * otherwise turn pop-ups off silently, and nobody re-opens the bell to notice.
+ * Only a person's own "Turn off" stops that, and it is remembered per browser.
  */
 export type PushState = 'unsupported' | 'unavailable' | 'blocked' | 'off' | 'on';
 
 const SW_URL = '/push-sw.js';
+const OPTED_OUT_KEY = 'roavion-push-off';
+
+/** Did the person press "Turn off" in this browser? Browser storage may refuse. */
+export function pushOptedOut(): boolean {
+  try {
+    return localStorage.getItem(OPTED_OUT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function rememberOptOut(off: boolean) {
+  try {
+    if (off) localStorage.setItem(OPTED_OUT_KEY, '1');
+    else localStorage.removeItem(OPTED_OUT_KEY);
+  } catch {
+    // Without storage the device simply re-signs up next time — the safe side.
+  }
+}
 
 export function pushSupported(): boolean {
   return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -54,6 +79,33 @@ export async function pushState(): Promise<PushState> {
   }
 }
 
+function sameKey(a: ArrayBuffer | null | undefined, b: Uint8Array): boolean {
+  if (!a) return false;
+  const x = new Uint8Array(a);
+  return x.length === b.length && x.every((v, i) => v === b[i]);
+}
+
+/**
+ * Register the worker, make sure this browser holds a subscription for the
+ * server's CURRENT key, and save it on the server (an upsert, so repeating it
+ * is harmless and moves a shared device to whoever is signed in now).
+ */
+async function subscribeAndSave(key: string): Promise<PushState> {
+  const reg = await navigator.serviceWorker.register(SW_URL, { scope: '/' });
+  await navigator.serviceWorker.ready;
+  const want = keyBytes(key);
+  let sub = await reg.pushManager.getSubscription();
+  // Subscribed with an older key (the server's keys were changed): the push
+  // service would refuse every send, and subscribing again over it throws.
+  if (sub && !sameKey(sub.options?.applicationServerKey, want)) {
+    await sub.unsubscribe().catch(() => false);
+    sub = null;
+  }
+  sub = sub || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: want as BufferSource }));
+  await apiClient.post('/push/subscriptions', sub.toJSON());
+  return 'on';
+}
+
 /** Ask the browser, register the worker, subscribe, and tell the server. */
 export async function enablePush(): Promise<PushState> {
   if (!pushSupported() || needsHomeScreen()) return 'unsupported';
@@ -61,16 +113,37 @@ export async function enablePush(): Promise<PushState> {
   if (permission !== 'granted') return permission === 'denied' ? 'blocked' : 'off';
   const key = await serverKey();
   if (!key) return 'unavailable';
-  const reg = await navigator.serviceWorker.register(SW_URL, { scope: '/' });
-  await navigator.serviceWorker.ready;
-  const sub = (await reg.pushManager.getSubscription())
-    || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) as BufferSource }));
-  await apiClient.post('/push/subscriptions', sub.toJSON());
-  return 'on';
+  rememberOptOut(false);
+  return subscribeAndSave(key);
 }
 
-/** Stop pop-ups on this device (also called on logout — never throws). */
-export async function disablePush(): Promise<PushState> {
+/**
+ * Keep this device signed up without asking anything: only when the browser
+ * already allows notifications and the person has not turned them off here.
+ * Never prompts, never throws — on any failure it just reports the state.
+ */
+export async function resyncPush(): Promise<PushState> {
+  if (!pushSupported() || needsHomeScreen()) return 'unsupported';
+  if (Notification.permission === 'denied') return 'blocked';
+  try {
+    const key = await serverKey();
+    if (!key) return 'unavailable';
+    if (Notification.permission !== 'granted' || pushOptedOut()) {
+      return (await currentSubscription()) ? 'on' : 'off';
+    }
+    return await subscribeAndSave(key);
+  } catch {
+    return 'off';
+  }
+}
+
+/**
+ * Stop pop-ups on this device (never throws). `remember` is for the person's
+ * own "Turn off": the panel then stops re-signing this browser up. Logout does
+ * not remember — the next person to sign in here gets their own pop-ups.
+ */
+export async function disablePush({ remember = false }: { remember?: boolean } = {}): Promise<PushState> {
+  if (remember) rememberOptOut(true);
   try {
     if (!pushSupported()) return 'unsupported';
     const sub = await currentSubscription();

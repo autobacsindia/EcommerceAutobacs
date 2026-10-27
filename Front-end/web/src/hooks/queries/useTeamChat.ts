@@ -6,6 +6,7 @@ import apiClient from '@/lib/api';
 import { submitMultipart, parseApiResponse } from '@/lib/multipartResponse';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from './keys';
+import { pollInterval } from './useNotifications';
 
 export interface ChatPerson {
   id: string;
@@ -147,7 +148,10 @@ export function useChatChannels(options: { poll?: boolean } = {}) {
     enabled,
     staleTime: 15_000,
     // Nav badges poll; the open chat page is kept fresh by the live stream instead.
-    refetchInterval: options.poll ? 30_000 : false,
+    // They keep polling (slower) in a hidden tab, so the chat sound still plays
+    // for someone in another tab or app — see useNotifications.ts.
+    refetchInterval: options.poll ? pollInterval(30_000) : false,
+    refetchIntervalInBackground: !!options.poll,
   });
 }
 

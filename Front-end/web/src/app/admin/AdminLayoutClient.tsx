@@ -7,6 +7,7 @@ import { useAdminStats } from '@/hooks/queries/useAdminStats';
 import { formatCurrency } from '@/lib/utils';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import NotificationBell from '@/components/notifications/NotificationBell';
+import PushPrompt from '@/components/notifications/PushPrompt';
 
 interface NavItem {
   href?: string;
@@ -354,7 +355,7 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
         </header>
 
         {/* Page Content */}
-        <div className="p-6 admin-panel">{children}</div>
+        <div className="p-6 admin-panel"><PushPrompt />{children}</div>
       </main>
     </div>
   );

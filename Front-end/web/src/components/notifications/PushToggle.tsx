@@ -61,7 +61,7 @@ export default function PushToggle() {
             if (!sent) throw new Error('This device could not be reached. Click "Turn off", then "Turn on" again.');
           }, 'Sent. No pop-up within a few seconds? Your computer is blocking it — on a Mac: System Settings → Notifications → Google Chrome → Allow notifications (and turn Focus / Do Not Disturb off).')}
             className="rounded-md border border-gray-300 px-2 py-0.5 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Send a test</button>
-          <button type="button" disabled={busy} onClick={() => run(disablePush)}
+          <button type="button" disabled={busy} onClick={() => run(() => disablePush({ remember: true }))}
             className="rounded-md border border-gray-300 px-2 py-0.5 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Turn off</button>
         </div>
       )}

@@ -5,7 +5,7 @@
  *   - only real push services are accepted as endpoints (the server POSTs there: no SSRF)
  *   - a device belongs to whoever subscribed last on it; logging out removes it
  *   - a chat message pops up for everyone who can read it, never the sender, never
- *     another team; admins get work updates / mentions / DMs, not every team's chatter
+ *     another team; admins get every team's messages too, but never other people's DMs
  *   - a device the push service says is gone (410) is removed; nothing ever throws
  *   - without VAPID keys push is simply off
  */
@@ -103,7 +103,7 @@ describe('Push notifications', () => {
     expect(await PushSubscription.countDocuments()).toBe(0);
   });
 
-  it('a team chat message pops up for teammates — not the sender, not another team, not the admin', async () => {
+  it('a team chat message pops up for teammates and the admin — not the sender, not another team', async () => {
     const a = await person('Priya', 'staff', staff('procurement'));
     const b = await person('Pavan', 'staff', staff('procurement'));
     const c = await person('Sana', 'staff', staff('sales'));
@@ -112,8 +112,24 @@ describe('Push notifications', () => {
     const team = (await a.s.get('/chat/channels')).body.channels.find((ch) => ch.key === 'team:procurement');
     await a.s.post(`/chat/channels/${team.id}/messages`, { text: 'Supplier called back', clientId: '1e777eb2-3395-4f4d-9723-532ee8e65fd6' });
     await settle();
+    expect(sent.map((x) => x.endpoint).sort()).toEqual([SUB(2).endpoint, SUB(4).endpoint].sort());
+    const toTeammate = sent.find((x) => x.endpoint === SUB(2).endpoint).payload;
+    expect(toTeammate).toMatchObject({ title: 'Priya · Procurement', body: 'Supplier called back', url: `/team/chat?c=${team.id}`, tag: `chat-${team.id}` });
+    expect(sent.find((x) => x.endpoint === SUB(4).endpoint).payload.url).toBe(`/admin/chat?c=${team.id}`);
+  });
+
+  it('a direct message pops up only for the other person — never the admin', async () => {
+    const a = await person('Priya', 'staff', staff('procurement'));
+    const b = await person('Pavan', 'staff', staff('procurement'));
+    const admin = await person('Owner', 'admin');
+    for (const [p, i] of [[a, 1], [b, 2], [admin, 4]]) await p.s.post('/push/subscriptions', SUB(i));
+    const dm = await a.s.post('/chat/dm', { userId: String(b.user._id) });
+    expect(dm.status).toBeLessThan(300);
+    const id = dm.body.channel?.id;
+    expect(id).toBeTruthy();
+    await a.s.post(`/chat/channels/${id}/messages`, { text: 'Lunch?', clientId: '2e777eb2-3395-4f4d-9723-532ee8e65fd6' });
+    await settle();
     expect(sent.map((x) => x.endpoint)).toEqual([SUB(2).endpoint]);
-    expect(sent[0].payload).toMatchObject({ title: 'Priya · Procurement', body: 'Supplier called back', url: `/team/chat?c=${team.id}`, tag: `chat-${team.id}` });
   });
 
   it('an automatic work update reaches the team AND the admin (admin link goes to the admin chat)', async () => {
