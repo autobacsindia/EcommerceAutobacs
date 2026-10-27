@@ -55,6 +55,7 @@ import {
   validateMarkDelivered,
   validateUndoDelivered,
 } from '../validators/staff.validator.js';
+import staffTaskRoutes from './staffTasks.js';
 import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard, uploadPaymentProof, uploadPaymentRequestFiles } from '../middleware/uploadMiddleware.js';
 import {
   listQueue,
@@ -145,6 +146,9 @@ router.post('/invites/accept', resetPasswordRateLimit, validateAcceptInvite, val
 // ── Signed-in panel ──────────────────────────────────────────────────────────
 
 router.use(authenticatedUserRateLimit, protect, staffOrAdmin);
+
+// Tasks given to people in the panel (routes/staffTasks.js) — behind the gate above.
+router.use('/tasks', staffTaskRoutes);
 
 // @route  GET /staff/me — the caller's team profile (null for an admin)
 router.get('/me', (req, res) => {

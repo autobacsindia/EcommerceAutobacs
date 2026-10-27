@@ -210,6 +210,16 @@ export const staffKeys = {
   customerBank: (kind: string, id: string) => [...staffKeys.customerBanks(), kind, id] as const,
 };
 
+/** `/staff/tasks/*` — tasks given to people in the panel. Invalidate `all` after any change. */
+export const taskKeys = {
+  all: [...staffKeys.all, 'tasks'] as const,
+  lists: () => [...taskKeys.all, 'list'] as const,
+  list: (filters: object) => [...taskKeys.lists(), filters] as const,
+  one: (id: string) => [...taskKeys.all, 'one', id] as const,
+  comments: (id: string) => [...taskKeys.all, 'comments', id] as const,
+  assignees: () => [...taskKeys.all, 'assignees'] as const,
+};
+
 /** `/admin/team-activity/*` — the admin's read-only view of the order workflow. */
 export const teamActivityKeys = {
   all: ['team-activity'] as const,

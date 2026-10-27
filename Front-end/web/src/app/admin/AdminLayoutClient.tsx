@@ -23,6 +23,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin', label: 'Dashboard', icon: '📊' },
       { href: '/admin/overview', label: 'Company overview', icon: '🏢' },
       { href: '/admin/chat', label: 'Team Chat', icon: '🗨️' },
+      { href: '/admin/tasks', label: 'Tasks', icon: '✅' },
       { href: '/admin/analytics', label: 'Analytics', icon: '📈' },
     ],
   },
