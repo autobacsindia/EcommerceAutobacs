@@ -13,6 +13,7 @@ import { errorMessage, rupees } from '@/components/staff/sales/types';
 import { shrinkPhoto, STAGE_TONE, PARCEL_STEP_OPTIONS, type LineAction, type ParcelStepStatus, type WorkOrder } from './types';
 import LineSupplierPayment, { useOrderSupplierPayments } from '@/components/payments/OrderSupplierPayments';
 import { displayEmail } from '@/lib/internalEmail';
+import ProductLink from '@/components/staff/ProductLink';
 
 type OrderResponse = { success: boolean; order: WorkOrder };
 
@@ -199,7 +200,10 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
             <li key={line.itemId} className="space-y-2 p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <p className="font-medium text-gray-900">{line.name}{line.variantLabel ? ` — ${line.variantLabel}` : ''} <span className="font-normal text-gray-500">× {line.quantity}</span></p>
+                  <p className="font-medium text-gray-900">
+                    <ProductLink product={line.productId} variantId={line.variantId}>{line.name}{line.variantLabel ? ` — ${line.variantLabel}` : ''}</ProductLink>{' '}
+                    <span className="font-normal text-gray-500">× {line.quantity}</span>
+                  </p>
                   {line.supplierName && line.stage === 'with_supplier' && <p className="text-xs text-gray-500">Supplier: {line.supplierName}</p>}
                   {line.paymentInitiatedAt && line.stage === 'to_ship' && (
                     <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">

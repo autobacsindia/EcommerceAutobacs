@@ -37,6 +37,9 @@ export type WorkRow = {
   needs: string[];
   lines: {
     itemId: string;
+    /** Catalogue product — for the "open on the website" link. */
+    productId?: string | null;
+    variantId?: string | null;
     name: string;
     variantLabel: string | null;
     quantity: number;

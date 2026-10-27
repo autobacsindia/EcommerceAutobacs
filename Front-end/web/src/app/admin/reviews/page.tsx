@@ -1,5 +1,6 @@
 'use client';
 
+import ProductLink from '@/components/staff/ProductLink';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -407,7 +408,7 @@ export default function AdminReviewsPage() {
                   {reviews.map((review) => (
                     <tr key={review._id}>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{review.product?.name || 'Unknown Product'}</div>
+                        <div className="text-sm font-medium text-gray-900"><ProductLink product={review.product}>{review.product?.name || 'Unknown Product'}</ProductLink></div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">

@@ -1,9 +1,11 @@
 'use client';
 
+import ProductLink from '@/components/staff/ProductLink';
 import { useState } from 'react';
 import { BUYER_TYPES, checkGstin, normalizeGstin } from '@/lib/legal/buyerTypes';
 import { enterpriseBlockError } from '@/lib/legal/checkoutBuyer';
-import { Search, Plus, Trash2 } from 'lucide-react';
+import { ExternalLink, Search, Plus, Trash2 } from 'lucide-react';
+import { productLinkHref } from '@/lib/productLink';
 import apiClient from '@/lib/api';
 import { SalesRep } from '@/lib/leads';
 
@@ -315,11 +317,22 @@ export default function OfflineOrderForm({
         {hits.length > 0 && (
           <ul className="mt-2 max-h-48 overflow-auto rounded-lg border border-gray-200">
             {hits.map((p) => (
-              <li key={p._id}>
-                <button onClick={() => addItem(p)} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50">
+              <li key={p._id} className="flex items-center">
+                <button onClick={() => addItem(p)} className="flex min-w-0 flex-1 items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50">
                   <span>{p.name}</span>
                   <span className="flex items-center gap-2 text-gray-500">₹{p.price?.toLocaleString()} <Plus className="h-4 w-4" /></span>
                 </button>
+                {/* Beside the row, not inside it: the whole row is the "add" button. */}
+                {productLinkHref(p._id) && <a
+                  href={productLinkHref(p._id)!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open on the website (new tab)"
+                  aria-label={`Open ${p.name} on the website (new tab)`}
+                  className="shrink-0 px-3 py-2 text-gray-400 hover:text-gray-700"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>}
               </li>
             ))}
           </ul>
@@ -345,7 +358,7 @@ export default function OfflineOrderForm({
                 const saving = Math.max(0, (it.listPrice - it.price)) * it.quantity;
                 return (
                   <tr key={it.product} className="border-t border-gray-100 align-top">
-                    <td className="py-2">{it.name}</td>
+                    <td className="py-2"><ProductLink product={it.product}>{it.name}</ProductLink></td>
                     <td className="py-2"><input type="number" min={1} value={it.quantity} onChange={(e) => updateItem(idx, { quantity: Math.max(1, Number(e.target.value)) })} className="w-14 rounded border border-gray-300 px-2 py-1" /></td>
                     {/* Catalogue price — read-only anchor the rep negotiates down from */}
                     <td className="py-2 pt-3 text-right text-gray-500">₹{it.listPrice.toLocaleString()}</td>

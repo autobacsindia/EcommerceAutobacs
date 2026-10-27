@@ -9,6 +9,7 @@ import { staffKeys } from '@/hooks/queries/keys';
 import { deepDiscountLines, deepDiscountWarning, isDeepDiscount } from './offerGuard';
 import { errorMessage, rupees, type Quotation, type SalesOrder, type SalesProduct } from './types';
 import { mobileProblem, normalizeMobile } from './phone';
+import ProductLink from '@/components/staff/ProductLink';
 
 type Line = {
   key: string;
@@ -377,12 +378,14 @@ export default function NewSalesOrderForm({
               {search.data?.products.map((p) => (
                 <div key={p.id} className="border-b border-gray-100 p-3 last:border-0">
                   <div className="flex items-center gap-3">
-                    {p.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.image} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
-                    ) : <div className="h-10 w-10 shrink-0 rounded bg-gray-100" />}
+                    <ProductLink product={p.id} decorative>
+                      {p.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.image} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />
+                      ) : <div className="h-10 w-10 shrink-0 rounded bg-gray-100" />}
+                    </ProductLink>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-gray-900">{p.name}</p>
+                      <p className="truncate text-sm font-medium text-gray-900"><ProductLink product={p.id}>{p.name}</ProductLink></p>
                       <p className="text-xs text-gray-500">{p.sku}</p>
                     </div>
                     {p.variants.length === 0 && (
@@ -431,10 +434,13 @@ export default function NewSalesOrderForm({
               return (
                 <li key={l.key} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
-                    {l.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={l.image} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
-                    ) : <div className="h-12 w-12 shrink-0 rounded bg-gray-100" />}
+                    {/* Custom items have no productId, so ProductLink leaves them as plain text. */}
+                    <ProductLink product={l.productId} variantId={l.variantId} decorative>
+                      {l.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={l.image} alt="" className="h-12 w-12 shrink-0 rounded object-cover" />
+                      ) : <div className="h-12 w-12 shrink-0 rounded bg-gray-100" />}
+                    </ProductLink>
                     {l.custom ? (
                       <div className="min-w-0 flex-1">
                         <label className="sr-only" htmlFor={`name-${l.key}`}>Custom item name</label>
@@ -450,7 +456,9 @@ export default function NewSalesOrderForm({
                       </div>
                     ) : (
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-900">{l.name}</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          <ProductLink product={l.productId} variantId={l.variantId}>{l.name}</ProductLink>
+                        </p>
                         <p className="text-xs text-gray-500">Price {rupees(l.listPrice)}</p>
                       </div>
                     )}

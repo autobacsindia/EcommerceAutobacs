@@ -2,6 +2,9 @@
 import type { LineStage } from '@/components/staff/work/types';
 
 export type SalesOrderItem = {
+  /** Catalogue product (null for a custom item) — for the "open on the website" link. */
+  productId?: string | null;
+  variantId?: string | null;
   name: string;
   variantLabel: string | null;
   quantity: number;

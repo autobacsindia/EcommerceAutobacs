@@ -70,6 +70,7 @@ export interface OrderLineSourceItem {
   name?: string;
   image?: string;
   variantLabel?: string | null;
+  variantId?: string | null;
 }
 
 export interface OrderLineSource {
@@ -88,6 +89,8 @@ export interface OrderLine {
    *  what a picker reads off the shelf, so they live under one field. */
   sku: string | null;
   variantLabel: string | null;
+  /** Sale lines only — lets the admin "open on the website" link land on this model. */
+  variantId: string | null;
   quantity: number;
   unitPrice: number;
   lineTotal: number;
@@ -147,6 +150,7 @@ export const buildOrderLines = (
       image: item.image || product?.images?.[0]?.url || null,
       sku: product?.sku ?? null,
       variantLabel: item.variantLabel ?? null,
+      variantId: item.variantId ?? null,
       quantity,
       unitPrice,
       lineTotal: unitPrice * quantity,
@@ -168,6 +172,7 @@ export const buildOrderLines = (
         image: reward!.imageUrl || null,
         sku: reward!.sku || null,
         variantLabel: null,
+        variantId: null,
         // Always exactly one — the prize ladder awards a single unit.
         quantity: 1,
         unitPrice: 0,

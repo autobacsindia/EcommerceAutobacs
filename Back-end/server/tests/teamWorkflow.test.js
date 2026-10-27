@@ -187,6 +187,25 @@ describe('who can see and do what', () => {
   });
 });
 
+describe('product links', () => {
+  it('each line carries its product and variant, so the panel can open it on the website', async () => {
+    const p = await staff('procurement');
+    const product = new mongoose.Types.ObjectId();
+    const variant = new mongoose.Types.ObjectId();
+    const order = await paidOrder({ items: [
+      { product, variantId: variant, variantLabel: 'Black', name: 'Seat cover', price: 5000, quantity: 1 },
+      { product: new mongoose.Types.ObjectId(), name: 'Floor mat', price: 1000, quantity: 2 },
+    ] });
+
+    const view = await wf.getOrder(p, String(order._id));
+    expect(view.lines[0]).toMatchObject({ productId: String(product), variantId: String(variant) });
+    expect(view.lines[1].variantId).toBeNull();
+
+    const [row] = (await wf.listQueue(p, 'procurement')).orders;
+    expect(row.lines[0]).toMatchObject({ productId: String(product), variantId: String(variant) });
+  });
+});
+
 describe('in stock → supplier → proof → delivered', () => {
   it('runs the whole happy path through the real parcel machinery', async () => {
     const p = await staff('procurement');

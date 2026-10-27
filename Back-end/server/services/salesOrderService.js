@@ -110,6 +110,9 @@ function shape(o) {
     paymentStatus: o.paymentStatus,
     totalAmount: o.totalAmount,
     items: (o.items || []).map((i) => ({
+      // For the panel's "open on the website" link; null on a custom item.
+      productId: i.product ? String(i.product._id ?? i.product) : null,
+      variantId: i.variantId ? String(i.variantId) : null,
       name: i.name,
       variantLabel: i.variantLabel || null,
       quantity: i.quantity,

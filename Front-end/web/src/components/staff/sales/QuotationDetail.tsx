@@ -10,6 +10,7 @@ import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import CustomerBankCard from './CustomerBankCard';
 import HoldControl from './HoldControl';
+import ProductLink from '@/components/staff/ProductLink';
 import { whatsappNumber } from './PaymentLinkCard';
 import { errorMessage, quotationPdfHref, rupees, type Quotation } from './types';
 
@@ -173,7 +174,9 @@ export default function QuotationDetail({ id }: { id: string }) {
           {quote.items.map((l, i) => (
             <li key={i} className="flex items-start justify-between gap-4 p-4 text-sm">
               <div className="min-w-0">
-                <p className="font-medium text-gray-900">{l.variantLabel ? `${l.name} — ${l.variantLabel}` : l.name}</p>
+                <p className="font-medium text-gray-900">
+                  <ProductLink product={l.product} variantId={l.variantId}>{l.variantLabel ? `${l.name} — ${l.variantLabel}` : l.name}</ProductLink>
+                </p>
                 <p className="text-xs text-gray-500">
                   {l.quantity} × {rupees(l.price)}
                   {l.listPrice ? <span className="ml-1 line-through">{rupees(l.listPrice)}</span> : null}
