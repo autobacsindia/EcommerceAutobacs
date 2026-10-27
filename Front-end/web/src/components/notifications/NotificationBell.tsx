@@ -31,7 +31,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Bell, Volume2, VolumeX } from 'lucide-react';
 import { useWaitingWork } from '@/hooks/queries/useNotifications';
-import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
+import { useChatUnreadSplit } from '@/hooks/queries/useTeamChat';
 import PushToggle from './PushToggle';
 import { alert, arm, chime, muted as isMuted, setMuted } from '@/lib/notificationChime';
 
@@ -45,7 +45,9 @@ export default function NotificationBell({
   tone?: 'light' | 'dark';
 }) {
   const { data } = useWaitingWork();
-  const chatUnread = useChatUnreadTotal();
+  const unreadSplit = useChatUnreadSplit();
+  // Both kinds of chat unread still play the chat chime, as before the split.
+  const chatUnread = unreadSplit.chat + unreadSplit.updates;
   const [open, setOpen] = useState(false);
   const [quiet, setQuiet] = useState(false);
 
@@ -109,8 +111,19 @@ export default function NotificationBell({
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
+  /*
+    People's messages and automatic order updates are separate rows, each opening
+    its own tab: "Unread order updates" goes straight to the Order updates tab of
+    the space that got the latest one.
+  */
   const rows = [
-    ...(chatUnread > 0 ? [{ key: 'chat', label: 'Unread messages', count: chatUnread, href: chatHref }] : []),
+    ...(unreadSplit.chat > 0 ? [{ key: 'chat', label: 'Unread messages', count: unreadSplit.chat, href: chatHref }] : []),
+    ...(unreadSplit.updates > 0 ? [{
+      key: 'chat_updates',
+      label: 'Unread order updates',
+      count: unreadSplit.updates,
+      href: unreadSplit.updatesChannelId ? `${chatHref}?c=${unreadSplit.updatesChannelId}&t=updates` : chatHref,
+    }] : []),
     ...(data?.items ?? []),
   ];
 

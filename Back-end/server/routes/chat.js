@@ -247,10 +247,10 @@ router.get('/orders/recent', validateOrderPick, validateRequest, asyncHandler(as
   res.json({ success: true, orders: await listRecentOrders(req.query.q) });
 }));
 
-// POST /chat/channels/:id/read { seq }
+// POST /chat/channels/:id/read { seq, part? } — part: 'chat' | 'updates' | 'all' (default)
 router.post('/channels/:id/read', validateChannelIdParam, validateMarkRead, validateRequest,
   asyncHandler(async (req, res) => {
-    res.json({ success: true, ...(await markChannelRead(req.user, req.params.id, req.body.seq)) });
+    res.json({ success: true, ...(await markChannelRead(req.user, req.params.id, req.body.seq, req.body.part)) });
   }));
 
 // PATCH /chat/messages/:id { text } — edit your own message, within 15 minutes

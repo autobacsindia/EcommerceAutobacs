@@ -49,6 +49,7 @@ export const validateOrderPick = [
 
 export const validateMarkRead = [
   body('seq').isInt({ min: 0 }).withMessage('Invalid position'),
+  body('part').optional().isIn(['chat', 'updates', 'all']).withMessage('Invalid part'),
 ];
 
 export const validateCreateSpace = [

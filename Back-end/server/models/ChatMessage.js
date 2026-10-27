@@ -83,6 +83,14 @@ const ChatMessageSchema = new mongoose.Schema(
     channel: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatChannel', required: true },
     seq: { type: Number, required: true },
     kind: { type: String, enum: ['user', 'system'], default: 'user' },
+    /*
+      Which tab of a space shows it: 'updates' = the "Order updates" tab (every
+      automatic post, and a person's reply inside an order's update thread);
+      unset = Chat. Each tab has its own unread count and read position
+      (ChatReadState). Messages older than this field have it unset; for them
+      kind 'system' alone means updates.
+    */
+    lane: { type: String, enum: ['updates'], default: undefined },
     sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, // null for system posts
     // Not required: a message may be attachments only. chatService enforces that
     // a message has text, files, or both.

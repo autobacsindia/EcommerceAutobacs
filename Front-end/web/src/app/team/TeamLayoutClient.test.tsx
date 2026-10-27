@@ -9,7 +9,10 @@ import TeamLayoutClient from './TeamLayoutClient';
 let pathname = '/team';
 jest.mock('next/navigation', () => ({ usePathname: () => pathname, useRouter: () => ({ replace: jest.fn(), push: jest.fn() }) }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ logout: jest.fn() }) }));
-jest.mock('@/hooks/queries/useTeamChat', () => ({ useChatUnreadTotal: () => 0 }));
+jest.mock('@/hooks/queries/useTeamChat', () => ({
+  useChatUnreadTotal: () => 0,
+  useChatUnreadSplit: () => ({ chat: 0, updates: 0, updatesChannelId: null }),
+}));
 // The header now carries the notification bell. This file is about the NAV, so
 // the bell's own data is stubbed — its behaviour is covered in
 // components/notifications/NotificationBell.test.tsx.

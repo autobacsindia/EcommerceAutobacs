@@ -204,10 +204,14 @@ export default function TeamChat() {
 
   const selectedId = params.get('c');
   const selected = channels.find((c) => c.id === selectedId) ?? null;
+  // ?t=updates: opened from an order-update pop-up or the bell — start on Order updates.
+  const initialTab = params.get('t') === 'updates' ? 'updates' as const : undefined;
 
   const select = useCallback(
     (id: string | null) => {
       const q = new URLSearchParams(params.toString());
+      // Picking a conversation by hand opens the tab its unread calls for.
+      q.delete('t');
       if (id) q.set('c', id);
       else q.delete('c');
       router.replace(`${pathname}${q.toString() ? `?${q}` : ''}`, { scroll: false });
@@ -457,6 +461,7 @@ export default function TeamChat() {
           orderHref={orderHref}
           onBack={() => select(null)}
           onSearch={() => setSearching(selected.id)}
+          initialTab={initialTab}
         />
       ) : (
         <div className="hidden flex-1 flex-col items-center justify-center gap-2 rounded-2xl bg-white text-gray-500 md:flex">
