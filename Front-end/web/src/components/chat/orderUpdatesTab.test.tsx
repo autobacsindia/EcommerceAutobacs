@@ -32,6 +32,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
   useSendMessage: () => ({ mutate: jest.fn(), mutateAsync: jest.fn() }),
   useEditMessage: () => ({ mutateAsync: jest.fn() }),
   useDeleteMessage: () => ({ mutateAsync: jest.fn() }),
+  useReactToMessage: () => ({ mutate: jest.fn() }),
   useRecentOrders: () => ({ data: [], isLoading: false }),
 }));
 

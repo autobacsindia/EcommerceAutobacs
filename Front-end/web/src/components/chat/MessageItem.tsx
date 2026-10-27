@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Download, History, MessageSquareReply, Package, Pencil, Quote, RotateCcw, Trash2 } from 'lucide-react';
+import { Download, History, MessageSquareReply, Package, Pencil, Quote, RotateCcw, SmilePlus, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
+import EmojiPicker from './EmojiPicker';
 
 /**
  * Message text as PLAIN TEXT, with links and @mentions picked out.
@@ -153,6 +154,73 @@ function ThreadSummary({ m, meId, onOpen }: { m: ChatMessage; meId: string; onOp
   );
 }
 
+/** "Sana, Anu and you" — who put this emoji on. */
+export function reactorNames(userIds: string[], meId: string, peopleById: Map<string, ChatPerson>): string {
+  const others = userIds.filter((id) => id !== meId).map((id) => peopleById.get(id)?.name ?? 'Former member');
+  const names = userIds.includes(meId) ? [...others, 'you'] : others;
+  if (names.length <= 1) return names[0] ?? '';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * The emoji under a message. Tapping one you have put on takes it off; tapping
+ * someone else's adds yours. Hovering (or a long look on a phone) says who.
+ */
+function Reactions({
+  m,
+  meId,
+  peopleById,
+  onReact,
+  onAdd,
+}: {
+  m: ChatMessage;
+  meId: string;
+  peopleById: Map<string, ChatPerson>;
+  onReact?: (emoji: string, on: boolean) => void;
+  onAdd?: () => void;
+}) {
+  const list = m.reactions ?? [];
+  if (!list.length) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+      {list.map((r) => {
+        const mine = r.userIds.includes(meId);
+        const who = reactorNames(r.userIds, meId, peopleById);
+        return (
+          <button
+            key={r.emoji}
+            type="button"
+            disabled={!onReact}
+            onClick={() => onReact?.(r.emoji, !mine)}
+            aria-pressed={mine}
+            aria-label={`${r.emoji} ${r.count} — ${who}. ${mine ? 'Remove your reaction' : 'Add yours'}`}
+            title={`${who} reacted with ${r.emoji}`}
+            className={`inline-flex h-7 items-center gap-1 rounded-full border px-2 text-sm leading-none transition-colors ${
+              mine
+                ? 'border-emerald-600 bg-emerald-50 text-emerald-900'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
+            } disabled:cursor-default`}
+          >
+            <span className="text-base">{r.emoji}</span>
+            <span className="text-xs font-semibold tabular-nums">{r.count}</span>
+          </button>
+        );
+      })}
+      {onAdd && (
+        <button
+          type="button"
+          onClick={onAdd}
+          aria-label="Add a reaction"
+          title="Add a reaction"
+          className="grid h-7 w-7 place-items-center rounded-full border border-gray-200 bg-white text-gray-500 hover:border-gray-400 hover:text-gray-800"
+        >
+          <SmilePlus className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** The DOM id of a message row, so a quote can scroll to what it quotes. */
 export const messageDomId = (id: string) => `chat-msg-${id}`;
 
@@ -227,8 +295,9 @@ function EditHistory({ history }: { history: NonNullable<ChatMessage['editHistor
 
 /**
  * One message, Google Chat style: round avatar, name + team + time, the text
- * below, and a small action bar on hover (quote it, reply in a thread — and,
- * on your own message for 30 minutes, edit or delete it).
+ * below, emoji reactions under it, and a small action bar on hover (react,
+ * quote it, reply in a thread — and, on your own message for 30 minutes, edit
+ * or delete it).
  *
  * A deleted message reads "This message was deleted" for everyone except an
  * admin, who is sent its words and sees them marked as deleted. Which version
@@ -247,6 +316,7 @@ export default function MessageItem({
   onJumpTo,
   onEdit,
   onDelete,
+  onReact,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
@@ -265,6 +335,8 @@ export default function MessageItem({
   onEdit?: (m: ChatMessage, text: string) => Promise<unknown>;
   /** Delete your own message. Rejects with a message to show. */
   onDelete?: (m: ChatMessage) => Promise<unknown>;
+  /** Put your emoji on this message (`on`) or take it off. */
+  onReact?: (m: ChatMessage, emoji: string, on: boolean) => void;
 }) {
   const m = message;
   // The timeline is ordered by activity, so a thread that just moved sits under
@@ -285,6 +357,8 @@ export default function MessageItem({
   const live = !m.deleted && !m.pending && !m.failed;
   const canReply = !!onOpenThread && live;
   const canQuote = !!onQuote && live;
+  const canReact = !!onReact && live;
+  const [picking, setPicking] = useState(false);
 
   const mine = m.sender?.id === meId;
   const editable = useStillEditable(m.editableUntil);
@@ -444,6 +518,15 @@ export default function MessageItem({
             </div>
           )}
           {changeError && <p role="alert" className="mt-1 text-xs text-red-600">{changeError}</p>}
+          {!(m.deleted && !(m.text || m.attachments.length)) && (
+            <Reactions
+              m={m}
+              meId={meId}
+              peopleById={peopleById}
+              onReact={canReact ? (emoji, on) => onReact!(m, emoji, on) : undefined}
+              onAdd={canReact ? () => setPicking(true) : undefined}
+            />
+          )}
           {onOpenThread && <ThreadSummary m={m} meId={meId} onOpen={() => onOpenThread(m)} />}
 
           {m.failed && (
@@ -456,8 +539,30 @@ export default function MessageItem({
           )}
         </div>
 
-        {(canQuote || canReply || (canChange && !editing && (onEdit || onDelete))) && (
+        {picking && canReact && (
+          <EmojiPicker
+            className="absolute right-3 top-6"
+            onPick={(emoji) => {
+              const mine = (m.reactions ?? []).some((r) => r.emoji === emoji && r.userIds.includes(meId));
+              // Picking one you already put on leaves it on — the picker only ever adds.
+              if (!mine) onReact!(m, emoji, true);
+            }}
+            onClose={() => setPicking(false)}
+          />
+        )}
+        {(canQuote || canReply || canReact || (canChange && !editing && (onEdit || onDelete))) && (
           <div className="absolute -top-3 right-3 hidden items-center gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 shadow-md focus-within:flex group-hover:flex pointer-coarse:flex">
+            {canReact && (
+              <button
+                type="button"
+                onClick={() => setPicking(true)}
+                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
+                aria-label="Add reaction"
+                title="Add reaction"
+              >
+                <SmilePlus className="h-4 w-4" />
+              </button>
+            )}
             {canQuote && (
               <button
                 type="button"

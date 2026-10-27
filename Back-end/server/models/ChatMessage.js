@@ -78,6 +78,19 @@ const EditSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * One emoji on a message and who put it there. A person appears at most once per
+ * emoji; an emoji with nobody left is removed (chatRepository.setReaction does
+ * both in one atomic write, so two people reacting at once never lose a tap).
+ */
+const ReactionSchema = new mongoose.Schema(
+  {
+    emoji: { type: String, required: true, maxlength: 32 },
+    users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  },
+  { _id: false }
+);
+
 const ChatMessageSchema = new mongoose.Schema(
   {
     channel: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatChannel', required: true },
@@ -106,6 +119,9 @@ const ChatMessageSchema = new mongoose.Schema(
     mentionTeams: [{ type: String }],
     refs: { type: [RefSchema], default: [] },
     quote: { type: QuoteSchema, default: undefined },
+    // Emoji reactions, in the order each emoji was first used. Capped per
+    // message (chatService.MAX_REACTIONS_PER_MESSAGE). Unset until the first one.
+    reactions: { type: [ReactionSchema], default: undefined },
 
     /*
       Threads. A reply carries `threadRoot`; a top-level message does not.

@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { chatKeys } from '@/hooks/queries/keys';
-import { upsertReply, useDeleteMessage, useEditMessage, useSendMessage, useThread } from '@/hooks/queries/useTeamChat';
+import { upsertReply, useDeleteMessage, useEditMessage, useReactToMessage, useSendMessage, useThread } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, SendVars, ThreadData } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
 import Composer, { mentionableTeams } from './Composer';
@@ -44,6 +44,7 @@ export default function ThreadPanel({
   const send = useSendMessage(channel.id);
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
+  const react = useReactToMessage(channel.id, meId);
   const [quote, setQuote] = useState<ChatMessage | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const replies = data?.replies ?? [];
@@ -107,6 +108,7 @@ export default function ThreadPanel({
       onJumpTo={(id) => document.getElementById(`chat-msg-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
       onEdit={(msg, text) => edit.mutateAsync({ id: msg.id, text })}
       onDelete={(msg) => remove.mutateAsync(msg.id)}
+      onReact={(msg, emoji, on) => react.mutate({ message: msg, emoji, on })}
     />
   );
 
