@@ -39,6 +39,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
   useForwardMessage: () => ({ mutateAsync: jest.fn(), isPending: false, isError: false }),
   useChatChannels: () => ({ data: [] }),
   usePins: () => ({ data: [] }),
+  liveStatus: () => null,
   usePinMessage: () => ({ mutate: jest.fn() }),
   useSetNotify: () => ({ mutate: jest.fn(), isError: false }),
   notifyOf: (c: { notify?: string }) => c.notify ?? 'all',

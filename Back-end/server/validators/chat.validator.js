@@ -57,6 +57,12 @@ export const validatePin = [
   body('on').optional().isBoolean({ strict: true }).withMessage('on must be true or false'),
 ];
 
+/** My chat status: a short line, optionally until a time. */
+export const validateStatus = [
+  body('text').isString().withMessage('Write a status').bail().isLength({ max: 200 }).withMessage('Status is too long'),
+  body('until').optional({ values: 'null' }).isISO8601().withMessage('Invalid date'),
+];
+
 export const validateMessagePage = [
   query('before').optional().isInt({ min: 1 }).withMessage('Invalid cursor'),
   query('after').optional().isInt({ min: 0 }).withMessage('Invalid cursor'),
