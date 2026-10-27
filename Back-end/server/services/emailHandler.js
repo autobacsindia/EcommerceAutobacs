@@ -13,6 +13,7 @@
  */
 
 import postmark from 'postmark';
+import { MAIL_PURPOSE, isCareersMailbox } from '../utils/careersMailbox.js';
 
 const { ServerClient } = postmark;
 
@@ -126,9 +127,11 @@ class EmailHandler {
    *        (optional), e.g. In-Reply-To / References for threading and
    *        `Auto-Submitted: auto-generated` so other autoresponders do not reply
    *        to our automated mail. Empty values are dropped.
+   * @param {string} options.purpose - What the email is for. Only `careers`
+   *        (MAIL_PURPOSE.CAREERS) may reach the careers mailbox — see utils/careersMailbox.js.
    * @returns {Promise<Object>} - Result with success status and details
    */
-  async sendEmail({ to, subject, text, html, messageStream, attachments, fromEmail, fromName, replyTo, headers }) {
+  async sendEmail({ to, subject, text, html, messageStream, attachments, fromEmail, fromName, replyTo, headers, purpose }) {
     // Check if service is enabled
     if (!this.isEnabled) {
       return {
@@ -147,6 +150,20 @@ class EmailHandler {
         success: false,
         skipped: true,
         error: 'Recipient is an internal company account with no mailbox',
+        provider: 'postmark',
+        retryable: false
+      };
+    }
+
+    // The careers mailbox takes employment email only. Checked here, at the one
+    // place every email passes, so no store email can reach it — including ones
+    // written after this rule. Not retryable: it is a decision, not a failure.
+    if (purpose !== MAIL_PURPOSE.CAREERS && isCareersMailbox(to)) {
+      this.log(`[EmailHandler] Not sent to ${to}: the careers mailbox receives employment email only | Subject: ${subject}`);
+      return {
+        success: false,
+        skipped: true,
+        error: 'The careers mailbox receives employment email only',
         provider: 'postmark',
         retryable: false
       };
@@ -550,6 +567,7 @@ class EmailHandler {
       to, subject, text, html,
       fromEmail: process.env.CAREERS_FROM_EMAIL || undefined,
       fromName: 'ROAVION Automotive',
+      purpose: MAIL_PURPOSE.CAREERS,
     });
   }
 
@@ -570,6 +588,7 @@ class EmailHandler {
       to, subject, text, html,
       fromEmail: process.env.CAREERS_FROM_EMAIL || undefined,
       fromName: 'ROAVION Automotive',
+      purpose: MAIL_PURPOSE.CAREERS,
     });
   }
 

@@ -64,7 +64,7 @@ async function paidOrder({ name = 'Ravi', item = 'Part 1' } = {}) {
   return Order.findById(order._id).lean();
 }
 
-beforeEach(() => { sent.length = 0; delete process.env.OVERDUE_REPORT_TO; });
+beforeEach(() => { sent.length = 0; delete process.env.OVERDUE_REPORT_TO; delete process.env.CAREERS_FROM_EMAIL; });
 
 describe('overdue orders email', () => {
   it('nothing overdue: info@ still gets a short "nothing overdue" report, nobody else', async () => {
@@ -112,6 +112,19 @@ describe('overdue orders email', () => {
     process.env.OVERDUE_REPORT_TO = 'ops-lead@example.com';
     await sendOverdueReport(Date.now());
     expect(sent.map((m) => m.to)).toEqual(['ops-lead@example.com']);
+  });
+
+  it('never goes to the careers mailbox — not as the report address, not as a team member', async () => {
+    process.env.CAREERS_FROM_EMAIL = 'careers@autobacsindia.com';
+    await person('procurement', { email: 'Careers@AutobacsIndia.com' });
+    const buyer = await person('procurement');
+    await paidOrder();
+
+    process.env.OVERDUE_REPORT_TO = 'careers@autobacsindia.com';
+    const r = await sendOverdueReport(Date.now() + 30 * H);
+    expect(r.total).toBe(1);
+    expect(r.summarySent).toBe(false);
+    expect(sent.map((m) => m.to)).toEqual([buyer.email]);
   });
 
   it('escapes customer and product names in the HTML', () => {

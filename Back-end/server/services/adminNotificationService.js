@@ -21,6 +21,7 @@ import userRepository from '../repositories/userRepository.js';
 import { RETURN_REASON_LABELS } from '../config/returnPolicy.js';
 import emailHandler from './emailHandler.js';
 import companyInfo from '../config/company.js';
+import { MAIL_PURPOSE, careersAlertRecipients, isCareersMailbox } from '../utils/careersMailbox.js';
 // Same customer-facing reference the invoice PDF prints, so an alert and the
 // customer's invoice always name the order identically.
 // Order reference for admin alerts. Uses the stable order number (WooCommerce
@@ -44,7 +45,9 @@ const adminRecipients = () => {
     process.env.ADMIN_NOTIFICATION_EMAILS ||
     process.env.ADMIN_NOTIFICATION_EMAIL ||
     companyInfo.email;
-  return [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))];
+  // Store alerts never go to the careers mailbox, even if it is on this list
+  // (emailHandler refuses it anyway; leaving it out keeps that from reading as a failure).
+  return [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))].filter((to) => !isCareersMailbox(to));
 };
 
 /** Public site base, trailing slash trimmed (for admin/product deep-links). */
@@ -136,10 +139,13 @@ const alertBanner = (title, subtitle) =>
  * job retries (a retry may re-send to already-delivered admins — acceptable for
  * low-volume internal alerts).
  */
-const sendToAdmins = async ({ subject, text, html }, context) => {
+const sendToAdmins = (message, context) => sendToInboxes(adminRecipients(), message, context);
+
+/** Same contract as sendToAdmins, for an explicit recipient list and email purpose. */
+const sendToInboxes = async (recipients, { subject, text, html }, context, purpose) => {
   let anySent = false;
-  for (const to of adminRecipients()) {
-    const result = await emailHandler.sendEmail({ to, subject, text, html });
+  for (const to of recipients) {
+    const result = await emailHandler.sendEmail({ to, subject, text, html, purpose });
     if (result?.success) anySent = true;
     else if (!result?.fallbackToConsole) {
       throw new Error(`Admin alert email failed (${context} → ${to}): ${result?.error || 'unknown error'}`);
@@ -302,7 +308,11 @@ export const emailAdminCareersAlert = async (applicationId) => {
   const htmlRows = fields.map(([k, v]) => [k, escapeHtml(String(v ?? '')).replace(/\n/g, '<br>')]);
   const html = renderEmail(subject, intro, htmlRows, 'Review application', adminLink);
 
-  return sendToAdmins({ subject, text, html }, `careers application ${applicationId}`);
+  // The careers mailbox when one is configured; otherwise the admin inboxes, as before.
+  const careers = careersAlertRecipients();
+  return careers.length
+    ? sendToInboxes(careers, { subject, text, html }, `careers application ${applicationId}`, MAIL_PURPOSE.CAREERS)
+    : sendToAdmins({ subject, text, html }, `careers application ${applicationId}`);
 };
 
 /**
@@ -710,7 +720,8 @@ const salesContacts = async (order) => {
 /** Send one message to each staff recipient (de-duplicated). Never throws. */
 const sendToStaff = async (people, { subject, text, html }, context) => {
   const recipients = new Map();
-  for (const u of people) if (u?.email) recipients.set(String(u.email).toLowerCase(), u);
+  // A staff login on the careers mailbox still gets no store email (see utils/careersMailbox.js).
+  for (const u of people) if (u?.email && !isCareersMailbox(u.email)) recipients.set(String(u.email).toLowerCase(), u);
   if (recipients.size === 0) return { status: 'no-recipients' };
   let anySent = false;
   for (const to of recipients.keys()) {

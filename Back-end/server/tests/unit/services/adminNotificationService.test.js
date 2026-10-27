@@ -10,6 +10,7 @@ const mockReviewFindById = jest.fn();
 const mockConsultFindById = jest.fn();
 const mockOrderFindById = jest.fn();
 const mockSendEmail = jest.fn();
+const mockApplicationFindById = jest.fn();
 
 /** Fake Mongoose query: chainable .populate(), awaitable to `result`. */
 const query = (result) => ({
@@ -22,6 +23,9 @@ jest.unstable_mockModule('../../../repositories/reviewRepository.js', () => ({
 }));
 jest.unstable_mockModule('../../../repositories/consultationRepository.js', () => ({
   default: { findById: mockConsultFindById },
+}));
+jest.unstable_mockModule('../../../repositories/jobApplicationRepository.js', () => ({
+  default: { findById: mockApplicationFindById },
 }));
 jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({
   default: { findById: mockOrderFindById },
@@ -44,12 +48,15 @@ const {
   emailAdminOrderPlacedAlert,
   emailAdminOrderCancelledAlert,
   emailAdminRefundFailedAlert,
+  emailAdminCareersAlert,
 } = await import('../../../services/adminNotificationService.js');
 
 beforeEach(() => {
   jest.clearAllMocks();
   delete process.env.ADMIN_NOTIFICATION_EMAIL;
   delete process.env.ADMIN_NOTIFICATION_EMAILS;
+  delete process.env.CAREERS_NOTIFICATION_EMAILS;
+  delete process.env.CAREERS_FROM_EMAIL;
   process.env.FRONTEND_URL = 'https://autobacsindia.com';
 });
 
@@ -350,3 +357,60 @@ describe('emailAdminRefundFailedAlert', () => {
     }
   );
 });
+
+describe('the careers mailbox: employment email only', () => {
+  const application = {
+    _id: 'app1', fullName: 'Nikhil R', roleTitle: 'Service Advisor', email: 'nikhil@example.com',
+    phone: '9876500000', city: 'Kochi', howFound: 'LinkedIn', whatYouBring: 'Five years at a dealership',
+  };
+
+  test('store alerts skip the careers mailbox even when it is on the admin list', async () => {
+    process.env.ADMIN_NOTIFICATION_EMAILS = 'support@autobacsindia.com, Careers@AutobacsIndia.com';
+    process.env.CAREERS_FROM_EMAIL = 'careers@autobacsindia.com';
+    mockOrderFindById.mockResolvedValue(makeOrder());
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    expect(await emailAdminOrderPlacedAlert('o1')).toEqual({ status: 'sent' });
+    expect(mockSendEmail.mock.calls.map(([m]) => m.to)).toEqual(['support@autobacsindia.com']);
+  });
+
+  test('a new job application goes to the careers mailbox only, marked as careers mail', async () => {
+    process.env.ADMIN_NOTIFICATION_EMAILS = 'support@autobacsindia.com';
+    process.env.CAREERS_NOTIFICATION_EMAILS = 'careers@autobacsindia.com, hr@autobacsindia.com';
+    mockApplicationFindById.mockResolvedValue(application);
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    expect(await emailAdminCareersAlert('app1')).toEqual({ status: 'sent' });
+    const calls = mockSendEmail.mock.calls.map(([m]) => m);
+    expect(calls.map((m) => m.to)).toEqual(['careers@autobacsindia.com', 'hr@autobacsindia.com']);
+    expect(calls.every((m) => m.purpose === 'careers')).toBe(true);
+    expect(calls[0].subject).toBe('New job application — Nikhil R (Service Advisor)');
+  });
+
+  test('with only the careers sender set, the application alert goes there', async () => {
+    process.env.CAREERS_FROM_EMAIL = 'careers@autobacsindia.com';
+    mockApplicationFindById.mockResolvedValue(application);
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminCareersAlert('app1');
+    expect(mockSendEmail.mock.calls.map(([m]) => m.to)).toEqual(['careers@autobacsindia.com']);
+  });
+
+  test('no careers mailbox configured: the application alert goes to the admin inboxes, as before', async () => {
+    process.env.ADMIN_NOTIFICATION_EMAILS = 'support@autobacsindia.com';
+    mockApplicationFindById.mockResolvedValue(application);
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminCareersAlert('app1');
+    expect(mockSendEmail.mock.calls.map(([m]) => m.to)).toEqual(['support@autobacsindia.com']);
+  });
+
+  test('a careers alert the provider rejects still throws, so the queue retries it', async () => {
+    process.env.CAREERS_NOTIFICATION_EMAILS = 'careers@autobacsindia.com';
+    mockApplicationFindById.mockResolvedValue(application);
+    mockSendEmail.mockResolvedValue({ success: false, error: 'Postmark 500' });
+
+    await expect(emailAdminCareersAlert('app1')).rejects.toThrow(/careers application app1/);
+  });
+});
+

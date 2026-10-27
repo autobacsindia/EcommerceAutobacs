@@ -18,6 +18,7 @@ import { collectStuck, STUCK_AFTER_HOURS } from './chatStuckDigest.js';
 import { orderNumber } from './invoiceService.js';
 import { STAGE, STAGE_LABELS } from '../utils/teamWorkflow.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
+import { isCareersMailbox } from '../utils/careersMailbox.js';
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -145,7 +146,8 @@ export async function sendOverdueReport(now = Date.now()) {
 
   const summary = buildReport(rowsByTeam, REPORT_TEAMS, now);
   let summarySent = false;
-  if (validEmail(to)) {
+  // Never to the careers mailbox — employment email only (utils/careersMailbox.js).
+  if (validEmail(to) && !isCareersMailbox(to)) {
     const res = await emailHandler.sendEmail({ to, subject: summary.subject, text: summary.text, html: summary.html });
     summarySent = !!res?.success;
   }
@@ -156,7 +158,7 @@ export async function sendOverdueReport(now = Date.now()) {
     if (!rows.length) continue;
     const people = (await userRepository.findActiveStaff(team))
       .map((u) => String(u.email || '').trim().toLowerCase())
-      .filter((e) => validEmail(e) && e !== to.toLowerCase());
+      .filter((e) => validEmail(e) && e !== to.toLowerCase() && !isCareersMailbox(e));
     const unique = [...new Set(people)];
     if (!unique.length) continue;
     const mail = buildReport(rowsByTeam, [team], now);
