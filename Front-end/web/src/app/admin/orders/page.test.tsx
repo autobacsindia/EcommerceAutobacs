@@ -80,6 +80,13 @@ jest.mock('@/components/orders/OrderFiltersPanel', () => {
   );
 });
 
+// The salesmen behind the "Sold by" filter (and the per-row dropdown).
+jest.mock('@/components/orders/SoldByCell', () => ({
+  __esModule: true,
+  ...jest.requireActual('@/components/orders/SoldByCell'),
+  useSellers: () => ({ data: [{ id: 's1', name: 'Sam', isHead: false }, { id: 'h1', name: 'Hari', isHead: true }] }),
+}));
+
 jest.mock('@/components/orders/BulkActionsBar', () => {
   return ({ selectedCount }: { selectedCount: number }) => (
     <div data-testid="bulk-actions">
@@ -382,6 +389,39 @@ describe('AdminOrdersPage', () => {
       expect(apiClient.get).toHaveBeenCalledWith(
         expect.stringContaining('search=test-order')
       );
+    });
+  });
+
+  describe('"Sold by" filter', () => {
+    const lastListUrl = () => (apiClient.get as jest.Mock).mock.calls.map((c) => String(c[0])).filter((u) => u.includes('?')).pop() || '';
+
+    it('offers all orders, website orders and each salesman, and asks the server for the choice', async () => {
+      renderPage();
+      const select = await screen.findByLabelText('Sold by');
+      expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['All orders', 'Website orders', 'Sam', 'Hari']);
+      expect(lastListUrl()).not.toContain('seller=');
+
+      fireEvent.change(select, { target: { value: 'website' } });
+      await waitFor(() => expect(lastListUrl()).toContain('seller=website'));
+      expect(mockReplace).toHaveBeenLastCalledWith(expect.stringContaining('seller=website'), { scroll: false });
+
+      fireEvent.change(select, { target: { value: 's1' } });
+      await waitFor(() => expect(lastListUrl()).toContain('seller=s1'));
+
+      fireEvent.change(select, { target: { value: '' } });
+      await waitFor(() => expect(lastListUrl()).not.toContain('seller='));
+    });
+
+    it('starts from the link it was opened with, and keeps it when other filters change', async () => {
+      (useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams('seller=h1'));
+      renderPage();
+      expect(await screen.findByLabelText('Sold by')).toHaveValue('h1');
+      await waitFor(() => expect(lastListUrl()).toContain('seller=h1'));
+
+      fireEvent.click(screen.getByTestId('apply-filter-btn'));
+      await waitFor(() => expect(lastListUrl()).toContain('search=test-order'));
+      expect(lastListUrl()).toContain('seller=h1');
+      expect(mockReplace).toHaveBeenLastCalledWith(expect.stringMatching(/search=test-order.*seller=h1|seller=h1.*search=test-order/), { scroll: false });
     });
   });
 

@@ -234,6 +234,12 @@ function AdminOrdersPageInner() {
    * cannot be caught by that, and it matches how the hide-unpaid filter is handled.
    */
 
+  /**
+   * "Sold by": '' = every order, 'website' = placed on the website, or a salesman's id.
+   * Owned here (not in OrderFiltersPanel) for the same reason as the toggles above.
+   */
+  const [seller, setSeller] = useState(() => searchParams.get('seller') || '');
+
   // Initialize filters from URL params
   const [filters, setFilters] = useState<OrderFilters>(() => ({
     search: searchParams.get('search') || '',
@@ -262,6 +268,7 @@ function AdminOrdersPageInner() {
     endDate: filters.endDate || undefined,
     minAmount: filters.minAmount || undefined,
     maxAmount: filters.maxAmount || undefined,
+    seller: seller || undefined,
   });
   const { data, isFetching, isError, refetch } = useQuery({
     queryKey: listKey,
@@ -276,6 +283,7 @@ function AdminOrdersPageInner() {
       if (filters.endDate) params.append('endDate', filters.endDate);
       if (filters.minAmount) params.append('minAmount', filters.minAmount);
       if (filters.maxAmount) params.append('maxAmount', filters.maxAmount);
+      if (seller) params.append('seller', seller);
       params.append('page', String(currentPage));
       params.append('limit', String(pageSize));
       params.append('sortBy', sortField);
@@ -431,10 +439,16 @@ function AdminOrdersPageInner() {
   const handleFiltersChange = (newFilters: OrderFilters) => {
     setFilters(newFilters);
     setCurrentPage(1); // Reset to first page
-    updateURL(newFilters);
+    updateURL(newFilters, seller);
   };
 
-  const updateURL = (newFilters: OrderFilters) => {
+  const handleSellerChange = (next: string) => {
+    setSeller(next);
+    setCurrentPage(1);
+    updateURL(filters, next);
+  };
+
+  const updateURL = (newFilters: OrderFilters, sellerValue: string) => {
     const params = new URLSearchParams();
     
     if (newFilters.search) params.set('search', newFilters.search);
@@ -445,6 +459,7 @@ function AdminOrdersPageInner() {
     if (newFilters.endDate) params.set('endDate', newFilters.endDate);
     if (newFilters.minAmount) params.set('minAmount', newFilters.minAmount);
     if (newFilters.maxAmount) params.set('maxAmount', newFilters.maxAmount);
+    if (sellerValue) params.set('seller', sellerValue);
     
     // replace, not push: filters commit on a debounce while the admin types, so pushing
     // would stack a history entry per typing pause and make Back walk backwards through
@@ -698,8 +713,29 @@ function AdminOrdersPageInner() {
 
       {/* Stats Summary */}
       <div className="mb-6 flex items-center justify-between text-sm text-gray-600">
-        <div>
-          Showing {orders.length} of {pagination.total} orders
+        <div className="flex flex-wrap items-center gap-4">
+          <span>Showing {orders.length} of {pagination.total} orders</span>
+          <label className="flex items-center gap-2">
+            <span>Sold by:</span>
+            <select
+              value={seller}
+              onChange={(e) => handleSellerChange(e.target.value)}
+              className="border border-gray-300 rounded px-2 py-1"
+              aria-label="Sold by"
+            >
+              <option value="">All orders</option>
+              <option value="website">Website orders</option>
+              {(sellers.data?.length ?? 0) > 0 && (
+                <optgroup label="Salesman">
+                  {sellers.data!.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </optgroup>
+              )}
+              {/* A salesman from a shared link who no longer sells: still selectable, by id. */}
+              {seller && seller !== 'website' && sellers.data && !sellers.data.some((s) => s.id === seller) && (
+                <option value={seller}>Salesman (no longer selling)</option>
+              )}
+            </select>
+          </label>
         </div>
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-2">
