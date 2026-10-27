@@ -6,7 +6,17 @@ import { Loader2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
-import { TASK_PRIORITIES, newClientId, type Assignee, type Task, type TaskPriority } from './types';
+import { TASK_PRIORITIES, isPastDay, newClientId, type Assignee, type Task, type TaskPriority } from './types';
+
+/** Shown under a due date that has already passed. */
+export function PastDueWarning({ dueOn }: { dueOn: string }) {
+  if (!isPastDay(dueOn)) return null;
+  return (
+    <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+      This due date has already passed, so the task will show as <strong>late</strong> straight away. Pick a later date if that is not what you meant.
+    </p>
+  );
+}
 
 type PickedOrder = { id: string; code: string };
 type OrderOption = { id: string; code: string; customer: string };
@@ -40,7 +50,7 @@ export function OrderPicker({ value, onChange }: { value: PickedOrder | null; on
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Order number or customer (optional)"
+        placeholder="Link an order — type its number or the customer's name (optional)"
         aria-label="Link an order"
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
       />
@@ -121,7 +131,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
         maxLength={200}
         required
         autoFocus
-        placeholder="What needs doing?"
+        placeholder="What needs doing? e.g. Call Bosch about order #51234"
         aria-label="Title"
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
       />
@@ -130,7 +140,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
         onChange={(e) => set({ description: e.target.value })}
         maxLength={4000}
         rows={3}
-        placeholder="Notes (optional)"
+        placeholder="More details (optional)"
         aria-label="Notes"
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
       />
@@ -157,6 +167,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
           <input type="date" value={form.dueOn} onChange={(e) => set({ dueOn: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
         </label>
       </div>
+      <PastDueWarning dueOn={form.dueOn} />
       <OrderPicker value={order} onChange={setOrder} />
       {choices.length <= 1 && (
         <p className="text-xs text-gray-500">Team heads and the admin give tasks to others. Tasks you add here are for you.</p>

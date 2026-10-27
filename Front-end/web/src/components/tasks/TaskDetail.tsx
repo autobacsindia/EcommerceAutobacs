@@ -8,7 +8,7 @@ import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage } from '@/components/staff/sales/types';
-import { OrderPicker, useAssignees } from './TaskForm';
+import { OrderPicker, PastDueWarning, useAssignees } from './TaskForm';
 import {
   PRIORITY_BADGE, STATUS_BADGE, TASK_PRIORITIES, TASK_STATUSES, formatDueDay, isConflict, newClientId, orderHrefFor,
   type CommentPage, type Task, type TaskComment, type TaskPriority, type TaskStatus,
@@ -126,6 +126,7 @@ function EditForm({ task, saving, onSave, onCancel }: {
           <input type="date" value={f.dueOn} onChange={(e) => setF({ ...f, dueOn: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
         </label>
       </div>
+      {f.dueOn !== (task.dueOn || '') && <PastDueWarning dueOn={f.dueOn} />}
       <OrderPicker value={order} onChange={setOrder} />
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>
@@ -246,7 +247,7 @@ export default function TaskDetail({ id, base }: { id: string; base: string }) {
           <div>
             <dt className="text-xs text-gray-500">Due</dt>
             <dd className={task.overdue ? 'font-semibold text-red-600' : task.dueToday ? 'font-semibold text-amber-700' : 'text-gray-900'}>
-              {task.dueOn ? `${task.overdue ? 'Overdue · ' : task.dueToday ? 'Today · ' : ''}${formatDueDay(task.dueOn)}` : 'No due date'}
+              {task.dueOn ? `${task.overdue ? 'Late · ' : task.dueToday ? 'Today · ' : ''}${formatDueDay(task.dueOn)}` : 'No due date'}
             </dd>
           </div>
           <div>

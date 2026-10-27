@@ -89,6 +89,13 @@ export const newClientId = () =>
 /** The API refused an edit because someone else changed the task first. */
 export const isConflict = (e: unknown) => (e as { status?: number })?.status === 409;
 
+/** Today's calendar day in India, YYYY-MM-DD — what "overdue" is measured against. */
+export const todayIST = (now: Date = new Date()) =>
+  new Date(now.getTime() + (5 * 60 + 30) * 60_000).toISOString().slice(0, 10);
+
+/** A due day that has already gone by (the task would be overdue the moment it is saved). */
+export const isPastDay = (ymd: string, today: string = todayIST()) => !!ymd && ymd < today;
+
 /** "15 Jan" / "15 Jan 2027" for a YYYY-MM-DD due day (no timezone shift: it is a day, not an instant). */
 export function formatDueDay(ymd: string | null): string {
   if (!ymd) return '';

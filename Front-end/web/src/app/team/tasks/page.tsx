@@ -13,7 +13,7 @@ export default function TeamTasksPage() {
   return (
     <div className="max-w-4xl">
       <h1 className="text-2xl font-bold text-gray-900">Tasks</h1>
-      <p className="mb-6 text-sm text-gray-500">Work given to people in the team, with a due date and a status. Open a task to comment on it.</p>
+      <p className="mb-6 text-sm text-gray-500">A shared to-do list: who has to do what, and by when.</p>
       <Suspense fallback={null}>
         <TaskList base="/team/tasks" canSeeTeam={user?.staff?.isHead === true} />
       </Suspense>
