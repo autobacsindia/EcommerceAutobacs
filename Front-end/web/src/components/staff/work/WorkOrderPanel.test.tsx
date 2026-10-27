@@ -249,6 +249,42 @@ describe('WorkOrderPanel', () => {
     });
   });
 
+  describe('operations: courier progress on a parcel in transit', () => {
+    const parcel = {
+      id: 's1', sequence: 1, status: 'shipped', courier: 'Delhivery', trackingNumber: 'DL1', shippedAt: null, deliveredAt: null,
+      items: [{ name: 'Snorkel', quantity: 1 }], photoUrl: null, canMarkDelivered: true, canAddStep: true, stepCount: 2,
+      steps: [
+        { status: 'in_transit' as const, label: 'In transit', note: 'Reached Kochi', at: '2026-10-27T05:00:00Z', by: 'Omar' },
+        { status: 'picked_up' as const, label: 'Picked up', note: '', at: '2026-10-26T05:00:00Z', by: 'Omar' },
+      ],
+    };
+
+    it('lists the updates, newest first, and posts a new one with the count it saw', async () => {
+      get.mockResolvedValue({ success: true, order: { ...base, parcels: [parcel] } });
+      post.mockResolvedValue({ success: true, order: base });
+      renderPanel();
+
+      const list = await screen.findByRole('list', { name: 'Updates for parcel 1' });
+      expect(list).toHaveTextContent(/In transit · Reached Kochi/);
+      expect(list).toHaveTextContent(/Omar/);
+
+      expect(screen.queryByRole('button', { name: 'Save update' })).not.toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Parcel 1 status'), { target: { value: 'delivery_failed' } });
+      fireEvent.change(screen.getByLabelText('Parcel 1 note'), { target: { value: ' Customer not at home ' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save update' }));
+
+      await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/work/orders/o1/parcels/s1/steps',
+        { status: 'delivery_failed', note: 'Customer not at home', expectedSteps: 2 }));
+    });
+
+    it('no update form without the permission, or once delivered', async () => {
+      get.mockResolvedValue({ success: true, order: { ...base, parcels: [{ ...parcel, canAddStep: false }] } });
+      renderPanel();
+      await screen.findByRole('list', { name: 'Updates for parcel 1' });
+      expect(screen.queryByLabelText('Parcel 1 status')).not.toBeInTheDocument();
+    });
+  });
+
   it('gives the sales person a WhatsApp message with the tracking number', async () => {
     get.mockResolvedValue({
       success: true,

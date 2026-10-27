@@ -45,6 +45,7 @@ import {
   validateDispatchOwnStock,
   validateWorkLineOnly,
   validateEditParcel,
+  validateParcelStep,
   validateCustomerDecision,
   validateRefundReview,
   validateRefundRetry,
@@ -70,6 +71,7 @@ import {
   reviewRefund,
   retryRefund,
   markDelivered,
+  addParcelStep,
   undoDelivered,
 } from '../services/teamWorkflowService.js';
 import {
@@ -540,6 +542,12 @@ router.post('/work/orders/:id/refunds/:cancellationId/send', validateRefundRetry
 // @route  POST /staff/work/orders/:id/delivered  { shipmentId? } — operations
 router.post('/work/orders/:id/delivered', validateMarkDelivered, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, order: await markDelivered(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/parcels/:shipmentId/steps  { status, note?, expectedSteps } — operations: courier progress
+router.post('/work/orders/:id/parcels/:shipmentId/steps', validateParcelStep, validateRequest, asyncHandler(async (req, res) => {
+  const { status, note, expectedSteps } = req.body;
+  res.json({ success: true, order: await addParcelStep(req.user, req.params.id, req.params.shipmentId, { status, note, expectedSteps }, req) });
 }));
 
 // @route  POST /staff/work/orders/:id/undo-delivered  { shipmentId } — operations / admin: back in transit

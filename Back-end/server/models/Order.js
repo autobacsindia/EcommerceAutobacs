@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { offlineRefundFields } from "./shared/offlineRefundFields.js";
+import { PARCEL_STEP_VALUES, MAX_STEP_NOTE } from "../utils/parcelSteps.js";
 
 const OrderSchema = new mongoose.Schema({
   user: {
@@ -750,7 +751,24 @@ const OrderSchema = new mongoose.Schema({
     shippedAt: Date,
     deliveredAt: Date,
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    notes: String
+    notes: String,
+    /*
+      Courier progress recorded by operations while the parcel is in transit
+      (team panel): picked up → in transit → out for delivery, or delivery failed.
+      The customer sees it under the parcel (without who recorded it). "Delivered"
+      is not a step — see utils/parcelSteps.js. Newest MAX_PARCEL_STEPS kept.
+      `stepCount` is the compare-and-set token: it only ever grows, so a double
+      press — or two people at once — adds ONE step.
+    */
+    trackingSteps: [{
+      status: { type: String, enum: PARCEL_STEP_VALUES, required: true },
+      note: { type: String, trim: true, maxlength: MAX_STEP_NOTE },
+      at: { type: Date, required: true },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      byName: String,
+      _id: false
+    }],
+    stepCount: Number
   }],
 
   /**

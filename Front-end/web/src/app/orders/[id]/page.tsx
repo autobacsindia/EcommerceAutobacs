@@ -26,6 +26,7 @@ import OrderDetailSkeleton from '@/components/skeletons/OrderDetailSkeleton';
 import { formatDateIST, formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
 import { buildOrderLines, variantDisplayName } from '@/lib/orderLines';
 import OrderParcels from '@/components/orders/OrderParcels';
+import ParcelSteps, { type ParcelStep } from '@/components/orders/ParcelSteps';
 import {
   canReturnItem,
   deliveredAtForItem,
@@ -124,6 +125,7 @@ interface OrderDetail {
     lines?: Array<{ itemId: string; quantity: number }>;
     includesReward?: boolean;
     deliveredAt?: string | null;
+    trackingSteps?: ParcelStep[];
   }>;
   /**
    * Lines cancelled before delivery, with the refund for each. Already on the wire —
@@ -611,6 +613,8 @@ export default function OrderDetailPage() {
                 </div>
               )}
             </div>
+            {/* Courier progress from the operations team, while the one parcel is on its way. */}
+            {order.shipments?.[0]?.status === 'shipped' && <ParcelSteps steps={order.shipments[0].trackingSteps} />}
           </div>
         )}
 

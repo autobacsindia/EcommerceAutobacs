@@ -1327,6 +1327,27 @@ class OrderRepository extends BaseRepository {
     ).lean();
   }
 
+  /**
+   * Add a courier step to a parcel still in transit, mirrored onto the order's
+   * tracking timeline. Compare-and-set on the parcel's `stepCount` (what the person
+   * saw): null when the parcel moved on or someone else added a step first.
+   */
+  async pushShipmentStepIf(orderId, shipmentId, expectedCount, { step, trackingEvent, event, maxSteps }) {
+    const count = expectedCount > 0 ? expectedCount : { $in: [0, null] };
+    return Order.findOneAndUpdate(
+      { _id: orderId, shipments: { $elemMatch: { _id: shipmentId, status: 'shipped', stepCount: count } } },
+      {
+        $push: {
+          'shipments.$.trackingSteps': { $each: [step], $slice: -maxSteps },
+          trackingEvents: { $each: [trackingEvent], $slice: -200 },
+          'workflow.history': { $each: [event], $slice: -300 },
+        },
+        $inc: { 'shipments.$.stepCount': 1 },
+      },
+      { new: true },
+    ).lean();
+  }
+
   /** Append a workflow history event (actions not tied to one line: shipped, delivered). */
   async pushWorkflowEvent(orderId, event) {
     return Order.updateOne(

@@ -8,6 +8,9 @@
  *     panel uses (/staff/work/.../photo), which streams the bytes after checking
  *     who is asking
  *   - everyone else (the customer's own order pages) never sees the ref at all
+ *
+ * `trackingSteps` (courier progress from the team panel) carry who recorded them;
+ * the customer gets the step, the time and the note — never the staff member.
  */
 
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
@@ -18,10 +21,13 @@ export const proofPhotoPath = (orderId, shipmentId) =>
 /** One parcel, shaped for the viewer. */
 export function shipmentForViewer(shipment, { orderId, isAdmin = false } = {}) {
   if (!shipment || typeof shipment !== 'object') return shipment;
-  const { proofPhoto, ...rest } = shipment;
+  const { proofPhoto, stepCount, ...rest } = shipment;
+  if (!isAdmin && Array.isArray(rest.trackingSteps)) {
+    rest.trackingSteps = rest.trackingSteps.map(({ status, note, at }) => ({ status, ...(note && { note }), at }));
+  }
   return isAdmin && proofPhoto?.publicId
-    ? { ...rest, proofPhotoUrl: proofPhotoPath(orderId, shipment._id) }
-    : rest;
+    ? { ...rest, proofPhotoUrl: proofPhotoPath(orderId, shipment._id), stepCount }
+    : (isAdmin ? { ...rest, stepCount } : rest);
 }
 
 /** Every parcel on an order, shaped for the viewer. */

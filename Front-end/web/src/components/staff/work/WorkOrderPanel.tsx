@@ -10,7 +10,7 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import CustomerBankCard from '@/components/staff/sales/CustomerBankCard';
 import { whatsappNumber } from '@/components/staff/sales/PaymentLinkCard';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
-import { shrinkPhoto, STAGE_TONE, type LineAction, type WorkOrder } from './types';
+import { shrinkPhoto, STAGE_TONE, PARCEL_STEP_OPTIONS, type LineAction, type ParcelStepStatus, type WorkOrder } from './types';
 import LineSupplierPayment, { useOrderSupplierPayments } from '@/components/payments/OrderSupplierPayments';
 import { displayEmail } from '@/lib/internalEmail';
 
@@ -78,6 +78,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const [editParcel, setEditParcel] = useState<string | null>(null);
   const [parcelFix, setParcelFix] = useState({ courier: '', tracking: '' });
   const [parcelPhoto, setParcelPhoto] = useState<File | null>(null);
+  // Operations: the courier step being added to one parcel.
+  const [stepFor, setStepFor] = useState<{ parcelId: string; status: ParcelStepStatus | ''; note: string } | null>(null);
   const [noteFor, setNoteFor] = useState<{ itemId: string; kind: 'reject' } | null>(null);
   const [note, setNote] = useState('');
 
@@ -100,7 +102,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const act = useMutation({
     mutationFn: ({ path, body }: { path: string; body: unknown }) =>
       apiClient.post<OrderResponse>(`/staff/work/orders/${orderId}${path}`, body),
-    onSuccess: (res) => { done(res); setNoteFor(null); setNote(''); },
+    onSuccess: (res) => { done(res); setNoteFor(null); setNote(''); setStepFor(null); },
     onError: (e) => setError(errorMessage(e, 'That did not work. Please try again.')),
   });
   // Correct a parcel's dispatch details (any time while it is in transit).
@@ -286,6 +288,39 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                       </button>
                     )}
                   </div>
+                  {(p.steps?.length ?? 0) > 0 && (
+                    <ol className="space-y-0.5 border-l-2 border-sky-200 pl-2 pt-1" aria-label={`Updates for parcel ${p.sequence}`}>
+                      {p.steps!.map((s, i) => (
+                        <li key={`${s.at}-${i}`} className={`text-xs ${i === 0 ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
+                          {s.label}{s.note && ` · ${s.note}`}
+                          <span className="font-normal text-gray-500"> — {formatDateTimeIST(s.at)}{s.by && ` · ${s.by}`}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  {p.canAddStep && (
+                    <form className="flex flex-wrap items-center gap-2 pt-1" aria-label={`Update parcel ${p.sequence}`}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (stepFor?.parcelId !== p.id || !stepFor.status) return;
+                        act.mutate({ path: `/parcels/${p.id}/steps`, body: { status: stepFor.status, note: stepFor.note.trim(), expectedSteps: p.stepCount ?? 0 } });
+                      }}>
+                      <select className={`${input} max-w-[11rem]`} aria-label={`Parcel ${p.sequence} status`}
+                        value={stepFor?.parcelId === p.id ? stepFor.status : ''}
+                        onChange={(e) => setStepFor({ parcelId: p.id, status: e.target.value as ParcelStepStatus | '', note: stepFor?.parcelId === p.id ? stepFor.note : '' })}>
+                        <option value="">Update status…</option>
+                        {PARCEL_STEP_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      {stepFor?.parcelId === p.id && stepFor.status && (
+                        <>
+                          <input className={`${input} max-w-[14rem]`} maxLength={120} aria-label={`Parcel ${p.sequence} note`}
+                            placeholder={stepFor.status === 'delivery_failed' ? 'Why? (e.g. customer not at home)' : 'Note (optional, e.g. city)'}
+                            value={stepFor.note} onChange={(e) => setStepFor({ ...stepFor, note: e.target.value })} />
+                          <button type="submit" disabled={busy} className={secondary}>Save update</button>
+                        </>
+                      )}
+                    </form>
+                  )}
                   {editParcel === p.id && (
                     <form className="space-y-2 pt-2" aria-label={`Edit dispatch details for parcel ${p.sequence}`}
                       onSubmit={(e) => { e.preventDefault(); editParcelMutation.mutate(p.id); }}>

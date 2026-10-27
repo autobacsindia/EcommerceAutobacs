@@ -9,7 +9,8 @@
  *   sales       : out of stock → asks the customer: wait for stock, or refund
  *   accounts    : approves (or sends back) a refund the customer asked for, and an
  *                 approval SENDS it (Razorpay); a failed send is retried from here too
- *   operations  : follows the parcel and marks it delivered
+ *   operations  : follows the parcel — picked up, in transit, out for delivery,
+ *                 delivery failed (shown to the customer) — and marks it delivered
  *   admin       : can do everything above; the admin Refunds page still works too
  *
  * ── ONE SET OF RECORDS ──────────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
 import { readListFilters, rowMatches } from '../utils/orderListFilters.js';
 import { SHIPMENT_STATUS, rewardShipped } from '../utils/orderFulfilment.js';
+import { PARCEL_STEP_VALUES, PARCEL_STEP_LABELS, TRACKING_EVENT_STATUS, MAX_PARCEL_STEPS, MAX_STEP_NOTE } from '../utils/parcelSteps.js';
 import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
 import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
 import { assertNoPendingSupplierPayment, openSupplierPaymentFor } from './paymentRequestService.js';
@@ -195,6 +197,7 @@ const HISTORY_LABELS = {
   shipped: 'Supplier proof uploaded — shipped',
   shipped_own: 'Dispatched from our warehouse',
   delivered: 'Marked delivered',
+  parcel_step: 'Parcel update',
   delivery_undone: 'Delivery undone — back in transit',
   payment_pending: 'Supplier payment requested — Payment Pending',
   payment_cleared: 'Supplier payment cancelled',
@@ -248,6 +251,12 @@ function detail(u, o) {
       // Marked delivered by mistake: operations (or the admin) puts it back in transit.
       canUndoDelivered: s.status === SHIPMENT_STATUS.DELIVERED && can.operations(u),
       canEdit: mayEditShipment(u, s),
+      // Courier progress, newest first; operations adds to it while in transit.
+      steps: (s.trackingSteps || []).slice().reverse().map((t) => ({
+        status: t.status, label: PARCEL_STEP_LABELS[t.status] || t.status, note: t.note || '', at: t.at, by: t.byName || '',
+      })),
+      stepCount: s.stepCount || 0,
+      canAddStep: s.status === SHIPMENT_STATUS.SHIPPED && can.operations(u),
     })),
     cancellations: (o.cancellations || []).map((c) => ({
       id: idOf(c._id),
@@ -1027,6 +1036,48 @@ export async function retryRefund(actor, orderId, cancellationId, req) {
   const line = (order.workflow?.lines || []).find((l) => idOf(l.cancellationId) === String(cancellationId));
   const result = await sendRefund(actor, orderId, cancellationId, line?.itemId, req);
   if (!result.success) throw fail(result.message || 'The refund could not be sent.', result.statusCode || 502);
+  return getOrder(actor, orderId);
+}
+
+/**
+ * Operations: record where a parcel in transit has got to — picked up, in transit,
+ * out for delivery, or delivery failed — with an optional short note (a city, the
+ * courier's remark). The customer sees it under the parcel. It never changes the
+ * order's status: "Delivered" is markDelivered.
+ *
+ * Compare-and-set on the parcel's step count the person saw, so a double press or
+ * two people at once add ONE step; the loser is told to refresh.
+ */
+export async function addParcelStep(actor, orderId, shipmentId, { status, note, expectedSteps } = {}, req) {
+  if (!can.operations(actor)) throw fail('Only the operations team can update a parcel.', 403);
+  if (!PARCEL_STEP_VALUES.includes(status)) throw fail('Choose picked up, in transit, out for delivery or delivery failed.', 400);
+  const expected = Number(expectedSteps);
+  if (!Number.isInteger(expected) || expected < 0) throw fail(RACE, 409);
+  const text = String(note || '').trim().slice(0, MAX_STEP_NOTE);
+
+  const o = await orderRepository.findForWorkflow(orderId);
+  if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
+  const parcel = (o.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
+  if (!parcel) throw fail('Parcel not found on this order.', 404);
+  if (parcel.status !== SHIPMENT_STATUS.SHIPPED) throw fail('Only a parcel in transit can be updated.', 409);
+
+  const at = new Date();
+  const label = PARCEL_STEP_LABELS[status];
+  const updated = await orderRepository.pushShipmentStepIf(orderId, shipmentId, expected, {
+    step: { status, ...(text && { note: text }), at, by: actor._id, byName: actor.name },
+    trackingEvent: {
+      timestamp: at,
+      status: TRACKING_EVENT_STATUS[status],
+      ...(text && { location: text }),
+      description: (o.shipments || []).length > 1 ? `Parcel ${parcel.sequence}: ${label}` : label,
+      scannedBy: 'Autobacs India',
+    },
+    event: event(actor, 'parcel_step', { note: [`Parcel ${parcel.sequence}: ${label}`, text].filter(Boolean).join(' · ') }),
+    maxSteps: MAX_PARCEL_STEPS,
+  });
+  if (!updated) throw fail('This parcel was just updated by someone else (or delivered). Refresh and try again.', 409);
+
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_parcel_step', shipmentId: String(shipmentId), status });
   return getOrder(actor, orderId);
 }
 

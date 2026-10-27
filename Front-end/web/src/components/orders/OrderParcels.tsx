@@ -6,6 +6,7 @@ import { Package, Truck, CheckCircle2, Clock } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { formatLongDateIST } from '@/lib/datetime';
+import ParcelSteps, { type ParcelStep } from './ParcelSteps';
 
 /**
  * Customer — "where are my things?" for an order that shipped in more than one box.
@@ -32,6 +33,7 @@ interface Shipment {
   carrier?: { name?: string; trackingUrl?: string };
   estimatedDelivery?: string;
   deliveredAt?: string;
+  trackingSteps?: ParcelStep[];
 }
 
 interface RemainingLine {
@@ -186,6 +188,7 @@ export default function OrderParcels({ orderId, itemNames, rewardName, cardClass
                     ? <span>Expected {formatLongDateIST(shipment.estimatedDelivery)}</span>
                     : null}
               </div>
+              {shipment.status === 'shipped' && <ParcelSteps steps={shipment.trackingSteps} />}
             </div>
           );
         })}
