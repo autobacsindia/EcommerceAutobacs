@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ChevronDown, FileText, Loader2, RefreshCw, UserPlus } from 'lucide-react';
 import apiClient from '@/lib/api-client';
@@ -11,6 +11,7 @@ import HoldControl from './HoldControl';
 import PaymentLinkCard from './PaymentLinkCard';
 import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
 import { STAGE_TONE } from '@/components/staff/work/types';
+import OrderListFilters, { NO_FILTERS, filterQuery, isFiltered, type ListFilters } from '@/components/staff/OrderListFilters';
 import { errorMessage, quotationHref, rupees, type SalesOrder, type SalesOrderPage } from './types';
 
 type Mode = 'sales' | 'paid';
@@ -233,12 +234,15 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
 export default function SalesOrdersList({ mode, stage }: { mode: Mode; stage?: Stage }) {
   // The seller's list is split into active orders and those "On hold — customer thinking".
   const [view, setView] = useState<'active' | 'on_hold'>('active');
+  // Search / filter / sort: the paid lists (Order processing, Delivered).
+  const [filters, setFilters] = useState<ListFilters>(NO_FILTERS);
   const base = mode === 'paid' ? '/staff/orders/paid' : '/staff/sales/orders';
   const endpoint = mode === 'paid'
-    ? (stage ? `${base}?stage=${stage}` : base)
+    ? `${base}?${stage ? `stage=${stage}` : ''}${filterQuery(filters)}`.replace('?&', '?').replace(/\?$/, '')
     : `${base}?view=${view}`;
   const q = useInfiniteQuery({
-    queryKey: mode === 'paid' ? staffKeys.paidOrders(stage) : staffKeys.salesOrderList(view),
+    queryKey: mode === 'paid' ? staffKeys.paidOrders(stage, filters) : staffKeys.salesOrderList(view),
+    placeholderData: keepPreviousData,
     queryFn: ({ pageParam }) => {
       // The endpoint may already carry ?stage, so the cursor joins with & not ?.
       const url = pageParam
@@ -255,6 +259,7 @@ export default function SalesOrdersList({ mode, stage }: { mode: Mode; stage?: S
   const orders = q.data?.pages.flatMap((p) => p.orders) ?? [];
   const showSeller = mode === 'paid' || q.data?.pages[0]?.scope === 'team';
 
+  const bar = mode === 'paid' ? <OrderListFilters value={filters} onChange={setFilters} /> : null;
   const tabs = mode !== 'paid' && (
     <div className="flex flex-wrap gap-2" role="tablist" aria-label="Which orders">
       {([['active', 'Active'], ['on_hold', 'On hold']] as const).map(([key, label]) => (
@@ -267,16 +272,16 @@ export default function SalesOrdersList({ mode, stage }: { mode: Mode; stage?: S
   );
 
   if (q.isPending) {
-    return <div className="space-y-3">{tabs}<p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading orders…</p></div>;
+    return <div className="space-y-3">{tabs}{bar}<p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading orders…</p></div>;
   }
   if (q.isError) {
     return <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load orders.')}</p>;
   }
   if (orders.length === 0) {
     return (
-      <div className="space-y-3">{tabs}
+      <div className="space-y-3">{tabs}{bar}
       <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-        {mode !== 'paid'
+        {mode === 'paid' && isFiltered(filters) ? 'No orders match these filters.' : mode !== 'paid'
           ? (view === 'on_hold'
             ? 'Nothing on hold. Use “On hold – customer thinking” on an unpaid order when a customer needs time.'
             : 'No orders yet. Orders appear here when a client accepts a quotation.')
@@ -292,6 +297,7 @@ export default function SalesOrdersList({ mode, stage }: { mode: Mode; stage?: S
 
   return (
     <div className="space-y-3">
+      {bar}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {tabs || <span />}
         <button type="button" onClick={() => q.refetch()} disabled={q.isFetching}

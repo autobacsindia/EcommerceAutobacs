@@ -109,9 +109,18 @@ export const validateCursorQuery = [
  * vs "Delivered"). Absent means every paid order, which is what the list did
  * before the split — so an older client keeps working unchanged.
  */
+// Search / filter / sort on the team order lists (utils/orderListFilters.js).
+const listFilterQueries = [
+  query('q').optional().isString().isLength({ max: 60 }).withMessage('Search is too long'),
+  query('step').optional().isString().isLength({ max: 40 }).withMessage('Invalid stage'),
+  query('source').optional().isIn(['website', 'sales']).withMessage('Invalid source'),
+  query('sort').optional().isIn(['newest', 'oldest']).withMessage('Invalid sort'),
+];
+
 export const validatePaidOrdersQuery = [
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
   query('stage').optional().isIn(['processing', 'delivered']).withMessage('Invalid stage'),
+  ...listFilterQueries,
 ];
 
 export const validateAttributionList = [
@@ -244,6 +253,7 @@ export const validateSalesOrder = [
 export const validateWorkQueue = [
   query('queue').isIn(['procurement', 'decisions', 'refunds', 'deliveries']).withMessage('Unknown work list'),
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+  ...listFilterQueries,
 ];
 
 export const validateWorkOrder = [
