@@ -88,6 +88,7 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 | `ELASTICSEARCH_NODE` / `_USERNAME` / `_PASSWORD` | dev index (or disabled) | prod ES | dev reindex must not touch prod index |
 | `CLOUDINARY_*` | dev cloud / `dev/` folder | prod | don't pollute prod media |
 | `POSTMARK_SERVER_TOKEN` / `POSTMARK_FROM_EMAIL` / `POSTMARK_MESSAGE_STREAM` | token + `noreply@autobacsindia.com` (or disabled) | prod token/sender | dev sends must not hit sender reputation |
+| `CAREERS_NOTIFICATION_EMAILS` / `CAREERS_FROM_EMAIL` | unset | the careers mailbox | the careers mailbox gets **employment email only** — job-application alerts go there, every store email skips it (`utils/careersMailbox.js`) |
 | `SENTRY_DSN` / `SENTRY_ENVIRONMENT` | unset / `development` | prod DSN / `production` | keep dev noise out of prod |
 | `SLACK_WEBHOOK_URL` | **unset locally** | prod webhook | dev 5xx must not page the team |
 | `COOKIE_DOMAIN` / `COOKIE_SAMESITE` | unset / `lax` | `.autobacsindia.com` / set at cutover | cross-subdomain cookies only in prod |
