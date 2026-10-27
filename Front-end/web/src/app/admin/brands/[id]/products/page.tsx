@@ -1,5 +1,6 @@
 'use client';
 
+import ProductLink from '@/components/staff/ProductLink';
 import { useState, useEffect, use } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
@@ -226,7 +227,7 @@ export default function BrandProductsPage({ params }: { params: Promise<{ id: st
                       </div>
                     )}
                     <div className="text-sm font-medium text-gray-900 line-clamp-2">
-                      {product.name}
+                      <ProductLink product={product._id}>{product.name}</ProductLink>
                     </div>
                   </div>
                 </td>

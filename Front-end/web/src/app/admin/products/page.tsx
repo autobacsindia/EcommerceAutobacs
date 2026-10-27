@@ -1,5 +1,6 @@
 'use client';
 
+import ProductLink from '@/components/staff/ProductLink';
 import { type StockStatus, getStockLabel } from '@/lib/stock';
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -365,7 +366,10 @@ function AdminProductsPageInner() {
                 <tr key={product._id} className={`hover:bg-gray-50 ${product.isActive === false ? 'bg-gray-50/60' : ''}`}>
                   <td className="px-4 py-3">
                     <div className="flex items-start gap-2">
-                      <div className="text-sm font-medium text-gray-900 line-clamp-2" title={product.name}>{product.name}</div>
+                      <div className="text-sm font-medium text-gray-900 line-clamp-2" title={product.name}>
+                        {/* A draft has no website page — its name stays plain text. */}
+                        {product.isActive === false ? product.name : <ProductLink product={product._id}>{product.name}</ProductLink>}
+                      </div>
                       {product.productType === 'variable' && (
                         <span className="shrink-0 mt-0.5 px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
                           Variable{product.variantCount ? ` · ${product.variantCount}` : ''}

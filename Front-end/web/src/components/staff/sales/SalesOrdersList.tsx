@@ -8,6 +8,7 @@ import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 import HoldControl from './HoldControl';
+import ProductLink from '@/components/staff/ProductLink';
 import PaymentLinkCard from './PaymentLinkCard';
 import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
 import { STAGE_TONE } from '@/components/staff/work/types';
@@ -106,7 +107,8 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
               {order.items.map((i, idx) => (
                 <tr key={idx}>
                   <td className="py-2 pr-2 text-gray-800">
-                    {i.name}{i.variantLabel ? ` — ${i.variantLabel}` : ''} <span className="text-gray-500">× {i.quantity}</span>
+                    <ProductLink product={i.productId} variantId={i.variantId}>{i.name}{i.variantLabel ? ` — ${i.variantLabel}` : ''}</ProductLink>{' '}
+                    <span className="text-gray-500">× {i.quantity}</span>
                   </td>
                   <td className="py-2 text-right whitespace-nowrap">
                     {i.listPrice && <span className="mr-2 text-xs text-gray-400 line-through">{rupees(i.listPrice)}</span>}

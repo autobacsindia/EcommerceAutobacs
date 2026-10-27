@@ -142,6 +142,9 @@ function row(o, view) {
       const wl = view?.lines.find((l) => l.itemId === idOf(it._id));
       return {
         itemId: idOf(it._id),
+        // For the panel's "open on the website" link (resolved to a slug on click).
+        productId: it.product ? idOf(it.product) : null,
+        variantId: it.variantId ? idOf(it.variantId) : null,
         name: it.name,
         variantLabel: it.variantLabel || null,
         quantity: it.quantity,

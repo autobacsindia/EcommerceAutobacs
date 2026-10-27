@@ -192,6 +192,8 @@ describe('custom items (not in the catalogue)', () => {
     expect(result.order.totalAmount).toBe(1500 + 9000 + 15999);
 
     const saved = await Order.findById(result.order.id).lean();
+    // The panel's "open on the website" link: catalogue lines carry their product, custom ones none.
+    expect(result.order.items.map((i) => i.productId)).toEqual([null, String(product._id), null]);
     expect(saved.items[0]).toMatchObject({ custom: true, listPrice: null });
     expect(saved.items[0].product).toBeUndefined();
     expect(String(saved.items[1].product)).toBe(String(product._id));

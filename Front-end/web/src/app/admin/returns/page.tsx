@@ -1,5 +1,6 @@
 'use client';
 
+import ProductLink from '@/components/staff/ProductLink';
 import { useState, useEffect, useCallback } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
@@ -345,7 +346,7 @@ function OfflineReturnModal({ onClose, onCreated }: { onClose: () => void; onCre
                         <label className={`flex items-center gap-3 text-sm ${returnable ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
                           <input type="checkbox" disabled={!returnable} checked={!!sel} onChange={() => toggleLine(key, item.quantity)} />
                           <span className="flex-1">
-                            <span className="font-medium">{item.product?.name || item.name}</span>
+                            <span className="font-medium"><ProductLink product={item.product}>{item.product?.name || item.name}</ProductLink></span>
                             {/*
                               WHICH MODEL. Two lines of the same variable product differ
                               ONLY by this, so without it the operator picking a line to
@@ -528,7 +529,7 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                           : <Package className="h-6 w-6 text-gray-400" />}
                       </div>
                       <div className="text-sm">
-                        <p className="font-medium">{item.product.name}</p>
+                        <p className="font-medium"><ProductLink product={item.product}>{item.product.name}</ProductLink></p>
                         {/* Snapshotted at request time; absent on pre-snapshot requests. */}
                         {item.variantLabel && (
                           <p className="mt-0.5">

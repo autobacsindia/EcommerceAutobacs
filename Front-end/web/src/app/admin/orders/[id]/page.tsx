@@ -1,5 +1,6 @@
 'use client';
 
+import ProductLink from '@/components/staff/ProductLink';
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -570,7 +571,7 @@ function AdminOrderDetailPageInner() {
                     <div className="flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className={`font-medium ${line.voided ? 'text-red-800 line-through' : ''}`}>
-                          {line.name ?? '[Product no longer available]'}
+                          <ProductLink product={line.product} variantId={line.variantId}>{line.name ?? '[Product no longer available]'}</ProductLink>
                         </h3>
                         {isReward && (
                           line.voided ? (

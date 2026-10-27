@@ -1,5 +1,6 @@
 'use client';
 
+import ProductLink from '@/components/staff/ProductLink';
 /*
   Lives outside the route file because a Next.js `page.tsx` may only export a
   default plus the framework's own fields — a named export there fails the build.
@@ -298,7 +299,7 @@ export default function ProductTierPanel({ campaignId }: { campaignId: string })
                           />
                         </td>
                         <td className="px-3 py-2 text-zinc-200">
-                          {p.name}
+                          <ProductLink product={p.id}>{p.name}</ProductLink>
                           {p.brand && <span className="ml-2 text-xs text-zinc-500">{p.brand}</span>}
                         </td>
                         <td className="px-3 py-2 text-zinc-300">
@@ -388,7 +389,7 @@ export default function ProductTierPanel({ campaignId }: { campaignId: string })
               <tbody className="divide-y divide-zinc-800">
                 {data.rows.map((row) => (
                   <tr key={row._id}>
-                    <td className="px-3 py-2 text-zinc-200">{row.product?.name ?? '—'}</td>
+                    <td className="px-3 py-2 text-zinc-200">{row.product ? <ProductLink product={row.product}>{row.product.name}</ProductLink> : '—'}</td>
                     <td className="px-3 py-2">
                       <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-200">
                         {tierLabel(tiers, row.tierCode)} · {tierPercent(tiers, row.tierCode)}%
