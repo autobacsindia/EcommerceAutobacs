@@ -9,6 +9,7 @@ import { body, param, query } from 'express-validator';
 import mongoose from 'mongoose';
 import { STAFF_TEAM_VALUES, STAFF_USERNAME_PATTERN, STAFF_USERNAME_HINT, GTM_SUB_ROLE_VALUES } from '../config/staff.js';
 import { isCommonPassword, COMMON_PASSWORD_MESSAGE } from '../config/commonPasswords.js';
+import { PARCEL_STEP_VALUES, MAX_STEP_NOTE } from '../utils/parcelSteps.js';
 
 const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v);
 
@@ -289,6 +290,14 @@ export const validateEditParcel = [
   param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
   body('courierName').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Courier name is too long'),
   body('trackingNumber').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Tracking number is too long'),
+];
+
+export const validateParcelStep = [
+  ...validateWorkOrder,
+  param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
+  body('status').isIn(PARCEL_STEP_VALUES).withMessage('Choose picked up, in transit, out for delivery or delivery failed'),
+  body('note').optional({ values: 'falsy' }).isString().trim().isLength({ max: MAX_STEP_NOTE }).withMessage(`Keep the note under ${MAX_STEP_NOTE} characters`),
+  body('expectedSteps').isInt({ min: 0 }).withMessage('Refresh the order and try again').toInt(),
 ];
 
 // Multipart fields arrive as strings; item ids as a JSON array or comma list.

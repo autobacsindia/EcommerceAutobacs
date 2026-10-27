@@ -2,6 +2,15 @@
 
 export type WorkQueue = 'procurement' | 'decisions' | 'refunds' | 'deliveries';
 
+/** Courier progress on a parcel in transit (Back-end utils/parcelSteps.js). */
+export type ParcelStepStatus = 'picked_up' | 'in_transit' | 'out_for_delivery' | 'delivery_failed';
+export const PARCEL_STEP_OPTIONS: { value: ParcelStepStatus; label: string }[] = [
+  { value: 'picked_up', label: 'Picked up' },
+  { value: 'in_transit', label: 'In transit' },
+  { value: 'out_for_delivery', label: 'Out for delivery' },
+  { value: 'delivery_failed', label: 'Delivery failed' },
+];
+
 export type LineStage =
   | 'stock_check' | 'to_ship' | 'own_stock' | 'payment_pending' | 'with_supplier' | 'customer_decision'
   | 'accounts_approval' | 'shipped' | 'delivered' | 'cancelled';
@@ -70,6 +79,11 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     canMarkDelivered: boolean;
     /** Dispatch details can still be corrected (any time while the parcel is in transit). */
     canEdit?: boolean;
+    /** Courier progress, newest first (operations adds while in transit). */
+    steps?: { status: ParcelStepStatus; label: string; note: string; at: string; by: string }[];
+    /** Compare-and-set token: sent back with a new step so a double press adds one. */
+    stepCount?: number;
+    canAddStep?: boolean;
   }[];
   cancellations: {
     id: string;

@@ -66,6 +66,7 @@ export const ACTION_LABELS = Object.freeze({
   refund_approval_failed: 'Refund approval failed',
   refund_approved: 'Refund approved',
   delivered: 'Delivered',
+  parcel_step: 'Parcel update (courier progress)',
 });
 
 function assertAdmin(actor) {

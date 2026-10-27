@@ -195,3 +195,24 @@ it('dispatches from our warehouse over HTTP: courier + tracking required, no pho
   expect(res.body.order.parcels[0]).toMatchObject({ courier: 'Delhivery', trackingNumber: 'DL777', status: 'shipped', photoUrl: null });
   expect(res.body.order.lines[0].stage).toBe('shipped');
 });
+
+it('records a courier step over HTTP — operations only, a known step, with the count it saw', async () => {
+  const order = await paidOrder();
+  const itemId = String(order.items[0]._id);
+  const procurement = await login('staff', { team: 'procurement' });
+  const operations = await login('staff', { team: 'operations' });
+  const customer = await login('customer');
+  await request(app).post(`${BASE}/staff/work/orders/${order._id}/lines/${itemId}/stock`).set(as(procurement)).send({ stock: 'own_stock' }).expect(200);
+  const shipped = await request(app).post(`${BASE}/staff/work/orders/${order._id}/dispatch-own`).set(as(procurement))
+    .field('courierName', 'Delhivery').field('trackingNumber', 'DL1').expect(200);
+  const path = `${BASE}/staff/work/orders/${order._id}/parcels/${shipped.body.order.parcels[0].id}/steps`;
+
+  expect((await request(app).post(path).set(as(operations)).send({ status: 'delivered', expectedSteps: 0 })).status).toBe(400);
+  expect((await request(app).post(path).set(as(operations)).send({ status: 'in_transit' })).status).toBe(400);
+  expect((await request(app).post(path).set(as(customer)).send({ status: 'in_transit', expectedSteps: 0 })).status).toBe(403);
+  expect((await request(app).post(path).set(as(procurement)).send({ status: 'in_transit', expectedSteps: 0 })).status).toBe(403);
+
+  const res = await request(app).post(path).set(as(operations)).send({ status: 'in_transit', note: 'Kochi hub', expectedSteps: 0 }).expect(200);
+  expect(res.body.order.parcels[0]).toMatchObject({ stepCount: 1, steps: [{ status: 'in_transit', label: 'In transit', note: 'Kochi hub' }] });
+  expect((await request(app).post(path).set(as(operations)).send({ status: 'out_for_delivery', expectedSteps: 0 })).status).toBe(409);
+});
