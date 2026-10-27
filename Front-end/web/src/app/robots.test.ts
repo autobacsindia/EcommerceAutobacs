@@ -59,14 +59,19 @@ describe('robots.txt', () => {
     expect(new Set(lists).size).toBe(1)
   })
 
-  // Legacy WooCommerce action URLs must stay blocked, and the patterns must stay
-  // anchored to the parameter — a bare '/*cart' would block the real /products pages.
-  it('blocks legacy WooCommerce action parameters without touching real pages', () => {
-    const disallow = ruleFor('*')!.disallow as string[]
-    for (const p of ['/*?add-to-cart=', '/*&add-to-cart=', '/*remove_item=', '/*_wpnonce=']) {
-      expect(disallow).toContain(p)
+  // Legacy WooCommerce URLs and internal search results must stay CRAWLABLE. A
+  // Disallow hides the middleware's 301 (WooCommerce params) and its
+  // `X-Robots-Tag: noindex` (search) from Google, which then keeps the URLs in its
+  // index indefinitely — the Search Console state this rule was written to clear.
+  it('lets Google crawl legacy WooCommerce params and search, so it sees the 301 / noindex', () => {
+    for (const r of rules()) {
+      const disallow = r.disallow as string[]
+      for (const blocked of disallow) {
+        expect(blocked).not.toMatch(/add-to-cart|per_page|layout|remove_item|_wpnonce|search|\?s=/)
+      }
     }
-    for (const live of ['/products', '/categories', '/model', '/brands', '/blog', '/']) {
+    const disallow = ruleFor('*')!.disallow as string[]
+    for (const live of ['/products', '/categories', '/model', '/brands', '/blog', '/consultation', '/']) {
       expect(disallow).not.toContain(live)
     }
   })
@@ -76,12 +81,5 @@ describe('robots.txt', () => {
     for (const path of ['/admin', '/api/', '/checkout', '/profile', '/festive', '/onam', '/team', '/staff-invite']) {
       expect(disallow).toContain(path)
     }
-  })
-
-  it('keeps crawlers off internal search results', () => {
-    const disallow = rules().find((r) => r.userAgent === '*')!.disallow as string[]
-    for (const p of ['/products/search', '/*?search=', '/*?s=']) expect(disallow).toContain(p)
-    // The real catalogue stays crawlable.
-    for (const live of ['/products', '/categories', '/brands']) expect(disallow).not.toContain(live)
   })
 })

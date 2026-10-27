@@ -10,13 +10,17 @@ interface ConsultSpecialistBannerProps {
 /**
  * "Consult a specialist" nudge for product pages. High-intent conversion prompt
  * for buyers unsure whether a part fits their build — routes to the consultation
- * booking flow. Deep-link carries lightweight attribution only (the consultation
- * page does not yet consume prefill).
+ * booking flow, which prefills the enquiry from `?item=`.
+ *
+ * ⚠️ Never put `?ref=` on this link. `ref` is the AFFILIATE code: the middleware
+ * captured the old `?ref=pdp` as affiliate "PDP" and, last click winning, wiped the
+ * real affiliate's cookie of every referred shopper who clicked this banner.
+ *
+ * `nofollow`: one /consultation?item= URL per product is crawl waste — they all
+ * canonicalise to /consultation, which the site links plainly elsewhere.
  */
 export default function ConsultSpecialistBanner({ productSlug, className = '' }: ConsultSpecialistBannerProps) {
-  const href = productSlug
-    ? `/consultation?ref=pdp&item=${encodeURIComponent(productSlug)}`
-    : '/consultation?ref=pdp';
+  const href = productSlug ? `/consultation?item=${encodeURIComponent(productSlug)}` : '/consultation';
 
   return (
     <div
@@ -34,6 +38,7 @@ export default function ConsultSpecialistBanner({ productSlug, className = '' }:
       </div>
       <Link
         href={href}
+        rel="nofollow"
         className="group inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-gold px-6 py-3 text-[15px] font-bold text-white transition-opacity hover:opacity-90"
       >
         Consult a specialist

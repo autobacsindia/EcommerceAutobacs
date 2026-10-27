@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Filter, X } from 'lucide-react';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import apiClient from '@/lib/api';
+import { VEHICLE_PAGE_SIZE } from '@/lib/vehiclePaging';
 import { vehicleService, VEHICLE_IMAGE_MAP, CROSS_RELATED_SLUG_MAP, getVehicleImageUrl } from '@/services/vehicleService';
 import type { Product } from '@/lib/types';
 import StoreProductCard from '@/components/products/redesign/StoreProductCard';
@@ -40,7 +41,7 @@ interface RelatedVehicle {
   image?: { url?: string };
 }
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = VEHICLE_PAGE_SIZE;
 const RELATED_LIMIT = 5;
 
 /** Sort dropdown value → backend `sortBy`/`order`. */

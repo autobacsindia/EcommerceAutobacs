@@ -2,7 +2,7 @@ import { slugToSearchWords } from '@/lib/legacySearchRedirect';
 
 /**
  * Where a dead WooCommerce-era URL should go, now that it may NOT go to
- * /products/search: that page is robots-disallowed and noindex, so every
+ * /products/search: that page is noindex (and was robots-disallowed then), so every
  * permanent redirect into it told Google "this page moved to a page you may not
  * read" — Search Console then listed hundreds of /model/<tag> URLs as blocked.
  *
