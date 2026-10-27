@@ -8,6 +8,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import NotificationBell from '@/components/notifications/NotificationBell';
+import PushPrompt from '@/components/notifications/PushPrompt';
 import { MARKETING_BASE } from '@/lib/usePanel';
 import { MARKETING_AREAS } from './marketingAreas';
 
@@ -145,7 +146,7 @@ export default function TeamLayoutClient({
           </button>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 p-4 md:ml-60 md:p-8">{children}</main>
+      <main className="min-w-0 flex-1 p-4 md:ml-60 md:p-8"><PushPrompt />{children}</main>
     </div>
   );
 }

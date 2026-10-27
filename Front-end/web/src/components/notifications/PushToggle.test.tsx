@@ -10,7 +10,7 @@ let homeScreen = false;
 jest.mock('@/lib/push', () => ({
   pushState: () => state(),
   enablePush: () => enable(),
-  disablePush: () => disable(),
+  disablePush: (...a: unknown[]) => disable(...a),
   sendTestPush: () => test(),
   needsHomeScreen: () => homeScreen,
 }));
@@ -36,6 +36,8 @@ it('on → send a test, or turn off', async () => {
   expect(await screen.findByRole('status')).toHaveTextContent(/Sent\. No pop-up.*System Settings/);
   fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
   expect(await screen.findByRole('button', { name: 'Turn on' })).toBeInTheDocument();
+  // Remembered, so the panel does not quietly sign this browser up again.
+  expect(disable).toHaveBeenCalledWith({ remember: true });
 });
 
 it('blocked → explains how to allow it in the browser', async () => {
