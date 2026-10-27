@@ -288,6 +288,25 @@ const chatRepository = {
   },
 
   /**
+   * "Mark as unread": move ONE tab's read position back to `seq` (never
+   * forward — a message that is already unread stays where it is). The other
+   * tab's position is written down as it stands, exactly as advanceRead does,
+   * so an older row with only lastReadSeq does not drag Order updates along.
+   */
+  moveReadBack: (user, channel, seq, part) => {
+    const chat = { $ifNull: ['$lastReadSeq', 0] };
+    const updates = { $ifNull: ['$lastReadUpdatesSeq', chat] };
+    return ChatReadState.findOneAndUpdate({ user, channel }, [
+      {
+        $set: {
+          lastReadUpdatesSeq: part === 'updates' ? { $min: [updates, seq] } : updates,
+          lastReadSeq: part === 'chat' ? { $min: [chat, seq] } : chat,
+        },
+      },
+    ], { upsert: true, new: true }).select('lastReadSeq lastReadUpdatesSeq').lean();
+  },
+
+  /**
    * Unread messages that address `user` — by name, or their `team` — per
    * channel. Only asked for channels set to "@mentions only" that have unread,
    * so it walks the same few unread rows as countUnreadByLane.

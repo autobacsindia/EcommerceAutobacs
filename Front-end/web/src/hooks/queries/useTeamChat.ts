@@ -563,6 +563,30 @@ export function useMarkRead() {
   });
 }
 
+/**
+ * "Mark as unread" from a message, for me. Not optimistic about the counts
+ * (the server knows what lies past that message); the read position it sends
+ * back goes into the cache at once, and the channel list refetches the numbers.
+ */
+export function useMarkUnread() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) =>
+      apiClient.post<{ channelId: string; part: ReadPart; lastReadSeq: number; lastReadUpdatesSeq: number }>(
+        `/chat/messages/${messageId}/unread`,
+        {},
+      ),
+    onSuccess: (res) => {
+      qc.setQueryData<ChatChannel[]>(chatKeys.channels(), (list) =>
+        list?.map((c) => (c.id === res.channelId
+          ? { ...c, lastReadSeq: res.lastReadSeq, lastReadUpdatesSeq: res.lastReadUpdatesSeq }
+          : c)),
+      );
+      qc.invalidateQueries({ queryKey: chatKeys.channels() });
+    },
+  });
+}
+
 /** Set my notification setting for one conversation. Shown at once; the server's answer confirms it. */
 export function useSetNotify() {
   const qc = useQueryClient();

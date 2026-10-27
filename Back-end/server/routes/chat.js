@@ -37,6 +37,7 @@ import {
   editMessage,
   reactToMessage,
   setChannelNotify,
+  markUnreadFrom,
   createSpace,
   deleteSpace,
   openDirectMessage,
@@ -260,6 +261,11 @@ router.post('/channels/:id/read', validateChannelIdParam, validateMarkRead, vali
 // PUT /chat/channels/:id/notify { notify: 'all' | 'mentions' | 'off' } — my notification setting here
 router.put('/channels/:id/notify', validateNotify, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await setChannelNotify(req.user, req.params.id, req.body.notify)) });
+}));
+
+// POST /chat/messages/:id/unread — mark this message (and what follows it in its tab) unread, for me
+router.post('/messages/:id/unread', validateMessageIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await markUnreadFrom(req.user, req.params.id)) });
 }));
 
 // PATCH /chat/messages/:id { text } — edit your own message, within 15 minutes

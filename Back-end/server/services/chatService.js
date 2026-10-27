@@ -1243,3 +1243,25 @@ export async function setChannelNotify(user, channelId, level) {
   await chatRepository.setNotify(user._id, channel._id, level);
   return { channelId: idOf(channel), notify: level };
 }
+
+// ── mark as unread ───────────────────────────────────────────────────────────
+
+/**
+ * "Mark as unread" from a message: it and everything after it in the same tab
+ * (Chat, or Order updates) count as unread again — for this person only.
+ * Doing it twice is the same as doing it once.
+ */
+export async function markUnreadFrom(user, messageId) {
+  if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
+  const m = await chatRepository.findMessageById(messageId);
+  if (!m) throw fail('Message not found', 404);
+  const channel = await loadAccessible(user, m.channel);
+  const part = m.kind === 'system' || m.lane === 'updates' ? 'updates' : 'chat';
+  const row = await chatRepository.moveReadBack(user._id, channel._id, m.seq - 1, part);
+  return {
+    channelId: idOf(channel),
+    part,
+    lastReadSeq: row?.lastReadSeq ?? 0,
+    lastReadUpdatesSeq: row?.lastReadUpdatesSeq ?? row?.lastReadSeq ?? 0,
+  };
+}

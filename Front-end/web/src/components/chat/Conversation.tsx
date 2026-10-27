@@ -17,6 +17,7 @@ import {
   useEditMessage,
   useDeleteMessage,
   useReactToMessage,
+  useMarkUnread,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
@@ -143,6 +144,21 @@ export default function Conversation({
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
   const react = useReactToMessage(channel.id, meId);
+  const unread = useMarkUnread();
+  /*
+    After "Mark as unread" the conversation must not mark itself read again the
+    moment it re-renders, so reading is held until the person sends something,
+    presses "Mark read", or leaves (this component is keyed by channel). On a
+    phone it simply goes back to the list, as Google Chat does.
+  */
+  const [holdRead, setHoldRead] = useState(false);
+  const markUnread = useCallback((m: ChatMessage) => {
+    setHoldRead(true);
+    unread.mutate(m.id, { onError: () => setHoldRead(false) });
+    if (typeof window !== 'undefined' && window.innerWidth < 768) onBack();
+    // unread is a stable mutation object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onBack]);
   const markRead = useMarkRead();
   const [tab, setTab] = useState<Tab>(() => {
     if (initialTab === 'updates') return channel.kind === 'space' ? 'updates' : 'messages';
@@ -272,10 +288,11 @@ export default function Conversation({
     "Unread" labels were taken.
   */
   const readNow = useCallback(() => {
+    if (holdRead) return;
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
     if (tab === 'messages' && lastChatSeq && stickToBottom.current) read('chat', lastChatSeq);
     if (tab === 'updates' && lastUpdatesSeq && unreadFrom !== null) read('updates', lastUpdatesSeq);
-  }, [tab, lastChatSeq, lastUpdatesSeq, unreadFrom, read]);
+  }, [tab, lastChatSeq, lastUpdatesSeq, unreadFrom, read, holdRead]);
   useEffect(() => { readNow(); }, [readNow]);
 
   useEffect(() => {
@@ -336,6 +353,7 @@ export default function Conversation({
       pending: true,
     };
     stickToBottom.current = true;
+    setHoldRead(false); // writing here means you have read it
     qc.setQueryData<Pages>(chatKeys.messages(channel.id), (d) => upsertMessage(d, optimistic));
     send.mutate(vars, {
       onSuccess: () => resend.forget(vars.clientId),
@@ -476,6 +494,7 @@ export default function Conversation({
                     onEdit={(msg, text) => edit.mutateAsync({ id: msg.id, text })}
                     onDelete={(msg) => remove.mutateAsync(msg.id)}
                     onReact={(msg, emoji, on) => react.mutate({ message: msg, emoji, on })}
+                    onMarkUnread={markUnread}
                   />
                   </div>
                 ))}
@@ -496,6 +515,12 @@ export default function Conversation({
               )}
             </div>
 
+            {holdRead && (
+              <div role="status" className="mx-4 mb-1 flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                Marked as unread — it stays unread until you come back to it.
+                <button type="button" onClick={() => setHoldRead(false)} className="font-semibold underline">Mark read</button>
+              </div>
+            )}
             {tab === 'messages' && (
             <Composer
               channelName={title}
@@ -520,6 +545,7 @@ export default function Conversation({
           peopleById={peopleById}
           orderHref={orderHref}
           onClose={() => setThread(null)}
+          onMarkUnread={markUnread}
         />
       )}
     </div>

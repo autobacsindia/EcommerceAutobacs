@@ -28,6 +28,7 @@ export default function ThreadPanel({
   peopleById,
   orderHref,
   onClose,
+  onMarkUnread,
 }: {
   channel: ChatChannel;
   rootId: string;
@@ -38,6 +39,8 @@ export default function ThreadPanel({
   peopleById: Map<string, ChatPerson>;
   orderHref: (id: string) => string;
   onClose: () => void;
+  /** Mark a message unread (held by the conversation, which owns reading). */
+  onMarkUnread?: (m: ChatMessage) => void;
 }) {
   const qc = useQueryClient();
   const { data, isLoading, isError, refetch } = useThread(rootId);
@@ -109,6 +112,7 @@ export default function ThreadPanel({
       onEdit={(msg, text) => edit.mutateAsync({ id: msg.id, text })}
       onDelete={(msg) => remove.mutateAsync(msg.id)}
       onReact={(msg, emoji, on) => react.mutate({ message: msg, emoji, on })}
+      onMarkUnread={onMarkUnread}
     />
   );
 

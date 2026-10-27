@@ -142,3 +142,28 @@ describe('reactorNames', () => {
     expect(reactorNames(['gone'], 'me', people)).toBe('Former member');
   });
 });
+
+describe('"Mark as unread" in the More menu', () => {
+  it('is offered on a live message and calls back with it', () => {
+    const onMarkUnread = jest.fn();
+    render(
+      <MessageItem message={base()} meId="me" meName="Sam" peopleById={people} orderHref={(id) => `/o/${id}`}
+        onRetry={() => {}} onMarkUnread={onMarkUnread} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mark as unread' }));
+    expect(onMarkUnread).toHaveBeenCalledWith(expect.objectContaining({ id: 'm1' }));
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['still sending', base({ pending: true })],
+    ['deleted', base({ deleted: true, text: '' })],
+  ])('is not offered on a message %s', (_l, m) => {
+    render(
+      <MessageItem message={m} meId="me" meName="Sam" peopleById={people} orderHref={(id) => `/o/${id}`}
+        onRetry={() => {}} onMarkUnread={jest.fn()} />,
+    );
+    expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument();
+  });
+});
