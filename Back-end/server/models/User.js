@@ -70,6 +70,13 @@ const UserSchema = new mongoose.Schema({
   // Not required for users migrated from WooCommerce (phpass hashes can't move to bcrypt);
   // those users are forced through password reset on first login (see mustResetPassword).
   passwordHash: { type: String, required: function () { return !this.migratedFromWp; } },
+  // STAFF ONLY: an encrypted copy of the password (utils/fieldEncryption.js), so the
+  // admin — and the person's team head — can look it up in the team panel. The
+  // owner's decision (2026-10-27). Never selected by default, never serialised;
+  // checked against passwordHash on every view, so a password changed some other
+  // way reads as "not available" instead of showing a stale one. Removed when
+  // staff access is removed.
+  staffPasswordView: { type: String, select: false },
   role: { type: String, enum: ["customer", "staff", "admin"], default: "customer" },
 
   // Internal team membership (config/staff.js). Present only on accounts that were
@@ -236,6 +243,7 @@ const UserSchema = new mongoose.Schema({
 UserSchema.set('toJSON', {
   transform: (_doc, ret) => {
     delete ret.passwordHash;
+    delete ret.staffPasswordView;
     delete ret.verificationToken;
     delete ret.resetPasswordToken;
     delete ret.refreshTokens;

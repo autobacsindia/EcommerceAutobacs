@@ -12,12 +12,22 @@ class UserRepository extends BaseRepository {
   }
 
   /** Set a password on a staff account and end every session it has. */
-  async setStaffPassword(userId, passwordHash) {
+  /** `passwordView`: the encrypted copy (staffPasswordView), or null to drop any old one. */
+  async setStaffPassword(userId, passwordHash, passwordView = null) {
     return User.findOneAndUpdate(
       { _id: userId, role: 'staff' },
-      { $set: { passwordHash }, $inc: { sessionVersion: 1 } },
+      {
+        $set: { passwordHash, ...(passwordView && { staffPasswordView: passwordView }) },
+        ...(!passwordView && { $unset: { staffPasswordView: '' } }),
+        $inc: { sessionVersion: 1 },
+      },
       { new: true }
     );
+  }
+
+  /** One staff member with the password fields the "Show password" check needs. */
+  async findStaffPasswordView(userId) {
+    return User.findById(userId).select('+staffPasswordView passwordHash role staff name').lean();
   }
 
   async findByEmail(email, session = null) {
@@ -215,12 +225,13 @@ class UserRepository extends BaseRepository {
    * Grant staff access to an existing account (an invite was redeemed). Bumps
    * sessionVersion so any session opened under the old role is re-issued.
    */
-  async grantStaff(userId, { passwordHash, staff, phone }) {
+  async grantStaff(userId, { passwordHash, staff, phone, passwordView = null }) {
     const set = { role: 'staff', staff, passwordHash, isVerified: true, mustResetPassword: false };
     if (phone) set.phone = phone;
+    if (passwordView) set.staffPasswordView = passwordView;
     return User.findOneAndUpdate(
       { _id: userId, role: { $ne: 'admin' } },
-      { $set: set, $inc: { sessionVersion: 1 } },
+      { $set: set, ...(!passwordView && { $unset: { staffPasswordView: '' } }), $inc: { sessionVersion: 1 } },
       { new: true }
     );
   }
@@ -263,6 +274,8 @@ class UserRepository extends BaseRepository {
           'staff.deactivatedBy': deactivatedBy,
           'staff.deactivatedAt': now,
         },
+        // No longer staff: nobody needs to look their password up any more.
+        $unset: { staffPasswordView: '' },
         $inc: { sessionVersion: 1 },
       },
       { new: true }
