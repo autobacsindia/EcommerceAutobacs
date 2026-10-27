@@ -69,7 +69,7 @@ const getProductForMetadata = cache(async (slug: string) => {
 /**
  * A product slug the API confirmed does not exist: send it to the page it became
  * (a renamed product, or the vehicle it names) or 404. Never to /products/search —
- * that page is robots-blocked, so a redirect into it left Google with a dead end.
+ * that page is noindex, so a redirect into it left Google with a dead end.
  */
 async function leaveDeadSlug(slug: string): Promise<never> {
   const target = await resolveLegacyTarget(slug, 'product');
@@ -89,7 +89,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   // A missing product is almost always a renamed or retired one still linked from
   // ads, chats and old search results, so it is sent to the product it became, or
   // the vehicle it names (permanent redirect) — else a real 404. Not to a product
-  // search: robots.txt blocks /products/search (lib/legacyTarget.ts). `product` is
+  // search: /products/search is noindex (lib/legacyTarget.ts). `product` is
   // null ONLY on a confirmed API 404 — a failed fetch throws above (error.tsx), so
   // an outage can never cache a redirect away from a live product.
   //

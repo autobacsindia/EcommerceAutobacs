@@ -47,22 +47,13 @@ const DISALLOW = [
   '/dev',
   '/integration-tests',
   '/_next/static/',
-  // Internal site-search results. Every typed term makes a new URL; they are thin,
-  // duplicate listings Google should neither crawl nor index (the page also sends
-  // `noindex` — app/products/search/layout.tsx). `?search=` is the legacy alias
-  // the listing still accepts; WordPress used `?s=`.
-  '/products/search',
-  '/*?search=',
-  '/*&search=',
-  '/*?s=',
-  // Legacy WooCommerce action parameters. Google still holds hundreds of old URLs
-  // carrying these (Search Console, Sep 2026: 616 of 911 "crawled – not indexed"
-  // had add-to-cart). This site never emits them, so blocking them only stops the
-  // crawl of junk permutations; the clean page stays crawlable without them.
-  '/*?add-to-cart=',
-  '/*&add-to-cart=',
-  '/*remove_item=',
-  '/*_wpnonce=',
+  // NOT listed, deliberately: internal search (/products/search, ?search=, ?s=)
+  // and legacy WooCommerce parameters (?add-to-cart=, ?per_page=, ?layout=, …).
+  // Both used to be Disallowed here, which is exactly why Google could never drop
+  // them: a crawler that may not fetch a URL cannot see its noindex or its redirect,
+  // so the URLs sat in Search Console forever. The middleware now 301s the WooCommerce
+  // parameters to the clean URL and sends `X-Robots-Tag: noindex, follow` on search
+  // results (lib/legacyQuery.ts) — both of which need the crawl to be allowed.
 ]
 
 export default function robots(): MetadataRoute.Robots {

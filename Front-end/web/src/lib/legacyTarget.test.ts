@@ -1,5 +1,5 @@
 /**
- * Where dead WooCommerce-era URLs go now that /products/search (robots-blocked)
+ * Where dead WooCommerce-era URLs go now that /products/search (noindex)
  * is off the table: the vehicle they name, the product they became, or a 404.
  * Cases from the Search Console report (Oct 2026).
  */

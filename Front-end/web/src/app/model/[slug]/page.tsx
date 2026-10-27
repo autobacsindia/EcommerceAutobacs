@@ -14,7 +14,7 @@ import { resolveLegacyTarget } from '@/lib/legacyTargetServer';
  * A slug the API confirms does not exist is almost always a WooCommerce-era
  * product-tag archive (/model/hilux-led-lights): those go to the vehicle they name
  * (/model/toyota-hilux), or a matching product, else a real 404 — never to the
- * robots-blocked product search (lib/legacyTarget.ts). A FAILED lookup still 404s —
+ * noindex product search (lib/legacyTarget.ts). A FAILED lookup still 404s —
  * it must never become a permanent redirect away from a real vehicle.
  *
  * lookupVehicle is cache()d, so this check and generateMetadata share one call.
@@ -27,7 +27,7 @@ async function resolveOrLeave(slug: string) {
   const result = await lookupVehicle(slug);
   if (result.status === 'missing') {
     // A WooCommerce tag archive: to the vehicle it names (or a product), else 404 —
-    // never to /products/search, which robots.txt blocks.
+    // never to /products/search, which is noindex.
     const target = await resolveLegacyTarget(slug, 'model');
     if (target && target !== `/model/${slug}`) permanentRedirect(target);
     notFound();

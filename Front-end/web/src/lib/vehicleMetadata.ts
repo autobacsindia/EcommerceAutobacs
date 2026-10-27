@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { cache } from 'react';
 import { getVehicleImageUrl } from '@/services/vehicleService';
 import { getServerApiBase } from '@/lib/server-api';
+import { VEHICLE_PAGE_SIZE } from '@/lib/vehiclePaging';
 
 /**
  * Shared SEO metadata for the `/model/[slug]` routes (page 1 and paginated).
@@ -45,6 +46,33 @@ export const lookupVehicle = cache(async function lookupVehicle(slug: string): P
   } catch (error) {
     console.error('Vehicle metadata fetch error:', error);
     return { status: 'error' };
+  }
+});
+
+/**
+ * How many listing pages a vehicle has, or null when the count could not be read.
+ *
+ * Lets /model/[slug]/page/[n] 404 past the last page: an empty page answered 200
+ * with a self-canonical, which Google files as a thin page (Search Console held
+ * WooCommerce-era page numbers far past today's catalogue). Counts the UNFILTERED
+ * listing, so a page that exists without a ?category= filter is never 404ed.
+ *
+ * Null on any failure — an outage must never turn a real page into a 404. A short
+ * revalidate keeps a newly-added last page from 404ing for long; limit=1 because
+ * only `total` is needed.
+ */
+export const vehiclePageCount = cache(async function vehiclePageCount(slug: string): Promise<number | null> {
+  try {
+    const res = await fetch(
+      `${getServerApiBase()}/products/by-vehicle/${encodeURIComponent(slug)}?page=1&limit=1`,
+      { next: { revalidate: 600 } },
+    );
+    if (!res.ok) return null;
+    const total = Number((await res.json())?.total);
+    return Number.isFinite(total) && total >= 0 ? Math.ceil(total / VEHICLE_PAGE_SIZE) : null;
+  } catch (error) {
+    console.error('Vehicle page count fetch error:', error);
+    return null;
   }
 });
 

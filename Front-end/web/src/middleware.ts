@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose'; // Lightweight JWT verification (edge-compatible)
 import { isGonePath } from '@/lib/legacyPaths';
+import { isInternalSearch, SEARCH_ROBOTS_HEADER, stripLegacyParams } from '@/lib/legacyQuery';
 import { buildPublicCsp, buildStrictCsp } from '@/lib/csp';
 import { isStrictCspPath } from '@/lib/cspRoutes';
 
@@ -227,6 +228,17 @@ export async function middleware(req: NextRequest) {
     });
   }
 
+  // ── Legacy WooCommerce query parameters (see lib/legacyQuery.ts) ────────────
+  // ?add-to-cart= / ?per_page= / ?layout= … are duplicates of the clean URL; fold
+  // them into it permanently. Before the referral capture so a URL carrying both
+  // keeps its ?ref through this hop and is credited on the next.
+  const cleanUrl = stripLegacyParams(req.nextUrl);
+  if (cleanUrl) {
+    const res = NextResponse.redirect(cleanUrl, 301);
+    res.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=86400');
+    return res;
+  }
+
   // ── Affiliate referral link ─────────────────────────────────────────────────
   // Placed after the API and 410 short-circuits (neither can carry a ?ref) and before
   // the nonce/CSP work, so the ~100% of requests with no `ref` pay only one
@@ -266,6 +278,10 @@ export async function middleware(req: NextRequest) {
     if (nonce) pageHeaders.set('x-nonce', nonce);
     const res = NextResponse.next({ request: { headers: pageHeaders } });
     res.headers.set('Content-Security-Policy', csp);
+    // Internal search results: crawlable (robots.txt allows them) but never indexed.
+    if (isInternalSearch(pathname, req.nextUrl.searchParams)) {
+      res.headers.set('X-Robots-Tag', SEARCH_ROBOTS_HEADER);
+    }
     if (extraSetCookies) {
       for (const cookie of extraSetCookies) res.headers.append('Set-Cookie', cookie);
     }
