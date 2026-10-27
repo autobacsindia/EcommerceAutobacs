@@ -27,6 +27,7 @@ import { Avatar, ChannelIcon, FileKindIcon, fileSize, timeOf } from './chatUi';
 import Composer, { mentionableTeams } from './Composer';
 import MessageItem, { messageDomId } from './MessageItem';
 import NotifyMenu from './NotifyMenu';
+import ForwardDialog from './ForwardDialog';
 import ThreadPanel from './ThreadPanel';
 
 type Pages = InfiniteData<MessagePage, number>;
@@ -123,6 +124,7 @@ export default function Conversation({
   people,
   orderHref,
   onBack,
+  onOpenChannel,
   onSearch,
   initialTab,
 }: {
@@ -133,6 +135,8 @@ export default function Conversation({
   people: ChatPerson[];
   orderHref: (id: string) => string;
   onBack: () => void;
+  /** Open another conversation (after forwarding into it). */
+  onOpenChannel?: (id: string) => void;
   /** Opens search already narrowed to this channel. */
   onSearch?: () => void;
   /** From the link (?t=updates — an order-update pop-up); otherwise chosen by what is unread. */
@@ -154,6 +158,8 @@ export default function Conversation({
     phone it simply goes back to the list, as Google Chat does.
   */
   const [holdRead, setHoldRead] = useState(false);
+  const [forwarding, setForwarding] = useState<ChatMessage | null>(null);
+  const [forwardedTo, setForwardedTo] = useState<ChatChannel | null>(null);
   const markUnread = useCallback((m: ChatMessage) => {
     setHoldRead(true);
     unread.mutate(m.id, { onError: () => setHoldRead(false) });
@@ -368,7 +374,9 @@ export default function Conversation({
 
   const title = channel.kind === 'dm' ? channel.name : channel.audience === 'teams' ? channel.name : `#${channel.name}`;
   const subtitle =
-    channel.kind === 'dm'
+    channel.group
+      ? `${channel.memberIds?.length ?? channel.memberCount ?? ''} people · ${['You', ...(channel.memberIds ?? []).filter((id) => id !== meId).map((id) => peopleById.get(id)?.name ?? 'Former member')].join(', ')}`
+      : channel.kind === 'dm'
       ? [channel.partner?.teamLabel, channel.partner?.isHead ? 'Head' : null].filter(Boolean).join(' · ')
       : channel.description;
 
@@ -380,7 +388,7 @@ export default function Conversation({
             <button type="button" onClick={onBack} className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-100 md:hidden" aria-label="Back to channels">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            {channel.kind === 'dm' ? <Avatar person={channel.partner} /> : <ChannelIcon channel={channel} size="md" />}
+            {channel.kind === 'dm' && !channel.group ? <Avatar person={channel.partner} /> : <ChannelIcon channel={channel} size="md" />}
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-gray-900">{title}</h2>
               {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}
@@ -497,6 +505,7 @@ export default function Conversation({
                     onDelete={(msg) => remove.mutateAsync(msg.id)}
                     onReact={(msg, emoji, on) => react.mutate({ message: msg, emoji, on })}
                     onStar={(msg, on) => star.mutate({ id: msg.id, on })}
+                    onForward={setForwarding}
                     onMarkUnread={markUnread}
                   />
                   </div>
@@ -518,6 +527,17 @@ export default function Conversation({
               )}
             </div>
 
+            {forwardedTo && (
+              <div role="status" className="mx-4 mb-1 flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs text-emerald-900">
+                Forwarded to {forwardedTo.kind === 'dm' || forwardedTo.audience === 'teams' ? forwardedTo.name : `#${forwardedTo.name}`}.
+                <span className="flex gap-3">
+                  {onOpenChannel && forwardedTo.id !== channel.id && (
+                    <button type="button" onClick={() => onOpenChannel(forwardedTo.id)} className="font-semibold underline">Open</button>
+                  )}
+                  <button type="button" onClick={() => setForwardedTo(null)} aria-label="Dismiss" className="font-semibold">✕</button>
+                </span>
+              </div>
+            )}
             {holdRead && (
               <div role="status" className="mx-4 mb-1 flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
                 Marked as unread — it stays unread until you come back to it.
@@ -529,6 +549,7 @@ export default function Conversation({
               channelName={title}
               people={people.filter((p) => p.id !== meId)}
               teams={mentionableTeams(channel)}
+              canMentionAll={channel.audience !== 'all' || isAdmin || !!people.find((p) => p.id === meId)?.isHead}
               onSend={doSend}
               quote={quote}
               onClearQuote={() => setQuote(null)}
@@ -537,6 +558,13 @@ export default function Conversation({
           </>
         )}
       </section>
+      {forwarding && (
+        <ForwardDialog
+          message={forwarding}
+          onClose={() => setForwarding(null)}
+          onDone={(c) => { setForwarding(null); setForwardedTo(c); }}
+        />
+      )}
       {thread && (
         <ThreadPanel
           channel={channel}
@@ -549,6 +577,7 @@ export default function Conversation({
           orderHref={orderHref}
           onClose={() => setThread(null)}
           onMarkUnread={markUnread}
+          onForward={setForwarding}
         />
       )}
     </div>

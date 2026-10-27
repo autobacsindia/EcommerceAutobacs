@@ -21,7 +21,7 @@ import multer from 'multer';
 import path from 'path';
 import AppError from '../utils/AppError.js';
 import { uploadToCloudinary, uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
-import { putPrivateAsset, deletePrivateAsset } from './storage/privateUploads.js';
+import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
 import { storageProvider } from '../config/storage.js';
 
 export const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -192,6 +192,47 @@ async function uploadToR2(files, channelId) {
     }
   } catch (err) {
     await Promise.all(done.map((a) => deletePrivateAsset({ publicId: a.publicId, provider: 'r2' })));
+    throw err;
+  }
+  return done;
+}
+
+/**
+ * Copy a message's files into another channel, for "Forward".
+ *
+ * A private (R2) file is served only to people who can read ITS channel
+ * (GET /chat/channels/:id/files/:name), so a forwarded message pointing at the
+ * original would either 404 for its new readers or need an access rule that
+ * reaches across conversations. A real copy under the new channel keeps the
+ * one simple rule. Older Cloudinary files already have a public URL and are
+ * reused as they are. If any copy fails, the copies made so far are removed.
+ */
+export async function copyChatAttachments(attachments, { channelId }) {
+  const done = [];
+  try {
+    for (const a of attachments || []) {
+      if (a.provider !== 'r2') {
+        done.push({ ...a });
+        continue;
+      }
+      const buffer = await readPrivateAsset({ publicId: a.publicId, provider: 'r2' });
+      const basename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${a.name}`;
+      const stored = await putPrivateAsset({ buffer, folder: chatFolder(channelId), basename, contentType: a.mime });
+      done.push({
+        url: chatFileUrl(channelId, basename),
+        publicId: stored.publicId,
+        provider: 'r2',
+        kind: a.kind,
+        name: a.name,
+        mime: a.mime,
+        size: a.size,
+        width: a.width ?? null,
+        height: a.height ?? null,
+      });
+    }
+  } catch (err) {
+    await Promise.all(done.filter((a) => a.provider === 'r2' && a.url.includes(`/channels/${channelId}/`))
+      .map((a) => deletePrivateAsset({ publicId: a.publicId, provider: 'r2' }).catch(() => {})));
     throw err;
   }
   return done;

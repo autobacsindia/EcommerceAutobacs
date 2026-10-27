@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Download, EyeOff, History, MessageSquareReply, MoreVertical, Package, Pencil, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
+import { CornerUpRight, Download, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
 import EmojiPicker from './EmojiPicker';
@@ -17,7 +17,8 @@ import EmojiPicker from './EmojiPicker';
 function MessageText({ text, mentionNames, meName }: { text: string; mentionNames: string[]; meName: string }) {
   const escaped = mentionNames.filter(Boolean).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const pattern = new RegExp(
-    `(https?:\\/\\/[^\\s<>"']+)${escaped.length ? `|(@(?:${escaped.join('|')}))` : ''}`,
+    // (?!\\w): "@all" must not light up the start of "@allison".
+    `(https?:\\/\\/[^\\s<>"']+)${escaped.length ? `|(@(?:${escaped.join('|')})(?!\\w))` : ''}`,
     'g',
   );
   const parts = text.split(pattern).filter((p) => p !== undefined);
@@ -33,7 +34,7 @@ function MessageText({ text, mentionNames, meName }: { text: string; mentionName
           );
         }
         if (part.startsWith('@') && mentionNames.includes(part.slice(1))) {
-          const isMe = part.slice(1) === meName;
+          const isMe = part.slice(1) === meName || part === '@all';
           return (
             <span
               key={i}
@@ -359,6 +360,7 @@ export default function MessageItem({
   onReact,
   onMarkUnread,
   onStar,
+  onForward,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
@@ -383,6 +385,8 @@ export default function MessageItem({
   onMarkUnread?: (m: ChatMessage) => void;
   /** Star it for me (`on`) or take the star off. */
   onStar?: (m: ChatMessage, on: boolean) => void;
+  /** Forward a copy of it to another conversation. */
+  onForward?: (m: ChatMessage) => void;
 }) {
   const m = message;
   // The timeline is ordered by activity, so a thread that just moved sits under
@@ -409,6 +413,7 @@ export default function MessageItem({
   const more: MoreAction[] = live
     ? [
         ...(onMarkUnread ? [{ label: 'Mark as unread', icon: <EyeOff className="h-4 w-4" />, onSelect: () => onMarkUnread(m) }] : []),
+        ...(onForward ? [{ label: 'Forward', icon: <Forward className="h-4 w-4" />, onSelect: () => onForward(m) }] : []),
         ...(onStar
           ? [m.starred
             ? { label: 'Remove star', icon: <StarOff className="h-4 w-4" />, onSelect: () => onStar(m, false) }
@@ -462,8 +467,12 @@ export default function MessageItem({
       setBusy(false);
     }
   };
-  const mentionsMe = m.mentions.includes(meId);
-  const mentionNames = m.mentions.map((id) => peopleById.get(id)?.name ?? '').filter(Boolean);
+  // "@all" addresses me too — unless I wrote it.
+  const mentionsMe = m.mentions.includes(meId) || (!!m.mentionAll && m.sender?.id !== meId);
+  const mentionNames = [
+    ...m.mentions.map((id) => peopleById.get(id)?.name ?? '').filter(Boolean),
+    ...(m.mentionAll ? ['all'] : []),
+  ];
   const photos = m.attachments.filter((a) => a.kind === 'image');
   const documents = m.attachments.filter((a) => a.kind !== 'image');
 
@@ -551,6 +560,13 @@ export default function MessageItem({
           ) : (
             <div className={m.pending ? 'opacity-60' : ''}>
               {m.quote && <QuoteBlock quote={m.quote} onJump={onJumpTo} />}
+              {m.forwarded && (
+                <p className="mb-0.5 inline-flex items-center gap-1 text-xs text-gray-500">
+                  <CornerUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  Forwarded · originally from <span className="font-medium text-gray-700">{m.forwarded.by || 'someone'}</span>
+                  <span className="text-gray-400">· {dayLabel(m.forwarded.at)}</span>
+                </p>
+              )}
               {m.text && <MessageText text={m.text} mentionNames={mentionNames} meName={meName} />}
               <Photos items={photos} />
               <Documents items={documents} />

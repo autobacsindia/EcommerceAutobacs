@@ -33,6 +33,10 @@ export interface ChatChannel {
   system: boolean;
   partner: ChatPerson | null;
   memberCount: number | null;
+  /** A group conversation (a DM with 3-8 people). Its name is the others' names. */
+  group?: boolean;
+  /** Group conversation: who is in it. */
+  memberIds?: string[];
   /** Custom group: may I add / remove members? (admin, or whoever created it) */
   canManageMembers?: boolean;
   lastMessageSeq: number;
@@ -118,7 +122,11 @@ export interface ChatMessage {
   attachments: ChatAttachment[];
   mentions: string[];
   mentionTeams: string[];
+  /** "@all" — everyone in the conversation. */
+  mentionAll?: boolean;
   refs: ChatRef[];
+  /** A forwarded copy: who wrote the original and when (never where). */
+  forwarded?: { by: string; at: string } | null;
   /** The message this one quotes, as it read when quoted. */
   quote?: ChatQuote | null;
   /** Emoji reactions, in the order each emoji was first used. */
@@ -340,6 +348,7 @@ export interface SendVars {
   clientId: string;
   mentions?: string[];
   mentionTeams?: string[];
+  mentionAll?: boolean;
   orderIds?: string[];
   files?: File[];
   /** Reply in this thread. */
@@ -367,6 +376,7 @@ export function useSendMessage(channelId: string | null) {
       form.append('clientId', vars.clientId);
       if (vars.mentions?.length) form.append('mentions', JSON.stringify(vars.mentions));
       if (vars.mentionTeams?.length) form.append('mentionTeams', JSON.stringify(vars.mentionTeams));
+      if (vars.mentionAll) form.append('mentionAll', 'true');
       if (vars.orderIds?.length) form.append('orderIds', JSON.stringify(vars.orderIds));
       if (vars.threadRoot) form.append('threadRoot', vars.threadRoot);
       if (vars.quoteId) form.append('quoteId', vars.quoteId);
@@ -645,6 +655,22 @@ export function useStarred(enabled: boolean) {
   });
 }
 
+/**
+ * Forward a message into a conversation I am in. The copy is a normal new
+ * message there; the target's timeline (if loaded) and the channel list refresh.
+ */
+export function useForwardMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, channelId, clientId }: { id: string; channelId: string; clientId: string }) =>
+      apiClient.post<{ message: ChatMessage }>(`/chat/messages/${id}/forward`, { channelId, clientId }),
+    onSuccess: (res, { channelId }) => {
+      qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) => upsertMessage(d, res.message));
+      qc.invalidateQueries({ queryKey: chatKeys.channels() });
+    },
+  });
+}
+
 /** Set my notification setting for one conversation. Shown at once; the server's answer confirms it. */
 export function useSetNotify() {
   const qc = useQueryClient();
@@ -668,10 +694,14 @@ export function useCreateSpace() {
   });
 }
 
+/** Open (or reuse) a conversation: one person is a DM, several a group conversation (up to 7 others). */
 export function useOpenDm() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (userId: string) => apiClient.post<{ channel: { id: string } }>('/chat/dm', { userId }),
+    mutationFn: (who: string | string[]) => {
+      const ids = Array.isArray(who) ? who : [who];
+      return apiClient.post<{ channel: { id: string } }>('/chat/dm', ids.length === 1 ? { userId: ids[0] } : { userIds: ids });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.channels() }),
   });
 }

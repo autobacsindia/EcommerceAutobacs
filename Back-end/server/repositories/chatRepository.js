@@ -325,7 +325,7 @@ const chatRepository = {
   },
 
   /**
-   * Unread messages that address `user` — by name, or their `team` — per
+   * Unread messages that address `user` — by name, their `team`, or @all — per
    * channel. Only asked for channels set to "@mentions only" that have unread,
    * so it walks the same few unread rows as countUnreadByLane.
    * @param {{ channel: ObjectId, chatFrom: number, updatesFrom: number }[]} positions
@@ -334,7 +334,7 @@ const chatRepository = {
   countUnreadMentions: (positions, user, team) => {
     if (!positions.length) return Promise.resolve([]);
     const isUpdates = { $or: [{ kind: 'system' }, { lane: 'updates' }] };
-    const addressed = [{ mentions: user }, ...(team ? [{ mentionTeams: team }] : [])];
+    const addressed = [{ mentions: user }, { mentionAll: true }, ...(team ? [{ mentionTeams: team }] : [])];
     // Every branch keeps its own { channel, seq } prefix, so each one is an
     // index range over that channel's unread rows; who is addressed is a filter
     // on those rows (an $and around two $ors would hide the prefix from the planner).
