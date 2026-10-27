@@ -18,6 +18,8 @@ import {
   validateThreadPage,
   validateReaction,
   validateNotify,
+  validateStar,
+  validateStarredPage,
 } from '../validators/chat.validator.js';
 import {
   listChannels,
@@ -38,6 +40,8 @@ import {
   reactToMessage,
   setChannelNotify,
   markUnreadFrom,
+  starMessage,
+  listStarred,
   createSpace,
   deleteSpace,
   openDirectMessage,
@@ -177,6 +181,16 @@ router.post('/dm', validateOpenDm, validateRequest, asyncHandler(async (req, res
 router.get('/search', asyncHandler(async (req, res) => {
   const page = await searchMessages(req.user, req.query);
   res.json({ success: true, ...page });
+}));
+
+// GET /chat/starred?before=&limit= — my starred messages, newest first
+router.get('/starred', validateStarredPage, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listStarred(req.user, req.query)) });
+}));
+
+// PUT /chat/messages/:id/star { on? } — star (default) or un-star a message, for me
+router.put('/messages/:id/star', validateStar, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await starMessage(req.user, req.params.id, { on: req.body.on })) });
 }));
 
 // GET /chat/channels/:id/messages?before=&after=&limit=

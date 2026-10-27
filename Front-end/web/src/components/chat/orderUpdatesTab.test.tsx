@@ -35,6 +35,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
   useDeleteMessage: () => ({ mutateAsync: jest.fn() }),
   useReactToMessage: () => ({ mutate: jest.fn() }),
   useMarkUnread: () => ({ mutate: (...a: unknown[]) => markUnread(...a) }),
+  useStarMessage: () => ({ mutate: jest.fn() }),
   useSetNotify: () => ({ mutate: jest.fn(), isError: false }),
   notifyOf: (c: { notify?: string }) => c.notify ?? 'all',
   useRecentOrders: () => ({ data: [], isLoading: false }),

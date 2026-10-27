@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ChevronDown, MessageSquarePlus, Plus, Search } from 'lucide-react';
+import { ChevronDown, MessageSquarePlus, Plus, Search, Star } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from '@/hooks/queries/keys';
@@ -28,6 +28,7 @@ import { Avatar, ChannelIcon, Dialog, GREEN, shortWhen } from './chatUi';
 import Conversation from './Conversation';
 import { NotifyIcon } from './NotifyMenu';
 import MessageSearch from './MessageSearch';
+import StarredPanel from './StarredPanel';
 
 type Pages = InfiniteData<MessagePage, number>;
 
@@ -196,6 +197,7 @@ export default function TeamChat() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // null = closed. 'all' = every channel I can see; otherwise one channel id.
   const [searching, setSearching] = useState<string | null>(null);
+  const [showStarred, setShowStarred] = useState(false);
 
   const meId = me?.userId ?? '';
   const meName = user?.name ?? 'You';
@@ -423,15 +425,26 @@ export default function TeamChat() {
               Chat
               {totalUnread > 0 && <span className="ml-2 align-middle text-xs font-semibold text-emerald-700">{totalUnread} new</span>}
             </h1>
-            <button
-              type="button"
-              onClick={() => setSearching('all')}
-              className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
-              aria-label="Search all messages"
-              title="Search all messages"
-            >
-              <Search className="h-5 w-5" />
-            </button>
+            <span className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setShowStarred(true)}
+                className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
+                aria-label="Starred messages"
+                title="Starred messages"
+              >
+                <Star className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearching('all')}
+                className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
+                aria-label="Search all messages"
+                title="Search all messages"
+              >
+                <Search className="h-5 w-5" />
+              </button>
+            </span>
           </div>
           <button
             type="button"
@@ -504,6 +517,14 @@ export default function TeamChat() {
           scopeTo={searching === 'all' ? null : channels.find((c) => c.id === searching) ?? null}
           onPick={(id) => { setSearching(null); select(id); }}
           onClose={() => setSearching(null)}
+        />
+      )}
+
+      {showStarred && (
+        <StarredPanel
+          channels={channels}
+          onPick={(id) => { setShowStarred(false); select(id); }}
+          onClose={() => setShowStarred(false)}
         />
       )}
 

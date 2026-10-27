@@ -32,6 +32,18 @@ export const validateNotify = [
   body('notify').isIn(['all', 'mentions', 'off']).withMessage('Choose all, mentions or off'),
 ];
 
+/** Star or un-star a message, for me. */
+export const validateStar = [
+  param('id').custom(isObjectId).withMessage('Invalid message id'),
+  body('on').optional().isBoolean({ strict: true }).withMessage('on must be true or false'),
+];
+
+/** A page of my starred messages. */
+export const validateStarredPage = [
+  query('before').optional().custom(isObjectId).withMessage('Invalid cursor'),
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be 1–50'),
+];
+
 export const validateMessagePage = [
   query('before').optional().isInt({ min: 1 }).withMessage('Invalid cursor'),
   query('after').optional().isInt({ min: 0 }).withMessage('Invalid cursor'),

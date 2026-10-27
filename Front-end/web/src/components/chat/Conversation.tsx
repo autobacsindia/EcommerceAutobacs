@@ -18,6 +18,7 @@ import {
   useDeleteMessage,
   useReactToMessage,
   useMarkUnread,
+  useStarMessage,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
@@ -144,6 +145,7 @@ export default function Conversation({
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
   const react = useReactToMessage(channel.id, meId);
+  const star = useStarMessage();
   const unread = useMarkUnread();
   /*
     After "Mark as unread" the conversation must not mark itself read again the
@@ -494,6 +496,7 @@ export default function Conversation({
                     onEdit={(msg, text) => edit.mutateAsync({ id: msg.id, text })}
                     onDelete={(msg) => remove.mutateAsync(msg.id)}
                     onReact={(msg, emoji, on) => react.mutate({ message: msg, emoji, on })}
+                    onStar={(msg, on) => star.mutate({ id: msg.id, on })}
                     onMarkUnread={markUnread}
                   />
                   </div>

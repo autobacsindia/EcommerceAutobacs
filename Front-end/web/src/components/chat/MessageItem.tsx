@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Download, EyeOff, History, MessageSquareReply, MoreVertical, Package, Pencil, Quote, RotateCcw, SmilePlus, Trash2 } from 'lucide-react';
+import { Download, EyeOff, History, MessageSquareReply, MoreVertical, Package, Pencil, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
 import EmojiPicker from './EmojiPicker';
@@ -358,6 +358,7 @@ export default function MessageItem({
   onDelete,
   onReact,
   onMarkUnread,
+  onStar,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
@@ -380,6 +381,8 @@ export default function MessageItem({
   onReact?: (m: ChatMessage, emoji: string, on: boolean) => void;
   /** Mark this message, and what follows it, unread for me. */
   onMarkUnread?: (m: ChatMessage) => void;
+  /** Star it for me (`on`) or take the star off. */
+  onStar?: (m: ChatMessage, on: boolean) => void;
 }) {
   const m = message;
   // The timeline is ordered by activity, so a thread that just moved sits under
@@ -406,6 +409,11 @@ export default function MessageItem({
   const more: MoreAction[] = live
     ? [
         ...(onMarkUnread ? [{ label: 'Mark as unread', icon: <EyeOff className="h-4 w-4" />, onSelect: () => onMarkUnread(m) }] : []),
+        ...(onStar
+          ? [m.starred
+            ? { label: 'Remove star', icon: <StarOff className="h-4 w-4" />, onSelect: () => onStar(m, false) }
+            : { label: 'Star', icon: <Star className="h-4 w-4" />, onSelect: () => onStar(m, true) }]
+          : []),
       ]
     : [];
 
@@ -486,6 +494,7 @@ export default function MessageItem({
                 <TeamBadge person={m.sender} />
               )}
               <span className="text-xs text-gray-500">{timeOf(m.createdAt)}</span>
+              {m.starred && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" aria-label="Starred" />}
               {m.edited && !m.deleted && (
                 <span className="text-xs text-gray-400" title={m.editedAt ? `Edited ${timeOf(m.editedAt)}` : 'Edited'}>
                   (edited)

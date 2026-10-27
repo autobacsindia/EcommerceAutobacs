@@ -233,6 +233,17 @@ function shapeQuote(q, hidden, admin) {
   };
 }
 
+/**
+ * Mark which of these (already shaped, for `user`) messages `user` has starred.
+ * One indexed query per page. Only ever on a response to that person — a
+ * broadcast carries no `starred`, and the client keeps what it had.
+ */
+async function withStars(user, messages) {
+  const starred = new Set((await chatRepository.findStarredAmong(user._id, messages.map((m) => m.id)))
+    .map((s) => idOf(s.message)));
+  return messages.map((m) => ({ ...m, starred: starred.has(m.id) }));
+}
+
 /** Reactions as the client draws them: the emoji, how many, and who. */
 function shapeReactions(list) {
   return (list || [])
@@ -425,7 +436,7 @@ export async function listMessages(user, channelId, { before, after, limit } = {
 
   const oldest = docs[0] ? (docs[0].activitySeq ?? docs[0].seq) : null;
   return {
-    messages: docs.map((m) => shapeMessage(m, null, user)),
+    messages: await withStars(user, docs.map((m) => shapeMessage(m, null, user))),
     // Cursor for the next older page (an activitySeq), or null at the beginning.
     nextBefore: after == null || after === '' ? (docs.length === size && oldest > 1 ? oldest : null) : undefined,
   };
@@ -447,9 +458,10 @@ export async function getThread(user, rootId, { after, limit } = {}) {
   const size = Math.min(Math.max(parseInt(limit, 10) || THREAD_PAGE_MAX, 1), THREAD_PAGE_MAX);
   const from = after != null && after !== '' ? Number(after) : null;
   const replies = await chatRepository.findThreadReplies(root._id, from, size);
+  const [shapedRoot, ...shapedReplies] = await withStars(user, [root, ...replies].map((m) => shapeMessage(m, null, user)));
   return {
-    root: shapeMessage(root, null, user),
-    replies: replies.map((m) => shapeMessage(m, null, user)),
+    root: shapedRoot,
+    replies: shapedReplies,
     nextAfter: replies.length === size ? replies[replies.length - 1].seq : null,
   };
 }
@@ -571,11 +583,11 @@ export async function searchMessages(user, { q, channelId, before, limit } = {})
   );
 
   return {
-    messages: docs.map((m) => ({
-      ...shapeMessage(m, null, user),
-      channel: String(m.channel),
-      channelName: names.get(String(m.channel))?.name ?? '',
-      channelKind: names.get(String(m.channel))?.kind ?? 'space',
+    messages: (await withStars(user, docs.map((m) => shapeMessage(m, null, user)))).map((m, i) => ({
+      ...m,
+      channel: String(docs[i].channel),
+      channelName: names.get(String(docs[i].channel))?.name ?? '',
+      channelKind: names.get(String(docs[i].channel))?.kind ?? 'space',
     })),
     // Null when the page came back short — there is nothing older to ask for.
     nextBefore: docs.length === size ? docs[docs.length - 1].createdAt : null,
@@ -1263,5 +1275,81 @@ export async function markUnreadFrom(user, messageId) {
     part,
     lastReadSeq: row?.lastReadSeq ?? 0,
     lastReadUpdatesSeq: row?.lastReadUpdatesSeq ?? row?.lastReadSeq ?? 0,
+  };
+}
+
+// ── stars ────────────────────────────────────────────────────────────────────
+/*
+  "Star" a message to come back to it. Private: nobody else learns who starred
+  what, and nothing is broadcast. Any message you can read, including order
+  updates; not a deleted one (there is nothing to come back to).
+*/
+
+export const STARRED_PAGE_MAX = 50;
+
+/** Star (`on`, the default) or un-star a message, for the caller only. Idempotent both ways. */
+export async function starMessage(user, messageId, { on = true } = {}) {
+  if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
+  const m = await chatRepository.findMessageById(messageId);
+  if (!m) throw fail('Message not found', 404);
+  const channel = await loadAccessible(user, m.channel);
+  if (on !== false) {
+    if (m.deletedAt) throw fail('This message was deleted', 409);
+    await chatRepository.addStar(user._id, m._id, channel._id);
+  } else {
+    await chatRepository.removeStar(user._id, m._id);
+  }
+  return { messageId: idOf(m), starred: on !== false };
+}
+
+/**
+ * My starred messages, newest star first, with the conversation each is in.
+ * Stars in a conversation I can no longer read (left the team, group deleted)
+ * are skipped, never shown — and so are messages since deleted, except to an
+ * admin, who sees deleted messages everywhere.
+ *   before=<star id>  the next page
+ */
+export async function listStarred(user, { before, limit } = {}) {
+  const size = Math.min(Math.max(parseInt(limit, 10) || 25, 1), STARRED_PAGE_MAX);
+  const cursor = before && mongoose.isValidObjectId(before) ? new mongoose.Types.ObjectId(String(before)) : null;
+  const stars = await chatRepository.findStars(user._id, cursor, size);
+  if (!stars.length) return { messages: [], nextBefore: null };
+
+  const channelIds = [...new Set(stars.map((s) => idOf(s.channel)))];
+  const channels = (await chatRepository.findChannels(
+    { _id: { $in: channelIds } },
+    'kind key name audience team teams members system archived',
+  )).filter((c) => canAccess(user, c));
+  const channelById = new Map(channels.map((c) => [idOf(c), c]));
+
+  const uid = idOf(user);
+  const partnerIds = new Set();
+  for (const c of channels) if (c.kind === 'dm') for (const m of c.members || []) if (idOf(m) !== uid) partnerIds.add(idOf(m));
+  const partnerById = new Map((await userRepository.findDisplayByIds([...partnerIds])).map((p) => [idOf(p), p]));
+  const nameOf = (c) => (c.kind === 'dm'
+    ? partnerById.get((c.members || []).map(idOf).find((m) => m !== uid) ?? '')?.name ?? 'Former member'
+    : channelNameFor(c, user));
+
+  const readable = stars.filter((s) => channelById.has(idOf(s.channel)));
+  const docs = await chatRepository.findMessagesByIds(readable.map((s) => s.message));
+  const docById = new Map(docs.map((d) => [idOf(d), d]));
+
+  const messages = readable
+    .map((s) => docById.get(idOf(s.message)))
+    .filter((d) => d && (!d.deletedAt || isAdmin(user)))
+    .map((d) => {
+      const c = channelById.get(idOf(d.channel));
+      return {
+        ...shapeMessage(d, null, user),
+        starred: true,
+        channel: idOf(c),
+        channelName: nameOf(c),
+        channelKind: c.kind,
+      };
+    });
+  return {
+    messages,
+    // The cursor follows the stars read, not the ones shown, so skipped stars never stall paging.
+    nextBefore: stars.length === size ? idOf(stars[stars.length - 1]._id) : null,
   };
 }

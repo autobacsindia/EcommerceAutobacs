@@ -123,6 +123,11 @@ export interface ChatMessage {
   quote?: ChatQuote | null;
   /** Emoji reactions, in the order each emoji was first used. */
   reactions?: ChatReaction[];
+  /**
+   * Have I starred it? Only on responses to me (pages, threads, search) — a
+   * live broadcast never carries it, so caches keep what they had (keepStar).
+   */
+  starred?: boolean;
   createdAt: string;
   /** Set on a reply: the top-level message it belongs to. */
   threadRoot?: string | null;
@@ -262,6 +267,10 @@ export function useChatMessages(channelId: string | null) {
 
 type Pages = InfiniteData<MessagePage, number>;
 
+/** A broadcast copy has no `starred`: keep what the cache knew. */
+const keepStar = (incoming: ChatMessage, old?: ChatMessage): ChatMessage =>
+  incoming.starred === undefined && old?.starred !== undefined ? { ...incoming, starred: old.starred } : incoming;
+
 /** Insert or replace a message in the cached pages (newest page is pages[0]). */
 export function upsertMessage(data: Pages | undefined, msg: ChatMessage): Pages | undefined {
   if (!data) return data;
@@ -273,7 +282,7 @@ export function upsertMessage(data: Pages | undefined, msg: ChatMessage): Pages 
     if (i === -1) return p;
     found = true;
     const next = p.messages.slice();
-    next[i] = msg;
+    next[i] = keepStar(msg, p.messages[i]);
     return { ...p, messages: next };
   });
   if (found) return { ...data, pages };
@@ -292,9 +301,10 @@ export function upsertMessage(data: Pages | undefined, msg: ChatMessage): Pages 
  */
 export function applyThreadUpdate(data: Pages | undefined, root: ChatMessage): Pages | undefined {
   if (!data) return data;
+  const moved = keepStar(root, data.pages.flatMap((p) => p.messages).find((m) => m.id === root.id));
   const pages = data.pages.map((p) => ({ ...p, messages: p.messages.filter((m) => m.id !== root.id) }));
   const [first, ...rest] = pages;
-  const merged = [...(first?.messages ?? []), root].sort((a, b) => orderOf(a) - orderOf(b));
+  const merged = [...(first?.messages ?? []), moved].sort((a, b) => orderOf(a) - orderOf(b));
   return { ...data, pages: [{ ...(first ?? { nextBefore: null }), messages: merged }, ...rest] };
 }
 
@@ -310,7 +320,7 @@ export function upsertReply(data: ThreadData | undefined, msg: ChatMessage): Thr
   const i = data.replies.findIndex(
     (m) => m.id === msg.id || (!!msg.clientId && m.clientId === msg.clientId && (m.pending || m.failed)),
   );
-  const replies = i === -1 ? [...data.replies, msg] : data.replies.map((m, j) => (j === i ? msg : m));
+  const replies = i === -1 ? [...data.replies, msg] : data.replies.map((m, j) => (j === i ? keepStar(msg, m) : m));
   replies.sort((a, b) => (a.pending ? Infinity : a.seq) - (b.pending ? Infinity : b.seq));
   return { ...data, replies };
 }
@@ -395,7 +405,7 @@ export function applyMessageChange(
   msg: ChatMessage,
   thread?: ChatMessage | null,
 ) {
-  const replace = (list: ChatMessage[], m: ChatMessage) => list.map((x) => (x.id === m.id ? m : x));
+  const replace = (list: ChatMessage[], m: ChatMessage) => list.map((x) => (x.id === m.id ? keepStar(m, x) : x));
   const inPages = (m: ChatMessage) =>
     qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) =>
       d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: replace(p.messages, m) })) } : d,
@@ -403,7 +413,7 @@ export function applyMessageChange(
   // A message is cached as a thread's root (when that thread is open) or as a reply in one.
   const inThreads = (m: ChatMessage) =>
     qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) =>
-      d ? { ...d, root: d.root.id === m.id ? m : d.root, replies: replace(d.replies, m) } : d,
+      d ? { ...d, root: d.root.id === m.id ? keepStar(m, d.root) : d.root, replies: replace(d.replies, m) } : d,
     );
 
   if (!msg.threadRoot) inPages(msg);
@@ -584,6 +594,54 @@ export function useMarkUnread() {
       );
       qc.invalidateQueries({ queryKey: chatKeys.channels() });
     },
+  });
+}
+
+// ── stars ────────────────────────────────────────────────────────────────────
+
+/** Set `starred` on a message wherever it is cached: timeline, threads, search. */
+function applyStar(qc: ReturnType<typeof useQueryClient>, messageId: string, starred: boolean) {
+  const set = <T extends ChatMessage>(m: T): T => (m.id === messageId ? { ...m, starred } : m);
+  qc.setQueriesData<Pages>({ queryKey: [...chatKeys.all, 'messages'] }, (d) =>
+    d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: p.messages.map(set) })) } : d,
+  );
+  qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) =>
+    d ? { ...d, root: set(d.root), replies: d.replies.map(set) } : d,
+  );
+  qc.setQueriesData<InfiniteData<SearchPage, string>>({ queryKey: [...chatKeys.all, 'search'] }, (d) =>
+    d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: p.messages.map(set) })) } : d,
+  );
+}
+
+/**
+ * Star a message for me, or take the star off. Private and undoable, so it
+ * shows at once; the Starred list refetches afterwards.
+ */
+export function useStarMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, on }: { id: string; on: boolean }) =>
+      apiClient.put<{ messageId: string; starred: boolean }>(`/chat/messages/${id}/star`, { on }),
+    onMutate: ({ id, on }) => applyStar(qc, id, on),
+    onError: (_e, { id, on }) => applyStar(qc, id, !on),
+    onSettled: () => qc.invalidateQueries({ queryKey: chatKeys.starred() }),
+  });
+}
+
+/** My starred messages, newest star first. */
+export function useStarred(enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.starred(),
+    queryFn: async ({ pageParam }) => {
+      const q = new URLSearchParams({ limit: '25' });
+      if (pageParam) q.set('before', pageParam);
+      const res = await apiClient.get<SearchPage>(`/chat/starred?${q}`);
+      return { messages: res.messages ?? [], nextBefore: res.nextBefore ?? null };
+    },
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextBefore ?? undefined,
+    enabled,
+    staleTime: 30_000,
   });
 }
 

@@ -1,6 +1,7 @@
 import ChatChannel from '../models/ChatChannel.js';
 import ChatMessage from '../models/ChatMessage.js';
 import ChatReadState from '../models/ChatReadState.js';
+import ChatStar from '../models/ChatStar.js';
 
 /**
  * Team-chat data access (channels, messages, read positions). Access decisions
@@ -250,6 +251,23 @@ const chatRepository = {
       { $set: { lastReplyPreview: preview, lastReplyBy: by, lastReplyMentions: mentions } },
       { new: true },
     ).populate('sender', SENDER_FIELDS).lean(),
+
+  // ── stars (private per person) ──
+  /** Star a message. Upsert on the unique { user, message }, so a retry is one star. */
+  addStar: (user, message, channel) =>
+    ChatStar.updateOne({ user, message }, { $setOnInsert: { channel } }, { upsert: true }),
+  removeStar: (user, message) => ChatStar.deleteOne({ user, message }),
+  /** Which of `messageIds` has `user` starred? One indexed lookup for a whole page. */
+  findStarredAmong: (user, messageIds) =>
+    messageIds.length
+      ? ChatStar.find({ user, message: { $in: messageIds } }).select('message').lean()
+      : Promise.resolve([]),
+  /** The Starred list, newest first, keyset on _id. */
+  findStars: (user, before, limit) =>
+    ChatStar.find({ user, ...(before ? { _id: { $lt: before } } : {}) })
+      .sort({ _id: -1 }).limit(limit).select('message channel').lean(),
+  findMessagesByIds: (ids) =>
+    ChatMessage.find({ _id: { $in: ids } }).populate('sender', SENDER_FIELDS).lean(),
 
   // ── read positions ──
   findReadStates: (user, channelIds) =>
