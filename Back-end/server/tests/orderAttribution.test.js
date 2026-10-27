@@ -295,4 +295,43 @@ describe('Crediting a website order to a salesman', () => {
       expect((await Order.findById(order._id).lean()).salesAttribution).toBeUndefined();
     });
   });
+
+  describe('Orders list — "Sold by" filter (admin and marketing)', () => {
+    const list = (s, qs) => s.get(`/orders/admin/all?${qs}`).then((r) => {
+      expect(r.status).toBe(200);
+      return r.body.orders.map((o) => String(o._id)).sort();
+    });
+
+    it('website orders only, one salesman\'s only, or everything', async () => {
+      const web = await websiteOrder();
+      const web2 = await websiteOrder();
+      const sams = await websiteOrder({ source: 'offline', salesUser: lead.user._id });
+      const hari = await websiteOrder({ source: 'offline', salesUser: head.user._id });
+      const all = [web, web2, sams, hari].map((o) => String(o._id)).sort();
+
+      for (const s of [admin.session, marketing.session]) {
+        expect(await list(s, '')).toEqual(all);
+        expect(await list(s, 'seller=website')).toEqual([web, web2].map((o) => String(o._id)).sort());
+        expect(await list(s, `seller=${lead.id}`)).toEqual([String(sams._id)]);
+        expect(await list(s, `seller=${head.id}`)).toEqual([String(hari._id)]);
+      }
+      // Combines with the other filters and the count follows it.
+      const res = await admin.session.get(`/orders/admin/all?seller=website&search=${String(web._id).slice(-8)}`);
+      expect(res.body.orders.map((o) => String(o._id))).toEqual([String(web._id)]);
+      expect((await admin.session.get('/orders/admin/all?seller=website')).body.pagination.total).toBe(2);
+    });
+
+    it('a salesman with no orders, or a garbled value, is an empty list — never every order', async () => {
+      await websiteOrder();
+      await websiteOrder({ source: 'offline', salesUser: lead.user._id });
+      expect(await list(admin.session, `seller=${lead2.id}`)).toEqual([]);
+      expect(await list(admin.session, 'seller=not-an-id')).toEqual([]);
+      expect(await list(admin.session, 'seller=%7B%22%24ne%22%3Anull%7D')).toEqual([]); // {"$ne":null}
+    });
+
+    it('other teams still cannot read the orders list', async () => {
+      const ops = await makeUser('Omar', 'staff', staff('operations'));
+      expect((await ops.session.get('/orders/admin/all?seller=website')).status).toBe(403);
+    });
+  });
 });
