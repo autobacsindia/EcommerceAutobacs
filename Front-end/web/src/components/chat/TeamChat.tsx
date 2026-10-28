@@ -81,20 +81,41 @@ function PeoplePicker({
   );
 }
 
-function NewMessageDialog({ meId, onClose, onOpened }: { meId: string; onClose: () => void; onOpened: (id: string) => void }) {
+/** Up to 7 others: one is a direct message, more is a group conversation. */
+const MAX_GROUP_OTHERS = 7;
+
+export function NewMessageDialog({ meId, onClose, onOpened }: { meId: string; onClose: () => void; onOpened: (id: string) => void }) {
   const { data: people = [] } = useChatPeople();
   const openDm = useOpenDm();
+  const [picked, setPicked] = useState<string[]>([]);
+  const toggle = (id: string) =>
+    setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= MAX_GROUP_OTHERS ? prev : [...prev, id]));
+  const start = async () => {
+    if (!picked.length || openDm.isPending) return;
+    const res = await openDm.mutateAsync(picked);
+    onOpened(res.channel.id);
+  };
+  const names = picked.map((id) => people.find((p) => p.id === id)?.name).filter(Boolean);
   return (
-    <Dialog title="New message" onClose={onClose}>
-      <PeoplePicker
-        people={people.filter((p) => p.id !== meId)}
-        selected={new Set()}
-        single
-        onToggle={async (id) => {
-          const res = await openDm.mutateAsync(id);
-          onOpened(res.channel.id);
-        }}
-      />
+    <Dialog title="New chat" onClose={onClose}>
+      <p className="mb-2 text-sm text-gray-600">
+        Pick one person for a direct message, or up to {MAX_GROUP_OTHERS} for a group conversation. Only the people you pick can see it.
+      </p>
+      <PeoplePicker people={people.filter((p) => p.id !== meId)} selected={new Set(picked)} onToggle={toggle} />
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="min-w-0 truncate text-sm text-gray-600">
+          {names.length ? names.join(', ') : 'No one picked yet'}
+        </span>
+        <button
+          type="button"
+          onClick={() => void start().catch(() => {})}
+          disabled={!picked.length || openDm.isPending}
+          className="shrink-0 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+        >
+          {openDm.isPending ? 'Opening…' : picked.length > 1 ? `Start group (${picked.length + 1})` : 'Start chat'}
+        </button>
+      </div>
+      {picked.length >= MAX_GROUP_OTHERS && <p className="mt-1 text-xs text-gray-500">That’s the most a group conversation can have.</p>}
       {openDm.isError && <p className="mt-2 text-sm text-red-600">Couldn&apos;t open the chat. Please try again.</p>}
     </Dialog>
   );
@@ -501,6 +522,7 @@ export default function TeamChat() {
           people={people}
           orderHref={orderHref}
           onBack={() => select(null)}
+          onOpenChannel={select}
           onSearch={() => setSearching(selected.id)}
           initialTab={initialTab}
         />

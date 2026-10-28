@@ -91,6 +91,21 @@ const ReactionSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * Where a forwarded message came from: who wrote it and when — a snapshot, like
+ * a quote. The source message id is kept for the record but never sent to
+ * clients: the people reading the forward may not be able to read the original
+ * conversation, and must not learn which one it was.
+ */
+const ForwardSchema = new mongoose.Schema(
+  {
+    message: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatMessage', required: true },
+    by: { type: String, default: '' },
+    at: { type: Date, required: true },
+  },
+  { _id: false }
+);
+
 const ChatMessageSchema = new mongoose.Schema(
   {
     channel: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatChannel', required: true },
@@ -117,8 +132,15 @@ const ChatMessageSchema = new mongoose.Schema(
     mentions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     /** Teams addressed as a group, e.g. '@accounts'. Values from config/staff.js. */
     mentionTeams: [{ type: String }],
+    /**
+     * "@all": everyone who can read the conversation. In #company only admins
+     * and team heads may use it (chatService) — one person must not be able to
+     * ping the whole company. Unset when not used.
+     */
+    mentionAll: { type: Boolean, default: undefined },
     refs: { type: [RefSchema], default: [] },
     quote: { type: QuoteSchema, default: undefined },
+    forwardedFrom: { type: ForwardSchema, default: undefined },
     // Emoji reactions, in the order each emoji was first used. Capped per
     // message (chatService.MAX_REACTIONS_PER_MESSAGE). Unset until the first one.
     reactions: { type: [ReactionSchema], default: undefined },

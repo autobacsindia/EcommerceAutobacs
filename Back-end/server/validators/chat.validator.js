@@ -44,6 +44,13 @@ export const validateStarredPage = [
   query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be 1–50'),
 ];
 
+/** Forward a message into a conversation. */
+export const validateForward = [
+  param('id').custom(isObjectId).withMessage('Invalid message id'),
+  body('channelId').custom(isObjectId).withMessage('Choose a conversation'),
+  body('clientId').optional().isString().matches(/^[A-Za-z0-9_-]{8,64}$/).withMessage('Invalid client id'),
+];
+
 export const validateMessagePage = [
   query('before').optional().isInt({ min: 1 }).withMessage('Invalid cursor'),
   query('after').optional().isInt({ min: 0 }).withMessage('Invalid cursor'),
@@ -85,6 +92,10 @@ export const validateCreateSpace = [
   body('memberIds.*').optional().custom(isObjectId).withMessage('Invalid member id'),
 ];
 
+/** One person (a DM) or a few (a group conversation, up to 7 others). */
 export const validateOpenDm = [
-  body('userId').custom(isObjectId).withMessage('Invalid person'),
+  body('userId').optional().custom(isObjectId).withMessage('Invalid person'),
+  body('userIds').optional().isArray({ min: 1, max: 7 }).withMessage('Choose 1 to 7 people'),
+  body('userIds.*').optional().custom(isObjectId).withMessage('Invalid person'),
+  body().custom((b) => !!(b?.userId || (Array.isArray(b?.userIds) && b.userIds.length))).withMessage('Choose who to message'),
 ];

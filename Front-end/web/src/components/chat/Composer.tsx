@@ -29,7 +29,7 @@ export function mentionableTeams(channel: ChatChannel): readonly string[] {
 
 type Pending = { file: File; preview: string | null };
 /** One row in the @mention picker: either a person or a whole team. */
-type MentionOption = { person?: ChatPerson; team?: string };
+type MentionOption = { person?: ChatPerson; team?: string; all?: true };
 
 export default function Composer({
   channelName,
@@ -39,6 +39,7 @@ export default function Composer({
   placeholder,
   quote,
   onClearQuote,
+  canMentionAll = false,
 }: {
   channelName: string;
   people: ChatPerson[];
@@ -50,6 +51,8 @@ export default function Composer({
   /** The message being quoted, shown above the box until sent or cleared. */
   quote?: ChatMessage | null;
   onClearQuote?: () => void;
+  /** May I @all here? (#company: admins and heads only — the API checks too.) */
+  canMentionAll?: boolean;
 }) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<Pending[]>([]);
@@ -118,12 +121,13 @@ export default function Composer({
     const q = mentionQuery.trim().toLowerCase();
     const peopleHits = people.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 6);
     const teamHits = teams.filter((t) => mentionName(t).includes(q)).slice(0, 3);
-    return [...teamHits.map((t) => ({ team: t })), ...peopleHits.map((p) => ({ person: p }))];
-  }, [mentionQuery, people, teams]);
+    const allHit: MentionOption[] = canMentionAll && 'all'.startsWith(q) ? [{ all: true }] : [];
+    return [...allHit, ...teamHits.map((t) => ({ team: t })), ...peopleHits.map((p) => ({ person: p }))];
+  }, [mentionQuery, people, teams, canMentionAll]);
 
   /** Swap the half-typed "@foo" for the chosen name and remember who was meant. */
   const pickMention = (option: MentionOption) => {
-    const label = option.person?.name ?? (option.team ? mentionName(option.team) : '');
+    const label = option.all ? 'all' : option.person?.name ?? (option.team ? mentionName(option.team) : '');
     setText((prev) => prev.replace(/(^|\s)@([\w ]{0,20})$/, (_m, lead) => `${lead}@${label} `));
     if (option.person) setMentioned((prev) => (prev.some((p) => p.id === option.person!.id) ? prev : [...prev, option.person!]));
     if (option.team) setMentionTeams((prev) => (prev.includes(option.team!) ? prev : [...prev, option.team!]));
@@ -141,6 +145,8 @@ export default function Composer({
       // Only keep mentions whose name survived any later editing of the text.
       mentions: mentioned.filter((p) => body.includes(`@${p.name}`)).map((p) => p.id),
       mentionTeams: mentionTeams.filter((t) => body.includes(`@${mentionName(t)}`)),
+      // "@all" written as a word, where allowed — picked from the list or typed.
+      ...(canMentionAll && /(^|\s)@all\b/i.test(body) ? { mentionAll: true } : {}),
       orderIds: orders.map((o) => o.id),
       files: files.map((f) => f.file),
       ...(quote ? { quoteId: quote.id } : {}),
@@ -220,14 +226,20 @@ export default function Composer({
         {mentionOptions.length > 0 && (
           <ul className="absolute bottom-full z-20 mb-2 w-72 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" role="listbox" aria-label="Mention someone">
             {mentionOptions.map((option) => (
-              <li key={option.person?.id ?? `team-${option.team}`}>
+              <li key={option.all ? 'all' : option.person?.id ?? `team-${option.team}`}>
                 <button
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => pickMention(option)}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-emerald-50"
                 >
-                  {option.person ? (
+                  {option.all ? (
+                    <>
+                      <span className="grid h-7 w-7 place-items-center rounded-lg bg-amber-100 text-xs font-bold text-amber-800">@</span>
+                      <span className="flex-1 text-sm text-gray-900">@all</span>
+                      <span className="text-xs text-gray-500">everyone here</span>
+                    </>
+                  ) : option.person ? (
                     <>
                       <Avatar person={option.person} size="sm" />
                       <span className="min-w-0 flex-1 truncate text-sm text-gray-900">{option.person.name}</span>

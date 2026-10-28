@@ -20,6 +20,7 @@ import {
   validateNotify,
   validateStar,
   validateStarredPage,
+  validateForward,
 } from '../validators/chat.validator.js';
 import {
   listChannels,
@@ -42,9 +43,10 @@ import {
   markUnreadFrom,
   starMessage,
   listStarred,
+  forwardMessage,
   createSpace,
   deleteSpace,
-  openDirectMessage,
+  openConversation,
   canAccess,
   canCreateSpace,
   isChatUser,
@@ -165,9 +167,9 @@ router.delete('/channels/:id/members/:userId', validateChannelIdParam, validateR
   res.json({ success: true, ...(await removeSpaceMember(req.user, req.params.id, req.params.userId)) });
 }));
 
-// POST /chat/dm { userId } — open (or reuse) a direct message
+// POST /chat/dm { userId } or { userIds: [..] } — open (or reuse) a direct message or a group conversation
 router.post('/dm', validateOpenDm, validateRequest, asyncHandler(async (req, res) => {
-  const channel = await openDirectMessage(req.user, req.body.userId);
+  const channel = await openConversation(req.user, { userId: req.body.userId, userIds: req.body.userIds });
   res.json({ success: true, channel });
 }));
 
@@ -227,6 +229,8 @@ router.post('/channels/:id/messages',
       clientId: req.body.clientId,
       mentions: asArray(req.body.mentions),
       mentionTeams: asArray(req.body.mentionTeams),
+      // JSON sends a boolean; multipart (with files) sends the string 'true'.
+      mentionAll: req.body.mentionAll === true || req.body.mentionAll === 'true',
       orderIds: asArray(req.body.orderIds),
       files: req.files,
       threadRoot: req.body.threadRoot || null,
@@ -280,6 +284,12 @@ router.put('/channels/:id/notify', validateNotify, validateRequest, asyncHandler
 // POST /chat/messages/:id/unread — mark this message (and what follows it in its tab) unread, for me
 router.post('/messages/:id/unread', validateMessageIdParam, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await markUnreadFrom(req.user, req.params.id)) });
+}));
+
+// POST /chat/messages/:id/forward { channelId, clientId? } — forward a copy into a conversation I am in
+router.post('/messages/:id/forward', validateForward, validateRequest, asyncHandler(async (req, res) => {
+  const { message, duplicate } = await forwardMessage(req.user, req.params.id, req.body);
+  res.status(duplicate ? 200 : 201).json({ success: true, message });
 }));
 
 // PATCH /chat/messages/:id { text } — edit your own message, within 15 minutes
