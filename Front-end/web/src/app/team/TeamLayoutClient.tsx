@@ -9,6 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import NotificationBell from '@/components/notifications/NotificationBell';
 import PanelShell from '@/components/panel/PanelShell';
+import ViewWebsiteLink from '@/components/panel/ViewWebsiteLink';
 import { MARKETING_BASE } from '@/lib/usePanel';
 import { MARKETING_AREAS } from './marketingAreas';
 
@@ -118,8 +119,14 @@ export default function TeamLayoutClient({
       onLogout={signOut}
       heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{current?.label || `${teamLabel} Team`}</h2>}
       // Everything waiting on this team in one place — approvals, refunds,
-      // unread chat — so nobody opens each page to check.
-      actions={<NotificationBell chatHref="/team/chat" />}
+      // unread chat — so nobody opens each page to check. Every team gets the
+      // website one click away, to check a product or a price as a customer sees it.
+      actions={(
+        <>
+          <ViewWebsiteLink />
+          <NotificationBell chatHref="/team/chat" />
+        </>
+      )}
     >
       {children}
     </PanelShell>

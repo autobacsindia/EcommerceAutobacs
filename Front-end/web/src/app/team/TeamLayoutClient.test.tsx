@@ -90,3 +90,18 @@ it('other teams do not get the marketing screens', () => {
   expect(screen.queryByRole('link', { name: /Coupons/ })).toBeNull();
   expect(screen.queryByRole('link', { name: /Page SEO/ })).toBeNull();
 });
+
+it('every team gets a "View website" link that opens the store in a new tab', () => {
+  for (const team of ['sales', 'procurement', 'accounts', 'operations', 'marketing']) {
+    const { unmount } = render(
+      <TeamLayoutClient userName="Kim" team={team} teamLabel={team} isHead={false}>
+        <p>panel content</p>
+      </TeamLayoutClient>,
+    );
+    const site = screen.getByRole('link', { name: /View website/ });
+    expect(site).toHaveAttribute('href', '/');
+    expect(site).toHaveAttribute('target', '_blank');
+    expect(site).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    unmount();
+  }
+});
