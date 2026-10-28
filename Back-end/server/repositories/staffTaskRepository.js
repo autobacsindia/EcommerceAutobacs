@@ -26,6 +26,15 @@ const staffTaskRepository = {
   clientIdFilter: (createdBy, clientId) => ({ createdBy, clientId: { $type: 'string', $eq: clientId } }),
   commentClientIdFilter: (by, clientId) => ({ by, clientId: { $type: 'string', $eq: clientId } }),
   findByClientId: (createdBy, clientId) => StaffTask.findOne(staffTaskRepository.clientIdFilter(createdBy, clientId)).lean(),
+  /** The copies of a create already made (a retry of a several-people create). */
+  findByClientIds: (createdBy, clientIds) => StaffTask.find({ createdBy, clientId: { $type: 'string', $in: clientIds } }).lean(),
+  /**
+   * Every copy of a task given to several people (at most MAX_ASSIGNEES rows).
+   * `$type` restates the partial filter of staff_task_group so the planner uses it:
+   * a bare `{ group }` read every task in the collection (4,003 docs for 3, measured).
+   */
+  findGroup: (group) => StaffTask.find({ group: { $type: 'objectId', $eq: group } })
+    .select('number assignee assigneeName team createdBy status bucket').lean(),
 
   /**
    * Apply a change only if nobody changed the task since `rev` was read

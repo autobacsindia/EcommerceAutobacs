@@ -6,7 +6,7 @@ import { Loader2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
-import { TASK_PRIORITIES, isPastDay, newClientId, type Assignee, type Task, type TaskPriority } from './types';
+import { TASK_PRIORITIES, isPastDay, newClientId, personLabel, type Assignee, type Task, type TaskPriority } from './types';
 
 /** Shown under a due date that has already passed. */
 export function PastDueWarning({ dueOn }: { dueOn: string }) {
@@ -84,7 +84,53 @@ export function useAssignees() {
   });
 }
 
-const label = (p: Assignee) => `${p.me ? `${p.name} (me)` : p.name}${p.teamLabel ? ` · ${p.teamLabel}` : ''}`;
+/**
+ * Tick everyone who should do it — each person gets their own copy. The API
+ * lists you first, then team heads, then everyone else; a search box appears
+ * once the list is long.
+ */
+export function PeoplePicker({ people, selected, onChange }: {
+  people: Assignee[]; selected: string[]; onChange: (ids: string[]) => void;
+}) {
+  const [q, setQ] = useState('');
+  const term = q.trim().toLowerCase();
+  const shown = term ? people.filter((p) => personLabel(p).toLowerCase().includes(term)) : people;
+  const toggle = (id: string) => onChange(
+    // Keep the list's own order (heads first), whatever order people were ticked in.
+    people.map((p) => p.id).filter((pid) => (pid === id ? !selected.includes(id) : selected.includes(pid))),
+  );
+  const n = selected.length;
+  return (
+    <fieldset className="rounded-lg border border-gray-300 p-2">
+      <legend className="px-1 text-xs font-medium text-gray-600">Who does it — tick one or more people</legend>
+      {people.length > 8 && (
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search by name or team"
+          aria-label="Search people"
+          className="mb-2 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+        />
+      )}
+      <ul className="max-h-56 space-y-0.5 overflow-auto">
+        {shown.map((p) => (
+          <li key={p.id}>
+            <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50">
+              <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggle(p.id)} className="h-4 w-4" />
+              <span className={p.isHead ? 'font-medium text-gray-900' : 'text-gray-800'}>{personLabel(p)}</span>
+            </label>
+          </li>
+        ))}
+        {shown.length === 0 && <li className="px-2 py-1 text-sm text-gray-500">Nobody matches.</li>}
+      </ul>
+      <p className={`mt-1 px-1 text-xs ${n === 0 ? 'text-red-600' : 'text-gray-500'}`}>
+        {n === 0 ? 'Pick at least one person.'
+          : n === 1 ? '1 person picked.'
+            : `${n} people picked — each gets their own copy and marks it done separately.`}
+      </p>
+    </fieldset>
+  );
+}
 
 /** New task. Admin: anyone; team head: their team; member: themselves. */
 export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) => void; onCancel: () => void }) {
@@ -94,16 +140,19 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
   const me = choices.find((p) => p.me);
   // One id for this form: pressing Create twice (or a retried request) makes one task.
   const clientId = useRef(newClientId());
-  const [form, setForm] = useState({ title: '', description: '', assigneeId: '', priority: 'normal' as TaskPriority, dueOn: '' });
+  const [form, setForm] = useState({ title: '', description: '', priority: 'normal' as TaskPriority, dueOn: '' });
+  // null until the person touches the list: it then starts with just "me" ticked.
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const chosen = picked ?? (me ? [me.id] : []);
   const [order, setOrder] = useState<PickedOrder | null>(null);
   const [error, setError] = useState('');
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
 
   const create = useMutation({
-    mutationFn: () => apiClient.post<{ task: Task }>('/staff/tasks', {
+    mutationFn: () => apiClient.post<{ task: Task; tasks: Task[] }>('/staff/tasks', {
       title: form.title.trim(),
       description: form.description.trim(),
-      assigneeId: form.assigneeId || me?.id || undefined,
+      assigneeIds: chosen,
       priority: form.priority,
       dueOn: form.dueOn || null,
       orderId: order?.id || null,
@@ -118,7 +167,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); setError(''); if (form.title.trim()) create.mutate(); }}
+      onSubmit={(e) => { e.preventDefault(); setError(''); if (form.title.trim() && chosen.length) create.mutate(); }}
       className="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
     >
       <div className="flex items-center justify-between">
@@ -144,18 +193,8 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
         aria-label="Notes"
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
       />
-      <div className="grid gap-3 sm:grid-cols-3">
-        <label className="text-xs font-medium text-gray-600">
-          Who does it
-          <select
-            value={form.assigneeId || me?.id || ''}
-            onChange={(e) => set({ assigneeId: e.target.value })}
-            disabled={choices.length <= 1}
-            className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-2 text-sm disabled:bg-gray-50"
-          >
-            {choices.map((p) => <option key={p.id} value={p.id}>{label(p)}</option>)}
-          </select>
-        </label>
+      {choices.length > 1 && <PeoplePicker people={choices} selected={chosen} onChange={setPicked} />}
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs font-medium text-gray-600">
           Priority
           <select value={form.priority} onChange={(e) => set({ priority: e.target.value as TaskPriority })} className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-2 text-sm">
@@ -169,18 +208,19 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
       </div>
       <PastDueWarning dueOn={form.dueOn} />
       <OrderPicker value={order} onChange={setOrder} />
-      {choices.length <= 1 && (
-        <p className="text-xs text-gray-500">Team heads and the admin give tasks to others. Tasks you add here are for you.</p>
+      {choices.length === 1 && (
+        <p className="text-xs text-gray-500">This task is for you. Team heads and the admin give tasks to others.</p>
       )}
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>
         <button
           type="submit"
-          disabled={create.isPending || !form.title.trim()}
+          disabled={create.isPending || !form.title.trim() || chosen.length === 0}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Create task
+          {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {chosen.length > 1 ? `Create ${chosen.length} tasks` : 'Create task'}
         </button>
       </div>
     </form>

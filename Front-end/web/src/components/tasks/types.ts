@@ -33,6 +33,8 @@ export type Task = {
   teamLabel: string;
   createdBy: { id: string; name: string };
   order: { id: string; code: string } | null;
+  /** Set when one task went to several people: each has their own copy. */
+  group: { id: string; size: number } | null;
   bucket: TaskBucket;
   completedAt: string | null;
   archivedAt: string | null;
@@ -43,6 +45,12 @@ export type Task = {
   rev: number;
   can: { edit: boolean; status: boolean; reassign: boolean; archive: boolean; restore: boolean; comment: boolean };
   history?: { at: string; by: string; action: string; from: string; to: string }[];
+  /** The task page only: the other people's copies the viewer may see. */
+  siblings?: TaskSibling[];
+};
+
+export type TaskSibling = {
+  id: string; code: string; assignee: { id: string; name: string }; status: TaskStatus; statusLabel: string; bucket: TaskBucket;
 };
 
 export type TaskPage = { tasks: Task[]; nextCursor: string | null };
@@ -51,6 +59,10 @@ export type TaskComment = { id: string; by: { id: string; name: string }; text: 
 export type CommentPage = { comments: TaskComment[]; nextBefore: string | null };
 
 export type Assignee = { id: string; name: string; team: string | null; teamLabel: string; isHead: boolean; me: boolean };
+
+/** "Amarnath · Marketing head", "Akash CT · Operations", "AutoBacs India (me) · Admin". */
+export const personLabel = (p: Assignee) =>
+  `${p.name}${p.me ? ' (me)' : ''}${p.teamLabel ? ` · ${p.teamLabel}${p.isHead ? ' head' : ''}` : ''}`;
 
 export const TASK_STATUSES: { value: TaskStatus; label: string }[] = [
   { value: 'todo', label: 'To do' },

@@ -32,6 +32,8 @@ export const validateTaskCreate = [
   body('priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
   body('dueOn').optional({ values: 'null' }).isString(),
   optionalId('assigneeId'),
+  body('assigneeIds').optional().isArray({ max: 30 }).withMessage('Pick at most 30 people'),
+  body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
   optionalId('orderId'),
   body('clientId').optional().isString().isLength({ max: 64 }),
 ];

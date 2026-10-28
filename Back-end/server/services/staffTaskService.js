@@ -16,6 +16,12 @@
  * A task's team is the assignee's team when it was given, so a head keeps seeing
  * the work they handed out even after the member moves on.
  *
+ * ── One task for several people ─────────────────────────────────────────────
+ * Each person gets their OWN copy (own number, status, comments), linked by a
+ * shared `group` id, so everyone is answerable for their part and the giver sees
+ * who has finished. The same who-gives-to-whom rule applies to every person
+ * picked; if any one of them is not allowed, nothing is created.
+ *
  * ── What must hold ──────────────────────────────────────────────────────────
  *   - a double-click or a retried request creates ONE task (and one comment):
  *     the browser sends a clientId, unique per author
@@ -47,6 +53,8 @@ export const COMMENT_PAGE_SIZE = 50;
 export const TITLE_MAX = 200;
 export const DESCRIPTION_MAX = 4000;
 export const COMMENT_MAX = 2000;
+/** One task can go to this many people at once (each gets their own copy). */
+export const MAX_ASSIGNEES = 30;
 const SUMMARY_MAX = 160;
 const COUNTER = 'staffTask';
 /** Open tasks with no due day sort after every dated one. */
@@ -140,6 +148,24 @@ async function loadAssignee(actor, id) {
   return target;
 }
 
+/** Every person picked, checked BEFORE anything is written: all allowed, or nothing. */
+async function loadAssignees(actor, rawIds) {
+  const ids = [...new Set((rawIds || []).map(String).filter(Boolean))];
+  if (!ids.length) return [await loadAssignee(actor, actor._id)];
+  if (ids.length > MAX_ASSIGNEES) throw fail(`Pick at most ${MAX_ASSIGNEES} people for one task.`, 400);
+  if (ids.some((id) => !mongoose.isValidObjectId(id))) throw fail('Pick who should do this task.', 400);
+  const found = await userRepository.findChatUsersByIds(ids);
+  const byId = new Map(found.map((u) => [idOf(u._id), u]));
+  const people = ids.map((id) => byId.get(id));
+  if (people.some((u) => !u)) throw fail('Someone you picked is no longer in the staff panel.', 400);
+  if (people.some((u) => !mayAssignTo(actor, u))) {
+    throw fail(isHead(actor)
+      ? 'You can give tasks only to people in your own team.'
+      : 'Only team heads and the admin give tasks to other people. You can add tasks for yourself.', 403);
+  }
+  return people;
+}
+
 async function loadOrderRef(raw) {
   if (raw == null || raw === '') return null;
   if (!mongoose.isValidObjectId(raw)) throw fail('That order could not be found.', 400);
@@ -174,6 +200,7 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
     teamLabel: t.team ? STAFF_TEAM_LABELS[t.team] || t.team : 'Admin',
     createdBy: { id: idOf(t.createdBy), name: t.createdByName || '' },
     order: t.order ? { id: idOf(t.order.target), code: t.order.code } : null,
+    group: t.group ? { id: idOf(t.group), size: t.groupSize || 1 } : null,
     bucket: t.bucket,
     completedAt: t.completedAt || null,
     archivedAt: t.archivedAt || null,
@@ -231,8 +258,25 @@ async function loadVisible(actor, id) {
   return t;
 }
 
+/**
+ * The other people's copies of the same task, as far as `actor` may see them —
+ * the giver, a head and the admin see everyone's progress; an assignee sees the
+ * copies they could open anyway.
+ */
+async function siblingsOf(actor, t) {
+  if (!t.group) return [];
+  const rows = await staffTaskRepository.findGroup(t.group);
+  return rows
+    .filter((r) => !same(r._id, t._id) && canSee(actor, r))
+    .map((r) => ({
+      id: idOf(r._id), code: `T-${r.number}`, assignee: { id: idOf(r.assignee), name: r.assigneeName || '' },
+      status: r.status, statusLabel: STATUS_LABELS[r.status], bucket: r.bucket,
+    }));
+}
+
 export async function getTask(actor, id) {
-  return shape(await loadVisible(actor, id), actor, { full: true });
+  const t = await loadVisible(actor, id);
+  return { ...shape(t, actor, { full: true }), siblings: await siblingsOf(actor, t) };
 }
 
 const encodeCursor = (t) => Buffer.from(JSON.stringify({ r: t.rank, i: idOf(t._id) })).toString('base64url');
@@ -300,8 +344,11 @@ export async function listAssignees(actor) {
   if (isAdmin(actor)) people = await userRepository.findChatUsers();
   else if (isHead(actor)) people = await userRepository.findActiveStaff(actor.staff.team);
   else people = [actor];
+  // You first, then team heads, then everyone else — each by name.
+  const order = (p) => (same(p._id, actor._id) ? 0 : isHead(p) ? 1 : 2);
   return people
     .filter((p) => mayAssignTo(actor, p))
+    .sort((a, b) => order(a) - order(b) || String(a.name || '').localeCompare(String(b.name || '')))
     .map((p) => ({
       id: idOf(p._id),
       name: p.name || '',
@@ -320,55 +367,80 @@ export async function countDueForBell(user) {
 // ── Write ───────────────────────────────────────────────────────────────────
 
 /**
- * @param {{ title, description?, priority?, dueOn?, assigneeId?, orderId?, clientId? }} input
- * @returns {Promise<{ task: object, duplicate: boolean }>}
+ * Create a task for one person, or a copy for each of several people.
+ *
+ * Retries are safe: one person's copy is keyed by the browser's clientId; with
+ * several people each copy is keyed by clientId + that person, so a retry after
+ * a half-finished create finds the copies already made, makes only the missing
+ * ones, and keeps them in the same group.
+ *
+ * @param {{ title, description?, priority?, dueOn?, assigneeId?, assigneeIds?, orderId?, clientId? }} input
+ * @returns {Promise<{ task: object, tasks: object[], duplicate: boolean }>}
  */
 export async function createTask(actor, input = {}, req) {
   const clientId = cleanClientId(input.clientId);
-  if (clientId) {
-    const seen = await staffTaskRepository.findByClientId(actor._id, clientId);
-    if (seen) return { task: shape(seen, actor, { full: true }), duplicate: true };
-  }
   const title = cleanTitle(input.title);
   const description = cleanDescription(input.description);
   const priority = input.priority == null || input.priority === '' ? 'normal' : cleanEnum(input.priority, TASK_PRIORITIES, 'priority');
   const dueOn = cleanDueOn(input.dueOn);
-  const assignee = input.assigneeId ? await loadAssignee(actor, input.assigneeId) : await loadAssignee(actor, actor._id);
+  const rawIds = Array.isArray(input.assigneeIds) && input.assigneeIds.length ? input.assigneeIds : [input.assigneeId].filter(Boolean);
+  const people = await loadAssignees(actor, rawIds);
   const order = await loadOrderRef(input.orderId);
 
+  const many = people.length > 1;
+  const keyFor = (p) => (!clientId ? undefined : many ? `${clientId}.${idOf(p._id)}` : clientId);
+  const earlier = clientId ? await staffTaskRepository.findByClientIds(actor._id, people.map(keyFor)) : [];
+  const madeFor = new Map(earlier.map((t) => [t.clientId, t]));
+  // A retry joins the group its first attempt started.
+  const group = many ? (earlier.find((t) => t.group)?.group ?? new mongoose.Types.ObjectId()) : null;
+
   const now = new Date();
-  const number = await counterRepository.next(COUNTER);
-  let doc;
-  try {
-    doc = await staffTaskRepository.create({
-      number,
-      title,
-      description,
-      priority,
-      status: 'todo',
-      dueOn,
-      assignee: assignee._id,
-      assigneeName: assignee.name || '',
-      team: teamOf(assignee),
-      createdBy: actor._id,
-      createdByName: actor.name || '',
-      order,
-      ...placeOf({ status: 'todo', dueOn }),
-      clientId,
-      history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: assignee.name || '' }],
-    });
-  } catch (err) {
-    // The same create arrived twice at the same moment: the unique clientId index decided.
-    if (err?.code === 11000 && clientId) {
-      const seen = await staffTaskRepository.findByClientId(actor._id, clientId);
-      if (seen) return { task: shape(seen, actor, { full: true }), duplicate: true };
+  const results = [];
+  for (const person of people) {
+    const key = keyFor(person);
+    const existing = key && madeFor.get(key);
+    if (existing) { results.push({ doc: existing, created: false }); continue; }
+    const number = await counterRepository.next(COUNTER);
+    try {
+      const doc = await staffTaskRepository.create({
+        number,
+        title,
+        description,
+        priority,
+        status: 'todo',
+        dueOn,
+        assignee: person._id,
+        assigneeName: person.name || '',
+        team: teamOf(person),
+        createdBy: actor._id,
+        createdByName: actor.name || '',
+        order,
+        group,
+        groupSize: many ? people.length : undefined,
+        ...placeOf({ status: 'todo', dueOn }),
+        clientId: key,
+        history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: person.name || '' }],
+      });
+      results.push({ doc, created: true });
+    } catch (err) {
+      // The same create arrived twice at the same moment: the unique clientId index decided.
+      if (err?.code === 11000 && key) {
+        const seen = await staffTaskRepository.findByClientId(actor._id, key);
+        if (seen) { results.push({ doc: seen, created: false }); continue; }
+      }
+      throw err;
     }
-    throw err;
   }
 
-  auditLogger.logAction(req, 'CREATE', 'StaffTask', doc._id, { number, assignee: idOf(assignee._id), team: doc.team });
-  if (!same(assignee._id, actor._id)) void notifyAssigned(doc, actor);
-  return { task: shape(doc, actor, { full: true }), duplicate: false };
+  for (const { doc, created } of results) {
+    if (!created) continue;
+    auditLogger.logAction(req, 'CREATE', 'StaffTask', doc._id, {
+      number: doc.number, assignee: idOf(doc.assignee), team: doc.team, ...(group && { group: idOf(group), people: people.length }),
+    });
+    if (!same(doc.assignee, actor._id)) void notifyAssigned(doc, actor);
+  }
+  const tasks = results.map(({ doc }) => shape(doc, actor, { full: true }));
+  return { task: tasks[0], tasks, duplicate: results.every((r) => !r.created) };
 }
 
 /**

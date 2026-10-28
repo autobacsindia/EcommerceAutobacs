@@ -568,6 +568,11 @@ export async function ensureCriticalIndexes() {
       { createdBy: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_task_client_id', background: true }
     );
+    // The copies of one task given to several people (partial: most tasks have no group).
+    await db.collection('stafftasks').createIndex(
+      { group: 1 },
+      { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group', background: true }
+    );
     await db.collection('stafftaskcomments').createIndex({ task: 1, _id: -1 }, { name: 'staff_task_comment_task', background: true });
     await db.collection('stafftaskcomments').createIndex(
       { by: 1, clientId: 1 },
