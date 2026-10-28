@@ -179,6 +179,7 @@ function decode(s) {
     .replace(/&([a-z]+);/gi, (m, n) => ENTITIES[n.toLowerCase()] ?? m);
 }
 // Control characters out, whitespace collapsed: this text ends up in a chat card.
+// eslint-disable-next-line no-control-regex
 const clean = (s, max) => decode(String(s || '')).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 
 function metaContent(head, key) {
