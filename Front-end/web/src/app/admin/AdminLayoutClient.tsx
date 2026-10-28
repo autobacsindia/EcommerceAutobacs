@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
-  BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, ExternalLink, Factory, FerrisWheel, FolderTree, Gift, Globe,
+  BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserRoundCog,
   Users, Wallet, Zap,
@@ -15,6 +15,7 @@ import { useAdminStats } from '@/hooks/queries/useAdminStats';
 import { formatCurrency } from '@/lib/utils';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import NotificationBell from '@/components/notifications/NotificationBell';
+import ViewWebsiteLink from '@/components/panel/ViewWebsiteLink';
 
 interface NavItem {
   href: string;
@@ -254,13 +255,7 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
             </p>
           </Link>
           <span className="mx-1 hidden h-8 w-px bg-gray-200 sm:block" aria-hidden="true" />
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 px-3.5 py-1.5 text-sm font-medium text-gray-800 transition-colors hover:border-blue-600 hover:text-blue-700"
-          >
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            View site
-          </Link>
+          <ViewWebsiteLink />
           {/* Chat has its own button so it is one click from anywhere in admin. */}
           <Link
             href="/admin/chat"

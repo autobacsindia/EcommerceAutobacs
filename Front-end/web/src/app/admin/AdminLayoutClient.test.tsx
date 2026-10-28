@@ -48,7 +48,11 @@ it('the header counters still open the orders behind them', () => {
   expect(screen.getByRole('link', { name: /Revenue \(FY 2026-27\)/ })).toHaveAttribute(
     'href', '/admin/orders?status=processing%2Cshipped%2Cdelivered&startDate=2026-04-01',
   );
-  expect(screen.getByRole('link', { name: /View site/ })).toHaveAttribute('href', '/');
+  const site = screen.getByRole('link', { name: /View website/ });
+  expect(site).toHaveAttribute('href', '/');
+  // A new tab: the admin keeps their place in the panel.
+  expect(site).toHaveAttribute('target', '_blank');
+  expect(site).toHaveAttribute('rel', expect.stringContaining('noopener'));
   expect(screen.getByRole('link', { name: /^Chat/ })).toHaveAttribute('href', '/admin/chat');
   expect(screen.getAllByLabelText('2 unread').length).toBeGreaterThan(0);
 });
