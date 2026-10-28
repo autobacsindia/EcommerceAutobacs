@@ -96,6 +96,8 @@ StaffTaskSchema.index({ assignee: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staf
 StaffTaskSchema.index({ team: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_team' });
 StaffTaskSchema.index({ createdBy: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_creator' });
 StaffTaskSchema.index({ bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_all' });
+// The copies of one task given to several people. Partial: most tasks have no group.
+StaffTaskSchema.index({ group: 1 }, { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group' });
 // `$type`, not `$ne`/`$exists: true` on null — MongoDB rejects `$ne` in a partialFilterExpression.
 StaffTaskSchema.index(
   { createdBy: 1, clientId: 1 },

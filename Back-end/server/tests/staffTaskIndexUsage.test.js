@@ -148,3 +148,18 @@ describe('duplicate checks (every create and comment)', () => {
   });
 });
 
+
+describe('the copies of a task given to several people', () => {
+  // Measured before the index: COLLSCAN, 4,003 docs examined to return 3.
+  it('are found on the group index, reading only that group', async () => {
+    const group = new mongoose.Types.ObjectId();
+    await StaffTask.insertMany([0, 1, 2].map((i) => ({
+      number: 900000 + i, title: 'g', assignee: people[i], createdBy: people[9], status: 'todo', priority: 'normal',
+      bucket: 'open', rank: '9999-12-31', group, groupSize: 3,
+    })));
+    const s = stats(await staffTaskRepository.findGroup(group).explain('executionStats'));
+    expect(s.index).toBe('staff_task_group');
+    expect(s.keys).toBeLessThanOrEqual(3);
+    expect(s.returned).toBe(3);
+  });
+});
