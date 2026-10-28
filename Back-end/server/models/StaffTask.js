@@ -62,6 +62,12 @@ const StaffTaskSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdByName: { type: String, default: '' },
     order: { type: OrderRefSchema, default: null },
+    /**
+     * Set when one task was given to several people: each person has their own
+     * copy, and every copy carries the same `group` (and how many there were).
+     */
+    group: { type: mongoose.Schema.Types.ObjectId, default: null },
+    groupSize: { type: Number, default: undefined },
     bucket: { type: String, enum: TASK_BUCKETS, default: 'open', required: true },
     rank: { type: String, required: true },
     rev: { type: Number, default: 1 },
@@ -69,8 +75,11 @@ const StaffTaskSchema = new mongoose.Schema(
     archivedAt: { type: Date, default: null },
     commentCount: { type: Number, default: 0 },
     lastCommentAt: { type: Date, default: null },
-    /** The browser's id for this create, so a double-click or a retried request makes one task. */
-    clientId: { type: String, default: undefined, maxlength: 64 },
+    /**
+     * The browser's id for this create, so a double-click or a retried request makes
+     * one task. A copy for one of several people stores `<clientId>.<personId>`.
+     */
+    clientId: { type: String, default: undefined, maxlength: 100 },
     history: { type: [HistorySchema], default: [] },
   },
   { timestamps: true },

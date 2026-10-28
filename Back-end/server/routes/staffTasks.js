@@ -37,10 +37,11 @@ router.get('/assignees', asyncHandler(async (req, res) => {
   res.json({ success: true, people: await listAssignees(req.user) });
 }));
 
-// @route  POST /staff/tasks { title, description?, priority?, dueOn?, assigneeId?, orderId?, clientId? }
+// @route  POST /staff/tasks { title, description?, priority?, dueOn?, assigneeId? | assigneeIds?, orderId?, clientId? }
+// Several people → one copy each; `tasks` lists them all, `task` is the first.
 router.post('/', validateTaskCreate, validateRequest, asyncHandler(async (req, res) => {
-  const { task, duplicate } = await createTask(req.user, req.body, req);
-  res.status(duplicate ? 200 : 201).json({ success: true, task, duplicate });
+  const { task, tasks, duplicate } = await createTask(req.user, req.body, req);
+  res.status(duplicate ? 200 : 201).json({ success: true, task, tasks, duplicate });
 }));
 
 // @route  GET /staff/tasks/:id

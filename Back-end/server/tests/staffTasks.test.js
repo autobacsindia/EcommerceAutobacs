@@ -423,3 +423,96 @@ describe('the bell', () => {
     expect((await summaryFor(admin)).items.find((i) => i.key === 'tasks_due').href).toBe('/admin/tasks?due=late');
   });
 });
+
+describe('one task for several people', () => {
+  const ids = (...people) => people.map((p) => String(p._id));
+
+  it('each person gets their own copy, numbered, in one group, and their own pop-up', async () => {
+    const r = await tasks.createTask(admin, { title: 'Stock count', assigneeIds: ids(procA, salesA, admin), dueOn: day(1) }, req);
+    expect(r.duplicate).toBe(false);
+    expect(r.tasks.map((t) => t.assignee.name)).toEqual(['Arun', 'Sam', 'Owner']);
+    expect(new Set(r.tasks.map((t) => t.number)).size).toBe(3);
+    expect(new Set(r.tasks.map((t) => t.group.id)).size).toBe(1);
+    expect(r.tasks.every((t) => t.group.size === 3)).toBe(true);
+    expect(r.tasks.map((t) => t.team)).toEqual(['procurement', 'sales', null]);
+    await settle();
+    // Not to the admin's own copy.
+    expect(pushes.map((p) => p.recipients[0].userId).sort()).toEqual(ids(procA, salesA).sort());
+    // Each person's "for me" list has their own copy.
+    expect((await tasks.listTasks(salesA, { view: 'mine' })).tasks.map((t) => t.title)).toEqual(['Stock count']);
+  });
+
+  it('a single person is still a plain task, with no group', async () => {
+    const r = await tasks.createTask(procHead, { title: 'x', assigneeIds: ids(procA) }, req);
+    expect(r.tasks).toHaveLength(1);
+    expect(r.task.group).toBeNull();
+  });
+
+  it('a head picks several from their own team; one outsider and nothing is made', async () => {
+    const ok = await tasks.createTask(procHead, { title: 'Pack', assigneeIds: ids(procA, procB) }, req);
+    expect(ok.tasks).toHaveLength(2);
+    await status(403, () => tasks.createTask(procHead, { title: 'Mixed', assigneeIds: ids(procA, salesA) }, req));
+    await status(403, () => tasks.createTask(procA, { title: 'Me and Bala', assigneeIds: ids(procA, procB) }, req));
+    await status(400, () => tasks.createTask(admin, { title: 'Gone', assigneeIds: ids(procA, gone) }, req));
+    expect(await StaffTask.countDocuments({ title: { $in: ['Mixed', 'Me and Bala', 'Gone'] } })).toBe(0);
+  });
+
+  it('the same person picked twice gets one copy; more than the limit is refused', async () => {
+    const r = await tasks.createTask(admin, { title: 'x', assigneeIds: [...ids(procA, procA), String(procB._id)] }, req);
+    expect(r.tasks.map((t) => t.assignee.name)).toEqual(['Arun', 'Bala']);
+    const many = Array.from({ length: tasks.MAX_ASSIGNEES + 1 }, () => String(new mongoose.Types.ObjectId()));
+    await status(400, () => tasks.createTask(admin, { title: 'y', assigneeIds: many }, req));
+  });
+
+  it('a retried create makes no extra copies and no extra pop-ups', async () => {
+    const input = { title: 'Audit', assigneeIds: ids(procA, procB), clientId: 'group-12345678' };
+    const first = await tasks.createTask(procHead, input, req);
+    await settle();
+    const again = await tasks.createTask(procHead, input, req);
+    await settle();
+    expect(again.duplicate).toBe(true);
+    expect(again.tasks.map((t) => t.id)).toEqual(first.tasks.map((t) => t.id));
+    expect(await StaffTask.countDocuments({ title: 'Audit' })).toBe(2);
+    expect(pushes).toHaveLength(2);
+  });
+
+  it('a retry after a half-finished create makes only the missing copy, in the same group', async () => {
+    const input = { title: 'Half', assigneeIds: ids(procA, procB, procHead), clientId: 'half-12345678' };
+    const first = await tasks.createTask(procHead, input, req);
+    await StaffTask.deleteOne({ _id: first.tasks[1].id }); // as if the request died after the first copy
+    const again = await tasks.createTask(procHead, input, req);
+    expect(again.duplicate).toBe(false);
+    const rows = await StaffTask.find({ title: 'Half' }).lean();
+    expect(rows).toHaveLength(3);
+    expect(new Set(rows.map((t) => String(t.group))).size).toBe(1);
+    expect(again.tasks[0].id).toBe(first.tasks[0].id);
+  });
+
+  it('the same several-people create twice at the same moment still makes one copy each', async () => {
+    const input = { title: 'Race', assigneeIds: ids(procA, procB), clientId: 'race-group-1234' };
+    await Promise.all([tasks.createTask(procHead, input, req), tasks.createTask(procHead, input, req)]);
+    expect(await StaffTask.countDocuments({ title: 'Race' })).toBe(2);
+  });
+
+  it('the task page shows the other copies — to whoever may see them', async () => {
+    const r = await tasks.createTask(admin, { title: 'Count', assigneeIds: ids(procA, procB, salesA) }, req);
+    const [a, b] = r.tasks;
+    await tasks.updateTask(procB, b.id, { rev: b.rev, status: 'done' }, req);
+
+    const forAdmin = await tasks.getTask(admin, a.id);
+    expect(forAdmin.siblings.map((s) => [s.assignee.name, s.statusLabel])).toEqual([['Bala', 'Done'], ['Sam', 'To do']]);
+    // The procurement head sees their team's copies, not GTM's.
+    expect((await tasks.getTask(procHead, a.id)).siblings.map((s) => s.assignee.name)).toEqual(['Bala']);
+    // An assignee sees no one else's copy.
+    expect((await tasks.getTask(procA, a.id)).siblings).toEqual([]);
+    // A plain task has none.
+    expect((await tasks.getTask(procA, (await make(procA)).id)).siblings).toEqual([]);
+  });
+
+  it('the picker lists you first, then team heads, then everyone else by name', async () => {
+    const people = await tasks.listAssignees(admin);
+    expect(people.slice(0, 3).map((p) => [p.name, p.isHead])).toEqual([['Owner', false], ['Hari', true], ['Priya', true]]);
+    const rest = people.slice(3).map((p) => p.name);
+    expect(rest).toEqual([...rest].sort((x, y) => x.localeCompare(y)));
+  });
+});

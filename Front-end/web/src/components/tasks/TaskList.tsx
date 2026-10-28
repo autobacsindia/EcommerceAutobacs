@@ -119,6 +119,7 @@ function TaskRow({ t, base, showAssignee }: { t: Task; base: string; showAssigne
         {showAssignee && <span>→ {t.assignee.name}</span>}
         {t.createdBy.id !== t.assignee.id && <span>from {t.createdBy.name}</span>}
         {t.order && <span className="text-blue-700">Order {t.order.code}</span>}
+        {t.group && <span className="rounded bg-violet-50 px-1.5 py-0.5 text-violet-700">👥 {t.group.size} people</span>}
         {t.commentCount > 0 && <span className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{t.commentCount}</span>}
       </div>
       {error && <p role="alert" className="mt-1 text-xs text-red-600">{error}</p>}

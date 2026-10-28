@@ -113,6 +113,11 @@ describe('Staff task routes', () => {
     expect((await head.session.post('/staff/tasks', {})).status).toBe(400);
     expect((await head.session.post('/staff/tasks', { title: 'x', priority: 'asap' })).status).toBe(400);
     expect((await head.session.post('/staff/tasks', { title: 'x', assigneeId: 'nope' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { title: 'x', assigneeIds: ['nope'] })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { title: 'x', assigneeIds: 'not-a-list' })).status).toBe(400);
+    const both = await head.session.post('/staff/tasks', { title: 'Both', assigneeIds: [String(head.user._id), String(member.user._id)] });
+    expect(both.status).toBe(201);
+    expect(both.body.tasks.map((t) => t.assignee.name)).toEqual(['Priya', 'Arun']);
     expect((await head.session.get('/staff/tasks?view=everything')).status).toBe(400);
     expect((await head.session.get('/staff/tasks?state=deleted')).status).toBe(400);
     expect((await head.session.get('/staff/tasks/not-an-id')).status).toBe(400);

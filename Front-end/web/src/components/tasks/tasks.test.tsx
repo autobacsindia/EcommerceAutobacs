@@ -34,7 +34,7 @@ const task = (over: Partial<Task> = {}): Task => ({
   status: 'todo', statusLabel: 'To do', priority: 'high', priorityLabel: 'High',
   dueOn: '2026-10-27', overdue: false, dueToday: true,
   assignee: { id: 'u2', name: 'Arun' }, team: 'procurement', teamLabel: 'Procurement',
-  createdBy: { id: 'u1', name: 'Priya' }, order: null, bucket: 'open',
+  createdBy: { id: 'u1', name: 'Priya' }, order: null, group: null, bucket: 'open',
   completedAt: null, archivedAt: null, commentCount: 0, lastCommentAt: null,
   createdAt: '2026-10-27T04:00:00Z', updatedAt: '2026-10-27T04:00:00Z', rev: 3, can,
   ...over,
@@ -43,6 +43,7 @@ const people = {
   people: [
     { id: 'u1', name: 'Priya', team: 'procurement', teamLabel: 'Procurement', isHead: true, me: true },
     { id: 'u2', name: 'Arun', team: 'procurement', teamLabel: 'Procurement', isHead: false, me: false },
+    { id: 'u3', name: 'Bala', team: 'procurement', teamLabel: 'Procurement', isHead: false, me: false },
   ],
 };
 
@@ -154,23 +155,51 @@ describe('the task list', () => {
 });
 
 describe('new task', () => {
-  it('a head picks someone in the team; pressing Create twice sends ONE clientId', async () => {
+  it('a head ticks someone in the team; pressing Create twice sends ONE clientId', async () => {
     serve({ list: [] });
-    post.mockRejectedValueOnce({ status: 503, rawData: { message: 'Try again' } }).mockResolvedValue({ task: task() });
+    post.mockRejectedValueOnce({ status: 503, rawData: { message: 'Try again' } }).mockResolvedValue({ task: task(), tasks: [task()] });
     wrap(<TaskList base="/team/tasks" canSeeTeam />);
     fireEvent.click(await screen.findByRole('button', { name: /New task/ }));
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Pack order 51234' } });
-    await screen.findByRole('option', { name: /Arun/ });
-    fireEvent.change(screen.getByLabelText('Who does it'), { target: { value: 'u2' } });
+    // Starts with "me" ticked; swap to Arun.
+    expect(await screen.findByRole('checkbox', { name: /Priya \(me\)/ })).toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Priya \(me\)/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Arun/ }));
     fireEvent.change(screen.getByLabelText('Due date'), { target: { value: '2026-10-30' } });
-    fireEvent.click(screen.getByRole('button', { name: /Create task/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create task' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Try again');
-    fireEvent.click(screen.getByRole('button', { name: /Create task/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create task' }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     const [first, second] = post.mock.calls.map((c) => c[1]);
-    expect(first).toMatchObject({ title: 'Pack order 51234', assigneeId: 'u2', dueOn: '2026-10-30', priority: 'normal', orderId: null });
+    expect(first).toMatchObject({ title: 'Pack order 51234', assigneeIds: ['u2'], dueOn: '2026-10-30', priority: 'normal', orderId: null });
     expect(first.clientId).toBeTruthy();
     expect(second.clientId).toBe(first.clientId);
+  });
+
+  it('heads are labelled as heads; several ticked people make one copy each', async () => {
+    serve({ list: [] });
+    post.mockResolvedValue({ task: task(), tasks: [task(), task()] });
+    wrap(<TaskList base="/admin/tasks" canSeeTeam />);
+    fireEvent.click(await screen.findByRole('button', { name: /New task/ }));
+    expect(await screen.findByText('Priya (me) · Procurement head')).toBeInTheDocument();
+    expect(screen.getByText('Arun · Procurement')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Stock count' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /Bala/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Arun/ }));
+    expect(screen.getByText(/3 people picked — each gets their own copy/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create 3 tasks' }));
+    // Sent in the list's order (me, then heads, then the rest), not the order ticked.
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: ['u1', 'u2', 'u3'] })));
+  });
+
+  it('nobody ticked: says so and cannot create', async () => {
+    serve({ list: [] });
+    wrap(<TaskList base="/team/tasks" canSeeTeam />);
+    fireEvent.click(await screen.findByRole('button', { name: /New task/ }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'x' } });
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Priya \(me\)/ }));
+    expect(screen.getByText('Pick at least one person.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create task' })).toBeDisabled();
   });
 
   it('warns when the due date has already passed, not when it is today or later', async () => {
@@ -187,10 +216,14 @@ describe('new task', () => {
 
   it('a member can only add for themselves, and is told why', async () => {
     serve({ list: [], assignees: { people: [{ ...people.people[1], me: true }] } });
+    post.mockResolvedValue({ task: task(), tasks: [task()] });
     wrap(<TaskList base="/team/tasks" canSeeTeam={false} />);
     fireEvent.click(await screen.findByRole('button', { name: /New task/ }));
-    expect(await screen.findByText(/Tasks you add here are for you/)).toBeInTheDocument();
-    expect(screen.getByLabelText('Who does it')).toBeDisabled();
+    expect(await screen.findByText(/This task is for you/)).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Mine' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create task' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: ['u2'] })));
   });
 });
 
@@ -206,6 +239,22 @@ describe('one task', () => {
     fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'urgent' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', expect.objectContaining({ rev: 3, priority: 'urgent', title: 'Call Bosch' })));
+  });
+
+  it('a task given to several people shows who else has it and how many are done', async () => {
+    serve({
+      one: task({
+        group: { id: 'g1', size: 3 },
+        siblings: [
+          { id: 't2', code: 'T-8', assignee: { id: 'u3', name: 'Bala' }, status: 'done', statusLabel: 'Done', bucket: 'done' },
+          { id: 't3', code: 'T-9', assignee: { id: 'u4', name: 'Sam' }, status: 'todo', statusLabel: 'To do', bucket: 'open' },
+        ],
+      }),
+    });
+    wrap(<TaskDetail id="t1" base="/admin/tasks" />);
+    expect(await screen.findByRole('heading', { name: 'Given to 3 people' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Bala/ })).toHaveAttribute('href', '/admin/tasks/t2');
+    expect(screen.getByText('1 of 3 done')).toBeInTheDocument();
   });
 
   it('the assignee (no edit rights) sees no Edit, Archive or reassign', async () => {

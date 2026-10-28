@@ -10,7 +10,7 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage } from '@/components/staff/sales/types';
 import { OrderPicker, PastDueWarning, useAssignees } from './TaskForm';
 import {
-  PRIORITY_BADGE, STATUS_BADGE, TASK_PRIORITIES, TASK_STATUSES, formatDueDay, isConflict, newClientId, orderHrefFor,
+  PRIORITY_BADGE, STATUS_BADGE, TASK_PRIORITIES, TASK_STATUSES, formatDueDay, isConflict, newClientId, orderHrefFor, personLabel,
   type CommentPage, type Task, type TaskComment, type TaskPriority, type TaskStatus,
 } from './types';
 
@@ -233,7 +233,7 @@ export default function TaskDetail({ id, base }: { id: string; base: string }) {
                   className="mt-0.5 rounded-lg border border-gray-300 px-2 py-1 text-sm"
                 >
                   {!reassignTo.some((p) => p.id === task.assignee.id) && <option value={task.assignee.id}>{task.assignee.name} (no longer here)</option>}
-                  {reassignTo.map((p) => <option key={p.id} value={p.id}>{p.name}{p.teamLabel ? ` · ${p.teamLabel}` : ''}</option>)}
+                  {reassignTo.map((p) => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
                 </select>
               ) : (
                 <span className="font-medium text-gray-900">{task.assignee.name}</span>
@@ -281,6 +281,34 @@ export default function TaskDetail({ id, base }: { id: string; base: string }) {
           </div>
         )}
       </section>
+
+      {task.group && (
+        <section className="rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="font-semibold text-gray-900">Given to {task.group.size} people</h2>
+          <p className="mb-3 text-sm text-gray-500">Each person has their own copy and marks it done separately.</p>
+          {(task.siblings ?? []).length > 0 ? (
+            <ul className="space-y-1.5">
+              <li className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium text-gray-900">{task.assignee.name} <span className="text-xs font-normal text-gray-400">(this copy)</span></span>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[task.status]}`}>{task.statusLabel}</span>
+              </li>
+              {task.siblings!.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-3 text-sm">
+                  <Link href={`${base}/${c.id}`} className="text-blue-700 hover:underline">{c.assignee.name} <span className="text-xs text-gray-400">{c.code}</span></Link>
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[c.status]}`}>{c.bucket === 'archived' ? 'Archived' : c.statusLabel}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-gray-500">The others&apos; copies are theirs to update.</p>
+          )}
+          {(task.siblings ?? []).length > 0 && (
+            <p className="mt-2 text-xs text-gray-500">
+              {[task, ...task.siblings!].filter((c) => c.status === 'done').length} of {task.siblings!.length + 1} done
+            </p>
+          )}
+        </section>
+      )}
 
       <Comments task={task} />
 
