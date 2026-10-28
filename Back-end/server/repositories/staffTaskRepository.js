@@ -70,6 +70,37 @@ const staffTaskRepository = {
   /** Open tasks given to `userId` that are due on or before `day` (the bell). */
   countDueBy: (userId, day) => StaffTask.countDocuments({ assignee: userId, bucket: 'open', rank: { $lte: day } }),
 
+  // ── Checklist (never bumps `rev`: ticking a step must not block someone's edit) ──
+  /**
+   * Add a step, atomically: refused (null) when the task is archived, already has
+   * `max` steps, or already has a step added with this `key` (a double-click).
+   */
+  pushChecklistItem: (id, item, entry, max) => StaffTask.findOneAndUpdate(
+    {
+      _id: id,
+      bucket: { $in: ['open', 'done'] },
+      [`checklist.${max - 1}`]: { $exists: false },
+      ...(item.key ? { 'checklist.key': { $ne: item.key } } : {}),
+    },
+    { $push: { checklist: item, history: { $each: [entry], $slice: -HISTORY_CAP } } },
+    { new: true },
+  ).lean(),
+  /** Change one step in place. Null when the task is archived or the step is gone. */
+  setChecklistItem: (id, itemId, set, entry) => StaffTask.findOneAndUpdate(
+    { _id: id, bucket: { $in: ['open', 'done'] }, 'checklist._id': itemId },
+    {
+      $set: Object.fromEntries(Object.entries(set).map(([k, v]) => [`checklist.$.${k}`, v])),
+      $push: { history: { $each: [entry], $slice: -HISTORY_CAP } },
+    },
+    { new: true },
+  ).lean(),
+  /** Remove one step. Null when the task is archived or the step is already gone. */
+  pullChecklistItem: (id, itemId, entry) => StaffTask.findOneAndUpdate(
+    { _id: id, bucket: { $in: ['open', 'done'] }, 'checklist._id': itemId },
+    { $pull: { checklist: { _id: itemId } }, $push: { history: { $each: [entry], $slice: -HISTORY_CAP } } },
+    { new: true },
+  ).lean(),
+
   // ── Comments ──
   createComment: async (doc) => (await StaffTaskComment.create(doc)).toObject(),
   findCommentByClientId: (by, clientId) => StaffTaskComment.findOne(staffTaskRepository.commentClientIdFilter(by, clientId)).lean(),

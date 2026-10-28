@@ -7,7 +7,7 @@ import { Loader2, MessageSquare } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
-import { DueLabel } from './DueLabel';
+import { ChecklistChip, DueLabel } from './DueLabel';
 import {
   PRIORITY_BADGE, STATUS_BADGE, TASK_STATUSES, isConflict,
   type Task, type TaskDue, type TaskPage, type TaskStatus, type TaskView,
@@ -54,6 +54,7 @@ function BoardCard({ t, base, showAssignee, onMove, moving }: {
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
         {t.priority !== 'normal' && <span className={`rounded px-1.5 py-0.5 font-medium ${PRIORITY_BADGE[t.priority]}`}>{t.priorityLabel}</span>}
         <DueLabel t={t} />
+        <ChecklistChip t={t} />
         {showAssignee && <span>→ {t.assignee.name}</span>}
         {t.group && <span className="rounded bg-violet-50 px-1.5 py-0.5 text-violet-700">👥 {t.group.size}</span>}
         {t.commentCount > 0 && <span className="inline-flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{t.commentCount}</span>}

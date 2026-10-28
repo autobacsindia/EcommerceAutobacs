@@ -43,6 +43,7 @@ async function signIn(email) {
     get: (url) => agent.get(`${BASE}${url}`),
     post: (url, body = {}) => agent.post(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf).send(body),
     patch: (url, body = {}) => agent.patch(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf).send(body),
+    del: (url) => agent.delete(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf),
     postNoCsrf: (url, body = {}) => agent.post(`${BASE}${url}`).send(body),
   };
 }
@@ -124,6 +125,21 @@ describe('Staff task routes', () => {
     const t = await head.session.post('/staff/tasks', { title: 'x' });
     expect((await head.session.patch(`/staff/tasks/${t.body.task.id}`, { title: 'no rev' })).status).toBe(400);
     expect((await head.session.patch(`/staff/tasks/${t.body.task.id}`, { rev: 1, status: 'finished' })).status).toBe(400);
+  });
+
+  it('checklist steps over HTTP: add, tick, remove; the member may tick but not add', async () => {
+    const t = (await head.session.post('/staff/tasks', { title: 'Ship', assigneeId: String(member.user._id), checklist: ['Pack'] })).body.task;
+    const step = t.checklistItems[0].id;
+    expect((await member.session.post(`/staff/tasks/${t.id}/checklist`, { text: 'Label' })).status).toBe(403);
+    const ticked = await member.session.patch(`/staff/tasks/${t.id}/checklist/${step}`, { done: true });
+    expect(ticked.status).toBe(200);
+    expect(ticked.body.task.checklist).toEqual({ done: 1, total: 1 });
+    expect((await head.session.post(`/staff/tasks/${t.id}/checklist`, { text: 'Label' })).body.task.checklist.total).toBe(2);
+    expect((await head.session.patch(`/staff/tasks/${t.id}/checklist/not-an-id`, { done: true })).status).toBe(400);
+    expect((await head.session.patch(`/staff/tasks/${t.id}/checklist/${step}`, { done: 'maybe' })).status).toBe(400);
+    const gone = await head.session.del(`/staff/tasks/${t.id}/checklist/${step}`);
+    expect(gone.status).toBe(200);
+    expect(gone.body.task.checklist).toEqual({ done: 0, total: 1 });
   });
 
   it('lists who you may give to', async () => {

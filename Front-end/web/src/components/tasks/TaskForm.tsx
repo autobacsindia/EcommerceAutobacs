@@ -140,7 +140,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
   const me = choices.find((p) => p.me);
   // One id for this form: pressing Create twice (or a retried request) makes one task.
   const clientId = useRef(newClientId());
-  const [form, setForm] = useState({ title: '', description: '', priority: 'normal' as TaskPriority, dueOn: '' });
+  const [form, setForm] = useState({ title: '', description: '', steps: '', priority: 'normal' as TaskPriority, dueOn: '' });
   // null until the person touches the list: it then starts with just "me" ticked.
   const [picked, setPicked] = useState<string[] | null>(null);
   const chosen = picked ?? (me ? [me.id] : []);
@@ -153,6 +153,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
       title: form.title.trim(),
       description: form.description.trim(),
       assigneeIds: chosen,
+      checklist: form.steps.split('\n').map((l) => l.trim()).filter(Boolean),
       priority: form.priority,
       dueOn: form.dueOn || null,
       orderId: order?.id || null,
@@ -193,6 +194,17 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
         aria-label="Notes"
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
       />
+      <label className="block text-xs font-medium text-gray-600">
+        Checklist (optional) — one step per line
+        <textarea
+          value={form.steps}
+          onChange={(e) => set({ steps: e.target.value })}
+          rows={2}
+          placeholder={'e.g.\nPack the parcel\nBook the courier'}
+          aria-label="Checklist steps"
+          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal"
+        />
+      </label>
       {choices.length > 1 && <PeoplePicker people={choices} selected={chosen} onChange={setPicked} />}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-xs font-medium text-gray-600">

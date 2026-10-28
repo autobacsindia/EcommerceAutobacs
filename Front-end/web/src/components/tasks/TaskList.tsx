@@ -10,7 +10,7 @@ import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
 import TaskForm from './TaskForm';
 import TaskBoard from './TaskBoard';
-import { DueLabel } from './DueLabel';
+import { ChecklistChip, DueLabel } from './DueLabel';
 import {
   PRIORITY_BADGE, STATUS_BADGE, TASK_STATUSES, isConflict,
   type Task, type TaskBucket, type TaskDue, type TaskPage, type TaskStatus, type TaskView,
@@ -109,6 +109,7 @@ function TaskRow({ t, base, showAssignee }: { t: Task; base: string; showAssigne
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
         {t.priority !== 'normal' && <span className={`rounded px-1.5 py-0.5 font-medium ${PRIORITY_BADGE[t.priority]}`}>{t.priorityLabel}</span>}
         <DueLabel t={t} />
+        <ChecklistChip t={t} />
         {showAssignee && <span>→ {t.assignee.name}</span>}
         {t.createdBy.id !== t.assignee.id && <span>from {t.createdBy.name}</span>}
         {t.order && <span className="text-blue-700">Order {t.order.code}</span>}

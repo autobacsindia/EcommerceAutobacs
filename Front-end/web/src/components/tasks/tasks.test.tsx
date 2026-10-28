@@ -13,9 +13,13 @@ import { formatDueDay, isPastDay, todayIST, type Task } from './types';
 const get = jest.fn();
 const post = jest.fn();
 const patch = jest.fn();
+const remove = jest.fn();
 jest.mock('@/lib/api-client', () => ({
   __esModule: true,
-  default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), patch: (...a: unknown[]) => patch(...a) },
+  default: {
+    get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a),
+    patch: (...a: unknown[]) => patch(...a), delete: (...a: unknown[]) => remove(...a),
+  },
 }));
 let search = '';
 jest.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(search) }));
@@ -28,13 +32,13 @@ const wrap = (ui: React.ReactElement) => render(
   <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>,
 );
 
-const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true };
+const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true };
 const task = (over: Partial<Task> = {}): Task => ({
   id: 't1', number: 7, code: 'T-7', title: 'Call Bosch', summary: '', description: 'Ask about the lift kit',
   status: 'todo', statusLabel: 'To do', priority: 'high', priorityLabel: 'High',
   dueOn: '2026-10-27', overdue: false, dueToday: true,
   assignee: { id: 'u2', name: 'Arun' }, team: 'procurement', teamLabel: 'Procurement',
-  createdBy: { id: 'u1', name: 'Priya' }, order: null, group: null, bucket: 'open',
+  createdBy: { id: 'u1', name: 'Priya' }, order: null, group: null, checklist: { done: 0, total: 0 }, bucket: 'open',
   completedAt: null, archivedAt: null, commentCount: 0, lastCommentAt: null,
   createdAt: '2026-10-27T04:00:00Z', updatedAt: '2026-10-27T04:00:00Z', rev: 3, can,
   ...over,
@@ -64,6 +68,7 @@ beforeEach(() => {
   get.mockReset();
   post.mockReset();
   patch.mockReset();
+  remove.mockReset();
   search = '';
   jest.spyOn(window, 'confirm').mockReturnValue(true);
 });
@@ -358,6 +363,69 @@ describe('one task', () => {
       : Promise.reject({ status: 404, rawData: { message: 'Task not found.' } })));
     wrap(<TaskDetail id="t9" base="/team/tasks" />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Task not found.');
+  });
+});
+
+describe('checklists', () => {
+  const steps = [
+    { id: 'c1', text: 'Pack', done: true, doneAt: '2026-10-28T05:00:00Z', doneBy: 'Arun' },
+    { id: 'c2', text: 'Book courier', done: false, doneAt: null, doneBy: '' },
+  ];
+
+  it('steps typed in the form are sent one per line', async () => {
+    serve({ list: [] });
+    post.mockResolvedValue({ task: task(), tasks: [task()] });
+    wrap(<TaskList base="/team/tasks" canSeeTeam />);
+    fireEvent.click(await screen.findByRole('button', { name: /New task/ }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Ship' } });
+    fireEvent.change(screen.getByLabelText('Checklist steps'), { target: { value: 'Pack\n\n  Label  \n' } });
+    await screen.findByRole('checkbox', { name: /Priya \(me\)/ });
+    fireEvent.click(screen.getByRole('button', { name: 'Create task' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ checklist: ['Pack', 'Label'] })));
+  });
+
+  it('cards show progress', async () => {
+    serve({ list: [task({ checklist: { done: 1, total: 2 } })] });
+    wrap(<TaskList base="/team/tasks" canSeeTeam={false} />);
+    expect(await screen.findByTitle('1 of 2 steps done')).toHaveTextContent('1/2');
+  });
+
+  it('the task page ticks, adds and removes steps', async () => {
+    serve({ one: task({ checklist: { done: 1, total: 2 }, checklistItems: steps }) });
+    patch.mockResolvedValue({ task: task({ checklist: { done: 2, total: 2 }, checklistItems: steps.map((c) => ({ ...c, done: true })) }) });
+    post.mockResolvedValue({ task: task({ checklistItems: [...steps, { id: 'c3', text: 'Label', done: false, doneAt: null, doneBy: '' }] }) });
+    remove.mockResolvedValue({ task: task({ checklistItems: [steps[1]] }) });
+    wrap(<TaskDetail id="t1" base="/team/tasks" />);
+    expect(await screen.findByText('1 of 2 done')).toBeInTheDocument();
+    expect(screen.getByLabelText('Step: Pack')).toBeChecked();
+
+    fireEvent.click(screen.getByLabelText('Step: Book courier'));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1/checklist/c2', { done: true }));
+    expect(await screen.findByText('2 of 2 done')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('New step'), { target: { value: 'Label' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks/t1/checklist', expect.objectContaining({ text: 'Label', clientId: expect.any(String) })));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Pack' }));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith('/staff/tasks/t1/checklist/c1'));
+  });
+
+  it('the doer may tick but not add, rename or remove', async () => {
+    serve({ one: task({ can: { ...can, edit: false, checklist: false }, checklistItems: steps }) });
+    wrap(<TaskDetail id="t1" base="/team/tasks" />);
+    expect(await screen.findByLabelText('Step: Book courier')).toBeEnabled();
+    expect(screen.queryByLabelText('New step')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Remove Pack/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Rename Pack/ })).toBeNull();
+  });
+
+  it('a step that could not be saved says so', async () => {
+    serve({ one: task({ checklistItems: steps }) });
+    patch.mockRejectedValue({ status: 404, rawData: { message: 'That step is no longer on the checklist.' } });
+    wrap(<TaskDetail id="t1" base="/team/tasks" />);
+    fireEvent.click(await screen.findByLabelText('Step: Book courier'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('That step is no longer on the checklist.');
   });
 });
 

@@ -35,6 +35,10 @@ export type Task = {
   order: { id: string; code: string } | null;
   /** Set when one task went to several people: each has their own copy. */
   group: { id: string; size: number } | null;
+  /** How many checklist steps are ticked, of how many. */
+  checklist: { done: number; total: number };
+  /** The task page only: the steps themselves. */
+  checklistItems?: ChecklistItem[];
   bucket: TaskBucket;
   completedAt: string | null;
   archivedAt: string | null;
@@ -43,11 +47,14 @@ export type Task = {
   createdAt: string;
   updatedAt: string;
   rev: number;
-  can: { edit: boolean; status: boolean; reassign: boolean; archive: boolean; restore: boolean; comment: boolean };
+  /** `status` also allows ticking steps; `checklist` is adding, renaming and removing them. */
+  can: { edit: boolean; status: boolean; reassign: boolean; archive: boolean; restore: boolean; comment: boolean; checklist: boolean };
   history?: { at: string; by: string; action: string; from: string; to: string }[];
   /** The task page only: the other people's copies the viewer may see. */
   siblings?: TaskSibling[];
 };
+
+export type ChecklistItem = { id: string; text: string; done: boolean; doneAt: string | null; doneBy: string };
 
 export type TaskSibling = {
   id: string; code: string; assignee: { id: string; name: string }; status: TaskStatus; statusLabel: string; bucket: TaskBucket;

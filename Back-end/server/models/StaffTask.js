@@ -42,6 +42,22 @@ const HistorySchema = new mongoose.Schema(
   { _id: false },
 );
 
+/**
+ * One step of a task's checklist ("Pack", "Label", "Book courier"). Ticking a step
+ * never completes the task by itself — the person still moves the task to Done.
+ */
+const ChecklistItemSchema = new mongoose.Schema(
+  {
+    text: { type: String, required: true, trim: true, maxlength: 200 },
+    done: { type: Boolean, default: false },
+    doneAt: { type: Date, default: null },
+    doneByName: { type: String, default: '' },
+    /** The browser's id for adding this step, so a double-click adds it once. */
+    key: { type: String, default: undefined, maxlength: 64 },
+  },
+  { _id: true },
+);
+
 export const TASK_STATUSES = Object.freeze(['todo', 'in_progress', 'waiting', 'done']);
 export const TASK_PRIORITIES = Object.freeze(['urgent', 'high', 'normal', 'low']);
 export const TASK_BUCKETS = Object.freeze(['open', 'done', 'archived']);
@@ -73,6 +89,8 @@ const StaffTaskSchema = new mongoose.Schema(
     rev: { type: Number, default: 1 },
     completedAt: { type: Date, default: null },
     archivedAt: { type: Date, default: null },
+    /** At most CHECKLIST_MAX steps (services/staffTaskService.js); changing them does not bump `rev`. */
+    checklist: { type: [ChecklistItemSchema], default: [] },
     commentCount: { type: Number, default: 0 },
     lastCommentAt: { type: Date, default: null },
     /**

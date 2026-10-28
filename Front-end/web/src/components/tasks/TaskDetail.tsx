@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArrowLeft, Loader2, Pencil, RotateCcw } from 'lucide-react';
+import { Archive, ArrowLeft, Check, Loader2, Pencil, RotateCcw, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
@@ -11,7 +11,7 @@ import { errorMessage } from '@/components/staff/sales/types';
 import { OrderPicker, PastDueWarning, useAssignees } from './TaskForm';
 import {
   PRIORITY_BADGE, STATUS_BADGE, TASK_PRIORITIES, TASK_STATUSES, formatDueDay, isConflict, newClientId, orderHrefFor, personLabel,
-  type CommentPage, type Task, type TaskComment, type TaskPriority, type TaskStatus,
+  type ChecklistItem, type CommentPage, type Task, type TaskComment, type TaskPriority, type TaskStatus,
 } from './types';
 
 type Patch = Partial<{
@@ -27,6 +27,11 @@ const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => 
   due: (h) => `changed the due date from ${h.from === 'none' ? 'none' : formatDueDay(h.from)} to ${h.to === 'none' ? 'none' : formatDueDay(h.to)}`,
   order: (h) => `changed the order from ${h.from} to ${h.to}`,
   edited: (h) => `edited the ${h.from}`,
+  check_added: (h) => `added the step "${h.to}"`,
+  check_renamed: (h) => `renamed a step to "${h.to}"`,
+  check_removed: (h) => `removed the step "${h.to}"`,
+  checked: (h) => `ticked "${h.to}"`,
+  unchecked: (h) => `unticked "${h.to}"`,
   archived: () => 'archived it',
   restored: () => 'restored it',
 };
@@ -95,6 +100,121 @@ function Comments({ task }: { task: Task }) {
       {q.hasNextPage && (
         <button onClick={() => q.fetchNextPage()} className="mt-3 text-sm text-blue-700 hover:underline">Older comments</button>
       )}
+    </section>
+  );
+}
+
+/**
+ * The task's steps. The doer ticks them; whoever gave the task (or the team head,
+ * or the admin) adds, renames and removes them. Every change comes back as the
+ * whole task, which replaces the page's copy.
+ */
+function Checklist({ task }: { task: Task }) {
+  const queryClient = useQueryClient();
+  const items: ChecklistItem[] = task.checklistItems ?? [];
+  const [text, setText] = useState('');
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [error, setError] = useState('');
+  const addKey = useRef(newClientId());
+  const url = `/staff/tasks/${encodeURIComponent(task.id)}/checklist`;
+  const settle = (res: { task: Task }) => {
+    setError('');
+    queryClient.setQueryData(taskKeys.one(task.id), { task: res.task });
+    queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
+  };
+  const fail = (fallback: string) => (e: unknown) => {
+    setError(errorMessage(e, fallback));
+    queryClient.invalidateQueries({ queryKey: taskKeys.one(task.id) });
+  };
+  const add = useMutation({
+    mutationFn: () => apiClient.post<{ task: Task }>(url, { text: text.trim(), clientId: addKey.current }),
+    onSuccess: (res) => { settle(res); setText(''); addKey.current = newClientId(); },
+    onError: fail('Could not add the step.'),
+  });
+  const change = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: { done?: boolean; text?: string } }) =>
+      apiClient.patch<{ task: Task }>(`${url}/${encodeURIComponent(id)}`, patch),
+    onSuccess: (res) => { settle(res); setEditing(null); },
+    onError: fail('Could not change the step.'),
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => apiClient.delete<{ task: Task }>(`${url}/${encodeURIComponent(id)}`),
+    onSuccess: settle,
+    onError: fail('Could not remove the step.'),
+  });
+
+  if (!items.length && !task.can.checklist) return null;
+  const done = items.filter((c) => c.done).length;
+  return (
+    <section className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="font-semibold text-gray-900">Checklist</h2>
+        {items.length > 0 && <span className="text-sm text-gray-500">{done} of {items.length} done</span>}
+      </div>
+      {items.length > 0 && (
+        <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden>
+          <div className="h-full bg-green-500 transition-all" style={{ width: `${(done / items.length) * 100}%` }} />
+        </div>
+      )}
+      <ul className="space-y-1">
+        {items.map((c) => (
+          <li key={c.id} className="group flex items-center gap-2 rounded px-1 py-1 hover:bg-gray-50">
+            <input
+              type="checkbox"
+              checked={c.done}
+              disabled={!task.can.status || change.isPending}
+              onChange={() => change.mutate({ id: c.id, patch: { done: !c.done } })}
+              aria-label={`Step: ${c.text}`}
+              className="h-4 w-4 shrink-0"
+            />
+            {editing?.id === c.id ? (
+              <form
+                className="flex flex-1 items-center gap-1"
+                onSubmit={(e) => { e.preventDefault(); if (editing.text.trim()) change.mutate({ id: c.id, patch: { text: editing.text.trim() } }); }}
+              >
+                <input
+                  value={editing.text}
+                  onChange={(e) => setEditing({ id: c.id, text: e.target.value })}
+                  maxLength={200}
+                  autoFocus
+                  aria-label="Step text"
+                  className="flex-1 rounded border border-gray-300 px-2 py-0.5 text-sm"
+                />
+                <button type="submit" aria-label="Save step" className="rounded p-1 text-green-700 hover:bg-green-50"><Check className="h-4 w-4" /></button>
+                <button type="button" onClick={() => setEditing(null)} aria-label="Cancel" className="rounded p-1 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+              </form>
+            ) : (
+              <>
+                <span className={`flex-1 text-sm ${c.done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                  {c.text}
+                  {c.done && c.doneBy && <span className="ml-2 text-xs text-gray-400 no-underline">✓ {c.doneBy}</span>}
+                </span>
+                {task.can.checklist && (
+                  <span className="flex gap-0.5 md:opacity-0 md:group-hover:opacity-100">
+                    <button onClick={() => setEditing({ id: c.id, text: c.text })} aria-label={`Rename ${c.text}`} className="rounded p-1 text-gray-500 hover:bg-gray-100"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => remove.mutate(c.id)} aria-label={`Remove ${c.text}`} className="rounded p-1 text-gray-500 hover:bg-red-50 hover:text-red-600"><X className="h-3.5 w-3.5" /></button>
+                  </span>
+                )}
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+      {task.can.checklist && (
+        <form onSubmit={(e) => { e.preventDefault(); if (text.trim()) add.mutate(); }} className="mt-2 flex gap-2">
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            maxLength={200}
+            placeholder="Add a step…"
+            aria-label="New step"
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+          />
+          <button type="submit" disabled={add.isPending || !text.trim()} className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">Add</button>
+        </form>
+      )}
+      {!items.length && task.can.checklist && <p className="mt-1 text-xs text-gray-500">Break the job into steps the person can tick off.</p>}
+      {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
     </section>
   );
 }
@@ -281,6 +401,8 @@ export default function TaskDetail({ id, base }: { id: string; base: string }) {
           </div>
         )}
       </section>
+
+      <Checklist task={task} />
 
       {task.group && (
         <section className="rounded-xl border border-gray-200 bg-white p-4">
