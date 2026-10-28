@@ -114,12 +114,15 @@ export async function renderPaymentSlip(r) {
 
       // Payment (when paid)
       if (paid && r.payment) {
-        doc.roundedRect(L, y, R - L, 58, 8).lineWidth(1).strokeColor(C.brand).stroke();
+        doc.roundedRect(L, y, R - L, 72, 8).lineWidth(1).strokeColor(C.brand).stroke();
         doc.font(FONT_BOLD).fontSize(10).fillColor(C.brand).text('PAID', L + 16, y + 12);
         doc.font(FONT).fontSize(9).fillColor(C.body)
-          .text(`${METHOD_LABELS[r.payment.method] || r.payment.method} · Reference ${r.payment.reference}`, L + 16, y + 28, { width: R - L - 32 })
-          .text(`${dateTime(r.payment.paidAt)} · by ${r.payment.paidByName || 'Accounts'}`, L + 16, doc.y + 2, { width: R - L - 32 });
-        y += 72;
+          .text(`${METHOD_LABELS[r.payment.method] || r.payment.method}${r.payment.reference ? ` · Reference ${r.payment.reference}` : ''}`, L + 16, y + 28, { width: R - L - 32 })
+          // When the money moved, and (separately) when it was recorded here — they
+          // differ whenever a transfer is recorded later.
+          .text(`Transaction: ${dateTime(r.payment.transactionAt || r.payment.paidAt)}`, L + 16, doc.y + 2, { width: R - L - 32 })
+          .text(`Recorded: ${dateTime(r.payment.paidAt)} · by ${r.payment.paidByName || 'Admin'}`, L + 16, doc.y + 2, { width: R - L - 32 });
+        y += 86;
       } else if (r.decisionNote && ['declined', 'on_hold'].includes(r.status)) {
         doc.font(FONT_BOLD).fontSize(8).fillColor(STATUS_COLOUR[r.status]).text(r.status === 'declined' ? 'REASON' : 'ON HOLD BECAUSE', L, y, { characterSpacing: 1 });
         doc.font(FONT).fontSize(9).fillColor(C.body).text(r.decisionNote, L, doc.y + 3, { width: R - L });

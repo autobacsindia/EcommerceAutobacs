@@ -32,7 +32,8 @@ export type PaymentRequest = {
   /** The supplier's bank details changed shortly before this was raised. */
   bankNotice?: { at: string; byName: string } | null;
   files: { id: string; kind: 'bill' | 'qr' | 'proof'; name: string; contentType: string; bytes: number }[];
-  payment: { method: string; reference: string; paidAt: string; paidByName: string } | null;
+  /** paidAt = when it was recorded; transactionAt = when the money moved (older records: absent). */
+  payment: { method: string; reference: string; paidAt: string; transactionAt?: string | null; paidByName: string } | null;
   decisionNote: string;
   history: { at: string; byName: string; role: string; action: string; note: string }[];
   createdAt: string;
@@ -79,6 +80,15 @@ export const errorMessage = (e: unknown, fallback: string) =>
   (e as { rawData?: { message?: string; errors?: { msg?: string }[] } })?.rawData?.message
   || (e as { rawData?: { errors?: { msg?: string }[] } })?.rawData?.errors?.[0]?.msg
   || fallback;
+
+/** A date for a <input type="datetime-local"> (the browser's local time, minutes). */
+export const toLocalInput = (d: Date | string = new Date()) => {
+  const x = new Date(d);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}T${pad(x.getHours())}:${pad(x.getMinutes())}`;
+};
+/** Back to an exact instant for the server (the input has no timezone; the browser's is used). */
+export const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : '');
 
 export const rupees = (n: number) =>
   `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;

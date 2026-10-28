@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronLeft, Loader2, Paperclip } from 'lucide-react';
-import { errorMessage, paymentKeys, postForm, rupees } from './api';
+import { errorMessage, paymentKeys, postForm, rupees, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { getPayGroup, listPayGroups, payQueueKeys, sumRupees } from './suppliers';
 import { formatDateIST } from '@/lib/datetime';
@@ -19,6 +19,7 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
   const [ticked, setTicked] = useState<string[]>([]);
   const [method, setMethod] = useState<'bank' | 'upi' | 'razorpay' | 'other'>('bank');
   const [reference, setReference] = useState('');
+  const [at, setAt] = useState(toLocalInput());
   const [proof, setProof] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -38,6 +39,7 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
     form.append('expectedTotal', String(total));
     form.append('method', method);
     form.append('reference', reference.trim());
+    form.append('transactionAt', fromLocalInput(at));
     for (const f of proof) form.append('proof', f);
     setBusy(true);
     try {
@@ -101,6 +103,8 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
                   </select></div>
                 <div><label className={label} htmlFor="pb-ref">Reference (UTR / payout ID) — optional</label>
                   <input id="pb-ref" className={input} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} /></div>
+                <div className="sm:col-span-2"><label className={label} htmlFor="pb-at">Transaction date &amp; time (when the money was sent)</label>
+                  <input id="pb-at" type="datetime-local" className={input} required max={toLocalInput()} value={at} onChange={(e) => setAt(e.target.value)} /></div>
               </div>
               <FilePicker files={proof} onChange={setProof} max={3} accept="image/jpeg,image/png,image/webp,application/pdf" label="Attach payment screenshot" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
               {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

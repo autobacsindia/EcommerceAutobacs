@@ -189,6 +189,7 @@ const nextNumber = async () => `PR-${String(await counterRepository.next('paymen
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
 
+const istTime = (d) => new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
 async function admins() {
@@ -394,6 +395,20 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   return shape(doc, actor);
 }
 
+/**
+ * When the money actually moved, from the form (an ISO time; the browser sends its
+ * local "date & time" as ISO). Empty → now. Not in the future (5 minutes' clock
+ * slack) and not more than a year back — a typo guard.
+ */
+export function cleanTransactionAt(value, now = Date.now()) {
+  if (value == null || value === '') return new Date(now);
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime())) throw fail('Enter a valid transaction date and time.', 400);
+  if (at.getTime() > now + 5 * 60 * 1000) throw fail('The transaction time cannot be in the future.', 400);
+  if (at.getTime() < now - 366 * 24 * 3600 * 1000) throw fail('That transaction date is more than a year ago — check it.', 400);
+  return at;
+}
+
 const truthy = (v) => v === true || v === 'true' || v === '1' || v === 1;
 
 /**
@@ -478,22 +493,23 @@ export async function hold(actor, id, { note } = {}, req) {
 }
 
 /** The admin records the payment made (Razorpay / bank / UPI), with a reference and a screenshot. */
-export async function markPaid(actor, id, { method, reference, note } = {}, proofFiles = [], req) {
+export async function markPaid(actor, id, { method, reference, note, transactionAt } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
   const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
   if (!how) throw fail('Choose how it was paid.', 400);
   // Optional: not every payment has one to hand (cash, some UPI apps).
   const ref = String(reference || '').trim();
+  const now = new Date();
+  const txAt = cleanTransactionAt(transactionAt, now.getTime());
   const r0 = await loadVisible(actor, id);
   // The admin paying a request still waiting for approval approves it in the same step.
   const from = ['submitted', 'approved', 'on_hold'];
   const uploads = (Array.isArray(proofFiles) ? proofFiles : [proofFiles]).filter(Boolean);
   const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor) : [];
-  const now = new Date();
   const r = await paymentRequestRepository.transition(id, from, {
     ...(r0.status === 'submitted' ? { approvedBy: actor._id, approvedAt: now } : {}),
     status: 'paid',
-    payment: { method: how, reference: ref.slice(0, 120), paidAt: now, paidBy: actor._id, paidByName: actor.name || '' },
+    payment: { method: how, reference: ref.slice(0, 120), paidAt: now, transactionAt: txAt, paidBy: actor._id, paidByName: actor.name || '' },
   }, entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`.trim(), note].filter(Boolean).join(' — ')), proof.length ? { files: { $each: proof } } : {});
   if (!r) {
     // Lost the race: the screenshot belongs to no payment.
@@ -584,7 +600,7 @@ export async function update(actor, id, input = {}, req) {
  * (payBatch) is corrected together with them: it was one transfer. One
  * transaction; every change is in each request's history.
  */
-export async function editPayment(actor, id, { method, reference, note, removeFileIds } = {}, proofFiles = [], req) {
+export async function editPayment(actor, id, { method, reference, note, removeFileIds, transactionAt } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin can edit a payment record.', 403);
   const r0 = await loadVisible(actor, id);
   if (r0.status !== 'paid') throw fail('Only a paid payment\'s details can be edited here.', 409);
@@ -592,6 +608,8 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   const how = method ? (['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null) : r0.payment?.method;
   if (!how) throw fail('Choose how it was paid.', 400);
   const ref = reference != null ? String(reference).trim().slice(0, 120) : r0.payment?.reference || '';
+  const wasAt = r0.payment?.transactionAt || r0.payment?.paidAt || null;
+  const txAt = transactionAt != null && transactionAt !== '' ? cleanTransactionAt(transactionAt) : wasAt;
   let removeIds = removeFileIds;
   if (typeof removeIds === 'string') { try { removeIds = JSON.parse(removeIds); } catch { removeIds = [removeIds]; } }
   removeIds = new Set((Array.isArray(removeIds) ? removeIds : []).map(String));
@@ -601,6 +619,9 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   const changes = [];
   if (how !== r0.payment?.method) changes.push(`paid by ${String(r0.payment?.method || '—').toUpperCase()} → ${how.toUpperCase()}`);
   if (ref !== (r0.payment?.reference || '')) changes.push(`reference ${r0.payment?.reference || '—'} → ${ref || '—'}`);
+  if (txAt && (!wasAt || new Date(txAt).getTime() !== new Date(wasAt).getTime())) {
+    changes.push(`transaction time ${wasAt ? istTime(wasAt) : '—'} → ${istTime(txAt)}`);
+  }
   if (removing.length) changes.push(`${removing.length} screenshot${removing.length === 1 ? '' : 's'} removed`);
   if (uploads.length) changes.push(`${uploads.length} screenshot${uploads.length === 1 ? '' : 's'} added`);
   const extra = String(note || '').trim().slice(0, 500);
@@ -618,7 +639,7 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
       let mine = null;
       for (const tid of targets) {
         if (publicIds.length) await paymentRequestRepository.pullProofsInSession(tid, publicIds, session);
-        const next = await paymentRequestRepository.editPaidInSession(tid, { 'payment.method': how, 'payment.reference': ref }, log, stored, session);
+        const next = await paymentRequestRepository.editPaidInSession(tid, { 'payment.method': how, 'payment.reference': ref, ...(txAt ? { 'payment.transactionAt': txAt } : {}) }, log, stored, session);
         if (!next) throw fail(MOVED, 409);
         if (idOf(tid) === idOf(r0._id)) mine = next;
       }
@@ -788,7 +809,7 @@ export async function supplierPayGroup(actor, groupId) {
  * add up to it (one was held or paid meanwhile), nothing changes.
  * Unticked requests are untouched and stay in the queue.
  */
-export async function payBatch(actor, { ids, expectedTotal, method, reference, note } = {}, proofFiles = [], req) {
+export async function payBatch(actor, { ids, expectedTotal, method, reference, note, transactionAt } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
   let list = ids;
   if (typeof list === 'string') { try { list = JSON.parse(list); } catch { list = [list]; } }
@@ -799,6 +820,7 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
   if (!how) throw fail('Choose how it was paid.', 400);
   const ref = String(reference || '').trim(); // optional, as for a single payment
+  const txAt = cleanTransactionAt(transactionAt);
 
   const rows = await paymentRequestRepository.findByIds(wanted);
   if (rows.length !== wanted.length) throw fail('Request not found.', 404);
@@ -818,7 +840,7 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor) : [];
   const batch = `PB-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
   const now = new Date();
-  const payment = { method: how, reference: ref.slice(0, 120), paidAt: now, paidBy: actor._id, paidByName: actor.name || '', batch };
+  const payment = { method: how, reference: ref.slice(0, 120), paidAt: now, transactionAt: txAt, paidBy: actor._id, paidByName: actor.name || '', batch };
   const together = `one transfer for ${rows.length} payment${rows.length === 1 ? '' : 's'}, ${inr(total)}`;
   const log = entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`.trim(), together, note].filter(Boolean).join(' — '));
 

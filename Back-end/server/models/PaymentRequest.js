@@ -120,7 +120,11 @@ const PaymentRequestSchema = new mongoose.Schema(
     payment: {
       method: { type: String, enum: ['razorpay', 'bank', 'upi', 'other'], default: undefined },
       reference: { type: String, default: '', maxlength: 120 },
-      paidAt: { type: Date, default: null },
+      paidAt: { type: Date, default: null }, // when it was RECORDED here
+      // When the money actually moved (the admin enters it; defaults to paidAt).
+      // Printed on the receipt beside the recorded time — they differ when a
+      // transfer is recorded later.
+      transactionAt: { type: Date, default: null },
       paidBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
       paidByName: { type: String, default: '' },
       // Set when several requests to one payee were paid in one transfer.
