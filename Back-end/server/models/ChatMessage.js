@@ -106,6 +106,20 @@ const ForwardSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * The card under a message's first link: text only (services/linkPreviewService.js
+ * explains why there is no image). Fetched after the message is posted.
+ */
+const PreviewSchema = new mongoose.Schema(
+  {
+    url: { type: String, required: true, maxlength: 2000 },
+    title: { type: String, required: true, maxlength: 200 },
+    description: { type: String, default: '', maxlength: 300 },
+    site: { type: String, default: '', maxlength: 80 },
+  },
+  { _id: false }
+);
+
 const ChatMessageSchema = new mongoose.Schema(
   {
     channel: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatChannel', required: true },
@@ -141,6 +155,7 @@ const ChatMessageSchema = new mongoose.Schema(
     refs: { type: [RefSchema], default: [] },
     quote: { type: QuoteSchema, default: undefined },
     forwardedFrom: { type: ForwardSchema, default: undefined },
+    preview: { type: PreviewSchema, default: undefined },
     /*
       Pinned to the top of its conversation ("Pinned" strip), by anyone who can
       read it. `pinnedByName` is a snapshot, like a quote's author. Unset when

@@ -15,6 +15,7 @@ import {
   applyMessageChange,
   applyReactions,
   applyPinned,
+  applyPreview,
   countedUnread,
   notifyOf,
   useCanChat,
@@ -282,6 +283,7 @@ export default function TeamChat() {
         type: string; channelId?: string; message?: ChatMessage; messageId?: string; thread?: ChatMessage;
         reactions?: ChatReaction[];
         pinned?: ChatMessage['pinned'];
+        preview?: ChatMessage['preview'];
       };
       if (e.type === 'message' && e.message && e.channelId) {
         if (e.message.threadRoot) {
@@ -339,6 +341,8 @@ export default function TeamChat() {
           return { ...d, root: hide(d.root), replies: d.replies.map(hide) };
         });
         qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
+      } else if (e.type === 'message_preview' && e.channelId && e.messageId) {
+        applyPreview(qc, e.channelId, e.messageId, e.preview ?? null);
       } else if (e.type === 'status') {
         qc.invalidateQueries({ queryKey: chatKeys.people() });
       } else if (e.type === 'message_pinned' && e.channelId && e.messageId) {

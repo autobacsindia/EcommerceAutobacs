@@ -142,6 +142,8 @@ export interface ChatMessage {
   forwarded?: { by: string; at: string } | null;
   /** Pinned to the top of its conversation: by whom, when. */
   pinned?: { by: string; at: string } | null;
+  /** The card for its first link (text only), once the server has fetched it. */
+  preview?: { url: string; title: string; description: string; site: string } | null;
   /** The message this one quotes, as it read when quoted. */
   quote?: ChatQuote | null;
   /** Emoji reactions, in the order each emoji was first used. */
@@ -742,6 +744,22 @@ export function applyPinned(
     d ? { ...d, root: set(d.root), replies: d.replies.map(set) } : d,
   );
   qc.invalidateQueries({ queryKey: chatKeys.pins(channelId) });
+}
+
+/** Set a message's link card wherever it is cached (it arrives after the message itself). */
+export function applyPreview(
+  qc: ReturnType<typeof useQueryClient>,
+  channelId: string,
+  messageId: string,
+  preview: ChatMessage['preview'],
+) {
+  const set = (m: ChatMessage) => (m.id === messageId ? { ...m, preview } : m);
+  qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) =>
+    d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: p.messages.map(set) })) } : d,
+  );
+  qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) =>
+    d ? { ...d, root: set(d.root), replies: d.replies.map(set) } : d,
+  );
 }
 
 /** Pin or unpin a message for everyone in the conversation. Not optimistic: the server says who pinned it. */
