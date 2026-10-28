@@ -24,6 +24,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
   useChatPeople: () => ({ data: people }),
   useForwardMessage: () => ({ mutateAsync: forwardMutate, isPending: false, isError: false }),
   useOpenDm: () => ({ mutateAsync: openMutate, isPending: false, isError: false }),
+  usePresence: () => new Set<string>(),
 }));
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 jest.mock('next/navigation', () => ({ useRouter: () => ({ replace: jest.fn() }), usePathname: () => '/team/chat', useSearchParams: () => new URLSearchParams() }));

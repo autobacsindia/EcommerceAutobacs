@@ -298,10 +298,11 @@ export function cleanText(raw) {
 
 // ── reads ────────────────────────────────────────────────────────────────────
 
-/** Everyone who can chat — for starting DMs and (later) @mentions. */
+/** Everyone who can chat — for starting DMs and @mentions — with their status, if any. */
 export async function listPeople() {
-  const users = await userRepository.findChatUsers();
-  return users.map(personOf);
+  const [users, statuses] = await Promise.all([userRepository.findChatUsers(), chatRepository.findLiveStatuses()]);
+  const statusOf = new Map(statuses.map((st) => [idOf(st.user), { text: st.text, until: st.until ?? null }]));
+  return users.map((u) => ({ ...personOf(u), status: statusOf.get(idOf(u)) ?? null }));
 }
 
 /** Channels visible to `user`, with unread counts and DM partner names. */
@@ -1504,4 +1505,56 @@ export async function listPins(user, channelId) {
   const channel = await loadAccessible(user, channelId);
   const docs = await chatRepository.findPins(channel._id, MAX_PINS_PER_CHANNEL);
   return { messages: await withStars(user, docs.map((d) => shapeMessage(d, null, user))) };
+}
+
+// ── presence and status ──────────────────────────────────────────────────────
+/*
+  "Online" here means "has team chat open" (the live stream heartbeat in
+  chatPresence) — exactly what the green dot claims, no more: it does not know
+  whether someone is at their desk with the chat closed.
+
+  A status is a short line ("On leave till Friday") anyone can set for
+  themselves, optionally until a time; it is everybody's to read.
+*/
+
+export const STATUS_MAX_LENGTH = 80;
+const MAX_STATUS_DAYS = 366;
+
+/** Who of the people who can chat has team chat open right now. */
+export async function listOnline() {
+  const people = await userRepository.findChatUsers();
+  const online = await onlineAmong(people.map(idOf));
+  return { online: [...online] };
+}
+
+/** Set my status; `until` (optional) must be in the future and within a year. */
+export async function setMyStatus(user, { text, until } = {}) {
+  const clean = cleanText(text).replace(/\s+/g, ' ');
+  if (!clean) throw fail('Write a status, or clear it', 400);
+  if (clean.length > STATUS_MAX_LENGTH) throw fail(`A status can be up to ${STATUS_MAX_LENGTH} characters`, 400);
+  let end = null;
+  if (until != null && until !== '') {
+    end = new Date(until);
+    const now = Date.now();
+    if (Number.isNaN(end.getTime()) || end.getTime() <= now) throw fail('"Clear after" must be in the future', 400);
+    if (end.getTime() > now + MAX_STATUS_DAYS * 86_400_000) throw fail('"Clear after" can be at most a year away', 400);
+  }
+  const row = await chatRepository.setStatus(user._id, { text: clean, until: end });
+  await announceStatus(user);
+  return { status: { text: row.text, until: row.until ?? null } };
+}
+
+export async function clearMyStatus(user) {
+  await chatRepository.clearStatus(user._id);
+  await announceStatus(user);
+  return { status: null };
+}
+
+/** Everyone who can chat refreshes the person's status (route: #company's audience). */
+function announceStatus(user) {
+  return publishChatEvent({
+    type: 'status',
+    userId: idOf(user),
+    route: { kind: 'space', audience: 'all', team: null, teams: [], members: [], archived: false },
+  });
 }

@@ -71,10 +71,13 @@ export function Avatar({
   person,
   system,
   size = 'md',
+  online,
 }: {
   person: ChatPerson | null;
   system?: boolean;
   size?: 'sm' | 'md';
+  /** Draw the green "has chat open" dot. */
+  online?: boolean;
 }) {
   const box = size === 'sm' ? 'h-7 w-7 text-[11px]' : 'h-9 w-9 text-sm';
   if (system) {
@@ -85,9 +88,16 @@ export function Avatar({
     );
   }
   const name = person?.name ?? '?';
-  return (
+  const face = (
     <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold ${colourFor(name)}`} aria-hidden="true">
       {initials(name)}
+    </span>
+  );
+  if (!online) return face;
+  return (
+    <span className="relative inline-flex shrink-0">
+      {face}
+      <OnlineDot />
     </span>
   );
 }
@@ -174,5 +184,17 @@ export function Dialog({
         {children}
       </div>
     </div>
+  );
+}
+
+/** The green dot: this person has team chat open. Placed on an avatar's corner. */
+export function OnlineDot({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 ${className}`}
+      role="img"
+      aria-label="Online"
+      title="Has team chat open"
+    />
   );
 }

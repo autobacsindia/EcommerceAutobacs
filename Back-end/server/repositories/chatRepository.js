@@ -2,6 +2,7 @@ import ChatChannel from '../models/ChatChannel.js';
 import ChatMessage from '../models/ChatMessage.js';
 import ChatReadState from '../models/ChatReadState.js';
 import ChatStar from '../models/ChatStar.js';
+import ChatStatus from '../models/ChatStatus.js';
 
 /**
  * Team-chat data access (channels, messages, read positions). Access decisions
@@ -271,6 +272,14 @@ const chatRepository = {
       { $unset: { pinnedAt: 1, pinnedBy: 1, pinnedByName: 1 } },
       { new: true },
     ).lean(),
+
+  // ── status (one row per person; a small collection, one per member of staff) ──
+  /** Statuses still in force at `now`. */
+  findLiveStatuses: (now = new Date()) =>
+    ChatStatus.find({ $or: [{ until: null }, { until: { $gt: now } }] }).select('user text until').lean(),
+  setStatus: (user, { text, until }) =>
+    ChatStatus.findOneAndUpdate({ user }, { $set: { text, until } }, { upsert: true, new: true }).lean(),
+  clearStatus: (user) => ChatStatus.deleteOne({ user }),
 
   // ── stars (private per person) ──
   /** Star a message. Upsert on the unique { user, message }, so a retry is one star. */

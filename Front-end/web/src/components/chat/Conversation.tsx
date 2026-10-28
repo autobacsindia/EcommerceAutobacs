@@ -20,6 +20,7 @@ import {
   useMarkUnread,
   useStarMessage,
   usePinMessage,
+  liveStatus,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
@@ -127,6 +128,7 @@ export default function Conversation({
   orderHref,
   onBack,
   onOpenChannel,
+  online,
   onSearch,
   initialTab,
 }: {
@@ -139,6 +141,8 @@ export default function Conversation({
   onBack: () => void;
   /** Open another conversation (after forwarding into it). */
   onOpenChannel?: (id: string) => void;
+  /** Who has team chat open (the green dot). */
+  online?: Set<string>;
   /** Opens search already narrowed to this channel. */
   onSearch?: () => void;
   /** From the link (?t=updates — an order-update pop-up); otherwise chosen by what is unread. */
@@ -380,7 +384,12 @@ export default function Conversation({
     channel.group
       ? `${channel.memberIds?.length ?? channel.memberCount ?? ''} people · ${['You', ...(channel.memberIds ?? []).filter((id) => id !== meId).map((id) => peopleById.get(id)?.name ?? 'Former member')].join(', ')}`
       : channel.kind === 'dm'
-      ? [channel.partner?.teamLabel, channel.partner?.isHead ? 'Head' : null].filter(Boolean).join(' · ')
+      ? [
+          channel.partner && online?.has(channel.partner.id) ? 'Active now' : null,
+          liveStatus(channel.partner ? peopleById.get(channel.partner.id)?.status : null)?.text,
+          channel.partner?.teamLabel,
+          channel.partner?.isHead ? 'Head' : null,
+        ].filter(Boolean).join(' · ')
       : channel.description;
 
   return (
@@ -391,7 +400,9 @@ export default function Conversation({
             <button type="button" onClick={onBack} className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-100 md:hidden" aria-label="Back to channels">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            {channel.kind === 'dm' && !channel.group ? <Avatar person={channel.partner} /> : <ChannelIcon channel={channel} size="md" />}
+            {channel.kind === 'dm' && !channel.group
+              ? <Avatar person={channel.partner} online={!!channel.partner && !!online?.has(channel.partner.id)} />
+              : <ChannelIcon channel={channel} size="md" />}
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-gray-900">{title}</h2>
               {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}

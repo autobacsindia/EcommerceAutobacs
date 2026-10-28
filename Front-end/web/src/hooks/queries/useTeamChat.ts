@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
@@ -15,7 +16,19 @@ export interface ChatPerson {
   team: string | null;
   teamLabel: string | null;
   isHead: boolean;
+  /** Their status ("On leave till Fri"), when set and not yet expired. From /chat/people only. */
+  status?: ChatStatus | null;
 }
+
+export interface ChatStatus {
+  text: string;
+  /** When it clears itself; null = until they clear it. */
+  until: string | null;
+}
+
+/** A status still in force (the server drops expired ones; this covers a page left open past `until`). */
+export const liveStatus = (s?: ChatStatus | null): ChatStatus | null =>
+  s && (!s.until || new Date(s.until).getTime() > Date.now()) ? s : null;
 
 export interface ChatChannel {
   id: string;
@@ -244,6 +257,35 @@ export function useChatPeople(enabled = true) {
     queryFn: async () => (await apiClient.get<{ people: ChatPerson[] }>('/chat/people')).people ?? [],
     enabled: enabled && canChat,
     staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Who has team chat open — the green dot. Polled while chat is on screen;
+ * "online" means exactly that and nothing more (see chatService).
+ */
+export function usePresence(enabled = true): Set<string> {
+  const canChat = useCanChat();
+  const { data } = useQuery({
+    queryKey: chatKeys.presence(),
+    queryFn: async () => (await apiClient.get<{ online: string[] }>('/chat/presence')).online ?? [],
+    enabled: enabled && canChat,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  });
+  return useMemo(() => new Set(data ?? []), [data]);
+}
+
+/** Set (text, optional until) or clear (null) my status. */
+export function useSetStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (status: { text: string; until: string | null } | null): Promise<{ status: ChatStatus | null }> =>
+      status
+        ? apiClient.put<{ status: ChatStatus | null }>('/chat/status', status)
+        : apiClient.delete<{ status: ChatStatus | null }>('/chat/status'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.people() }),
   });
 }
 

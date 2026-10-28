@@ -22,6 +22,7 @@ import {
   validateStarredPage,
   validateForward,
   validatePin,
+  validateStatus,
 } from '../validators/chat.validator.js';
 import {
   listChannels,
@@ -47,6 +48,9 @@ import {
   forwardMessage,
   pinMessage,
   listPins,
+  listOnline,
+  setMyStatus,
+  clearMyStatus,
   createSpace,
   deleteSpace,
   openConversation,
@@ -140,6 +144,19 @@ router.get('/me', asyncHandler(async (req, res) => {
 // GET /chat/people — everyone who can chat (for DMs / mentions)
 router.get('/people', asyncHandler(async (req, res) => {
   res.json({ success: true, people: await listPeople() });
+}));
+
+// GET /chat/presence — who has team chat open right now
+router.get('/presence', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listOnline()) });
+}));
+
+// PUT /chat/status { text, until? } — set my status; DELETE clears it
+router.put('/status', validateStatus, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await setMyStatus(req.user, req.body)) });
+}));
+router.delete('/status', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await clearMyStatus(req.user)) });
 }));
 
 // GET /chat/channels — spaces and DMs visible to me, with unread counts

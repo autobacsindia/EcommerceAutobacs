@@ -21,15 +21,18 @@ import {
   useChatChannels,
   useChatMe,
   useChatPeople,
+  usePresence,
+  liveStatus,
   useCreateSpace,
   useOpenDm,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, ChatReaction, MessagePage, ThreadData } from '@/hooks/queries/useTeamChat';
-import { Avatar, ChannelIcon, Dialog, GREEN, shortWhen } from './chatUi';
+import { Avatar, ChannelIcon, Dialog, GREEN, OnlineDot, shortWhen } from './chatUi';
 import Conversation from './Conversation';
 import { NotifyIcon } from './NotifyMenu';
 import MessageSearch from './MessageSearch';
 import StarredPanel from './StarredPanel';
+import StatusDialog from './StatusDialog';
 
 type Pages = InfiniteData<MessagePage, number>;
 
@@ -47,6 +50,7 @@ function PeoplePicker({
   single?: boolean;
 }) {
   const [q, setQ] = useState('');
+  const online = usePresence();
   const shown = people.filter((p) => p.name.toLowerCase().includes(q.trim().toLowerCase()));
   return (
     <div>
@@ -68,10 +72,12 @@ function PeoplePicker({
               aria-pressed={selected.has(p.id)}
               className={`flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 ${selected.has(p.id) ? 'bg-emerald-50' : ''}`}
             >
-              <Avatar person={p} />
+              <Avatar person={p} online={online.has(p.id)} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-gray-900">{p.name}</span>
-                <span className="block text-xs text-gray-500">{p.teamLabel}{p.isHead ? ' · Head' : ''}</span>
+                <span className="block truncate text-xs text-gray-500">
+                  {p.teamLabel}{p.isHead ? ' · Head' : ''}{liveStatus(p.status) ? ` · ${liveStatus(p.status)!.text}` : ''}
+                </span>
               </span>
               {!single && selected.has(p.id) && <span className="text-xs font-semibold text-emerald-700">Added</span>}
             </button>
@@ -214,6 +220,8 @@ export default function TeamChat() {
   const { data: channels = [], isLoading, isError, refetch } = useChatChannels();
   const { data: me } = useChatMe();
   const { data: people = [] } = useChatPeople();
+  const online = usePresence(canChat);
+  const [editingStatus, setEditingStatus] = useState(false);
   const [dialog, setDialog] = useState<'space' | 'dm' | null>(null);
   const [filter, setFilter] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -223,6 +231,8 @@ export default function TeamChat() {
 
   const meId = me?.userId ?? '';
   const meName = user?.name ?? 'You';
+  const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
+  const myStatus = liveStatus(peopleById.get(meId)?.status);
   const isAdmin = user?.role === 'admin';
   // Admins manage orders in their own panel; staff see them in the team panel.
   const orderHref = useCallback(
@@ -329,6 +339,8 @@ export default function TeamChat() {
           return { ...d, root: hide(d.root), replies: d.replies.map(hide) };
         });
         qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
+      } else if (e.type === 'status') {
+        qc.invalidateQueries({ queryKey: chatKeys.people() });
       } else if (e.type === 'message_pinned' && e.channelId && e.messageId) {
         applyPinned(qc, e.channelId, e.messageId, e.pinned ?? null);
       } else if (e.type === 'message_reactions' && e.channelId && e.messageId && e.reactions) {
@@ -382,8 +394,16 @@ export default function TeamChat() {
             active ? 'bg-emerald-100 text-emerald-950' : 'text-gray-700 hover:bg-gray-200/70'
           } ${counted > 0 ? 'font-semibold text-gray-900' : ''}`}
         >
-          <ChannelIcon channel={c} />
-          <span className="min-w-0 flex-1 truncate">{c.audience === 'teams' || c.kind === 'dm' ? c.name : `#${c.name}`}</span>
+          <span className="relative inline-flex shrink-0">
+            <ChannelIcon channel={c} />
+            {c.kind === 'dm' && !c.group && c.partner && online.has(c.partner.id) && <OnlineDot />}
+          </span>
+          <span className="min-w-0 flex-1 truncate">
+            {c.audience === 'teams' || c.kind === 'dm' ? c.name : `#${c.name}`}
+            {c.kind === 'dm' && !c.group && c.partner && liveStatus(peopleById.get(c.partner.id)?.status) && (
+              <span className="ml-1.5 font-normal text-gray-500">· {liveStatus(peopleById.get(c.partner.id)?.status)!.text}</span>
+            )}
+          </span>
           {level !== 'all' && (
             <span className="shrink-0 text-gray-400" title={level === 'off' ? 'Notifications off' : 'Only @mentions'}>
               <NotifyIcon level={level} className="h-3.5 w-3.5" />
@@ -481,6 +501,14 @@ export default function TeamChat() {
           >
             <MessageSquarePlus className="h-5 w-5 text-emerald-700" /> New chat
           </button>
+          <button
+            type="button"
+            onClick={() => setEditingStatus(true)}
+            className="mt-2 block w-full truncate rounded-full px-3 py-1 text-left text-xs text-gray-600 hover:bg-gray-200/70"
+            title="Set a status everyone in chat can see"
+          >
+            {myStatus ? <>Your status: <span className="font-medium text-gray-800">{myStatus.text}</span></> : '＋ Set a status'}
+          </button>
           <div className="relative mt-3">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
             <input
@@ -530,6 +558,7 @@ export default function TeamChat() {
           orderHref={orderHref}
           onBack={() => select(null)}
           onOpenChannel={select}
+          online={online}
           onSearch={() => setSearching(selected.id)}
           initialTab={initialTab}
         />
@@ -548,6 +577,8 @@ export default function TeamChat() {
           onClose={() => setSearching(null)}
         />
       )}
+
+      {editingStatus && <StatusDialog current={myStatus} onClose={() => setEditingStatus(false)} />}
 
       {showStarred && (
         <StarredPanel

@@ -66,6 +66,8 @@ export const chatKeys = {
   /** `/chat/orders/recent` — the order picker. */
   recentOrders: () => [...chatKeys.all, 'orders'] as const,
   me: () => [...chatKeys.all, 'me'] as const,
+  /** `/chat/presence` — who has team chat open. */
+  presence: () => [...chatKeys.all, 'presence'] as const,
   /** `/chat/starred` — my starred messages, newest first. */
   starred: () => [...chatKeys.all, 'starred'] as const,
   /** `/chat/channels/:id/pins` — a conversation's pinned messages. */
