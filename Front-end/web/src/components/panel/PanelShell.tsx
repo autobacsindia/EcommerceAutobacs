@@ -26,8 +26,8 @@ export type PanelNavSection = {
 };
 
 /**
- * The frame shared by the admin and team panels: a white sidebar with the
- * Roavion logo on a green brand badge, a white top bar, and on phones a menu
+ * The frame shared by the admin and team panels: a deep emerald sidebar with
+ * the white Roavion logo, a white top bar, and on phones a menu
  * button that slides the sidebar in over the page. Visual only — every link,
  * section and button is the caller's, so behaviour stays where it was.
  */
@@ -93,11 +93,11 @@ export default function PanelShell({
         data-open={menuOpen}
         className={`pn-side pn-drawer fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] flex-col transition-[width] duration-200 ${width}`}
       >
-        <div className={`pn-brand flex items-center gap-2 px-4 py-4 ${rail ? 'md:justify-center md:px-2' : ''}`}>
+        <div className={`pn-brand flex items-center gap-2 px-5 py-5 ${rail ? 'md:justify-center md:px-2' : ''}`}>
           <Link href={homeHref} className={`min-w-0 flex-1 ${rail ? 'md:hidden' : ''}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/images/roavion-logo.png" alt="Roavion" width={960} height={255} className="h-7 w-auto" />
-            <span className="pn-brand-sub mt-1.5 block truncate text-xs font-medium">{subtitle}</span>
+            <img src="/images/roavion-logo.png" alt="Roavion" width={960} height={255} className="pn-logo h-7 w-auto" />
+            <span className="pn-brand-sub mt-2 block truncate">{subtitle}</span>
           </Link>
           {onToggleCollapsed && (
             <button
@@ -114,7 +114,7 @@ export default function PanelShell({
           </button>
         </div>
 
-        <nav aria-label="Panel menu" className="flex-1 space-y-1 overflow-y-auto px-3 py-3">
+        <nav aria-label="Panel menu" className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {sections.map((section, i) => {
             const open = !section.title || section.expanded !== false || rail;
             return (
@@ -138,7 +138,7 @@ export default function PanelShell({
                         href={href}
                         aria-current={active ? 'page' : undefined}
                         title={rail ? label : undefined}
-                        className={`pn-nav flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${rail ? 'md:justify-center md:px-0' : ''}`}
+                        className={`pn-nav flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${rail ? 'md:justify-center md:px-0' : ''}`}
                       >
                         <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
                         <span className={`min-w-0 flex-1 truncate ${rail ? 'md:sr-only' : ''}`}>{label}</span>
@@ -157,16 +157,18 @@ export default function PanelShell({
         </nav>
 
         <div className={`pn-side-line border-t p-3 ${rail ? 'md:px-2' : ''}`}>
-          <div className={`flex items-center gap-3 px-1 ${rail ? 'md:hidden' : ''}`}>
-            <span aria-hidden="true" className="pn-avatar grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold">
-              {initials(user.name)}
-            </span>
-            <div className="min-w-0">
-              <p className="pn-side-name truncate text-sm font-medium">{user.name}</p>
-              {user.role && <p className="pn-side-muted truncate text-xs">{user.role}</p>}
+          <div className={`pn-user rounded-xl p-2.5 ${rail ? 'md:hidden' : ''}`}>
+            <div className="flex items-center gap-3">
+              <span aria-hidden="true" className="pn-avatar grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold">
+                {initials(user.name)}
+              </span>
+              <div className="min-w-0">
+                <p className="pn-side-name truncate text-sm font-semibold">{user.name}</p>
+                {user.role && <p className="pn-side-muted truncate text-xs">{user.role}</p>}
+              </div>
             </div>
+            {footer && <div className="mt-2 border-t border-white/10 pt-2">{footer}</div>}
           </div>
-          {footer && <div className={`mt-2 px-1 ${rail ? 'md:hidden' : ''}`}>{footer}</div>}
           <button
             type="button"
             onClick={onLogout}

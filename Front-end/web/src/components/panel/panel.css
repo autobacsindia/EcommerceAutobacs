@@ -1,9 +1,9 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   PANEL THEME — the admin (/admin) and team (/team) panels: a bright white
-   workspace in the Roavion logo colours (green #0A5C33, white, grey #707070).
-   The logo green carries the brand (the badge at the top of the sidebar); a
-   brighter green does the work (buttons, links, selection); a vivid green is
-   for highlights only, never text.
+   PANEL THEME — the admin (/admin) and team (/team) panels: a deep emerald
+   sidebar with the white Roavion logo beside a bright white workspace, in the
+   logo colours (green #0A5C33, white, grey #707070). The logo green carries
+   the brand (the sidebar); a brighter green does the work (buttons, links,
+   selection); a vivid green is for highlights only, never text.
 
    Scoped to `.panel-theme`, the root of PanelShell, so the storefront is
    untouched.
@@ -32,23 +32,26 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 .panel-theme {
-  /* Shell tokens. */
+  /* Shell tokens. The sidebar is a deep emerald gradient that stays dark from
+     top to bottom, so white text holds at least 7.9:1 everywhere on it
+     (14:1 at the top, 7.9:1 at #0b5e36, the lightest stop). */
   --pn-bg: #f6f8f7;            /* the page behind the cards: near-white */
-  --pn-side: #ffffff;
-  --pn-side-line: #e6ebe9;
-  --pn-side-ink: #2f3634;      /* sidebar text: 12.6:1 on white */
-  --pn-side-icon: #6b7371;
-  --pn-side-muted: #6b7371;    /* section labels: 4.9:1 on white */
-  --pn-side-hover: #f2f6f4;
-  --pn-active-bg: #e9f8ef;     /* mint */
-  --pn-active-ink: #0b6b38;    /* 6.0:1 on the mint */
-  --pn-active-bar: #16a34a;    /* the vivid edge on the current page */
+  --pn-side: linear-gradient(180deg, #06331d 0%, #0a4a2b 42%, #0b5e36 100%);
+  --pn-side-glow: radial-gradient(120% 45% at 100% 0%, rgba(92, 214, 140, 0.16), transparent 62%);
+  --pn-side-line: rgba(255, 255, 255, 0.10);
+  --pn-side-ink: rgba(255, 255, 255, 0.9);   /* ≥6.7:1 */
+  --pn-side-icon: #b9e6cc;     /* ≥5.7:1 */
+  --pn-side-muted: #a7dcbd;    /* section labels, role: ≥5.1:1 */
+  --pn-side-hover: rgba(255, 255, 255, 0.08);
+  --pn-active-bg: #ffffff;     /* the current page: a white pill */
+  --pn-active-ink: #0a5c33;    /* 8.1:1 on it */
+  --pn-active-icon: #0b7d41;
+  --pn-count-bg: #4ade80;
+  --pn-count-ink: #05301b;     /* 8.3:1 */
+  --pn-card: rgba(255, 255, 255, 0.07);      /* the user card at the foot */
   --pn-bar: #ffffff;
   --pn-bar-line: #e6ebe9;
   --pn-focus: #0b7d41;
-  /* The brand badge: the logo green into a brighter green; the white logo
-     holds 8.1:1 at the start and 3.2:1 at the end (a large graphic: 3:1). */
-  --pn-brand: linear-gradient(125deg, #0a5c33 0%, #0b7d41 55%, #19a45a 100%);
 
   /* Neutrals: Tailwind's lightness steps, the store's hue. */
   --color-gray-50:  oklch(98.4% 0.003 165);
@@ -85,15 +88,12 @@
 
 [data-theme='dark'] .panel-theme {
   --pn-bg: #0f1212;
-  --pn-side: #141919;
-  --pn-side-line: #263030;
-  --pn-side-ink: #e5ebe9;      /* 14.7:1 */
-  --pn-side-icon: #9aa5a2;
-  --pn-side-muted: #9aa5a2;    /* 6.9:1 */
-  --pn-side-hover: #1b2323;
-  --pn-active-bg: #142b20;
-  --pn-active-ink: #6ee7a0;    /* 9.7:1 */
-  --pn-active-bar: #37b074;
+  /* Deeper still in the dark theme, so the sidebar sits back from the cards. */
+  --pn-side: linear-gradient(180deg, #03190e 0%, #062b19 45%, #083a22 100%);
+  --pn-side-glow: radial-gradient(120% 45% at 100% 0%, rgba(92, 214, 140, 0.10), transparent 62%);
+  --pn-active-bg: #e9f8ef;
+  --pn-active-ink: #064a26;
+  --pn-active-icon: #0b7d41;
   --pn-bar: #141919;
   --pn-bar-line: #263030;
   --pn-focus: #37b074;
@@ -169,9 +169,9 @@
   outline-offset: 2px;
 }
 
-/* A brand-gradient surface (the dashboard's health score). White on it: 3.2–8.1:1,
-   used only for large figures. */
-.panel-theme .pn-gradient { background: var(--pn-brand); color: #fff; }
+/* A brand-gradient surface (the dashboard's health score): the sidebar's
+   emerald, so white on it is ≥7.9:1. */
+.panel-theme .pn-gradient { background: linear-gradient(135deg, #06331d 0%, #0a5c33 55%, #0b7d41 100%); color: #fff; }
 
 /* Page titles in the top bar, and any page that opts in. */
 .panel-theme .pn-title {
@@ -182,49 +182,60 @@
 
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 .pn-side {
-  background: var(--pn-side);
+  background: var(--pn-side-glow), var(--pn-side);
   color: var(--pn-side-ink);
-  border-right: 1px solid var(--pn-side-line);
+  box-shadow: 1px 0 0 rgba(0, 0, 0, 0.04), 8px 0 30px -12px rgba(6, 51, 29, 0.35);
 }
 .pn-side-line { border-color: var(--pn-side-line); }
-/* The logo sits on the brand badge: the logo is white, the badge is the logo green. */
-.pn-brand {
-  background: var(--pn-brand);
-  color: #fff;
-  border-bottom-right-radius: 18px;
+/* The logo area sits on the darkest part of the gradient. */
+.pn-brand { color: #fff; border-bottom: 1px solid var(--pn-side-line); }
+/* The logo file is a white wordmark with a GREEN stripe and a green "Powered
+   by" line — both vanish on a green sidebar. Drawn all-white here, the way a
+   brand mark is shown on its own brand colour. */
+.pn-logo { filter: brightness(0) invert(1); }
+.pn-brand-sub {
+  color: var(--pn-side-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
-.pn-brand-sub { color: rgba(255, 255, 255, 0.86); }
-.pn-brand-btn { color: #fff; border-radius: 8px; transition: background-color 0.15s; }
-.pn-brand-btn:hover { background: rgba(255, 255, 255, 0.16); }
-.pn-brand :focus-visible { outline-color: #fff !important; }
+.pn-brand-btn { color: var(--pn-side-ink); border-radius: 8px; transition: background-color 0.15s; }
+.pn-brand-btn:hover { background: var(--pn-side-hover); color: #fff; }
+.pn-side :focus-visible { outline-color: #fff !important; }
 .pn-section {
   color: var(--pn-side-muted);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.pn-section:hover { color: var(--pn-side-ink); }
+.pn-section:hover { color: #fff; }
 .pn-nav {
   color: var(--pn-side-ink);
-  transition: background-color 0.15s, color 0.15s;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .pn-nav svg { color: var(--pn-side-icon); transition: color 0.15s; }
-.pn-nav:hover { background: var(--pn-side-hover); }
-.pn-nav:hover svg { color: var(--pn-active-ink); }
+.pn-nav:hover { background: var(--pn-side-hover); color: #fff; }
+.pn-nav:hover svg { color: #fff; }
 .pn-nav[aria-current='page'] {
   background: var(--pn-active-bg);
   color: var(--pn-active-ink);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--pn-active-bar);
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(255, 255, 255, 0.4) inset;
 }
-.pn-nav[aria-current='page'] svg { color: var(--pn-active-ink); }
-.pn-count { background: var(--color-blue-600); color: var(--color-white); }
+.pn-nav[aria-current='page'] svg { color: var(--pn-active-icon); }
+.pn-count { background: var(--pn-count-bg); color: var(--pn-count-ink); }
 .pn-side-muted { color: var(--pn-side-muted); }
-.pn-side-name { color: var(--pn-side-ink); }
-.pn-avatar { background: var(--pn-brand); color: #fff; }
-.pn-logout { color: var(--pn-side-ink); border: 1px solid var(--pn-side-line); }
-.pn-logout:hover { color: var(--color-red-700); background: var(--color-red-50); border-color: var(--color-red-200); }
+.pn-side-link { color: var(--pn-side-muted); }
+.pn-side-link:hover { color: #fff; }
+.pn-side-name { color: #fff; }
+.pn-user { background: var(--pn-card); border: 1px solid var(--pn-side-line); }
+.pn-avatar { background: #fff; color: #0a5c33; }
+.pn-logout { color: var(--pn-side-ink); border: 1px solid rgba(255, 255, 255, 0.22); }
+.pn-logout:hover { color: #fff; background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.4); }
+/* A quiet scrollbar for a long menu on the dark green. */
+.pn-side nav { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.22) transparent; }
 
 /* ── Top bar ─────────────────────────────────────────────────────────────── */
 .pn-bar {
@@ -235,7 +246,7 @@
 /* Phone drawer: the sidebar slides in over the page. Hidden (not just moved) when
    closed, so its links leave the tab order and the accessibility tree. */
 @media (max-width: 767.98px) {
-  .pn-drawer { transform: translateX(-100%); visibility: hidden; transition: transform 0.22s ease, visibility 0s linear 0.22s; box-shadow: 0 0 40px rgba(0, 0, 0, 0.18); }
+  .pn-drawer { transform: translateX(-100%); visibility: hidden; transition: transform 0.22s ease, visibility 0s linear 0.22s; }
   .pn-drawer[data-open='true'] { transform: none; visibility: visible; transition: transform 0.22s ease; }
 }
 @media (prefers-reduced-motion: reduce) {
