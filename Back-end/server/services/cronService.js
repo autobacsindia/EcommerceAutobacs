@@ -12,6 +12,7 @@ import { findOriginalsMissingVariants } from './storage/variantSweep.js';
 import { storageProvider } from '../config/storage.js';
 import { postStuckDigests } from './chatStuckDigest.js';
 import { sendOverdueReport } from './overdueReportService.js';
+import { postEtaReminders } from './parcelEtaReminders.js';
 
 class CronService {
   constructor() {
@@ -65,6 +66,7 @@ class CronService {
     this.scheduleVariantSweep();
     this.scheduleChatStuckDigest();
     this.scheduleOverdueReport();
+    this.scheduleEtaReminders();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -414,6 +416,59 @@ class CronService {
     } catch (err) {
       console.error('[CronService] Overdue-orders email failed:', err.message);
       // Let a later run today try again.
+      if (this.redis) await this.redis.del(marker).catch(() => {});
+      return null;
+    }
+  }
+
+  /**
+   * Team chat reminders for parcels on (or past) their expected delivery date
+   * (services/parcelEtaReminders.js). 09:00 IST Monday–Saturday, like the
+   * overdue email. Same once-a-day guard: the run lock stops two replicas at the
+   * same moment, a per-day marker stops a second scan later the same day — and
+   * each post's own idempotency key would stop a duplicate even without them.
+   */
+  scheduleEtaReminders() {
+    const schedule = process.env.ETA_REMINDER_CRON || '0 9 * * 1-6';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid ETA_REMINDER_CRON "${schedule}" — delivery-date reminders NOT scheduled`);
+      return;
+    }
+    const tz = process.env.ETA_REMINDER_TZ || 'Asia/Kolkata';
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:etaReminders', 15 * 60, () => this.runEtaRemindersOnce()),
+      { scheduled: true, timezone: tz }
+    );
+    this.scheduledTasks.push({
+      name: 'etaReminders',
+      task,
+      schedule,
+      description: 'Team chat: reminders for parcels due (or overdue) on their expected delivery date',
+    });
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[CronService] Delivery-date reminders scheduled: "${schedule}"`);
+    }
+  }
+
+  /** One scan per IST day (see scheduleEtaReminders). Never throws. */
+  async runEtaRemindersOnce(now = Date.now()) {
+    const day = new Date(now + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const marker = `cron:done:etaReminders:${day}`;
+    try {
+      if (this.redis) {
+        const first = await this.redis.set(marker, '1', 'NX', 'EX', 36 * 60 * 60).catch(() => 'OK');
+        if (!first) {
+          console.log(`[CronService] Delivery-date reminders already sent for ${day} — skipping`);
+          return null;
+        }
+      }
+      const result = await postEtaReminders(now);
+      console.log(`[CronService] Delivery-date reminders: due=${result.due} posted=${result.posted} failed=${result.failed}`);
+      // Some did not post: let a later run today post those (the rest are not repeated).
+      if (result.failed && this.redis) await this.redis.del(marker).catch(() => {});
+      return result;
+    } catch (err) {
+      console.error('[CronService] Delivery-date reminders failed:', err.message);
       if (this.redis) await this.redis.del(marker).catch(() => {});
       return null;
     }

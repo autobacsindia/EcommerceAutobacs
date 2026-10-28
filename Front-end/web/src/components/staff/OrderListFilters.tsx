@@ -9,8 +9,9 @@ import { STAGE_TONE, type LineStage } from '@/components/staff/work/types';
  * filtering (utils/orderListFilters.js), so every page of results honours it —
  * this only collects what the person wants.
  */
-export type ListFilters = { q: string; step: '' | LineStage; source: '' | 'website' | 'sales'; sort: 'newest' | 'oldest' };
-export const NO_FILTERS: ListFilters = { q: '', step: '', source: '', sort: 'newest' };
+export type EtaFilter = '' | 'due_today' | 'overdue' | 'none';
+export type ListFilters = { q: string; step: '' | LineStage; source: '' | 'website' | 'sales'; sort: 'newest' | 'oldest'; eta?: EtaFilter };
+export const NO_FILTERS: ListFilters = { q: '', step: '', source: '', sort: 'newest', eta: '' };
 
 /** `&q=…&step=…` for the API (empty values left out). */
 export function filterQuery(f: ListFilters): string {
@@ -18,12 +19,13 @@ export function filterQuery(f: ListFilters): string {
   if (f.q.trim()) p.set('q', f.q.trim());
   if (f.step) p.set('step', f.step);
   if (f.source) p.set('source', f.source);
+  if (f.eta) p.set('eta', f.eta);
   if (f.sort !== 'newest') p.set('sort', f.sort);
   const s = p.toString();
   return s ? `&${s}` : '';
 }
 
-export const isFiltered = (f: ListFilters) => !!(f.q.trim() || f.step || f.source);
+export const isFiltered = (f: ListFilters) => !!(f.q.trim() || f.step || f.source || f.eta);
 
 const STEPS: { value: LineStage; label: string }[] = [
   { value: 'stock_check', label: 'New Order' },
@@ -39,8 +41,8 @@ const STEPS: { value: LineStage; label: string }[] = [
 const field = 'rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
 export default function OrderListFilters({
-  value, onChange, showStage = false,
-}: { value: ListFilters; onChange: (f: ListFilters) => void; showStage?: boolean }) {
+  value, onChange, showStage = false, showEta = false,
+}: { value: ListFilters; onChange: (f: ListFilters) => void; showStage?: boolean; showEta?: boolean }) {
   // Typing is local; the list reloads once the person pauses (not on every key).
   const [text, setText] = useState(value.q);
   useEffect(() => { setText(value.q); }, [value.q]);
@@ -69,6 +71,15 @@ export default function OrderListFilters({
           className={`${field} ${value.step ? STAGE_TONE[value.step] : ''}`}>
           <option value="">All stages</option>
           {STEPS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+      )}
+      {showEta && (
+        <select aria-label="Expected delivery" value={value.eta || ''} onChange={(e) => onChange({ ...value, eta: e.target.value as EtaFilter })}
+          className={`${field} ${value.eta === 'overdue' ? 'bg-red-50 text-red-800' : value.eta === 'due_today' ? 'bg-amber-50 text-amber-900' : ''}`}>
+          <option value="">All delivery dates</option>
+          <option value="due_today">Due today</option>
+          <option value="overdue">Overdue</option>
+          <option value="none">No delivery date set</option>
         </select>
       )}
       <select aria-label="Sold by" value={value.source} onChange={(e) => onChange({ ...value, source: e.target.value as ListFilters['source'] })} className={field}>

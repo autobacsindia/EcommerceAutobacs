@@ -14,6 +14,7 @@ import { shrinkPhoto, STAGE_TONE, PARCEL_STEP_OPTIONS, type LineAction, type Par
 import LineSupplierPayment, { useOrderSupplierPayments } from '@/components/payments/OrderSupplierPayments';
 import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
+import ParcelEta from './ParcelEta';
 
 type OrderResponse = { success: boolean; order: WorkOrder };
 
@@ -117,6 +118,14 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
     },
     onSuccess: (res) => { done(res); setEditParcel(null); setParcelPhoto(null); },
     onError: (e) => setError(errorMessage(e, 'Could not save the dispatch details.')),
+  });
+
+  // Expected delivery date on a parcel in transit (server re-checks the date and who may set it).
+  const etaMutation = useMutation({
+    mutationFn: ({ shipmentId, date, previousDate }: { shipmentId: string; date: string; previousDate: string }) =>
+      apiClient.put<OrderResponse>(`/staff/work/orders/${orderId}/parcels/${shipmentId}/eta`, { date, previousDate }),
+    onSuccess: done,
+    onError: (e) => setError(errorMessage(e, 'Could not save the expected delivery date.')),
   });
 
   if (q.isPending) return <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>;
@@ -260,6 +269,10 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                   <p className="text-xs text-gray-500">
                     {p.shippedAt && `Shipped ${formatDateTimeIST(p.shippedAt)}`}{p.deliveredAt && ` · Delivered ${formatDateTimeIST(p.deliveredAt)}`}
                   </p>
+                  {p.status === 'shipped' && (
+                    <ParcelEta parcel={p} saving={etaMutation.isPending}
+                      onSave={(date, previousDate) => etaMutation.mutate({ shipmentId: p.id, date, previousDate })} />
+                  )}
                   <div className="flex flex-wrap gap-2 pt-1">
                     {o.canContactCustomer && o.customer.phone && p.status !== 'lost' && (
                       <a className={`${btn} bg-[#25D366] text-white hover:bg-[#1ebe5b]`} target="_blank" rel="noopener noreferrer"

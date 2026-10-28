@@ -116,6 +116,7 @@ const listFilterQueries = [
   query('step').optional().isString().isLength({ max: 40 }).withMessage('Invalid stage'),
   query('source').optional().isIn(['website', 'sales']).withMessage('Invalid source'),
   query('sort').optional().isIn(['newest', 'oldest']).withMessage('Invalid sort'),
+  query('eta').optional().isIn(['due_today', 'overdue', 'none']).withMessage('Invalid delivery date filter'),
 ];
 
 export const validatePaidOrdersQuery = [
@@ -290,6 +291,13 @@ export const validateEditParcel = [
   param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
   body('courierName').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Courier name is too long'),
   body('trackingNumber').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Tracking number is too long'),
+];
+
+export const validateParcelEta = [
+  ...validateWorkOrder,
+  param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
+  body('date').isString().matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Choose a valid date'),
+  body('previousDate').optional({ values: 'null' }).isString().isLength({ max: 10 }).withMessage('Refresh the order and try again'),
 ];
 
 export const validateParcelStep = [

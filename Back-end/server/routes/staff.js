@@ -46,6 +46,7 @@ import {
   validateWorkLineOnly,
   validateEditParcel,
   validateParcelStep,
+  validateParcelEta,
   validateCustomerDecision,
   validateRefundReview,
   validateRefundRetry,
@@ -73,6 +74,7 @@ import {
   retryRefund,
   markDelivered,
   addParcelStep,
+  setParcelEta,
   undoDelivered,
 } from '../services/teamWorkflowService.js';
 import {
@@ -455,8 +457,8 @@ router.post('/bank-transfers/:id/reject', validateBankTransferReject, validateRe
 
 // @route  GET /staff/work?queue=procurement|decisions|refunds|deliveries&cursor=
 router.get('/work', validateWorkQueue, validateRequest, asyncHandler(async (req, res) => {
-  const { queue, cursor, q, step, source, sort } = req.query;
-  res.json({ success: true, ...(await listQueue(req.user, queue, { cursor, q, step, source, sort })) });
+  const { queue, cursor, q, step, source, sort, eta } = req.query;
+  res.json({ success: true, ...(await listQueue(req.user, queue, { cursor, q, step, source, sort, eta })) });
 }));
 
 // @route  GET /staff/work/orders/:id — one order, with the actions this person may take
@@ -559,6 +561,12 @@ router.post('/work/orders/:id/delivered', validateMarkDelivered, validateRequest
 router.post('/work/orders/:id/parcels/:shipmentId/steps', validateParcelStep, validateRequest, asyncHandler(async (req, res) => {
   const { status, note, expectedSteps } = req.body;
   res.json({ success: true, order: await addParcelStep(req.user, req.params.id, req.params.shipmentId, { status, note, expectedSteps }, req) });
+}));
+
+// @route  PUT /staff/work/orders/:id/parcels/:shipmentId/eta  { date: 'YYYY-MM-DD', previousDate? } — procurement / operations: expected delivery date
+router.put('/work/orders/:id/parcels/:shipmentId/eta', validateParcelEta, validateRequest, asyncHandler(async (req, res) => {
+  const { date, previousDate } = req.body;
+  res.json({ success: true, order: await setParcelEta(req.user, req.params.id, req.params.shipmentId, { date, previousDate }, req) });
 }));
 
 // @route  POST /staff/work/orders/:id/undo-delivered  { shipmentId } — operations / admin: back in transit

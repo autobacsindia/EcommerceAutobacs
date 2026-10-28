@@ -1348,6 +1348,27 @@ class OrderRepository extends BaseRepository {
     ).lean();
   }
 
+  /**
+   * Set a parcel's expected delivery date. Compare-and-set on the date the
+   * caller read (`currentDay`, null for none) and on the parcel still being in
+   * transit, so two people changing it at once — or a change racing "delivered" —
+   * leave ONE result; the loser gets null. `null` in $elemMatch also matches a
+   * parcel that never had a date.
+   */
+  async setShipmentEtaIf(orderId, shipmentId, currentDay, { eta, change, event, maxHistory }) {
+    return Order.findOneAndUpdate(
+      { _id: orderId, shipments: { $elemMatch: { _id: shipmentId, status: 'shipped', 'eta.day': currentDay || null } } },
+      {
+        $set: { 'shipments.$.eta': eta },
+        $push: {
+          'shipments.$.etaHistory': { $each: [change], $slice: -maxHistory },
+          'workflow.history': { $each: [event], $slice: -300 },
+        },
+      },
+      { new: true },
+    ).lean();
+  }
+
   /** Append a workflow history event (actions not tied to one line: shipped, delivered). */
   async pushWorkflowEvent(orderId, event) {
     return Order.updateOne(

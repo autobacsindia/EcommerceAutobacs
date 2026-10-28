@@ -53,9 +53,10 @@ const ids = (o) => o.items.map((i) => String(i._id));
 
 describe('reading the filters', () => {
   it('ignores anything it does not know, and trims / lower-cases the search', () => {
-    expect(readListFilters({ q: '  #AB12CD34 ', step: 'nonsense', source: 'x', sort: 'y' }))
-      .toEqual({ q: 'ab12cd34', stage: null, source: null, sort: 'newest' });
-    expect(readListFilters({ step: 'to_ship', source: 'sales', sort: 'oldest' })).toMatchObject({ stage: 'to_ship', source: 'sales', sort: 'oldest' });
+    expect(readListFilters({ q: '  #AB12CD34 ', step: 'nonsense', source: 'x', sort: 'y', eta: 'someday' }))
+      .toEqual({ q: 'ab12cd34', stage: null, source: null, sort: 'newest', eta: null });
+    expect(readListFilters({ step: 'to_ship', source: 'sales', sort: 'oldest', eta: 'overdue' }))
+      .toMatchObject({ stage: 'to_ship', source: 'sales', sort: 'oldest', eta: 'overdue' });
   });
 
   it('a row matches only when every word is somewhere in it', () => {

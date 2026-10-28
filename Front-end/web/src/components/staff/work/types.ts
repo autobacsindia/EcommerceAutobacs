@@ -19,6 +19,9 @@ export type LineAction =
   | 'in_stock' | 'own_stock' | 'ordered' | 'out_of_stock' | 'ship' | 'dispatch_own' | 'wait' | 'refund' | 'approve' | 'reject'
   | 'payment_initiated' | 'payment_undo' | 'stock_undo' | 'decision_undo';
 
+/** A parcel in transit against its expected delivery date (Back-end utils/parcelEta.js). */
+export type EtaState = 'none' | 'upcoming' | 'due_today' | 'overdue';
+
 export type WorkRow = {
   id: string;
   orderNumber: string;
@@ -35,6 +38,8 @@ export type WorkRow = {
   /** The stage behind `summary` — colours the order's pill like the stage itself. */
   summaryStage?: LineStage | null;
   needs: string[];
+  /** Parcels in transit vs their expected delivery date; null when none is in transit. */
+  eta?: { overdue: number; dueToday: number; missing: number; earliest: string | null } | null;
   lines: {
     itemId: string;
     /** Catalogue product — for the "open on the website" link. */
@@ -87,6 +92,14 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     /** Compare-and-set token: sent back with a new step so a double press adds one. */
     stepCount?: number;
     canAddStep?: boolean;
+    /** The team's expected delivery date ('YYYY-MM-DD', India) — never shown to the customer. */
+    eta?: { date: string; setBy: string; setAt: string | null } | null;
+    /** null when the parcel is not in transit. */
+    etaState?: EtaState | null;
+    /** Date changes, newest first. */
+    etaHistory?: { from: string; to: string; by: string; at: string }[];
+    /** Procurement, operations or admin, while in transit. */
+    canSetEta?: boolean;
   }[];
   cancellations: {
     id: string;
