@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { CornerUpRight, Download, Phone, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Pin, PinOff, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { meetLinkIn } from './meet';
-import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
+import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf, useOpenUpwardIfCut } from './chatUi';
 import EmojiPicker from './EmojiPicker';
 import { formatMessage } from './chatFormat';
 
@@ -239,6 +239,7 @@ export interface MoreAction {
  */
 function MoreMenu({ actions, onClose }: { actions: MoreAction[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  useOpenUpwardIfCut(ref);
   useEffect(() => {
     const onDown = (e: MouseEvent | TouchEvent) => { if (!ref.current?.contains(e.target as Node)) onClose(); };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -265,6 +266,16 @@ function MoreMenu({ actions, onClose }: { actions: MoreAction[]; onClose: () => 
     </div>
   );
 }
+
+/** A phone or tablet: no hover, so a message's action bar opens on a tap instead. */
+const isTouchScreen = () =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+
+/** What a tap on a message must not hijack: its own links, buttons and fields. */
+const INTERACTIVE = 'a,button,input,textarea,select,label,[role="menu"],[role="dialog"],[role="alertdialog"]';
+
+/** The action-bar buttons: a bigger target on a touch screen. */
+const ACTION_BTN = 'rounded-full p-1.5 text-gray-600 pointer-coarse:p-2.5';
 
 /** The DOM id of a message row, so a quote can scroll to what it quotes. */
 export const messageDomId = (id: string) => `chat-msg-${id}`;
@@ -417,6 +428,26 @@ export default function MessageItem({
   const canReact = !!onReact && live;
   const [picking, setPicking] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  // Touch screens: the action bar of the ONE message you tapped (hover does this
+  // with a mouse). A tap anywhere outside the message closes it.
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const row = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!actionsOpen) return;
+    const onDown = (e: MouseEvent | TouchEvent) => { if (!row.current?.contains(e.target as Node)) setActionsOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+    };
+  }, [actionsOpen]);
+  const onRowTap = (e: React.MouseEvent) => {
+    if (!isTouchScreen() || (e.target as Element).closest(INTERACTIVE)) return;
+    // Long-press to select text ends in a click too — leave the selection alone.
+    if (window.getSelection()?.toString()) return;
+    setActionsOpen((open) => !open);
+  };
   const more: MoreAction[] = live
     ? [
         ...(onMarkUnread ? [{ label: 'Mark as unread', icon: <EyeOff className="h-4 w-4" />, onSelect: () => onMarkUnread(m) }] : []),
@@ -498,8 +529,10 @@ export default function MessageItem({
         </div>
       )}
       <div
+        ref={row}
+        onClick={onRowTap}
         className={`group relative flex gap-3 rounded-xl px-3 transition-colors ${grouped ? 'py-0.5' : 'mt-1 pb-1 pt-2'} ${
-          mentionsMe ? 'bg-amber-50 ring-1 ring-amber-200' : 'hover:bg-gray-100/70'
+          mentionsMe ? 'bg-amber-50 ring-1 ring-amber-200' : actionsOpen ? 'bg-gray-100/70' : 'hover:bg-gray-100/70'
         }`}
       >
         {grouped ? <span className="w-9 shrink-0" /> : <Avatar person={m.sender} system={m.kind === 'system'} />}
@@ -644,12 +677,19 @@ export default function MessageItem({
         )}
         {moreOpen && more.length > 0 && <MoreMenu actions={more} onClose={() => setMoreOpen(false)} />}
         {(canQuote || canReply || canReact || more.length > 0 || (canChange && !editing && (onEdit || onDelete))) && (
-          <div className="absolute -top-3 right-3 hidden items-center gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 shadow-md focus-within:flex group-hover:flex pointer-coarse:flex">
+          <div
+            data-testid="message-actions"
+            // A pick closes the bar on a touch screen; what it opened (picker, menu) stays.
+            onClick={() => setActionsOpen(false)}
+            className={`absolute -top-3 right-3 z-10 items-center gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 shadow-md focus-within:flex group-hover:flex ${
+              actionsOpen ? 'flex' : 'hidden'
+            }`}
+          >
             {canReact && (
               <button
                 type="button"
                 onClick={() => setPicking(true)}
-                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
+                className={`${ACTION_BTN} hover:bg-emerald-50 hover:text-emerald-800`}
                 aria-label="Add reaction"
                 title="Add reaction"
               >
@@ -660,7 +700,7 @@ export default function MessageItem({
               <button
                 type="button"
                 onClick={() => onQuote!(m)}
-                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
+                className={`${ACTION_BTN} hover:bg-emerald-50 hover:text-emerald-800`}
                 aria-label="Quote in reply"
                 title="Quote in reply"
               >
@@ -671,7 +711,7 @@ export default function MessageItem({
               <button
                 type="button"
                 onClick={() => onOpenThread!(m)}
-                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
+                className={`${ACTION_BTN} hover:bg-emerald-50 hover:text-emerald-800`}
                 aria-label="Reply in thread"
                 title="Reply in thread"
               >
@@ -682,7 +722,7 @@ export default function MessageItem({
               <button
                 type="button"
                 onClick={startEdit}
-                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
+                className={`${ACTION_BTN} hover:bg-emerald-50 hover:text-emerald-800`}
                 aria-label="Edit message"
                 title="Edit (within 30 minutes of sending)"
               >
@@ -693,7 +733,7 @@ export default function MessageItem({
               <button
                 type="button"
                 onClick={() => { setChangeError(''); setConfirmDelete(true); }}
-                className="rounded-full p-1.5 text-gray-600 hover:bg-red-50 hover:text-red-700"
+                className={`${ACTION_BTN} hover:bg-red-50 hover:text-red-700`}
                 aria-label="Delete message"
                 title="Delete (within 30 minutes of sending)"
               >
@@ -704,7 +744,7 @@ export default function MessageItem({
               <button
                 type="button"
                 onClick={() => setMoreOpen(true)}
-                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
+                className={`${ACTION_BTN} hover:bg-emerald-50 hover:text-emerald-800`}
                 aria-label="More actions"
                 aria-haspopup="menu"
                 title="More"

@@ -34,6 +34,7 @@ import { NotifyIcon } from './NotifyMenu';
 import MessageSearch from './MessageSearch';
 import StarredPanel from './StarredPanel';
 import StatusDialog from './StatusDialog';
+import { ONE_PANE_BELOW, useFitToViewport } from './useFitToViewport';
 
 type Pages = InfiniteData<MessagePage, number>;
 
@@ -258,9 +259,10 @@ export default function TeamChat() {
     [params, pathname, router],
   );
 
-  // On a wide screen never show an empty pane; on phones start on the list.
+  // Side by side, never show an empty pane; one pane at a time (phones, tablets),
+  // start on the list.
   useEffect(() => {
-    if (!selectedId && channels.length && typeof window !== 'undefined' && window.innerWidth >= 768) {
+    if (!selectedId && channels.length && typeof window !== 'undefined' && window.innerWidth >= ONE_PANE_BELOW) {
       select(channels[0].id);
     }
   }, [selectedId, channels, select]);
@@ -367,6 +369,9 @@ export default function TeamChat() {
     [channels],
   );
 
+  const box = useRef<HTMLDivElement>(null);
+  useFitToViewport(box, canChat);
+
   if (!canChat) {
     return <p className="p-6 text-gray-600">Team chat is available to staff and admins only.</p>;
   }
@@ -466,9 +471,15 @@ export default function TeamChat() {
   };
 
   return (
-    <div className="relative flex h-[calc(100dvh-140px)] min-h-[480px] gap-0 overflow-hidden rounded-2xl bg-[#f2f6fc] p-0 md:gap-2 md:p-2">
+    // Below lg: edge to edge (cancelling the panel's padding), one pane at a time,
+    // height fitted to the visible screen by useFitToViewport. From lg: list beside
+    // the conversation, as before.
+    <div
+      ref={box}
+      className="relative -mx-4 -mb-4 flex h-[calc(100dvh-4.5rem)] gap-0 overflow-hidden bg-[#f2f6fc] p-0 md:-mx-6 md:-mb-6 lg:mx-0 lg:mb-0 lg:h-[calc(100dvh-140px)] lg:min-h-[480px] lg:gap-2 lg:rounded-2xl lg:p-2"
+    >
       <aside
-        className={`w-full shrink-0 flex-col md:flex md:w-72 ${selected ? 'hidden' : 'flex'}`}
+        className={`w-full min-w-0 shrink-0 flex-col lg:flex lg:w-72 ${selected ? 'hidden' : 'flex'}`}
         aria-label="Chat channels"
       >
         <div className="px-2 pb-1 pt-2">
@@ -567,7 +578,7 @@ export default function TeamChat() {
           initialTab={initialTab}
         />
       ) : (
-        <div className="hidden flex-1 flex-col items-center justify-center gap-2 rounded-2xl bg-white text-gray-500 md:flex">
+        <div className="hidden flex-1 flex-col items-center justify-center gap-2 rounded-2xl bg-white text-gray-500 lg:flex">
           <MessageSquarePlus className="h-10 w-10 text-gray-300" aria-hidden="true" />
           Pick a space, team or person to start chatting
         </div>

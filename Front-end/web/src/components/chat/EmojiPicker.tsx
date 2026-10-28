@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useOpenUpwardIfCut } from './chatUi';
 
 /** The six that cover most answers, shown first and largest. */
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '🙏', '✅', '👀'] as const;
@@ -30,6 +31,7 @@ export default function EmojiPicker({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  useOpenUpwardIfCut(ref);
   useEffect(() => {
     const onDown = (e: MouseEvent | TouchEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();

@@ -33,6 +33,7 @@ import ForwardDialog from './ForwardDialog';
 import PinnedStrip from './PinnedStrip';
 import CallButton from './CallButton';
 import ThreadPanel from './ThreadPanel';
+import { ONE_PANE_BELOW } from './useFitToViewport';
 
 type Pages = InfiniteData<MessagePage, number>;
 type Tab = 'messages' | 'updates' | 'files' | 'members';
@@ -171,7 +172,7 @@ export default function Conversation({
   const markUnread = useCallback((m: ChatMessage) => {
     setHoldRead(true);
     unread.mutate(m.id, { onError: () => setHoldRead(false) });
-    if (typeof window !== 'undefined' && window.innerWidth < 768) onBack();
+    if (typeof window !== 'undefined' && window.innerWidth < ONE_PANE_BELOW) onBack();
     // unread is a stable mutation object.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onBack]);
@@ -394,21 +395,23 @@ export default function Conversation({
       : channel.description;
 
   return (
-    <div className="relative flex h-full min-h-0 flex-1">
-      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white md:rounded-2xl" aria-label={`Conversation ${title}`}>
+    // min-w-0: without it this pane grows to its widest child (the pinned bar, the
+    // header icons) and every message is clipped on a phone, Send off-screen.
+    <div className="relative flex h-full min-h-0 min-w-0 flex-1">
+      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white lg:rounded-2xl" aria-label={`Conversation ${title}`}>
         <header className="border-b border-gray-100 px-4 pt-3">
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={onBack} className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-100 md:hidden" aria-label="Back to channels">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button type="button" onClick={onBack} className="-ml-1.5 shrink-0 rounded-lg p-2 text-gray-600 hover:bg-gray-100 lg:hidden" aria-label="Back to channels">
               <ArrowLeft className="h-5 w-5" />
             </button>
             {channel.kind === 'dm' && !channel.group
               ? <Avatar person={channel.partner} online={!!channel.partner && !!online?.has(channel.partner.id)} />
               : <ChannelIcon channel={channel} size="md" />}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <h2 className="truncate text-base font-semibold text-gray-900">{title}</h2>
               {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}
             </div>
-            <div className="ml-auto flex shrink-0 items-center gap-1">
+            <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
               {channel.kind === 'space' && channel.memberCount != null && (
                 <button type="button" onClick={() => setTab('members')} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-gray-600 hover:bg-gray-100" aria-label={`${channel.memberCount} members — open member list`}>
                   <Users className="h-4 w-4" /> {channel.memberCount}
@@ -442,7 +445,7 @@ export default function Conversation({
                 role="tab"
                 aria-selected={tab === key}
                 onClick={() => setTab(key)}
-                className={`-mb-px border-b-2 pb-2 text-sm font-medium capitalize ${
+                className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-2 text-sm font-medium capitalize ${
                   tab === key ? 'border-emerald-700 text-emerald-800' : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >

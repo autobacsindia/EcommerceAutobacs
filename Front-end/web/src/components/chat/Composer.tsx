@@ -445,7 +445,7 @@ export default function Composer({
             maxLength={4000}
             placeholder={placeholder ?? `Message ${channelName}`}
             aria-label={placeholder ?? `Message ${channelName}`}
-            className="max-h-40 min-h-[40px] flex-1 resize-none border-0 bg-transparent px-2 py-2 text-[15px] text-gray-900 outline-none"
+            className="max-h-40 min-h-[40px] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-[15px] text-gray-900 outline-none"
           />
           <button
             type="submit"

@@ -1,8 +1,30 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect, type RefObject } from 'react';
 import { ArrowLeftRight, FileSpreadsheet, FileText, File as FileIcon, Hash, Image as ImageIcon, Lock, Users, X } from 'lucide-react';
 import type { ChatChannel, ChatPerson } from '@/hooks/queries/useTeamChat';
+
+/**
+ * A pop-up hanging below its message (⋮ menu, emoji picker) on one of the last
+ * messages would run under the composer. If it is cut at the bottom of the
+ * scrolling list and fits above, open it upwards instead.
+ */
+export function useOpenUpwardIfCut(ref: RefObject<HTMLElement | null>) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const anchor = el?.offsetParent;
+    if (!el || !anchor) return;
+    let scroller = el.parentElement;
+    while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    const bounds = scroller ? scroller.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+    const box = el.getBoundingClientRect();
+    const roomAbove = anchor.getBoundingClientRect().top - bounds.top;
+    if (box.bottom > bounds.bottom && roomAbove >= box.height) {
+      el.style.top = 'auto';
+      el.style.bottom = '100%';
+    }
+  }, [ref]);
+}
 
 /** The store green, so the panels match the rest of the brand. */
 export const GREEN = '#0a5c33';
