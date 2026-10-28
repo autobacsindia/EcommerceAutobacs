@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Download, History, MessageSquareReply, Package, Pencil, Quote, RotateCcw, SmilePlus, Trash2 } from 'lucide-react';
+import { Download, EyeOff, History, MessageSquareReply, MoreVertical, Package, Pencil, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
 import EmojiPicker from './EmojiPicker';
@@ -221,6 +221,46 @@ function Reactions({
   );
 }
 
+/** One entry in a message's "More" menu. */
+export interface MoreAction {
+  label: string;
+  icon: React.ReactNode;
+  onSelect: () => void;
+}
+
+/**
+ * The less frequent actions on a message (mark unread, star…), behind ⋮ so the
+ * hover bar stays small. Closes on a pick, Escape, or a click elsewhere.
+ */
+function MoreMenu({ actions, onClose }: { actions: MoreAction[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: MouseEvent | TouchEvent) => { if (!ref.current?.contains(e.target as Node)) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    document.addEventListener('keydown', onKey);
+    ref.current?.querySelector('button')?.focus();
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+  return (
+    <div ref={ref} role="menu" aria-label="More actions"
+      className="absolute right-3 top-6 z-30 w-52 rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
+      {actions.map((a) => (
+        <button key={a.label} type="button" role="menuitem"
+          onClick={() => { a.onSelect(); onClose(); }}
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none">
+          <span className="text-gray-500">{a.icon}</span>{a.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The DOM id of a message row, so a quote can scroll to what it quotes. */
 export const messageDomId = (id: string) => `chat-msg-${id}`;
 
@@ -317,6 +357,8 @@ export default function MessageItem({
   onEdit,
   onDelete,
   onReact,
+  onMarkUnread,
+  onStar,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
@@ -337,6 +379,10 @@ export default function MessageItem({
   onDelete?: (m: ChatMessage) => Promise<unknown>;
   /** Put your emoji on this message (`on`) or take it off. */
   onReact?: (m: ChatMessage, emoji: string, on: boolean) => void;
+  /** Mark this message, and what follows it, unread for me. */
+  onMarkUnread?: (m: ChatMessage) => void;
+  /** Star it for me (`on`) or take the star off. */
+  onStar?: (m: ChatMessage, on: boolean) => void;
 }) {
   const m = message;
   // The timeline is ordered by activity, so a thread that just moved sits under
@@ -359,6 +405,17 @@ export default function MessageItem({
   const canQuote = !!onQuote && live;
   const canReact = !!onReact && live;
   const [picking, setPicking] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const more: MoreAction[] = live
+    ? [
+        ...(onMarkUnread ? [{ label: 'Mark as unread', icon: <EyeOff className="h-4 w-4" />, onSelect: () => onMarkUnread(m) }] : []),
+        ...(onStar
+          ? [m.starred
+            ? { label: 'Remove star', icon: <StarOff className="h-4 w-4" />, onSelect: () => onStar(m, false) }
+            : { label: 'Star', icon: <Star className="h-4 w-4" />, onSelect: () => onStar(m, true) }]
+          : []),
+      ]
+    : [];
 
   const mine = m.sender?.id === meId;
   const editable = useStillEditable(m.editableUntil);
@@ -437,6 +494,7 @@ export default function MessageItem({
                 <TeamBadge person={m.sender} />
               )}
               <span className="text-xs text-gray-500">{timeOf(m.createdAt)}</span>
+              {m.starred && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" aria-label="Starred" />}
               {m.edited && !m.deleted && (
                 <span className="text-xs text-gray-400" title={m.editedAt ? `Edited ${timeOf(m.editedAt)}` : 'Edited'}>
                   (edited)
@@ -550,7 +608,8 @@ export default function MessageItem({
             onClose={() => setPicking(false)}
           />
         )}
-        {(canQuote || canReply || canReact || (canChange && !editing && (onEdit || onDelete))) && (
+        {moreOpen && more.length > 0 && <MoreMenu actions={more} onClose={() => setMoreOpen(false)} />}
+        {(canQuote || canReply || canReact || more.length > 0 || (canChange && !editing && (onEdit || onDelete))) && (
           <div className="absolute -top-3 right-3 hidden items-center gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 shadow-md focus-within:flex group-hover:flex pointer-coarse:flex">
             {canReact && (
               <button
@@ -605,6 +664,18 @@ export default function MessageItem({
                 title="Delete (within 30 minutes of sending)"
               >
                 <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+            {more.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setMoreOpen(true)}
+                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
+                aria-label="More actions"
+                aria-haspopup="menu"
+                title="More"
+              >
+                <MoreVertical className="h-4 w-4" />
               </button>
             )}
           </div>

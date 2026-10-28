@@ -17,6 +17,7 @@ jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href }: 
 
 const fetchNextPage = jest.fn();
 const markRead = jest.fn();
+const markUnread = jest.fn();
 let pages: { messages: ChatMessage[]; nextBefore: number | null }[] = [];
 let hasNextPage = false;
 jest.mock('@/hooks/queries/useTeamChat', () => ({
@@ -33,6 +34,10 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
   useEditMessage: () => ({ mutateAsync: jest.fn() }),
   useDeleteMessage: () => ({ mutateAsync: jest.fn() }),
   useReactToMessage: () => ({ mutate: jest.fn() }),
+  useMarkUnread: () => ({ mutate: (...a: unknown[]) => markUnread(...a) }),
+  useStarMessage: () => ({ mutate: jest.fn() }),
+  useSetNotify: () => ({ mutate: jest.fn(), isError: false }),
+  notifyOf: (c: { notify?: string }) => c.notify ?? 'all',
   useRecentOrders: () => ({ data: [], isLoading: false }),
 }));
 
@@ -58,6 +63,7 @@ beforeAll(() => { Element.prototype.scrollIntoView = jest.fn(); });
 beforeEach(() => {
   fetchNextPage.mockReset();
   markRead.mockReset();
+  markUnread.mockReset();
   hasNextPage = false;
   pages = [{ messages: [msg(1, 'user', 'Morning all'), msg(2, 'system', '🧾 New expense PR-0022'), msg(3, 'user', 'Approved it')], nextBefore: null }];
 });
@@ -129,4 +135,28 @@ it('a link for an order update (?t=updates) opens Order updates; each tab shows 
 it('a direct message ignores ?t=updates', () => {
   show(channel({ kind: 'dm', key: null, audience: 'members', team: null }), 'updates');
   expect(selectedTab()).toMatch(/^Chat/);
+});
+
+it('"Mark as unread" stops the open conversation from marking itself read again', () => {
+  const client = new QueryClient();
+  const view = (ch: ChatChannel) => (
+    <QueryClientProvider client={client}>
+      <Conversation channel={ch} meId="me" meName="Me" isAdmin={false} people={[]} orderHref={(id) => `/o/${id}`} onBack={() => {}} />
+    </QueryClientProvider>
+  );
+  const { rerender } = render(view(channel({ lastReadSeq: 3 })));
+  markRead.mockReset();
+
+  const row = document.getElementById('chat-msg-m3')!;
+  fireEvent.click(row.querySelector('[aria-label="More actions"]')!);
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Mark as unread' }));
+  expect(markUnread).toHaveBeenCalledWith('m3', expect.anything());
+  expect(screen.getByRole('status')).toHaveTextContent('Marked as unread');
+
+  // The server moved the read position back; the conversation is still on screen.
+  rerender(view(channel({ lastReadSeq: 2, unreadChat: 1, unread: 1 })));
+  expect(markRead).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Mark read' }));
+  expect(markRead).toHaveBeenCalledWith(expect.objectContaining({ channelId: 'c', seq: 3, part: 'chat' }));
 });

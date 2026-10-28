@@ -17,6 +17,9 @@ import {
   validateOpenDm,
   validateThreadPage,
   validateReaction,
+  validateNotify,
+  validateStar,
+  validateStarredPage,
 } from '../validators/chat.validator.js';
 import {
   listChannels,
@@ -35,6 +38,10 @@ import {
   deleteMessage,
   editMessage,
   reactToMessage,
+  setChannelNotify,
+  markUnreadFrom,
+  starMessage,
+  listStarred,
   createSpace,
   deleteSpace,
   openDirectMessage,
@@ -176,6 +183,16 @@ router.get('/search', asyncHandler(async (req, res) => {
   res.json({ success: true, ...page });
 }));
 
+// GET /chat/starred?before=&limit= — my starred messages, newest first
+router.get('/starred', validateStarredPage, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listStarred(req.user, req.query)) });
+}));
+
+// PUT /chat/messages/:id/star { on? } — star (default) or un-star a message, for me
+router.put('/messages/:id/star', validateStar, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await starMessage(req.user, req.params.id, { on: req.body.on })) });
+}));
+
 // GET /chat/channels/:id/messages?before=&after=&limit=
 router.get('/channels/:id/messages', validateChannelIdParam, validateMessagePage, validateRequest,
   asyncHandler(async (req, res) => {
@@ -254,6 +271,16 @@ router.post('/channels/:id/read', validateChannelIdParam, validateMarkRead, vali
   asyncHandler(async (req, res) => {
     res.json({ success: true, ...(await markChannelRead(req.user, req.params.id, req.body.seq, req.body.part)) });
   }));
+
+// PUT /chat/channels/:id/notify { notify: 'all' | 'mentions' | 'off' } — my notification setting here
+router.put('/channels/:id/notify', validateNotify, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await setChannelNotify(req.user, req.params.id, req.body.notify)) });
+}));
+
+// POST /chat/messages/:id/unread — mark this message (and what follows it in its tab) unread, for me
+router.post('/messages/:id/unread', validateMessageIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await markUnreadFrom(req.user, req.params.id)) });
+}));
 
 // PATCH /chat/messages/:id { text } — edit your own message, within 15 minutes
 router.patch('/messages/:id', validateEditMessage, validateRequest, asyncHandler(async (req, res) => {

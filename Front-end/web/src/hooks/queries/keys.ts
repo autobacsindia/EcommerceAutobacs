@@ -66,6 +66,8 @@ export const chatKeys = {
   /** `/chat/orders/recent` — the order picker. */
   recentOrders: () => [...chatKeys.all, 'orders'] as const,
   me: () => [...chatKeys.all, 'me'] as const,
+  /** `/chat/starred` — my starred messages, newest first. */
+  starred: () => [...chatKeys.all, 'starred'] as const,
 };
 
 export const brandKeys = {

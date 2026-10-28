@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ChevronDown, MessageSquarePlus, Plus, Search } from 'lucide-react';
+import { ChevronDown, MessageSquarePlus, Plus, Search, Star } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from '@/hooks/queries/keys';
@@ -14,6 +14,8 @@ import {
   applyThreadUpdate,
   applyMessageChange,
   applyReactions,
+  countedUnread,
+  notifyOf,
   useCanChat,
   useChatChannels,
   useChatMe,
@@ -24,7 +26,9 @@ import {
 import type { ChatChannel, ChatMessage, ChatPerson, ChatReaction, MessagePage, ThreadData } from '@/hooks/queries/useTeamChat';
 import { Avatar, ChannelIcon, Dialog, GREEN, shortWhen } from './chatUi';
 import Conversation from './Conversation';
+import { NotifyIcon } from './NotifyMenu';
 import MessageSearch from './MessageSearch';
+import StarredPanel from './StarredPanel';
 
 type Pages = InfiniteData<MessagePage, number>;
 
@@ -193,6 +197,7 @@ export default function TeamChat() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // null = closed. 'all' = every channel I can see; otherwise one channel id.
   const [searching, setSearching] = useState<string | null>(null);
+  const [showStarred, setShowStarred] = useState(false);
 
   const meId = me?.userId ?? '';
   const meName = user?.name ?? 'You';
@@ -312,7 +317,11 @@ export default function TeamChat() {
     },
   });
 
-  const totalUnread = useMemo(() => channels.reduce((n, c) => n + c.unread, 0), [channels]);
+  // Muted conversations do not add to "N new" (the same rule as the nav badge).
+  const totalUnread = useMemo(
+    () => channels.reduce((n, c) => { const u = countedUnread(c); return n + u.chat + u.updates; }, 0),
+    [channels],
+  );
 
   if (!canChat) {
     return <p className="p-6 text-gray-600">Team chat is available to staff and admins only.</p>;
@@ -327,8 +336,13 @@ export default function TeamChat() {
     .sort((x, y) => new Date(y.lastMessageAt || 0).getTime() - new Date(x.lastMessageAt || 0).getTime());
   const dms = visible.filter((c) => c.kind === 'dm');
 
+  /** What a row's badge counts: on "@mentions only" the mentions, on "Off" nothing. */
+  const loud = (c: ChatChannel) => { const u = countedUnread(c); return u.chat + u.updates; };
+
   const row = (c: ChatChannel) => {
     const active = c.id === selectedId;
+    const level = notifyOf(c);
+    const counted = loud(c);
     return (
       <li key={c.id}>
         <button
@@ -338,12 +352,24 @@ export default function TeamChat() {
           title={c.description || c.name}
           className={`flex w-full items-center gap-3 rounded-full py-1.5 pl-2 pr-3 text-left text-sm transition-colors ${
             active ? 'bg-emerald-100 text-emerald-950' : 'text-gray-700 hover:bg-gray-200/70'
-          } ${c.unread > 0 ? 'font-semibold text-gray-900' : ''}`}
+          } ${counted > 0 ? 'font-semibold text-gray-900' : ''}`}
         >
           <ChannelIcon channel={c} />
           <span className="min-w-0 flex-1 truncate">{c.audience === 'teams' || c.kind === 'dm' ? c.name : `#${c.name}`}</span>
-          {c.unread > 0 ? (
-            <span className="min-w-[22px] rounded-full px-1.5 text-center text-xs font-bold leading-[20px] text-white" style={{ background: GREEN }}>
+          {level !== 'all' && (
+            <span className="shrink-0 text-gray-400" title={level === 'off' ? 'Notifications off' : 'Only @mentions'}>
+              <NotifyIcon level={level} className="h-3.5 w-3.5" />
+            </span>
+          )}
+          {counted > 0 ? (
+            <span className="min-w-[22px] rounded-full px-1.5 text-center text-xs font-bold leading-[20px] text-white" style={{ background: GREEN }}
+              aria-label={level === 'mentions' ? `${counted} unread mentions` : `${counted} unread`}>
+              {level === 'mentions' ? '@' : ''}{counted > 99 ? '99+' : counted}
+            </span>
+          ) : c.unread > 0 ? (
+            // Quietened, with unread: still visible, but grey — it does not ask for attention.
+            <span className="min-w-[22px] rounded-full bg-gray-200 px-1.5 text-center text-xs font-semibold leading-[20px] text-gray-600"
+              aria-label={`${c.unread} unread (notifications ${level === 'off' ? 'off' : 'for @mentions only'})`}>
               {c.unread > 99 ? '99+' : c.unread}
             </span>
           ) : (
@@ -357,7 +383,7 @@ export default function TeamChat() {
   /** A collapsible list section, as in Google Chat. */
   const section = (key: string, label: string, items: ChatChannel[], empty: string, action?: React.ReactNode) => {
     const open = !collapsed.has(key);
-    const unread = items.reduce((n, c) => n + c.unread, 0);
+    const unread = items.reduce((n, c) => n + loud(c), 0);
     return (
       <div className="mt-3">
         <div className="flex items-center justify-between pl-2 pr-1">
@@ -399,15 +425,26 @@ export default function TeamChat() {
               Chat
               {totalUnread > 0 && <span className="ml-2 align-middle text-xs font-semibold text-emerald-700">{totalUnread} new</span>}
             </h1>
-            <button
-              type="button"
-              onClick={() => setSearching('all')}
-              className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
-              aria-label="Search all messages"
-              title="Search all messages"
-            >
-              <Search className="h-5 w-5" />
-            </button>
+            <span className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setShowStarred(true)}
+                className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
+                aria-label="Starred messages"
+                title="Starred messages"
+              >
+                <Star className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearching('all')}
+                className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
+                aria-label="Search all messages"
+                title="Search all messages"
+              >
+                <Search className="h-5 w-5" />
+              </button>
+            </span>
           </div>
           <button
             type="button"
@@ -480,6 +517,14 @@ export default function TeamChat() {
           scopeTo={searching === 'all' ? null : channels.find((c) => c.id === searching) ?? null}
           onPick={(id) => { setSearching(null); select(id); }}
           onClose={() => setSearching(null)}
+        />
+      )}
+
+      {showStarred && (
+        <StarredPanel
+          channels={channels}
+          onPick={(id) => { setShowStarred(false); select(id); }}
+          onClose={() => setShowStarred(false)}
         />
       )}
 
