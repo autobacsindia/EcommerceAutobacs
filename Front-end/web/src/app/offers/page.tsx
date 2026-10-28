@@ -22,7 +22,7 @@ function OffersPageInner() {
     <div className="sp sh-theme">
       <StorePageHeader
         crumbs={[{ label: "Today's Deals" }]}
-        title={<>Today&apos;s Deals <span className="ml-2 inline-block rounded-md bg-[#cc0c39] px-2 py-0.5 align-middle text-[13px] font-bold text-white">Limited time</span></>}
+        title={<>Today&apos;s Deals <span className="ml-2 inline-block rounded-md bg-[#cc0c39] px-2 py-0.5 align-middle text-[13px] font-bold text-[#fff]">Limited time</span></>}
         subtitle="Genuine price drops on parts and accessories — the M.R.P. is shown on every deal."
         aside={!isPending && !isError && typeof total === 'number' ? `${total.toLocaleString('en-IN')} deals` : undefined}
       />

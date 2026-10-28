@@ -73,7 +73,7 @@ function VideosContent() {
   return (
     <div>
       {/* Header */}
-      <div className="bg-linear-to-r from-[#0a5c33] to-[#0b4a2b] text-white py-14 px-4">
+      <div className="bg-linear-to-r from-[#0a5c33] to-[#0b4a2b] text-[#fff] py-14 px-4">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-3">
             <Video className="h-8 w-8 opacity-80" />

@@ -190,7 +190,7 @@ export default function StoreProductCard({
             </span>
           )}
           {onSale && !outOfStock && (
-            <span className="rounded-md bg-[#cc0c39] px-2 py-1 text-[11px] font-bold text-white">
+            <span className="rounded-md bg-[#cc0c39] px-2 py-1 text-[11px] font-bold text-[#fff]">
               -{discount}%
             </span>
           )}
@@ -288,7 +288,7 @@ export default function StoreProductCard({
               'grid h-10 w-10 shrink-0 place-items-center rounded-full transition-all duration-300',
               outOfStock
                 ? 'cursor-not-allowed border border-hairline text-ink-muted'
-                : 'bg-gold text-white shadow-sm hover:scale-105 hover:bg-[#0b6b3c]'
+                : 'bg-gold text-white shadow-sm hover:scale-105 hover:bg-[#0b6b3c] hover:text-[#fff]'
             )}
           >
             {isVariable ? <SlidersHorizontal className="h-4 w-4" /> : backorder ? <HeadphonesIcon className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}

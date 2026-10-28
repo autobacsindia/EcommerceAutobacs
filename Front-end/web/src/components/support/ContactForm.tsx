@@ -109,7 +109,7 @@ export default function ContactForm({ defaultSubject = '', orderId = null }: Pro
   }
 
   const inputClass =
-    'w-full bg-obsidian-raised border border-hairline focus:border-gold rounded-lg px-4 py-3' +
+    'w-full bg-obsidian-raised border border-hairline focus:border-gold rounded-lg px-4 py-3 ' +
     'text-ink font-display text-sm outline-none transition-colors placeholder:text-ink-muted';
 
   return (

@@ -105,7 +105,7 @@ export default function SuperCarsPage() {
             <div className="animation-delay-300 animate-slide-up-enter opacity-0">
               <Link 
                 href="/contact" 
-                className="inline-flex items-center gap-2 px-8 py-4 bg-linear-to-r from-[#0a5c33] to-[#0b6b3c] rounded-full text-white font-semibold tracking-wide hover:shadow-[0_0_20px_rgba(10,92,51,0.5)] transition-all duration-300 hover:scale-105"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-linear-to-r from-[#0a5c33] to-[#0b6b3c] rounded-full text-[#fff] font-semibold tracking-wide hover:shadow-[0_0_20px_rgba(10,92,51,0.5)] transition-all duration-300 hover:scale-105"
               >
                 Start Your Journey
                 <ArrowRight className="w-5 h-5" />
@@ -168,7 +168,7 @@ export default function SuperCarsPage() {
           <div className="hover:scale-105 transition-transform duration-300 inline-block">
             <Link 
               href="/contact"
-              className="inline-flex items-center gap-3 px-10 py-5 bg-gold text-white text-lg font-bold rounded-full hover:bg-[#0b6b3c] transition-colors shadow-lg"
+              className="inline-flex items-center gap-3 px-10 py-5 bg-gold text-white text-lg font-bold rounded-full hover:bg-[#0b6b3c] hover:text-[#fff] transition-colors shadow-lg"
             >
               Contact us for Expert Suggestions
               <ArrowRight className="w-5 h-5" />
