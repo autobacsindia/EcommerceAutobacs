@@ -25,12 +25,13 @@ import {
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
 import MembersPanel from './MembersPanel';
-import { Avatar, ChannelIcon, FileKindIcon, fileSize, timeOf } from './chatUi';
+import { Avatar, ChannelIcon, FileKindIcon, fileSize, newClientId, timeOf } from './chatUi';
 import Composer, { mentionableTeams } from './Composer';
 import MessageItem, { messageDomId } from './MessageItem';
 import NotifyMenu from './NotifyMenu';
 import ForwardDialog from './ForwardDialog';
 import PinnedStrip from './PinnedStrip';
+import CallButton from './CallButton';
 import ThreadPanel from './ThreadPanel';
 
 type Pages = InfiniteData<MessagePage, number>;
@@ -413,6 +414,7 @@ export default function Conversation({
                   <Users className="h-4 w-4" /> {channel.memberCount}
                 </button>
               )}
+              <CallButton channel={channel} onShare={(text) => doSend({ text, clientId: newClientId() })} />
               <NotifyMenu channel={channel} />
               {onSearch && (
                 <button

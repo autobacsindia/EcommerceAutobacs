@@ -23,6 +23,7 @@ import {
   validateForward,
   validatePin,
   validateStatus,
+  validateMeet,
 } from '../validators/chat.validator.js';
 import {
   listChannels,
@@ -51,6 +52,7 @@ import {
   listOnline,
   setMyStatus,
   clearMyStatus,
+  setMeetLink,
   createSpace,
   deleteSpace,
   openConversation,
@@ -213,6 +215,11 @@ router.get('/starred', validateStarredPage, validateRequest, asyncHandler(async 
 // PUT /chat/messages/:id/star { on? } — star (default) or un-star a message, for me
 router.put('/messages/:id/star', validateStar, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await starMessage(req.user, req.params.id, { on: req.body.on })) });
+}));
+
+// PUT /chat/channels/:id/meet { url | null } — the conversation's standing Google Meet link
+router.put('/channels/:id/meet', validateMeet, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await setMeetLink(req.user, req.params.id, req.body.url)) });
 }));
 
 // GET /chat/channels/:id/pins — the conversation's pinned messages
