@@ -84,6 +84,8 @@ const staffTaskRepository = {
       .lean();
   },
 
+  /** Open tasks given to `userId` whose due day is in `range` (the page header). */
+  countDueIn: (userId, range) => StaffTask.countDocuments({ assignee: userId, bucket: 'open', rank: range }),
   /** Open tasks given to `userId` that are due on or before `day` (the bell). */
   countDueBy: (userId, day) => StaffTask.countDocuments({ assignee: userId, bucket: 'open', rank: { $lte: day } }),
 

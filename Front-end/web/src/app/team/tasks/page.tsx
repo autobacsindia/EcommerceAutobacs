@@ -2,7 +2,7 @@
 
 import { Suspense } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import TaskList from '@/components/tasks/TaskList';
+import TasksWorkspace from '@/components/tasks/TasksWorkspace';
 
 /**
  * Tasks: what I have to do, what I gave out, and — for a team head — the whole
@@ -11,11 +11,9 @@ import TaskList from '@/components/tasks/TaskList';
 export default function TeamTasksPage() {
   const { user } = useAuth();
   return (
-    <div className="max-w-4xl">
-      <h1 className="text-2xl font-bold text-gray-900">Tasks</h1>
-      <p className="mb-6 text-sm text-gray-500">A shared to-do list: who has to do what, and by when.</p>
+    <div className="max-w-6xl">
       <Suspense fallback={null}>
-        <TaskList base="/team/tasks" canSeeTeam={user?.staff?.isHead === true} />
+        <TasksWorkspace base="/team/tasks" canSeeTeam={user?.staff?.isHead === true} />
       </Suspense>
     </div>
   );

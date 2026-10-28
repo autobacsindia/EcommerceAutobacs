@@ -142,6 +142,18 @@ describe('Staff task routes', () => {
     expect(gone.body.task.checklist).toEqual({ done: 0, total: 1 });
   });
 
+  it('header counts, search and filters over HTTP', async () => {
+    await head.session.post('/staff/tasks', { title: 'Late one', assigneeId: String(member.user._id), dueOn: '2020-01-01' });
+    const sum = await member.session.get('/staff/tasks/summary');
+    expect(sum.status).toBe(200);
+    expect(sum.body).toMatchObject({ late: 1, today: 0 });
+    expect((await member.session.get('/staff/tasks?q=late')).body.tasks).toHaveLength(1);
+    expect((await member.session.get('/staff/tasks?due=week')).status).toBe(200);
+    expect((await member.session.get('/staff/tasks?priority=asap')).status).toBe(400);
+    expect((await member.session.get(`/staff/tasks?q=${'x'.repeat(101)}`)).status).toBe(400);
+    expect((await member.session.post('/staff/tasks', { title: 'x', status: 'done' })).status).toBe(400);
+  });
+
   it('lists who you may give to', async () => {
     const res = await head.session.get('/staff/tasks/assignees');
     expect(res.status).toBe(200);

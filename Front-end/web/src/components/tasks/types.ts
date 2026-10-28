@@ -10,7 +10,17 @@ export type TaskStatus = 'todo' | 'in_progress' | 'waiting' | 'done';
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskBucket = 'open' | 'done' | 'archived';
 export type TaskView = 'mine' | 'created' | 'team';
-export type TaskDue = 'late' | 'overdue' | 'today';
+export type TaskDue = 'late' | 'overdue' | 'today' | 'week';
+
+/** What the Tasks page is showing: whose tasks, and the filters on top. */
+export type TaskFilters = {
+  view: TaskView;
+  due?: TaskDue | '';
+  priority?: TaskPriority | '';
+  q?: string;
+  /** The team list only: one person's tasks. */
+  assignee?: string;
+};
 
 export type Task = {
   id: string;

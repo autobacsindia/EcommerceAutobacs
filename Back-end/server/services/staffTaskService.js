@@ -327,7 +327,19 @@ function decodeCursor(cursor) {
  *           due?: 'overdue'|'today'|'late', assignee?: string, team?: string, cursor?: string }} opts
  *   `late` = overdue or due today. `team` narrows the admin's team view.
  */
-export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, cursor } = {}) {
+/** "T-42", "t42" or "42" → 42; anything else → null (a title search). */
+const taskNumberIn = (q) => {
+  const m = /^\s*t?-?\s*(\d{1,9})\s*$/i.exec(q);
+  return m ? Number(m[1]) : null;
+};
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** The IST calendar day `days` after `ymd`. */
+const addDays = (ymd, days) => {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+};
+
+export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, priority, q, cursor } = {}) {
   const query = { bucket: state };
   if (view === 'mine') {
     query.assignee = actor._id;
@@ -349,12 +361,23 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
     throw fail('Invalid view.', 400);
   }
 
+  if (priority) query.priority = cleanEnum(priority, TASK_PRIORITIES, 'priority');
+  // Search stays inside the list being shown (the same person / team / bucket),
+  // so it never reads other people's tasks: a T-number, or words in the title.
+  const term = String(q ?? '').trim().slice(0, 100);
+  if (term) {
+    const number = taskNumberIn(term);
+    if (number != null) query.number = number;
+    else query.title = { $regex: escapeRegex(term), $options: 'i' };
+  }
+
   const today = todayIST();
   let range = null;
   if (due && state === 'open') {
     if (due === 'overdue') range = { $lt: today };
     else if (due === 'today') range = { $gte: today, $lte: today };
     else if (due === 'late') range = { $lte: today };
+    else if (due === 'week') range = { $gte: today, $lte: addDays(today, 6) };
   }
 
   const rows = await staffTaskRepository.page(query, { after: decodeCursor(cursor), limit: TASK_PAGE_SIZE + 1, range });
@@ -387,6 +410,16 @@ export async function listAssignees(actor) {
     }));
 }
 
+/** The page header: how many of `user`'s open tasks are late, and due today. */
+export async function summaryFor(user) {
+  const today = todayIST();
+  const [late, dueToday] = await Promise.all([
+    staffTaskRepository.countDueIn(user._id, { $lt: today }),
+    staffTaskRepository.countDueIn(user._id, { $gte: today, $lte: today }),
+  ]);
+  return { late, today: dueToday };
+}
+
 /** The bell: open tasks given to `user` that are overdue or due today. */
 export async function countDueForBell(user) {
   return staffTaskRepository.countDueBy(user._id, todayIST());
@@ -412,6 +445,8 @@ export async function createTask(actor, input = {}, req) {
   const priority = input.priority == null || input.priority === '' ? 'normal' : cleanEnum(input.priority, TASK_PRIORITIES, 'priority');
   const dueOn = cleanDueOn(input.dueOn);
   const checklist = cleanChecklist(input.checklist);
+  // "+ Add task" inside a status group starts the task in that group (never Done).
+  const status = input.status == null || input.status === '' ? 'todo' : cleanEnum(input.status, ['todo', 'in_progress', 'waiting'], 'status');
   const rawIds = Array.isArray(input.assigneeIds) && input.assigneeIds.length ? input.assigneeIds : [input.assigneeId].filter(Boolean);
   const people = await loadAssignees(actor, rawIds);
   const order = await loadOrderRef(input.orderId);
@@ -436,7 +471,7 @@ export async function createTask(actor, input = {}, req) {
         title,
         description,
         priority,
-        status: 'todo',
+        status,
         dueOn,
         assignee: person._id,
         assigneeName: person.name || '',
@@ -447,7 +482,7 @@ export async function createTask(actor, input = {}, req) {
         checklist,
         group,
         groupSize: many ? people.length : undefined,
-        ...placeOf({ status: 'todo', dueOn }),
+        ...placeOf({ status, dueOn }),
         clientId: key,
         history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: person.name || '' }],
       });

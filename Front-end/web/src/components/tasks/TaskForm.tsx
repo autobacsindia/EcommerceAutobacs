@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { CalendarDays, Flag, ListChecks, Loader2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
@@ -161,6 +162,8 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
     }),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: taskKeys.all });
+      const n = res.tasks?.length ?? 1;
+      toast.success(n > 1 ? `${n} tasks created` : 'Task created');
       onDone(res.task);
     },
     onError: (e) => setError(errorMessage(e, 'Could not create the task.')),
@@ -169,67 +172,69 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); setError(''); if (form.title.trim() && chosen.length) create.mutate(); }}
-      className="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+      className="flex max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
     >
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-gray-900">New task</h2>
-        <button type="button" onClick={onCancel} aria-label="Close" className="rounded p-1 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+      <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+        <h2 className="text-sm font-semibold text-gray-900">New task</h2>
+        <button type="button" onClick={onCancel} aria-label="Close" className="rounded-md p-1 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
       </div>
-      <input
-        value={form.title}
-        onChange={(e) => set({ title: e.target.value })}
-        maxLength={200}
-        required
-        autoFocus
-        placeholder="What needs doing? e.g. Call Bosch about order #51234"
-        aria-label="Title"
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-      />
-      <textarea
-        value={form.description}
-        onChange={(e) => set({ description: e.target.value })}
-        maxLength={4000}
-        rows={3}
-        placeholder="More details (optional)"
-        aria-label="Notes"
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-      />
-      <label className="block text-xs font-medium text-gray-600">
-        Checklist (optional) — one step per line
-        <textarea
-          value={form.steps}
-          onChange={(e) => set({ steps: e.target.value })}
-          rows={2}
-          placeholder={'e.g.\nPack the parcel\nBook the courier'}
-          aria-label="Checklist steps"
-          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal"
+      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <input
+          value={form.title}
+          onChange={(e) => set({ title: e.target.value })}
+          maxLength={200}
+          required
+          autoFocus
+          placeholder="What needs doing? e.g. Call Bosch about order #51234"
+          aria-label="Title"
+          className="w-full border-0 bg-transparent p-0 text-lg font-semibold text-gray-900 outline-none placeholder:font-normal placeholder:text-gray-400"
         />
-      </label>
-      {choices.length > 1 && <PeoplePicker people={choices} selected={chosen} onChange={setPicked} />}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs font-medium text-gray-600">
-          Priority
-          <select value={form.priority} onChange={(e) => set({ priority: e.target.value as TaskPriority })} className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-2 text-sm">
-            {TASK_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
+        <textarea
+          value={form.description}
+          onChange={(e) => set({ description: e.target.value })}
+          maxLength={4000}
+          rows={3}
+          placeholder="Add a description (optional)"
+          aria-label="Notes"
+          className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm"
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-medium text-gray-500">
+            <span className="mb-1 flex items-center gap-1"><Flag aria-hidden className="h-3.5 w-3.5" /> Priority</span>
+            <select value={form.priority} onChange={(e) => set({ priority: e.target.value as TaskPriority })} className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm">
+              {TASK_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-medium text-gray-500">
+            <span className="mb-1 flex items-center gap-1"><CalendarDays aria-hidden className="h-3.5 w-3.5" /> Due date</span>
+            <input type="date" aria-label="Due date" value={form.dueOn} onChange={(e) => set({ dueOn: e.target.value })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+          </label>
+        </div>
+        <PastDueWarning dueOn={form.dueOn} />
+        {choices.length > 1 && <PeoplePicker people={choices} selected={chosen} onChange={setPicked} />}
+        {choices.length === 1 && (
+          <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">This task is for you. Team heads and the admin give tasks to others.</p>
+        )}
+        <label className="block text-xs font-medium text-gray-500">
+          <span className="mb-1 flex items-center gap-1"><ListChecks aria-hidden className="h-3.5 w-3.5" /> Checklist (optional) — one step per line</span>
+          <textarea
+            value={form.steps}
+            onChange={(e) => set({ steps: e.target.value })}
+            rows={2}
+            placeholder={'Pack the parcel\nBook the courier'}
+            aria-label="Checklist steps"
+            className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal"
+          />
         </label>
-        <label className="text-xs font-medium text-gray-600">
-          Due date
-          <input type="date" value={form.dueOn} onChange={(e) => set({ dueOn: e.target.value })} className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
-        </label>
+        <OrderPicker value={order} onChange={setOrder} />
+        {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       </div>
-      <PastDueWarning dueOn={form.dueOn} />
-      <OrderPicker value={order} onChange={setOrder} />
-      {choices.length === 1 && (
-        <p className="text-xs text-gray-500">This task is for you. Team heads and the admin give tasks to others.</p>
-      )}
-      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      <div className="flex justify-end gap-2">
-        <button type="button" onClick={onCancel} className="rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>
+      <div className="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3">
+        <button type="button" onClick={onCancel} className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancel</button>
         <button
           type="submit"
           disabled={create.isPending || !form.title.trim() || chosen.length === 0}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
         >
           {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           {chosen.length > 1 ? `Create ${chosen.length} tasks` : 'Create task'}

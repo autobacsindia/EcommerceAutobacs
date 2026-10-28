@@ -20,7 +20,9 @@ export const validateTaskId = [param('id').custom(isObjectId).withMessage('Inval
 export const validateTaskList = [
   query('view').optional().isIn(['mine', 'created', 'team']).withMessage('Invalid view'),
   query('state').optional().isIn(['open', 'done', 'archived']).withMessage('Invalid state'),
-  query('due').optional().isIn(['overdue', 'today', 'late']).withMessage('Invalid due filter'),
+  query('due').optional().isIn(['overdue', 'today', 'late', 'week']).withMessage('Invalid due filter'),
+  query('priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
+  query('q').optional().isString().isLength({ max: 100 }).withMessage('Search is too long'),
   query('assignee').optional().custom(isObjectId).withMessage('Invalid person'),
   query('team').optional().isIn([...STAFF_TEAM_VALUES, 'admin']).withMessage('Invalid team'),
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
@@ -30,6 +32,7 @@ export const validateTaskCreate = [
   body('title').isString().withMessage('Give the task a title'),
   body('description').optional().isString(),
   body('priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
+  body('status').optional().isIn(['todo', 'in_progress', 'waiting']).withMessage('Invalid status'),
   body('dueOn').optional({ values: 'null' }).isString(),
   optionalId('assigneeId'),
   body('assigneeIds').optional().isArray({ max: 30 }).withMessage('Pick at most 30 people'),

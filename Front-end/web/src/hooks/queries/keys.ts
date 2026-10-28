@@ -224,6 +224,8 @@ export const taskKeys = {
   one: (id: string) => [...taskKeys.all, 'one', id] as const,
   comments: (id: string) => [...taskKeys.all, 'comments', id] as const,
   assignees: () => [...taskKeys.all, 'assignees'] as const,
+  /** The page header's late / due-today counts. */
+  summary: () => [...taskKeys.all, 'summary'] as const,
 };
 
 /** `/admin/team-activity/*` — the admin's read-only view of the order workflow. */
