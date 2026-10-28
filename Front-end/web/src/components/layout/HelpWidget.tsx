@@ -215,7 +215,7 @@ export default function HelpWidget() {
       style={{ top: `${top}px`, touchAction: 'none' }}
       className={`group fixed right-0 z-[60] flex select-none flex-col items-center gap-1.5
         rounded-l-2xl border border-r-0 border-[#4fd283]/40 bg-[#121414] px-2 py-3.5 sm:px-2.5 sm:py-4
-        text-white shadow-[0_10px_28px_rgba(0,0,0,0.35)]
+        text-[#fff] shadow-[0_10px_28px_rgba(0,0,0,0.35)]
         transition-[background-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]
         hover:-translate-x-0.5 hover:bg-[#1d2121] hover:shadow-[0_12px_32px_rgba(0,0,0,0.45)]
         focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6fdc9c]

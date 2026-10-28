@@ -186,7 +186,7 @@ export default function HelpBot() {
         aria-expanded={open}
         aria-controls="help-bot-panel"
         aria-label={open ? 'Close help' : 'Open help'}
-        className={`fixed ${launcherBottom} right-4 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-[#0a5c33] text-white shadow-lg ring-[3px] ring-white shadow-xl shadow-black/30 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
+        className={`fixed ${launcherBottom} right-4 z-[60] flex h-14 w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] shadow-lg ring-[3px] ring-white shadow-xl shadow-black/30 transition hover:bg-[#084a29] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0a5c33]/40`}
       >
         {open ? <X className="h-6 w-6" /> : <MessageCircle className="h-6 w-6" />}
       </button>
@@ -200,19 +200,19 @@ export default function HelpBot() {
           aria-label="Help"
           className={`fixed inset-x-3 ${panelBottom} z-[60] flex max-h-[min(34rem,calc(100dvh-9rem))] flex-col overflow-hidden rounded-2xl border border-hairline bg-white shadow-2xl sm:inset-x-auto sm:right-4 sm:w-[23rem]`}
         >
-          <header className="flex items-center gap-3 bg-[#121414] px-4 py-3 text-white">
+          <header className="flex items-center gap-3 bg-[#121414] px-4 py-3 text-[#fff]">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0a5c33]">
               <MessageCircle className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate font-display text-[15px] font-bold tracking-[-0.01em]">Roavion Help</p>
-              <p className="truncate text-[11.5px] text-white/70">Real answers, from our own pages</p>
+              <p className="truncate text-[11.5px] text-[#fff]/70">Real answers, from our own pages</p>
             </div>
             <button
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close help"
-              className="rounded p-1 text-white/70 transition hover:bg-white/10 hover:text-white"
+              className="rounded p-1 text-[#fff]/70 transition hover:bg-[#fff]/10 hover:text-[#fff]"
             >
               <X className="h-4 w-4" />
             </button>
@@ -224,7 +224,7 @@ export default function HelpBot() {
                 <div
                   className={
                     t.from === 'you'
-                      ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-[#0a5c33] px-4 py-2.5 text-[14.5px] leading-[1.45] text-white shadow-sm'
+                      ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-[#0a5c33] px-4 py-2.5 text-[14.5px] leading-[1.45] text-[#fff] shadow-sm'
                       : 'max-w-[92%] rounded-2xl rounded-bl-sm border border-hairline bg-white px-4 py-3 text-[14.5px] leading-[1.55] text-ink shadow-sm'
                   }
                 >
@@ -262,7 +262,7 @@ export default function HelpBot() {
                             href={a.href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-full bg-[#0a5c33] px-3.5 py-2 text-[12.5px] font-semibold text-white transition hover:bg-[#084a29]"
+                            className="inline-flex items-center gap-1 rounded-full bg-[#0a5c33] px-3.5 py-2 text-[12.5px] font-semibold text-[#fff] transition hover:bg-[#084a29]"
                           >
                             {a.label} <ExternalLink className="h-3 w-3" />
                           </a>
@@ -271,7 +271,7 @@ export default function HelpBot() {
                             key={a.label}
                             href={a.href}
                             onClick={() => setOpen(false)}
-                            className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#0a5c33] px-3.5 py-2 text-[12.5px] font-semibold text-gold transition hover:bg-[#0a5c33] hover:text-white"
+                            className="inline-flex items-center gap-1 rounded-full border-[1.5px] border-[#0a5c33] px-3.5 py-2 text-[12.5px] font-semibold text-gold transition hover:bg-[#0a5c33] hover:text-[#fff]"
                           >
                             {a.label}
                           </Link>
@@ -306,7 +306,7 @@ export default function HelpBot() {
                     key={s}
                     type="button"
                     onClick={() => ask(s)}
-                    className="rounded-full border border-hairline bg-white px-3.5 py-2 text-[13px] font-medium text-[#333838] shadow-sm transition hover:border-[#0a5c33] hover:bg-gold-soft hover:text-gold"
+                    className="rounded-full border border-hairline bg-white px-3.5 py-2 text-[13px] font-medium text-ink shadow-sm transition hover:border-[#0a5c33] hover:bg-gold-soft hover:text-gold"
                   >
                     {s}
                   </button>
@@ -336,7 +336,7 @@ export default function HelpBot() {
               type="submit"
               disabled={!draft.trim()}
               aria-label="Send"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0a5c33] text-white transition hover:bg-[#084a29] disabled:opacity-40"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] transition hover:bg-[#084a29] disabled:opacity-40"
             >
               <Send className="h-4 w-4" />
             </button>

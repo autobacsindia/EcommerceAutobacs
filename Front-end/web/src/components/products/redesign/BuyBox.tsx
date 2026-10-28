@@ -228,7 +228,7 @@ export default function BuyBox({
         {onSale && (
           <>
             <span className="text-[15px] text-ink-muted">M.R.P.: <span className="line-through">{formatPrice(activeOriginal!)}</span></span>
-            <span className="rounded-md bg-[#cc0c39] px-2.5 py-1 text-[13px] font-bold text-white">
+            <span className="rounded-md bg-[#cc0c39] px-2.5 py-1 text-[13px] font-bold text-[#fff]">
               -{discount}%
             </span>
           </>
@@ -368,7 +368,7 @@ export default function BuyBox({
             <button
               onClick={add}
               disabled={needsSelection || outOfStock || adding}
-              className="flex items-center justify-center gap-2.5 rounded-full bg-gold py-3.5 text-[16px] font-bold text-white shadow-sm transition-colors hover:bg-[#0b6b3c] disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex items-center justify-center gap-2.5 rounded-full bg-gold py-3.5 text-[16px] font-bold text-white shadow-sm transition-colors hover:bg-[#0b6b3c] hover:text-[#fff] disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ShoppingBag className="h-4 w-4" />
               {adding ? 'Adding…' : 'Add to cart'}

@@ -283,7 +283,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
           ) : (
             <button
               onClick={() => setOpen(true)}
-              className="rounded-full bg-gold px-6 py-2.5 text-sm font-bold text-white shadow transition hover:bg-[#0b6b3c] active:scale-95"
+              className="rounded-full bg-gold px-6 py-2.5 text-sm font-bold text-white shadow transition hover:bg-[#0b6b3c] hover:text-[#fff] active:scale-95"
             >
               {phase === 'revealed' ? 'View your prize' : 'Spin now'}
             </button>
@@ -331,7 +331,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
           {phase === 'ready' && (
             <button
               onClick={spin}
-              className="mx-auto mt-5 block rounded-full bg-gold px-10 py-3 text-base font-bold text-white shadow-lg transition hover:bg-[#0b6b3c] active:scale-95"
+              className="mx-auto mt-5 block rounded-full bg-gold px-10 py-3 text-base font-bold text-white shadow-lg transition hover:bg-[#0b6b3c] hover:text-[#fff] active:scale-95"
             >
               SPIN
             </button>
@@ -398,7 +398,7 @@ export default function SpinSection({ orderId }: { orderId: string }) {
                   {reviewCta.body && <p className="mt-1 text-xs text-ink-muted">{reviewCta.body}</p>}
                   <div className="mt-3 flex items-center justify-center gap-3">
                     <button onClick={openReview}
-                      className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-white hover:bg-[#0b6b3c]">
+                      className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-white hover:bg-[#0b6b3c] hover:text-[#fff]">
                       ⭐ Review us on Google
                     </button>
                     <button onClick={() => setReviewDismissed(true)}

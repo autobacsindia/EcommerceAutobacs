@@ -18,7 +18,7 @@ const base =
   'transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer';
 
 const variants: Record<Variant, string> = {
-  gold: 'bg-gold text-white px-7 py-3 hover:bg-[#0b6b3c]',
+  gold: 'bg-gold text-white px-7 py-3 hover:bg-[#0b6b3c] hover:text-[#fff]',
   ghost: 'border border-gold text-gold bg-white px-7 py-3 hover:bg-gold hover:text-white',
   line: 'border border-hairline bg-white text-ink px-7 py-3 hover:border-gold hover:text-gold',
 };
