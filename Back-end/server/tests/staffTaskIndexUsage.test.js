@@ -176,3 +176,21 @@ describe('list pages send counts, not checklists', () => {
     expect(bytes(rows)).toBeLessThan(bytes(full) * 0.6);
   });
 });
+
+describe('search', () => {
+  // Measured (4,000 tasks): a T-number reads 1 key; words in a person's list read only that
+  // person's open tasks (52 keys for a page of 51); the admin's all-teams search reads every open
+  // task (1,800 here) — fine at today's size, the one to revisit if open tasks reach the thousands.
+  it('a T-number is one key on the unique number index', async () => {
+    const s = stats(await StaffTask.find({ assignee: people[3], bucket: 'open', number: 350 }).explain('executionStats'));
+    expect(s.index).toBe('staff_task_number');
+    expect(s.keys).toBeLessThanOrEqual(1);
+  });
+
+  it('words in my list stay inside my rows', async () => {
+    const s = stats(await StaffTask.find({ assignee: people[3], bucket: 'open', title: { $regex: 't3', $options: 'i' } })
+      .sort({ rank: 1, _id: 1 }).limit(51).explain('executionStats'));
+    expect(s.index).toBe('staff_task_assignee');
+    expect(s.docs).toBeLessThanOrEqual(PER_PERSON);
+  });
+});

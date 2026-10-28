@@ -614,3 +614,47 @@ describe('list rows (what the database sends for a page)', () => {
       .toEqual(Object.keys(full).filter((k) => !pageOnly.includes(k)).sort());
   });
 });
+
+describe('search, filters, counters and quick add', () => {
+  it('searches title words or a T-number — only inside the list being shown', async () => {
+    const a = await make(procHead, { assigneeId: String(procA._id), title: 'Call Bosch about the lift kit' });
+    await make(procHead, { assigneeId: String(procA._id), title: 'Pack order' });
+    await make(procHead, { assigneeId: String(procB._id), title: 'Call Bosch too' });
+    const titles = async (u, opts) => (await tasks.listTasks(u, { view: 'mine', ...opts })).tasks.map((t) => t.title);
+    expect(await titles(procA, { q: 'bosch' })).toEqual(['Call Bosch about the lift kit']);
+    expect(await titles(procA, { q: `T-${a.number}` })).toEqual(['Call Bosch about the lift kit']);
+    expect(await titles(procA, { q: String(a.number) })).toEqual(['Call Bosch about the lift kit']);
+    // Regex characters are matched literally, never as a pattern.
+    expect(await titles(procA, { q: '.*' })).toEqual([]);
+    expect(await titles(procA, { q: '(' })).toEqual([]);
+    // The head searching the team finds both people's.
+    expect((await titles(procHead, { view: 'team', q: 'Bosch' })).sort()).toEqual(['Call Bosch about the lift kit', 'Call Bosch too']);
+  });
+
+  it('filters by priority and by "this week"', async () => {
+    await make(procA, { title: 'urgent soon', priority: 'urgent', dueOn: day(2) });
+    await make(procA, { title: 'normal soon', dueOn: day(6) });
+    await make(procA, { title: 'later', dueOn: day(8) });
+    await make(procA, { title: 'late', dueOn: day(-1) });
+    const titles = async (opts) => (await tasks.listTasks(procA, { view: 'mine', ...opts })).tasks.map((t) => t.title);
+    expect(await titles({ priority: 'urgent' })).toEqual(['urgent soon']);
+    expect(await titles({ due: 'week' })).toEqual(['urgent soon', 'normal soon']);
+    await status(400, () => tasks.listTasks(procA, { view: 'mine', priority: 'asap' }));
+  });
+
+  it('counts my late and due-today tasks for the header', async () => {
+    await make(procHead, { assigneeId: String(procA._id), dueOn: day(-2) });
+    await make(procHead, { assigneeId: String(procA._id), dueOn: day(-1) });
+    await make(procHead, { assigneeId: String(procA._id), dueOn: day(0) });
+    await make(procHead, { assigneeId: String(procA._id), dueOn: day(3) });
+    await make(procHead, { assigneeId: String(procB._id), dueOn: day(-1) });
+    expect(await tasks.summaryFor(procA)).toEqual({ late: 2, today: 1 });
+    expect(await tasks.summaryFor(salesA)).toEqual({ late: 0, today: 0 });
+  });
+
+  it('"+ Add task" in a status group starts the task there — never in Done', async () => {
+    const t = await make(procA, { title: 'Quick', status: 'in_progress' });
+    expect(t).toMatchObject({ status: 'in_progress', bucket: 'open' });
+    await status(400, () => make(procA, { title: 'x', status: 'done' }));
+  });
+});

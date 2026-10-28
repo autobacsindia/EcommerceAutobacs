@@ -15,6 +15,7 @@ import {
 import {
   listTasks,
   listAssignees,
+  summaryFor,
   getTask,
   createTask,
   updateTask,
@@ -33,9 +34,14 @@ import {
  */
 const router = express.Router();
 
-// @route  GET /staff/tasks?view=mine|created|team&state=open|done|archived&due=&assignee=&team=&cursor=
+// @route  GET /staff/tasks?view=mine|created|team&state=open|done|archived&due=&priority=&q=&assignee=&team=&cursor=
 router.get('/', validateTaskList, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listTasks(req.user, req.query)) });
+}));
+
+// @route  GET /staff/tasks/summary — the caller's late / due-today counts (page header)
+router.get('/summary', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await summaryFor(req.user)) });
 }));
 
 // @route  GET /staff/tasks/assignees — who the caller may give a task to
