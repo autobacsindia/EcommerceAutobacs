@@ -6,6 +6,7 @@ import { Loader2, RefreshCw } from 'lucide-react';
 import { formatDateIST } from '@/lib/datetime';
 import { errorMessage, listRequests, paymentKeys, rupees, STATUS_TONE } from './api';
 import PaymentRequestDetail from './PaymentRequestDetail';
+import OrderTypeTag from '@/components/orders/OrderTypeTag';
 
 export type ListFilter = { value: string; label: string };
 
@@ -67,8 +68,9 @@ export default function PaymentRequestList({
             <li key={r.id}>
               <button type="button" onClick={() => setOpen(r.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-gray-900">
-                    {r.number} · {r.kind === 'supplier' ? `Supplier — ${r.payee.name}` : `${r.category} — ${r.payee.name}`}
+                  <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-900">
+                    <span className="truncate">{r.number} · {r.kind === 'supplier' ? `Supplier — ${r.payee.name}` : `${r.category} — ${r.payee.name}`}</span>
+                    {r.kind === 'supplier' && <OrderTypeTag type="procurement" />}
                   </p>
                   <p className="truncate text-xs text-gray-500">
                     {r.teamLabel} · {r.requestedBy} · {formatDateIST(r.createdAt)}{r.order ? ` · ${r.order.number}` : ''}

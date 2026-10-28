@@ -14,6 +14,7 @@ import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
 import { STAGE_TONE } from '@/components/staff/work/types';
 import OrderListFilters, { NO_FILTERS, filterQuery, isFiltered, type ListFilters } from '@/components/staff/OrderListFilters';
 import { errorMessage, quotationHref, rupees, type SalesOrder, type SalesOrderPage } from './types';
+import OrderTypeTag from '@/components/orders/OrderTypeTag';
 
 type Mode = 'sales' | 'paid';
 /** Which half of the paid list to show: still being worked, or handed over. */
@@ -83,6 +84,7 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
         <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
           <p className="text-sm font-semibold text-gray-900">
             {order.customer.name} <span className="font-normal text-gray-500">· {order.orderNumber}</span>
+            <OrderTypeTag type="purchase" className="ml-2 align-middle" />
           </p>
           <p className="text-xs text-gray-500">
             {formatDateTimeIST(order.createdAt)}

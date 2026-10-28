@@ -159,6 +159,12 @@ describe('AdminOrdersPage', () => {
     });
   });
 
+  it('tags every customer order in the table as a purchase order', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByText(/ORD-002/)).toBeInTheDocument());
+    expect(screen.getAllByText('Purchase order')).toHaveLength(2);
+  });
+
   it('confirms via modal before updating status, and warns about the customer email', async () => {
     renderPage();
 
