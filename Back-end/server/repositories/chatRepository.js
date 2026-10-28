@@ -264,6 +264,9 @@ const chatRepository = {
       { new: true, projection: { channel: 1, threadRoot: 1, preview: 1 } },
     ).lean(),
 
+  setMeetUrl: (channel, url) =>
+    ChatChannel.updateOne({ _id: channel }, url ? { $set: { meetUrl: url } } : { $unset: { meetUrl: 1 } }),
+
   // ── pins (shared per conversation) ──
   /** Live pinned messages in a channel, newest pin first (index chat_pins). */
   findPins: (channel, limit) =>

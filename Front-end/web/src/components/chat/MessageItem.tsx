@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CornerUpRight, Download, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Pin, PinOff, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
+import { CornerUpRight, Download, Phone, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Pin, PinOff, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
+import { meetLinkIn } from './meet';
 import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
 import EmojiPicker from './EmojiPicker';
 import { formatMessage } from './chatFormat';
@@ -35,6 +36,20 @@ function LinkCard({ preview }: { preview: NonNullable<ChatMessage['preview']> })
       <span className="block truncate text-xs text-gray-500">{preview.site}</span>
       <span className="block text-sm font-semibold text-gray-900 line-clamp-2">{preview.title}</span>
       {preview.description && <span className="mt-0.5 block text-xs text-gray-600 line-clamp-2">{preview.description}</span>}
+    </a>
+  );
+}
+
+/** A Google Meet link in a message: a big "Join call" button rather than a bare URL. */
+function MeetCard({ url }: { url: string }) {
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer"
+      className="mt-1.5 inline-flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 hover:bg-emerald-100">
+      <span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-700 text-white"><Phone className="h-4 w-4" /></span>
+      <span>
+        <span className="block text-sm font-semibold text-emerald-900">Google Meet call</span>
+        <span className="block text-xs text-emerald-800">Tap to join</span>
+      </span>
     </a>
   );
 }
@@ -570,7 +585,7 @@ export default function MessageItem({
                 </p>
               )}
               {m.text && <MessageText text={m.text} mentionNames={mentionNames} meName={meName} />}
-              {m.preview && <LinkCard preview={m.preview} />}
+              {meetLinkIn(m.text) ? <MeetCard url={meetLinkIn(m.text)!} /> : m.preview && <LinkCard preview={m.preview} />}
               <Photos items={photos} />
               <Documents items={documents} />
               <OrderRefs refs={m.refs} orderHref={orderHref} />

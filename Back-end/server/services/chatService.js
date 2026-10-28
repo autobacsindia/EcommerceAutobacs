@@ -312,7 +312,7 @@ export async function listChannels(user) {
   await ensureDefaultSpaces();
   const channels = await chatRepository.findChannels(
     accessFilter(user),
-    'kind key name description audience team teams members system lastMessageSeq lastMessageAt createdBy'
+    'kind key name description audience team teams members system lastMessageSeq lastMessageAt createdBy meetUrl'
   );
 
   const ids = channels.map((c) => c._id);
@@ -383,6 +383,9 @@ export async function listChannels(user) {
         ...(isGroupDm ? { group: true, memberIds: c.members.map(idOf) } : {}),
         // Custom group: may this person add / remove members? (the admin, or whoever created it)
         canManageMembers: c.kind === 'space' && c.audience === 'members' && mayManageMembers(user, c),
+        // Call link: the saved Google Meet link, and whether I may change it.
+        meetUrl: c.meetUrl ?? null,
+        canSetMeet: maySetMeet(user, c),
         lastMessageSeq: c.lastMessageSeq,
         lastMessageAt: c.lastMessageAt,
         lastReadSeq: read.chat,
@@ -876,6 +879,7 @@ let previewsInFlight = 0;
 async function attachPreview(channel, m) {
   const url = firstUrl(m.text);
   if (!url || !linkPreviewsEnabled() || previewsInFlight >= MAX_PREVIEWS_IN_FLIGHT) return;
+  if (MEET_URL.test(url)) return; // a call link gets a "Join call" card on screen instead
   previewsInFlight += 1;
   try {
     const preview = await previewFor(url);
@@ -1603,4 +1607,29 @@ function announceStatus(user) {
     userId: idOf(user),
     route: { kind: 'space', audience: 'all', team: null, teams: [], members: [], archived: false },
   });
+}
+
+// ── calls (Google Meet) ──────────────────────────────────────────────────────
+/*
+  Calls happen in Google Meet (the company keeps Google Workspace); chat only
+  carries the link. A conversation can keep a standing Meet link so "📞 Call"
+  is one tap: in a space, admins and team heads set it; in a direct message or
+  group conversation, anyone in it can. Only a real meet.google.com meeting
+  link is accepted, so the button can never send people somewhere else.
+*/
+
+export const MEET_URL = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:\?[\w=&%.-]*)?$/;
+
+export const maySetMeet = (user, channel) =>
+  canAccess(user, channel) && (channel.kind === 'dm' || isAdmin(user) || user?.staff?.isHead === true);
+
+/** Save (or with null, remove) the conversation's Google Meet link. */
+export async function setMeetLink(user, channelId, url) {
+  const channel = await loadAccessible(user, channelId);
+  if (!maySetMeet(user, channel)) throw fail('Only admins and team heads can set the call link for a space', 403);
+  const clean = url == null || url === '' ? null : String(url).trim();
+  if (clean && !MEET_URL.test(clean)) throw fail('Paste a Google Meet link, like https://meet.google.com/abc-defg-hij', 400);
+  await chatRepository.setMeetUrl(channel._id, clean);
+  await publishChatEvent({ type: 'channel', channelId: idOf(channel), route: audienceOf(channel) });
+  return { channelId: idOf(channel), meetUrl: clean };
 }

@@ -46,6 +46,10 @@ export interface ChatChannel {
   system: boolean;
   partner: ChatPerson | null;
   memberCount: number | null;
+  /** The conversation's standing Google Meet link, if one is saved. */
+  meetUrl?: string | null;
+  /** May I change it? (spaces: admins and heads; DMs and groups: anyone in it) */
+  canSetMeet?: boolean;
   /** A group conversation (a DM with 3-8 people). Its name is the others' names. */
   group?: boolean;
   /** Group conversation: who is in it. */
@@ -783,6 +787,19 @@ export function useSetNotify() {
     onMutate: ({ channelId, notify }) => put(channelId, notify),
     // The mention count only exists for "@mentions only" — fetch the real numbers.
     onSettled: () => qc.invalidateQueries({ queryKey: chatKeys.channels() }),
+  });
+}
+
+/** Save (or with null, remove) a conversation's standing Meet link. */
+export function useSetMeet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelId, url }: { channelId: string; url: string | null }) =>
+      apiClient.put<{ channelId: string; meetUrl: string | null }>(`/chat/channels/${channelId}/meet`, { url }),
+    onSuccess: (res) => {
+      qc.setQueryData<ChatChannel[]>(chatKeys.channels(), (list) =>
+        list?.map((c) => (c.id === res.channelId ? { ...c, meetUrl: res.meetUrl } : c)));
+    },
   });
 }
 

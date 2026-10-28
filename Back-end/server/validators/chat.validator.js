@@ -63,6 +63,12 @@ export const validateStatus = [
   body('until').optional({ values: 'null' }).isISO8601().withMessage('Invalid date'),
 ];
 
+/** A conversation's Google Meet link (null clears it). The service checks it is a Meet link. */
+export const validateMeet = [
+  param('id').custom(isObjectId).withMessage('Invalid channel id'),
+  body('url').optional({ values: 'null' }).isString().isLength({ max: 120 }).withMessage('Invalid link'),
+];
+
 export const validateMessagePage = [
   query('before').optional().isInt({ min: 1 }).withMessage('Invalid cursor'),
   query('after').optional().isInt({ min: 0 }).withMessage('Invalid cursor'),
