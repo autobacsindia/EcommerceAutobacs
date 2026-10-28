@@ -10,6 +10,7 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import WorkOrderPanel from './WorkOrderPanel';
 import { STAGE_TONE, type WorkQueue, type WorkRow } from './types';
+import { EtaRowBadge } from './ParcelEta';
 
 type Page = { success: boolean; orders: WorkRow[]; nextCursor: string | null };
 
@@ -42,6 +43,7 @@ function Row({ order }: { order: WorkRow }) {
             {order.summary}
           </span>
         )}
+        <EtaRowBadge eta={order.eta} />
         <span className="ml-auto text-right text-sm font-bold text-gray-900 sm:ml-0 sm:w-28">{rupees(order.totalAmount)}</span>
         <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -65,7 +67,7 @@ export default function WorkQueueList({ queue }: { queue: WorkQueue }) {
   });
   const orders = q.data?.pages.flatMap((p) => p.orders) ?? [];
 
-  const bar = <OrderListFilters value={filters} onChange={setFilters} showStage />;
+  const bar = <OrderListFilters value={filters} onChange={setFilters} showStage showEta={queue === 'deliveries'} />;
   if (q.isPending) return <div className="space-y-3">{bar}<p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p></div>;
   if (q.isError) return <div className="space-y-3">{bar}<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load the list.')}</p></div>;
 

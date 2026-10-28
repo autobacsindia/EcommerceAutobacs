@@ -768,7 +768,30 @@ const OrderSchema = new mongoose.Schema({
       byName: String,
       _id: false
     }],
-    stepCount: Number
+    stepCount: Number,
+    /*
+      The team's expected delivery date while the parcel is in transit (team
+      panel; utils/parcelEta.js). STAFF ONLY — the customer's date is
+      `estimatedDelivery` above. `day` is the India calendar day 'YYYY-MM-DD';
+      the morning job reminds `setBy` in team chat on that day and each working
+      morning after it until the parcel is delivered or the date is changed.
+      `etaHistory` keeps the newest MAX_ETA_HISTORY changes (old → new, who, when).
+    */
+    eta: {
+      day: String,
+      setBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      setByName: String,
+      setByTeam: String,
+      setAt: Date
+    },
+    etaHistory: [{
+      from: String,
+      to: { type: String, required: true },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      byName: String,
+      at: { type: Date, required: true },
+      _id: false
+    }]
   }],
 
   /**

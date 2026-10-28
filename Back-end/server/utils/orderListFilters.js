@@ -10,24 +10,30 @@ import { STAGE } from './teamWorkflow.js';
  *            (`stage` already means processing / delivered on the paid lists)
  *   source — 'website' | 'sales'
  *   sort   — 'newest' (default) | 'oldest'
+ *   eta    — 'due_today' | 'overdue' | 'none': a parcel in transit whose expected
+ *            delivery date is today / has passed / was never set (work lists only)
  */
 export const LIST_SORTS = Object.freeze(['newest', 'oldest']);
 export const LIST_SOURCES = Object.freeze(['website', 'sales']);
+export const LIST_ETA = Object.freeze(['due_today', 'overdue', 'none']);
+const ETA_COUNT = { due_today: 'dueToday', overdue: 'overdue', none: 'missing' };
 const STAGES = new Set(Object.values(STAGE));
 
-export function readListFilters({ q, step, source, sort } = {}) {
+export function readListFilters({ q, step, source, sort, eta } = {}) {
   const words = String(q ?? '').trim().toLowerCase().replace(/^#/, '').slice(0, 60);
   return {
     q: words || null,
     stage: STAGES.has(step) ? step : null,
     source: LIST_SOURCES.includes(source) ? source : null,
     sort: sort === 'oldest' ? 'oldest' : 'newest',
+    eta: LIST_ETA.includes(eta) ? eta : null,
   };
 }
 
 /** Does a work-list row (teamWorkflowService.row) pass the filters? */
 export function rowMatches(row, f) {
   if (f.source && row.source !== f.source) return false;
+  if (f.eta && !(row.eta?.[ETA_COUNT[f.eta]] > 0)) return false;
   if (f.stage && row.summaryStage !== f.stage && !(row.lines || []).some((l) => l.stage === f.stage)) return false;
   if (f.q) {
     const hay = [

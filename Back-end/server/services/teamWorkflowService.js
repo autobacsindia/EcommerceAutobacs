@@ -51,6 +51,7 @@ import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
 import { readListFilters, rowMatches } from '../utils/orderListFilters.js';
 import { SHIPMENT_STATUS, rewardShipped } from '../utils/orderFulfilment.js';
+import { istDay, parseEtaDay, etaDayProblem, etaState, etaSummary, formatEtaDay, MAX_ETA_HISTORY } from '../utils/parcelEta.js';
 import { PARCEL_STEP_VALUES, PARCEL_STEP_LABELS, TRACKING_EVENT_STATUS, MAX_PARCEL_STEPS, MAX_STEP_NOTE } from '../utils/parcelSteps.js';
 import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
 import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
@@ -79,6 +80,8 @@ const can = {
   accounts: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.ACCOUNTS),
   operations: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.OPERATIONS),
   /** The customer's decision: the sales person on the order, or any sales head (website orders have no seller). */
+  /** The expected delivery date on a parcel: whoever chases the courier — procurement or operations. */
+  planDelivery: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.PROCUREMENT) || onTeam(u, STAFF_TEAMS.OPERATIONS),
   decide: (u, order) => isAdmin(u)
     || isHeadOf(u, STAFF_TEAMS.SALES)
     || (onTeam(u, STAFF_TEAMS.SALES) && order.salesUser && idOf(order.salesUser) === idOf(u._id)),
@@ -138,6 +141,8 @@ function row(o, view) {
     summary: view?.summary || null,
     summaryStage: view?.summaryStage || null,
     needs: view?.needs || [],
+    // Parcels in transit against their expected delivery date (badges + filter); null when none.
+    eta: etaSummary(o.shipments, istDay()),
     lines: (o.items || []).map((it) => {
       const wl = view?.lines.find((l) => l.itemId === idOf(it._id));
       return {
@@ -207,6 +212,7 @@ const HISTORY_LABELS = {
   stock_undone: 'Stock decision undone',
   decision_undone: 'Customer decision undone',
   dispatch_edited: 'Dispatch details corrected',
+  eta_set: 'Expected delivery date set',
 };
 
 const photoPath = (orderId, shipmentId) => `/api/v1/staff/work/orders/${orderId}/parcels/${shipmentId}/photo`;
@@ -214,6 +220,7 @@ const photoPath = (orderId, shipmentId) => `/api/v1/staff/work/orders/${orderId}
 /** The full order for the detail view, with the actions this person may take. */
 function detail(u, o) {
   const view = workflowView(o);
+  const today = istDay();
   const base = row(o, view);
   const wfLines = new Map((view?.lines || []).map((l) => [l.itemId, l]));
   const names = new Map((o.items || []).map((it) => [idOf(it._id), itemName(it)]));
@@ -260,6 +267,11 @@ function detail(u, o) {
       })),
       stepCount: s.stepCount || 0,
       canAddStep: s.status === SHIPMENT_STATUS.SHIPPED && can.operations(u),
+      // The team's expected delivery date (never shown to the customer).
+      eta: s.eta?.day ? { date: s.eta.day, setBy: s.eta.setByName || '', setAt: s.eta.setAt || null } : null,
+      etaState: etaState(s, today),
+      etaHistory: (s.etaHistory || []).slice().reverse().map((h) => ({ from: h.from || '', to: h.to, by: h.byName || '', at: h.at })),
+      canSetEta: s.status === SHIPMENT_STATUS.SHIPPED && can.planDelivery(u),
     })),
     cancellations: (o.cancellations || []).map((c) => ({
       id: idOf(c._id),
@@ -1081,6 +1093,48 @@ export async function addParcelStep(actor, orderId, shipmentId, { status, note, 
   if (!updated) throw fail('This parcel was just updated by someone else (or delivered). Refresh and try again.', 409);
 
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_parcel_step', shipmentId: String(shipmentId), status });
+  return getOrder(actor, orderId);
+}
+
+/**
+ * Procurement / operations: the date a parcel in transit is expected to arrive,
+ * after checking with the courier. The morning job reminds whoever set it, in
+ * team chat, on that day — and each working morning after while it is still in
+ * transit — so changing the date moves the reminder, and "delivered" stops it.
+ *
+ * `previousDate` is the date the person saw ('' for none): if someone else
+ * changed it meanwhile, they are told to refresh rather than overwrite it. The
+ * write itself is a compare-and-set on the stored date and on the parcel still
+ * being in transit (orderRepository.setShipmentEtaIf).
+ */
+export async function setParcelEta(actor, orderId, shipmentId, { date, previousDate } = {}, req) {
+  if (!can.planDelivery(actor)) throw fail('Only procurement, operations or an admin can set the expected delivery date.', 403);
+  const day = parseEtaDay(date);
+  const problem = etaDayProblem(day, istDay());
+  if (problem) throw fail(problem, 400);
+
+  const o = await orderRepository.findForWorkflow(orderId);
+  if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
+  const parcel = (o.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
+  if (!parcel) throw fail('Parcel not found on this order.', 404);
+  if (parcel.status !== SHIPMENT_STATUS.SHIPPED) throw fail('The expected delivery date can only be set while the parcel is in transit.', 409);
+
+  const current = parcel.eta?.day || '';
+  if (previousDate != null && String(previousDate) !== current) throw fail('Someone else just changed this date. Refresh and try again.', 409);
+  if (day === current) return getOrder(actor, orderId);
+
+  const at = new Date();
+  const updated = await orderRepository.setShipmentEtaIf(orderId, shipmentId, current, {
+    eta: { day, setBy: actor._id, setByName: actor.name, setByTeam: actorTeam(actor), setAt: at },
+    change: { ...(current && { from: current }), to: day, by: actor._id, byName: actor.name, at },
+    event: event(actor, 'eta_set', {
+      note: `Parcel ${parcel.sequence}: ${current ? `${formatEtaDay(current)} → ` : ''}${formatEtaDay(day)}`,
+    }),
+    maxHistory: MAX_ETA_HISTORY,
+  });
+  if (!updated) throw fail('This parcel was just updated by someone else (or delivered). Refresh and try again.', 409);
+
+  auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_parcel_eta', shipmentId: String(shipmentId), from: current || null, to: day });
   return getOrder(actor, orderId);
 }
 
