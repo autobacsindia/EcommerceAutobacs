@@ -463,7 +463,7 @@ export const RETURN_POLICY_POINTS = [
  * Canonical customer-facing answer to "what is your return policy?".
  *
  * Every public surface that states the policy in prose — the /faq page, the
- * /contact and /help FAQ strips, and the FAQPage JSON-LD in app/layout.tsx —
+ * /contact and /help FAQ strips, and the FAQPage JSON-LD on /faq —
  * MUST render this string rather than hand-writing its own version. Those five
  * surfaces had drifted to three different windows (30 / 7 / 4 days) and to an
  * any-reason "unused items" promise the backend never honoured, which is both a
