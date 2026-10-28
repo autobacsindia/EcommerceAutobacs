@@ -3,50 +3,56 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import {
+  BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, ExternalLink, Factory, FerrisWheel, FolderTree, Gift, Globe,
+  GraduationCap, HandCoins, Handshake, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
+  MessagesSquare, Package, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserRoundCog,
+  Users, Wallet, Zap,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import PanelShell from '@/components/panel/PanelShell';
 import { useAdminStats } from '@/hooks/queries/useAdminStats';
 import { formatCurrency } from '@/lib/utils';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
 import NotificationBell from '@/components/notifications/NotificationBell';
-import PushPrompt from '@/components/notifications/PushPrompt';
 
 interface NavItem {
-  href?: string;
+  href: string;
   label: string;
-  icon: string;
-  children?: NavItem[];
+  icon: LucideIcon;
 }
 
 const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: 'Main',
     items: [
-      { href: '/admin', label: 'Dashboard', icon: '📊' },
-      { href: '/admin/overview', label: 'Company overview', icon: '🏢' },
-      { href: '/admin/chat', label: 'Team Chat', icon: '🗨️' },
-      { href: '/admin/tasks', label: 'Tasks', icon: '✅' },
-      { href: '/admin/analytics', label: 'Analytics', icon: '📈' },
+      { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/admin/overview', label: 'Company overview', icon: Building2 },
+      { href: '/admin/chat', label: 'Team Chat', icon: MessagesSquare },
+      { href: '/admin/tasks', label: 'Tasks', icon: ListTodo },
+      { href: '/admin/analytics', label: 'Analytics', icon: ChartLine },
     ],
   },
   {
     title: 'Catalog',
     items: [
-      { href: '/admin/products', label: 'Products', icon: '🛍️' },
-      { href: '/admin/brands', label: 'Brands', icon: '🏷️' },
-      { href: '/admin/categories', label: 'Categories', icon: '📂' },
-      { href: '/admin/vehicles', label: 'Vehicles', icon: '🚗' },
-      { href: '/admin/coupons', label: 'Coupons', icon: '🎟️' },
-      { href: '/admin/campaigns', label: 'Campaigns', icon: '🎁' },
-      { href: '/admin/loyalty', label: 'Karma Points', icon: '✨' },
-      { href: '/admin/stock-requests', label: 'Stock Requests', icon: '🔔' },
+      { href: '/admin/products', label: 'Products', icon: ShoppingBag },
+      { href: '/admin/brands', label: 'Brands', icon: Tag },
+      { href: '/admin/categories', label: 'Categories', icon: FolderTree },
+      { href: '/admin/vehicles', label: 'Vehicles', icon: Car },
+      { href: '/admin/coupons', label: 'Coupons', icon: TicketPercent },
+      { href: '/admin/campaigns', label: 'Campaigns', icon: Gift },
+      { href: '/admin/loyalty', label: 'Karma Points', icon: Sparkles },
+      { href: '/admin/stock-requests', label: 'Stock Requests', icon: BellRing },
     ],
   },
   {
     title: 'Orders',
     items: [
-      { href: '/admin/orders', label: 'Orders', icon: '📦' },
-      { href: '/admin/returns', label: 'Returns', icon: '↩️' },
-      { href: '/admin/refunds', label: 'Refunds', icon: '💰' },
-      { href: '/admin/spin', label: 'Spin to Win', icon: '🎡' },
+      { href: '/admin/orders', label: 'Orders', icon: Package },
+      { href: '/admin/returns', label: 'Returns', icon: Undo2 },
+      { href: '/admin/refunds', label: 'Refunds', icon: HandCoins },
+      { href: '/admin/spin', label: 'Spin to Win', icon: FerrisWheel },
       /*
         There is deliberately NO "Goodies to pack" entry here.
 
@@ -64,49 +70,49 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   // {
   //   title: 'Inventory',
   //   items: [
-  //     { href: '/admin/warehouses', label: 'Warehouses', icon: '🏭' },
+  //     { href: '/admin/warehouses', label: 'Warehouses', icon: Warehouse },
   //   ],
   // },
   {
     title: 'Support',
     items: [
-      { href: '/admin/support', label: 'Inbox', icon: '💬' },
+      { href: '/admin/support', label: 'Inbox', icon: Inbox },
     ],
   },
   {
     title: 'Sales',
     items: [
-      { href: '/admin/leads', label: 'Leads', icon: '💼' },
-      { href: '/admin/sales-reps', label: 'Sales Reps', icon: '🧑‍💼' },
-      { href: '/admin/affiliates', label: 'Affiliates', icon: '🤝' },
+      { href: '/admin/leads', label: 'Leads', icon: Briefcase },
+      { href: '/admin/sales-reps', label: 'Sales Reps', icon: UserRoundCog },
+      { href: '/admin/affiliates', label: 'Affiliates', icon: Handshake },
       // Listed BEFORE the batches screen: "who is due" is the question you start from,
     // "what have we already built" is the follow-up.
-    { href: '/admin/affiliates/payout-queue', label: 'Payout Queue', icon: '⏳' },
-    { href: '/admin/affiliates/payouts', label: 'Affiliate Payouts', icon: '🏦' },
-      { href: '/admin/users', label: 'Users', icon: '👥' },
-      { href: '/admin/reviews', label: 'Reviews', icon: '⭐' },
-      { href: '/admin/consultation', label: 'Consultancy', icon: '🎯' },
+      { href: '/admin/affiliates/payout-queue', label: 'Payout Queue', icon: Hourglass },
+      { href: '/admin/affiliates/payouts', label: 'Affiliate Payouts', icon: Wallet },
+      { href: '/admin/users', label: 'Users', icon: Users },
+      { href: '/admin/reviews', label: 'Reviews', icon: Star },
+      { href: '/admin/consultation', label: 'Consultancy', icon: Target },
     ],
   },
   {
     title: 'Content',
     items: [
-      { href: '/admin/blog', label: 'Blog', icon: '📝' },
-      { href: '/admin/promo-banners', label: 'Promo Banner', icon: '🎪' },
-      { href: '/admin/media', label: 'Media', icon: '🖼️' },
-      { href: '/admin/careers', label: 'Careers', icon: '💼' },
-      { href: '/admin/seo', label: 'Pages SEO', icon: '🌐' },
+      { href: '/admin/blog', label: 'Blog', icon: SquarePen },
+      { href: '/admin/promo-banners', label: 'Promo Banner', icon: Megaphone },
+      { href: '/admin/media', label: 'Media', icon: Images },
+      { href: '/admin/careers', label: 'Careers', icon: GraduationCap },
+      { href: '/admin/seo', label: 'Pages SEO', icon: Globe },
     ],
   },
   {
     title: 'System',
     items: [
-      { href: '/admin/staff', label: 'Staff & Teams', icon: '🪪' },
-      { href: '/admin/team-activity', label: 'Team activity', icon: '⏱️' },
-      { href: '/admin/payments', label: 'Payments', icon: '💳' },
-      { href: '/admin/suppliers', label: 'Suppliers', icon: '🏭' },
-      { href: '/admin/bank-transfers', label: 'Bank transfers', icon: '🏦' },
-      { href: '/admin/workflows', label: 'Workflows', icon: '⚡' },
+      { href: '/admin/staff', label: 'Staff & Teams', icon: IdCard },
+      { href: '/admin/team-activity', label: 'Team activity', icon: Timer },
+      { href: '/admin/payments', label: 'Payments', icon: CreditCard },
+      { href: '/admin/suppliers', label: 'Suppliers', icon: Factory },
+      { href: '/admin/bank-transfers', label: 'Bank transfers', icon: Landmark },
+      { href: '/admin/workflows', label: 'Workflows', icon: Zap },
     ],
   },
 ];
@@ -192,172 +198,92 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
     }
   };
 
+  const sections = navSections.map((section) => ({
+    // "Main" is always open: it holds the dashboard, chat and tasks.
+    title: section.title === 'Main' ? undefined : section.title,
+    expanded: !!expandedSections[section.title],
+    onToggle: () => toggleSection(section.title),
+    items: section.items.map((item) => ({
+      href: item.href,
+      label: item.label,
+      icon: item.icon,
+      active: isLinkActive(item.href),
+      count: item.href === '/admin/chat' ? chatUnread : undefined,
+    })),
+  }));
+
+  const pageLabel = navSections.flatMap((s) => s.items).find((link) => link.href === activeHref)?.label;
+
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside
-        className={`${
-          sidebarOpen ? 'w-64' : 'w-20'
-        } bg-gray-900 text-white transition-all duration-300 flex flex-col fixed h-full z-10`}
-      >
-        {/* Logo */}
-        <div className="p-4 border-b border-gray-800">
-          <h1 className={`font-bold text-xl ${!sidebarOpen && 'hidden'}`}>
-            Autobacs Admin
-          </h1>
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="mt-2 text-gray-400 hover:text-white"
-          >
-            {sidebarOpen ? '◀' : '▶'}
-          </button>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto max-h-[calc(100vh-200px)]">
-          {navSections.map((section) => {
-            const isSectionActive = section.items.some(item => isLinkActive(item.href));
-            const isExpanded = expandedSections[section.title];
-
-            return (
-              <div key={section.title} className="mb-2">
-                {/* Section Header */}
-                {sidebarOpen && (
-                  <button
-                    onClick={() => toggleSection(section.title)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-300 transition-colors"
-                  >
-                    <span>{section.title}</span>
-                    <span className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
-                      ▶
-                    </span>
-                  </button>
-                )}
-
-                {/* Section Items */}
-                {(isExpanded || !sidebarOpen) && (
-                  <div className="space-y-1 mt-1">
-                    {section.items.map((item) => (
-                      <Link
-                        key={item.href}
-                        href={item.href!}
-                        className={`flex items-center p-3 rounded-lg transition-all ${
-                          isLinkActive(item.href)
-                            ? 'bg-blue-600 text-white shadow-lg'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        } ${!sidebarOpen ? 'justify-center' : ''}`}
-                      >
-                        <span className="text-xl shrink-0">{item.icon}</span>
-                        {sidebarOpen && (
-                          <span className="ml-3 text-sm font-medium">{item.label}</span>
-                        )}
-                        {item.href === '/admin/chat' && chatUnread > 0 && (
-                          <span className="ml-auto rounded-full bg-emerald-500 px-1.5 text-xs font-bold leading-5 text-white" aria-label={`${chatUnread} unread`}>
-                            {chatUnread > 99 ? '99+' : chatUnread}
-                          </span>
-                        )}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-
-        {/* User Info */}
-        <div className="p-4 border-t border-gray-800">
-          {sidebarOpen && (
-            <div className="mb-3">
-              <p className="text-sm text-gray-400">Logged in as:</p>
-              <p className="text-sm font-medium truncate">{userName}</p>
-            </div>
-          )}
-          <button
-            onClick={handleLogout}
-            className="w-full p-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm transition-colors"
-          >
-            {sidebarOpen ? 'Logout' : '🚪'}
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content. `min-w-0` lets this flex item shrink below its content width:
-          without it a wide table stretches the whole page past the viewport (page-level
-          horizontal scroll, sidebar overlapping content) instead of scrolling inside its
-          own overflow-x-auto wrapper. */}
-      <main
-        className={`flex-1 min-w-0 ${
-          sidebarOpen ? 'ml-64' : 'ml-20'
-        } transition-all duration-300`}
-      >
-        {/* Top Bar */}
-        <header className="bg-white shadow-sm border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-          <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-bold text-gray-800">
-              {navSections.flatMap(s => s.items).find((link) => link.href === pathname)?.label || 'Admin'}
-            </h2>
-            <Link
-              href="/"
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-            >
-              <span>🌐</span>
-              <span>View Site</span>
-            </Link>
-            {/* Chat has its own button so it is one click from anywhere in admin. */}
-            <Link
-              href="/admin/chat"
-              className={`relative flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                isLinkActive('/admin/chat') ? 'bg-emerald-800 text-white' : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100'
-              }`}
-            >
-              <span>💬</span>
-              <span>Chat</span>
-              {chatUnread > 0 && (
-                <span className="rounded-full bg-emerald-600 px-1.5 text-xs font-bold leading-5 text-white" aria-label={`${chatUnread} unread`}>
-                  {chatUnread > 99 ? '99+' : chatUnread}
-                </span>
-              )}
-            </Link>
-            {/* One glance for everything else that is waiting — approvals,
-                refunds — so nobody has to open each section to find out. */}
-            <NotificationBell chatHref="/admin/chat" />
-          </div>
-
+    <PanelShell
+      homeHref="/admin"
+      subtitle="Admin panel"
+      sections={sections}
+      collapsed={!sidebarOpen}
+      onToggleCollapsed={() => setSidebarOpen(!sidebarOpen)}
+      user={{ name: userName, role: 'Admin' }}
+      onLogout={handleLogout}
+      heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{pageLabel || 'Admin'}</h2>}
+      actions={
+        <>
           {/* Stats Overview — each tile drills into the orders behind the number */}
-          <div className="flex items-center space-x-2">
-            <Link
-              href={ordersHref(stats.filters?.pendingOrders, 'processing,shipped')}
-              title="Orders placed but not delivered yet"
-              className="text-right px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <p className="text-sm text-gray-500">Pending Orders</p>
-              <p className="text-lg font-bold text-orange-600">
-                {statsFailed ? '—' : stats.pendingOrders.toLocaleString('en-IN')}
-              </p>
-            </Link>
-            <Link
-              href={ordersHref(
-                stats.filters?.totalRevenue,
-                'processing,shipped,delivered',
-                stats.revenuePeriod?.startDate
-              )}
-              title={`Realised revenue since ${stats.revenuePeriod?.startDate ?? 'the start of the financial year'} — excludes cancelled, returned and abandoned orders`}
-              className="text-right px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <p className="text-sm text-gray-500">
-                Revenue{stats.revenuePeriod ? ` (${stats.revenuePeriod.label})` : ''}
-              </p>
-              <p className="text-lg font-bold text-green-600">
-                {statsFailed ? '—' : formatCurrency(stats.totalRevenue)}
-              </p>
-            </Link>
-          </div>
-        </header>
-
-        {/* Page Content */}
-        <div className="p-6 admin-panel"><PushPrompt />{children}</div>
-      </main>
-    </div>
+          <Link
+            href={ordersHref(stats.filters?.pendingOrders, 'processing,shipped')}
+            title="Orders placed but not delivered yet"
+            className="hidden rounded-lg px-2.5 py-1 text-right transition-colors hover:bg-gray-100 sm:block"
+          >
+            <p className="text-xs text-gray-500">Pending orders</p>
+            <p className="text-base font-bold tabular-nums text-amber-700">
+              {statsFailed ? '—' : stats.pendingOrders.toLocaleString('en-IN')}
+            </p>
+          </Link>
+          <Link
+            href={ordersHref(
+              stats.filters?.totalRevenue,
+              'processing,shipped,delivered',
+              stats.revenuePeriod?.startDate
+            )}
+            title={`Realised revenue since ${stats.revenuePeriod?.startDate ?? 'the start of the financial year'} — excludes cancelled, returned and abandoned orders`}
+            className="hidden rounded-lg px-2.5 py-1 text-right transition-colors hover:bg-gray-100 sm:block"
+          >
+            <p className="text-xs text-gray-500">
+              Revenue{stats.revenuePeriod ? ` (${stats.revenuePeriod.label})` : ''}
+            </p>
+            <p className="text-base font-bold tabular-nums text-green-700">
+              {statsFailed ? '—' : formatCurrency(stats.totalRevenue)}
+            </p>
+          </Link>
+          <span className="mx-1 hidden h-8 w-px bg-gray-200 sm:block" aria-hidden="true" />
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 rounded-full border border-gray-300 px-3.5 py-1.5 text-sm font-medium text-gray-800 transition-colors hover:border-blue-600 hover:text-blue-700"
+          >
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            View site
+          </Link>
+          {/* Chat has its own button so it is one click from anywhere in admin. */}
+          <Link
+            href="/admin/chat"
+            aria-current={isLinkActive('/admin/chat') ? 'page' : undefined}
+            className={`relative inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              isLinkActive('/admin/chat') ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+            }`}
+          >
+            <MessagesSquare className="h-3.5 w-3.5" aria-hidden="true" />
+            Chat
+            {chatUnread > 0 && (
+              <span className="rounded-full bg-blue-600 px-1.5 text-xs font-bold leading-5 text-white" aria-label={`${chatUnread} unread`}>
+                {chatUnread > 99 ? '99+' : chatUnread}
+              </span>
+            )}
+          </Link>
+          {/* One glance for everything else that is waiting — approvals,
+              refunds — so nobody has to open each section to find out. */}
+          <NotificationBell chatHref="/admin/chat" />
+        </>
+      }
+    >
+      {children}
+    </PanelShell>
   );
 }
