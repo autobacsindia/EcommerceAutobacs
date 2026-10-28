@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { FAQ_CATEGORIES } from '@/lib/help/faq';
+import { whatsappLink } from '@/lib/contactInfo';
 import StorePageHeader from '@/components/store/StorePageHeader';
 
 export default function FAQPage() {
@@ -53,9 +54,11 @@ export default function FAQPage() {
                 Contact Us
                 <ChevronRight className="h-4 w-4" />
               </Link>
-              <Link href="/support/chat" className="inline-flex items-center justify-center px-6 py-3 bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold rounded-full transition-colors">
-                Live Chat
-              </Link>
+              {/* There is no /support/chat page — this link 404'd. WhatsApp is
+                  where a person actually answers. */}
+              <a href={whatsappLink('Hi, I have a question that the FAQ did not answer.')} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center px-6 py-3 bg-obsidian-raised border border-hairline text-ink/70 hover:text-ink font-display font-bold rounded-full transition-colors">
+                Chat on WhatsApp
+              </a>
             </div>
           </div>
         </div>
