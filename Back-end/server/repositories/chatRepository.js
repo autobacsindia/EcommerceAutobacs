@@ -154,6 +154,63 @@ const chatRepository = {
       },
       { new: true },
     ).populate('sender', SENDER_FIELDS).lean(),
+  /**
+   * Put `userId`'s `emoji` on a message (`on`) or take it off — one atomic
+   * pipeline write, so it is safe to retry (adding twice is one reaction,
+   * removing twice is a no-op) and two people reacting at the same moment
+   * cannot overwrite each other the way a read-modify-write would.
+   *
+   * A new emoji is only added while the message has fewer than `max` different
+   * ones; the caller tells "capped" from "added" by looking at the result.
+   * Deleted messages are left alone. Returns { channel, threadRoot, reactions },
+   * or null when the message is gone or deleted.
+   */
+  setReaction: (id, userId, emoji, on, max) => {
+    const e = { $literal: emoji }; // never read as a field path
+    const current = { $ifNull: ['$reactions', []] };
+    const add = {
+      $let: {
+        vars: { r: current },
+        in: {
+          $cond: [
+            { $in: [e, '$$r.emoji'] },
+            {
+              $map: {
+                input: '$$r',
+                as: 'x',
+                in: {
+                  $cond: [
+                    { $and: [{ $eq: ['$$x.emoji', e] }, { $not: [{ $in: [userId, '$$x.users'] }] }] },
+                    { emoji: '$$x.emoji', users: { $concatArrays: ['$$x.users', [userId]] } },
+                    '$$x',
+                  ],
+                },
+              },
+            },
+            { $cond: [{ $lt: [{ $size: '$$r' }, max] }, { $concatArrays: ['$$r', [{ emoji: e, users: [userId] }]] }, '$$r'] },
+          ],
+        },
+      },
+    };
+    const remove = {
+      $filter: {
+        input: {
+          $map: {
+            input: current,
+            as: 'x',
+            in: { emoji: '$$x.emoji', users: { $filter: { input: '$$x.users', as: 'u', cond: { $ne: ['$$u', userId] } } } },
+          },
+        },
+        as: 'y',
+        cond: { $gt: [{ $size: '$$y.users' }, 0] },
+      },
+    };
+    return ChatMessage.findOneAndUpdate(
+      { _id: id, deletedAt: null },
+      [{ $set: { reactions: on ? add : remove } }],
+      { new: true, projection: { channel: 1, threadRoot: 1, reactions: 1 } },
+    ).lean();
+  },
   /** Soft-delete. Returns the message as it now stands, or null. */
   deleteOwnMessage: (id, sender, { notBefore, at = new Date() }) =>
     ChatMessage.findOneAndUpdate(

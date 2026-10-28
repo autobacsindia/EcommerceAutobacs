@@ -16,6 +16,7 @@ import {
   useSendMessage,
   useEditMessage,
   useDeleteMessage,
+  useReactToMessage,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
@@ -140,6 +141,7 @@ export default function Conversation({
   const send = useSendMessage(channel.id);
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
+  const react = useReactToMessage(channel.id, meId);
   const markRead = useMarkRead();
   const [tab, setTab] = useState<Tab>(() => {
     if (initialTab === 'updates') return channel.kind === 'space' ? 'updates' : 'messages';
@@ -471,6 +473,7 @@ export default function Conversation({
                     onJumpTo={jumpTo}
                     onEdit={(msg, text) => edit.mutateAsync({ id: msg.id, text })}
                     onDelete={(msg) => remove.mutateAsync(msg.id)}
+                    onReact={(msg, emoji, on) => react.mutate({ message: msg, emoji, on })}
                   />
                   </div>
                 ))}

@@ -18,6 +18,14 @@ export const validateEditMessage = [
     .bail().isLength({ max: 4000 }).withMessage('Message must be 4000 characters or fewer'),
 ];
 
+/** A reaction: which emoji, and whether it should be on. The service checks it is one emoji. */
+export const validateReaction = [
+  param('id').custom(isObjectId).withMessage('Invalid message id'),
+  body('emoji').isString().withMessage('Pick an emoji')
+    .bail().isLength({ min: 1, max: 32 }).withMessage('Pick an emoji'),
+  body('on').optional().isBoolean({ strict: true }).withMessage('on must be true or false'),
+];
+
 export const validateMessagePage = [
   query('before').optional().isInt({ min: 1 }).withMessage('Invalid cursor'),
   query('after').optional().isInt({ min: 0 }).withMessage('Invalid cursor'),

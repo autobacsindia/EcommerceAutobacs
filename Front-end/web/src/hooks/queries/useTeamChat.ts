@@ -100,6 +100,8 @@ export interface ChatMessage {
   refs: ChatRef[];
   /** The message this one quotes, as it read when quoted. */
   quote?: ChatQuote | null;
+  /** Emoji reactions, in the order each emoji was first used. */
+  reactions?: ChatReaction[];
   createdAt: string;
   /** Set on a reply: the top-level message it belongs to. */
   threadRoot?: string | null;
@@ -122,6 +124,13 @@ export interface ChatMessage {
   editHistory?: { text: string; editedAt: string }[];
   /** Admins only: when a deleted message was deleted. */
   deletedAt?: string;
+}
+
+/** One emoji on a message: how many people, and who (the people can see the channel). */
+export interface ChatReaction {
+  emoji: string;
+  count: number;
+  userIds: string[];
 }
 
 export interface ChatQuote {
@@ -414,6 +423,67 @@ export function useDeleteMessage(channelId: string | null) {
       qc.invalidateQueries({ queryKey: chatKeys.messages(channelId) });
       qc.invalidateQueries({ queryKey: [...chatKeys.all, 'thread'] });
       qc.invalidateQueries({ queryKey: chatKeys.files(channelId) });
+    },
+  });
+}
+
+// ── reactions ────────────────────────────────────────────────────────────────
+
+/**
+ * `reactions` with `userId`'s `emoji` put on (`on`) or taken off — the same
+ * rule the server applies, so the tap shows at once and the server's answer
+ * normally changes nothing. Pure, for the optimistic update and its tests.
+ */
+export function withReaction(reactions: ChatReaction[] = [], emoji: string, userId: string, on: boolean): ChatReaction[] {
+  const existing = reactions.find((r) => r.emoji === emoji);
+  if (on) {
+    if (existing?.userIds.includes(userId)) return reactions;
+    if (!existing) return [...reactions, { emoji, count: 1, userIds: [userId] }];
+    return reactions.map((r) => (r === existing ? { ...r, count: r.count + 1, userIds: [...r.userIds, userId] } : r));
+  }
+  if (!existing?.userIds.includes(userId)) return reactions;
+  return reactions
+    .map((r) => (r === existing ? { ...r, count: r.count - 1, userIds: r.userIds.filter((id) => id !== userId) } : r))
+    .filter((r) => r.count > 0);
+}
+
+/** Put a message's reactions into every cache that holds it (timeline and threads). */
+export function applyReactions(
+  qc: ReturnType<typeof useQueryClient>,
+  channelId: string,
+  messageId: string,
+  reactions: ChatReaction[],
+) {
+  const set = (m: ChatMessage) => (m.id === messageId ? { ...m, reactions } : m);
+  qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) =>
+    d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: p.messages.map(set) })) } : d,
+  );
+  qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) =>
+    d ? { ...d, root: set(d.root), replies: d.replies.map(set) } : d,
+  );
+}
+
+/**
+ * Put your emoji on a message, or take it off. Shown at once (a reaction is
+ * cheap and undoable, unlike anything to do with money), then replaced by what
+ * the server stored. On failure the caches are refetched rather than rolled
+ * back by hand: someone else's reaction may have arrived in the meantime.
+ */
+export function useReactToMessage(channelId: string | null, meId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ message, emoji, on }: { message: ChatMessage; emoji: string; on: boolean }) =>
+      apiClient.post<{ messageId: string; reactions: ChatReaction[] }>(`/chat/messages/${message.id}/reactions`, { emoji, on }),
+    onMutate: ({ message, emoji, on }) => {
+      if (channelId) applyReactions(qc, channelId, message.id, withReaction(message.reactions, emoji, meId, on));
+    },
+    onSuccess: (res) => {
+      if (channelId) applyReactions(qc, channelId, res.messageId, res.reactions);
+    },
+    onError: () => {
+      if (!channelId) return;
+      qc.invalidateQueries({ queryKey: chatKeys.messages(channelId) });
+      qc.invalidateQueries({ queryKey: [...chatKeys.all, 'thread'] });
     },
   });
 }

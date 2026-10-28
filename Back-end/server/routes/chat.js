@@ -16,6 +16,7 @@ import {
   validateCreateSpace,
   validateOpenDm,
   validateThreadPage,
+  validateReaction,
 } from '../validators/chat.validator.js';
 import {
   listChannels,
@@ -33,6 +34,7 @@ import {
   markChannelRead,
   deleteMessage,
   editMessage,
+  reactToMessage,
   createSpace,
   deleteSpace,
   openDirectMessage,
@@ -256,6 +258,11 @@ router.post('/channels/:id/read', validateChannelIdParam, validateMarkRead, vali
 // PATCH /chat/messages/:id { text } — edit your own message, within 15 minutes
 router.patch('/messages/:id', validateEditMessage, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await editMessage(req.user, req.params.id, { text: req.body.text })) });
+}));
+
+// POST /chat/messages/:id/reactions { emoji, on? } — put your emoji on (on: true, default) or take it off
+router.post('/messages/:id/reactions', validateReaction, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await reactToMessage(req.user, req.params.id, { emoji: req.body.emoji, on: req.body.on })) });
 }));
 
 // DELETE /chat/messages/:id — delete your own message, within 15 minutes.

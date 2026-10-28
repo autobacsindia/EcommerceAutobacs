@@ -13,6 +13,7 @@ import {
   upsertReply,
   applyThreadUpdate,
   applyMessageChange,
+  applyReactions,
   useCanChat,
   useChatChannels,
   useChatMe,
@@ -20,7 +21,7 @@ import {
   useCreateSpace,
   useOpenDm,
 } from '@/hooks/queries/useTeamChat';
-import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ThreadData } from '@/hooks/queries/useTeamChat';
+import type { ChatChannel, ChatMessage, ChatPerson, ChatReaction, MessagePage, ThreadData } from '@/hooks/queries/useTeamChat';
 import { Avatar, ChannelIcon, Dialog, GREEN, shortWhen } from './chatUi';
 import Conversation from './Conversation';
 import MessageSearch from './MessageSearch';
@@ -242,6 +243,7 @@ export default function TeamChat() {
     onMessage: (event) => {
       const e = event as unknown as {
         type: string; channelId?: string; message?: ChatMessage; messageId?: string; thread?: ChatMessage;
+        reactions?: ChatReaction[];
       };
       if (e.type === 'message' && e.message && e.channelId) {
         if (e.message.threadRoot) {
@@ -296,6 +298,8 @@ export default function TeamChat() {
           return { ...d, root: hide(d.root), replies: d.replies.map(hide) };
         });
         qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
+      } else if (e.type === 'message_reactions' && e.channelId && e.messageId && e.reactions) {
+        applyReactions(qc, e.channelId, e.messageId, e.reactions);
       } else if (e.type === 'channel') {
         scheduleChannelsRefresh();
       }

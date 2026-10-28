@@ -200,6 +200,7 @@ function shapeMessage(m, sender, viewer = null) {
     mentionTeams: m.mentionTeams || [],
     refs: hide ? [] : (m.refs || []).map((r) => ({ type: r.type, code: r.code, id: idOf(r.target) })),
     quote: shapeQuote(m.quote, hide, admin),
+    reactions: hide ? [] : shapeReactions(m.reactions),
     createdAt: m.createdAt,
     edited: !!m.editedAt,
     editedAt: m.editedAt ?? null,
@@ -230,6 +231,13 @@ function shapeQuote(q, hidden, admin) {
     preview: withheld ? '' : q.preview,
     deleted: !!q.deleted,
   };
+}
+
+/** Reactions as the client draws them: the emoji, how many, and who. */
+function shapeReactions(list) {
+  return (list || [])
+    .filter((r) => r.users?.length)
+    .map((r) => ({ emoji: r.emoji, count: r.users.length, userIds: r.users.map(idOf) }));
 }
 
 /** Where a message sits in a thread, and — for a root — what its thread holds. */
@@ -1122,4 +1130,66 @@ export async function openDirectMessage(user, otherId) {
     }
   }
   return { id: idOf(channel) };
+}
+
+// ── reactions ────────────────────────────────────────────────────────────────
+/*
+  Anyone who can read a message can react to it — a person's message or an
+  automatic order update (a ✅ on "Order paid" is how people say "on it").
+  Not a deleted one: there is nothing left to react to.
+
+  The request says what the reaction should BE (`on: true|false`), not "toggle":
+  a retried or double-sent tap then lands in the same state instead of
+  undoing itself. Reactions never send a pop-up or an email — they are the
+  quiet way to answer.
+*/
+
+export const MAX_REACTIONS_PER_MESSAGE = 20;
+
+const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+// Every code point must belong to an emoji, and at least one must be a real
+// picture (not just a digit, '#', or a lone skin-tone modifier).
+const EMOJI_CHARS = /^[\p{Extended_Pictographic}\p{Emoji_Component}]+$/u;
+const EMOJI_PICTURE = /\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|\u20E3/u;
+
+/** The emoji, if `raw` is exactly one emoji (one character as people see it); otherwise null. */
+export function normalizeEmoji(raw) {
+  if (typeof raw !== 'string') return null;
+  const e = raw.trim();
+  if (!e || e.length > 32 || !EMOJI_CHARS.test(e) || !EMOJI_PICTURE.test(e)) return null;
+  let count = 0;
+  for (const _ of segmenter.segment(e)) if (++count > 1) return null;
+  return e;
+}
+
+/** Add (`on`, the default) or remove the caller's reaction on a message. */
+export async function reactToMessage(user, messageId, { emoji, on = true } = {}) {
+  if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
+  const e = normalizeEmoji(emoji);
+  if (!e) throw fail('Pick an emoji', 400);
+  const m = await chatRepository.findMessageById(messageId);
+  if (!m) throw fail('Message not found', 404);
+  // 404 before anything else: nobody learns a message exists in a channel they cannot read.
+  const channel = await loadAccessible(user, m.channel);
+  if (m.deletedAt) throw fail('This message was deleted', 409);
+
+  const updated = await chatRepository.setReaction(m._id, user._id, e, on !== false, MAX_REACTIONS_PER_MESSAGE);
+  if (!updated) throw fail('This message was deleted', 409); // deleted between the read and the write
+
+  const reactions = shapeReactions(updated.reactions);
+  if (on !== false && !reactions.some((r) => r.emoji === e)) {
+    throw fail(`A message can have up to ${MAX_REACTIONS_PER_MESSAGE} different reactions`, 400);
+  }
+  // Only tell the room when something changed — a retried tap is silent.
+  if (JSON.stringify(reactions) !== JSON.stringify(shapeReactions(m.reactions))) {
+    await publishChatEvent({
+      type: 'message_reactions',
+      channelId: idOf(channel),
+      route: audienceOf(channel),
+      messageId: idOf(m),
+      threadRoot: m.threadRoot ? idOf(m.threadRoot) : null,
+      reactions,
+    });
+  }
+  return { messageId: idOf(m), reactions };
 }
