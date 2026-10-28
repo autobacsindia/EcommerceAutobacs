@@ -4,7 +4,7 @@
  * that a create carries one clientId however often it is pressed, and that every
  * edit names the revision it was made against.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TaskList from './TaskList';
 import TaskDetail from './TaskDetail';
@@ -48,8 +48,9 @@ const people = {
 };
 
 /** GET router: lists, assignees, one task, comments. */
-function serve({ list = [task()], one = task(), assignees = people } = {}) {
+function serve({ list = [task()], one = task(), assignees = people, done = [] as Task[] } = {}) {
   get.mockImplementation((url: string) => {
+    if (url.startsWith('/staff/tasks?') && url.includes('state=done')) return Promise.resolve({ tasks: done, nextCursor: null });
     if (url.startsWith('/staff/tasks?')) return Promise.resolve({ tasks: list, nextCursor: null });
     if (url === '/staff/tasks/assignees') return Promise.resolve(assignees);
     if (url.includes('/comments')) return Promise.resolve({ comments: [], nextBefore: null });
@@ -151,6 +152,71 @@ describe('the task list', () => {
     await screen.findByText('Call Bosch');
     expect(screen.queryByLabelText('Status of T-7')).toBeNull();
     expect(screen.getByText('To do')).toBeInTheDocument();
+  });
+});
+
+describe('the board', () => {
+  const dt = (id: string) => ({ getData: () => id, setData: () => {}, dropEffect: '', effectAllowed: '' });
+  const board = async (list: Task[], done: Task[] = []) => {
+    serve({ list, done });
+    wrap(<TaskList base="/team/tasks" canSeeTeam />);
+    fireEvent.click(await screen.findByRole('button', { name: /Board/ }));
+  };
+
+  it('shows each job in its status column, and remembers the choice', async () => {
+    await board(
+      [task(), task({ id: 't2', code: 'T-8', title: 'Chase supplier', status: 'waiting', statusLabel: 'Waiting' })],
+      [task({ id: 't3', code: 'T-9', title: 'Old job', status: 'done', statusLabel: 'Done', bucket: 'done' })],
+    );
+    const col = (name: string) => screen.getByRole('region', { name });
+    await waitFor(() => expect(within(col('To do')).getByText('Call Bosch')).toBeInTheDocument());
+    expect(within(col('Waiting')).getByText('Chase supplier')).toBeInTheDocument();
+    expect(await within(col('Done')).findByText('Old job')).toBeInTheDocument();
+    expect(within(col('In progress')).queryAllByRole('listitem')).toHaveLength(0);
+    expect(localStorage.getItem('tasks-view-mode')).toBe('board');
+  });
+
+  it('dropping a card on a column moves it, with the revision', async () => {
+    patch.mockResolvedValue({ task: task({ status: 'in_progress', rev: 4 }) });
+    await board([task()]);
+    const card = (await screen.findByText('Call Bosch')).closest('li')!;
+    expect(card).toHaveAttribute('draggable', 'true');
+    fireEvent.dragStart(card, { dataTransfer: dt('t1') });
+    fireEvent.drop(screen.getByRole('region', { name: 'In progress' }), { dataTransfer: dt('t1') });
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'in_progress' }));
+  });
+
+  it('a refused move puts the card back and says why', async () => {
+    patch.mockRejectedValue({ status: 409, rawData: { message: 'changed' } });
+    await board([task()]);
+    await screen.findByText('Call Bosch');
+    fireEvent.drop(screen.getByRole('region', { name: 'Done' }), { dataTransfer: dt('t1') });
+    expect(await screen.findByRole('alert')).toHaveTextContent('T-7 was changed by someone else just now');
+    await waitFor(() => expect(within(screen.getByRole('region', { name: 'To do' })).getByText('Call Bosch')).toBeInTheDocument());
+  });
+
+  it('cards you may not move cannot be dragged or dropped', async () => {
+    await board([task({ can: { ...can, status: false } })]);
+    const card = (await screen.findByText('Call Bosch')).closest('li')!;
+    expect(card).toHaveAttribute('draggable', 'false');
+    fireEvent.drop(screen.getByRole('region', { name: 'Done' }), { dataTransfer: dt('t1') });
+    expect(patch).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Move T-7')).toBeNull();
+  });
+
+  it('on a phone, "Move to" on the card does the same move', async () => {
+    patch.mockResolvedValue({ task: task({ status: 'waiting', rev: 4 }) });
+    await board([task()]);
+    fireEvent.change(await screen.findByLabelText('Move T-7'), { target: { value: 'waiting' } });
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'waiting' }));
+  });
+
+  it('a date filter shows only what is still to do (no Done column)', async () => {
+    await board([task()]);
+    await screen.findByText('Call Bosch');
+    fireEvent.click(screen.getByRole('button', { name: 'Late' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Done' })).toBeNull());
+    expect(get).toHaveBeenCalledWith('/staff/tasks?view=mine&state=open&due=overdue');
   });
 });
 
