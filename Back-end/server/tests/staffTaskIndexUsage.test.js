@@ -163,3 +163,16 @@ describe('the copies of a task given to several people', () => {
     expect(s.returned).toBe(3);
   });
 });
+
+describe('list pages send counts, not checklists', () => {
+  it('a page of 50 tasks with five steps each reads about half the bytes', async () => {
+    const step = (i) => ({ _id: new mongoose.Types.ObjectId(), text: `Step number ${i} of the job`, done: i % 2 === 0, key: `k-${i}-123456789` });
+    await StaffTask.updateMany({ assignee: people[11] }, { $set: { checklist: [0, 1, 2, 3, 4].map(step) } });
+    const query = { assignee: people[11], bucket: 'open' };
+    const full = await StaffTask.find(query).sort({ rank: 1, _id: 1 }).limit(50).select('-history -clientId').lean();
+    const rows = await staffTaskRepository.page(query, { limit: 50 });
+    const bytes = (docs) => docs.reduce((n, d) => n + mongoose.mongo.BSON.calculateObjectSize(d), 0);
+    expect(rows.every((r) => r.checklist === undefined && r.checklistTotal === 5 && r.checklistDone === 3)).toBe(true);
+    expect(bytes(rows)).toBeLessThan(bytes(full) * 0.6);
+  });
+});

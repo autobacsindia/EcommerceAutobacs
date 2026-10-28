@@ -596,3 +596,21 @@ describe('checklists', () => {
     await status(409, () => tasks.removeChecklistItem(procA, t.id, t.checklistItems[0].id));
   });
 });
+
+describe('list rows (what the database sends for a page)', () => {
+  it('carry checklist counts, not the steps — and every field the task page has', async () => {
+    const t = await make(procHead, { assigneeId: String(procA._id), checklist: ['Pack', 'Label', 'Ship'], orderId: undefined });
+    await tasks.updateChecklistItem(procA, t.id, t.checklistItems[0].id, { done: true });
+    const raw = (await StaffTask.db.collection('stafftasks').findOne({ _id: new mongoose.Types.ObjectId(t.id) }));
+    expect(raw.checklist).toHaveLength(3);
+    const row = (await tasks.listTasks(procA, { view: 'mine' })).tasks[0];
+    expect(row.checklist).toEqual({ done: 1, total: 3 });
+    // A field missing from LIST_PROJECTION would show up here as a difference.
+    const full = await tasks.getTask(procA, t.id);
+    const listOnly = ['summary'];
+    const pageOnly = ['description', 'checklistItems', 'history', 'siblings'];
+    for (const key of Object.keys(full).filter((k) => !pageOnly.includes(k))) expect(row[key]).toEqual(full[key]);
+    expect(Object.keys(row).filter((k) => !listOnly.includes(k)).sort())
+      .toEqual(Object.keys(full).filter((k) => !pageOnly.includes(k)).sort());
+  });
+});

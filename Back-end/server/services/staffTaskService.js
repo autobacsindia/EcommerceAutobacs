@@ -220,7 +220,11 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
     createdBy: { id: idOf(t.createdBy), name: t.createdByName || '' },
     order: t.order ? { id: idOf(t.order.target), code: t.order.code } : null,
     group: t.group ? { id: idOf(t.group), size: t.groupSize || 1 } : null,
-    checklist: { done: (t.checklist || []).filter((c) => c.done).length, total: (t.checklist || []).length },
+    // List rows carry counts from the database (LIST_PROJECTION); the task page counts the steps it has.
+    checklist: {
+      done: t.checklistDone ?? (t.checklist || []).filter((c) => c.done).length,
+      total: t.checklistTotal ?? (t.checklist || []).length,
+    },
     bucket: t.bucket,
     completedAt: t.completedAt || null,
     archivedAt: t.archivedAt || null,
