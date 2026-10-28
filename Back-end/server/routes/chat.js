@@ -17,6 +17,13 @@ import {
   validateOpenDm,
   validateThreadPage,
   validateReaction,
+  validateNotify,
+  validateStar,
+  validateStarredPage,
+  validateForward,
+  validatePin,
+  validateStatus,
+  validateMeet,
 } from '../validators/chat.validator.js';
 import {
   listChannels,
@@ -35,9 +42,20 @@ import {
   deleteMessage,
   editMessage,
   reactToMessage,
+  setChannelNotify,
+  markUnreadFrom,
+  starMessage,
+  listStarred,
+  forwardMessage,
+  pinMessage,
+  listPins,
+  listOnline,
+  setMyStatus,
+  clearMyStatus,
+  setMeetLink,
   createSpace,
   deleteSpace,
-  openDirectMessage,
+  openConversation,
   canAccess,
   canCreateSpace,
   isChatUser,
@@ -130,6 +148,19 @@ router.get('/people', asyncHandler(async (req, res) => {
   res.json({ success: true, people: await listPeople() });
 }));
 
+// GET /chat/presence — who has team chat open right now
+router.get('/presence', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listOnline()) });
+}));
+
+// PUT /chat/status { text, until? } — set my status; DELETE clears it
+router.put('/status', validateStatus, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await setMyStatus(req.user, req.body)) });
+}));
+router.delete('/status', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await clearMyStatus(req.user)) });
+}));
+
 // GET /chat/channels — spaces and DMs visible to me, with unread counts
 router.get('/channels', asyncHandler(async (req, res) => {
   res.json({ success: true, channels: await listChannels(req.user) });
@@ -158,9 +189,9 @@ router.delete('/channels/:id/members/:userId', validateChannelIdParam, validateR
   res.json({ success: true, ...(await removeSpaceMember(req.user, req.params.id, req.params.userId)) });
 }));
 
-// POST /chat/dm { userId } — open (or reuse) a direct message
+// POST /chat/dm { userId } or { userIds: [..] } — open (or reuse) a direct message or a group conversation
 router.post('/dm', validateOpenDm, validateRequest, asyncHandler(async (req, res) => {
-  const channel = await openDirectMessage(req.user, req.body.userId);
+  const channel = await openConversation(req.user, { userId: req.body.userId, userIds: req.body.userIds });
   res.json({ success: true, channel });
 }));
 
@@ -174,6 +205,31 @@ router.post('/dm', validateOpenDm, validateRequest, asyncHandler(async (req, res
 router.get('/search', asyncHandler(async (req, res) => {
   const page = await searchMessages(req.user, req.query);
   res.json({ success: true, ...page });
+}));
+
+// GET /chat/starred?before=&limit= — my starred messages, newest first
+router.get('/starred', validateStarredPage, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listStarred(req.user, req.query)) });
+}));
+
+// PUT /chat/messages/:id/star { on? } — star (default) or un-star a message, for me
+router.put('/messages/:id/star', validateStar, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await starMessage(req.user, req.params.id, { on: req.body.on })) });
+}));
+
+// PUT /chat/channels/:id/meet { url | null } — the conversation's standing Google Meet link
+router.put('/channels/:id/meet', validateMeet, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await setMeetLink(req.user, req.params.id, req.body.url)) });
+}));
+
+// GET /chat/channels/:id/pins — the conversation's pinned messages
+router.get('/channels/:id/pins', validateChannelIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listPins(req.user, req.params.id)) });
+}));
+
+// PUT /chat/messages/:id/pin { on? } — pin (default) or unpin, for everyone in the conversation
+router.put('/messages/:id/pin', validatePin, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await pinMessage(req.user, req.params.id, { on: req.body.on })) });
 }));
 
 // GET /chat/channels/:id/messages?before=&after=&limit=
@@ -210,6 +266,8 @@ router.post('/channels/:id/messages',
       clientId: req.body.clientId,
       mentions: asArray(req.body.mentions),
       mentionTeams: asArray(req.body.mentionTeams),
+      // JSON sends a boolean; multipart (with files) sends the string 'true'.
+      mentionAll: req.body.mentionAll === true || req.body.mentionAll === 'true',
       orderIds: asArray(req.body.orderIds),
       files: req.files,
       threadRoot: req.body.threadRoot || null,
@@ -254,6 +312,22 @@ router.post('/channels/:id/read', validateChannelIdParam, validateMarkRead, vali
   asyncHandler(async (req, res) => {
     res.json({ success: true, ...(await markChannelRead(req.user, req.params.id, req.body.seq, req.body.part)) });
   }));
+
+// PUT /chat/channels/:id/notify { notify: 'all' | 'mentions' | 'off' } — my notification setting here
+router.put('/channels/:id/notify', validateNotify, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await setChannelNotify(req.user, req.params.id, req.body.notify)) });
+}));
+
+// POST /chat/messages/:id/unread — mark this message (and what follows it in its tab) unread, for me
+router.post('/messages/:id/unread', validateMessageIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await markUnreadFrom(req.user, req.params.id)) });
+}));
+
+// POST /chat/messages/:id/forward { channelId, clientId? } — forward a copy into a conversation I am in
+router.post('/messages/:id/forward', validateForward, validateRequest, asyncHandler(async (req, res) => {
+  const { message, duplicate } = await forwardMessage(req.user, req.params.id, req.body);
+  res.status(duplicate ? 200 : 201).json({ success: true, message });
+}));
 
 // PATCH /chat/messages/:id { text } — edit your own message, within 15 minutes
 router.patch('/messages/:id', validateEditMessage, validateRequest, asyncHandler(async (req, res) => {

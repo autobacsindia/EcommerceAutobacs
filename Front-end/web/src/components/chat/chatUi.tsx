@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { ArrowLeftRight, FileSpreadsheet, FileText, File as FileIcon, Hash, Image as ImageIcon, Lock, X } from 'lucide-react';
+import { ArrowLeftRight, FileSpreadsheet, FileText, File as FileIcon, Hash, Image as ImageIcon, Lock, Users, X } from 'lucide-react';
 import type { ChatChannel, ChatPerson } from '@/hooks/queries/useTeamChat';
 
 /** The store green, so the panels match the rest of the brand. */
@@ -71,10 +71,13 @@ export function Avatar({
   person,
   system,
   size = 'md',
+  online,
 }: {
   person: ChatPerson | null;
   system?: boolean;
   size?: 'sm' | 'md';
+  /** Draw the green "has chat open" dot. */
+  online?: boolean;
 }) {
   const box = size === 'sm' ? 'h-7 w-7 text-[11px]' : 'h-9 w-9 text-sm';
   if (system) {
@@ -85,9 +88,16 @@ export function Avatar({
     );
   }
   const name = person?.name ?? '?';
-  return (
+  const face = (
     <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold ${colourFor(name)}`} aria-hidden="true">
       {initials(name)}
+    </span>
+  );
+  if (!online) return face;
+  return (
+    <span className="relative inline-flex shrink-0">
+      {face}
+      <OnlineDot />
     </span>
   );
 }
@@ -116,6 +126,13 @@ export function TeamBadge({ person }: { person: ChatPerson | null }) {
 /** The square icon a conversation shows in the list and its header. */
 export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; size?: 'sm' | 'md' }) {
   const box = size === 'md' ? 'h-9 w-9 text-sm' : 'h-7 w-7 text-[11px]';
+  if (channel.kind === 'dm' && channel.group) {
+    return (
+      <span className={`grid ${box} shrink-0 place-items-center rounded-full bg-sky-100 text-sky-800`} aria-hidden="true">
+        <Users className="h-3.5 w-3.5" />
+      </span>
+    );
+  }
   if (channel.kind === 'dm') {
     return (
       <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold ${colourFor(channel.name)}`} aria-hidden="true">
@@ -167,5 +184,17 @@ export function Dialog({
         {children}
       </div>
     </div>
+  );
+}
+
+/** The green dot: this person has team chat open. Placed on an avatar's corner. */
+export function OnlineDot({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 ${className}`}
+      role="img"
+      aria-label="Online"
+      title="Has team chat open"
+    />
   );
 }

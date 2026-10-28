@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { chatKeys } from '@/hooks/queries/keys';
-import { upsertReply, useDeleteMessage, useEditMessage, useReactToMessage, useSendMessage, useThread } from '@/hooks/queries/useTeamChat';
+import { upsertReply, useDeleteMessage, useEditMessage, useReactToMessage, useSendMessage, useStarMessage, useThread } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, SendVars, ThreadData } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
 import Composer, { mentionableTeams } from './Composer';
@@ -28,6 +28,9 @@ export default function ThreadPanel({
   peopleById,
   orderHref,
   onClose,
+  onMarkUnread,
+  onForward,
+  onPin,
 }: {
   channel: ChatChannel;
   rootId: string;
@@ -38,6 +41,11 @@ export default function ThreadPanel({
   peopleById: Map<string, ChatPerson>;
   orderHref: (id: string) => string;
   onClose: () => void;
+  /** Mark a message unread (held by the conversation, which owns reading). */
+  onMarkUnread?: (m: ChatMessage) => void;
+  /** Forward a message (the conversation owns the dialog). */
+  onForward?: (m: ChatMessage) => void;
+  onPin?: (m: ChatMessage, on: boolean) => void;
 }) {
   const qc = useQueryClient();
   const { data, isLoading, isError, refetch } = useThread(rootId);
@@ -45,6 +53,7 @@ export default function ThreadPanel({
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
   const react = useReactToMessage(channel.id, meId);
+  const star = useStarMessage();
   const [quote, setQuote] = useState<ChatMessage | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const replies = data?.replies ?? [];
@@ -109,6 +118,10 @@ export default function ThreadPanel({
       onEdit={(msg, text) => edit.mutateAsync({ id: msg.id, text })}
       onDelete={(msg) => remove.mutateAsync(msg.id)}
       onReact={(msg, emoji, on) => react.mutate({ message: msg, emoji, on })}
+      onStar={(msg, on) => star.mutate({ id: msg.id, on })}
+      onMarkUnread={onMarkUnread}
+      onForward={onForward}
+      onPin={onPin}
     />
   );
 

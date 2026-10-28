@@ -20,8 +20,9 @@ import { STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import { publishChatEvent } from './chatEvents.js';
 import { pushConfigured, sendToUsers } from './pushService.js';
 import { onlineAmong } from './chatPresence.js';
-import { uploadChatAttachments, MAX_ATTACHMENTS_PER_MESSAGE, CHAT_FILE_NAME, chatFolder, chatFileType } from './chatAttachmentService.js';
+import { uploadChatAttachments, copyChatAttachments, MAX_ATTACHMENTS_PER_MESSAGE, CHAT_FILE_NAME, chatFolder, chatFileType } from './chatAttachmentService.js';
 import { readPrivateAsset } from './storage/privateUploads.js';
+import { firstUrl, previewFor, linkPreviewsEnabled } from './linkPreviewService.js';
 import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 import { orderNumber } from './invoiceService.js';
@@ -198,9 +199,14 @@ function shapeMessage(m, sender, viewer = null) {
     })),
     mentions: (m.mentions || []).map(idOf),
     mentionTeams: m.mentionTeams || [],
+    mentionAll: !!m.mentionAll,
     refs: hide ? [] : (m.refs || []).map((r) => ({ type: r.type, code: r.code, id: idOf(r.target) })),
     quote: shapeQuote(m.quote, hide, admin),
+    // Who wrote the original and when — never where it was (see models/ChatMessage.js).
+    forwarded: !hide && m.forwardedFrom ? { by: m.forwardedFrom.by, at: m.forwardedFrom.at } : null,
     reactions: hide ? [] : shapeReactions(m.reactions),
+    pinned: !hide && m.pinnedAt ? { by: m.pinnedByName || '', at: m.pinnedAt } : null,
+    preview: !hide && m.preview ? { url: m.preview.url, title: m.preview.title, description: m.preview.description || '', site: m.preview.site || '' } : null,
     createdAt: m.createdAt,
     edited: !!m.editedAt,
     editedAt: m.editedAt ?? null,
@@ -231,6 +237,17 @@ function shapeQuote(q, hidden, admin) {
     preview: withheld ? '' : q.preview,
     deleted: !!q.deleted,
   };
+}
+
+/**
+ * Mark which of these (already shaped, for `user`) messages `user` has starred.
+ * One indexed query per page. Only ever on a response to that person — a
+ * broadcast carries no `starred`, and the client keeps what it had.
+ */
+async function withStars(user, messages) {
+  const starred = new Set((await chatRepository.findStarredAmong(user._id, messages.map((m) => m.id)))
+    .map((s) => idOf(s.message)));
+  return messages.map((m) => ({ ...m, starred: starred.has(m.id) }));
 }
 
 /** Reactions as the client draws them: the emoji, how many, and who. */
@@ -283,10 +300,11 @@ export function cleanText(raw) {
 
 // ── reads ────────────────────────────────────────────────────────────────────
 
-/** Everyone who can chat — for starting DMs and (later) @mentions. */
+/** Everyone who can chat — for starting DMs and @mentions — with their status, if any. */
 export async function listPeople() {
-  const users = await userRepository.findChatUsers();
-  return users.map(personOf);
+  const [users, statuses] = await Promise.all([userRepository.findChatUsers(), chatRepository.findLiveStatuses()]);
+  const statusOf = new Map(statuses.map((st) => [idOf(st.user), { text: st.text, until: st.until ?? null }]));
+  return users.map((u) => ({ ...personOf(u), status: statusOf.get(idOf(u)) ?? null }));
 }
 
 /** Channels visible to `user`, with unread counts and DM partner names. */
@@ -294,7 +312,7 @@ export async function listChannels(user) {
   await ensureDefaultSpaces();
   const channels = await chatRepository.findChannels(
     accessFilter(user),
-    'kind key name description audience team teams members system lastMessageSeq lastMessageAt createdBy'
+    'kind key name description audience team teams members system lastMessageSeq lastMessageAt createdBy meetUrl'
   );
 
   const ids = channels.map((c) => c._id);
@@ -303,8 +321,9 @@ export async function listChannels(user) {
   const readBy = new Map(reads.map((r) => [idOf(r.channel), {
     chat: r.lastReadSeq ?? 0,
     updates: r.lastReadUpdatesSeq ?? r.lastReadSeq ?? 0,
+    notify: r.notify ?? 'all',
   }]));
-  const readOf = (c) => readBy.get(idOf(c)) ?? { chat: 0, updates: 0 };
+  const readOf = (c) => readBy.get(idOf(c)) ?? { chat: 0, updates: 0, notify: 'all' };
   // Count only where something is past a read position — usually a handful of channels.
   const unreadRows = await chatRepository.countUnreadByLane(channels
     .filter((c) => c.lastMessageSeq > Math.min(readOf(c).chat, readOf(c).updates))
@@ -316,6 +335,13 @@ export async function listChannels(user) {
     u[r._id.updates ? 'updates' : 'chat'] += r.n;
     unreadBy.set(key, u);
   }
+
+  // "@mentions only" channels count what addresses this person, so the badge
+  // there means "someone asked you something", not "people are talking".
+  const mentionRows = await chatRepository.countUnreadMentions(channels
+    .filter((c) => readOf(c).notify === 'mentions' && unreadBy.has(idOf(c)))
+    .map((c) => ({ channel: c._id, chatFrom: readOf(c).chat, updatesFrom: readOf(c).updates })), user._id, teamOf(user));
+  const mentionsBy = new Map(mentionRows.map((r) => [idOf(r._id), r.n]));
 
   // Names for DM partners, resolved in one query.
   const uid = idOf(user);
@@ -329,14 +355,18 @@ export async function listChannels(user) {
     .map((c) => {
       const read = readOf(c);
       const unread = unreadBy.get(idOf(c)) ?? { chat: 0, updates: 0 };
-      const partner = c.kind === 'dm'
+      const isGroupDm = c.kind === 'dm' && c.members.length > 2;
+      const partner = c.kind === 'dm' && !isGroupDm
         ? partnerById.get(c.members.map(idOf).find((m) => m !== uid) ?? '')
         : null;
       return {
         id: idOf(c),
         kind: c.kind,
         key: c.key ?? null,
-        name: c.kind === 'dm' ? partner?.name ?? 'Former member' : channelNameFor(c, user),
+        // A group conversation is named after the others in it, from where I sit.
+        name: isGroupDm
+          ? groupNameFor(c, uid, partnerById)
+          : c.kind === 'dm' ? partner?.name ?? 'Former member' : channelNameFor(c, user),
         description: c.audience === 'teams'
           ? (c.teams || []).map((t) => STAFF_TEAM_LABELS[t] || t).join(' ↔ ')
           : c.system && c.team ? `${STAFF_TEAM_LABELS[c.team] || c.team} team` : c.description || '',
@@ -347,10 +377,15 @@ export async function listChannels(user) {
           ? (c.teams || []).find((t) => t !== teamOf(user)) ?? null
           : null,
         system: !!c.system,
-        partner: c.kind === 'dm' ? personOf(partner) : null,
+        partner: c.kind === 'dm' && !isGroupDm ? personOf(partner) : null,
         memberCount: c.audience === 'members' ? c.members.length : null,
+        // Group conversation: who is in it (ids — names come from the people list).
+        ...(isGroupDm ? { group: true, memberIds: c.members.map(idOf) } : {}),
         // Custom group: may this person add / remove members? (the admin, or whoever created it)
         canManageMembers: c.kind === 'space' && c.audience === 'members' && mayManageMembers(user, c),
+        // Call link: the saved Google Meet link, and whether I may change it.
+        meetUrl: c.meetUrl ?? null,
+        canSetMeet: maySetMeet(user, c),
         lastMessageSeq: c.lastMessageSeq,
         lastMessageAt: c.lastMessageAt,
         lastReadSeq: read.chat,
@@ -358,6 +393,9 @@ export async function listChannels(user) {
         unreadChat: unread.chat,
         unreadUpdates: unread.updates,
         unread: unread.chat + unread.updates,
+        // Notification setting, and — when it is "@mentions only" — the unread that addresses me.
+        notify: read.notify,
+        unreadMentions: read.notify === 'mentions' ? mentionsBy.get(idOf(c)) ?? 0 : 0,
       };
     })
     .sort((a, b) => {
@@ -367,6 +405,14 @@ export async function listChannels(user) {
       if (oa !== ob) return oa - ob;
       return new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0);
     });
+}
+
+/** "Anu, Ravi and Priya" — a group conversation's name for one of its members. */
+function groupNameFor(c, uid, partnerById) {
+  const names = (c.members || []).map(idOf).filter((m) => m !== uid)
+    .map((m) => (partnerById.get(m)?.name || 'Former member').split(/\s+/)[0]);
+  if (names.length <= 1) return names[0] ?? 'Group';
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
 async function loadAccessible(user, channelId) {
@@ -414,7 +460,7 @@ export async function listMessages(user, channelId, { before, after, limit } = {
 
   const oldest = docs[0] ? (docs[0].activitySeq ?? docs[0].seq) : null;
   return {
-    messages: docs.map((m) => shapeMessage(m, null, user)),
+    messages: await withStars(user, docs.map((m) => shapeMessage(m, null, user))),
     // Cursor for the next older page (an activitySeq), or null at the beginning.
     nextBefore: after == null || after === '' ? (docs.length === size && oldest > 1 ? oldest : null) : undefined,
   };
@@ -436,9 +482,10 @@ export async function getThread(user, rootId, { after, limit } = {}) {
   const size = Math.min(Math.max(parseInt(limit, 10) || THREAD_PAGE_MAX, 1), THREAD_PAGE_MAX);
   const from = after != null && after !== '' ? Number(after) : null;
   const replies = await chatRepository.findThreadReplies(root._id, from, size);
+  const [shapedRoot, ...shapedReplies] = await withStars(user, [root, ...replies].map((m) => shapeMessage(m, null, user)));
   return {
-    root: shapeMessage(root, null, user),
-    replies: replies.map((m) => shapeMessage(m, null, user)),
+    root: shapedRoot,
+    replies: shapedReplies,
     nextAfter: replies.length === size ? replies[replies.length - 1].seq : null,
   };
 }
@@ -554,17 +601,18 @@ export async function searchMessages(user, { q, channelId, before, limit } = {})
   const names = new Map(
     found.map((c) => {
       if (c.kind !== 'dm') return [String(c._id), { name: spaceDisplayName(c), kind: c.kind }];
+      if ((c.members || []).length > 2) return [String(c._id), { name: groupNameFor(c, uid, partnerById), kind: 'dm' }];
       const partner = partnerById.get((c.members || []).map(idOf).find((m) => m !== uid) ?? '');
       return [String(c._id), { name: partner?.name ?? 'Former member', kind: 'dm' }];
     }),
   );
 
   return {
-    messages: docs.map((m) => ({
-      ...shapeMessage(m, null, user),
-      channel: String(m.channel),
-      channelName: names.get(String(m.channel))?.name ?? '',
-      channelKind: names.get(String(m.channel))?.kind ?? 'space',
+    messages: (await withStars(user, docs.map((m) => shapeMessage(m, null, user)))).map((m, i) => ({
+      ...m,
+      channel: String(docs[i].channel),
+      channelName: names.get(String(docs[i].channel))?.name ?? '',
+      channelKind: names.get(String(docs[i].channel))?.kind ?? 'space',
     })),
     // Null when the page came back short — there is nothing older to ask for.
     nextBefore: docs.length === size ? docs[docs.length - 1].createdAt : null,
@@ -629,7 +677,9 @@ async function markRead(userId, channelId, seq, part = 'all') {
 }
 
 /** Post a message. Idempotent on (channel, sender, clientId). */
-export async function sendMessage(user, channelId, { text, clientId, mentions, mentionTeams, orderIds, files, threadRoot, quoteId } = {}) {
+export async function sendMessage(user, channelId, {
+  text, clientId, mentions, mentionTeams, mentionAll, orderIds, files, threadRoot, quoteId,
+} = {}) {
   const channel = await loadAccessible(user, channelId);
   // Before any upload: a reply to a thread that is not there must not leave files behind.
   const root = await loadThreadRoot(channel, threadRoot);
@@ -650,16 +700,27 @@ export async function sendMessage(user, channelId, { text, clientId, mentions, m
   }
 
   const [people, teams] = await resolveMentions(channel, mentions, mentionTeams);
+  const all = mentionAll === true;
+  if (all && !mayMentionAll(user, channel)) {
+    throw fail('Only admins and team heads can @all in #company', 403);
+  }
   const refs = await resolveOrderRefs(orderIds);
   const attachments = hasFiles ? await uploadChatAttachments(files, { channelId: idOf(channel) }) : [];
 
   const result = await insertMessage(channel, {
     kind: 'user', sender: user, text: body, clientId,
-    attachments, mentions: people, mentionTeams: teams, refs, threadRoot: root, quote,
+    attachments, mentions: people, mentionTeams: teams, mentionAll: all, refs, threadRoot: root, quote,
   });
-  if (!result.duplicate) notifyMentions(channel, user, result.message, people, teams);
+  if (!result.duplicate) notifyMentions(channel, user, result.message, people, teams, all);
   return result;
 }
+
+/**
+ * "@all" pings everyone in a conversation. Anywhere for anyone, except
+ * #company (everybody in the business), where only admins and team heads may.
+ */
+export const mayMentionAll = (user, channel) =>
+  channel.audience !== 'all' || isAdmin(user) || user?.staff?.isHead === true;
 
 /**
  * Keep only mentions the channel can actually see — mentioning someone must
@@ -693,15 +754,20 @@ async function resolveOrderRefs(orderIds) {
  * Email the people addressed who do NOT have chat open. Fire-and-forget: chat
  * has already accepted the message, so a mail problem must not fail the send.
  */
-function notifyMentions(channel, sender, message, people, teams) {
+function notifyMentions(channel, sender, message, people, teams, all = false) {
   (async () => {
     const direct = people.map(String);
-    const fromTeams = teams.length
+    const fromTeams = teams.length || all
       ? (await userRepository.findChatUsers())
-          .filter((u) => u.role === 'staff' && teams.includes(u.staff?.team))
+          .filter((u) => (all ? canAccess(u, channel) : u.role === 'staff' && teams.includes(u.staff?.team)))
           .map((u) => idOf(u))
       : [];
-    const targets = [...new Set([...direct, ...fromTeams])].filter((id) => id !== idOf(sender));
+    const addressed = [...new Set([...direct, ...fromTeams])].filter((id) => id !== idOf(sender));
+    if (!addressed.length) return;
+    // Someone who switched this conversation off hears nothing from it — not even a mention.
+    const off = new Set((await chatRepository.findQuietened(channel._id, addressed))
+      .filter((r) => r.notify === 'off').map((r) => idOf(r.user)));
+    const targets = addressed.filter((id) => !off.has(id));
     if (!targets.length) return;
 
     const online = await onlineAmong(targets);
@@ -709,7 +775,9 @@ function notifyMentions(channel, sender, message, people, teams) {
     if (!offline.length) return;
 
     const users = (await userRepository.findContactsByIds(offline)).filter((u) => u.email);
-    const where = channel.kind === 'dm' ? 'a direct message' : `#${channel.name}`;
+    const where = channel.kind === 'dm'
+      ? ((channel.members || []).length > 2 ? 'a group conversation' : 'a direct message')
+      : `#${channel.name}`;
     const link = `${(process.env.FRONTEND_URL || '').replace(/\/$/, '')}/team/chat?c=${idOf(channel)}`;
     const preview = message.text.slice(0, 300) || '(shared a file)';
     await Promise.all(users.map((u) => emailHandler.sendEmail({
@@ -721,7 +789,8 @@ function notifyMentions(channel, sender, message, people, teams) {
 }
 
 async function insertMessage(channel, {
-  kind, sender, text, clientId, attachments = [], mentions = [], mentionTeams = [], refs = [], threadRoot = null, threadOrder, quote = null,
+  kind, sender, text, clientId, attachments = [], mentions = [], mentionTeams = [], mentionAll = false, refs = [],
+  threadRoot = null, threadOrder, quote = null, forwardedFrom = null,
 }) {
   const at = new Date();
   const seq = await chatRepository.nextSeq(channel._id, at);
@@ -741,7 +810,9 @@ async function insertMessage(channel, {
       attachments,
       mentions,
       mentionTeams,
+      ...(mentionAll ? { mentionAll: true } : {}),
       refs,
+      ...(forwardedFrom ? { forwardedFrom } : {}),
       ...(threadRoot ? { threadRoot: threadRoot._id } : { activitySeq: seq }),
       ...(threadOrder ? { threadOrder } : {}),
       ...(clientId ? { clientId } : {}),
@@ -777,9 +848,60 @@ async function insertMessage(channel, {
   await publishChatEvent({
     type: 'message', channelId: idOf(channel), route: audienceOf(channel), message, ...(thread ? { thread } : {}),
   });
+  // The first link's card, fetched after the message is out — never awaited.
+  if (kind === 'user') void attachPreview(channel, doc);
   // A pop-up on the devices of everyone who can see it — not awaited: chat never waits for push.
-  void pushForMessage(channel, { kind, text, attachments, sender, updates });
+  void pushForMessage(channel, { kind, text, attachments, sender, updates, mentions, mentionTeams, mentionAll });
   return { message, thread, duplicate: false };
+}
+
+/**
+ * Does `user`, with notification setting `level` for a conversation, want to
+ * hear about a message addressed to `mentions` / `mentionTeams`?
+ */
+export function wantsNotification(level, user, { mentions = [], mentionTeams = [], mentionAll = false } = {}) {
+  if (level === 'off') return false;
+  if (level !== 'mentions' || mentionAll) return true;
+  const uid = idOf(user);
+  return mentions.some((m) => idOf(m) === uid) || (!!teamOf(user) && mentionTeams.includes(teamOf(user)));
+}
+
+// ── link previews ────────────────────────────────────────────────────────────
+
+const MAX_PREVIEWS_IN_FLIGHT = 4;
+let previewsInFlight = 0;
+
+/**
+ * Fetch the card for a message's first link and tell the room. Best-effort:
+ * a slow site, a blocked address or a busy server simply means no card. Kept
+ * to a few fetches at once so a burst of links cannot tie up the server.
+ */
+async function attachPreview(channel, m) {
+  const url = firstUrl(m.text);
+  if (!url || !linkPreviewsEnabled() || previewsInFlight >= MAX_PREVIEWS_IN_FLIGHT) return;
+  if (MEET_URL.test(url)) return; // a call link gets a "Join call" card on screen instead
+  previewsInFlight += 1;
+  try {
+    const preview = await previewFor(url);
+    if (!preview) return;
+    await publishPreview(channel, await chatRepository.setPreview(m._id, m.text, preview));
+  } catch (err) {
+    console.error('[chat] link preview failed (ignored):', err.message);
+  } finally {
+    previewsInFlight -= 1;
+  }
+}
+
+async function publishPreview(channel, updated) {
+  if (!updated) return;
+  await publishChatEvent({
+    type: 'message_preview',
+    channelId: idOf(channel),
+    route: audienceOf(channel),
+    messageId: idOf(updated),
+    threadRoot: updated.threadRoot ? idOf(updated.threadRoot) : null,
+    preview: updated.preview ? { url: updated.preview.url, title: updated.preview.title, description: updated.preview.description || '', site: updated.preview.site || '' } : null,
+  });
 }
 
 /**
@@ -788,14 +910,23 @@ async function insertMessage(channel, {
  * space: the owner asked to hear about all of it, and it matches what their bell
  * already counts and chimes for in the page. Never throws.
  */
-async function pushForMessage(channel, { kind, text, attachments = [], sender, updates = false }) {
+async function pushForMessage(channel, {
+  kind, text, attachments = [], sender, updates = false, mentions = [], mentionTeams = [], mentionAll = false,
+}) {
   try {
     if (!pushConfigured()) return;
     const senderId = idOf(sender);
     const people = await userRepository.findChatUsers();
-    const recipients = people.filter((u) => idOf(u) !== senderId && canAccess(u, channel));
+    const readers = people.filter((u) => idOf(u) !== senderId && canAccess(u, channel));
+    if (!readers.length) return;
+    // Each reader's own setting for this conversation ("@mentions only", "off").
+    const quiet = new Map((await chatRepository.findQuietened(channel._id, readers.map((u) => u._id)))
+      .map((r) => [idOf(r.user), r.notify]));
+    const recipients = readers.filter((u) => wantsNotification(quiet.get(idOf(u)) ?? 'all', u, { mentions, mentionTeams, mentionAll }));
     if (!recipients.length) return;
-    const where = channel.kind === 'dm' ? '' : (channel.team ? STAFF_TEAM_LABELS[channel.team] || channel.team : `#${channel.name || 'chat'}`);
+    const where = channel.kind === 'dm'
+      ? ((channel.members || []).length > 2 ? 'Group' : '')
+      : (channel.team ? STAFF_TEAM_LABELS[channel.team] || channel.team : `#${channel.name || 'chat'}`);
     const body = (text || (attachments.length ? '📎 Shared a file' : '')).replace(/\s+/g, ' ').slice(0, 200);
     await sendToUsers(
       // An order update opens that space's Order updates tab; a message opens Chat.
@@ -970,6 +1101,11 @@ export async function editMessage(user, messageId, { text } = {}) {
   }
 
   await chatRepository.refreshQuotePreviews(channel._id, updated._id, previewOf(updated));
+  // A different first link (or none) means a different card (or none).
+  if (firstUrl(updated.text) !== firstUrl(m.text)) {
+    if (m.preview) await publishPreview(channel, await chatRepository.setPreview(updated._id, updated.text, null));
+    void attachPreview(channel, updated);
+  }
   const thread = await refreshThreadSummaryFor(updated);
   await publishChatEvent({
     type: 'message_edited',
@@ -1110,23 +1246,44 @@ export async function createSpace(user, { name, description, memberIds } = {}) {
   return { id: idOf(channel), name: channel.name };
 }
 
-/** Get or create the DM between `user` and `otherId`. */
-export async function openDirectMessage(user, otherId) {
-  if (!mongoose.isValidObjectId(otherId)) throw fail('Person not found', 404);
-  if (idOf(user) === String(otherId)) throw fail('You cannot message yourself', 400);
-  const [other] = await userRepository.findChatUsersByIds([otherId]);
-  if (!other) throw fail('Person not found', 404);
+/** How many other people a group conversation may have (8 including you), as in a Google Chat group DM. */
+export const MAX_GROUP_OTHERS = 7;
 
-  const pair = [idOf(user), idOf(other)].sort();
-  const key = `dm:${pair[0]}:${pair[1]}`;
+/**
+ * Open (or reuse) a conversation with one person (a DM) or a few (a group
+ * conversation). Anyone who can chat may start either — unlike a named space,
+ * which only admins and heads create.
+ *
+ * Both are kind 'dm': private to their members, admins NOT implicitly in.
+ * The key is the sorted member ids, so opening the same people again — even
+ * twice at the same moment — lands in the one conversation.
+ */
+export async function openConversation(user, { userId, userIds } = {}) {
+  const requested = [...new Set([
+    ...(userId ? [String(userId)] : []),
+    ...(Array.isArray(userIds) ? userIds.map(String) : []),
+  ])].filter((id) => id !== idOf(user));
+  if (!requested.length) {
+    if (userId && String(userId) === idOf(user)) throw fail('You cannot message yourself', 400);
+    throw fail('Choose who to message', 400);
+  }
+  if (requested.length > MAX_GROUP_OTHERS) throw fail(`A group conversation can have up to ${MAX_GROUP_OTHERS + 1} people`, 400);
+  if (requested.some((id) => !mongoose.isValidObjectId(id))) throw fail('Person not found', 404);
+  const others = await userRepository.findChatUsersByIds(requested);
+  if (others.length !== requested.length) throw fail('Person not found', 404);
+
+  const members = [idOf(user), ...others.map(idOf)].sort();
+  const key = members.length === 2 ? `dm:${members[0]}:${members[1]}` : `gdm:${members.join(':')}`;
   let channel = await chatRepository.findChannelByKey(key);
   if (!channel) {
     try {
-      channel = await chatRepository.createChannel({ kind: 'dm', key, audience: 'members', members: pair });
+      channel = await chatRepository.createChannel({
+        kind: 'dm', key, audience: 'members', members, ...(members.length > 2 ? { createdBy: user._id } : {}),
+      });
       await publishChatEvent({ type: 'channel', channelId: idOf(channel), route: audienceOf(channel) });
     } catch (err) {
       if (err?.code !== 11000) throw err;
-      channel = await chatRepository.findChannelByKey(key); // the other person opened it at the same moment
+      channel = await chatRepository.findChannelByKey(key); // someone opened it at the same moment
     }
   }
   return { id: idOf(channel) };
@@ -1192,4 +1349,287 @@ export async function reactToMessage(user, messageId, { emoji, on = true } = {})
     });
   }
   return { messageId: idOf(m), reactions };
+}
+
+// ── notification settings ───────────────────────────────────────────────────
+
+export const NOTIFY_LEVELS = Object.freeze(['all', 'mentions', 'off']);
+
+/**
+ * Set how loudly a conversation reaches this person: 'all', 'mentions' (only
+ * when they or their team are @mentioned) or 'off'. Their own setting only —
+ * nobody can quieten a conversation for someone else.
+ */
+export async function setChannelNotify(user, channelId, level) {
+  if (!NOTIFY_LEVELS.includes(level)) throw fail('Choose all, mentions or off', 400);
+  const channel = await loadAccessible(user, channelId);
+  await chatRepository.setNotify(user._id, channel._id, level);
+  return { channelId: idOf(channel), notify: level };
+}
+
+// ── mark as unread ───────────────────────────────────────────────────────────
+
+/**
+ * "Mark as unread" from a message: it and everything after it in the same tab
+ * (Chat, or Order updates) count as unread again — for this person only.
+ * Doing it twice is the same as doing it once.
+ */
+export async function markUnreadFrom(user, messageId) {
+  if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
+  const m = await chatRepository.findMessageById(messageId);
+  if (!m) throw fail('Message not found', 404);
+  const channel = await loadAccessible(user, m.channel);
+  const part = m.kind === 'system' || m.lane === 'updates' ? 'updates' : 'chat';
+  const row = await chatRepository.moveReadBack(user._id, channel._id, m.seq - 1, part);
+  return {
+    channelId: idOf(channel),
+    part,
+    lastReadSeq: row?.lastReadSeq ?? 0,
+    lastReadUpdatesSeq: row?.lastReadUpdatesSeq ?? row?.lastReadSeq ?? 0,
+  };
+}
+
+// ── stars ────────────────────────────────────────────────────────────────────
+/*
+  "Star" a message to come back to it. Private: nobody else learns who starred
+  what, and nothing is broadcast. Any message you can read, including order
+  updates; not a deleted one (there is nothing to come back to).
+*/
+
+export const STARRED_PAGE_MAX = 50;
+
+/** Star (`on`, the default) or un-star a message, for the caller only. Idempotent both ways. */
+export async function starMessage(user, messageId, { on = true } = {}) {
+  if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
+  const m = await chatRepository.findMessageById(messageId);
+  if (!m) throw fail('Message not found', 404);
+  const channel = await loadAccessible(user, m.channel);
+  if (on !== false) {
+    if (m.deletedAt) throw fail('This message was deleted', 409);
+    await chatRepository.addStar(user._id, m._id, channel._id);
+  } else {
+    await chatRepository.removeStar(user._id, m._id);
+  }
+  return { messageId: idOf(m), starred: on !== false };
+}
+
+/**
+ * My starred messages, newest star first, with the conversation each is in.
+ * Stars in a conversation I can no longer read (left the team, group deleted)
+ * are skipped, never shown — and so are messages since deleted, except to an
+ * admin, who sees deleted messages everywhere.
+ *   before=<star id>  the next page
+ */
+export async function listStarred(user, { before, limit } = {}) {
+  const size = Math.min(Math.max(parseInt(limit, 10) || 25, 1), STARRED_PAGE_MAX);
+  const cursor = before && mongoose.isValidObjectId(before) ? new mongoose.Types.ObjectId(String(before)) : null;
+  const stars = await chatRepository.findStars(user._id, cursor, size);
+  if (!stars.length) return { messages: [], nextBefore: null };
+
+  const channelIds = [...new Set(stars.map((s) => idOf(s.channel)))];
+  const channels = (await chatRepository.findChannels(
+    { _id: { $in: channelIds } },
+    'kind key name audience team teams members system archived',
+  )).filter((c) => canAccess(user, c));
+  const channelById = new Map(channels.map((c) => [idOf(c), c]));
+
+  const uid = idOf(user);
+  const partnerIds = new Set();
+  for (const c of channels) if (c.kind === 'dm') for (const m of c.members || []) if (idOf(m) !== uid) partnerIds.add(idOf(m));
+  const partnerById = new Map((await userRepository.findDisplayByIds([...partnerIds])).map((p) => [idOf(p), p]));
+  const nameOf = (c) => {
+    if (c.kind !== 'dm') return channelNameFor(c, user);
+    if ((c.members || []).length > 2) return groupNameFor(c, uid, partnerById);
+    return partnerById.get((c.members || []).map(idOf).find((m) => m !== uid) ?? '')?.name ?? 'Former member';
+  };
+
+  const readable = stars.filter((s) => channelById.has(idOf(s.channel)));
+  const docs = await chatRepository.findMessagesByIds(readable.map((s) => s.message));
+  const docById = new Map(docs.map((d) => [idOf(d), d]));
+
+  const messages = readable
+    .map((s) => docById.get(idOf(s.message)))
+    .filter((d) => d && (!d.deletedAt || isAdmin(user)))
+    .map((d) => {
+      const c = channelById.get(idOf(d.channel));
+      return {
+        ...shapeMessage(d, null, user),
+        starred: true,
+        channel: idOf(c),
+        channelName: nameOf(c),
+        channelKind: c.kind,
+      };
+    });
+  return {
+    messages,
+    // The cursor follows the stars read, not the ones shown, so skipped stars never stall paging.
+    nextBefore: stars.length === size ? idOf(stars[stars.length - 1]._id) : null,
+  };
+}
+
+// ── forward ──────────────────────────────────────────────────────────────────
+
+/**
+ * Forward a message into another conversation (or the same one). Both must be
+ * conversations the caller can read — forwarding can only move words to people
+ * the caller could already talk to. The copy is the caller's own message,
+ * marked "Forwarded · originally from <name>": text, files (copied, see
+ * copyChatAttachments) and order links travel; mentions and quotes do not —
+ * a forward must not ping people the original pinged.
+ *
+ * Idempotent on (target, caller, clientId) like any send.
+ */
+export async function forwardMessage(user, messageId, { channelId, clientId } = {}) {
+  if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
+  const source = await chatRepository.findMessageWithSender(messageId);
+  if (!source) throw fail('Message not found', 404);
+  await loadAccessible(user, source.channel);
+  if (source.deletedAt) throw fail('This message was deleted', 409);
+  const target = await loadAccessible(user, channelId);
+
+  if (clientId) {
+    const existing = await chatRepository.findByClientId(target._id, user._id, clientId);
+    if (existing) return { message: shapeMessage(existing), duplicate: true };
+  }
+
+  const attachments = await copyChatAttachments(source.attachments, { channelId: idOf(target) });
+  const by = source.kind === 'system' ? 'Roavion updates' : source.sender?.name || 'Former member';
+  return insertMessage(target, {
+    kind: 'user',
+    sender: user,
+    text: source.text || '',
+    clientId,
+    attachments,
+    refs: (source.refs || []).map((r) => ({ type: r.type, code: r.code, target: r.target })),
+    forwardedFrom: { message: source._id, by, at: source.createdAt },
+  });
+}
+
+// ── pins ─────────────────────────────────────────────────────────────────────
+/*
+  Pin a message to the top of its conversation, as in Google Chat: anyone who
+  can read the conversation can pin or unpin, and everyone in it sees the
+  change live. A deleted message cannot be pinned and drops off the list.
+  Pinning twice keeps the first pin; unpinning twice is a no-op.
+*/
+
+export const MAX_PINS_PER_CHANNEL = 20;
+
+/** Pin (`on`, the default) or unpin a message. */
+export async function pinMessage(user, messageId, { on = true } = {}) {
+  if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
+  const m = await chatRepository.findMessageById(messageId);
+  if (!m) throw fail('Message not found', 404);
+  const channel = await loadAccessible(user, m.channel);
+
+  let changed = null;
+  if (on !== false) {
+    if (m.deletedAt) throw fail('This message was deleted', 409);
+    if (!m.pinnedAt) {
+      if ((await chatRepository.countPins(channel._id)) >= MAX_PINS_PER_CHANNEL) {
+        throw fail(`A conversation can have up to ${MAX_PINS_PER_CHANNEL} pinned messages — unpin one first`, 400);
+      }
+      changed = await chatRepository.pin(m._id, { by: user._id, byName: user.name || '' });
+    }
+  } else if (m.pinnedAt) {
+    changed = await chatRepository.unpin(m._id);
+  }
+
+  const now = changed ?? (await chatRepository.findMessageById(m._id));
+  const pinned = now?.pinnedAt && !now.deletedAt ? { by: now.pinnedByName || '', at: now.pinnedAt } : null;
+  if (changed) {
+    await publishChatEvent({
+      type: 'message_pinned',
+      channelId: idOf(channel),
+      route: audienceOf(channel),
+      messageId: idOf(m),
+      threadRoot: m.threadRoot ? idOf(m.threadRoot) : null,
+      pinned,
+    });
+  }
+  return { messageId: idOf(m), pinned };
+}
+
+/** The conversation's pinned messages, newest pin first (bounded). */
+export async function listPins(user, channelId) {
+  const channel = await loadAccessible(user, channelId);
+  const docs = await chatRepository.findPins(channel._id, MAX_PINS_PER_CHANNEL);
+  return { messages: await withStars(user, docs.map((d) => shapeMessage(d, null, user))) };
+}
+
+// ── presence and status ──────────────────────────────────────────────────────
+/*
+  "Online" here means "has team chat open" (the live stream heartbeat in
+  chatPresence) — exactly what the green dot claims, no more: it does not know
+  whether someone is at their desk with the chat closed.
+
+  A status is a short line ("On leave till Friday") anyone can set for
+  themselves, optionally until a time; it is everybody's to read.
+*/
+
+export const STATUS_MAX_LENGTH = 80;
+const MAX_STATUS_DAYS = 366;
+
+/** Who of the people who can chat has team chat open right now. */
+export async function listOnline() {
+  const people = await userRepository.findChatUsers();
+  const online = await onlineAmong(people.map(idOf));
+  return { online: [...online] };
+}
+
+/** Set my status; `until` (optional) must be in the future and within a year. */
+export async function setMyStatus(user, { text, until } = {}) {
+  const clean = cleanText(text).replace(/\s+/g, ' ');
+  if (!clean) throw fail('Write a status, or clear it', 400);
+  if (clean.length > STATUS_MAX_LENGTH) throw fail(`A status can be up to ${STATUS_MAX_LENGTH} characters`, 400);
+  let end = null;
+  if (until != null && until !== '') {
+    end = new Date(until);
+    const now = Date.now();
+    if (Number.isNaN(end.getTime()) || end.getTime() <= now) throw fail('"Clear after" must be in the future', 400);
+    if (end.getTime() > now + MAX_STATUS_DAYS * 86_400_000) throw fail('"Clear after" can be at most a year away', 400);
+  }
+  const row = await chatRepository.setStatus(user._id, { text: clean, until: end });
+  await announceStatus(user);
+  return { status: { text: row.text, until: row.until ?? null } };
+}
+
+export async function clearMyStatus(user) {
+  await chatRepository.clearStatus(user._id);
+  await announceStatus(user);
+  return { status: null };
+}
+
+/** Everyone who can chat refreshes the person's status (route: #company's audience). */
+function announceStatus(user) {
+  return publishChatEvent({
+    type: 'status',
+    userId: idOf(user),
+    route: { kind: 'space', audience: 'all', team: null, teams: [], members: [], archived: false },
+  });
+}
+
+// ── calls (Google Meet) ──────────────────────────────────────────────────────
+/*
+  Calls happen in Google Meet (the company keeps Google Workspace); chat only
+  carries the link. A conversation can keep a standing Meet link so "📞 Call"
+  is one tap: in a space, admins and team heads set it; in a direct message or
+  group conversation, anyone in it can. Only a real meet.google.com meeting
+  link is accepted, so the button can never send people somewhere else.
+*/
+
+export const MEET_URL = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:\?[\w=&%.-]*)?$/;
+
+export const maySetMeet = (user, channel) =>
+  canAccess(user, channel) && (channel.kind === 'dm' || isAdmin(user) || user?.staff?.isHead === true);
+
+/** Save (or with null, remove) the conversation's Google Meet link. */
+export async function setMeetLink(user, channelId, url) {
+  const channel = await loadAccessible(user, channelId);
+  if (!maySetMeet(user, channel)) throw fail('Only admins and team heads can set the call link for a space', 403);
+  const clean = url == null || url === '' ? null : String(url).trim();
+  if (clean && !MEET_URL.test(clean)) throw fail('Paste a Google Meet link, like https://meet.google.com/abc-defg-hij', 400);
+  await chatRepository.setMeetUrl(channel._id, clean);
+  await publishChatEvent({ type: 'channel', channelId: idOf(channel), route: audienceOf(channel) });
+  return { channelId: idOf(channel), meetUrl: clean };
 }

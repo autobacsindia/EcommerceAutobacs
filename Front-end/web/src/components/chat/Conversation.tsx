@@ -17,13 +17,21 @@ import {
   useEditMessage,
   useDeleteMessage,
   useReactToMessage,
+  useMarkUnread,
+  useStarMessage,
+  usePinMessage,
+  liveStatus,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
 import MembersPanel from './MembersPanel';
-import { Avatar, ChannelIcon, FileKindIcon, fileSize, timeOf } from './chatUi';
+import { Avatar, ChannelIcon, FileKindIcon, fileSize, newClientId, timeOf } from './chatUi';
 import Composer, { mentionableTeams } from './Composer';
 import MessageItem, { messageDomId } from './MessageItem';
+import NotifyMenu from './NotifyMenu';
+import ForwardDialog from './ForwardDialog';
+import PinnedStrip from './PinnedStrip';
+import CallButton from './CallButton';
 import ThreadPanel from './ThreadPanel';
 
 type Pages = InfiniteData<MessagePage, number>;
@@ -120,6 +128,8 @@ export default function Conversation({
   people,
   orderHref,
   onBack,
+  onOpenChannel,
+  online,
   onSearch,
   initialTab,
 }: {
@@ -130,6 +140,10 @@ export default function Conversation({
   people: ChatPerson[];
   orderHref: (id: string) => string;
   onBack: () => void;
+  /** Open another conversation (after forwarding into it). */
+  onOpenChannel?: (id: string) => void;
+  /** Who has team chat open (the green dot). */
+  online?: Set<string>;
   /** Opens search already narrowed to this channel. */
   onSearch?: () => void;
   /** From the link (?t=updates — an order-update pop-up); otherwise chosen by what is unread. */
@@ -142,6 +156,25 @@ export default function Conversation({
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
   const react = useReactToMessage(channel.id, meId);
+  const star = useStarMessage();
+  const pin = usePinMessage(channel.id);
+  const unread = useMarkUnread();
+  /*
+    After "Mark as unread" the conversation must not mark itself read again the
+    moment it re-renders, so reading is held until the person sends something,
+    presses "Mark read", or leaves (this component is keyed by channel). On a
+    phone it simply goes back to the list, as Google Chat does.
+  */
+  const [holdRead, setHoldRead] = useState(false);
+  const [forwarding, setForwarding] = useState<ChatMessage | null>(null);
+  const [forwardedTo, setForwardedTo] = useState<ChatChannel | null>(null);
+  const markUnread = useCallback((m: ChatMessage) => {
+    setHoldRead(true);
+    unread.mutate(m.id, { onError: () => setHoldRead(false) });
+    if (typeof window !== 'undefined' && window.innerWidth < 768) onBack();
+    // unread is a stable mutation object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onBack]);
   const markRead = useMarkRead();
   const [tab, setTab] = useState<Tab>(() => {
     if (initialTab === 'updates') return channel.kind === 'space' ? 'updates' : 'messages';
@@ -271,10 +304,11 @@ export default function Conversation({
     "Unread" labels were taken.
   */
   const readNow = useCallback(() => {
+    if (holdRead) return;
     if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
     if (tab === 'messages' && lastChatSeq && stickToBottom.current) read('chat', lastChatSeq);
     if (tab === 'updates' && lastUpdatesSeq && unreadFrom !== null) read('updates', lastUpdatesSeq);
-  }, [tab, lastChatSeq, lastUpdatesSeq, unreadFrom, read]);
+  }, [tab, lastChatSeq, lastUpdatesSeq, unreadFrom, read, holdRead]);
   useEffect(() => { readNow(); }, [readNow]);
 
   useEffect(() => {
@@ -335,6 +369,7 @@ export default function Conversation({
       pending: true,
     };
     stickToBottom.current = true;
+    setHoldRead(false); // writing here means you have read it
     qc.setQueryData<Pages>(chatKeys.messages(channel.id), (d) => upsertMessage(d, optimistic));
     send.mutate(vars, {
       onSuccess: () => resend.forget(vars.clientId),
@@ -347,8 +382,15 @@ export default function Conversation({
 
   const title = channel.kind === 'dm' ? channel.name : channel.audience === 'teams' ? channel.name : `#${channel.name}`;
   const subtitle =
-    channel.kind === 'dm'
-      ? [channel.partner?.teamLabel, channel.partner?.isHead ? 'Head' : null].filter(Boolean).join(' · ')
+    channel.group
+      ? `${channel.memberIds?.length ?? channel.memberCount ?? ''} people · ${['You', ...(channel.memberIds ?? []).filter((id) => id !== meId).map((id) => peopleById.get(id)?.name ?? 'Former member')].join(', ')}`
+      : channel.kind === 'dm'
+      ? [
+          channel.partner && online?.has(channel.partner.id) ? 'Active now' : null,
+          liveStatus(channel.partner ? peopleById.get(channel.partner.id)?.status : null)?.text,
+          channel.partner?.teamLabel,
+          channel.partner?.isHead ? 'Head' : null,
+        ].filter(Boolean).join(' · ')
       : channel.description;
 
   return (
@@ -359,7 +401,9 @@ export default function Conversation({
             <button type="button" onClick={onBack} className="rounded-lg p-1.5 text-gray-600 hover:bg-gray-100 md:hidden" aria-label="Back to channels">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            {channel.kind === 'dm' ? <Avatar person={channel.partner} /> : <ChannelIcon channel={channel} size="md" />}
+            {channel.kind === 'dm' && !channel.group
+              ? <Avatar person={channel.partner} online={!!channel.partner && !!online?.has(channel.partner.id)} />
+              : <ChannelIcon channel={channel} size="md" />}
             <div className="min-w-0">
               <h2 className="truncate text-base font-semibold text-gray-900">{title}</h2>
               {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}
@@ -370,6 +414,8 @@ export default function Conversation({
                   <Users className="h-4 w-4" /> {channel.memberCount}
                 </button>
               )}
+              <CallButton channel={channel} onShare={(text) => doSend({ text, clientId: newClientId() })} />
+              <NotifyMenu channel={channel} />
               {onSearch && (
                 <button
                   type="button"
@@ -413,6 +459,7 @@ export default function Conversation({
             ))}
           </div>
         </header>
+        <PinnedStrip channelId={channel.id} onJump={(id) => { setTab('messages'); setTimeout(() => jumpTo(id), 0); }} />
 
         {tab === 'members' && isGroup ? (
           <MembersPanel channelId={channel.id} onDeleted={onBack} />
@@ -474,6 +521,10 @@ export default function Conversation({
                     onEdit={(msg, text) => edit.mutateAsync({ id: msg.id, text })}
                     onDelete={(msg) => remove.mutateAsync(msg.id)}
                     onReact={(msg, emoji, on) => react.mutate({ message: msg, emoji, on })}
+                    onStar={(msg, on) => star.mutate({ id: msg.id, on })}
+                    onForward={setForwarding}
+                    onPin={(msg, on) => pin.mutate({ id: msg.id, on })}
+                    onMarkUnread={markUnread}
                   />
                   </div>
                 ))}
@@ -494,11 +545,29 @@ export default function Conversation({
               )}
             </div>
 
+            {forwardedTo && (
+              <div role="status" className="mx-4 mb-1 flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs text-emerald-900">
+                Forwarded to {forwardedTo.kind === 'dm' || forwardedTo.audience === 'teams' ? forwardedTo.name : `#${forwardedTo.name}`}.
+                <span className="flex gap-3">
+                  {onOpenChannel && forwardedTo.id !== channel.id && (
+                    <button type="button" onClick={() => onOpenChannel(forwardedTo.id)} className="font-semibold underline">Open</button>
+                  )}
+                  <button type="button" onClick={() => setForwardedTo(null)} aria-label="Dismiss" className="font-semibold">✕</button>
+                </span>
+              </div>
+            )}
+            {holdRead && (
+              <div role="status" className="mx-4 mb-1 flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                Marked as unread — it stays unread until you come back to it.
+                <button type="button" onClick={() => setHoldRead(false)} className="font-semibold underline">Mark read</button>
+              </div>
+            )}
             {tab === 'messages' && (
             <Composer
               channelName={title}
               people={people.filter((p) => p.id !== meId)}
               teams={mentionableTeams(channel)}
+              canMentionAll={channel.audience !== 'all' || isAdmin || !!people.find((p) => p.id === meId)?.isHead}
               onSend={doSend}
               quote={quote}
               onClearQuote={() => setQuote(null)}
@@ -507,6 +576,13 @@ export default function Conversation({
           </>
         )}
       </section>
+      {forwarding && (
+        <ForwardDialog
+          message={forwarding}
+          onClose={() => setForwarding(null)}
+          onDone={(c) => { setForwarding(null); setForwardedTo(c); }}
+        />
+      )}
       {thread && (
         <ThreadPanel
           channel={channel}
@@ -518,6 +594,9 @@ export default function Conversation({
           peopleById={peopleById}
           orderHref={orderHref}
           onClose={() => setThread(null)}
+          onMarkUnread={markUnread}
+          onForward={setForwarding}
+          onPin={(msg, on) => pin.mutate({ id: msg.id, on })}
         />
       )}
     </div>

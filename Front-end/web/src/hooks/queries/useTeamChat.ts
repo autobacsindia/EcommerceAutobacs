@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
@@ -15,7 +16,19 @@ export interface ChatPerson {
   team: string | null;
   teamLabel: string | null;
   isHead: boolean;
+  /** Their status ("On leave till Fri"), when set and not yet expired. From /chat/people only. */
+  status?: ChatStatus | null;
 }
+
+export interface ChatStatus {
+  text: string;
+  /** When it clears itself; null = until they clear it. */
+  until: string | null;
+}
+
+/** A status still in force (the server drops expired ones; this covers a page left open past `until`). */
+export const liveStatus = (s?: ChatStatus | null): ChatStatus | null =>
+  s && (!s.until || new Date(s.until).getTime() > Date.now()) ? s : null;
 
 export interface ChatChannel {
   id: string;
@@ -33,6 +46,14 @@ export interface ChatChannel {
   system: boolean;
   partner: ChatPerson | null;
   memberCount: number | null;
+  /** The conversation's standing Google Meet link, if one is saved. */
+  meetUrl?: string | null;
+  /** May I change it? (spaces: admins and heads; DMs and groups: anyone in it) */
+  canSetMeet?: boolean;
+  /** A group conversation (a DM with 3-8 people). Its name is the others' names. */
+  group?: boolean;
+  /** Group conversation: who is in it. */
+  memberIds?: string[];
   /** Custom group: may I add / remove members? (admin, or whoever created it) */
   canManageMembers?: boolean;
   lastMessageSeq: number;
@@ -45,6 +66,27 @@ export interface ChatChannel {
   unreadChat?: number;
   unreadUpdates?: number;
   unread: number;
+  /** My notification setting here. Absent from an older server = 'all'. */
+  notify?: NotifyLevel;
+  /** On '@mentions only': the unread that @mentions me or my team. */
+  unreadMentions?: number;
+}
+
+/** How loudly a conversation reaches me, as in Google Chat. */
+export type NotifyLevel = 'all' | 'mentions' | 'off';
+
+export const notifyOf = (c: ChatChannel): NotifyLevel => c.notify ?? 'all';
+
+/**
+ * What a conversation adds to my badges and chime: everything on "All", only
+ * what @mentions me on "@mentions only", nothing on "Off". (Its own row still
+ * shows the plain unread count, greyed — see TeamChat.)
+ */
+export function countedUnread(c: ChatChannel): { chat: number; updates: number } {
+  const level = notifyOf(c);
+  if (level === 'off') return { chat: 0, updates: 0 };
+  if (level === 'mentions') return { chat: c.unreadMentions ?? 0, updates: 0 };
+  return { chat: unreadChatOf(c), updates: unreadUpdatesOf(c) };
 }
 
 /** Which tab of a conversation a read applies to. */
@@ -97,11 +139,24 @@ export interface ChatMessage {
   attachments: ChatAttachment[];
   mentions: string[];
   mentionTeams: string[];
+  /** "@all" — everyone in the conversation. */
+  mentionAll?: boolean;
   refs: ChatRef[];
+  /** A forwarded copy: who wrote the original and when (never where). */
+  forwarded?: { by: string; at: string } | null;
+  /** Pinned to the top of its conversation: by whom, when. */
+  pinned?: { by: string; at: string } | null;
+  /** The card for its first link (text only), once the server has fetched it. */
+  preview?: { url: string; title: string; description: string; site: string } | null;
   /** The message this one quotes, as it read when quoted. */
   quote?: ChatQuote | null;
   /** Emoji reactions, in the order each emoji was first used. */
   reactions?: ChatReaction[];
+  /**
+   * Have I starred it? Only on responses to me (pages, threads, search) — a
+   * live broadcast never carries it, so caches keep what they had (keepStar).
+   */
+  starred?: boolean;
   createdAt: string;
   /** Set on a reply: the top-level message it belongs to. */
   threadRoot?: string | null;
@@ -178,10 +233,10 @@ export function useChatChannels(options: { poll?: boolean } = {}) {
   });
 }
 
-/** Total unread across every channel — for the "Chat" nav badge. */
+/** Total unread across every channel — for the "Chat" nav badge. Muted conversations do not count. */
 export function useChatUnreadTotal(): number {
   const { data } = useChatChannels({ poll: true });
-  return (data ?? []).reduce((n, c) => n + c.unread, 0);
+  return (data ?? []).reduce((n, c) => { const u = countedUnread(c); return n + u.chat + u.updates; }, 0);
 }
 
 /**
@@ -192,11 +247,11 @@ export function useChatUnreadSplit(): { chat: number; updates: number; updatesCh
   const { data } = useChatChannels({ poll: true });
   const list = data ?? [];
   const withUpdates = list
-    .filter((c) => unreadUpdatesOf(c) > 0)
+    .filter((c) => countedUnread(c).updates > 0)
     .sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
   return {
-    chat: list.reduce((n, c) => n + unreadChatOf(c), 0),
-    updates: list.reduce((n, c) => n + unreadUpdatesOf(c), 0),
+    chat: list.reduce((n, c) => n + countedUnread(c).chat, 0),
+    updates: list.reduce((n, c) => n + countedUnread(c).updates, 0),
     updatesChannelId: withUpdates[0]?.id ?? null,
   };
 }
@@ -208,6 +263,35 @@ export function useChatPeople(enabled = true) {
     queryFn: async () => (await apiClient.get<{ people: ChatPerson[] }>('/chat/people')).people ?? [],
     enabled: enabled && canChat,
     staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Who has team chat open — the green dot. Polled while chat is on screen;
+ * "online" means exactly that and nothing more (see chatService).
+ */
+export function usePresence(enabled = true): Set<string> {
+  const canChat = useCanChat();
+  const { data } = useQuery({
+    queryKey: chatKeys.presence(),
+    queryFn: async () => (await apiClient.get<{ online: string[] }>('/chat/presence')).online ?? [],
+    enabled: enabled && canChat,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  });
+  return useMemo(() => new Set(data ?? []), [data]);
+}
+
+/** Set (text, optional until) or clear (null) my status. */
+export function useSetStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (status: { text: string; until: string | null } | null): Promise<{ status: ChatStatus | null }> =>
+      status
+        ? apiClient.put<{ status: ChatStatus | null }>('/chat/status', status)
+        : apiClient.delete<{ status: ChatStatus | null }>('/chat/status'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.people() }),
   });
 }
 
@@ -241,6 +325,10 @@ export function useChatMessages(channelId: string | null) {
 
 type Pages = InfiniteData<MessagePage, number>;
 
+/** A broadcast copy has no `starred`: keep what the cache knew. */
+const keepStar = (incoming: ChatMessage, old?: ChatMessage): ChatMessage =>
+  incoming.starred === undefined && old?.starred !== undefined ? { ...incoming, starred: old.starred } : incoming;
+
 /** Insert or replace a message in the cached pages (newest page is pages[0]). */
 export function upsertMessage(data: Pages | undefined, msg: ChatMessage): Pages | undefined {
   if (!data) return data;
@@ -252,7 +340,7 @@ export function upsertMessage(data: Pages | undefined, msg: ChatMessage): Pages 
     if (i === -1) return p;
     found = true;
     const next = p.messages.slice();
-    next[i] = msg;
+    next[i] = keepStar(msg, p.messages[i]);
     return { ...p, messages: next };
   });
   if (found) return { ...data, pages };
@@ -271,9 +359,10 @@ export function upsertMessage(data: Pages | undefined, msg: ChatMessage): Pages 
  */
 export function applyThreadUpdate(data: Pages | undefined, root: ChatMessage): Pages | undefined {
   if (!data) return data;
+  const moved = keepStar(root, data.pages.flatMap((p) => p.messages).find((m) => m.id === root.id));
   const pages = data.pages.map((p) => ({ ...p, messages: p.messages.filter((m) => m.id !== root.id) }));
   const [first, ...rest] = pages;
-  const merged = [...(first?.messages ?? []), root].sort((a, b) => orderOf(a) - orderOf(b));
+  const merged = [...(first?.messages ?? []), moved].sort((a, b) => orderOf(a) - orderOf(b));
   return { ...data, pages: [{ ...(first ?? { nextBefore: null }), messages: merged }, ...rest] };
 }
 
@@ -289,7 +378,7 @@ export function upsertReply(data: ThreadData | undefined, msg: ChatMessage): Thr
   const i = data.replies.findIndex(
     (m) => m.id === msg.id || (!!msg.clientId && m.clientId === msg.clientId && (m.pending || m.failed)),
   );
-  const replies = i === -1 ? [...data.replies, msg] : data.replies.map((m, j) => (j === i ? msg : m));
+  const replies = i === -1 ? [...data.replies, msg] : data.replies.map((m, j) => (j === i ? keepStar(msg, m) : m));
   replies.sort((a, b) => (a.pending ? Infinity : a.seq) - (b.pending ? Infinity : b.seq));
   return { ...data, replies };
 }
@@ -309,6 +398,7 @@ export interface SendVars {
   clientId: string;
   mentions?: string[];
   mentionTeams?: string[];
+  mentionAll?: boolean;
   orderIds?: string[];
   files?: File[];
   /** Reply in this thread. */
@@ -336,6 +426,7 @@ export function useSendMessage(channelId: string | null) {
       form.append('clientId', vars.clientId);
       if (vars.mentions?.length) form.append('mentions', JSON.stringify(vars.mentions));
       if (vars.mentionTeams?.length) form.append('mentionTeams', JSON.stringify(vars.mentionTeams));
+      if (vars.mentionAll) form.append('mentionAll', 'true');
       if (vars.orderIds?.length) form.append('orderIds', JSON.stringify(vars.orderIds));
       if (vars.threadRoot) form.append('threadRoot', vars.threadRoot);
       if (vars.quoteId) form.append('quoteId', vars.quoteId);
@@ -374,7 +465,7 @@ export function applyMessageChange(
   msg: ChatMessage,
   thread?: ChatMessage | null,
 ) {
-  const replace = (list: ChatMessage[], m: ChatMessage) => list.map((x) => (x.id === m.id ? m : x));
+  const replace = (list: ChatMessage[], m: ChatMessage) => list.map((x) => (x.id === m.id ? keepStar(m, x) : x));
   const inPages = (m: ChatMessage) =>
     qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) =>
       d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: replace(p.messages, m) })) } : d,
@@ -382,7 +473,7 @@ export function applyMessageChange(
   // A message is cached as a thread's root (when that thread is open) or as a reply in one.
   const inThreads = (m: ChatMessage) =>
     qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) =>
-      d ? { ...d, root: d.root.id === m.id ? m : d.root, replies: replace(d.replies, m) } : d,
+      d ? { ...d, root: d.root.id === m.id ? keepStar(m, d.root) : d.root, replies: replace(d.replies, m) } : d,
     );
 
   if (!msg.threadRoot) inPages(msg);
@@ -533,9 +624,181 @@ export function useMarkRead() {
           const next = part === 'updates'
             ? { ...c, lastReadUpdatesSeq: Math.max(seq, readUpdatesSeqOf(c)), unreadUpdates: 0 }
             : { ...c, lastReadSeq: Math.max(seq, c.lastReadSeq), unreadChat: 0 };
-          return { ...next, unread: unreadChatOf(next) + unreadUpdatesOf(next) };
+          const unread = unreadChatOf(next) + unreadUpdatesOf(next);
+          // The mention count is per channel, not per tab: exact on the next poll.
+          return { ...next, unread, unreadMentions: unread === 0 ? 0 : Math.min(c.unreadMentions ?? 0, unread) };
         }),
       );
+    },
+  });
+}
+
+/**
+ * "Mark as unread" from a message, for me. Not optimistic about the counts
+ * (the server knows what lies past that message); the read position it sends
+ * back goes into the cache at once, and the channel list refetches the numbers.
+ */
+export function useMarkUnread() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: string) =>
+      apiClient.post<{ channelId: string; part: ReadPart; lastReadSeq: number; lastReadUpdatesSeq: number }>(
+        `/chat/messages/${messageId}/unread`,
+        {},
+      ),
+    onSuccess: (res) => {
+      qc.setQueryData<ChatChannel[]>(chatKeys.channels(), (list) =>
+        list?.map((c) => (c.id === res.channelId
+          ? { ...c, lastReadSeq: res.lastReadSeq, lastReadUpdatesSeq: res.lastReadUpdatesSeq }
+          : c)),
+      );
+      qc.invalidateQueries({ queryKey: chatKeys.channels() });
+    },
+  });
+}
+
+// ── stars ────────────────────────────────────────────────────────────────────
+
+/** Set `starred` on a message wherever it is cached: timeline, threads, search. */
+function applyStar(qc: ReturnType<typeof useQueryClient>, messageId: string, starred: boolean) {
+  const set = <T extends ChatMessage>(m: T): T => (m.id === messageId ? { ...m, starred } : m);
+  qc.setQueriesData<Pages>({ queryKey: [...chatKeys.all, 'messages'] }, (d) =>
+    d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: p.messages.map(set) })) } : d,
+  );
+  qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) =>
+    d ? { ...d, root: set(d.root), replies: d.replies.map(set) } : d,
+  );
+  qc.setQueriesData<InfiniteData<SearchPage, string>>({ queryKey: [...chatKeys.all, 'search'] }, (d) =>
+    d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: p.messages.map(set) })) } : d,
+  );
+}
+
+/**
+ * Star a message for me, or take the star off. Private and undoable, so it
+ * shows at once; the Starred list refetches afterwards.
+ */
+export function useStarMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, on }: { id: string; on: boolean }) =>
+      apiClient.put<{ messageId: string; starred: boolean }>(`/chat/messages/${id}/star`, { on }),
+    onMutate: ({ id, on }) => applyStar(qc, id, on),
+    onError: (_e, { id, on }) => applyStar(qc, id, !on),
+    onSettled: () => qc.invalidateQueries({ queryKey: chatKeys.starred() }),
+  });
+}
+
+/** My starred messages, newest star first. */
+export function useStarred(enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.starred(),
+    queryFn: async ({ pageParam }) => {
+      const q = new URLSearchParams({ limit: '25' });
+      if (pageParam) q.set('before', pageParam);
+      const res = await apiClient.get<SearchPage>(`/chat/starred?${q}`);
+      return { messages: res.messages ?? [], nextBefore: res.nextBefore ?? null };
+    },
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextBefore ?? undefined,
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Forward a message into a conversation I am in. The copy is a normal new
+ * message there; the target's timeline (if loaded) and the channel list refresh.
+ */
+export function useForwardMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, channelId, clientId }: { id: string; channelId: string; clientId: string }) =>
+      apiClient.post<{ message: ChatMessage }>(`/chat/messages/${id}/forward`, { channelId, clientId }),
+    onSuccess: (res, { channelId }) => {
+      qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) => upsertMessage(d, res.message));
+      qc.invalidateQueries({ queryKey: chatKeys.channels() });
+    },
+  });
+}
+
+// ── pins ─────────────────────────────────────────────────────────────────────
+
+/** A conversation's pinned messages, newest pin first (at most 20). */
+export function usePins(channelId: string | null) {
+  return useQuery({
+    queryKey: chatKeys.pins(channelId ?? 'none'),
+    queryFn: async () => (await apiClient.get<{ messages: ChatMessage[] }>(`/chat/channels/${channelId}/pins`)).messages ?? [],
+    enabled: !!channelId,
+    staleTime: 60_000, // the live stream invalidates it on any pin change
+  });
+}
+
+/** Set a message's `pinned` wherever the timeline or a thread holds it. */
+export function applyPinned(
+  qc: ReturnType<typeof useQueryClient>,
+  channelId: string,
+  messageId: string,
+  pinned: ChatMessage['pinned'],
+) {
+  const set = (m: ChatMessage) => (m.id === messageId ? { ...m, pinned } : m);
+  qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) =>
+    d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: p.messages.map(set) })) } : d,
+  );
+  qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) =>
+    d ? { ...d, root: set(d.root), replies: d.replies.map(set) } : d,
+  );
+  qc.invalidateQueries({ queryKey: chatKeys.pins(channelId) });
+}
+
+/** Set a message's link card wherever it is cached (it arrives after the message itself). */
+export function applyPreview(
+  qc: ReturnType<typeof useQueryClient>,
+  channelId: string,
+  messageId: string,
+  preview: ChatMessage['preview'],
+) {
+  const set = (m: ChatMessage) => (m.id === messageId ? { ...m, preview } : m);
+  qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) =>
+    d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: p.messages.map(set) })) } : d,
+  );
+  qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) =>
+    d ? { ...d, root: set(d.root), replies: d.replies.map(set) } : d,
+  );
+}
+
+/** Pin or unpin a message for everyone in the conversation. Not optimistic: the server says who pinned it. */
+export function usePinMessage(channelId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, on }: { id: string; on: boolean }) =>
+      apiClient.put<{ messageId: string; pinned: ChatMessage['pinned'] }>(`/chat/messages/${id}/pin`, { on }),
+    onSuccess: (res) => { if (channelId) applyPinned(qc, channelId, res.messageId, res.pinned); },
+  });
+}
+
+/** Set my notification setting for one conversation. Shown at once; the server's answer confirms it. */
+export function useSetNotify() {
+  const qc = useQueryClient();
+  const put = (channelId: string, notify: NotifyLevel) =>
+    qc.setQueryData<ChatChannel[]>(chatKeys.channels(), (list) => list?.map((c) => (c.id === channelId ? { ...c, notify } : c)));
+  return useMutation({
+    mutationFn: ({ channelId, notify }: { channelId: string; notify: NotifyLevel }) =>
+      apiClient.put<{ channelId: string; notify: NotifyLevel }>(`/chat/channels/${channelId}/notify`, { notify }),
+    onMutate: ({ channelId, notify }) => put(channelId, notify),
+    // The mention count only exists for "@mentions only" — fetch the real numbers.
+    onSettled: () => qc.invalidateQueries({ queryKey: chatKeys.channels() }),
+  });
+}
+
+/** Save (or with null, remove) a conversation's standing Meet link. */
+export function useSetMeet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelId, url }: { channelId: string; url: string | null }) =>
+      apiClient.put<{ channelId: string; meetUrl: string | null }>(`/chat/channels/${channelId}/meet`, { url }),
+    onSuccess: (res) => {
+      qc.setQueryData<ChatChannel[]>(chatKeys.channels(), (list) =>
+        list?.map((c) => (c.id === res.channelId ? { ...c, meetUrl: res.meetUrl } : c)));
     },
   });
 }
@@ -549,10 +812,14 @@ export function useCreateSpace() {
   });
 }
 
+/** Open (or reuse) a conversation: one person is a DM, several a group conversation (up to 7 others). */
 export function useOpenDm() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (userId: string) => apiClient.post<{ channel: { id: string } }>('/chat/dm', { userId }),
+    mutationFn: (who: string | string[]) => {
+      const ids = Array.isArray(who) ? who : [who];
+      return apiClient.post<{ channel: { id: string } }>('/chat/dm', ids.length === 1 ? { userId: ids[0] } : { userIds: ids });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: chatKeys.channels() }),
   });
 }

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ChevronDown, MessageSquarePlus, Plus, Search } from 'lucide-react';
+import { ChevronDown, MessageSquarePlus, Plus, Search, Star } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from '@/hooks/queries/keys';
@@ -14,17 +14,26 @@ import {
   applyThreadUpdate,
   applyMessageChange,
   applyReactions,
+  applyPinned,
+  applyPreview,
+  countedUnread,
+  notifyOf,
   useCanChat,
   useChatChannels,
   useChatMe,
   useChatPeople,
+  usePresence,
+  liveStatus,
   useCreateSpace,
   useOpenDm,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, ChatReaction, MessagePage, ThreadData } from '@/hooks/queries/useTeamChat';
-import { Avatar, ChannelIcon, Dialog, GREEN, shortWhen } from './chatUi';
+import { Avatar, ChannelIcon, Dialog, GREEN, OnlineDot, shortWhen } from './chatUi';
 import Conversation from './Conversation';
+import { NotifyIcon } from './NotifyMenu';
 import MessageSearch from './MessageSearch';
+import StarredPanel from './StarredPanel';
+import StatusDialog from './StatusDialog';
 
 type Pages = InfiniteData<MessagePage, number>;
 
@@ -42,6 +51,7 @@ function PeoplePicker({
   single?: boolean;
 }) {
   const [q, setQ] = useState('');
+  const online = usePresence();
   const shown = people.filter((p) => p.name.toLowerCase().includes(q.trim().toLowerCase()));
   return (
     <div>
@@ -63,10 +73,12 @@ function PeoplePicker({
               aria-pressed={selected.has(p.id)}
               className={`flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 ${selected.has(p.id) ? 'bg-emerald-50' : ''}`}
             >
-              <Avatar person={p} />
+              <Avatar person={p} online={online.has(p.id)} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-gray-900">{p.name}</span>
-                <span className="block text-xs text-gray-500">{p.teamLabel}{p.isHead ? ' · Head' : ''}</span>
+                <span className="block truncate text-xs text-gray-500">
+                  {p.teamLabel}{p.isHead ? ' · Head' : ''}{liveStatus(p.status) ? ` · ${liveStatus(p.status)!.text}` : ''}
+                </span>
               </span>
               {!single && selected.has(p.id) && <span className="text-xs font-semibold text-emerald-700">Added</span>}
             </button>
@@ -77,20 +89,41 @@ function PeoplePicker({
   );
 }
 
-function NewMessageDialog({ meId, onClose, onOpened }: { meId: string; onClose: () => void; onOpened: (id: string) => void }) {
+/** Up to 7 others: one is a direct message, more is a group conversation. */
+const MAX_GROUP_OTHERS = 7;
+
+export function NewMessageDialog({ meId, onClose, onOpened }: { meId: string; onClose: () => void; onOpened: (id: string) => void }) {
   const { data: people = [] } = useChatPeople();
   const openDm = useOpenDm();
+  const [picked, setPicked] = useState<string[]>([]);
+  const toggle = (id: string) =>
+    setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= MAX_GROUP_OTHERS ? prev : [...prev, id]));
+  const start = async () => {
+    if (!picked.length || openDm.isPending) return;
+    const res = await openDm.mutateAsync(picked);
+    onOpened(res.channel.id);
+  };
+  const names = picked.map((id) => people.find((p) => p.id === id)?.name).filter(Boolean);
   return (
-    <Dialog title="New message" onClose={onClose}>
-      <PeoplePicker
-        people={people.filter((p) => p.id !== meId)}
-        selected={new Set()}
-        single
-        onToggle={async (id) => {
-          const res = await openDm.mutateAsync(id);
-          onOpened(res.channel.id);
-        }}
-      />
+    <Dialog title="New chat" onClose={onClose}>
+      <p className="mb-2 text-sm text-gray-600">
+        Pick one person for a direct message, or up to {MAX_GROUP_OTHERS} for a group conversation. Only the people you pick can see it.
+      </p>
+      <PeoplePicker people={people.filter((p) => p.id !== meId)} selected={new Set(picked)} onToggle={toggle} />
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span className="min-w-0 truncate text-sm text-gray-600">
+          {names.length ? names.join(', ') : 'No one picked yet'}
+        </span>
+        <button
+          type="button"
+          onClick={() => void start().catch(() => {})}
+          disabled={!picked.length || openDm.isPending}
+          className="shrink-0 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+        >
+          {openDm.isPending ? 'Opening…' : picked.length > 1 ? `Start group (${picked.length + 1})` : 'Start chat'}
+        </button>
+      </div>
+      {picked.length >= MAX_GROUP_OTHERS && <p className="mt-1 text-xs text-gray-500">That’s the most a group conversation can have.</p>}
       {openDm.isError && <p className="mt-2 text-sm text-red-600">Couldn&apos;t open the chat. Please try again.</p>}
     </Dialog>
   );
@@ -188,14 +221,19 @@ export default function TeamChat() {
   const { data: channels = [], isLoading, isError, refetch } = useChatChannels();
   const { data: me } = useChatMe();
   const { data: people = [] } = useChatPeople();
+  const online = usePresence(canChat);
+  const [editingStatus, setEditingStatus] = useState(false);
   const [dialog, setDialog] = useState<'space' | 'dm' | null>(null);
   const [filter, setFilter] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // null = closed. 'all' = every channel I can see; otherwise one channel id.
   const [searching, setSearching] = useState<string | null>(null);
+  const [showStarred, setShowStarred] = useState(false);
 
   const meId = me?.userId ?? '';
   const meName = user?.name ?? 'You';
+  const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
+  const myStatus = liveStatus(peopleById.get(meId)?.status);
   const isAdmin = user?.role === 'admin';
   // Admins manage orders in their own panel; staff see them in the team panel.
   const orderHref = useCallback(
@@ -244,6 +282,8 @@ export default function TeamChat() {
       const e = event as unknown as {
         type: string; channelId?: string; message?: ChatMessage; messageId?: string; thread?: ChatMessage;
         reactions?: ChatReaction[];
+        pinned?: ChatMessage['pinned'];
+        preview?: ChatMessage['preview'];
       };
       if (e.type === 'message' && e.message && e.channelId) {
         if (e.message.threadRoot) {
@@ -274,7 +314,10 @@ export default function TeamChat() {
         qc.invalidateQueries({ queryKey: chatKeys.messages(e.channelId) });
         qc.invalidateQueries({ queryKey: [...chatKeys.all, 'thread'] });
         qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
+        qc.invalidateQueries({ queryKey: chatKeys.pins(e.channelId) });
       } else if (e.type === 'message_deleted' && e.channelId && e.messageId) {
+        // A deleted message drops off the Pinned list.
+        qc.invalidateQueries({ queryKey: chatKeys.pins(e.channelId) });
         // If it was a thread's newest reply, the thread's "last reply" line changed too.
         if (e.thread) applyMessageChange(qc, e.channelId, e.thread);
         qc.setQueryData<Pages>(chatKeys.messages(e.channelId), (d) =>
@@ -298,6 +341,12 @@ export default function TeamChat() {
           return { ...d, root: hide(d.root), replies: d.replies.map(hide) };
         });
         qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
+      } else if (e.type === 'message_preview' && e.channelId && e.messageId) {
+        applyPreview(qc, e.channelId, e.messageId, e.preview ?? null);
+      } else if (e.type === 'status') {
+        qc.invalidateQueries({ queryKey: chatKeys.people() });
+      } else if (e.type === 'message_pinned' && e.channelId && e.messageId) {
+        applyPinned(qc, e.channelId, e.messageId, e.pinned ?? null);
       } else if (e.type === 'message_reactions' && e.channelId && e.messageId && e.reactions) {
         applyReactions(qc, e.channelId, e.messageId, e.reactions);
       } else if (e.type === 'channel') {
@@ -312,7 +361,11 @@ export default function TeamChat() {
     },
   });
 
-  const totalUnread = useMemo(() => channels.reduce((n, c) => n + c.unread, 0), [channels]);
+  // Muted conversations do not add to "N new" (the same rule as the nav badge).
+  const totalUnread = useMemo(
+    () => channels.reduce((n, c) => { const u = countedUnread(c); return n + u.chat + u.updates; }, 0),
+    [channels],
+  );
 
   if (!canChat) {
     return <p className="p-6 text-gray-600">Team chat is available to staff and admins only.</p>;
@@ -327,8 +380,13 @@ export default function TeamChat() {
     .sort((x, y) => new Date(y.lastMessageAt || 0).getTime() - new Date(x.lastMessageAt || 0).getTime());
   const dms = visible.filter((c) => c.kind === 'dm');
 
+  /** What a row's badge counts: on "@mentions only" the mentions, on "Off" nothing. */
+  const loud = (c: ChatChannel) => { const u = countedUnread(c); return u.chat + u.updates; };
+
   const row = (c: ChatChannel) => {
     const active = c.id === selectedId;
+    const level = notifyOf(c);
+    const counted = loud(c);
     return (
       <li key={c.id}>
         <button
@@ -338,12 +396,32 @@ export default function TeamChat() {
           title={c.description || c.name}
           className={`flex w-full items-center gap-3 rounded-full py-1.5 pl-2 pr-3 text-left text-sm transition-colors ${
             active ? 'bg-emerald-100 text-emerald-950' : 'text-gray-700 hover:bg-gray-200/70'
-          } ${c.unread > 0 ? 'font-semibold text-gray-900' : ''}`}
+          } ${counted > 0 ? 'font-semibold text-gray-900' : ''}`}
         >
-          <ChannelIcon channel={c} />
-          <span className="min-w-0 flex-1 truncate">{c.audience === 'teams' || c.kind === 'dm' ? c.name : `#${c.name}`}</span>
-          {c.unread > 0 ? (
-            <span className="min-w-[22px] rounded-full px-1.5 text-center text-xs font-bold leading-[20px] text-white" style={{ background: GREEN }}>
+          <span className="relative inline-flex shrink-0">
+            <ChannelIcon channel={c} />
+            {c.kind === 'dm' && !c.group && c.partner && online.has(c.partner.id) && <OnlineDot />}
+          </span>
+          <span className="min-w-0 flex-1 truncate">
+            {c.audience === 'teams' || c.kind === 'dm' ? c.name : `#${c.name}`}
+            {c.kind === 'dm' && !c.group && c.partner && liveStatus(peopleById.get(c.partner.id)?.status) && (
+              <span className="ml-1.5 font-normal text-gray-500">· {liveStatus(peopleById.get(c.partner.id)?.status)!.text}</span>
+            )}
+          </span>
+          {level !== 'all' && (
+            <span className="shrink-0 text-gray-400" title={level === 'off' ? 'Notifications off' : 'Only @mentions'}>
+              <NotifyIcon level={level} className="h-3.5 w-3.5" />
+            </span>
+          )}
+          {counted > 0 ? (
+            <span className="min-w-[22px] rounded-full px-1.5 text-center text-xs font-bold leading-[20px] text-white" style={{ background: GREEN }}
+              aria-label={level === 'mentions' ? `${counted} unread mentions` : `${counted} unread`}>
+              {level === 'mentions' ? '@' : ''}{counted > 99 ? '99+' : counted}
+            </span>
+          ) : c.unread > 0 ? (
+            // Quietened, with unread: still visible, but grey — it does not ask for attention.
+            <span className="min-w-[22px] rounded-full bg-gray-200 px-1.5 text-center text-xs font-semibold leading-[20px] text-gray-600"
+              aria-label={`${c.unread} unread (notifications ${level === 'off' ? 'off' : 'for @mentions only'})`}>
               {c.unread > 99 ? '99+' : c.unread}
             </span>
           ) : (
@@ -357,7 +435,7 @@ export default function TeamChat() {
   /** A collapsible list section, as in Google Chat. */
   const section = (key: string, label: string, items: ChatChannel[], empty: string, action?: React.ReactNode) => {
     const open = !collapsed.has(key);
-    const unread = items.reduce((n, c) => n + c.unread, 0);
+    const unread = items.reduce((n, c) => n + loud(c), 0);
     return (
       <div className="mt-3">
         <div className="flex items-center justify-between pl-2 pr-1">
@@ -399,15 +477,26 @@ export default function TeamChat() {
               Chat
               {totalUnread > 0 && <span className="ml-2 align-middle text-xs font-semibold text-emerald-700">{totalUnread} new</span>}
             </h1>
-            <button
-              type="button"
-              onClick={() => setSearching('all')}
-              className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
-              aria-label="Search all messages"
-              title="Search all messages"
-            >
-              <Search className="h-5 w-5" />
-            </button>
+            <span className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setShowStarred(true)}
+                className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
+                aria-label="Starred messages"
+                title="Starred messages"
+              >
+                <Star className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearching('all')}
+                className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
+                aria-label="Search all messages"
+                title="Search all messages"
+              >
+                <Search className="h-5 w-5" />
+              </button>
+            </span>
           </div>
           <button
             type="button"
@@ -415,6 +504,14 @@ export default function TeamChat() {
             className="mt-2 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-gray-800 shadow-sm hover:shadow-md"
           >
             <MessageSquarePlus className="h-5 w-5 text-emerald-700" /> New chat
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditingStatus(true)}
+            className="mt-2 block w-full truncate rounded-full px-3 py-1 text-left text-xs text-gray-600 hover:bg-gray-200/70"
+            title="Set a status everyone in chat can see"
+          >
+            {myStatus ? <>Your status: <span className="font-medium text-gray-800">{myStatus.text}</span></> : '＋ Set a status'}
           </button>
           <div className="relative mt-3">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
@@ -464,6 +561,8 @@ export default function TeamChat() {
           people={people}
           orderHref={orderHref}
           onBack={() => select(null)}
+          onOpenChannel={select}
+          online={online}
           onSearch={() => setSearching(selected.id)}
           initialTab={initialTab}
         />
@@ -480,6 +579,16 @@ export default function TeamChat() {
           scopeTo={searching === 'all' ? null : channels.find((c) => c.id === searching) ?? null}
           onPick={(id) => { setSearching(null); select(id); }}
           onClose={() => setSearching(null)}
+        />
+      )}
+
+      {editingStatus && <StatusDialog current={myStatus} onClose={() => setEditingStatus(false)} />}
+
+      {showStarred && (
+        <StarredPanel
+          channels={channels}
+          onPick={(id) => { setShowStarred(false); select(id); }}
+          onClose={() => setShowStarred(false)}
         />
       )}
 

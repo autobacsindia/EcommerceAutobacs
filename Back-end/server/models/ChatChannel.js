@@ -35,6 +35,9 @@ const ChatChannelSchema = new mongoose.Schema(
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     system: { type: Boolean, default: false }, // created by the app, cannot be archived
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    // A standing Google Meet link for this conversation ("📞 Call" posts it).
+    // Only a meet.google.com meeting link is accepted (chatService.MEET_URL).
+    meetUrl: { type: String, default: undefined, maxlength: 120 },
     archived: { type: Boolean, default: false },
     archivedAt: { type: Date },
     archivedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

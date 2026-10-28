@@ -91,6 +91,35 @@ const ReactionSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * Where a forwarded message came from: who wrote it and when — a snapshot, like
+ * a quote. The source message id is kept for the record but never sent to
+ * clients: the people reading the forward may not be able to read the original
+ * conversation, and must not learn which one it was.
+ */
+const ForwardSchema = new mongoose.Schema(
+  {
+    message: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatMessage', required: true },
+    by: { type: String, default: '' },
+    at: { type: Date, required: true },
+  },
+  { _id: false }
+);
+
+/**
+ * The card under a message's first link: text only (services/linkPreviewService.js
+ * explains why there is no image). Fetched after the message is posted.
+ */
+const PreviewSchema = new mongoose.Schema(
+  {
+    url: { type: String, required: true, maxlength: 2000 },
+    title: { type: String, required: true, maxlength: 200 },
+    description: { type: String, default: '', maxlength: 300 },
+    site: { type: String, default: '', maxlength: 80 },
+  },
+  { _id: false }
+);
+
 const ChatMessageSchema = new mongoose.Schema(
   {
     channel: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatChannel', required: true },
@@ -117,8 +146,24 @@ const ChatMessageSchema = new mongoose.Schema(
     mentions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     /** Teams addressed as a group, e.g. '@accounts'. Values from config/staff.js. */
     mentionTeams: [{ type: String }],
+    /**
+     * "@all": everyone who can read the conversation. In #company only admins
+     * and team heads may use it (chatService) — one person must not be able to
+     * ping the whole company. Unset when not used.
+     */
+    mentionAll: { type: Boolean, default: undefined },
     refs: { type: [RefSchema], default: [] },
     quote: { type: QuoteSchema, default: undefined },
+    forwardedFrom: { type: ForwardSchema, default: undefined },
+    preview: { type: PreviewSchema, default: undefined },
+    /*
+      Pinned to the top of its conversation ("Pinned" strip), by anyone who can
+      read it. `pinnedByName` is a snapshot, like a quote's author. Unset when
+      not pinned. At most MAX_PINS_PER_CHANNEL per conversation (chatService).
+    */
+    pinnedAt: { type: Date, default: undefined },
+    pinnedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
+    pinnedByName: { type: String, default: undefined, maxlength: 80 },
     // Emoji reactions, in the order each emoji was first used. Capped per
     // message (chatService.MAX_REACTIONS_PER_MESSAGE). Unset until the first one.
     reactions: { type: [ReactionSchema], default: undefined },
@@ -191,6 +236,11 @@ ChatMessageSchema.index(
 ChatMessageSchema.index(
   { channel: 1, threadOrder: 1 },
   { name: 'chat_order_thread', unique: true, partialFilterExpression: { threadOrder: { $type: 'objectId' } } }
+);
+// A conversation's pinned messages, newest pin first. Partial: only pinned rows.
+ChatMessageSchema.index(
+  { channel: 1, pinnedAt: -1 },
+  { name: 'chat_pins', partialFilterExpression: { pinnedAt: { $type: 'date' } } }
 );
 // "Mentions of me", newest first.
 ChatMessageSchema.index({ mentions: 1, createdAt: -1 });

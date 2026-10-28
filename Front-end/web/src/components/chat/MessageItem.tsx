@@ -2,50 +2,55 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Download, History, MessageSquareReply, Package, Pencil, Quote, RotateCcw, SmilePlus, Trash2 } from 'lucide-react';
+import { CornerUpRight, Download, Phone, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Pin, PinOff, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
+import { meetLinkIn } from './meet';
 import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
 import EmojiPicker from './EmojiPicker';
+import { formatMessage } from './chatFormat';
 
 /**
- * Message text as PLAIN TEXT, with links and @mentions picked out.
- *
- * Nothing here ever renders HTML from a message: the parts are split with a
- * regex and emitted as React children, so a pasted `<script>` is shown as the
- * characters a colleague typed and can never execute.
+ * Message text with its formatting (*bold*, _italic_, lists, code…), links and
+ * @mentions drawn — as React elements, never as HTML (see chatFormat.tsx).
  */
 function MessageText({ text, mentionNames, meName }: { text: string; mentionNames: string[]; meName: string }) {
-  const escaped = mentionNames.filter(Boolean).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const pattern = new RegExp(
-    `(https?:\\/\\/[^\\s<>"']+)${escaped.length ? `|(@(?:${escaped.join('|')}))` : ''}`,
-    'g',
-  );
-  const parts = text.split(pattern).filter((p) => p !== undefined);
-
   return (
-    <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-gray-800">
-      {parts.map((part, i) => {
-        if (/^https?:\/\//.test(part)) {
-          return (
-            <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="break-all text-link underline">
-              {part}
-            </a>
-          );
-        }
-        if (part.startsWith('@') && mentionNames.includes(part.slice(1))) {
-          const isMe = part.slice(1) === meName;
-          return (
-            <span
-              key={i}
-              className={`rounded px-1 font-semibold ${isMe ? 'bg-amber-200 text-amber-950' : 'bg-emerald-100 text-emerald-900'}`}
-            >
-              {part}
-            </span>
-          );
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </p>
+    <div className="break-words text-[15px] leading-relaxed text-gray-800">
+      {formatMessage(text, { mentionNames, meName })}
+    </div>
+  );
+}
+
+/**
+ * The card under a message's first link: site, title, a line of description.
+ * Text only — no image is ever loaded from the linked site.
+ */
+function LinkCard({ preview }: { preview: NonNullable<ChatMessage['preview']> }) {
+  return (
+    <a
+      href={preview.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-1.5 block max-w-md rounded-lg border-l-4 border-emerald-600 bg-gray-50 px-3 py-2 hover:bg-emerald-50"
+    >
+      <span className="block truncate text-xs text-gray-500">{preview.site}</span>
+      <span className="block text-sm font-semibold text-gray-900 line-clamp-2">{preview.title}</span>
+      {preview.description && <span className="mt-0.5 block text-xs text-gray-600 line-clamp-2">{preview.description}</span>}
+    </a>
+  );
+}
+
+/** A Google Meet link in a message: a big "Join call" button rather than a bare URL. */
+function MeetCard({ url }: { url: string }) {
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer"
+      className="mt-1.5 inline-flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 hover:bg-emerald-100">
+      <span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-700 text-white"><Phone className="h-4 w-4" /></span>
+      <span>
+        <span className="block text-sm font-semibold text-emerald-900">Google Meet call</span>
+        <span className="block text-xs text-emerald-800">Tap to join</span>
+      </span>
+    </a>
   );
 }
 
@@ -221,6 +226,46 @@ function Reactions({
   );
 }
 
+/** One entry in a message's "More" menu. */
+export interface MoreAction {
+  label: string;
+  icon: React.ReactNode;
+  onSelect: () => void;
+}
+
+/**
+ * The less frequent actions on a message (mark unread, star…), behind ⋮ so the
+ * hover bar stays small. Closes on a pick, Escape, or a click elsewhere.
+ */
+function MoreMenu({ actions, onClose }: { actions: MoreAction[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onDown = (e: MouseEvent | TouchEvent) => { if (!ref.current?.contains(e.target as Node)) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    document.addEventListener('keydown', onKey);
+    ref.current?.querySelector('button')?.focus();
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+  return (
+    <div ref={ref} role="menu" aria-label="More actions"
+      className="absolute right-3 top-6 z-30 w-52 rounded-xl border border-gray-200 bg-white p-1 shadow-xl">
+      {actions.map((a) => (
+        <button key={a.label} type="button" role="menuitem"
+          onClick={() => { a.onSelect(); onClose(); }}
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none">
+          <span className="text-gray-500">{a.icon}</span>{a.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The DOM id of a message row, so a quote can scroll to what it quotes. */
 export const messageDomId = (id: string) => `chat-msg-${id}`;
 
@@ -317,6 +362,10 @@ export default function MessageItem({
   onEdit,
   onDelete,
   onReact,
+  onMarkUnread,
+  onStar,
+  onForward,
+  onPin,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
@@ -337,6 +386,14 @@ export default function MessageItem({
   onDelete?: (m: ChatMessage) => Promise<unknown>;
   /** Put your emoji on this message (`on`) or take it off. */
   onReact?: (m: ChatMessage, emoji: string, on: boolean) => void;
+  /** Mark this message, and what follows it, unread for me. */
+  onMarkUnread?: (m: ChatMessage) => void;
+  /** Star it for me (`on`) or take the star off. */
+  onStar?: (m: ChatMessage, on: boolean) => void;
+  /** Forward a copy of it to another conversation. */
+  onForward?: (m: ChatMessage) => void;
+  /** Pin it to the top of the conversation (`on`) or unpin it — for everyone. */
+  onPin?: (m: ChatMessage, on: boolean) => void;
 }) {
   const m = message;
   // The timeline is ordered by activity, so a thread that just moved sits under
@@ -359,6 +416,23 @@ export default function MessageItem({
   const canQuote = !!onQuote && live;
   const canReact = !!onReact && live;
   const [picking, setPicking] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const more: MoreAction[] = live
+    ? [
+        ...(onMarkUnread ? [{ label: 'Mark as unread', icon: <EyeOff className="h-4 w-4" />, onSelect: () => onMarkUnread(m) }] : []),
+        ...(onForward ? [{ label: 'Forward', icon: <Forward className="h-4 w-4" />, onSelect: () => onForward(m) }] : []),
+        ...(onPin
+          ? [m.pinned
+            ? { label: 'Unpin', icon: <PinOff className="h-4 w-4" />, onSelect: () => onPin(m, false) }
+            : { label: 'Pin to the top', icon: <Pin className="h-4 w-4" />, onSelect: () => onPin(m, true) }]
+          : []),
+        ...(onStar
+          ? [m.starred
+            ? { label: 'Remove star', icon: <StarOff className="h-4 w-4" />, onSelect: () => onStar(m, false) }
+            : { label: 'Star', icon: <Star className="h-4 w-4" />, onSelect: () => onStar(m, true) }]
+          : []),
+      ]
+    : [];
 
   const mine = m.sender?.id === meId;
   const editable = useStillEditable(m.editableUntil);
@@ -405,8 +479,12 @@ export default function MessageItem({
       setBusy(false);
     }
   };
-  const mentionsMe = m.mentions.includes(meId);
-  const mentionNames = m.mentions.map((id) => peopleById.get(id)?.name ?? '').filter(Boolean);
+  // "@all" addresses me too — unless I wrote it.
+  const mentionsMe = m.mentions.includes(meId) || (!!m.mentionAll && m.sender?.id !== meId);
+  const mentionNames = [
+    ...m.mentions.map((id) => peopleById.get(id)?.name ?? '').filter(Boolean),
+    ...(m.mentionAll ? ['all'] : []),
+  ];
   const photos = m.attachments.filter((a) => a.kind === 'image');
   const documents = m.attachments.filter((a) => a.kind !== 'image');
 
@@ -437,6 +515,12 @@ export default function MessageItem({
                 <TeamBadge person={m.sender} />
               )}
               <span className="text-xs text-gray-500">{timeOf(m.createdAt)}</span>
+              {m.starred && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" aria-label="Starred" />}
+              {m.pinned && (
+                <span className="inline-flex items-center gap-0.5 text-[11px] text-gray-500" title={`Pinned by ${m.pinned.by || 'someone'}`}>
+                  <Pin className="h-3 w-3" aria-hidden="true" /> Pinned
+                </span>
+              )}
               {m.edited && !m.deleted && (
                 <span className="text-xs text-gray-400" title={m.editedAt ? `Edited ${timeOf(m.editedAt)}` : 'Edited'}>
                   (edited)
@@ -493,7 +577,15 @@ export default function MessageItem({
           ) : (
             <div className={m.pending ? 'opacity-60' : ''}>
               {m.quote && <QuoteBlock quote={m.quote} onJump={onJumpTo} />}
+              {m.forwarded && (
+                <p className="mb-0.5 inline-flex items-center gap-1 text-xs text-gray-500">
+                  <CornerUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  Forwarded · originally from <span className="font-medium text-gray-700">{m.forwarded.by || 'someone'}</span>
+                  <span className="text-gray-400">· {dayLabel(m.forwarded.at)}</span>
+                </p>
+              )}
               {m.text && <MessageText text={m.text} mentionNames={mentionNames} meName={meName} />}
+              {meetLinkIn(m.text) ? <MeetCard url={meetLinkIn(m.text)!} /> : m.preview && <LinkCard preview={m.preview} />}
               <Photos items={photos} />
               <Documents items={documents} />
               <OrderRefs refs={m.refs} orderHref={orderHref} />
@@ -550,7 +642,8 @@ export default function MessageItem({
             onClose={() => setPicking(false)}
           />
         )}
-        {(canQuote || canReply || canReact || (canChange && !editing && (onEdit || onDelete))) && (
+        {moreOpen && more.length > 0 && <MoreMenu actions={more} onClose={() => setMoreOpen(false)} />}
+        {(canQuote || canReply || canReact || more.length > 0 || (canChange && !editing && (onEdit || onDelete))) && (
           <div className="absolute -top-3 right-3 hidden items-center gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 shadow-md focus-within:flex group-hover:flex pointer-coarse:flex">
             {canReact && (
               <button
@@ -605,6 +698,18 @@ export default function MessageItem({
                 title="Delete (within 30 minutes of sending)"
               >
                 <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+            {more.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setMoreOpen(true)}
+                className="rounded-full p-1.5 text-gray-600 hover:bg-emerald-50 hover:text-emerald-800"
+                aria-label="More actions"
+                aria-haspopup="menu"
+                title="More"
+              >
+                <MoreVertical className="h-4 w-4" />
               </button>
             )}
           </div>

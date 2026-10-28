@@ -26,6 +26,49 @@ export const validateReaction = [
   body('on').optional().isBoolean({ strict: true }).withMessage('on must be true or false'),
 ];
 
+/** A conversation's notification setting, for the signed-in person. */
+export const validateNotify = [
+  param('id').custom(isObjectId).withMessage('Invalid channel id'),
+  body('notify').isIn(['all', 'mentions', 'off']).withMessage('Choose all, mentions or off'),
+];
+
+/** Star or un-star a message, for me. */
+export const validateStar = [
+  param('id').custom(isObjectId).withMessage('Invalid message id'),
+  body('on').optional().isBoolean({ strict: true }).withMessage('on must be true or false'),
+];
+
+/** A page of my starred messages. */
+export const validateStarredPage = [
+  query('before').optional().custom(isObjectId).withMessage('Invalid cursor'),
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be 1–50'),
+];
+
+/** Forward a message into a conversation. */
+export const validateForward = [
+  param('id').custom(isObjectId).withMessage('Invalid message id'),
+  body('channelId').custom(isObjectId).withMessage('Choose a conversation'),
+  body('clientId').optional().isString().matches(/^[A-Za-z0-9_-]{8,64}$/).withMessage('Invalid client id'),
+];
+
+/** Pin or unpin a message in its conversation. */
+export const validatePin = [
+  param('id').custom(isObjectId).withMessage('Invalid message id'),
+  body('on').optional().isBoolean({ strict: true }).withMessage('on must be true or false'),
+];
+
+/** My chat status: a short line, optionally until a time. */
+export const validateStatus = [
+  body('text').isString().withMessage('Write a status').bail().isLength({ max: 200 }).withMessage('Status is too long'),
+  body('until').optional({ values: 'null' }).isISO8601().withMessage('Invalid date'),
+];
+
+/** A conversation's Google Meet link (null clears it). The service checks it is a Meet link. */
+export const validateMeet = [
+  param('id').custom(isObjectId).withMessage('Invalid channel id'),
+  body('url').optional({ values: 'null' }).isString().isLength({ max: 120 }).withMessage('Invalid link'),
+];
+
 export const validateMessagePage = [
   query('before').optional().isInt({ min: 1 }).withMessage('Invalid cursor'),
   query('after').optional().isInt({ min: 0 }).withMessage('Invalid cursor'),
@@ -67,6 +110,10 @@ export const validateCreateSpace = [
   body('memberIds.*').optional().custom(isObjectId).withMessage('Invalid member id'),
 ];
 
+/** One person (a DM) or a few (a group conversation, up to 7 others). */
 export const validateOpenDm = [
-  body('userId').custom(isObjectId).withMessage('Invalid person'),
+  body('userId').optional().custom(isObjectId).withMessage('Invalid person'),
+  body('userIds').optional().isArray({ min: 1, max: 7 }).withMessage('Choose 1 to 7 people'),
+  body('userIds.*').optional().custom(isObjectId).withMessage('Invalid person'),
+  body().custom((b) => !!(b?.userId || (Array.isArray(b?.userIds) && b.userIds.length))).withMessage('Choose who to message'),
 ];
