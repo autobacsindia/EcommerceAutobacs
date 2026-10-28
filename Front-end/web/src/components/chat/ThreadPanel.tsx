@@ -127,7 +127,7 @@ export default function ThreadPanel({
 
   return (
     <aside
-      className="absolute inset-0 z-20 flex min-h-0 flex-col bg-white md:static md:ml-2 md:w-[380px] md:shrink-0 md:rounded-2xl"
+      className="absolute inset-0 z-20 flex min-h-0 min-w-0 flex-col bg-white xl:static xl:ml-2 xl:w-[380px] xl:shrink-0 xl:rounded-2xl"
       aria-label="Thread"
     >
       <header className="flex items-center gap-2 border-b border-gray-200 px-4 py-3">
@@ -140,7 +140,7 @@ export default function ThreadPanel({
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto rounded-lg p-1.5 text-gray-600 hover:bg-gray-100"
+          className="ml-auto shrink-0 rounded-lg p-2.5 text-gray-600 hover:bg-gray-100"
           aria-label="Close thread"
         >
           <X className="h-5 w-5" />
