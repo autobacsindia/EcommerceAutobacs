@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Package, Paperclip, Quote, Send, X } from 'lucide-react';
+import { Bold, Code, Italic, List, Package, Paperclip, Quote, Send, Smile, Strikethrough, Type, X } from 'lucide-react';
 import type { ChatChannel, ChatMessage, ChatPerson, RecentOrder, SendVars } from '@/hooks/queries/useTeamChat';
 import { useRecentOrders } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, GREEN, fileSize, newClientId } from './chatUi';
 import { STAFF_TEAMS } from '@/lib/staffTeams';
+import EmojiPicker from './EmojiPicker';
 
 const MAX_FILES = 5;
 const MAX_FILE_MB = 10;
@@ -25,6 +26,32 @@ export function mentionableTeams(channel: ChatChannel): readonly string[] {
   if (channel.kind !== 'space' || channel.audience === 'members') return [];
   if (channel.audience === 'teams') return channel.teams ?? [];
   return TEAMS;
+}
+
+/**
+ * Wrap the selected text in a formatting marker (`*` bold, `_` italic, `~`
+ * strike, `` ` `` code), or — with nothing selected — put an empty pair at the
+ * caret. Returns the new text and where the selection should be. Pure, for tests.
+ */
+export function wrapSelection(text: string, start: number, end: number, marker: string) {
+  const picked = text.slice(start, end);
+  const next = `${text.slice(0, start)}${marker}${picked}${marker}${text.slice(end)}`;
+  return { text: next, start: start + marker.length, end: end + marker.length };
+}
+
+/** Turn the selected lines (or the caret's line) into "- " bullets. Pure, for tests. */
+export function bulletLines(text: string, start: number, end: number) {
+  const from = text.lastIndexOf('\n', start - 1) + 1;
+  const toNl = text.indexOf('\n', end);
+  const to = toNl === -1 ? text.length : toNl;
+  const block = text.slice(from, to).split('\n').map((l) => (/^\s*[-*•]\s/.test(l) ? l : `- ${l}`)).join('\n');
+  const next = `${text.slice(0, from)}${block}${text.slice(to)}`;
+  return { text: next, start: from + block.length, end: from + block.length };
+}
+
+/** Insert `piece` at the caret (replacing any selection). Pure, for tests. */
+export function insertAt(text: string, start: number, end: number, piece: string) {
+  return { text: `${text.slice(0, start)}${piece}${text.slice(end)}`, start: start + piece.length, end: start + piece.length };
 }
 
 type Pending = { file: File; preview: string | null };
@@ -61,6 +88,8 @@ export default function Composer({
   const [mentionTeams, setMentionTeams] = useState<string[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [showOrders, setShowOrders] = useState(false);
+  const [showFormat, setShowFormat] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
   const [error, setError] = useState('');
 
   const box = useRef<HTMLTextAreaElement>(null);
@@ -124,6 +153,20 @@ export default function Composer({
     const allHit: MentionOption[] = canMentionAll && 'all'.startsWith(q) ? [{ all: true }] : [];
     return [...allHit, ...teamHits.map((t) => ({ team: t })), ...peopleHits.map((p) => ({ person: p }))];
   }, [mentionQuery, people, teams, canMentionAll]);
+
+  /** Apply an edit to the box and put the caret/selection where it belongs. */
+  const edit = (fn: (text: string, start: number, end: number) => { text: string; start: number; end: number }) => {
+    const el = box.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const next = fn(text, start, end);
+    setText(next.text.slice(0, 4000));
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(next.start, next.end);
+    });
+  };
+  const format = (marker: string) => edit((t, a, b) => wrapSelection(t, a, b, marker));
 
   /** Swap the half-typed "@foo" for the chosen name and remember who was meant. */
   const pickMention = (option: MentionOption) => {
@@ -291,6 +334,30 @@ export default function Composer({
           </div>
         )}
 
+        {showEmoji && (
+          <EmojiPicker
+            className="absolute bottom-full left-0 mb-2"
+            onPick={(emoji) => edit((t, a, b) => insertAt(t, a, b, emoji))}
+            onClose={() => setShowEmoji(false)}
+          />
+        )}
+        {showFormat && (
+          <div className="mb-1 flex items-center gap-0.5 px-1" role="toolbar" aria-label="Formatting">
+            {([
+              ['Bold (Ctrl+B)', Bold, () => format('*')],
+              ['Italic (Ctrl+I)', Italic, () => format('_')],
+              ['Strikethrough', Strikethrough, () => format('~')],
+              ['Code', Code, () => format('`')],
+              ['Bulleted list', List, () => edit(bulletLines)],
+            ] as const).map(([label, Icon, run]) => (
+              <button key={label} type="button" onMouseDown={(e) => e.preventDefault()} onClick={run}
+                className="grid h-8 w-8 place-items-center rounded-lg text-gray-600 hover:bg-gray-200 hover:text-gray-900"
+                aria-label={label} title={label}>
+                <Icon className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-end gap-1 rounded-3xl border border-transparent bg-gray-100 p-1.5 transition-colors focus-within:border-emerald-600 focus-within:bg-white">
           <button
             type="button"
@@ -309,6 +376,25 @@ export default function Composer({
             title="Link an order"
           >
             <Package className="h-[18px] w-[18px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowEmoji((v) => !v)}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 hover:text-gray-800"
+            aria-label="Add an emoji"
+            title="Emoji"
+          >
+            <Smile className="h-[18px] w-[18px]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFormat((v) => !v)}
+            aria-pressed={showFormat}
+            className={`hidden h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-gray-200 hover:text-gray-800 sm:grid ${showFormat ? 'bg-gray-200 text-gray-900' : 'text-gray-600'}`}
+            aria-label="Formatting"
+            title="Formatting: *bold* _italic_ ~strike~ `code`"
+          >
+            <Type className="h-[18px] w-[18px]" />
           </button>
           <input
             ref={fileInput}
@@ -333,6 +419,11 @@ export default function Composer({
               }
             }}
             onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 'b' || e.key === 'i')) {
+                e.preventDefault();
+                format(e.key === 'b' ? '*' : '_');
+                return;
+              }
               if (e.key === 'Escape') {
                 setMentionQuery(null);
                 setShowOrders(false);
@@ -368,7 +459,7 @@ export default function Composer({
         </div>
       </div>
       <p className="mt-1 hidden text-[11px] text-gray-400 sm:block">
-        Enter to send · Shift + Enter for a new line · @ to mention · drag a file in to share it
+        Enter to send · Shift + Enter for a new line · @ to mention · *bold* _italic_ ~strike~ `code` · drag a file in to share it
       </p>
     </form>
   );

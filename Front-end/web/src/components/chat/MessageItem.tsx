@@ -6,47 +6,36 @@ import { CornerUpRight, Download, EyeOff, Forward, History, MessageSquareReply, 
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
 import EmojiPicker from './EmojiPicker';
+import { formatMessage } from './chatFormat';
 
 /**
- * Message text as PLAIN TEXT, with links and @mentions picked out.
- *
- * Nothing here ever renders HTML from a message: the parts are split with a
- * regex and emitted as React children, so a pasted `<script>` is shown as the
- * characters a colleague typed and can never execute.
+ * Message text with its formatting (*bold*, _italic_, lists, code…), links and
+ * @mentions drawn — as React elements, never as HTML (see chatFormat.tsx).
  */
 function MessageText({ text, mentionNames, meName }: { text: string; mentionNames: string[]; meName: string }) {
-  const escaped = mentionNames.filter(Boolean).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const pattern = new RegExp(
-    // (?!\\w): "@all" must not light up the start of "@allison".
-    `(https?:\\/\\/[^\\s<>"']+)${escaped.length ? `|(@(?:${escaped.join('|')})(?!\\w))` : ''}`,
-    'g',
-  );
-  const parts = text.split(pattern).filter((p) => p !== undefined);
-
   return (
-    <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-gray-800">
-      {parts.map((part, i) => {
-        if (/^https?:\/\//.test(part)) {
-          return (
-            <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="break-all text-link underline">
-              {part}
-            </a>
-          );
-        }
-        if (part.startsWith('@') && mentionNames.includes(part.slice(1))) {
-          const isMe = part.slice(1) === meName || part === '@all';
-          return (
-            <span
-              key={i}
-              className={`rounded px-1 font-semibold ${isMe ? 'bg-amber-200 text-amber-950' : 'bg-emerald-100 text-emerald-900'}`}
-            >
-              {part}
-            </span>
-          );
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </p>
+    <div className="break-words text-[15px] leading-relaxed text-gray-800">
+      {formatMessage(text, { mentionNames, meName })}
+    </div>
+  );
+}
+
+/**
+ * The card under a message's first link: site, title, a line of description.
+ * Text only — no image is ever loaded from the linked site.
+ */
+function LinkCard({ preview }: { preview: NonNullable<ChatMessage['preview']> }) {
+  return (
+    <a
+      href={preview.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-1.5 block max-w-md rounded-lg border-l-4 border-emerald-600 bg-gray-50 px-3 py-2 hover:bg-emerald-50"
+    >
+      <span className="block truncate text-xs text-gray-500">{preview.site}</span>
+      <span className="block text-sm font-semibold text-gray-900 line-clamp-2">{preview.title}</span>
+      {preview.description && <span className="mt-0.5 block text-xs text-gray-600 line-clamp-2">{preview.description}</span>}
+    </a>
   );
 }
 
@@ -581,6 +570,7 @@ export default function MessageItem({
                 </p>
               )}
               {m.text && <MessageText text={m.text} mentionNames={mentionNames} meName={meName} />}
+              {m.preview && <LinkCard preview={m.preview} />}
               <Photos items={photos} />
               <Documents items={documents} />
               <OrderRefs refs={m.refs} orderHref={orderHref} />

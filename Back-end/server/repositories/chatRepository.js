@@ -253,6 +253,17 @@ const chatRepository = {
       { new: true },
     ).populate('sender', SENDER_FIELDS).lean(),
 
+  /**
+   * Store a link preview — only if the message still says what it said when
+   * the preview was fetched (an edit in between would make it the wrong card).
+   */
+  setPreview: (id, text, preview) =>
+    ChatMessage.findOneAndUpdate(
+      { _id: id, text, deletedAt: null },
+      preview ? { $set: { preview } } : { $unset: { preview: 1 } },
+      { new: true, projection: { channel: 1, threadRoot: 1, preview: 1 } },
+    ).lean(),
+
   // ── pins (shared per conversation) ──
   /** Live pinned messages in a channel, newest pin first (index chat_pins). */
   findPins: (channel, limit) =>

@@ -22,6 +22,7 @@ import { pushConfigured, sendToUsers } from './pushService.js';
 import { onlineAmong } from './chatPresence.js';
 import { uploadChatAttachments, copyChatAttachments, MAX_ATTACHMENTS_PER_MESSAGE, CHAT_FILE_NAME, chatFolder, chatFileType } from './chatAttachmentService.js';
 import { readPrivateAsset } from './storage/privateUploads.js';
+import { firstUrl, previewFor, linkPreviewsEnabled } from './linkPreviewService.js';
 import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 import { orderNumber } from './invoiceService.js';
@@ -205,6 +206,7 @@ function shapeMessage(m, sender, viewer = null) {
     forwarded: !hide && m.forwardedFrom ? { by: m.forwardedFrom.by, at: m.forwardedFrom.at } : null,
     reactions: hide ? [] : shapeReactions(m.reactions),
     pinned: !hide && m.pinnedAt ? { by: m.pinnedByName || '', at: m.pinnedAt } : null,
+    preview: !hide && m.preview ? { url: m.preview.url, title: m.preview.title, description: m.preview.description || '', site: m.preview.site || '' } : null,
     createdAt: m.createdAt,
     edited: !!m.editedAt,
     editedAt: m.editedAt ?? null,
@@ -843,6 +845,8 @@ async function insertMessage(channel, {
   await publishChatEvent({
     type: 'message', channelId: idOf(channel), route: audienceOf(channel), message, ...(thread ? { thread } : {}),
   });
+  // The first link's card, fetched after the message is out — never awaited.
+  if (kind === 'user') void attachPreview(channel, doc);
   // A pop-up on the devices of everyone who can see it — not awaited: chat never waits for push.
   void pushForMessage(channel, { kind, text, attachments, sender, updates, mentions, mentionTeams, mentionAll });
   return { message, thread, duplicate: false };
@@ -857,6 +861,43 @@ export function wantsNotification(level, user, { mentions = [], mentionTeams = [
   if (level !== 'mentions' || mentionAll) return true;
   const uid = idOf(user);
   return mentions.some((m) => idOf(m) === uid) || (!!teamOf(user) && mentionTeams.includes(teamOf(user)));
+}
+
+// ── link previews ────────────────────────────────────────────────────────────
+
+const MAX_PREVIEWS_IN_FLIGHT = 4;
+let previewsInFlight = 0;
+
+/**
+ * Fetch the card for a message's first link and tell the room. Best-effort:
+ * a slow site, a blocked address or a busy server simply means no card. Kept
+ * to a few fetches at once so a burst of links cannot tie up the server.
+ */
+async function attachPreview(channel, m) {
+  const url = firstUrl(m.text);
+  if (!url || !linkPreviewsEnabled() || previewsInFlight >= MAX_PREVIEWS_IN_FLIGHT) return;
+  previewsInFlight += 1;
+  try {
+    const preview = await previewFor(url);
+    if (!preview) return;
+    await publishPreview(channel, await chatRepository.setPreview(m._id, m.text, preview));
+  } catch (err) {
+    console.error('[chat] link preview failed (ignored):', err.message);
+  } finally {
+    previewsInFlight -= 1;
+  }
+}
+
+async function publishPreview(channel, updated) {
+  if (!updated) return;
+  await publishChatEvent({
+    type: 'message_preview',
+    channelId: idOf(channel),
+    route: audienceOf(channel),
+    messageId: idOf(updated),
+    threadRoot: updated.threadRoot ? idOf(updated.threadRoot) : null,
+    preview: updated.preview ? { url: updated.preview.url, title: updated.preview.title, description: updated.preview.description || '', site: updated.preview.site || '' } : null,
+  });
 }
 
 /**
@@ -1056,6 +1097,11 @@ export async function editMessage(user, messageId, { text } = {}) {
   }
 
   await chatRepository.refreshQuotePreviews(channel._id, updated._id, previewOf(updated));
+  // A different first link (or none) means a different card (or none).
+  if (firstUrl(updated.text) !== firstUrl(m.text)) {
+    if (m.preview) await publishPreview(channel, await chatRepository.setPreview(updated._id, updated.text, null));
+    void attachPreview(channel, updated);
+  }
   const thread = await refreshThreadSummaryFor(updated);
   await publishChatEvent({
     type: 'message_edited',
