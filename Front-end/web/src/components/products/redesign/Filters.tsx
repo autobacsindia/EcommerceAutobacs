@@ -8,6 +8,7 @@ import productService from '@/lib/services/productService';
 import { useCurrency } from '@/context/CurrencyContext';
 
 import PriceHistogram from '@/components/ui/PriceHistogram';
+import { FILTER_PARAMS } from './filterParams';
 import './redesign.css';
 
 /**
@@ -283,6 +284,18 @@ export default function Filters({
     brandQuery ? b.label.toLowerCase().includes(brandQuery.toLowerCase()) : true
   );
 
+  // Clears the filters and nothing else. Pushing the bare basePath also dropped
+  // the search page's `q`, so "Clear all filters" threw away what was searched.
+  const hasActiveFilter = FILTER_PARAMS.some((k) => searchParams.has(k));
+  const clearFilters = () => {
+    const p = new URLSearchParams(searchParams.toString());
+    FILTER_PARAMS.forEach((k) => p.delete(k));
+    p.delete('page');
+    p.delete('shown');
+    const qs = p.toString();
+    router.push(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
+  };
+
   // ── URL writer (live-apply) ──
   // Patches ONLY the keys it is handed, on top of the CURRENT url. It must not
   // rebuild the whole query from this component's view of the world, or a
@@ -375,15 +388,17 @@ export default function Filters({
         </p>
       )}
 
-      {/* Nothing matches — name the way out rather than leaving a dead panel. */}
-      {total === 0 && (
+      {/* Nothing matches — name the way out rather than leaving a dead panel.
+          Only when a filter is on: with none, there is nothing to clear, and the
+          results area already says why the list is empty. */}
+      {total === 0 && hasActiveFilter && (
         <div className="mb-4 rounded-lg border border-hairline bg-obsidian px-3.5 py-3">
           <p className="text-[13px] text-ink-muted">
             No products match every filter.
           </p>
           <button
             type="button"
-            onClick={() => router.push(basePath, { scroll: false })}
+            onClick={clearFilters}
             className="mt-2 text-[13px] font-semibold text-link hover:text-gold hover:underline"
           >
             Clear all filters

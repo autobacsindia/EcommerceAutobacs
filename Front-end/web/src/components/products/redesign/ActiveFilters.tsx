@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { X } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { useCurrency } from '@/context/CurrencyContext';
+import { FILTER_PARAMS } from './filterParams';
 
 interface Category { _id: string; name: string }
 
@@ -93,7 +94,7 @@ export default function ActiveFilters() {
       ))}
       <button
         onClick={() => replaceParams((p) => {
-          ['category', 'brand', 'rating', 'minPrice', 'maxPrice', 'inStock', 'vehicleMake', 'vehicleModel'].forEach((k) => p.delete(k));
+          FILTER_PARAMS.forEach((k) => p.delete(k));
         })}
         className="text-[13px] font-semibold text-link underline-offset-4 hover:text-gold hover:underline"
       >
