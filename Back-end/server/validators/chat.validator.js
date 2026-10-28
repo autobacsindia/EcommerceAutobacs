@@ -51,6 +51,12 @@ export const validateForward = [
   body('clientId').optional().isString().matches(/^[A-Za-z0-9_-]{8,64}$/).withMessage('Invalid client id'),
 ];
 
+/** Pin or unpin a message in its conversation. */
+export const validatePin = [
+  param('id').custom(isObjectId).withMessage('Invalid message id'),
+  body('on').optional().isBoolean({ strict: true }).withMessage('on must be true or false'),
+];
+
 export const validateMessagePage = [
   query('before').optional().isInt({ min: 1 }).withMessage('Invalid cursor'),
   query('after').optional().isInt({ min: 0 }).withMessage('Invalid cursor'),

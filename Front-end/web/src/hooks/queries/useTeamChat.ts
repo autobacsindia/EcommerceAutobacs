@@ -127,6 +127,8 @@ export interface ChatMessage {
   refs: ChatRef[];
   /** A forwarded copy: who wrote the original and when (never where). */
   forwarded?: { by: string; at: string } | null;
+  /** Pinned to the top of its conversation: by whom, when. */
+  pinned?: { by: string; at: string } | null;
   /** The message this one quotes, as it read when quoted. */
   quote?: ChatQuote | null;
   /** Emoji reactions, in the order each emoji was first used. */
@@ -668,6 +670,45 @@ export function useForwardMessage() {
       qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) => upsertMessage(d, res.message));
       qc.invalidateQueries({ queryKey: chatKeys.channels() });
     },
+  });
+}
+
+// ── pins ─────────────────────────────────────────────────────────────────────
+
+/** A conversation's pinned messages, newest pin first (at most 20). */
+export function usePins(channelId: string | null) {
+  return useQuery({
+    queryKey: chatKeys.pins(channelId ?? 'none'),
+    queryFn: async () => (await apiClient.get<{ messages: ChatMessage[] }>(`/chat/channels/${channelId}/pins`)).messages ?? [],
+    enabled: !!channelId,
+    staleTime: 60_000, // the live stream invalidates it on any pin change
+  });
+}
+
+/** Set a message's `pinned` wherever the timeline or a thread holds it. */
+export function applyPinned(
+  qc: ReturnType<typeof useQueryClient>,
+  channelId: string,
+  messageId: string,
+  pinned: ChatMessage['pinned'],
+) {
+  const set = (m: ChatMessage) => (m.id === messageId ? { ...m, pinned } : m);
+  qc.setQueryData<Pages>(chatKeys.messages(channelId), (d) =>
+    d ? { ...d, pages: d.pages.map((p) => ({ ...p, messages: p.messages.map(set) })) } : d,
+  );
+  qc.setQueriesData<ThreadData>({ queryKey: [...chatKeys.all, 'thread'] }, (d) =>
+    d ? { ...d, root: set(d.root), replies: d.replies.map(set) } : d,
+  );
+  qc.invalidateQueries({ queryKey: chatKeys.pins(channelId) });
+}
+
+/** Pin or unpin a message for everyone in the conversation. Not optimistic: the server says who pinned it. */
+export function usePinMessage(channelId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, on }: { id: string; on: boolean }) =>
+      apiClient.put<{ messageId: string; pinned: ChatMessage['pinned'] }>(`/chat/messages/${id}/pin`, { on }),
+    onSuccess: (res) => { if (channelId) applyPinned(qc, channelId, res.messageId, res.pinned); },
   });
 }
 

@@ -14,6 +14,7 @@ import {
   applyThreadUpdate,
   applyMessageChange,
   applyReactions,
+  applyPinned,
   countedUnread,
   notifyOf,
   useCanChat,
@@ -270,6 +271,7 @@ export default function TeamChat() {
       const e = event as unknown as {
         type: string; channelId?: string; message?: ChatMessage; messageId?: string; thread?: ChatMessage;
         reactions?: ChatReaction[];
+        pinned?: ChatMessage['pinned'];
       };
       if (e.type === 'message' && e.message && e.channelId) {
         if (e.message.threadRoot) {
@@ -300,7 +302,10 @@ export default function TeamChat() {
         qc.invalidateQueries({ queryKey: chatKeys.messages(e.channelId) });
         qc.invalidateQueries({ queryKey: [...chatKeys.all, 'thread'] });
         qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
+        qc.invalidateQueries({ queryKey: chatKeys.pins(e.channelId) });
       } else if (e.type === 'message_deleted' && e.channelId && e.messageId) {
+        // A deleted message drops off the Pinned list.
+        qc.invalidateQueries({ queryKey: chatKeys.pins(e.channelId) });
         // If it was a thread's newest reply, the thread's "last reply" line changed too.
         if (e.thread) applyMessageChange(qc, e.channelId, e.thread);
         qc.setQueryData<Pages>(chatKeys.messages(e.channelId), (d) =>
@@ -324,6 +329,8 @@ export default function TeamChat() {
           return { ...d, root: hide(d.root), replies: d.replies.map(hide) };
         });
         qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
+      } else if (e.type === 'message_pinned' && e.channelId && e.messageId) {
+        applyPinned(qc, e.channelId, e.messageId, e.pinned ?? null);
       } else if (e.type === 'message_reactions' && e.channelId && e.messageId && e.reactions) {
         applyReactions(qc, e.channelId, e.messageId, e.reactions);
       } else if (e.type === 'channel') {

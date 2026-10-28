@@ -141,6 +141,14 @@ const ChatMessageSchema = new mongoose.Schema(
     refs: { type: [RefSchema], default: [] },
     quote: { type: QuoteSchema, default: undefined },
     forwardedFrom: { type: ForwardSchema, default: undefined },
+    /*
+      Pinned to the top of its conversation ("Pinned" strip), by anyone who can
+      read it. `pinnedByName` is a snapshot, like a quote's author. Unset when
+      not pinned. At most MAX_PINS_PER_CHANNEL per conversation (chatService).
+    */
+    pinnedAt: { type: Date, default: undefined },
+    pinnedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
+    pinnedByName: { type: String, default: undefined, maxlength: 80 },
     // Emoji reactions, in the order each emoji was first used. Capped per
     // message (chatService.MAX_REACTIONS_PER_MESSAGE). Unset until the first one.
     reactions: { type: [ReactionSchema], default: undefined },
@@ -213,6 +221,11 @@ ChatMessageSchema.index(
 ChatMessageSchema.index(
   { channel: 1, threadOrder: 1 },
   { name: 'chat_order_thread', unique: true, partialFilterExpression: { threadOrder: { $type: 'objectId' } } }
+);
+// A conversation's pinned messages, newest pin first. Partial: only pinned rows.
+ChatMessageSchema.index(
+  { channel: 1, pinnedAt: -1 },
+  { name: 'chat_pins', partialFilterExpression: { pinnedAt: { $type: 'date' } } }
 );
 // "Mentions of me", newest first.
 ChatMessageSchema.index({ mentions: 1, createdAt: -1 });

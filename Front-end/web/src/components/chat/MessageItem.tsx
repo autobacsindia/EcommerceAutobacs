@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CornerUpRight, Download, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
+import { CornerUpRight, Download, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Pin, PinOff, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf } from './chatUi';
 import EmojiPicker from './EmojiPicker';
@@ -361,6 +361,7 @@ export default function MessageItem({
   onMarkUnread,
   onStar,
   onForward,
+  onPin,
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
@@ -387,6 +388,8 @@ export default function MessageItem({
   onStar?: (m: ChatMessage, on: boolean) => void;
   /** Forward a copy of it to another conversation. */
   onForward?: (m: ChatMessage) => void;
+  /** Pin it to the top of the conversation (`on`) or unpin it — for everyone. */
+  onPin?: (m: ChatMessage, on: boolean) => void;
 }) {
   const m = message;
   // The timeline is ordered by activity, so a thread that just moved sits under
@@ -414,6 +417,11 @@ export default function MessageItem({
     ? [
         ...(onMarkUnread ? [{ label: 'Mark as unread', icon: <EyeOff className="h-4 w-4" />, onSelect: () => onMarkUnread(m) }] : []),
         ...(onForward ? [{ label: 'Forward', icon: <Forward className="h-4 w-4" />, onSelect: () => onForward(m) }] : []),
+        ...(onPin
+          ? [m.pinned
+            ? { label: 'Unpin', icon: <PinOff className="h-4 w-4" />, onSelect: () => onPin(m, false) }
+            : { label: 'Pin to the top', icon: <Pin className="h-4 w-4" />, onSelect: () => onPin(m, true) }]
+          : []),
         ...(onStar
           ? [m.starred
             ? { label: 'Remove star', icon: <StarOff className="h-4 w-4" />, onSelect: () => onStar(m, false) }
@@ -504,6 +512,11 @@ export default function MessageItem({
               )}
               <span className="text-xs text-gray-500">{timeOf(m.createdAt)}</span>
               {m.starred && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" aria-label="Starred" />}
+              {m.pinned && (
+                <span className="inline-flex items-center gap-0.5 text-[11px] text-gray-500" title={`Pinned by ${m.pinned.by || 'someone'}`}>
+                  <Pin className="h-3 w-3" aria-hidden="true" /> Pinned
+                </span>
+              )}
               {m.edited && !m.deleted && (
                 <span className="text-xs text-gray-400" title={m.editedAt ? `Edited ${timeOf(m.editedAt)}` : 'Edited'}>
                   (edited)

@@ -21,6 +21,7 @@ import {
   validateStar,
   validateStarredPage,
   validateForward,
+  validatePin,
 } from '../validators/chat.validator.js';
 import {
   listChannels,
@@ -44,6 +45,8 @@ import {
   starMessage,
   listStarred,
   forwardMessage,
+  pinMessage,
+  listPins,
   createSpace,
   deleteSpace,
   openConversation,
@@ -193,6 +196,16 @@ router.get('/starred', validateStarredPage, validateRequest, asyncHandler(async 
 // PUT /chat/messages/:id/star { on? } — star (default) or un-star a message, for me
 router.put('/messages/:id/star', validateStar, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await starMessage(req.user, req.params.id, { on: req.body.on })) });
+}));
+
+// GET /chat/channels/:id/pins — the conversation's pinned messages
+router.get('/channels/:id/pins', validateChannelIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listPins(req.user, req.params.id)) });
+}));
+
+// PUT /chat/messages/:id/pin { on? } — pin (default) or unpin, for everyone in the conversation
+router.put('/messages/:id/pin', validatePin, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await pinMessage(req.user, req.params.id, { on: req.body.on })) });
 }));
 
 // GET /chat/channels/:id/messages?before=&after=&limit=

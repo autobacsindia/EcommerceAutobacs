@@ -204,6 +204,7 @@ function shapeMessage(m, sender, viewer = null) {
     // Who wrote the original and when — never where it was (see models/ChatMessage.js).
     forwarded: !hide && m.forwardedFrom ? { by: m.forwardedFrom.by, at: m.forwardedFrom.at } : null,
     reactions: hide ? [] : shapeReactions(m.reactions),
+    pinned: !hide && m.pinnedAt ? { by: m.pinnedByName || '', at: m.pinnedAt } : null,
     createdAt: m.createdAt,
     edited: !!m.editedAt,
     editedAt: m.editedAt ?? null,
@@ -1451,4 +1452,56 @@ export async function forwardMessage(user, messageId, { channelId, clientId } = 
     refs: (source.refs || []).map((r) => ({ type: r.type, code: r.code, target: r.target })),
     forwardedFrom: { message: source._id, by, at: source.createdAt },
   });
+}
+
+// ── pins ─────────────────────────────────────────────────────────────────────
+/*
+  Pin a message to the top of its conversation, as in Google Chat: anyone who
+  can read the conversation can pin or unpin, and everyone in it sees the
+  change live. A deleted message cannot be pinned and drops off the list.
+  Pinning twice keeps the first pin; unpinning twice is a no-op.
+*/
+
+export const MAX_PINS_PER_CHANNEL = 20;
+
+/** Pin (`on`, the default) or unpin a message. */
+export async function pinMessage(user, messageId, { on = true } = {}) {
+  if (!mongoose.isValidObjectId(messageId)) throw fail('Message not found', 404);
+  const m = await chatRepository.findMessageById(messageId);
+  if (!m) throw fail('Message not found', 404);
+  const channel = await loadAccessible(user, m.channel);
+
+  let changed = null;
+  if (on !== false) {
+    if (m.deletedAt) throw fail('This message was deleted', 409);
+    if (!m.pinnedAt) {
+      if ((await chatRepository.countPins(channel._id)) >= MAX_PINS_PER_CHANNEL) {
+        throw fail(`A conversation can have up to ${MAX_PINS_PER_CHANNEL} pinned messages — unpin one first`, 400);
+      }
+      changed = await chatRepository.pin(m._id, { by: user._id, byName: user.name || '' });
+    }
+  } else if (m.pinnedAt) {
+    changed = await chatRepository.unpin(m._id);
+  }
+
+  const now = changed ?? (await chatRepository.findMessageById(m._id));
+  const pinned = now?.pinnedAt && !now.deletedAt ? { by: now.pinnedByName || '', at: now.pinnedAt } : null;
+  if (changed) {
+    await publishChatEvent({
+      type: 'message_pinned',
+      channelId: idOf(channel),
+      route: audienceOf(channel),
+      messageId: idOf(m),
+      threadRoot: m.threadRoot ? idOf(m.threadRoot) : null,
+      pinned,
+    });
+  }
+  return { messageId: idOf(m), pinned };
+}
+
+/** The conversation's pinned messages, newest pin first (bounded). */
+export async function listPins(user, channelId) {
+  const channel = await loadAccessible(user, channelId);
+  const docs = await chatRepository.findPins(channel._id, MAX_PINS_PER_CHANNEL);
+  return { messages: await withStars(user, docs.map((d) => shapeMessage(d, null, user))) };
 }
