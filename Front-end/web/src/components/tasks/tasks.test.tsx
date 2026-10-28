@@ -36,19 +36,6 @@ jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => <a href={href} className={className}>{children}</a>,
 }));
-// Motion off: elements appear and disappear at once.
-jest.mock('framer-motion', () => {
-  const MOTION = new Set(['initial', 'animate', 'exit', 'transition']);
-  const strip = (p: Record<string, unknown>) => Object.fromEntries(Object.entries(p).filter(([k]) => !MOTION.has(k)));
-  return {
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    motion: {
-      div: (p: Record<string, unknown>) => <div {...strip(p)} />,
-      aside: (p: Record<string, unknown>) => <aside {...strip(p)} />,
-    },
-  };
-});
-
 const wrap = (ui: React.ReactElement) => render(
   <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>,
 );
