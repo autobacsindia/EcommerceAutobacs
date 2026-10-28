@@ -53,6 +53,9 @@ export const COMMENT_PAGE_SIZE = 50;
 export const TITLE_MAX = 200;
 export const DESCRIPTION_MAX = 4000;
 export const COMMENT_MAX = 2000;
+/** Steps on one task's checklist, and how long one step may be. */
+export const CHECKLIST_MAX = 30;
+export const CHECK_TEXT_MAX = 200;
 /** One task can go to this many people at once (each gets their own copy). */
 export const MAX_ASSIGNEES = 30;
 const SUMMARY_MAX = 160;
@@ -134,6 +137,22 @@ function cleanEnum(raw, values, what) {
   return raw;
 }
 
+function cleanCheckText(raw) {
+  const text = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) throw fail('Write the step first.', 400);
+  if (text.length > CHECK_TEXT_MAX) throw fail(`Keep a step under ${CHECK_TEXT_MAX} characters.`, 400);
+  return text;
+}
+
+/** Steps typed when creating a task: blanks dropped, at most CHECKLIST_MAX. */
+function cleanChecklist(raw) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) throw fail('The checklist must be a list of steps.', 400);
+  const steps = raw.map((t) => String(t ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean);
+  if (steps.length > CHECKLIST_MAX) throw fail(`A checklist can have at most ${CHECKLIST_MAX} steps.`, 400);
+  return steps.map((t) => ({ text: cleanCheckText(t), done: false }));
+}
+
 const cleanClientId = (raw) => (typeof raw === 'string' && /^[\w-]{8,64}$/.test(raw) ? raw : undefined);
 
 async function loadAssignee(actor, id) {
@@ -201,6 +220,11 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
     createdBy: { id: idOf(t.createdBy), name: t.createdByName || '' },
     order: t.order ? { id: idOf(t.order.target), code: t.order.code } : null,
     group: t.group ? { id: idOf(t.group), size: t.groupSize || 1 } : null,
+    // List rows carry counts from the database (LIST_PROJECTION); the task page counts the steps it has.
+    checklist: {
+      done: t.checklistDone ?? (t.checklist || []).filter((c) => c.done).length,
+      total: t.checklistTotal ?? (t.checklist || []).length,
+    },
     bucket: t.bucket,
     completedAt: t.completedAt || null,
     archivedAt: t.archivedAt || null,
@@ -216,8 +240,12 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
       archive: !archived && canEdit(viewer, t),
       restore: archived && canEdit(viewer, t),
       comment: !archived && canSee(viewer, t),
+      checklist: !archived && canEdit(viewer, t),
     },
     ...(full && {
+      checklistItems: (t.checklist || []).map((c) => ({
+        id: idOf(c._id), text: c.text, done: !!c.done, doneAt: c.doneAt || null, doneBy: c.doneByName || '',
+      })),
       history: [...(t.history || [])].reverse().map((h) => ({
         at: h.at, by: h.byName || '', action: h.action, from: h.from || '', to: h.to || '',
       })),
@@ -383,6 +411,7 @@ export async function createTask(actor, input = {}, req) {
   const description = cleanDescription(input.description);
   const priority = input.priority == null || input.priority === '' ? 'normal' : cleanEnum(input.priority, TASK_PRIORITIES, 'priority');
   const dueOn = cleanDueOn(input.dueOn);
+  const checklist = cleanChecklist(input.checklist);
   const rawIds = Array.isArray(input.assigneeIds) && input.assigneeIds.length ? input.assigneeIds : [input.assigneeId].filter(Boolean);
   const people = await loadAssignees(actor, rawIds);
   const order = await loadOrderRef(input.orderId);
@@ -415,6 +444,7 @@ export async function createTask(actor, input = {}, req) {
         createdBy: actor._id,
         createdByName: actor.name || '',
         order,
+        checklist,
         group,
         groupSize: many ? people.length : undefined,
         ...placeOf({ status: 'todo', dueOn }),
@@ -531,6 +561,78 @@ export async function updateTask(actor, id, input = {}, req) {
   });
   if (newAssignee && !same(newAssignee._id, actor._id)) void notifyAssigned(next, actor);
   return shape(next, actor, { full: true });
+}
+
+// ── Checklist ───────────────────────────────────────────────────────────────
+/*
+  Adding, renaming and removing steps is editing the task (whoever gave it, the
+  team head, the admin). Ticking a step is doing the work, so the person doing it
+  may tick too. None of it bumps `rev`, so ticking a step never makes someone's
+  open edit form stale. Each change is one atomic update, so two people ticking
+  different steps at the same moment both land.
+*/
+
+async function loadForChecklist(actor, id, allowed, refusal) {
+  const t = await loadVisible(actor, id);
+  if (t.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
+  if (!allowed(actor, t)) throw fail(refusal, 403);
+  return t;
+}
+const checkEntry = (actor, action, text) => ({ at: new Date(), by: actor._id, byName: actor.name || '', action, to: text });
+const EDIT_REFUSAL = 'Only whoever gave this task, the team head or the admin can change its checklist.';
+
+/** @returns {Promise<object>} the task, as the task page shows it */
+export async function addChecklistItem(actor, id, { text, clientId } = {}) {
+  const t = await loadForChecklist(actor, id, canEdit, EDIT_REFUSAL);
+  const key = cleanClientId(clientId);
+  if (key && (t.checklist || []).some((c) => c.key === key)) return getTask(actor, id);
+  const clean = cleanCheckText(text);
+  if ((t.checklist || []).length >= CHECKLIST_MAX) throw fail(`A checklist can have at most ${CHECKLIST_MAX} steps.`, 400);
+  const next = await staffTaskRepository.pushChecklistItem(t._id, { text: clean, done: false, key }, checkEntry(actor, 'check_added', clean), CHECKLIST_MAX);
+  if (!next) {
+    // Lost a race: say exactly why.
+    const now = await staffTaskRepository.findById(t._id);
+    if (key && (now?.checklist || []).some((c) => c.key === key)) return getTask(actor, id);
+    if (now?.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
+    throw fail(`A checklist can have at most ${CHECKLIST_MAX} steps.`, 400);
+  }
+  return getTask(actor, id);
+}
+
+/** Tick / untick a step (the doer too), or rename it (editors only). */
+export async function updateChecklistItem(actor, id, itemId, { done, text } = {}) {
+  const t = await loadVisible(actor, id);
+  if (t.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
+  const item = mongoose.isValidObjectId(itemId) && (t.checklist || []).find((c) => same(c._id, itemId));
+  if (!item) throw fail('That step is no longer on the checklist.', 404);
+  const set = {};
+  let entry = null;
+  if (text !== undefined) {
+    if (!canEdit(actor, t)) throw fail(EDIT_REFUSAL, 403);
+    const clean = cleanCheckText(text);
+    if (clean !== item.text) { set.text = clean; entry = checkEntry(actor, 'check_renamed', clean); }
+  }
+  if (done !== undefined) {
+    if (!canSetStatus(actor, t)) throw fail('Only the person doing this task, whoever gave it, the team head or the admin can tick its steps.', 403);
+    const want = done === true || done === 'true';
+    if (want !== !!item.done) {
+      Object.assign(set, { done: want, doneAt: want ? new Date() : null, doneByName: want ? actor.name || '' : '' });
+      entry = checkEntry(actor, want ? 'checked' : 'unchecked', set.text || item.text);
+    }
+  }
+  if (!entry) return getTask(actor, id);
+  const next = await staffTaskRepository.setChecklistItem(t._id, item._id, set, entry);
+  if (!next) throw fail('That step is no longer on the checklist.', 404);
+  return getTask(actor, id);
+}
+
+export async function removeChecklistItem(actor, id, itemId) {
+  const t = await loadForChecklist(actor, id, canEdit, EDIT_REFUSAL);
+  const item = mongoose.isValidObjectId(itemId) && (t.checklist || []).find((c) => same(c._id, itemId));
+  // Already gone (a double-click, or someone else removed it): the result is the same.
+  if (!item) return getTask(actor, id);
+  await staffTaskRepository.pullChecklistItem(t._id, item._id, checkEntry(actor, 'check_removed', item.text));
+  return getTask(actor, id);
 }
 
 // ── Comments ────────────────────────────────────────────────────────────────

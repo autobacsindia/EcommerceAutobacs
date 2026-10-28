@@ -4,6 +4,24 @@ import StaffTaskComment from '../models/StaffTaskComment.js';
 /** History entries kept on a task; older ones fall off so the document stays small. */
 const HISTORY_CAP = 100;
 
+/*
+  What a list row needs — and the checklist COUNTS instead of the checklist.
+  Cards show "2/5", never the steps, yet reading the steps cost a page of 50 tasks
+  71 KB instead of 35 KB with five short steps each, and 503 KB with full
+  checklists (measured, BSON). The database counts them instead.
+  Every field services/staffTaskService.js `shape()` reads for a list row must be
+  here; tests/staffTasks.test.js compares a list row with the task page to catch
+  one being forgotten.
+*/
+export const LIST_PROJECTION = Object.freeze({
+  number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1,
+  assignee: 1, assigneeName: 1, team: 1, createdBy: 1, createdByName: 1,
+  order: 1, group: 1, groupSize: 1, bucket: 1, rank: 1, rev: 1,
+  completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
+  checklistTotal: { $size: { $ifNull: ['$checklist', []] } },
+  checklistDone: { $size: { $filter: { input: { $ifNull: ['$checklist', []] }, cond: '$$this.done' } } },
+});
+
 /**
  * Staff tasks and their comments (models/StaffTask.js, StaffTaskComment.js).
  * Data access only — who may do what lives in services/staffTaskService.js.
@@ -60,15 +78,45 @@ const staffTaskRepository = {
     const keyset = after
       ? { $or: [{ rank: { $gt: after.rank } }, { rank: after.rank, _id: { $gt: after.id } }] }
       : null;
-    return StaffTask.find(keyset ? { $and: [filter, keyset] } : filter)
+    return StaffTask.find(keyset ? { $and: [filter, keyset] } : filter, LIST_PROJECTION)
       .sort({ rank: 1, _id: 1 })
       .limit(limit)
-      .select('-history -clientId')
       .lean();
   },
 
   /** Open tasks given to `userId` that are due on or before `day` (the bell). */
   countDueBy: (userId, day) => StaffTask.countDocuments({ assignee: userId, bucket: 'open', rank: { $lte: day } }),
+
+  // ── Checklist (never bumps `rev`: ticking a step must not block someone's edit) ──
+  /**
+   * Add a step, atomically: refused (null) when the task is archived, already has
+   * `max` steps, or already has a step added with this `key` (a double-click).
+   */
+  pushChecklistItem: (id, item, entry, max) => StaffTask.findOneAndUpdate(
+    {
+      _id: id,
+      bucket: { $in: ['open', 'done'] },
+      [`checklist.${max - 1}`]: { $exists: false },
+      ...(item.key ? { 'checklist.key': { $ne: item.key } } : {}),
+    },
+    { $push: { checklist: item, history: { $each: [entry], $slice: -HISTORY_CAP } } },
+    { new: true },
+  ).lean(),
+  /** Change one step in place. Null when the task is archived or the step is gone. */
+  setChecklistItem: (id, itemId, set, entry) => StaffTask.findOneAndUpdate(
+    { _id: id, bucket: { $in: ['open', 'done'] }, 'checklist._id': itemId },
+    {
+      $set: Object.fromEntries(Object.entries(set).map(([k, v]) => [`checklist.$.${k}`, v])),
+      $push: { history: { $each: [entry], $slice: -HISTORY_CAP } },
+    },
+    { new: true },
+  ).lean(),
+  /** Remove one step. Null when the task is archived or the step is already gone. */
+  pullChecklistItem: (id, itemId, entry) => StaffTask.findOneAndUpdate(
+    { _id: id, bucket: { $in: ['open', 'done'] }, 'checklist._id': itemId },
+    { $pull: { checklist: { _id: itemId } }, $push: { history: { $each: [entry], $slice: -HISTORY_CAP } } },
+    { new: true },
+  ).lean(),
 
   // ── Comments ──
   createComment: async (doc) => (await StaffTaskComment.create(doc)).toObject(),

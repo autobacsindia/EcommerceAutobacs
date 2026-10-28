@@ -516,3 +516,101 @@ describe('one task for several people', () => {
     expect(rest).toEqual([...rest].sort((x, y) => x.localeCompare(y)));
   });
 });
+
+describe('checklists', () => {
+  const steps = (t) => t.checklistItems.map((c) => [c.text, c.done]);
+
+  it('steps typed at creation go on every copy, blanks dropped; cards show "x of y"', async () => {
+    const r = await tasks.createTask(procHead, {
+      title: 'Ship order', assigneeIds: [String(procA._id), String(procB._id)], checklist: ['Pack', '  ', 'Label', 'Book courier'],
+    }, req);
+    for (const t of r.tasks) expect(steps(t)).toEqual([['Pack', false], ['Label', false], ['Book courier', false]]);
+    const row = (await tasks.listTasks(procA, { view: 'mine' })).tasks[0];
+    expect(row.checklist).toEqual({ done: 0, total: 3 });
+    expect(row.checklistItems).toBeUndefined();
+    await status(400, () => tasks.createTask(procA, { title: 'x', checklist: Array.from({ length: 31 }, (_, i) => `s${i}`) }, req));
+    await status(400, () => tasks.createTask(procA, { title: 'x', checklist: 'Pack' }, req));
+  });
+
+  it('the doer ticks steps; only the giver, head or admin adds, renames or removes them', async () => {
+    const t = await make(procHead, { assigneeId: String(procA._id), checklist: ['Pack', 'Label'] });
+    const [pack, label] = t.checklistItems;
+    const ticked = await tasks.updateChecklistItem(procA, t.id, pack.id, { done: true });
+    expect(ticked.checklistItems[0]).toMatchObject({ done: true, doneBy: 'Arun' });
+    expect(ticked.checklist).toEqual({ done: 1, total: 2 });
+    // Ticking is not finishing: the task stays open.
+    expect(ticked.status).toBe('todo');
+    await status(403, () => tasks.addChecklistItem(procA, t.id, { text: 'More' }));
+    await status(403, () => tasks.updateChecklistItem(procA, t.id, label.id, { text: 'Renamed' }));
+    await status(403, () => tasks.removeChecklistItem(procA, t.id, label.id));
+    await status(404, () => tasks.updateChecklistItem(procB, t.id, label.id, { done: true }));
+
+    const added = await tasks.addChecklistItem(procHead, t.id, { text: 'Book courier' });
+    const renamed = await tasks.updateChecklistItem(procHead, t.id, label.id, { text: 'Print label' });
+    expect(steps(renamed)).toEqual([['Pack', true], ['Print label', false], ['Book courier', false]]);
+    const removed = await tasks.removeChecklistItem(admin, t.id, added.checklistItems[2].id);
+    expect(steps(removed)).toEqual([['Pack', true], ['Print label', false]]);
+    expect(removed.history.slice(0, 4).map((h) => h.action)).toEqual(['check_removed', 'check_renamed', 'check_added', 'checked']);
+  });
+
+  it('a step does not bump the revision, so it never makes an open edit stale', async () => {
+    const t = await make(procHead, { assigneeId: String(procA._id), checklist: ['Pack'] });
+    await tasks.updateChecklistItem(procA, t.id, t.checklistItems[0].id, { done: true });
+    await tasks.addChecklistItem(procHead, t.id, { text: 'Label' });
+    const edited = await tasks.updateTask(procHead, t.id, { rev: t.rev, priority: 'urgent' }, req);
+    expect(edited.priority).toBe('urgent');
+  });
+
+  it('a double-clicked add lands once, even at the same moment; a double remove is harmless', async () => {
+    const t = await make(procA);
+    await tasks.addChecklistItem(procA, t.id, { text: 'Pack', clientId: 'step-12345678' });
+    await tasks.addChecklistItem(procA, t.id, { text: 'Pack', clientId: 'step-12345678' });
+    await Promise.all([
+      tasks.addChecklistItem(procA, t.id, { text: 'Label', clientId: 'step-abcdefgh' }),
+      tasks.addChecklistItem(procA, t.id, { text: 'Label', clientId: 'step-abcdefgh' }),
+    ]);
+    const now = await tasks.getTask(procA, t.id);
+    expect(steps(now)).toEqual([['Pack', false], ['Label', false]]);
+    const id = now.checklistItems[0].id;
+    await Promise.all([tasks.removeChecklistItem(procA, t.id, id), tasks.removeChecklistItem(procA, t.id, id)]);
+    expect(steps(await tasks.getTask(procA, t.id))).toEqual([['Label', false]]);
+  });
+
+  it('two people ticking different steps at once both land', async () => {
+    const t = await make(procHead, { assigneeId: String(procA._id), checklist: ['A', 'B'] });
+    await Promise.all([
+      tasks.updateChecklistItem(procA, t.id, t.checklistItems[0].id, { done: true }),
+      tasks.updateChecklistItem(procHead, t.id, t.checklistItems[1].id, { done: true }),
+    ]);
+    expect((await tasks.getTask(procA, t.id)).checklist).toEqual({ done: 2, total: 2 });
+  });
+
+  it('stops at the limit, refuses blanks, and leaves archived tasks alone', async () => {
+    const t = await make(procA, { checklist: Array.from({ length: tasks.CHECKLIST_MAX }, (_, i) => `s${i}`) });
+    await status(400, () => tasks.addChecklistItem(procA, t.id, { text: 'one too many' }));
+    await status(400, () => tasks.addChecklistItem(procA, t.id, { text: '   ' }));
+    await status(404, () => tasks.updateChecklistItem(procA, t.id, String(new mongoose.Types.ObjectId()), { done: true }));
+    const archived = await tasks.updateTask(procA, t.id, { rev: t.rev, archived: true }, req);
+    expect(archived.can.checklist).toBe(false);
+    await status(409, () => tasks.updateChecklistItem(procA, t.id, t.checklistItems[0].id, { done: true }));
+    await status(409, () => tasks.removeChecklistItem(procA, t.id, t.checklistItems[0].id));
+  });
+});
+
+describe('list rows (what the database sends for a page)', () => {
+  it('carry checklist counts, not the steps — and every field the task page has', async () => {
+    const t = await make(procHead, { assigneeId: String(procA._id), checklist: ['Pack', 'Label', 'Ship'], orderId: undefined });
+    await tasks.updateChecklistItem(procA, t.id, t.checklistItems[0].id, { done: true });
+    const raw = (await StaffTask.db.collection('stafftasks').findOne({ _id: new mongoose.Types.ObjectId(t.id) }));
+    expect(raw.checklist).toHaveLength(3);
+    const row = (await tasks.listTasks(procA, { view: 'mine' })).tasks[0];
+    expect(row.checklist).toEqual({ done: 1, total: 3 });
+    // A field missing from LIST_PROJECTION would show up here as a difference.
+    const full = await tasks.getTask(procA, t.id);
+    const listOnly = ['summary'];
+    const pageOnly = ['description', 'checklistItems', 'history', 'siblings'];
+    for (const key of Object.keys(full).filter((k) => !pageOnly.includes(k))) expect(row[key]).toEqual(full[key]);
+    expect(Object.keys(row).filter((k) => !listOnly.includes(k)).sort())
+      .toEqual(Object.keys(full).filter((k) => !pageOnly.includes(k)).sort());
+  });
+});

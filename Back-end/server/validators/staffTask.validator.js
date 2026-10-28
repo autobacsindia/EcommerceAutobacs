@@ -34,6 +34,8 @@ export const validateTaskCreate = [
   optionalId('assigneeId'),
   body('assigneeIds').optional().isArray({ max: 30 }).withMessage('Pick at most 30 people'),
   body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
+  body('checklist').optional().isArray({ max: 30 }).withMessage('A checklist can have at most 30 steps'),
+  body('checklist.*').isString().withMessage('Invalid step'),
   optionalId('orderId'),
   body('clientId').optional().isString().isLength({ max: 64 }),
 ];
@@ -61,3 +63,19 @@ export const validateCommentCreate = [
   body('text').isString().withMessage('Write a comment first'),
   body('clientId').optional().isString().isLength({ max: 64 }),
 ];
+
+const itemParams = [...validateTaskId, param('itemId').custom(isObjectId).withMessage('Invalid step')];
+
+export const validateChecklistAdd = [
+  ...validateTaskId,
+  body('text').isString().withMessage('Write the step first'),
+  body('clientId').optional().isString().isLength({ max: 64 }),
+];
+
+export const validateChecklistUpdate = [
+  ...itemParams,
+  body('done').optional().isBoolean().withMessage('Invalid tick'),
+  body('text').optional().isString(),
+];
+
+export const validateChecklistRemove = itemParams;

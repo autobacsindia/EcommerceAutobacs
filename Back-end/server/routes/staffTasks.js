@@ -8,6 +8,9 @@ import {
   validateTaskUpdate,
   validateCommentList,
   validateCommentCreate,
+  validateChecklistAdd,
+  validateChecklistUpdate,
+  validateChecklistRemove,
 } from '../validators/staffTask.validator.js';
 import {
   listTasks,
@@ -17,6 +20,9 @@ import {
   updateTask,
   listComments,
   addComment,
+  addChecklistItem,
+  updateChecklistItem,
+  removeChecklistItem,
 } from '../services/staffTaskService.js';
 
 /**
@@ -52,6 +58,21 @@ router.get('/:id', validateTaskId, validateRequest, asyncHandler(async (req, res
 // @route  PATCH /staff/tasks/:id { rev, ...changes }
 router.patch('/:id', validateTaskUpdate, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, task: await updateTask(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/tasks/:id/checklist { text, clientId? } — add a step
+router.post('/:id/checklist', validateChecklistAdd, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, task: await addChecklistItem(req.user, req.params.id, req.body) });
+}));
+
+// @route  PATCH /staff/tasks/:id/checklist/:itemId { done?, text? } — tick / untick / rename
+router.patch('/:id/checklist/:itemId', validateChecklistUpdate, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, task: await updateChecklistItem(req.user, req.params.id, req.params.itemId, req.body) });
+}));
+
+// @route  DELETE /staff/tasks/:id/checklist/:itemId — remove a step
+router.delete('/:id/checklist/:itemId', validateChecklistRemove, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, task: await removeChecklistItem(req.user, req.params.id, req.params.itemId) });
 }));
 
 // @route  GET /staff/tasks/:id/comments?before=

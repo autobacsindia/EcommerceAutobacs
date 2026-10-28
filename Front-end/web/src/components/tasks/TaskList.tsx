@@ -4,13 +4,15 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, Info, Loader2, MessageSquare, Plus, X } from 'lucide-react';
+import { Columns3, Info, List, Loader2, MessageSquare, Plus, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
 import TaskForm from './TaskForm';
+import TaskBoard from './TaskBoard';
+import { ChecklistChip, DueLabel } from './DueLabel';
 import {
-  PRIORITY_BADGE, STATUS_BADGE, TASK_STATUSES, formatDueDay, isConflict,
+  PRIORITY_BADGE, STATUS_BADGE, TASK_STATUSES, isConflict,
   type Task, type TaskBucket, type TaskDue, type TaskPage, type TaskStatus, type TaskView,
 } from './types';
 
@@ -37,6 +39,8 @@ const DUES: { value: TaskDue | ''; label: string }[] = [
 ];
 
 const HELP_KEY = 'tasks-help-hidden';
+const MODE_KEY = 'tasks-view-mode';
+type Mode = 'list' | 'board';
 
 /** "How tasks work" — shown until the person hides it (remembered on this device). */
 function HowItWorks({ canGive }: { canGive: boolean }) {
@@ -66,17 +70,6 @@ function HowItWorks({ canGive }: { canGive: boolean }) {
 }
 
 const asDue = (v: string | null): TaskDue | '' => (v === 'late' || v === 'overdue' || v === 'today' ? v : '');
-
-function DueLabel({ t }: { t: Task }) {
-  if (!t.dueOn) return null;
-  const tone = t.overdue ? 'text-red-600 font-semibold' : t.dueToday ? 'text-amber-700 font-semibold' : 'text-gray-500';
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs ${tone}`}>
-      <CalendarClock className="h-3.5 w-3.5" />
-      {t.overdue ? 'Late · ' : t.dueToday ? 'Today · ' : ''}{formatDueDay(t.dueOn)}
-    </span>
-  );
-}
 
 function TaskRow({ t, base, showAssignee }: { t: Task; base: string; showAssignee: boolean }) {
   const queryClient = useQueryClient();
@@ -116,6 +109,7 @@ function TaskRow({ t, base, showAssignee }: { t: Task; base: string; showAssigne
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
         {t.priority !== 'normal' && <span className={`rounded px-1.5 py-0.5 font-medium ${PRIORITY_BADGE[t.priority]}`}>{t.priorityLabel}</span>}
         <DueLabel t={t} />
+        <ChecklistChip t={t} />
         {showAssignee && <span>→ {t.assignee.name}</span>}
         {t.createdBy.id !== t.assignee.id && <span>from {t.createdBy.name}</span>}
         {t.order && <span className="text-blue-700">Order {t.order.code}</span>}
@@ -139,6 +133,15 @@ export default function TaskList({ base, canSeeTeam }: { base: string; canSeeTea
   // ?due=late from the bell: start on what is due now.
   const [due, setDue] = useState<TaskDue | ''>(asDue(params.get('due')));
   const [creating, setCreating] = useState(false);
+  // List or board, remembered on this device.
+  const [mode, setModeState] = useState<Mode>('list');
+  useEffect(() => {
+    try { if (localStorage.getItem(MODE_KEY) === 'board') setModeState('board'); } catch { /* storage blocked: list */ }
+  }, []);
+  const setMode = (m: Mode) => {
+    setModeState(m);
+    try { localStorage.setItem(MODE_KEY, m); } catch { /* storage blocked: this visit only */ }
+  };
 
   const filters = { view, state, ...(state === 'open' && due ? { due } : {}) };
   const q = useInfiniteQuery({
@@ -150,6 +153,8 @@ export default function TaskList({ base, canSeeTeam }: { base: string; canSeeTea
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor || undefined,
     refetchInterval: 60_000,
+    // The board runs its own queries (same keys for open jobs).
+    enabled: mode === 'list',
   });
   const rows = q.data?.pages.flatMap((p) => p.tasks) ?? [];
   const views = viewsFor(isAdmin).filter((v) => v.value !== 'team' || canSeeTeam);
@@ -182,15 +187,28 @@ export default function TaskList({ base, canSeeTeam }: { base: string; canSeeTea
       {creating && <TaskForm onDone={() => setCreating(false)} onCancel={() => setCreating(false)} />}
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <select value={state} onChange={(e) => setState(e.target.value as TaskBucket)} aria-label="Show jobs that are" className="rounded-lg border border-gray-300 px-2 py-1.5">
-          {STATES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
-        {state === 'open' && DUES.map((d) => (
+        <div className="mr-1 inline-flex overflow-hidden rounded-lg ring-1 ring-gray-200" role="group" aria-label="Show as">
+          <button onClick={() => setMode('list')} aria-pressed={mode === 'list'} className={`inline-flex items-center gap-1 px-2.5 py-1.5 ${mode === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'}`}>
+            <List className="h-4 w-4" /> List
+          </button>
+          <button onClick={() => setMode('board')} aria-pressed={mode === 'board'} className={`inline-flex items-center gap-1 px-2.5 py-1.5 ${mode === 'board' ? 'bg-gray-900 text-white' : 'bg-white text-gray-700'}`}>
+            <Columns3 className="h-4 w-4" /> Board
+          </button>
+        </div>
+        {/* The board always shows open jobs plus the latest done ones. */}
+        {mode === 'list' && (
+          <select value={state} onChange={(e) => setState(e.target.value as TaskBucket)} aria-label="Show jobs that are" className="rounded-lg border border-gray-300 px-2 py-1.5">
+            {STATES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        )}
+        {(mode === 'board' || state === 'open') && DUES.map((d) => (
           <button key={d.value || 'any'} onClick={() => setDue(d.value)} className={pill(due === d.value)}>{d.label}</button>
         ))}
       </div>
 
-      {q.isLoading ? (
+      {mode === 'board' ? (
+        <TaskBoard view={view} due={due} base={base} showAssignee={view !== 'mine'} />
+      ) : q.isLoading ? (
         <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>
       ) : q.isError ? (
         <p role="alert" className="text-sm text-red-600">{errorMessage(q.error, 'Could not load tasks.')}</p>
@@ -209,7 +227,7 @@ export default function TaskList({ base, canSeeTeam }: { base: string; canSeeTea
         </ul>
       )}
 
-      {q.hasNextPage && (
+      {mode === 'list' && q.hasNextPage && (
         <button onClick={() => q.fetchNextPage()} disabled={q.isFetchingNextPage} className="w-full rounded-lg py-2 text-sm text-blue-700 hover:bg-blue-50">
           {q.isFetchingNextPage ? 'Loading…' : 'Load more'}
         </button>
