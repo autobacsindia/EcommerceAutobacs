@@ -186,7 +186,7 @@ function CycleEvents({ events }: { events: JourneyEvent[] }) {
 
 function CycleHeader({ group }: { group: JourneyGroup }) {
   const badge = group.outcome === 'open'
-    ? { label: 'Open', className: 'bg-blue-100 text-blue-800' }
+    ? { label: 'Open', className: 'bg-sky-100 text-sky-800' }
     : { label: LEAD_STATUS_LABELS[group.outcome], className: LEAD_STATUS_COLORS[group.outcome] };
   const range = [group.start, group.end].every((v) => v && Number.isFinite(v))
     ? `${fmtDate(group.start!)} → ${fmtDate(group.end!)}`

@@ -26,8 +26,8 @@ export type PanelNavSection = {
 };
 
 /**
- * The frame shared by the admin and team panels: a black sidebar with the
- * Roavion logo (as on the store header), a white top bar, and on phones a menu
+ * The frame shared by the admin and team panels: a white sidebar with the
+ * Roavion logo on a green brand badge, a white top bar, and on phones a menu
  * button that slides the sidebar in over the page. Visual only — every link,
  * section and button is the caller's, so behaviour stays where it was.
  */
@@ -93,23 +93,23 @@ export default function PanelShell({
         data-open={menuOpen}
         className={`pn-side pn-drawer fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] flex-col transition-[width] duration-200 ${width}`}
       >
-        <div className={`pn-side-line flex items-center gap-2 border-b px-4 py-4 ${rail ? 'md:justify-center md:px-2' : ''}`}>
+        <div className={`pn-brand flex items-center gap-2 px-4 py-4 ${rail ? 'md:justify-center md:px-2' : ''}`}>
           <Link href={homeHref} className={`min-w-0 flex-1 ${rail ? 'md:hidden' : ''}`}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/images/roavion-logo.png" alt="Roavion" width={960} height={255} className="h-7 w-auto" />
-            <span className="pn-side-muted mt-1.5 block truncate text-xs">{subtitle}</span>
+            <span className="pn-brand-sub mt-1.5 block truncate text-xs font-medium">{subtitle}</span>
           </Link>
           {onToggleCollapsed && (
             <button
               type="button"
               onClick={onToggleCollapsed}
               aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
-              className="pn-nav hidden rounded-lg p-2 md:block"
+              className="pn-brand-btn hidden p-2 md:block"
             >
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
             </button>
           )}
-          <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu" className="pn-nav rounded-lg p-2 md:hidden">
+          <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu" className="pn-brand-btn p-2 md:hidden">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -158,11 +158,11 @@ export default function PanelShell({
 
         <div className={`pn-side-line border-t p-3 ${rail ? 'md:px-2' : ''}`}>
           <div className={`flex items-center gap-3 px-1 ${rail ? 'md:hidden' : ''}`}>
-            <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#12753f] text-xs font-bold text-[#fff]">
+            <span aria-hidden="true" className="pn-avatar grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold">
               {initials(user.name)}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-[#fff]">{user.name}</p>
+              <p className="pn-side-name truncate text-sm font-medium">{user.name}</p>
               {user.role && <p className="pn-side-muted truncate text-xs">{user.role}</p>}
             </div>
           </div>

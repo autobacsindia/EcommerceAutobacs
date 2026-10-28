@@ -652,7 +652,7 @@ export default function AdminBlogPage() {
                       <td className="px-4 py-3">
                         <p className="font-medium text-gray-900">{c.name}</p>
                         <p className="text-xs text-gray-400">{c.email}</p>
-                        {c.parent && <span className="text-xs text-blue-500">↳ reply</span>}
+                        {c.parent && <span className="text-xs text-blue-600">↳ reply</span>}
                       </td>
                       <td className="px-4 py-3 text-gray-700 max-w-xs">
                         <p className="line-clamp-2">{c.comment}</p>

@@ -61,7 +61,7 @@ const STATUS_STYLE: Record<Status, string> = {
   open: 'bg-green-100 text-green-700',
   draft: 'bg-gray-100 text-gray-600',
   closed: 'bg-amber-100 text-amber-700',
-  filled: 'bg-blue-100 text-blue-700',
+  filled: 'bg-sky-100 text-sky-800',
 };
 
 const linesToArray = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean);

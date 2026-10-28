@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, type ReactNode } from 'react';
+import { AlertTriangle, Boxes, IndianRupee, Inbox, MessageSquare, Package, ReceiptText, Users } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useSSE } from '@/hooks/useSSE';
@@ -209,42 +211,42 @@ export default function AdminDashboardPage() {
     switch (status.toLowerCase()) {
       // Health Statuses
       case 'healthy':
-        return 'text-green-600 bg-green-100';
+        return 'text-green-800 bg-green-100';
       case 'degraded':
-        return 'text-yellow-600 bg-yellow-100';
+        return 'text-yellow-800 bg-yellow-100';
       case 'warning':
-        return 'text-orange-600 bg-orange-100';
+        return 'text-orange-800 bg-orange-100';
       case 'critical':
-        return 'text-red-600 bg-red-100';
+        return 'text-red-800 bg-red-100';
       
       // Order Statuses (fulfillment axis; legacy values kept for old data)
       case 'awaiting_payment':
       case 'pending':
-        return 'text-yellow-600 bg-yellow-100';
+        return 'text-yellow-800 bg-yellow-100';
       case 'confirmed':
       case 'processing':
-        return 'text-blue-600 bg-blue-100';
+        return 'text-sky-800 bg-sky-100';
       case 'shipped':
-        return 'text-purple-600 bg-purple-100';
+        return 'text-purple-800 bg-purple-100';
       case 'delivered':
-        return 'text-green-600 bg-green-100';
+        return 'text-green-800 bg-green-100';
       case 'returned':
       case 'cancelled':
       case 'refunded':
-        return 'text-red-600 bg-red-100';
+        return 'text-red-800 bg-red-100';
 
       // Message Statuses
       case 'new':
-        return 'text-blue-600 bg-blue-100';
+        return 'text-sky-800 bg-sky-100';
       case 'replied':
-        return 'text-green-600 bg-green-100';
+        return 'text-green-800 bg-green-100';
       case 'read':
-        return 'text-gray-600 bg-gray-100';
+        return 'text-gray-700 bg-gray-100';
       case 'closed':
-        return 'text-gray-600 bg-gray-200';
+        return 'text-gray-700 bg-gray-200';
 
       default:
-        return 'text-gray-600 bg-gray-100';
+        return 'text-gray-700 bg-gray-100';
     }
   };
 
@@ -283,12 +285,12 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div>
       {/* Header */}
-      <div className="mb-6 bg-white rounded-lg shadow p-6">
-        <div className="flex justify-between items-center">
+      <div className="mb-6 bg-white rounded-2xl shadow p-6">
+        <div className="flex flex-wrap justify-between items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+            <h1 className="pn-title text-2xl md:text-3xl text-gray-900">Admin Dashboard</h1>
             <p className="text-gray-600 mt-1">Real-time system monitoring and analytics</p>
             <Link href="/admin/overview" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline">
               Company overview — teams, payments and activity →
@@ -307,14 +309,14 @@ export default function AdminDashboardPage() {
 
       {/* Health Overview */}
       {health && (
-        <div className="mb-6 bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">System Health</h2>
+        <div className="mb-6 bg-white rounded-2xl shadow p-6">
+          <h2 className="pn-title text-lg mb-4 text-gray-900">System Health</h2>
           
           {/* Overall Health Score */}
           <div className="mb-6 text-center">
-            <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-linear-to-br from-blue-500 to-purple-600 text-white">
+            <div className="inline-flex items-center justify-center w-32 h-32 rounded-full pn-gradient shadow-lg">
               <div>
-                <div className="text-4xl font-bold">{health.overall.score}</div>
+                <div className="pn-title text-4xl">{health.overall.score}</div>
                 <div className="text-sm">Overall</div>
               </div>
             </div>
@@ -326,9 +328,9 @@ export default function AdminDashboardPage() {
           {/* Dimension Breakdown */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {Object.entries(health.dimensions).map(([key, dimension]) => (
-              <div key={key} className="p-4 border rounded-lg">
+              <div key={key} className="p-4 border border-gray-200 rounded-xl bg-gray-50">
                 <h3 className="text-sm font-medium text-gray-600 mb-2 capitalize">{key}</h3>
-                <div className="text-3xl font-bold text-gray-900">{dimension.score}</div>
+                <div className="pn-title text-3xl text-gray-900">{dimension.score}</div>
                 <div className={`mt-2 inline-block px-2 py-1 rounded text-xs font-medium ${getStatusColor(dimension.status)}`}>
                   {dimension.status}
                 </div>
@@ -342,12 +344,12 @@ export default function AdminDashboardPage() {
       {analytics && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
           {/* Sales Card */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900">Sales</h3>
+          <div className="bg-white rounded-2xl shadow p-6">
+            <CardTitle icon={IndianRupee} tone="green">Sales</CardTitle>
             <div className="space-y-3">
               <div>
                 <p className="text-sm text-gray-600">Today's Revenue</p>
-                <p className="text-2xl font-bold text-green-600">{formatPrice(analytics.sales.revenueToday)}</p>
+                <p className="pn-title text-2xl text-green-700">{formatPrice(analytics.sales.revenueToday)}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Orders Today</p>
@@ -365,8 +367,8 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Orders Card */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900">Orders Status</h3>
+          <div className="bg-white rounded-2xl shadow p-6">
+            <CardTitle icon={Package} tone="sky">Orders Status</CardTitle>
             <div className="space-y-2">
               {Object.entries(analytics.orders.statusBreakdown).map(([status, count]) => (
                 <div key={status} className="flex justify-between items-center">
@@ -376,7 +378,7 @@ export default function AdminDashboardPage() {
               ))}
             </div>
             {analytics.orders.pendingOldOrders > 0 && (
-              <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded">
+              <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                 <p className="text-sm text-orange-800">
                   <span className="font-semibold">{analytics.orders.pendingOldOrders}</span> orders pending for over 1 hour
                 </p>
@@ -385,12 +387,12 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Customers Card */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900">Customers</h3>
+          <div className="bg-white rounded-2xl shadow p-6">
+            <CardTitle icon={Users} tone="blue">Customers</CardTitle>
             <div className="space-y-3">
               <div>
                 <p className="text-sm text-gray-600">New Today</p>
-                <p className="text-2xl font-bold text-blue-600">{analytics.customers.newToday}</p>
+                <p className="pn-title text-2xl text-blue-600">{analytics.customers.newToday}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Active (24h)</p>
@@ -405,12 +407,12 @@ export default function AdminDashboardPage() {
 
           {/* Messages Card */}
           {analytics.messages && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900">Messages</h3>
+            <div className="bg-white rounded-2xl shadow p-6">
+              <CardTitle icon={MessageSquare} tone="purple">Messages</CardTitle>
               <div className="space-y-3">
                 <div>
                   <p className="text-sm text-gray-600">New Inquiries</p>
-                  <p className="text-2xl font-bold text-purple-600">{analytics.messages.breakdown.new}</p>
+                  <p className="pn-title text-2xl text-purple-700">{analytics.messages.breakdown.new}</p>
                 </div>
                 <div className="space-y-2">
                    <div className="flex justify-between items-center text-sm">
@@ -431,33 +433,33 @@ export default function AdminDashboardPage() {
           )}
 
           {/* Inventory Card */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900">Inventory</h3>
+          <div className="bg-white rounded-2xl shadow p-6">
+            <CardTitle icon={Boxes} tone="amber">Inventory</CardTitle>
             <div className="space-y-3">
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <p className="text-sm text-gray-600">Low Stock Items</p>
-                <p className="text-2xl font-bold text-yellow-700">{analytics.system.inventory.lowStock}</p>
+                <p className="pn-title text-2xl text-yellow-800">{analytics.system.inventory.lowStock}</p>
               </div>
-              <div className="p-3 bg-red-50 border border-red-200 rounded">
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-sm text-gray-600">Out of Stock</p>
-                <p className="text-2xl font-bold text-red-700">{analytics.system.inventory.outOfStock}</p>
+                <p className="pn-title text-2xl text-red-700">{analytics.system.inventory.outOfStock}</p>
               </div>
             </div>
           </div>
 
           {/* Recent Orders */}
-          <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900">Recent Orders</h3>
+          <div className="bg-white rounded-2xl shadow p-6 lg:col-span-2">
+            <CardTitle icon={ReceiptText} tone="green">Recent Orders</CardTitle>
             <div className="space-y-2">
               {analytics.orders.recentOrders.map((order) => (
-                <div key={order.id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                <div key={order.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
                   <div>
                     <p className="font-medium">{order.orderNumber}</p>
                     <p className="text-sm text-gray-600">{order.customerName}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold">{formatPrice(order.amount)}</p>
-                    <span className={`text-xs px-2 py-1 rounded ${getStatusColor(order.status)}`}>
+                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${getStatusColor(order.status)}`}>
                       {order.status}
                     </span>
                   </div>
@@ -468,14 +470,14 @@ export default function AdminDashboardPage() {
 
           {/* Recent Messages */}
           {analytics.messages && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <h3 className="text-lg font-semibold mb-4 text-gray-900">Recent Messages</h3>
+            <div className="bg-white rounded-2xl shadow p-6">
+              <CardTitle icon={Inbox} tone="purple">Recent Messages</CardTitle>
               <div className="space-y-2">
                 {analytics.messages.recentMessages.map((msg) => (
-                  <div key={msg._id} className="p-3 bg-gray-50 rounded">
+                  <div key={msg._id} className="p-3 bg-gray-50 rounded-xl">
                     <div className="flex justify-between items-start mb-1">
                       <p className="font-medium text-sm truncate pr-2">{msg.subject}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded ${getStatusColor(msg.status)} whitespace-nowrap`}>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getStatusColor(msg.status)} whitespace-nowrap`}>
                         {msg.status}
                       </span>
                     </div>
@@ -496,18 +498,18 @@ export default function AdminDashboardPage() {
 
       {/* Alerts */}
       {alerts.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Active Alerts</h2>
+        <div className="bg-white rounded-2xl shadow p-6">
+          <CardTitle icon={AlertTriangle} tone="red" as="h2">Active Alerts</CardTitle>
           <div className="space-y-3">
             {alerts.map((alert, index) => {
               const severityColors = {
-                info: 'bg-blue-50 border-blue-200 text-blue-800',
+                info: 'bg-sky-50 border-sky-200 text-sky-800',
                 warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
                 critical: 'bg-red-50 border-red-200 text-red-800'
               };
 
               return (
-                <div key={index} className={`p-4 border rounded ${severityColors[alert.severity]}`}>
+                <div key={index} className={`p-4 border rounded-xl ${severityColors[alert.severity]}`}>
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-semibold">{alert.type.replace(/_/g, ' ')}</p>
@@ -534,11 +536,32 @@ export default function AdminDashboardPage() {
 
       {/* Error State */}
       {connectionState === 'error' && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
           <p className="text-red-800 font-semibold">Connection Error</p>
-          <p className="text-red-600 mt-2">Attempting to reconnect...</p>
+          <p className="text-red-700 mt-2">Attempting to reconnect...</p>
         </div>
       )}
     </div>
+  );
+}
+
+const TONES = {
+  green: 'bg-green-100 text-green-800',
+  sky: 'bg-sky-100 text-sky-800',
+  blue: 'bg-blue-100 text-blue-800',
+  purple: 'bg-purple-100 text-purple-800',
+  amber: 'bg-amber-100 text-amber-800',
+  red: 'bg-red-100 text-red-800',
+} as const;
+
+/** A card heading with a small coloured icon tile, so each card reads at a glance. */
+function CardTitle({ icon: Icon, tone, as: Tag = 'h3', children }: { icon: LucideIcon; tone: keyof typeof TONES; as?: 'h2' | 'h3'; children: ReactNode }) {
+  return (
+    <Tag className="mb-4 flex items-center gap-2.5 text-base font-semibold text-gray-900">
+      <span className={`grid h-8 w-8 place-items-center rounded-lg ${TONES[tone]}`} aria-hidden="true">
+        <Icon className="h-4 w-4" />
+      </span>
+      {children}
+    </Tag>
   );
 }

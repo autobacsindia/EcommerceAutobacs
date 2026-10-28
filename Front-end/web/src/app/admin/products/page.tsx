@@ -294,7 +294,7 @@ function AdminProductsPageInner() {
           <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-sm border border-blue-200">
             <Package className="h-4 w-4" />
             Category:&nbsp;<strong>{categoryInfo?.name || 'Selected category'}</strong>
-            <span className="text-blue-500">(includes subcategories)</span>
+            <span className="text-blue-600">(includes subcategories)</span>
             <button
               onClick={clearCategoryFilter}
               className="ml-1 hover:text-blue-900"

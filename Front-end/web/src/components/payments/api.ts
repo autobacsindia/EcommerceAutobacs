@@ -59,7 +59,7 @@ export const EXPENSE_CATEGORIES = [
 
 export const STATUS_TONE: Record<PaymentStatus, string> = {
   submitted: 'bg-amber-100 text-amber-800',
-  approved: 'bg-blue-100 text-blue-800',
+  approved: 'bg-sky-100 text-sky-800',
   on_hold: 'bg-orange-100 text-orange-800',
   paid: 'bg-green-100 text-green-800',
   declined: 'bg-red-100 text-red-800',

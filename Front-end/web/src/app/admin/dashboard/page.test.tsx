@@ -31,6 +31,11 @@ jest.mock('lucide-react', () => ({
   Layout: () => <span>LayoutIcon</span>,
   TrendingUp: () => <span>TrendingUpIcon</span>,
   MessageSquare: () => <span>MessageSquareIcon</span>,
+  // Card heading icons
+  Boxes: () => <span>BoxesIcon</span>,
+  IndianRupee: () => <span>IndianRupeeIcon</span>,
+  Inbox: () => <span>InboxIcon</span>,
+  ReceiptText: () => <span>ReceiptTextIcon</span>,
 }));
 
 describe('AdminDashboardPage', () => {

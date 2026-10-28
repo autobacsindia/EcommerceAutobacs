@@ -12,7 +12,7 @@ import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-blue-100 text-blue-800',
+  approved: 'bg-sky-100 text-sky-800',
   courier_booked: 'bg-indigo-100 text-indigo-800',
   received: 'bg-purple-100 text-purple-800',
   refunded: 'bg-green-100 text-green-800',
