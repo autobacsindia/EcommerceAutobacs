@@ -147,6 +147,9 @@ describe('the admin pays by supplier', () => {
     expect(JSON.parse(form.get('ids') as string)).toEqual(['a', 'b']);
     expect(form.get('expectedTotal')).toBe('3500.5');
     expect(form.get('reference')).toBe('UTR998877');
+    // When the money moved: an exact instant, defaulting to now.
+    const at = new Date(form.get('transactionAt') as string).getTime();
+    expect(Math.abs(Date.now() - at)).toBeLessThan(2 * 60 * 1000);
   });
 
   it('shows the server\'s reason when the batch is refused', async () => {
@@ -231,6 +234,18 @@ describe('admin corrects a paid payment', () => {
     expect(form.get('reference')).toBe('UTR777888');
     expect(JSON.parse(form.get('removeFileIds') as string)).toEqual(['f9']);
     expect(form.get('amount')).toBeNull();
+    // Prefilled from the recorded payment; sent back as an exact instant.
+    expect(Number.isNaN(new Date(form.get('transactionAt') as string).getTime())).toBe(false);
     await waitFor(() => expect(onDone).toHaveBeenCalled());
+  });
+});
+
+describe('transaction date & time helpers', () => {
+  it('round-trip a date through the datetime-local box to the minute', async () => {
+    const { toLocalInput, fromLocalInput } = await import('./api');
+    const d = new Date(2026, 9, 27, 14, 35, 59);
+    expect(toLocalInput(d)).toBe('2026-10-27T14:35');
+    expect(new Date(fromLocalInput('2026-10-27T14:35')).getTime()).toBe(new Date(2026, 9, 27, 14, 35).getTime());
+    expect(fromLocalInput('')).toBe('');
   });
 });

@@ -440,4 +440,49 @@ describe('Supplier directory and one-transfer payments', () => {
       expect(db.history.at(-1).note).toMatch(/whole transfer/);
     });
   });
+
+  describe('the transaction date & time (when the money actually moved)', () => {
+    it('is saved when paying; empty means now; the future and typos are refused', async () => {
+      const r = await approvedPayment({ amount: 1000, payee: OTHER_BANK });
+      const future = new Date(Date.now() + 3600 * 1000).toISOString();
+      expect((await admin.session.form(`/payment-requests/${r.id}/pay`, { method: 'bank', transactionAt: future })).status).toBe(400);
+      expect((await admin.session.form(`/payment-requests/${r.id}/pay`, { method: 'bank', transactionAt: 'yesterday-ish' })).status).toBe(400);
+      const when = new Date(Date.now() - 26 * 3600 * 1000);
+      const paid = await admin.session.form(`/payment-requests/${r.id}/pay`, { method: 'bank', reference: 'UTR1', transactionAt: when.toISOString() });
+      expect(paid.status).toBe(200);
+      const doc = await PaymentRequest.findById(r.id).lean();
+      expect(new Date(doc.payment.transactionAt).getTime()).toBe(when.getTime());
+      expect(doc.payment.paidAt.getTime()).toBeGreaterThan(when.getTime()); // recorded later — both kept
+
+      const r2 = await approvedPayment({ amount: 500, payee: OTHER_BANK });
+      await admin.session.form(`/payment-requests/${r2.id}/pay`, { method: 'upi' });
+      const d2 = await PaymentRequest.findById(r2.id).lean();
+      expect(Math.abs(d2.payment.transactionAt - d2.payment.paidAt)).toBeLessThan(5000);
+    });
+
+    it('one transfer for several payments gets one time; the admin can correct it later', async () => {
+      const s = await addSupplier();
+      const a = await approvedPayment({ amount: 1000, supplierId: s.id });
+      const b = await approvedPayment({ amount: 2000, supplierId: s.id });
+      const when = new Date(Date.now() - 3 * 3600 * 1000);
+      expect((await payBatch(admin.session, [a.id, b.id], 3000, { transactionAt: when.toISOString() })).status).toBe(200);
+      const both = await PaymentRequest.find({ _id: { $in: [a.id, b.id] } }).lean();
+      expect(both.map((d) => new Date(d.payment.transactionAt).getTime())).toEqual([when.getTime(), when.getTime()]);
+
+      const fixed = new Date(Date.now() - 5 * 3600 * 1000);
+      const res = await admin.session.formPut(`/payment-requests/${a.id}/payment`, { transactionAt: fixed.toISOString() });
+      expect(res.status).toBe(200);
+      const after = await PaymentRequest.find({ _id: { $in: [a.id, b.id] } }).lean();
+      expect(after.map((d) => new Date(d.payment.transactionAt).getTime())).toEqual([fixed.getTime(), fixed.getTime()]);
+      expect(after[0].history.at(-1).note).toMatch(/transaction time/);
+    });
+
+    it('the receipt PDF still renders with it', async () => {
+      const r = await approvedPayment({ amount: 1000, payee: OTHER_BANK });
+      await admin.session.form(`/payment-requests/${r.id}/pay`, { method: 'bank', transactionAt: new Date(Date.now() - 60000).toISOString() });
+      const pdf = await admin.session.get(`/payment-requests/${r.id}/slip`);
+      expect(pdf.status).toBe(200);
+      expect(pdf.headers['content-type']).toMatch(/pdf/);
+    });
+  });
 });

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Loader2, Paperclip } from 'lucide-react';
-import { errorMessage, fileHref, postForm, type PaymentRequest } from './api';
+import { errorMessage, fileHref, postForm, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
@@ -17,6 +17,7 @@ const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gra
 export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentRequest; onDone: (r: PaymentRequest) => void; onCancel: () => void }) {
   const [method, setMethod] = useState(r.payment?.method || 'bank');
   const [reference, setReference] = useState(r.payment?.reference || '');
+  const [at, setAt] = useState(toLocalInput(r.payment?.transactionAt || r.payment?.paidAt || new Date()));
   const [note, setNote] = useState('');
   const [remove, setRemove] = useState<string[]>([]);
   const [add, setAdd] = useState<File[]>([]);
@@ -30,6 +31,7 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
     const form = new FormData();
     form.append('method', method);
     form.append('reference', reference.trim());
+    if (at) form.append('transactionAt', fromLocalInput(at));
     if (note.trim()) form.append('note', note.trim());
     if (remove.length) form.append('removeFileIds', JSON.stringify(remove));
     for (const f of add) form.append('proof', f);
@@ -56,6 +58,8 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
           </select></div>
         <div><label className={label} htmlFor="ep-ref">Reference / UTR</label>
           <input id="ep-ref" className={input} maxLength={120} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" /></div>
+        <div className="sm:col-span-2"><label className={label} htmlFor="ep-at">Transaction date &amp; time</label>
+          <input id="ep-at" type="datetime-local" className={input} max={toLocalInput()} value={at} onChange={(e) => setAt(e.target.value)} /></div>
       </div>
       {proofs.length > 0 && (
         <fieldset>

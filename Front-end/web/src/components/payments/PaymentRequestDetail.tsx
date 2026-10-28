@@ -5,8 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Loader2, Paperclip, Pencil, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
 import {
-  actOn, errorMessage, fileHref, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest,
-} from './api';
+  actOn, errorMessage, fileHref, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import EditPaymentRequest from './EditPaymentRequest';
 import EditPaidPayment from './EditPaidPayment';
@@ -44,7 +43,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
   const q = useQuery({ queryKey: paymentKeys.one(id), queryFn: () => getRequest(id) });
   const [note, setNote] = useState('');
   const [mode, setMode] = useState<null | 'decline' | 'hold' | 'pay' | 'edit' | 'editPayment'>(startEditing ? 'edit' : null);
-  const [pay, setPay] = useState({ method: 'razorpay', reference: '' });
+  const [pay, setPay] = useState({ method: 'razorpay', reference: '', at: toLocalInput() });
   const [proof, setProof] = useState<File[]>([]);
   const [error, setError] = useState('');
 
@@ -60,6 +59,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
       const form = new FormData();
       form.append('method', pay.method);
       form.append('reference', pay.reference.trim());
+      form.append('transactionAt', fromLocalInput(pay.at));
       if (note.trim()) form.append('note', note.trim());
       for (const f of proof) form.append('proof', f);
       return (await postForm<{ request: PaymentRequest }>(`/payment-requests/${id}/pay`, form)).request;
@@ -104,7 +104,9 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               <Row k="Details" v={r.description} />
               <Row k="Pay by" v={r.payee.method === 'upi' ? `UPI · ${r.payee.upiId || 'scan their QR (attached)'}` : `Bank · ${r.payee.accountName}, A/c ${r.payee.accountNumber}, IFSC ${r.payee.ifsc}${r.payee.bankName ? ` (${r.payee.bankName})` : ''}`} />
               <Row k="Payee phone" v={r.payee.phone} />
-              {r.payment && <Row k="Paid" v={`${r.payment.method.toUpperCase()}${r.payment.reference ? ` · ref ${r.payment.reference}` : ''} · ${formatDateTimeIST(r.payment.paidAt)} · by ${r.payment.paidByName}`} />}
+              {r.payment && <Row k="Paid" v={`${r.payment.method.toUpperCase()}${r.payment.reference ? ` · ref ${r.payment.reference}` : ''} · by ${r.payment.paidByName}`} />}
+              {r.payment && <Row k="Transaction" v={formatDateTimeIST(r.payment.transactionAt || r.payment.paidAt)} />}
+              {r.payment && <Row k="Recorded" v={formatDateTimeIST(r.payment.paidAt)} />}
               {r.decisionNote && ['declined', 'on_hold'].includes(r.status) && <Row k={r.status === 'declined' ? 'Reason' : 'On hold'} v={r.decisionNote} />}
             </dl>
 
@@ -174,6 +176,9 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                         <option value="other">Other</option>
                       </select>
                       <input aria-label="Payment reference" className={input} value={pay.reference} onChange={(e) => setPay({ ...pay, reference: e.target.value })} placeholder="Payout ID / UTR (optional)" />
+                      <label className="text-xs text-gray-600 sm:col-span-2">Transaction date &amp; time (when the money was sent)
+                        <input type="datetime-local" aria-label="Transaction date and time" className={`${input} mt-1`} max={toLocalInput()} required value={pay.at} onChange={(e) => setPay({ ...pay, at: e.target.value })} />
+                      </label>
                     </div>
                     <div className="text-sm">
                       <FilePicker files={proof} onChange={setProof} max={MAX_PROOFS} accept="image/jpeg,image/png,image/webp,application/pdf"
