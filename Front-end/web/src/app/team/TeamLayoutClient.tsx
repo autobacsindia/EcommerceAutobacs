@@ -111,7 +111,7 @@ export default function TeamLayoutClient({
       sections={[{ items }]}
       user={{ name: userName, role: roleLabel || (isHead ? 'Team head' : 'Team member') }}
       footer={canChangePassword && (
-        <Link href={PASSWORD_PATH} className="pn-side-muted inline-flex items-center gap-1.5 text-xs hover:text-[#fff]">
+        <Link href={PASSWORD_PATH} className="pn-side-muted inline-flex items-center gap-1.5 text-xs hover:text-blue-700">
           <KeyRound className="h-3.5 w-3.5" aria-hidden="true" /> Change password
         </Link>
       )}

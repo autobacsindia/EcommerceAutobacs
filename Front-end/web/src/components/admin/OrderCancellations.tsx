@@ -93,7 +93,7 @@ interface Props {
 const REFUND_STYLE: Record<string, string> = {
   not_applicable: 'bg-gray-100 text-gray-700',
   pending: 'bg-amber-100 text-amber-900',
-  processing: 'bg-blue-100 text-blue-800',
+  processing: 'bg-sky-100 text-sky-800',
   completed: 'bg-green-100 text-green-800',
   failed: 'bg-red-100 text-red-800',
 };

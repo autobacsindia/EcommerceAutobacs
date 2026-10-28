@@ -56,7 +56,7 @@ const FILTERS = [
 ] as const;
 
 const STATUS_STYLES: Record<TicketStatus, string> = {
-  new: 'bg-blue-100 text-blue-800',
+  new: 'bg-sky-100 text-sky-800',
   open: 'bg-amber-100 text-amber-800',
   pending_customer: 'bg-purple-100 text-purple-800',
   on_hold: 'bg-gray-200 text-gray-700',

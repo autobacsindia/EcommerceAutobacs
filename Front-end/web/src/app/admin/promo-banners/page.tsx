@@ -96,7 +96,7 @@ const EMPTY: Draft = {
  */
 const STATE_BADGE: Record<BannerState, { text: string; className: string; explain: string }> = {
   live: { text: 'LIVE', className: 'bg-green-100 text-green-700', explain: 'Showing on the site right now.' },
-  scheduled: { text: 'SCHEDULED', className: 'bg-blue-100 text-blue-700', explain: 'Active, but its start date/time has not arrived yet.' },
+  scheduled: { text: 'SCHEDULED', className: 'bg-sky-100 text-sky-800', explain: 'Active, but its start date/time has not arrived yet.' },
   ended: { text: 'ENDED', className: 'bg-gray-200 text-gray-700', explain: 'Active, but its end date has passed. Clear or extend the end date to run it again.' },
   superseded: { text: 'WAITING', className: 'bg-amber-100 text-amber-800', explain: 'Active and in date, but another banner has a higher priority. Raise its priority or turn the other one off.' },
   off: { text: 'OFF', className: 'bg-gray-100 text-gray-500', explain: 'Switched off.' },

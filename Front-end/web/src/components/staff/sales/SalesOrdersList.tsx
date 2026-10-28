@@ -26,7 +26,7 @@ function statusOf(o: SalesOrder): { text: string; cls: string } {
   if (o.paymentStatus !== 'pending' && o.workflowSummary) {
     if (o.workflowStage) return { text: o.workflowSummary, cls: STAGE_TONE[o.workflowStage] };
     const done = /Delivered/.test(o.workflowSummary);
-    return { text: o.workflowSummary, cls: done ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800' };
+    return { text: o.workflowSummary, cls: done ? 'bg-green-100 text-green-800' : 'bg-sky-100 text-sky-800' };
   }
   if (o.paymentStatus === 'paid') {
     const after: Record<string, string> = { shipped: 'Paid · shipped', delivered: 'Paid · delivered', cancelled: 'Paid · cancelled' };
@@ -44,7 +44,7 @@ function statusOf(o: SalesOrder): { text: string; cls: string } {
     const p = o.payment;
     if (p && p.amountPaid > 0) return { text: `${rupees(p.amountPaid)} of ${rupees(o.totalAmount)} received`, cls: 'bg-amber-100 text-amber-800' };
     if (p && p.parts.some((x) => x.status === 'pending')) return { text: 'Waiting for payment', cls: 'bg-amber-100 text-amber-800' };
-    return { text: 'Payment not requested yet', cls: 'bg-blue-100 text-blue-800' };
+    return { text: 'Payment not requested yet', cls: 'bg-sky-100 text-sky-800' };
   }
   if (o.linkState === 'active') return { text: 'Waiting for payment', cls: 'bg-amber-100 text-amber-800' };
   return { text: 'Link expired', cls: 'bg-red-100 text-red-800' };

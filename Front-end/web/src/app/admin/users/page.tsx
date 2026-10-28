@@ -216,7 +216,7 @@ export default function AdminUsersPage() {
                   <span className={`px-2 py-1 text-xs rounded-full ${
                     user.role === 'admin'
                       ? 'bg-purple-100 text-purple-800'
-                      : 'bg-blue-100 text-blue-800'
+                      : 'bg-sky-100 text-sky-800'
                   }`}>
                     {user.role}
                   </span>
@@ -347,7 +347,7 @@ export default function AdminUsersPage() {
                   <span className={`px-3 py-1 text-sm rounded-full inline-block ${
                     selectedUser.role === 'admin' 
                       ? 'bg-purple-100 text-purple-800' 
-                      : 'bg-blue-100 text-blue-800'
+                      : 'bg-sky-100 text-sky-800'
                   }`}>
                     {selectedUser.role}
                   </span>

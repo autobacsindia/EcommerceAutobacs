@@ -381,7 +381,7 @@ function AdminOrderDetailPageInner() {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       pending: 'bg-yellow-100 text-yellow-800',
-      confirmed: 'bg-blue-100 text-blue-800',
+      confirmed: 'bg-sky-100 text-sky-800',
       processing: 'bg-indigo-100 text-indigo-800',
       shipped: 'bg-purple-100 text-purple-800',
       delivered: 'bg-green-100 text-green-800',
@@ -1011,7 +1011,7 @@ function AdminOrderDetailPageInner() {
                       const s = order.paymentStatus === 'refunded' ? 'completed' : order.refundDetails?.status;
                       const map: Record<string, { label: string; cls: string }> = {
                         completed: { label: 'Refunded ✓', cls: 'bg-green-100 text-green-800' },
-                        processing: { label: 'Refunding…', cls: 'bg-blue-100 text-blue-800' },
+                        processing: { label: 'Refunding…', cls: 'bg-sky-100 text-sky-800' },
                         failed: { label: 'Refund failed', cls: 'bg-red-100 text-red-800' },
                         pending: { label: 'Refund due', cls: 'bg-yellow-100 text-yellow-800' },
                       };

@@ -15,7 +15,7 @@ import { whatsappNumber } from './PaymentLinkCard';
 import { errorMessage, quotationPdfHref, rupees, type Quotation } from './types';
 
 export const QUOTATION_STATUS: Record<Quotation['status'], { text: string; cls: string }> = {
-  open: { text: 'Shared — waiting for the client', cls: 'bg-blue-100 text-blue-800' },
+  open: { text: 'Shared — waiting for the client', cls: 'bg-sky-100 text-sky-800' },
   expired: { text: 'Expired — edit to refresh', cls: 'bg-amber-100 text-amber-800' },
   accepted: { text: 'Accepted — order created', cls: 'bg-green-100 text-green-800' },
   cancelled: { text: 'Cancelled', cls: 'bg-gray-200 text-gray-700' },

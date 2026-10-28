@@ -1,7 +1,9 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   PANEL THEME — the admin (/admin) and team (/team) panels in the Roavion
-   store look (components/home/store/store.css): the logo green, the store's
-   green-tinted greys, the header black behind the white logo.
+   PANEL THEME — the admin (/admin) and team (/team) panels: a bright white
+   workspace in the Roavion logo colours (green #0A5C33, white, grey #707070).
+   The logo green carries the brand (the badge at the top of the sidebar); a
+   brighter green does the work (buttons, links, selection); a vivid green is
+   for highlights only, never text.
 
    Scoped to `.panel-theme`, the root of PanelShell, so the storefront is
    untouched.
@@ -12,32 +14,41 @@
    So inside the panel:
      • gray-*  → the same lightness steps with the store's green-grey hue.
                  Lightness is what contrast is made of, so every text/background
-                 pair keeps the contrast it has today (gray-500 is the one step moved —
-                 see its note).
-     • blue-*  → the brand green ramp. In these panels blue is the "primary"
+                 pair keeps the contrast it has today (gray-500 is the one step
+                 moved — see its note).
+     • blue-*  → a bright green ramp. In these panels blue is the "primary"
                  colour — buttons, links, focus rings, selected states (~400 of
-                 the ~430 blue utilities) — so primary becomes Roavion green.
-   Red, amber and green status colours are not touched: learnt meanings.
+                 the ~430 blue utilities). Status badges that meant "in
+                 progress" use `sky-*` instead, so they stay blue.
+   Red, amber and green status colours keep their hue: learnt meanings.
 
    DARK. globals.css inverts the grey ramp and `white` under
    [data-theme='dark'], so `text-white` on a button reads DARK there. The dark
-   green ramp below is therefore light where light one is dark: a light green
-   button carries that dark text (AA), and the same step reads as a green link
-   on a dark card (AA). Values measured, not guessed — see the notes.
+   green ramp is therefore light where the light one is dark: a light green
+   button carries that dark text, and the same step reads as a green link on a
+   dark card. The status families (green, red, amber, sky…) get the same
+   treatment — dark tints, light ink — so a "Paid" badge is not a white sticker
+   on a dark page. Every pair below was measured, not guessed.
    ══════════════════════════════════════════════════════════════════════════ */
 
 .panel-theme {
-  /* Shell tokens (not part of the Tailwind ramp, so dark mode never inverts them). */
-  --pn-bg: #eef1f0;            /* the page behind the cards — the store's --bg */
-  --pn-side: #121414;          /* sidebar: the store header black */
-  --pn-side-2: #1d2121;        /* sidebar hover / selected */
-  --pn-side-ink: #d6dad9;      /* sidebar text: 13.1:1 on --pn-side */
-  --pn-side-muted: #8b9391;    /* section labels: 5.9:1 on --pn-side */
-  --pn-side-line: rgba(255, 255, 255, 0.08);
-  --pn-accent: #5cd68c;        /* selected item icon: 8.9:1 on --pn-side-2 */
-  --pn-focus: #12753f;         /* the store's focus ring */
+  /* Shell tokens. */
+  --pn-bg: #f6f8f7;            /* the page behind the cards: near-white */
+  --pn-side: #ffffff;
+  --pn-side-line: #e6ebe9;
+  --pn-side-ink: #2f3634;      /* sidebar text: 12.6:1 on white */
+  --pn-side-icon: #6b7371;
+  --pn-side-muted: #6b7371;    /* section labels: 4.9:1 on white */
+  --pn-side-hover: #f2f6f4;
+  --pn-active-bg: #e9f8ef;     /* mint */
+  --pn-active-ink: #0b6b38;    /* 6.0:1 on the mint */
+  --pn-active-bar: #16a34a;    /* the vivid edge on the current page */
   --pn-bar: #ffffff;
-  --pn-bar-line: #dfe3e2;
+  --pn-bar-line: #e6ebe9;
+  --pn-focus: #0b7d41;
+  /* The brand badge: the logo green into a brighter green; the white logo
+     holds 8.1:1 at the start and 3.2:1 at the end (a large graphic: 3:1). */
+  --pn-brand: linear-gradient(125deg, #0a5c33 0%, #0b7d41 55%, #19a45a 100%);
 
   /* Neutrals: Tailwind's lightness steps, the store's hue. */
   --color-gray-50:  oklch(98.4% 0.003 165);
@@ -46,8 +57,7 @@
   --color-gray-300: oklch(87.1% 0.008 165);
   --color-gray-400: oklch(70.7% 0.012 165);
   /* One step darker than Tailwind's 55.1%: hint text also sits straight on the
-     page (--pn-bg), which is a shade deeper than the old gray-50. 4.8:1 there,
-     5.5:1 on white. At 55.1% it measured 4.2:1 on the page — under AA. */
+     page (--pn-bg). 4.8:1 on white, still AA on the page. */
   --color-gray-500: oklch(52% 0.014 165);
   --color-gray-600: oklch(44.6% 0.014 165);
   --color-gray-700: oklch(37.3% 0.013 165);
@@ -55,18 +65,18 @@
   --color-gray-900: oklch(21% 0.010 165);
   --color-gray-950: oklch(13% 0.008 165);
 
-  /* Primary: the logo green (#0A5C33 at 600). */
-  --color-blue-50:  #f2f8f4;
-  --color-blue-100: #e7f3ec;
-  --color-blue-200: #c9e4d3;
-  --color-blue-300: #9fcdb0;
-  --color-blue-400: #5fae80;
-  --color-blue-500: #12753f;   /* focus rings, borders; 5.8:1 on white as text */
-  --color-blue-600: #0a5c33;   /* buttons (white text 8.1:1), links (8.1:1) */
-  --color-blue-700: #084a29;   /* hover */
-  --color-blue-800: #073d22;   /* text on a 50/100 tint: 10.8:1 */
-  --color-blue-900: #05301b;
-  --color-blue-950: #031d10;
+  /* Primary: bright green. */
+  --color-blue-50:  #effaf3;
+  --color-blue-100: #dcf5e5;
+  --color-blue-200: #b9ebcb;
+  --color-blue-300: #86d9a6;
+  --color-blue-400: #3fbf73;
+  --color-blue-500: #0f9550;   /* focus rings, borders: 3.9:1 on white (UI needs 3:1) */
+  --color-blue-600: #0b7d41;   /* buttons: white text 5.2:1; links 5.2:1 on white, 4.9:1 on the page and the 50 tint */
+  --color-blue-700: #096a36;   /* hover, darker links: 6.6:1 */
+  --color-blue-800: #075a2d;   /* text on a 100 tint: 7.6:1 */
+  --color-blue-900: #054522;
+  --color-blue-950: #032d16;
 
   background: var(--pn-bg);
   color: var(--color-gray-900);
@@ -75,10 +85,18 @@
 
 [data-theme='dark'] .panel-theme {
   --pn-bg: #0f1212;
-  --pn-side: #0b0e0e;
-  --pn-side-2: #172020;
+  --pn-side: #141919;
+  --pn-side-line: #263030;
+  --pn-side-ink: #e5ebe9;      /* 14.7:1 */
+  --pn-side-icon: #9aa5a2;
+  --pn-side-muted: #9aa5a2;    /* 6.9:1 */
+  --pn-side-hover: #1b2323;
+  --pn-active-bg: #142b20;
+  --pn-active-ink: #6ee7a0;    /* 9.7:1 */
+  --pn-active-bar: #37b074;
   --pn-bar: #141919;
-  --pn-bar-line: #2a3233;
+  --pn-bar-line: #263030;
+  --pn-focus: #37b074;
 
   /* The site's inverted ramp (globals.css), in the store's hue. */
   --color-gray-50:  oklch(19% 0.006 165);
@@ -106,15 +124,54 @@
   --color-blue-800: #9fe3bd;
   --color-blue-900: #c4efd6;
   --color-blue-950: #e6f8ee;
+
+  /* Status families: 50–200 are badge / note backgrounds, 700–900 their ink.
+     Inks are Tailwind's 300/200 steps; each clears 9:1 on its own tint. */
+  --color-green-50: #10241a;   --color-green-100: #14291d;   --color-green-200: #1d3d2a;
+  --color-green-700: #86efac;  --color-green-800: #86efac;   --color-green-900: #bbf7d0;
+  --color-emerald-50: #0f241c; --color-emerald-100: #13291f; --color-emerald-200: #1b3d2e;
+  --color-emerald-700: #6ee7b7; --color-emerald-800: #6ee7b7; --color-emerald-900: #a7f3d0;
+  --color-red-50: #2a1316;     --color-red-100: #2c1418;     --color-red-200: #4a1d24;
+  --color-red-700: #fca5a5;    --color-red-800: #fca5a5;     --color-red-900: #fecaca;
+  --color-rose-50: #2a1319;    --color-rose-100: #2d141b;    --color-rose-200: #4b1d29;
+  --color-rose-700: #fda4af;   --color-rose-800: #fda4af;    --color-rose-900: #fecdd3;
+  --color-amber-50: #261d0e;   --color-amber-100: #2a2110;   --color-amber-200: #4a3714;
+  --color-amber-700: #fcd34d;  --color-amber-800: #fcd34d;   --color-amber-900: #fde68a;
+  --color-yellow-50: #26220d;  --color-yellow-100: #2a250f;  --color-yellow-200: #4a4114;
+  --color-yellow-700: #fde047; --color-yellow-800: #fde047;  --color-yellow-900: #fef08a;
+  --color-orange-50: #2a1a0e;  --color-orange-100: #2e1c10;  --color-orange-200: #4d2e15;
+  --color-orange-700: #fdba74; --color-orange-800: #fdba74;  --color-orange-900: #fed7aa;
+  --color-sky-50: #0d1f2b;     --color-sky-100: #0f2433;     --color-sky-200: #173a52;
+  --color-sky-700: #7dd3fc;    --color-sky-800: #7dd3fc;     --color-sky-900: #bae6fd;
+  --color-purple-50: #21162b;  --color-purple-100: #24182f;  --color-purple-200: #3b2650;
+  --color-purple-700: #d8b4fe; --color-purple-800: #d8b4fe;  --color-purple-900: #e9d5ff;
+  --color-indigo-50: #171a33;  --color-indigo-100: #1a1d38;  --color-indigo-200: #2a2f5c;
+  --color-indigo-700: #a5b4fc; --color-indigo-800: #a5b4fc;  --color-indigo-900: #c7d2fe;
+  --color-teal-50: #0d2423;    --color-teal-100: #10292a;    --color-teal-200: #184140;
+  --color-teal-700: #5eead4;   --color-teal-800: #5eead4;    --color-teal-900: #99f6e4;
 }
 
-/* Keyboard focus: the store's green ring on buttons and links. Fields keep the
-   ring their own classes draw (they match :focus-visible on a mouse click). */
+/* Cards: Tailwind's `shadow` is a hard grey edge on a near-white page. A soft,
+   slightly green-tinted lift plus a hairline reads as one consistent card. */
+.panel-theme .shadow,
+.panel-theme .shadow-sm {
+  box-shadow: 0 0 0 1px rgba(16, 40, 28, 0.06), 0 1px 2px rgba(16, 40, 28, 0.04), 0 6px 18px -6px rgba(16, 40, 28, 0.08);
+}
+[data-theme='dark'] .panel-theme .shadow,
+[data-theme='dark'] .panel-theme .shadow-sm {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* Keyboard focus: a green ring on buttons and links. Fields keep the ring their
+   own classes draw (they match :focus-visible on a mouse click). */
 .panel-theme :focus-visible:not(input, textarea, select) {
   outline: 2px solid var(--pn-focus);
   outline-offset: 2px;
 }
-[data-theme='dark'] .panel-theme :focus-visible:not(input, textarea, select) { outline-color: #37b074; }
+
+/* A brand-gradient surface (the dashboard's health score). White on it: 3.2–8.1:1,
+   used only for large figures. */
+.panel-theme .pn-gradient { background: var(--pn-brand); color: #fff; }
 
 /* Page titles in the top bar, and any page that opts in. */
 .panel-theme .pn-title {
@@ -130,6 +187,16 @@
   border-right: 1px solid var(--pn-side-line);
 }
 .pn-side-line { border-color: var(--pn-side-line); }
+/* The logo sits on the brand badge: the logo is white, the badge is the logo green. */
+.pn-brand {
+  background: var(--pn-brand);
+  color: #fff;
+  border-bottom-right-radius: 18px;
+}
+.pn-brand-sub { color: rgba(255, 255, 255, 0.86); }
+.pn-brand-btn { color: #fff; border-radius: 8px; transition: background-color 0.15s; }
+.pn-brand-btn:hover { background: rgba(255, 255, 255, 0.16); }
+.pn-brand :focus-visible { outline-color: #fff !important; }
 .pn-section {
   color: var(--pn-side-muted);
   font-size: 11px;
@@ -142,21 +209,22 @@
   color: var(--pn-side-ink);
   transition: background-color 0.15s, color 0.15s;
 }
-.pn-nav svg { color: #9aa3a1; transition: color 0.15s; }
-.pn-nav:hover { background: var(--pn-side-2); color: #fff; }
-.pn-nav:hover svg { color: #fff; }
+.pn-nav svg { color: var(--pn-side-icon); transition: color 0.15s; }
+.pn-nav:hover { background: var(--pn-side-hover); }
+.pn-nav:hover svg { color: var(--pn-active-ink); }
 .pn-nav[aria-current='page'] {
-  background: var(--pn-side-2);
-  color: #fff;
+  background: var(--pn-active-bg);
+  color: var(--pn-active-ink);
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px rgba(92, 214, 140, 0.25);
+  box-shadow: inset 3px 0 0 var(--pn-active-bar);
 }
-.pn-nav[aria-current='page'] svg { color: var(--pn-accent); }
-.pn-count { background: #12753f; color: #fff; }
-.pn-side :focus-visible { outline-color: var(--pn-accent) !important; }
+.pn-nav[aria-current='page'] svg { color: var(--pn-active-ink); }
+.pn-count { background: var(--color-blue-600); color: var(--color-white); }
 .pn-side-muted { color: var(--pn-side-muted); }
+.pn-side-name { color: var(--pn-side-ink); }
+.pn-avatar { background: var(--pn-brand); color: #fff; }
 .pn-logout { color: var(--pn-side-ink); border: 1px solid var(--pn-side-line); }
-.pn-logout:hover { color: #fff; background: #8f1d2c; border-color: #8f1d2c; }
+.pn-logout:hover { color: var(--color-red-700); background: var(--color-red-50); border-color: var(--color-red-200); }
 
 /* ── Top bar ─────────────────────────────────────────────────────────────── */
 .pn-bar {
@@ -167,7 +235,7 @@
 /* Phone drawer: the sidebar slides in over the page. Hidden (not just moved) when
    closed, so its links leave the tab order and the accessibility tree. */
 @media (max-width: 767.98px) {
-  .pn-drawer { transform: translateX(-100%); visibility: hidden; transition: transform 0.22s ease, visibility 0s linear 0.22s; }
+  .pn-drawer { transform: translateX(-100%); visibility: hidden; transition: transform 0.22s ease, visibility 0s linear 0.22s; box-shadow: 0 0 40px rgba(0, 0, 0, 0.18); }
   .pn-drawer[data-open='true'] { transform: none; visibility: visible; transition: transform 0.22s ease; }
 }
 @media (prefers-reduced-motion: reduce) {

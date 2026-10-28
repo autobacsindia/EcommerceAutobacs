@@ -40,7 +40,7 @@ interface AppDetail extends AppRow {
 
 const STATUSES: Status[] = ['new', 'reviewing', 'shortlisted', 'rejected', 'hired'];
 const STATUS_STYLE: Record<Status, string> = {
-  new: 'bg-blue-100 text-blue-700',
+  new: 'bg-sky-100 text-sky-800',
   reviewing: 'bg-amber-100 text-amber-700',
   shortlisted: 'bg-purple-100 text-purple-700',
   hired: 'bg-green-100 text-green-700',
