@@ -17,7 +17,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
 // the bell's own data is stubbed — its behaviour is covered in
 // components/notifications/NotificationBell.test.tsx.
 jest.mock('@/hooks/queries/useNotifications', () => ({ useWaitingWork: () => ({ data: { items: [], total: 0 } }) }));
-jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => <a href={href} className={className}>{children}</a> }));
+jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, ...rest }: { children: React.ReactNode; href: string }) => <a href={href} {...rest}>{children}</a> }));
 
 const shell = (canChangePassword: boolean, extra: { canSell?: boolean; roleLabel?: string } = { canSell: true }) => render(
   <TeamLayoutClient userName="Sam" team="sales" teamLabel="GTM" isHead={false} canChangePassword={canChangePassword} {...extra}>
@@ -74,8 +74,8 @@ it('marketing gets its panel screens, highlighted on their detail pages too', ()
   ] as const) {
     expect(screen.getByRole('link', { name })).toHaveAttribute('href', href);
   }
-  expect(screen.getByRole('link', { name: /Coupons/ }).className).toContain('bg-blue-600');
-  expect(screen.getByRole('link', { name: /Campaigns/ }).className).not.toContain('bg-blue-600');
+  expect(screen.getByRole('link', { name: /Coupons/ })).toHaveAttribute('aria-current', 'page');
+  expect(screen.getByRole('link', { name: /Campaigns/ })).not.toHaveAttribute('aria-current');
   // Selling and stock tools stay with their teams.
   expect(screen.queryByRole('link', { name: /New quotation/ })).toBeNull();
   pathname = '/team';

@@ -1,0 +1,175 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   PANEL THEME — the admin (/admin) and team (/team) panels in the Roavion
+   store look (components/home/store/store.css): the logo green, the store's
+   green-tinted greys, the header black behind the white logo.
+
+   Scoped to `.panel-theme`, the root of PanelShell, so the storefront is
+   untouched.
+
+   HOW 155 SCREENS CHANGE WITHOUT EDITING THEM. Tailwind v4 compiles every
+   colour utility to a variable (`bg-blue-600` → `var(--color-blue-600)`), and
+   a custom property redefined on an element wins for everything inside it.
+   So inside the panel:
+     • gray-*  → the same lightness steps with the store's green-grey hue.
+                 Lightness is what contrast is made of, so every text/background
+                 pair keeps the contrast it has today (gray-500 is the one step moved —
+                 see its note).
+     • blue-*  → the brand green ramp. In these panels blue is the "primary"
+                 colour — buttons, links, focus rings, selected states (~400 of
+                 the ~430 blue utilities) — so primary becomes Roavion green.
+   Red, amber and green status colours are not touched: learnt meanings.
+
+   DARK. globals.css inverts the grey ramp and `white` under
+   [data-theme='dark'], so `text-white` on a button reads DARK there. The dark
+   green ramp below is therefore light where light one is dark: a light green
+   button carries that dark text (AA), and the same step reads as a green link
+   on a dark card (AA). Values measured, not guessed — see the notes.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.panel-theme {
+  /* Shell tokens (not part of the Tailwind ramp, so dark mode never inverts them). */
+  --pn-bg: #eef1f0;            /* the page behind the cards — the store's --bg */
+  --pn-side: #121414;          /* sidebar: the store header black */
+  --pn-side-2: #1d2121;        /* sidebar hover / selected */
+  --pn-side-ink: #d6dad9;      /* sidebar text: 13.1:1 on --pn-side */
+  --pn-side-muted: #8b9391;    /* section labels: 5.9:1 on --pn-side */
+  --pn-side-line: rgba(255, 255, 255, 0.08);
+  --pn-accent: #5cd68c;        /* selected item icon: 8.9:1 on --pn-side-2 */
+  --pn-focus: #12753f;         /* the store's focus ring */
+  --pn-bar: #ffffff;
+  --pn-bar-line: #dfe3e2;
+
+  /* Neutrals: Tailwind's lightness steps, the store's hue. */
+  --color-gray-50:  oklch(98.4% 0.003 165);
+  --color-gray-100: oklch(96.6% 0.004 165);
+  --color-gray-200: oklch(92.7% 0.006 165);
+  --color-gray-300: oklch(87.1% 0.008 165);
+  --color-gray-400: oklch(70.7% 0.012 165);
+  /* One step darker than Tailwind's 55.1%: hint text also sits straight on the
+     page (--pn-bg), which is a shade deeper than the old gray-50. 4.8:1 there,
+     5.5:1 on white. At 55.1% it measured 4.2:1 on the page — under AA. */
+  --color-gray-500: oklch(52% 0.014 165);
+  --color-gray-600: oklch(44.6% 0.014 165);
+  --color-gray-700: oklch(37.3% 0.013 165);
+  --color-gray-800: oklch(27.8% 0.012 165);
+  --color-gray-900: oklch(21% 0.010 165);
+  --color-gray-950: oklch(13% 0.008 165);
+
+  /* Primary: the logo green (#0A5C33 at 600). */
+  --color-blue-50:  #f2f8f4;
+  --color-blue-100: #e7f3ec;
+  --color-blue-200: #c9e4d3;
+  --color-blue-300: #9fcdb0;
+  --color-blue-400: #5fae80;
+  --color-blue-500: #12753f;   /* focus rings, borders; 5.8:1 on white as text */
+  --color-blue-600: #0a5c33;   /* buttons (white text 8.1:1), links (8.1:1) */
+  --color-blue-700: #084a29;   /* hover */
+  --color-blue-800: #073d22;   /* text on a 50/100 tint: 10.8:1 */
+  --color-blue-900: #05301b;
+  --color-blue-950: #031d10;
+
+  background: var(--pn-bg);
+  color: var(--color-gray-900);
+  font-family: var(--font-dm-sans), system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+[data-theme='dark'] .panel-theme {
+  --pn-bg: #0f1212;
+  --pn-side: #0b0e0e;
+  --pn-side-2: #172020;
+  --pn-bar: #141919;
+  --pn-bar-line: #2a3233;
+
+  /* The site's inverted ramp (globals.css), in the store's hue. */
+  --color-gray-50:  oklch(19% 0.006 165);
+  --color-gray-100: oklch(23% 0.007 165);
+  --color-gray-200: oklch(28% 0.008 165);
+  --color-gray-300: oklch(36% 0.009 165);
+  --color-gray-400: oklch(52% 0.011 165);
+  --color-gray-500: oklch(64% 0.012 165);
+  --color-gray-600: oklch(74% 0.012 165);
+  --color-gray-700: oklch(83% 0.010 165);
+  --color-gray-800: oklch(90% 0.007 165);
+  --color-gray-900: oklch(96% 0.004 165);
+  --color-gray-950: oklch(99% 0.002 165);
+
+  /* Tints dark, ink light. 600 holds the (dark) `text-white` at 8.6:1 and reads
+     as a link on a dark card at 8.6:1. */
+  --color-blue-50:  #11201a;
+  --color-blue-100: #142b20;
+  --color-blue-200: #1b3a2a;
+  --color-blue-300: #245038;
+  --color-blue-400: #2f6e4b;
+  --color-blue-500: #37b074;
+  --color-blue-600: #4cc282;
+  --color-blue-700: #6fd39c;
+  --color-blue-800: #9fe3bd;
+  --color-blue-900: #c4efd6;
+  --color-blue-950: #e6f8ee;
+}
+
+/* Keyboard focus: the store's green ring on buttons and links. Fields keep the
+   ring their own classes draw (they match :focus-visible on a mouse click). */
+.panel-theme :focus-visible:not(input, textarea, select) {
+  outline: 2px solid var(--pn-focus);
+  outline-offset: 2px;
+}
+[data-theme='dark'] .panel-theme :focus-visible:not(input, textarea, select) { outline-color: #37b074; }
+
+/* Page titles in the top bar, and any page that opts in. */
+.panel-theme .pn-title {
+  font-family: var(--font-montserrat), var(--font-dm-sans), system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.pn-side {
+  background: var(--pn-side);
+  color: var(--pn-side-ink);
+  border-right: 1px solid var(--pn-side-line);
+}
+.pn-side-line { border-color: var(--pn-side-line); }
+.pn-section {
+  color: var(--pn-side-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.pn-section:hover { color: var(--pn-side-ink); }
+.pn-nav {
+  color: var(--pn-side-ink);
+  transition: background-color 0.15s, color 0.15s;
+}
+.pn-nav svg { color: #9aa3a1; transition: color 0.15s; }
+.pn-nav:hover { background: var(--pn-side-2); color: #fff; }
+.pn-nav:hover svg { color: #fff; }
+.pn-nav[aria-current='page'] {
+  background: var(--pn-side-2);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(92, 214, 140, 0.25);
+}
+.pn-nav[aria-current='page'] svg { color: var(--pn-accent); }
+.pn-count { background: #12753f; color: #fff; }
+.pn-side :focus-visible { outline-color: var(--pn-accent) !important; }
+.pn-side-muted { color: var(--pn-side-muted); }
+.pn-logout { color: var(--pn-side-ink); border: 1px solid var(--pn-side-line); }
+.pn-logout:hover { color: #fff; background: #8f1d2c; border-color: #8f1d2c; }
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+.pn-bar {
+  background: var(--pn-bar);
+  border-bottom: 1px solid var(--pn-bar-line);
+}
+
+/* Phone drawer: the sidebar slides in over the page. Hidden (not just moved) when
+   closed, so its links leave the tab order and the accessibility tree. */
+@media (max-width: 767.98px) {
+  .pn-drawer { transform: translateX(-100%); visibility: hidden; transition: transform 0.22s ease, visibility 0s linear 0.22s; }
+  .pn-drawer[data-open='true'] { transform: none; visibility: visible; transition: transform 0.22s ease; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pn-drawer, .pn-drawer[data-open='true'] { transition: none; }
+}
