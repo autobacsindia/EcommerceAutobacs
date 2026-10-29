@@ -56,6 +56,7 @@ jest.mock('@/hooks/useRazorpay', () => ({
 
 const QUOTE = {
   subtotal: 89850,
+  subtotalBeforeTax: 77240.85,
   couponDiscount: 7188,
   freeShippingApplied: false,
   karmaDiscount: 0,
@@ -110,6 +111,19 @@ describe('checkout review step totals', () => {
     const total = screen.getByText('Total').parentElement!;
     expect(total).toHaveTextContent('₹82662.00');
     expect(total).not.toHaveTextContent('₹89850.00');
+  });
+
+  /*
+    Regression: "Subtotal" printed the GST-inclusive ₹89,850 and then the GST inside
+    it, so the rows did not add up. It now prints the server's subtotal before GST:
+    77,240.85 − 7,188 + 12,609.15 = 82,662.
+  */
+  it('shows the subtotal before GST, so the rows add up to the total', async () => {
+    render(<CheckoutPage />);
+    const labels = await screen.findAllByText('Subtotal (before GST)', {}, { timeout: 3000 });
+    await waitFor(() => {
+      expect(labels[0].nextElementSibling).toHaveTextContent('₹77240.85');
+    }, { timeout: 3000 });
   });
 
   it('never prints a confident total before the server answers', async () => {

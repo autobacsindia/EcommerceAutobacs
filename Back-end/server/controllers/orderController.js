@@ -15,7 +15,7 @@ import { createOfflineOrderRecord } from '../services/offlineOrderService.js';
 import offlineRefundService from '../services/offlineRefundService.js';
 import { isAlreadyRefundedAtGateway, alreadyRefundedGuidance } from '../utils/gatewayRefundErrors.js';
 import { remainingCancellable } from '../utils/orderCancellation.js';
-import { fromPaise } from '../utils/money.js';
+import { fromPaise, subtotalBeforeTax } from '../utils/money.js';
 import AppError from '../utils/AppError.js';
 import orderTrackingService, { OTHER_CARRIER_CODE } from '../services/orderTrackingService.js';
 import leadSyncService from '../services/leadSyncService.js';
@@ -373,6 +373,9 @@ export const getOrderById = async (req, res) => {
     // Strip the raw gateway entity (MDR, card id, acquirer data) before it leaves the
     // server; keep the method summary + EMI plan the order page renders.
     payment: publicPaymentSummary(order.payment),
+    // What the order summary's "Subtotal" row prints, from the order's own
+    // snapshot — so Subtotal − discount + Tax + Shipping = Total on the page.
+    subtotalBeforeTax: subtotalBeforeTax(order.subtotal, order.tax),
     items: order.items.map(item => {
       const metaContentId = contentIdForLineItem(item.product, item.variantId);
       // Strip internal-only fields we populated solely to derive metaContentId —

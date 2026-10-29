@@ -149,6 +149,19 @@ describe('OrderDetailPage', () => {
     });
   });
 
+  // Regression: the summary printed the GST-inclusive subtotal and then the GST inside
+  // it, so Subtotal + Tax came to more than the Total.
+  it('shows the subtotal before GST, so the summary adds up to the total', async () => {
+    (orderService.getOrderById as jest.Mock).mockResolvedValue({
+      ...mockOrder, subtotal: 157300, subtotalBeforeTax: 133305.08, tax: 23994.92, shippingCost: 0, totalAmount: 157300,
+    });
+    render(<OrderDetailPage />);
+
+    const label = await screen.findByText('Subtotal (before GST)');
+    expect(label.nextElementSibling).toHaveTextContent('₹133305.08');
+    expect(screen.getByText('Tax').nextElementSibling).toHaveTextContent('₹23994.92');
+  });
+
   it('handles buy again', async () => {
     render(<OrderDetailPage />);
     

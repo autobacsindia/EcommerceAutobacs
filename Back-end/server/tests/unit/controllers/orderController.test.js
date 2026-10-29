@@ -184,6 +184,39 @@ describe('OrderController Unit Tests', () => {
       }));
     });
 
+    // Regression: the order page printed the GST-inclusive subtotal beside the GST
+    // inside it, so its rows did not add up to the total.
+    it('serves subtotalBeforeTax from the order snapshot so the summary adds up', async () => {
+      const mockOrderDoc = {
+        _id: 'order-id', user: { _id: 'user-id' }, items: [],
+        subtotal: 157300, tax: 23994.92, discount: 0, shippingCost: 0, totalAmount: 157300,
+      };
+      mockOrder.findById.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(mockOrderDoc),
+      });
+      req.params.id = 'order-id';
+
+      await getOrderById(req, res);
+
+      const { order } = res.json.mock.calls[0][0];
+      expect(order.subtotalBeforeTax).toBe(133305.08);
+      expect(order.subtotal).toBe(157300); // snapshot left untouched
+      expect(order.subtotalBeforeTax + order.tax).toBe(order.totalAmount);
+    });
+
+    it('subtotalBeforeTax equals the subtotal on an order with no GST recorded', async () => {
+      mockOrder.findById.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue({ _id: 'o', user: { _id: 'user-id' }, items: [], subtotal: 500, totalAmount: 500 }),
+      });
+      req.params.id = 'o';
+
+      await getOrderById(req, res);
+
+      expect(res.json.mock.calls[0][0].order.subtotalBeforeTax).toBe(500);
+    });
+
     it('should return 404 if order not found', async () => {
       const mockChain = {
         populate: jest.fn().mockReturnThis(),

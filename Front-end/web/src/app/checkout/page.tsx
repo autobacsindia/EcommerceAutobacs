@@ -31,6 +31,8 @@ type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
 interface ServerValidation {
   subtotal: number;
+  /** Subtotal minus the GST inside it — what the "Subtotal" row prints. */
+  subtotalBeforeTax?: number;
   tax: number;
   total: number;
   items: Array<{ productId: string; variantId?: string | null; name: string; quantity: number; unitPrice: number; lineTotal: number }>;
@@ -433,6 +435,7 @@ function CheckoutPageContent() {
 
       const validated: ServerValidation = {
         subtotal: validation.subtotal,
+        subtotalBeforeTax: validation.subtotalBeforeTax,
         tax: validation.tax,
         total: validation.total,
         items: validation.items,
@@ -763,9 +766,10 @@ function CheckoutPageContent() {
             <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
               <div className="space-y-3 mb-4 border-b border-hairline pb-4">
                 <div className="flex justify-between text-sm">
-                  <span className="text-ink-muted font-display">Subtotal</span>
+                  {/* Before GST, so the rows add up to the Total (see cart/page.tsx). */}
+                  <span className="text-ink-muted font-display">Subtotal (before GST)</span>
                   <span className="text-ink/70 font-display">
-                    {reviewQuote ? `₹${reviewQuote.subtotal.toFixed(2)}` : '—'}
+                    {reviewQuote?.subtotalBeforeTax != null ? `₹${reviewQuote.subtotalBeforeTax.toFixed(2)}` : '—'}
                   </span>
                 </div>
                 {reviewQuote && reviewQuote.couponDiscount > 0 && (
@@ -1091,8 +1095,10 @@ function CheckoutPageContent() {
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-ink-muted font-display">Subtotal (updated)</span>
-                        <span className="text-ink/70 font-display">₹{serverValidation.subtotal.toFixed(2)}</span>
+                        <span className="text-ink-muted font-display">Subtotal before GST (updated)</span>
+                        <span className="text-ink/70 font-display">
+                          {serverValidation.subtotalBeforeTax != null ? `₹${serverValidation.subtotalBeforeTax.toFixed(2)}` : '—'}
+                        </span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-ink-muted font-display">Tax (18% GST)</span>
