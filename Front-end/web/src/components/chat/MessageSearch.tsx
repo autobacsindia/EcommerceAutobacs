@@ -170,7 +170,7 @@ export default function MessageSearch({
             type="button"
             onClick={() => fetchNextPage()}
             disabled={isFetchingNextPage}
-            className="mt-3 h-10 w-full rounded-full text-sm font-semibold text-white disabled:opacity-50"
+            className="mt-3 h-10 w-full rounded-full text-sm font-semibold text-[#fff] disabled:opacity-50"
             style={{ background: GREEN }}
           >
             {isFetchingNextPage ? 'Loading…' : 'Show older matches'}

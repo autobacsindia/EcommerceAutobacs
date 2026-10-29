@@ -126,7 +126,7 @@ export default function CareerCategoriesPanel({ categories, onChanged, loadError
       </div>
 
       {loadError && (
-        <div className="mx-4 mt-3 flex items-center justify-between gap-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+        <div className="mx-4 mt-3 flex items-center justify-between gap-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
           <span>Couldn&apos;t load categories.</span>
           <button onClick={onChanged} className="font-medium underline underline-offset-2 hover:no-underline">
             Retry
@@ -135,7 +135,7 @@ export default function CareerCategoriesPanel({ categories, onChanged, loadError
       )}
 
       {error && (
-        <div className="mx-4 mt-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+        <div className="mx-4 mt-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
           {error}
         </div>
       )}

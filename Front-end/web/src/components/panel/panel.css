@@ -52,6 +52,8 @@
   --pn-bar: #ffffff;
   --pn-bar-line: #e6ebe9;
   --pn-focus: #0b7d41;
+  /* Team chat's backdrop, behind the channel list and the conversation card. */
+  --pn-chat: #f2f6fc;
 
   /* Neutrals: Tailwind's lightness steps, the store's hue. */
   --color-gray-50:  oklch(98.4% 0.003 165);
@@ -97,6 +99,8 @@
   --pn-bar: #141919;
   --pn-bar-line: #263030;
   --pn-focus: #37b074;
+  /* A step above the (dark) cards, so the conversation card still reads as one. */
+  --pn-chat: #1a2020;
 
   /* The site's inverted ramp (globals.css), in the store's hue. */
   --color-gray-50:  oklch(19% 0.006 165);
@@ -149,6 +153,11 @@
   --color-indigo-700: #a5b4fc; --color-indigo-800: #a5b4fc;  --color-indigo-900: #c7d2fe;
   --color-teal-50: #0d2423;    --color-teal-100: #10292a;    --color-teal-200: #184140;
   --color-teal-700: #5eead4;   --color-teal-800: #5eead4;    --color-teal-900: #99f6e4;
+  /* Team chat's Accounts badge and the "ask the customer" stage. */
+  --color-violet-50: #1f1830;  --color-violet-100: #221a35;  --color-violet-200: #382a5a;
+  --color-violet-700: #c4b5fd; --color-violet-800: #c4b5fd;  --color-violet-900: #ddd6fe;
+  --color-pink-50: #2a1322;    --color-pink-100: #2e1526;    --color-pink-200: #4d1f3d;
+  --color-pink-700: #f9a8d4;   --color-pink-800: #f9a8d4;    --color-pink-900: #fbcfe8;
 }
 
 /* Cards: Tailwind's `shadow` is a hard grey edge on a near-white page. A soft,
