@@ -216,3 +216,22 @@ it('records a courier step over HTTP — operations only, a known step, with the
   expect(res.body.order.parcels[0]).toMatchObject({ stepCount: 1, steps: [{ status: 'in_transit', label: 'In transit', note: 'Kochi hub' }] });
   expect((await request(app).post(path).set(as(operations)).send({ status: 'out_for_delivery', expectedSteps: 0 })).status).toBe(409);
 });
+
+it('"Edit order": checks the input, then corrects through the route for procurement only', async () => {
+  const order = await paidOrder();
+  const itemId = String(order.items[0]._id);
+  const procurement = await login('staff', { team: 'procurement' });
+  const sales = await login('staff', { team: 'sales', isHead: true });
+  const url = `${BASE}/staff/work/orders/${order._id}/correct`;
+  const body = { action: 'dispatched', reason: 'Sent via Google Chat', itemIds: [itemId], expectedStages: { [itemId]: 'stock_check' }, courierName: 'DTDC' };
+
+  for (const bad of [{ action: 'paid' }, { reason: 'no' }, { itemIds: ['x'] }, { shippedOn: '28/10/2026' }, { expectedStages: 'stock_check' }]) {
+    const res = await request(app).post(url).set(as(procurement)).send({ ...body, ...bad });
+    expect(res.status).toBe(400);
+  }
+  expect((await request(app).post(url).set(as(sales)).send(body)).status).toBe(403);
+
+  const ok = await request(app).post(url).set(as(procurement)).send(body).expect(200);
+  expect(ok.body.order.parcels[0]).toMatchObject({ courier: 'DTDC', status: 'shipped' });
+  expect(ok.body.order.history[0].note).toMatch(/Reason: Sent via Google Chat$/);
+});

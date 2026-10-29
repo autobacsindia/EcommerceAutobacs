@@ -55,6 +55,7 @@ import {
   validateCustomerBankRemove,
   validateMarkDelivered,
   validateUndoDelivered,
+  validateOrderCorrection,
 } from '../validators/staff.validator.js';
 import staffTaskRoutes from './staffTasks.js';
 import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard, uploadPaymentProof, uploadPaymentRequestFiles } from '../middleware/uploadMiddleware.js';
@@ -77,6 +78,7 @@ import {
   setParcelEta,
   undoDelivered,
 } from '../services/teamWorkflowService.js';
+import { correctOrder } from '../services/orderCorrectionService.js';
 import {
   describeStaff,
   listTeam,
@@ -572,6 +574,13 @@ router.put('/work/orders/:id/parcels/:shipmentId/eta', validateParcelEta, valida
 // @route  POST /staff/work/orders/:id/undo-delivered  { shipmentId } — operations / admin: back in transit
 router.post('/work/orders/:id/undo-delivered', validateUndoDelivered, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, order: await undoDelivered(req.user, req.params.id, req.body, req) });
+}));
+
+// @route  POST /staff/work/orders/:id/correct  { action, reason, itemIds?, expectedStages?, shipmentIds?,
+//         expectedParcels?, courierName?, trackingNumber?, shippedOn?, deliveredOn?, includesGift? }
+//         — procurement / admin: "Edit order", bring an order handled outside the panel up to date
+router.post('/work/orders/:id/correct', validateOrderCorrection, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, order: await correctOrder(req.user, req.params.id, req.body, req) });
 }));
 
 // ── Customer bank details for refunds / NEFT (never cards) ─────────────────────

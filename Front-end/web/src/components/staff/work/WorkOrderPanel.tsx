@@ -15,6 +15,7 @@ import LineSupplierPayment, { useOrderSupplierPayments } from '@/components/paym
 import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
 import ParcelEta from './ParcelEta';
+import OrderCorrection from './OrderCorrection';
 import OrderJourney from '@/components/orders/OrderJourney';
 import FilePicker from '@/components/payments/FilePicker';
 
@@ -399,6 +400,9 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
       )}
 
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+
+      {/* Keyed on what it offers, so it starts fresh whenever the order moves. */}
+      <OrderCorrection key={JSON.stringify(o.corrections ?? null)} order={o} onDone={done} />
 
       {/* History */}
       {o.history.length > 0 && (
