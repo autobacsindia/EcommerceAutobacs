@@ -355,6 +355,31 @@ describe('spreadsheet upload', () => {
     expect(await PastSale.countDocuments()).toBe(2);
   });
 
+  it('a bill entered by someone else between the check and the save is skipped, not doubled, and the rest still go in', async () => {
+    const { default: repo } = await import('../repositories/pastSaleRepository.js');
+    const realClashes = repo.findActiveClashes;
+    // The check sees nothing; then, before the batch is saved, AB-2 is entered by hand.
+    repo.findActiveClashes = async (...a) => {
+      const r = await realClashes(...a);
+      repo.findActiveClashes = realClashes; // once: the hand entry below runs the real check
+      await ps.createPastSale(lead2, sale({ invoiceNo: 'AB-2', customer: { name: 'Bina' } }), req);
+      return r;
+    };
+    try {
+      const res = await ps.importUpload(lead, csv([HEADER,
+        '14/03/2024,AB-1,Arun,,Mats,1,100,0,100,Cash',
+        '14/03/2024,AB-2,Bina,,Wiper,1,50,0,50,Cash',
+        '14/03/2024,AB-3,Chitra,,Bulb,1,30,0,30,Cash']), {}, req);
+      expect(res.counts).toMatchObject({ imported: 2, duplicates: 1 });
+      expect(res.importedValue).toBe(130);
+      expect(res.sales.map((x) => x.status)).toEqual(['imported', 'duplicate', 'imported']);
+    } finally {
+      repo.findActiveClashes = realClashes;
+    }
+    expect(await PastSale.countDocuments({ invoiceKey: 'AB2' })).toBe(1);
+    expect(await PastSale.countDocuments()).toBe(3);
+  });
+
   it('accounts uploads for a chosen salesman, and can undo the whole upload', async () => {
     const res = await ps.importUpload(accounts, csv([HEADER, '15/03/2024,,Bina,,Wiper,2,450,0,900,Cash']), { salesUserId: String(lead2._id) }, req);
     expect((await PastSale.findOne().lean()).salesUserName).toBe('Tara');

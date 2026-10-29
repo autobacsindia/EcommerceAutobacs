@@ -16,6 +16,27 @@ const pastSaleRepository = {
   model: PastSale,
 
   create: async (doc) => (await PastSale.create(doc)).toObject(),
+
+  /**
+   * Insert many in one round trip per chunk, carrying on past duplicates. Returns
+   * the positions (in `docs`) that hit a unique index — someone entered that bill
+   * between the check and now. Any other failure is thrown, never skipped: the
+   * docs were already checked, so a validation error here is a bug, not data.
+   */
+  insertManyIgnoringDuplicates: async (docs, chunkSize = 500) => {
+    const duplicates = new Set();
+    for (let start = 0; start < docs.length; start += chunkSize) {
+      const chunk = docs.slice(start, start + chunkSize);
+      try {
+        await PastSale.insertMany(chunk, { ordered: false, throwOnValidationError: true });
+      } catch (err) {
+        const writeErrors = err?.writeErrors || [];
+        if (!writeErrors.length || writeErrors.some((e) => (e.code ?? e.err?.code) !== 11000)) throw err;
+        for (const e of writeErrors) duplicates.add(start + (e.index ?? e.err?.index));
+      }
+    }
+    return duplicates;
+  },
   findById: (id) => PastSale.findById(id).lean(),
 
   /** How many of these product ids exist (a sale line may link a catalogue product). */

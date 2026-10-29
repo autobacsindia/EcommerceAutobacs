@@ -516,28 +516,26 @@ export async function importUpload(actor, buffer, opts = {}, req) {
   const { seller, planned } = await planUpload(actor, buffer, opts);
   const batchId = crypto.randomBytes(12).toString('hex');
   const stamp = actorStamp(actor);
-  let imported = 0;
-  for (const p of planned) {
-    if (!p.value || p.duplicateInFile || p.clash) continue;
-    try {
-      await pastSaleRepository.create({
-        ...p.value,
-        saleDate: dateOf(p.value.saleDate),
-        fingerprint: p.fingerprint,
-        salesUser: seller?._id || null,
-        salesUserName: seller?.name || undefined,
-        createdBy: actor._id,
-        createdByName: actor.name || '',
-        batchId,
-        history: [{ ...stamp, action: 'created' }],
-      });
-      imported += 1;
-    } catch (err) {
-      // Entered by someone else between the check and now: the index decided.
-      if (!isDuplicateKey(err)) throw err;
-      p.clash = { saleDate: dateOf(p.value.saleDate), customer: p.value.customer, invoiceKey: p.value.invoiceKey, invoiceNo: p.value.invoiceNo };
-    }
+  const toInsert = planned.filter((p) => p.value && !p.duplicateInFile && !p.clash);
+  // One round trip per 500 sales rather than one per sale (a 2,000-row sheet was
+  // 2,000 sequential inserts). Unordered, so one duplicate does not stop the rest.
+  const duplicates = await pastSaleRepository.insertManyIgnoringDuplicates(toInsert.map((p) => ({
+    ...p.value,
+    saleDate: dateOf(p.value.saleDate),
+    fingerprint: p.fingerprint,
+    salesUser: seller?._id || null,
+    salesUserName: seller?.name || undefined,
+    createdBy: actor._id,
+    createdByName: actor.name || '',
+    batchId,
+    history: [{ ...stamp, action: 'created' }],
+  })));
+  // Entered by someone else between the check and now: the index decided.
+  for (const i of duplicates) {
+    const p = toInsert[i];
+    p.clash = { saleDate: dateOf(p.value.saleDate), customer: p.value.customer, invoiceKey: p.value.invoiceKey, invoiceNo: p.value.invoiceNo };
   }
+  const imported = toInsert.length - duplicates.size;
   const result = describePlan(planned);
   // describePlan marks what was just imported as "ready"; report it as imported.
   for (const s of result.sales) if (s.status === 'ready') s.status = 'imported';
