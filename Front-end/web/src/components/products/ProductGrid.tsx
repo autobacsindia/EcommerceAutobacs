@@ -7,6 +7,16 @@ import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates
 import { useCampaignBadgeVisible } from '@/hooks/queries/useCampaign';
 import StoreProductCard from './redesign/StoreProductCard';
 
+/**
+ * How many leading cards load their photo eagerly at high priority. Four is the
+ * first row at the widest breakpoint (xl:grid-cols-4) and the first two rows on a
+ * phone — the cards on screen before any scroll. One of them is the page's Largest
+ * Contentful Paint; left lazy, it was not even requested until layout had run, which
+ * Lighthouse measured as ~7 s of "resource load delay" on a throttled phone.
+ * Everything after stays lazy so a long grid does not compete with its own first row.
+ */
+export const GRID_PRIORITY_IMAGES = 4;
+
 interface ProductGridImage {
   url: string;
   alt?: string;
@@ -52,9 +62,10 @@ export default function ProductGrid({ products, loading }: ProductGridProps) {
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
-      {products.map((product) => (
+      {products.map((product, index) => (
         <StoreProductCard
           key={product._id}
+          priority={index < GRID_PRIORITY_IMAGES}
           product={product as unknown as StoreProduct}
           featured={product.isFeatured}
           campaignRate={badgeVisible ? campaignData?.rates?.[product._id] : null}
