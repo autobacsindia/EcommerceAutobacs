@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy } from 'lucide-react';
+import { LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -56,6 +56,8 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   */
   // Bank transfers on sales orders: accounts confirms them, GTM follows its own.
   if (team === 'accounts' || (team === 'sales' && canSell)) nav.push({ href: '/team/bank-transfers', label: 'Bank transfers', icon: Landmark });
+  // Sales made before the website: GTM enters its own, accounts corrects and deletes.
+  if (team === 'accounts' || (team === 'sales' && canSell)) nav.push({ href: '/team/past-sales', label: 'Past sales', icon: History });
   nav.push({ href: '/team/payments', label: 'Payments', icon: Banknote });
   if (team === 'procurement' || team === 'accounts') nav.push({ href: '/team/suppliers', label: 'Suppliers', icon: Factory });
   nav.push({ href: '/team/members', label: 'My team', icon: Users });

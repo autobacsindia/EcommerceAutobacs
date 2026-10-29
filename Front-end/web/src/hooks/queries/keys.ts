@@ -216,6 +216,20 @@ export const staffKeys = {
   customerBank: (kind: string, id: string) => [...staffKeys.customerBanks(), kind, id] as const,
 };
 
+/**
+ * `/staff/past-sales/*` — sales made in the store / by phone before the website.
+ * Invalidate `all` after any add, edit, delete, restore or upload: totals and the
+ * list both move.
+ */
+export const pastSaleKeys = {
+  all: [...staffKeys.all, 'past-sales'] as const,
+  list: (filters: object) => [...pastSaleKeys.all, 'list', filters] as const,
+  totals: (filters: object) => [...pastSaleKeys.all, 'totals', filters] as const,
+  one: (id: string) => [...pastSaleKeys.all, 'one', id] as const,
+  sellers: () => [...pastSaleKeys.all, 'sellers'] as const,
+  products: (q: string) => [...pastSaleKeys.all, 'products', q.trim().toLowerCase()] as const,
+};
+
 /** `/staff/tasks/*` — tasks given to people in the panel. Invalidate `all` after any change. */
 export const taskKeys = {
   all: [...staffKeys.all, 'tasks'] as const,
