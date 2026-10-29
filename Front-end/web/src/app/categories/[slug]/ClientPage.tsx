@@ -1,14 +1,14 @@
 'use client';
 
 import type { StockStatus } from '@/lib/stock';
-import { Suspense, useState, useEffect } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { SlidersHorizontal, X } from 'lucide-react';
 import apiClient from '@/lib/api';
 import ProductGrid from '@/components/products/ProductGrid';
 import Filters from '@/components/products/redesign/Filters';
-import CategoryChips from '@/components/products/redesign/CategoryChips';
+import CategoryChips, { CategoryChipsFallback } from '@/components/products/redesign/CategoryChips';
 import ShopContactHero from '@/components/products/ShopContactHero';
 import Pagination from '@/components/layout/Pagination';
 import StorePageHeader from '@/components/store/StorePageHeader';
@@ -16,6 +16,11 @@ import { trackViewItemList } from '@/lib/analytics';
 import { getMainCategory } from '@/lib/categoryMapping';
 import { resolveCategoryScope } from '@/lib/categoryScope';
 import { useCategoriesFetcher } from '@/hooks/queries/useCategories';
+import {
+  buildCategoryProductsQuery,
+  isDefaultListingView,
+  normalizeProductsResponse,
+} from '@/lib/categoryProducts';
 
 // Define types for our data
 interface ProductImage {
@@ -90,76 +95,10 @@ interface Category {
 // Function to fetch products with proper sorting parameters
 async function getProducts(searchParams: any, categoryId: string): Promise<ProductsData> {
   try {
-    // Build query string from search params
-    const queryParams = new URLSearchParams();
-    
-    // Add category filter. `categoryId` is the resolved SCOPE: the hub itself,
-    // or — when the sidebar has drilled into this hub's children — those
-    // children. It was previously always the hub, so any category the sidebar
-    // wrote to the URL changed the checkbox and nothing else.
-    queryParams.append('category', categoryId);
-
-    if (searchParams.search) queryParams.append('search', searchParams.search);
-    if (searchParams.page) queryParams.append('page', searchParams.page);
-    if (searchParams.minPrice) queryParams.append('minPrice', searchParams.minPrice);
-    if (searchParams.maxPrice) queryParams.append('maxPrice', searchParams.maxPrice);
-    if (searchParams.inStock) queryParams.append('inStock', searchParams.inStock);
-    if (searchParams.rating) queryParams.append('rating', searchParams.rating);
-    if (searchParams.vehicleMake) queryParams.append('vehicleMake', searchParams.vehicleMake);
-    if (searchParams.vehicleModel) queryParams.append('vehicleModel', searchParams.vehicleModel);
-    if (searchParams.brand) queryParams.append('brand', searchParams.brand);
-    if (searchParams.showAll === 'true') queryParams.append('limit', '500');
-    
-    // Map frontend sort values to backend parameters
-    if (searchParams.sort) {
-      const sortValue = searchParams.sort;
-      switch (sortValue) {
-        case 'price_asc':
-          queryParams.append('sortBy', 'price');
-          queryParams.append('order', 'asc');
-          break;
-        case 'price_desc':
-          queryParams.append('sortBy', 'price');
-          queryParams.append('order', 'desc');
-          break;
-        case 'name_asc':
-          queryParams.append('sortBy', 'name');
-          queryParams.append('order', 'asc');
-          break;
-        case 'rating_desc':
-          queryParams.append('sortBy', 'averageRating');
-          queryParams.append('order', 'desc');
-          break;
-        case 'createdAt_desc':
-        default:
-          queryParams.append('sortBy', 'createdAt');
-          queryParams.append('order', 'desc');
-          break;
-      }
-    }
-    
-    const queryString = queryParams.toString();
-    const endpoint = `/products${queryString ? `?${queryString}` : ''}`;
-    
-    const data: any = await apiClient.get(endpoint);
-    
-    // Fix: Backend returns pagination properties directly in response object
-    if (data && data.products) {
-      // Extract pagination properties from the response
-      const { total, pages, currentPage, hasNext, hasPrev, count } = data;
-      return {
-        products: data.products,
-        pagination: {
-          total,
-          pages,
-          currentPage,
-          hasNext,
-          hasPrev,
-          count
-        }
-      };
-    }
-    return { products: [], pagination: {} };
+    // Shared with page.tsx, which pre-renders the default view — both MUST build the
+    // same query, or the refetch would swap the server's grid for a different one.
+    const data: unknown = await apiClient.get(`/products?${buildCategoryProductsQuery(searchParams, categoryId)}`);
+    return normalizeProductsResponse<Product>(data);
   } catch (error: any) {
     // 404 means "nothing matches" — a genuinely empty result.
     if (error.status === 404 || error.responseStatus === 404) return { products: [], pagination: {} };
@@ -197,15 +136,40 @@ async function getCategoryBySlug(slug: string): Promise<Category | null> {
   }
 }
 
-function ClientPageInner({ slug, initialCategory }: { slug: string; initialCategory?: Category | null }) {
-  const searchParams = useSearchParams();
+type ReadonlyParams = Pick<URLSearchParams, 'get' | 'entries' | 'toString'>;
+
+interface CategoryViewProps {
+  slug: string;
+  initialCategory?: Category | null;
+  /**
+   * The default first page, fetched by page.tsx and trimmed to card fields. Seeds
+   * the grid when the URL asks for exactly that view, so the products (and the
+   * page's largest image) are in the HTML instead of arriving after the bundle.
+   */
+  initialProducts?: ProductsData | null;
+  searchParams: ReadonlyParams;
+}
+
+/**
+ * The page itself, with the URL passed IN rather than read with useSearchParams().
+ * That is what lets the same tree render twice: once as the Suspense fallback
+ * (server HTML, empty params — the default view) and once for real on the client.
+ * Identical markup for the default view means the swap does not move anything.
+ */
+function CategoryView({ slug, initialCategory, initialProducts, searchParams }: CategoryViewProps) {
+  // Seed only the exact view the server rendered: this slug, no listing filters.
+  const seeded = !!initialProducts && initialCategory?.slug === slug && isDefaultListingView(searchParams);
+  // The refetch on mount still runs — it reconciles the server copy (up to 5 min
+  // old, or purged on a product write) with live prices — but silently: flashing
+  // skeletons over a grid that is already correct is worse than no pre-render.
+  const silentFirstLoad = useRef(seeded);
   // Reads the same cached taxonomy the chip strip above renders from.
   const fetchCategories = useCategoriesFetcher();
-  const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
+  const [data, setData] = useState<ProductsData>(seeded ? initialProducts! : { products: [], pagination: {} });
   // Seed from the category the server component already fetched for metadata, so
   // the header renders immediately and we skip a redundant category network call.
   const [category, setCategory] = useState<Category | null>(initialCategory ?? null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!seeded);
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Bumped by "Try again" to re-run the load effect after a failed fetch.
@@ -243,7 +207,11 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
       if (!isMounted) return;
       
       try {
-        setLoading(true);
+        if (silentFirstLoad.current) {
+          silentFirstLoad.current = false;
+        } else {
+          setLoading(true);
+        }
         setError(null);
         
         // Validate slug before fetching
@@ -382,7 +350,11 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
           from a chip was a one-way door: no way to reach a sibling hub but Back. */}
       <div className="sticky top-[var(--store-header-h)] z-30 border-b border-hairline bg-white/95 backdrop-blur">
         <div className="sp-wrap py-3">
-          <CategoryChips />
+          {/* Own boundary: CategoryChips reads useSearchParams(), and inside the
+              server-rendered fallback that would bail the whole page out again. */}
+          <Suspense fallback={<CategoryChipsFallback />}>
+            <CategoryChips />
+          </Suspense>
         </div>
       </div>
 
@@ -391,7 +363,10 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
           {/* Filters Sidebar */}
           <aside className="hidden w-64 shrink-0 lg:block">
             <div className="rounded-xl bg-white p-5 shadow-sm">
-              <Filters basePath={`/categories/${slug}`} scopeCategoryId={category?._id} />
+              {/* Own boundary for the same reason as the chips above. */}
+              <Suspense fallback={null}>
+                <Filters basePath={`/categories/${slug}`} scopeCategoryId={category?._id} />
+              </Suspense>
             </div>
           </aside>
 
@@ -484,7 +459,7 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
                   pagination={data.pagination}
                   currentPage={currentPage}
                   basePath={`/categories/${slug}`}
-                  searchParams={searchParams}
+                  searchParams={new URLSearchParams(searchParams.toString())}
                 />
               </div>
             )}
@@ -531,12 +506,30 @@ function ClientPageInner({ slug, initialCategory }: { slug: string; initialCateg
 // meant a future rename of `initialCategory` would compile clean and silently drop the
 // server-seeded data, sending the grid back to a client refetch — the exact
 // regression the seed exists to avoid.
-type ClientPageProps = Parameters<typeof ClientPageInner>[0];
+type ClientPageProps = Omit<CategoryViewProps, 'searchParams'>;
 
-export default function ClientPage({ slug, initialCategory }: ClientPageProps) {
+/** No params at all — the default view the server pre-renders. */
+const NO_PARAMS: ReadonlyParams = new URLSearchParams();
+
+function ClientPageInner(props: ClientPageProps) {
+  return <CategoryView {...props} searchParams={useSearchParams()} />;
+}
+
+export default function ClientPage({ slug, initialCategory, initialProducts }: ClientPageProps) {
   return (
-    <Suspense fallback={<div className="sp sh-theme" />}>
-      <ClientPageInner slug={slug} initialCategory={initialCategory} />
+    /*
+      The fallback is the default view itself, not an empty div. A static route
+      cannot read the URL, so this is what the server HTML contains: heading,
+      count and the first page of products — with the largest image requested by
+      the HTML. On the client, the real tree (which can read the URL) replaces it;
+      for the default view the markup is identical, so nothing moves.
+    */
+    <Suspense
+      fallback={
+        <CategoryView slug={slug} initialCategory={initialCategory} initialProducts={initialProducts} searchParams={NO_PARAMS} />
+      }
+    >
+      <ClientPageInner slug={slug} initialCategory={initialCategory} initialProducts={initialProducts} />
     </Suspense>
   );
 }

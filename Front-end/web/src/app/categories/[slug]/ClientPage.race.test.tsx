@@ -67,7 +67,7 @@ jest.mock('@/components/products/ProductGrid', () => ({
   ),
 }));
 jest.mock('@/components/products/redesign/Filters', () => ({ __esModule: true, default: () => <div /> }));
-jest.mock('@/components/products/redesign/CategoryChips', () => ({ __esModule: true, default: () => <div /> }));
+jest.mock('@/components/products/redesign/CategoryChips', () => ({ __esModule: true, default: () => <div />, CategoryChipsFallback: () => <div /> }));
 jest.mock('@/components/layout/Breadcrumb', () => ({ __esModule: true, default: () => <div /> }));
 jest.mock('@/components/layout/Pagination', () => ({ __esModule: true, default: () => <div /> }));
 jest.mock('@/lib/analytics', () => ({ trackViewItemList: jest.fn() }));

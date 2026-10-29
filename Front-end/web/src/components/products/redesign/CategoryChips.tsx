@@ -146,3 +146,22 @@ export default function CategoryChips() {
     </nav>
   );
 }
+
+/**
+ * What the row looks like before it can read the URL — used as its Suspense
+ * fallback when the page is pre-rendered on the server. Only the "All categories"
+ * chip, in the same markup, so the row's height is settled from the first paint
+ * (see the CLS note above) and the swap to the full row moves nothing vertically.
+ */
+export function CategoryChipsFallback() {
+  return (
+    <nav aria-label="Categories" className="sf-noscroll flex gap-2 overflow-x-auto">
+      <Link
+        href="/products"
+        className="whitespace-nowrap rounded-full border border-hairline bg-white px-4 py-2 text-[14px] font-medium text-ink/80 transition-colors hover:border-gold hover:text-gold"
+      >
+        All categories
+      </Link>
+    </nav>
+  );
+}

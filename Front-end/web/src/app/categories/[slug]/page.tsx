@@ -7,6 +7,7 @@ import { resolveSeo } from '@/lib/seo';
 import { SITE_URL } from '@/lib/siteUrl';
 
 import { categorySlugsForPrerender } from '@/lib/staticParams';
+import { buildCategoryProductsQuery, normalizeProductsResponse, toCardProduct } from '@/lib/categoryProducts';
 
 /**
  * Makes this route statically generatable, which is the point: a static route
@@ -98,9 +99,57 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 }
 
+/**
+ * How long the pre-render waits for the product list before giving up. A slow API
+ * must not hold the whole page hostage: without this the render waits as long as
+ * the backend does, and a page that is still being generated has nothing to show.
+ */
+const FIRST_PAGE_TIMEOUT_MS = 4000;
+
+/**
+ * The default first page of products, trimmed to card fields, for the server HTML.
+ * See lib/categoryProducts.ts for why the category page needs this.
+ *
+ * Cached like the category itself, and tagged so it never outlives a write:
+ * `product:list` is purged by EVERY product write (backend utils/nextTags.js) and
+ * `category:<slug>` by a write to this category — so a price edit reaches this HTML
+ * within seconds, and the 5-minute window only bounds what a write can't signal
+ * (e.g. a sale ending on its own). The client refetches on mount regardless.
+ *
+ * Never throws. Unlike the category lookup above, a failure here is not "this page
+ * does not exist" — returning null just leaves the client to load the grid itself,
+ * which is exactly how the page worked before.
+ */
+async function getFirstPageProducts(slug: string, categoryId: string) {
+  try {
+    const res = await fetch(
+      `${getServerApiBase()}/products?${buildCategoryProductsQuery({}, categoryId)}`,
+      {
+        headers: internalApiHeaders(),
+        next: { revalidate: 300, tags: ['product:list', `category:${slug}`] },
+        signal: AbortSignal.timeout(FIRST_PAGE_TIMEOUT_MS),
+      },
+    );
+    if (!res.ok) return null;
+    const { products, pagination } = normalizeProductsResponse<Record<string, unknown>>(await res.json());
+    return { products: products.map(toCardProduct), pagination };
+  } catch (error) {
+    console.error('[categories/[slug]] first-page products fetch failed:', error);
+    return null;
+  }
+}
+
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const category = await getCategoryForMetadata(slug);
   if (!category) notFound();
-  return <ClientPage slug={slug} initialCategory={category} />;
+  const initialProducts = await getFirstPageProducts(slug, String(category._id));
+  return (
+    <ClientPage
+      slug={slug}
+      initialCategory={category}
+      // Card-field subset of the same documents; the client refetch fills the rest.
+      initialProducts={initialProducts as Parameters<typeof ClientPage>[0]['initialProducts']}
+    />
+  );
 }
