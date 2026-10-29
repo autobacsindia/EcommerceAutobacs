@@ -15,6 +15,7 @@ import LineSupplierPayment, { useOrderSupplierPayments } from '@/components/paym
 import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
 import ParcelEta from './ParcelEta';
+import OrderJourney from '@/components/orders/OrderJourney';
 
 type OrderResponse = { success: boolean; order: WorkOrder };
 
@@ -170,6 +171,9 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
 
   return (
     <div className="space-y-5 text-sm">
+      {/* Where every product stands, left to right, with who moved it and when. */}
+      <OrderJourney order={o} showFacts={false} />
+
       {/* Customer + delivery */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
