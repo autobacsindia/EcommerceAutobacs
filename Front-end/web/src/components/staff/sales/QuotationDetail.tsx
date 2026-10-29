@@ -10,9 +10,10 @@ import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import CustomerBankCard from './CustomerBankCard';
 import HoldControl from './HoldControl';
+import QuoteDiscountSummary from './QuoteDiscountSummary';
 import ProductLink from '@/components/staff/ProductLink';
 import { whatsappNumber } from './PaymentLinkCard';
-import { errorMessage, quotationPdfHref, rupees, type Quotation } from './types';
+import { errorMessage, percentText, quotationPdfHref, rupees, type Quotation } from './types';
 
 export const QUOTATION_STATUS: Record<Quotation['status'], { text: string; cls: string }> = {
   open: { text: 'Shared — waiting for the client', cls: 'bg-sky-100 text-sky-800' },
@@ -68,6 +69,8 @@ export default function QuotationDetail({ id }: { id: string }) {
   const status = QUOTATION_STATUS[quote.status];
   const open = quote.status === 'open';
   const editable = quote.status === 'open' || quote.status === 'expired';
+  // Accepted but nothing paid yet: an edit re-opens it (old order + links cancelled).
+  const editAfter = quote.status === 'accepted' ? quote.editAfterAccept : undefined;
   const a = quote.shippingAddress;
   const busy = accept.isPending || cancel.isPending;
 
@@ -142,10 +145,21 @@ export default function QuotationDetail({ id }: { id: string }) {
             </p>
           )}
           {quote.status === 'accepted' && quote.orderId && (
-            <Link href={`/team/sales/orders/${quote.orderId}`}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-              Go to the order &amp; payment →
-            </Link>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Link href={`/team/sales/orders/${quote.orderId}`}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                Go to the order &amp; payment →
+              </Link>
+              {editAfter?.allowed && (
+                <Link href={`/team/sales/quotations/${quote.id}/edit`}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">
+                  <Pencil className="h-4 w-4" /> Edit quotation
+                </Link>
+              )}
+            </div>
+          )}
+          {editAfter && !editAfter.allowed && editAfter.reason && (
+            <p className="mt-3 text-xs text-gray-500">{editAfter.reason}</p>
           )}
           {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         </section>
@@ -187,9 +201,8 @@ export default function QuotationDetail({ id }: { id: string }) {
             </li>
           ))}
         </ul>
-        <div className="flex items-center justify-between border-t border-gray-200 p-4">
-          <p className="text-sm text-gray-500">Total</p>
-          <p className="text-xl font-bold text-gray-900">{rupees(quote.totalAmount)}</p>
+        <div className="border-t border-gray-200 p-4">
+          <QuoteDiscountSummary subtotal={quote.subtotal} discount={quote.discount} total={quote.totalAmount} />
         </div>
       </section>
 
@@ -199,9 +212,19 @@ export default function QuotationDetail({ id }: { id: string }) {
         <p className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-700"><span className="font-medium">Note: </span>{quote.notes}</p>
       )}
       {quote.revisions.length > 0 && (
-        <p className="text-xs text-gray-500">
-          Earlier versions: {quote.revisions.map((r) => `v${r.version} ${rupees(r.totalAmount)}`).join(' · ')}
-        </p>
+        <section className="rounded-xl border border-gray-200 bg-white p-4">
+          <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Earlier versions</h2>
+          <ul className="space-y-1 text-xs text-gray-600">
+            {quote.revisions.map((r) => (
+              <li key={r.version}>
+                <span className="font-medium text-gray-800">v{r.version}</span> {rupees(r.totalAmount)}
+                {r.discount ? ` (discount ${percentText(r.discount.percent)})` : ''}
+                {r.wasAccepted ? ' · had been accepted — its unpaid order was cancelled' : ''}
+                {' · changed '}{formatDateTimeIST(r.savedAt)}{r.savedByName ? ` by ${r.savedByName}` : ''}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );

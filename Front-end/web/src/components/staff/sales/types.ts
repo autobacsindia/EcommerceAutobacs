@@ -78,6 +78,12 @@ export type SalesOrder = {
   status: string;
   paymentStatus: string;
   totalAmount: number;
+  /** Σ lines before the quotation discount (= totalAmount when there is none). */
+  subtotal?: number;
+  /** The accepted quotation's % discount, staff view. */
+  discount?: QuoteDiscount | null;
+  /** The quotation this order came from (single-order read only). */
+  quotation?: { id: string; number: string } | null;
   items: SalesOrderItem[];
   customer: { name: string; email: string; phone: string };
   shippingAddress: {
@@ -137,6 +143,27 @@ export type SalesHold = {
   due: boolean;
 };
 
+/**
+ * A percentage off the whole quotation. The server computes `amount` (whole rupees)
+ * from the lines and the percent; the panel only sends percent + reason. `byName`
+ * and `reason` are staff-only — the customer's PDF shows just "Discount (5%)".
+ */
+export type QuoteDiscount = {
+  percent: number;
+  amount: number;
+  reason: string;
+  byName: string | null;
+  at: string | null;
+};
+
+/** Whether an ACCEPTED quotation can still be edited (its order is wholly unpaid). */
+export type EditAfterAccept = {
+  allowed: boolean;
+  reason: string | null;
+  /** The customer was given bank / QR details: the seller must confirm they have not paid. */
+  payDetailsShared: boolean;
+};
+
 export type Quotation = {
   id: string;
   /** "QT-7F3A91C2", or "QT-7F3A91C2-v2" from the second version. */
@@ -146,6 +173,10 @@ export type Quotation = {
   customer: { name: string; email: string; phone: string };
   shippingAddress: SalesOrder['shippingAddress'];
   items: QuotationLine[];
+  /** Σ lines, before the discount. */
+  subtotal: number;
+  discount: QuoteDiscount | null;
+  /** subtotal − discount: what the customer is asked to pay. */
   totalAmount: number;
   notes: string;
   validUntil: string;
@@ -154,9 +185,51 @@ export type Quotation = {
   orderId: string | null;
   createdAt: string;
   updatedAt: string;
-  revisions: { version: number; totalAmount: number; savedAt: string }[];
+  revisions: {
+    version: number;
+    totalAmount: number;
+    discount: QuoteDiscount | null;
+    savedAt: string;
+    savedByName: string | null;
+    /** That version had been accepted; the edit cancelled its unpaid order. */
+    wasAccepted: boolean;
+  }[];
   hold?: SalesHold | null;
+  /** Only on a single accepted quotation (GET /staff/sales/quotations/:id). */
+  editAfterAccept?: EditAfterAccept;
 };
+
+/**
+ * The form's check of the discount boxes — the same rules the server enforces
+ * (utils/quoteDiscount.js), so the seller hears about a problem before saving.
+ * '' = fine (including "no discount").
+ */
+export function discountRuleProblem(percentText: string, reason: string): string {
+  const raw = percentText.trim();
+  if (raw === '') return '';
+  const p = Number(raw);
+  if (!Number.isFinite(p) || p < 0) return 'Enter the discount as a percentage, e.g. 5 or 2.5.';
+  if (p === 0) return '';
+  if (Math.abs(Math.round(p * 100) - p * 100) > 1e-6) return 'Use at most 2 decimals, e.g. 7.25.';
+  if (p >= 100) return 'The discount must be less than 100%.';
+  if (reason.trim().length < 3) return 'Write the reason for the discount.';
+  return '';
+}
+
+/** "5%", "2.5%" — the percent as people write it. */
+export const percentText = (p: number) => `${Number(p).toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`;
+
+/**
+ * A PREVIEW of the server's discount maths (utils/quoteDiscount.js) for the form:
+ * whole rupees, half-up. The saved quotation shows the server's figure; this one is
+ * never sent.
+ */
+export function previewDiscount(subtotal: number, percent: number): { amount: number; total: number } {
+  const subtotalPaise = Math.round((Number(subtotal) || 0) * 100);
+  const bp = Math.round((Number(percent) || 0) * 100);
+  const amountRupees = bp > 0 ? Math.round((subtotalPaise * bp) / 1000000) : 0;
+  return { amount: amountRupees, total: (subtotalPaise - amountRupees * 100) / 100 };
+}
 
 export type QuotationPage = { quotations: Quotation[]; nextCursor: string | null; scope: 'mine' | 'team' };
 

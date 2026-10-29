@@ -10,6 +10,7 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import BankTransferForm from './BankTransferForm';
 import CustomerBankCard from './CustomerBankCard';
 import HoldControl from './HoldControl';
+import QuoteDiscountSummary from './QuoteDiscountSummary';
 import PaymentLinkCard from './PaymentLinkCard';
 import { PayDetailsCard, PayDetailsForm } from './PayDetails';
 import { errorMessage, paymentRequestHref, rupees, type PaymentPart, type SalesOrder } from './types';
@@ -179,6 +180,18 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
           </p>
         )}
         {o.status === 'cancelled' && <p className="mt-3 text-sm font-medium text-gray-600">This order was cancelled.</p>}
+        {o.discount && (
+          <div className="mt-4 border-t border-gray-100 pt-3">
+            <QuoteDiscountSummary subtotal={o.subtotal ?? o.totalAmount} discount={o.discount} total={o.totalAmount} totalLabel="Order total" />
+          </div>
+        )}
+        {o.quotation && (
+          <p className="mt-3 text-xs text-gray-500">
+            From quotation{' '}
+            <Link href={`/team/sales/quotations/${o.quotation.id}`} className="font-medium text-blue-700 hover:text-blue-900">{o.quotation.number}</Link>
+            {open && !anyPaid && !transferWaiting && ' — to change the items, price or discount, open it and choose Edit quotation.'}
+          </p>
+        )}
       </section>
 
       {transferWaiting && (
@@ -211,7 +224,9 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
       {canPay && choice === 'details' && (
         <PayDetailsForm order={o} onCancel={() => setChoice(null)} onDone={() => { setChoice(null); refresh(); }} />
       )}
-      {o.payDetails && choice !== 'details' && (
+      {/* Not on a cancelled order (e.g. replaced by an edited quotation): its share
+          buttons would send the customer an amount nobody should pay. */}
+      {o.payDetails && o.status !== 'cancelled' && choice !== 'details' && (
         <PayDetailsCard order={o} details={o.payDetails} canChange={canPay} onChange={() => setChoice('details')} />
       )}
       {canPay && o.payDetails && parts.length === 0 && choice === null && pay && pay.amountToRequest > 0 && (

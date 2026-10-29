@@ -55,6 +55,21 @@ const OrderSchema = new mongoose.Schema({
   // The staff member (team panel, sales team) who created this offline order.
   // Drives "my orders" / team scoping; `salesRep` stays the name-only CRM credit.
   salesUser: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  // The quotation's percentage discount, snapshotted when the customer accepted it
+  // (services/salesQuotationService.js). `amount` is INSIDE `discount` below (and
+  // `totalAmount` is net of it), so refunds prorate it like any order discount.
+  // Customer documents print only "Discount (percent%)"; reason / giver are staff-only.
+  salesDiscount: {
+    type: new mongoose.Schema({
+      percent: { type: Number, required: true },
+      amount: { type: Number, required: true },
+      reason: { type: String, default: '' },
+      by: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      byName: { type: String, default: '' },
+      at: Date,
+    }, { _id: false }),
+    default: undefined,
+  },
   // A bank transfer has been recorded for this unpaid sales order and is waiting
   // for accounts to find it in the bank (models/BankTransfer.js). While set, no new
   // payment link can be issued and the order cannot be cancelled — the money may
@@ -463,7 +478,8 @@ const OrderSchema = new mongoose.Schema({
     default: 0
   },
   // Discount breakdown (server-computed; see services/pricingService.js).
-  // `discount` above is the goods-level total = couponDiscount + karmaDiscount.
+  // `discount` above is the goods-level total = couponDiscount + karmaDiscount
+  // (web orders) or salesDiscount.amount (an accepted GTM quotation).
   couponCode: { type: String, default: null },      // applied coupon code snapshot
   couponDiscount: { type: Number, default: 0 },     // rupee discount from the coupon (goods)
   karmaDiscount: { type: Number, default: 0 },      // rupee discount from redeemed karma

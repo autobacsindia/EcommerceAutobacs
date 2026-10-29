@@ -213,6 +213,11 @@ export async function retireAllParts(order) {
       try {
         await razorpayService.cancelPaymentLink(p.linkId);
       } catch (err) {
+        // Already dead (cancelled by a concurrent request, or just expired) is fine;
+        // anything else — most likely "paid" — must stop the caller.
+        let status = 'unknown';
+        try { ({ status } = await razorpayService.fetchPaymentLinkStatus(p.linkId)); } catch { /* keep unknown */ }
+        if (status === 'cancelled' || status === 'expired') continue;
         throw fail(`Could not cancel a payment link — it may have just been paid. Reload in a minute. (${err.message})`, 409);
       }
     }

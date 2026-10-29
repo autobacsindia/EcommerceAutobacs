@@ -248,6 +248,13 @@ export const validateSalesOrder = [
   body('items.*.quantity').isInt({ min: 1, max: 100 }).withMessage('Quantity must be between 1 and 100').toInt(),
   body('items.*.offerPrice').optional({ values: 'null' }).isFloat({ min: 0, max: 10000000 }).withMessage('Invalid offer price'),
   body('notes').optional().isString().isLength({ max: 1000 }),
+  // Quotation discount: the percent and the reason only — the amount and the total
+  // are computed on the server (utils/quoteDiscount.js checks the details).
+  body('discount').optional({ values: 'null' }).isObject().withMessage('Invalid discount'),
+  body('discount.percent').optional({ values: 'falsy' }).isFloat({ min: 0, max: 100 }).withMessage('Enter the discount as a percentage between 0 and 100'),
+  body('discount.reason').optional({ values: 'null' }).isString().isLength({ max: 300 }).withMessage('Keep the discount reason under 300 characters'),
+  // Editing an accepted quotation whose customer has bank / QR details: "I checked they have not paid".
+  body('confirmNotPaid').optional().isBoolean().withMessage('Invalid confirmation').toBoolean(),
 ];
 
 // ── Team workflow ────────────────────────────────────────────────────────────

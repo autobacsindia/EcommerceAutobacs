@@ -21,6 +21,7 @@ import razorpayService from './razorpayService.js';
 import orderStatusService from './orderStatusService.js';
 import pricingService from './pricingService.js';
 import orderRepository from '../repositories/orderRepository.js';
+import salesQuotationRepository from '../repositories/salesQuotationRepository.js';
 import salesRepRepository from '../repositories/salesRepRepository.js';
 import { createOfflineOrderRecord, PAYMENT_LINK_TTL_MS } from './offlineOrderService.js';
 import SearchService from './searchService.js';
@@ -83,7 +84,7 @@ async function page(baseQuery, cursor, { includePayment = false, oldestFirst = f
     sort: oldestFirst ? { createdAt: 1, _id: 1 } : { createdAt: -1, _id: -1 },
     select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
       + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
-      + 'bankTransferPendingAt offlinePayment salesHold',
+      + 'bankTransferPendingAt offlinePayment salesHold subtotal salesDiscount',
     populate,
   });
   const hasMore = rows.length > PAGE_SIZE;
@@ -109,6 +110,11 @@ function shape(o) {
     status: o.status,
     paymentStatus: o.paymentStatus,
     totalAmount: o.totalAmount,
+    subtotal: o.subtotal ?? o.totalAmount,
+    // The accepted quotation's % discount (staff view: who gave it and why).
+    discount: o.salesDiscount?.percent
+      ? { percent: o.salesDiscount.percent, amount: o.salesDiscount.amount, reason: o.salesDiscount.reason || '', byName: o.salesDiscount.byName || null, at: o.salesDiscount.at || null }
+      : null,
     items: (o.items || []).map((i) => ({
       // For the panel's "open on the website" link; null on a custom item.
       productId: i.product ? String(i.product._id ?? i.product) : null,
@@ -403,7 +409,12 @@ export async function getSalesOrder(actor, orderId) {
   if (!isSalesHead(actor) && String(order.salesUser._id ?? order.salesUser) !== String(actor._id)) {
     throw fail('Order not found.', 404);
   }
-  return shape(order);
+  // The quotation it came from (index quotation_order), for "Edit quotation".
+  const from = await salesQuotationRepository.findByOrder(order._id);
+  return {
+    ...shape(order),
+    quotation: from ? { id: String(from._id), number: from.version > 1 ? `${from.number}-v${from.version}` : from.number } : null,
+  };
 }
 
 /**

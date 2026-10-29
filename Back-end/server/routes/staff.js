@@ -265,7 +265,8 @@ router.get('/sales/quotations/:id', validateQuotationIdParam, validateRequest, a
   res.json({ success: true, quotation: await getQuotation(req.user, req.params.id) });
 }));
 
-// @route  PUT /staff/sales/quotations/:id — edit an open quotation (new version)
+// @route  PUT /staff/sales/quotations/:id — edit a quotation (new version); an accepted, unpaid one re-opens
+// { ...quotation body, discount?: { percent, reason }, confirmNotPaid? }
 router.put('/sales/quotations/:id', validateQuotationIdParam, validateSalesOrder, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, quotation: await updateQuotation(req.user, req.params.id, req.body, req) });
 }));

@@ -6,6 +6,7 @@ import { formatInvoiceNumber } from './invoiceFormat.js';
 import { formatLongDateIST } from './datetime.js';
 import { describeEmiPlan } from './paymentMethodDetails.js';
 import { buildOrderLines, variantDisplayName } from './orderLines.js';
+import { discountLabel } from './quoteDiscount.js';
 
 /**
  * The plain-text name of one display line, WITH its variant.
@@ -589,7 +590,7 @@ Items:
 ${itemsText}
 
 Subtotal: ${inr(order.subtotal)}
-${order.couponDiscount ? `Coupon discount: -${inr(order.couponDiscount)}\n` : ''}${order.karmaDiscount ? `Karma points: -${inr(order.karmaDiscount)}\n` : ''}Shipping: ${shippingValue}
+${order.couponDiscount ? `Coupon discount: -${inr(order.couponDiscount)}\n` : ''}${order.karmaDiscount ? `Karma points: -${inr(order.karmaDiscount)}\n` : ''}${order.salesDiscount?.amount ? `${discountLabel(order.salesDiscount.percent)}: -${inr(order.salesDiscount.amount)}\n` : ''}Shipping: ${shippingValue}
 ${offer ? `Order total: ${inr(order.totalAmount)}\n${offerLabel}: -${inr(offer.discount)}\n` : ''}${shippingExtra ? 'Total (excl. shipping)' : 'Total Paid'}: ${inr(paidAmount)}${shippingExtra ? '\n\nShipping is calculated and collected at the time of delivery.' : ''}
 
 Your tax invoice is attached to this email as a PDF.
@@ -648,6 +649,7 @@ ${companyName}
           ${totalsRow('Subtotal', inr(order.subtotal))}
           ${order.couponDiscount ? totalsRow(`Coupon${order.couponCode ? ` (${order.couponCode})` : ''}`, `- ${inr(order.couponDiscount)}`) : ''}
           ${order.karmaDiscount ? totalsRow('Karma points', `- ${inr(order.karmaDiscount)}`) : ''}
+          ${order.salesDiscount?.amount ? totalsRow(discountLabel(order.salesDiscount.percent), `- ${inr(order.salesDiscount.amount)}`) : ''}
           ${totalsRow('Shipping', shippingValue)}
           ${order.tax ? totalsRow('Tax (incl.)', inr(order.tax)) : ''}
           ${offer ? totalsRow('Order total', inr(order.totalAmount)) : ''}

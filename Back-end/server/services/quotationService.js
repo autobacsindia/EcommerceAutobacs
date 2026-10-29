@@ -24,6 +24,7 @@ import { variantDisplayName } from '../utils/orderLines.js';
 import { formatLongDateIST } from '../utils/datetime.js';
 import { rupeesInWords } from '../utils/amountInWords.js';
 import { publicEmail } from '../utils/customerContact.js';
+import { discountLabel } from '../utils/quoteDiscount.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -63,10 +64,14 @@ export function buildQuotation(order, { now = Date.now() } = {}) {
   const subtotalAtList = round2(lines.reduce((s, l) => s + l.listAmount, 0));
   const itemsTotal = round2(lines.reduce((s, l) => s + l.amount, 0));
   const shipping = round2(order.shippingCost);
+  // The quotation's percentage discount (Order.salesDiscount). Only the percent and
+  // the amount are printed — the reason and who gave it are staff-only.
+  const sd = order.salesDiscount?.percent ? order.salesDiscount : null;
+  const extraDiscount = sd ? { label: discountLabel(sd.percent), amount: round2(sd.amount) } : null;
   // The order's own total is what the customer is charged. The line sum is a
   // cross-check, never a replacement: if they ever disagree, print the charge.
   const total = round2(order.totalAmount);
-  const consistent = Math.abs(itemsTotal + shipping - total) < 0.01;
+  const consistent = Math.abs(itemsTotal - (extraDiscount?.amount || 0) + shipping - total) < 0.01;
 
   const addr = order.shippingAddress || {};
   const linkExpiry = order.paymentLinkExpiresAt ? new Date(order.paymentLinkExpiresAt) : null;
@@ -93,6 +98,7 @@ export function buildQuotation(order, { now = Date.now() } = {}) {
     lines,
     subtotalAtList,
     discount: round2(subtotalAtList - itemsTotal),
+    extraDiscount,
     shipping,
     total,
     totalInWords: rupeesInWords(total),
@@ -262,7 +268,9 @@ export async function renderQuotationPdf(q) {
         y += 17;
       };
       row('Subtotal', money(q.subtotalAtList));
-      if (q.discount > 0) row('Your discount', `− ${money(q.discount)}`, { color: C.brand, bold: true });
+      // With a percentage discount too, the markdown row is named for what it is.
+      if (q.discount > 0) row(q.extraDiscount ? 'Offer price savings' : 'Your discount', `− ${money(q.discount)}`, { color: C.brand, bold: true });
+      if (q.extraDiscount) row(q.extraDiscount.label, `− ${money(q.extraDiscount.amount)}`, { color: C.brand, bold: true });
       row('Delivery', q.shipping > 0 ? money(q.shipping) : 'Extra, as applicable');
       y += 4;
       doc.roundedRect(tx - 10, y, tw + 10, 34, 6).fill(C.brand);
