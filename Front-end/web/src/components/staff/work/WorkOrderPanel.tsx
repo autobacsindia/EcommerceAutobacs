@@ -15,6 +15,12 @@ import LineSupplierPayment, { useOrderSupplierPayments } from '@/components/paym
 import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
 import ParcelEta from './ParcelEta';
+import OrderJourney from '@/components/orders/OrderJourney';
+import FilePicker from '@/components/payments/FilePicker';
+
+/** Dispatch photos: what the server takes. Any size — shrinkPhoto brings it under the server's 8 MB. */
+const PHOTO_TYPES = 'image/jpeg,image/png,image/webp';
+const pickPhoto = (set: (f: File | null) => void) => (files: File[]) => set(files[0] ?? null);
 
 type OrderResponse = { success: boolean; order: WorkOrder };
 
@@ -170,6 +176,9 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
 
   return (
     <div className="space-y-5 text-sm">
+      {/* Where every product stands, left to right, with who moved it and when. */}
+      <OrderJourney order={o} showFacts={false} />
+
       {/* Customer + delivery */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
@@ -345,9 +354,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                         <input className={`${input} max-w-[12rem]`} aria-label="Courier" maxLength={80} value={parcelFix.courier} onChange={(e) => setParcelFix({ ...parcelFix, courier: e.target.value })} placeholder="Courier" />
                         <input className={`${input} max-w-[12rem]`} aria-label="Tracking number" maxLength={80} value={parcelFix.tracking} onChange={(e) => setParcelFix({ ...parcelFix, tracking: e.target.value })} placeholder="Tracking number" />
                       </div>
-                      <label className="block text-xs text-gray-600">Replace the photo (optional)
-                        <input type="file" accept="image/jpeg,image/png,image/webp" className="mt-1 block text-xs" onChange={(e) => setParcelPhoto(e.target.files?.[0] || null)} />
-                      </label>
+                      <FilePicker files={parcelPhoto ? [parcelPhoto] : []} onChange={pickPhoto(setParcelPhoto)} max={1} accept={PHOTO_TYPES}
+                        maxBytes={Infinity} label="Replace the photo (optional)" icon={<Camera className="h-4 w-4" />} onError={setError} />
                       <div className="flex gap-2">
                         <button type="submit" disabled={editParcelMutation.isPending} className={primary}>Save</button>
                         <button type="button" className={secondary} onClick={() => setEditParcel(null)}>Cancel</button>
@@ -472,13 +480,11 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
           ))}
         </fieldset>
       )}
-      <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-700">Photo of the parcel / courier receipt, or the supplier&apos;s screenshot</span>
-        <span className="flex items-center gap-2">
-          <Camera className="h-4 w-4 text-gray-500" />
-          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" aria-label="Dispatch photo" />
-        </span>
-      </label>
+      <div>
+        <p className="mb-1 text-xs font-medium text-gray-700">Photo of the parcel / courier receipt, or the supplier&apos;s screenshot</p>
+        <FilePicker files={file ? [file] : []} onChange={pickPhoto(setFile)} max={1} accept={PHOTO_TYPES} maxBytes={Infinity}
+          label="Add photo" inputLabel="Dispatch photo" icon={<Camera className="h-4 w-4" />} onError={onError} />
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-gray-700">Courier (if known)</span>
@@ -566,13 +572,11 @@ function OwnStockForm({ order, onShipped, onError }: { order: WorkOrder; onShipp
           <input className={input} required maxLength={80} value={tracking} onChange={(e) => setTracking(e.target.value)} />
         </label>
       </div>
-      <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-700">Photo of the packed parcel (optional)</span>
-        <span className="flex items-center gap-2">
-          <Camera className="h-4 w-4 text-gray-500" />
-          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFile(e.target.files?.[0] || null)} className="text-sm" aria-label="Parcel photo (optional)" />
-        </span>
-      </label>
+      <div>
+        <p className="mb-1 text-xs font-medium text-gray-700">Photo of the packed parcel (optional)</p>
+        <FilePicker files={file ? [file] : []} onChange={pickPhoto(setFile)} max={1} accept={PHOTO_TYPES} maxBytes={Infinity}
+          label="Add photo" inputLabel="Parcel photo (optional)" icon={<Camera className="h-4 w-4" />} onError={onError} />
+      </div>
       <button type="submit" disabled={busy || !ready} className={primary}>
         {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
         {ours.length > 1 && allChosen ? 'Dispatch all items'

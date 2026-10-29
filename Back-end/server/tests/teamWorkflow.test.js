@@ -251,6 +251,11 @@ describe('in stock → supplier → proof → delivered', () => {
     expect(done.status).toBe('delivered');
     expect(done.workflow.open).toBe(false);
     expect(view.history.map((h) => h.action)).toEqual(expect.arrayContaining(['Marked delivered', 'Supplier proof uploaded — shipped']));
+    // Each entry also carries its raw action and line, for the order-journey tracker.
+    expect(view.history.find((h) => h.code === 'delivered')).toMatchObject({ action: 'Marked delivered' });
+    expect(view.history.find((h) => h.code === 'entered')).toMatchObject({ itemId: null });
+    const stocked = view.history.find((h) => h.code === 'stock_in_stock');
+    expect(stocked.itemId).toBe(String(mat));
     expect((await wf.listQueue(ops, 'deliveries')).orders).toHaveLength(0);
   });
 

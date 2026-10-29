@@ -450,7 +450,7 @@ export default function Composer({
           <button
             type="submit"
             disabled={!text.trim() && !files.length}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-white disabled:opacity-40"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[#fff] disabled:opacity-40"
             style={{ background: GREEN }}
             aria-label="Send message"
           >

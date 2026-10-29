@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { within, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import WorkOrderPanel from './WorkOrderPanel';
 import type { WorkOrder } from './types';
@@ -129,6 +129,26 @@ describe('WorkOrderPanel', () => {
     expect(form.get('courierName')).toBe('Delhivery');
     expect(JSON.parse(form.get('itemIds') as string)).toEqual(['i1']);
     expect(form.get('photo')).toBeInstanceOf(Blob);
+  });
+
+  it('takes a pasted screenshot as the dispatch photo, exactly like a chosen one', async () => {
+    const shippable = { ...base, canShip: true, lines: [{ ...base.lines[0], stage: 'with_supplier' as const, actions: ['ship' as const] }] };
+    get.mockResolvedValue({ success: true, order: shippable });
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, order: base }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderPanel();
+
+    const courier = await screen.findByPlaceholderText('e.g. Delhivery');
+    expect(screen.getByText(/or paste a screenshot/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /upload proof/i })).toBeDisabled();
+    const shot = new File([new Uint8Array([0x89, 0x50])], 'image.png', { type: 'image/png' });
+    fireEvent.paste(courier, { clipboardData: { files: [shot], items: [], types: ['Files'] } });
+    expect(await screen.findByText(/^screenshot-.*\.png$/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /upload proof/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/staff/work/orders/o1/ship');
+    expect((fetchMock.mock.calls[0][1].body as FormData).get('photo')).toBeInstanceOf(Blob);
   });
 
   it('starts with every item ticked ("ship all"), including unchecked ones, and can send part', async () => {
@@ -342,7 +362,12 @@ describe('WorkOrderPanel', () => {
         ? { requests: [] }
         : { success: true, order: { ...base, lines: [{ ...base.lines[0], stage: 'payment_pending', stageLabel: 'Payment Pending', actions: [] }] } }));
       renderPanel();
-      expect((await screen.findByText('Payment Pending')).className).toMatch(/bg-red-100/);
+      // The line's stage pill (the journey tracker above it names the step too).
+      const pill = (await screen.findAllByText('Payment Pending')).find((el) => el.tagName === 'SPAN');
+      expect(pill!.className).toMatch(/bg-red-100/);
+      // …and the panel opens with the order's journey, the current step marked.
+      const journey = screen.getByRole('list', { name: /^Journey of / });
+      expect(within(journey).getByText('Payment Pending').closest('li')).toHaveAttribute('aria-current', 'step');
     });
   });
 

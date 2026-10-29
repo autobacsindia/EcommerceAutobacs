@@ -77,6 +77,19 @@ describe('raising', () => {
     expect(screen.queryByLabelText(/Attach bills/)).toBeNull(); // full
   });
 
+  it('a screenshot pasted in the form is sent as a bill', async () => {
+    const onDone = jest.fn();
+    wrap(<PaymentRequestForm onDone={onDone} />);
+    fillExpense();
+    const shotPng = shot('image.png', 'image/png');
+    fireEvent.paste(screen.getByLabelText('Details'), { clipboardData: { files: [shotPng], items: [], types: ['Files'] } });
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.getAll('bill').map((f) => (f as File).name)).toEqual([expect.stringMatching(/^screenshot-.*\.png$/)]);
+    expect(form.getAll('qr')).toEqual([]);
+  });
+
   it('sends an expense as multipart with the payee as JSON', async () => {
     const onDone = jest.fn();
     wrap(<PaymentRequestForm onDone={onDone} />);

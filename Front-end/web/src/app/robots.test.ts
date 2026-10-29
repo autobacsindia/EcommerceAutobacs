@@ -76,6 +76,16 @@ describe('robots.txt', () => {
     }
   })
 
+  // Google renders pages with their CSS/JS. Blocking Next's static assets made it
+  // see an unstyled, broken storefront.
+  it('never blocks the CSS/JS/fonts Google needs to render a page', () => {
+    for (const r of rules()) {
+      for (const blocked of r.disallow as string[]) {
+        expect(blocked.startsWith('/_next')).toBe(false)
+      }
+    }
+  })
+
   it('private routes are disallowed for the wildcard agent too', () => {
     const disallow = ruleFor('*')!.disallow as string[]
     for (const path of ['/admin', '/api/', '/checkout', '/profile', '/festive', '/onam', '/team', '/staff-invite']) {

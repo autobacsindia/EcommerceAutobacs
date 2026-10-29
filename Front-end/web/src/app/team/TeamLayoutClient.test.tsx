@@ -105,3 +105,15 @@ it('every team gets a "View website" link that opens the store in a new tab', ()
     unmount();
   }
 });
+
+it('every team gets the Help page in its menu', () => {
+  for (const team of ['sales', 'procurement', 'accounts', 'operations', 'marketing']) {
+    const { unmount } = render(
+      <TeamLayoutClient userName="Kim" team={team} teamLabel={team} isHead={false}>
+        <p>panel content</p>
+      </TeamLayoutClient>,
+    );
+    expect(screen.getByRole('link', { name: /^Help$/ })).toHaveAttribute('href', '/team/help');
+    unmount();
+  }
+});

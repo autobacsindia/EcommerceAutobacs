@@ -32,6 +32,13 @@ jest.mock('lucide-react', () => ({
   Paperclip: () => <span>PaperclipIcon</span>,
 }));
 
+// The journey tracker fetches the team-workflow view itself and has its own
+// tests (components/orders/OrderJourney.test.tsx); here only its placement matters.
+jest.mock('@/components/orders/AdminOrderJourney', () => ({
+  __esModule: true,
+  default: ({ orderId }: { orderId: string }) => <div data-testid="order-journey">{orderId}</div>,
+}));
+
 describe('AdminOrderDetailPage', () => {
   const mockRouter = {
     back: jest.fn(),
@@ -118,6 +125,17 @@ describe('AdminOrderDetailPage', () => {
       expect(screen.getByText('User Name')).toBeInTheDocument();
       expect(screen.getByText('₹270.00')).toBeInTheDocument();
     });
+  });
+
+  it('shows the order journey for this order above the details', async () => {
+    render(<AdminOrderDetailPage />);
+    expect(await screen.findByTestId('order-journey')).toHaveTextContent('order123');
+  });
+
+  it('tags the order as a purchase order (a customer buying from us)', async () => {
+    render(<AdminOrderDetailPage />);
+    expect(await screen.findByText('Purchase order')).toBeInTheDocument();
+    expect(screen.queryByText('Procurement order')).toBeNull();
   });
 
   /**
