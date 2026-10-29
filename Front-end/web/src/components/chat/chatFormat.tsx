@@ -91,7 +91,7 @@ function inline(text: string, ctx: Ctx, keyBase: string): ReactNode[] {
       case 'mention': {
         const isMe = whole.slice(1) === ctx.meName || whole === '@all';
         out.push(
-          <span key={key} className={`rounded px-1 font-semibold ${isMe ? 'bg-amber-200 text-amber-950' : 'bg-emerald-100 text-emerald-900'}`}>
+          <span key={key} className={`rounded px-1 font-semibold ${isMe ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-900'}`}>
             {whole}
           </span>,
         );

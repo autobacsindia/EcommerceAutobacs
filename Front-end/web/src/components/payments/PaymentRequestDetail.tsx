@@ -9,6 +9,7 @@ import {
 import FilePicker from './FilePicker';
 import EditPaymentRequest from './EditPaymentRequest';
 import EditPaidPayment from './EditPaidPayment';
+import OrderTypeTag from '@/components/orders/OrderTypeTag';
 
 /** The server takes up to three payment screenshots per payment. */
 const MAX_PROOFS = 3;
@@ -74,7 +75,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
       <aside className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()} aria-label="Payment request">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">{r ? r.number : 'Payment request'}</h2>
+            <h2 className="flex flex-wrap items-center gap-2 text-lg font-semibold text-gray-900"><span>{r ? r.number : 'Payment request'}</span>{r?.kind === 'supplier' && <OrderTypeTag type="procurement" />}</h2>
             {r && <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>}
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"><X className="h-5 w-5" /></button>

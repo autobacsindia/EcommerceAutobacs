@@ -193,7 +193,7 @@ function NewSpaceDialog({ meId, onClose, onCreated }: { meId: string; onClose: (
         <button
           type="submit"
           disabled={create.isPending || name.trim().length < 2}
-          className="h-11 w-full rounded-full text-sm font-semibold text-white disabled:opacity-50"
+          className="h-11 w-full rounded-full text-sm font-semibold text-[#fff] disabled:opacity-50"
           style={{ background: GREEN }}
         >
           {create.isPending ? 'Creating…' : 'Create space'}
@@ -400,7 +400,7 @@ export default function TeamChat() {
           aria-current={active ? 'true' : undefined}
           title={c.description || c.name}
           className={`flex w-full items-center gap-3 rounded-full py-1.5 pl-2 pr-3 text-left text-sm transition-colors ${
-            active ? 'bg-emerald-100 text-emerald-950' : 'text-gray-700 hover:bg-gray-200/70'
+            active ? 'bg-emerald-100 text-emerald-900' : 'text-gray-700 hover:bg-gray-200/70'
           } ${counted > 0 ? 'font-semibold text-gray-900' : ''}`}
         >
           <span className="relative inline-flex shrink-0">
@@ -419,7 +419,7 @@ export default function TeamChat() {
             </span>
           )}
           {counted > 0 ? (
-            <span className="min-w-[22px] rounded-full px-1.5 text-center text-xs font-bold leading-[20px] text-white" style={{ background: GREEN }}
+            <span className="min-w-[22px] rounded-full px-1.5 text-center text-xs font-bold leading-[20px] text-[#fff]" style={{ background: GREEN }}
               aria-label={level === 'mentions' ? `${counted} unread mentions` : `${counted} unread`}>
               {level === 'mentions' ? '@' : ''}{counted > 99 ? '99+' : counted}
             </span>
@@ -476,7 +476,7 @@ export default function TeamChat() {
     // the conversation, as before.
     <div
       ref={box}
-      className="relative -mx-4 -mb-4 flex h-[calc(100dvh-4.5rem)] gap-0 overflow-hidden bg-[#f2f6fc] p-0 md:-mx-6 md:-mb-6 lg:mx-0 lg:mb-0 lg:h-[calc(100dvh-140px)] lg:min-h-[480px] lg:gap-2 lg:rounded-2xl lg:p-2"
+      className="relative -mx-4 -mb-4 flex h-[calc(100dvh-4.5rem)] gap-0 overflow-hidden bg-[var(--pn-chat,#f2f6fc)] p-0 md:-mx-6 md:-mb-6 lg:mx-0 lg:mb-0 lg:h-[calc(100dvh-140px)] lg:min-h-[480px] lg:gap-2 lg:rounded-2xl lg:p-2"
     >
       <aside
         className={`w-full min-w-0 shrink-0 flex-col lg:flex lg:w-72 ${selected ? 'hidden' : 'flex'}`}
