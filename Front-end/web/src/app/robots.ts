@@ -46,7 +46,10 @@ const DISALLOW = [
   // defence for preview/test tiers, which are publicly reachable.
   '/dev',
   '/integration-tests',
-  '/_next/static/',
+  // NOT listed, deliberately: /_next/static/ (the site's CSS, JS and fonts). Google
+  // renders pages like a browser; blocked assets make it see an unstyled, broken
+  // page, which hurts mobile-friendliness and ranking. Google's guidance is never
+  // to block the resources a page needs to render.
   // NOT listed, deliberately: internal search (/products/search, ?search=, ?s=)
   // and legacy WooCommerce parameters (?add-to-cart=, ?per_page=, ?layout=, …).
   // Both used to be Disallowed here, which is exactly why Google could never drop
