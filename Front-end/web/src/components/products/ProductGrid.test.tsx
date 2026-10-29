@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import ProductGrid from './ProductGrid';
+import ProductGrid, { GRID_PRIORITY_IMAGES } from './ProductGrid';
 import '@testing-library/jest-dom';
 
 // Mocks
@@ -67,9 +67,9 @@ jest.mock('@/hooks/queries/useCampaign', () => ({
 }));
 
 jest.mock('./redesign/StoreProductCard', () => {
-  return function MockStoreProductCard({ product }: { product: any }) {
+  return function MockStoreProductCard({ product, priority }: { product: any; priority?: boolean }) {
     return (
-      <div data-testid="product-card">
+      <div data-testid="product-card" data-priority={String(!!priority)}>
         {product.name}
       </div>
     );
@@ -110,6 +110,23 @@ describe('ProductGrid Component', () => {
     expect(screen.getAllByTestId('product-card')).toHaveLength(2);
     expect(screen.getByText('Product 1')).toBeInTheDocument();
     expect(screen.getByText('Product 2')).toBeInTheDocument();
+  });
+
+  /*
+    Regression (PageSpeed): every grid photo was lazy, so the page's largest image —
+    the first card — was not even requested until layout had run (~7 s of "resource
+    load delay" on a throttled phone). The first row loads at high priority; the
+    rest stay lazy so a long grid does not compete with its own first row.
+  */
+  it('loads only the first row of photos at high priority', () => {
+    const many = Array.from({ length: GRID_PRIORITY_IMAGES + 3 }, (_, i) => ({
+      ...mockProducts[0], _id: `p${i}`, name: `Product ${i}`,
+    }));
+    render(<ProductGrid products={many as any} loading={false} />);
+
+    const flags = screen.getAllByTestId('product-card').map((c) => c.dataset.priority);
+    expect(flags.slice(0, GRID_PRIORITY_IMAGES)).toEqual(Array(GRID_PRIORITY_IMAGES).fill('true'));
+    expect(flags.slice(GRID_PRIORITY_IMAGES)).toEqual(['false', 'false', 'false']);
   });
 
   it('renders empty state when no products provided', () => {

@@ -30,6 +30,7 @@ export default function StoreProductCard({
   fitmentBadge,
   campaignRate,
   className,
+  priority = false,
 }: {
   product: Product;
   featured?: boolean;
@@ -43,6 +44,12 @@ export default function StoreProductCard({
    */
   campaignRate?: ProductRate | null;
   className?: string;
+  /**
+   * Load this card's photo immediately at high priority instead of lazily. Set by
+   * grids for their FIRST row only: that photo is the page's largest paint, and a
+   * lazy image is not even requested until layout has run.
+   */
+  priority?: boolean;
 }) {
   const router = useRouter();
   const url = productUrl(product);
@@ -164,6 +171,7 @@ export default function StoreProductCard({
           <ProductImage
             src={firstImage}
             alt={product.name}
+            priority={priority}
             className="h-full w-full object-contain mix-blend-multiply transition-transform duration-500 ease-lux group-hover:scale-[1.04]"
           />
         ) : (

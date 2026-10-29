@@ -221,7 +221,12 @@ export default function EnhancedImage({
       width={imageWidth}
       height={imageHeight}
       priority={priority}
-      className={`${className} ${imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
+      // A priority image is never faded in. The fade starts at opacity-0 in the
+      // server HTML and only lifts once React has hydrated and seen `load`, so the
+      // above-the-fold photo it is meant for stayed invisible behind every script on
+      // the page — the opposite of what `priority` asks for. Everything else keeps
+      // the fade, which only ever plays below the fold.
+      className={`${className} ${priority || imageLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
       onError={() => setImageError(true)}
       {...props}
       sizes={resolvedSizes}

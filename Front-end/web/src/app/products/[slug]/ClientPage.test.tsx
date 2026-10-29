@@ -110,6 +110,26 @@ describe('ClientPage', () => {
     expect(screen.getByRole('button', { name: /add to cart/i })).toBeInTheDocument();
   });
 
+  /*
+    Regression (PageSpeed): the gallery and buy box were wrapped in <Reveal>, which
+    renders at opacity 0 until the bundle hydrates and an observer fires — so the
+    product photo and price were invisible behind every script on the page. Nothing
+    above the fold may sit inside a hidden ancestor on first render.
+  */
+  it('renders the photo and price box visible, not faded in behind hydration', async () => {
+    renderPDP(<ClientPage slug="p1" />);
+    await screen.findByRole('heading', { name: 'Test Product' });
+
+    const hiddenAncestor = (el: HTMLElement | null) => {
+      for (let n = el; n; n = n.parentElement) {
+        if (n.style.opacity === '0') return n;
+      }
+      return null;
+    };
+    expect(hiddenAncestor(screen.getByTestId('gallery'))).toBeNull();
+    expect(hiddenAncestor(screen.getByRole('button', { name: /add to cart/i }))).toBeNull();
+  });
+
   it('adds to cart with the selected quantity', async () => {
     renderPDP(<ClientPage slug="p1" />);
     await waitFor(() => {

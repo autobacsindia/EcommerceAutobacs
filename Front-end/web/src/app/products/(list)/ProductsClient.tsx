@@ -17,6 +17,7 @@ import ShopContactHero from '@/components/products/ShopContactHero';
 import StorePageHeader from '@/components/store/StorePageHeader';
 import Reveal from '@/components/ui/Reveal';
 import StoreProductCard from '@/components/products/redesign/StoreProductCard';
+import { GRID_PRIORITY_IMAGES } from '@/components/products/ProductGrid';
 import CategoryChips from '@/components/products/redesign/CategoryChips';
 import ActiveFilters from '@/components/products/redesign/ActiveFilters';
 
@@ -188,15 +189,22 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
             {!loading && !isError && data.products.length > 0 && (
               <>
                 <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
-                  {data.products.map((p, i) => (
-                    <Reveal key={p._id} delay={Math.min(i, 8) * 0.04}>
+                  {data.products.map((p, i) => {
+                    const card = (
                       <StoreProductCard
                         product={p}
                         featured={p.isFeatured}
                         campaignRate={campaignBadgeVisible ? campaignData?.rates?.[p._id] : null}
+                        priority={i < GRID_PRIORITY_IMAGES}
                       />
-                    </Reveal>
-                  ))}
+                    );
+                    /* The first row paints with the HTML: <Reveal> renders at opacity 0
+                       until hydration, which hid the page's largest image behind every
+                       script on the page. Cards further down keep the scroll reveal. */
+                    return i < GRID_PRIORITY_IMAGES
+                      ? <div key={p._id}>{card}</div>
+                      : <Reveal key={p._id} delay={Math.min(i, 8) * 0.04}>{card}</Reveal>;
+                  })}
                 </div>
                 {!showAll && data.pagination && (
                   <div className="mt-10">

@@ -244,17 +244,26 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
 
         {/* Gallery + Buy box */}
         <div className="grid gap-6 rounded-xl bg-white p-4 shadow-sm sm:p-6 lg:grid-cols-2 lg:gap-12 lg:p-8">
-          <Reveal y={20}>
+          {/*
+            ⚠ No <Reveal> here. It server-renders its children at opacity 0 and only
+            fades them in once the client bundle has hydrated AND an observer fires —
+            so the product photo and price, the first things a shopper looks for,
+            were invisible until every script on the page (analytics included) had
+            run. On a throttled phone that was most of the page's load time. The
+            above-the-fold content paints with the HTML; Reveal is for content
+            further down the page.
+          */}
+          <div>
             <Gallery images={displayImages} name={product.name} onSale={onSale} jumpTo={variantSlide} />
-          </Reveal>
-          <Reveal y={20} delay={0.08}>
+          </div>
+          <div>
             <BuyBox
               product={product}
               selectedVariantId={selectedVariantId}
               onSelectVariant={setSelectedVariantId}
               onWriteReview={() => setWriteReviewSignal((n) => n + 1)}
             />
-          </Reveal>
+          </div>
         </div>
 
         {/* Similar products first — the shopper is still choosing, so alternatives
