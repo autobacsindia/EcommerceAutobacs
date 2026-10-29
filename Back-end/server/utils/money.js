@@ -28,6 +28,28 @@ export function roundRupees(rupees) {
 }
 
 /**
+ * The "Subtotal" a summary shows, so that its rows ADD UP to the total.
+ *
+ * Catalogue prices are GST-inclusive, and `tax` is the GST already inside them. A
+ * summary that printed the inclusive subtotal and then that GST on the next row
+ * counted the GST twice: "₹1,57,300 + ₹23,995 GST = ₹1,57,300". Shown as the
+ * subtotal minus the GST it contains, the rows reconcile exactly:
+ *
+ *   subtotalBeforeTax − discount + tax + shipping = totalAmount
+ *
+ * because `tax` is the SAME figure on both sides — it cancels, so there is no
+ * rounding gap, with or without a coupon or karma. Display only: nothing is charged
+ * from this number, and it never feeds back into the total.
+ *
+ * @param {number} subtotal  GST-inclusive goods subtotal, rupees
+ * @param {number} tax       GST embedded in the order, rupees
+ * @returns {number} rupees, never negative
+ */
+export function subtotalBeforeTax(subtotal, tax) {
+  return fromPaise(Math.max(0, toPaise(subtotal) - toPaise(tax)));
+}
+
+/**
  * Clamp an integer-paise value to the inclusive [min, max] range.
  * Used to cap discounts so they never exceed the amount they apply to.
  */

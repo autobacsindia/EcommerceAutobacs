@@ -48,6 +48,8 @@ interface OrderDetail {
   status: string;
   totalAmount: number;
   subtotal: number;
+  /** Server-derived from the order's snapshot: subtotal minus the GST inside it. */
+  subtotalBeforeTax?: number;
   shippingCost: number;
   tax: number;
   discount: number;
@@ -754,7 +756,8 @@ export default function OrderDetailPage() {
               <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Order Summary</h3>
             </div>
             <div className="font-display text-sm space-y-2">
-              <div className="flex justify-between"><span className="text-ink-muted">Subtotal</span><span className="text-ink/70">₹{(order.subtotal || 0).toFixed(2)}</span></div>
+              {/* Before GST, so Subtotal + Tax − Discount (+ Shipping) = Total. */}
+              <div className="flex justify-between"><span className="text-ink-muted">Subtotal (before GST)</span><span className="text-ink/70">{order.subtotalBeforeTax != null ? `₹${order.subtotalBeforeTax.toFixed(2)}` : '—'}</span></div>
               <div className="flex justify-between"><span className="text-ink-muted">Shipping</span><span className="text-ink/70">{(order.shippingCost || 0) > 0 ? `₹${order.shippingCost.toFixed(2)}` : 'Calculated at delivery'}</span></div>
               <div className="flex justify-between"><span className="text-ink-muted">Tax</span><span className="text-ink/70">₹{(order.tax || 0).toFixed(2)}</span></div>
               {(order.discount || 0) > 0 && (

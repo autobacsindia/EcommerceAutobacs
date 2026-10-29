@@ -184,6 +184,59 @@ describe('pricingService.computeQuote', () => {
     expect(q.totalAmount).toBe(850);
   });
 
+  /*
+    Regression: the cart summary printed the GST-INCLUSIVE subtotal and then the GST
+    inside it, so "₹1,57,300 + ₹23,995 GST" came to a Total of ₹1,57,300. The summary
+    row must be the subtotal before GST, and the rows must add up to the total EXACTLY
+    (to the paise) whatever discounts and shipping are on the order.
+  */
+  describe('subtotalBeforeTax — the summary rows add up to the total', () => {
+    // Row arithmetic exactly as every summary prints it.
+    const rowsSum = (q) =>
+      Math.round((q.subtotalBeforeTax - q.couponDiscount - q.karmaDiscount + q.tax + q.shippingCost) * 100) / 100;
+
+    test('plain cart: Subtotal + GST = Total (the reported ₹1,57,300 case)', async () => {
+      mockProductRepo.findActiveById.mockResolvedValue(product('a', 157300));
+      const q = await pricingService.computeQuote({ items: [{ product: 'a', quantity: 1 }] });
+
+      expect(q.subtotal).toBe(157300);             // inclusive figure still served
+      expect(q.tax).toBe(23994.92);
+      expect(q.subtotalBeforeTax).toBe(133305.08);
+      expect(q.totalAmount).toBe(157300);          // what is charged is unchanged
+      expect(rowsSum(q)).toBe(q.totalAmount);
+    });
+
+    test('coupon + karma + shipping still reconcile to the paise', async () => {
+      mockProductRepo.findActiveById.mockResolvedValue(product('a', 9999.99));
+      mockUserRepo.getKarma.mockResolvedValue({ karmaPoints: 5000 });
+      mockCouponRepo.findByCode.mockResolvedValue({
+        _id: 'c9', code: 'SEVEN', type: 'percentage', value: 7, maxDiscountAmount: null,
+        isActive: true, minCartValue: 0, appliesTo: {}, usedCount: 0, usageLimit: null
+      });
+      const q = await pricingService.computeQuote({
+        items: [{ product: 'a', quantity: 3 }], couponCode: 'SEVEN',
+        redeemKarmaPoints: 5000, userId: 'u1', shippingCost: 149.5
+      });
+
+      expect(q.couponDiscount).toBeGreaterThan(0);
+      expect(q.karmaDiscount).toBeGreaterThan(0);
+      expect(rowsSum(q)).toBe(q.totalAmount);
+    });
+
+    test('a zero-total order never shows a negative subtotal', async () => {
+      mockProductRepo.findActiveById.mockResolvedValue(product('a', 300));
+      mockCouponRepo.findByCode.mockResolvedValue({
+        _id: 'c2', code: 'FLAT500', type: 'fixed', value: 500,
+        isActive: true, minCartValue: 0, appliesTo: {}, usedCount: 0, usageLimit: null
+      });
+      const q = await pricingService.computeQuote({ items: [{ product: 'a', quantity: 1 }], couponCode: 'FLAT500' });
+
+      expect(q.tax).toBe(0);
+      expect(q.subtotalBeforeTax).toBe(300);
+      expect(rowsSum(q)).toBe(q.totalAmount);
+    });
+  });
+
   test('out-of-stock item throws', async () => {
     mockProductRepo.findActiveById.mockResolvedValue(product('a', 1000, { stock: 'out' }));
     await expect(pricingService.computeQuote({ items: [{ product: 'a', quantity: 1 }] }))

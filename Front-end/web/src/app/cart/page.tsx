@@ -512,8 +512,12 @@ function CartPageContent() {
 
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-ink/70 font-display text-sm">
-                  <span>Subtotal</span>
-                  <span>{quote ? formatPrice(quote.subtotal) : '—'}</span>
+                  {/* BEFORE GST, so Subtotal + GST = Total. Prices include GST, and
+                      this row used to print the inclusive figure with the GST inside
+                      it listed again below — "₹1,57,300 + ₹23,995 = ₹1,57,300". Exact
+                      (paise kept), because it is part of a sum the shopper can check. */}
+                  <span>Subtotal (before GST)</span>
+                  <span>{quote?.subtotalBeforeTax != null ? formatPrice(quote.subtotalBeforeTax, { exact: true }) : '—'}</span>
                 </div>
                 {quote && quote.couponDiscount > 0 && (
                   /* Exact, because the lines above break this figure down: rounding the
@@ -537,7 +541,7 @@ function CartPageContent() {
                   {/* Never print a confident ₹0. Tax is inclusive and always non-zero on a
                       real basket, so a zero here means the quote did not load — which read
                       as "no tax charged" rather than "not calculated yet". */}
-                  <span>{quote ? formatPrice(quote.tax) : '—'}</span>
+                  <span>{quote ? formatPrice(quote.tax, { exact: true }) : '—'}</span>
                 </div>
                 <div className="border-t border-hairline pt-3 flex justify-between">
                   <span className="font-display text-ink tracking-[-0.01em]">Total</span>
@@ -552,7 +556,7 @@ function CartPageContent() {
                       brief "working it out".
                     */}
                     {quote
-                      ? formatPrice(quote.totalAmount)
+                      ? formatPrice(quote.totalAmount, { exact: true })
                       : awaitingPricing ? 'Working it out…' : '—'}
                   </span>
                 </div>

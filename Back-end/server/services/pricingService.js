@@ -30,7 +30,7 @@ import AppError from '../utils/AppError.js';
 import { resolveVariantImage } from '../utils/variantImage.js';
 import { STOCK_STATUS, isPurchasable } from '../utils/stockStatus.js';
 import { getLoyaltyConfig } from './loyaltyConfigService.js';
-import { toPaise, fromPaise } from '../utils/money.js';
+import { toPaise, fromPaise, subtotalBeforeTax } from '../utils/money.js';
 import { effectivePrice } from '../utils/productPrice.js';
 import { CAMPAIGN_REASON } from '../config/campaign.js';
 import { resolveLinePercent, lineDiscountPaise, apportionCap } from '../utils/productTiers.js';
@@ -634,6 +634,9 @@ class PricingService {
 
     return {
       subtotal: fromPaise(subtotalPaise),
+      // What the summary's "Subtotal" row prints, so Subtotal − discounts + GST +
+      // shipping = total. See utils/money.js subtotalBeforeTax.
+      subtotalBeforeTax: subtotalBeforeTax(fromPaise(subtotalPaise), fromPaise(taxPaise)),
       couponDiscount: fromPaise(goodsCouponPaise),
       freeShippingApplied: shippingWaivePaise > 0,
       karmaDiscount: fromPaise(karmaDiscountPaise),

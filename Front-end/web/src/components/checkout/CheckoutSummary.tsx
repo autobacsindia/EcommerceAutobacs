@@ -151,7 +151,11 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
           Order Summary {loading && <Loader2 className="h-3 w-3 animate-spin text-gold" />}
         </h3>
         <div className="space-y-2">
-          <Row label="Subtotal (incl. GST)" value={money(quote?.subtotal ?? 0)} />
+          {/* Before GST, so the rows add up to the Total (see cart/page.tsx). */}
+          <Row
+            label="Subtotal (before GST)"
+            value={quote?.subtotalBeforeTax != null ? money(quote.subtotalBeforeTax) : '—'}
+          />
           {!!quote?.couponDiscount && (
             <Row label={`Coupon (${quote.appliedCoupon?.code})`} value={`- ${money(quote.couponDiscount)}`} positive />
           )}
@@ -159,7 +163,7 @@ export default function CheckoutSummary({ items, isAuthenticated, shippingCost =
           {!!quote?.karmaDiscount && (
             <Row label={`Karma (${quote.karmaPointsUsed} pts)`} value={`- ${money(quote.karmaDiscount)}`} positive />
           )}
-          <Row label="GST (18% included)" value={money(quote?.tax ?? 0)} muted />
+          <Row label="GST (18%)" value={money(quote?.tax ?? 0)} muted />
         </div>
         <div className="flex justify-between border-t border-hairline pt-3 mt-3">
           <span className="font-display text-ink tracking-[-0.01em]">Total</span>

@@ -152,6 +152,8 @@ interface Order {
   /** Projected summary from GET /orders/:id — carries methodDetails/emiPlanLabel. */
   payment?: OrderPaymentSummary | string | null;
   subtotal: number;
+  /** Server-derived from the order's snapshot: subtotal minus the GST inside it. */
+  subtotalBeforeTax?: number;
   shippingCost: number;
   tax: number;
   discount: number;
@@ -1137,8 +1139,9 @@ function AdminOrderDetailPageInner() {
             </div>
             <div className="p-6 space-y-3">
               <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>₹{order.subtotal.toFixed(2)}</span>
+                {/* Before GST, so the rows add up to the Total. */}
+                <span>Subtotal (before GST)</span>
+                <span>{order.subtotalBeforeTax != null ? `₹${order.subtotalBeforeTax.toFixed(2)}` : '—'}</span>
               </div>
               
               <div className="flex justify-between">

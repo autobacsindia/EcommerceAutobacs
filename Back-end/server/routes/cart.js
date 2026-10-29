@@ -6,6 +6,7 @@ import pricingService, { effectivePrice, resolveVariant, REJECTED_AFFILIATE_NO_D
 import { validateCartItem, validateCartUpdate, validateCartProductIdParam } from "../middleware/validationMiddleware.js";
 import { STOCK_STATUS, isPurchasable } from "../utils/stockStatus.js";
 import { serializeCart } from "../utils/cartSerializer.js";
+import { subtotalBeforeTax } from "../utils/money.js";
 import { sessionCartFilter, userCartFilter } from "../repositories/cartRepository.js";
 
 // Resolve the buyable unit for an add/update: a simple product prices from itself;
@@ -726,6 +727,8 @@ router.get("/validate", asyncHandler(async (req, res) => {
     stockErrors,
     items: validatedItems,
     subtotal,
+    // The summary's "Subtotal" row, so Subtotal + GST = Total (utils/money.js).
+    subtotalBeforeTax: subtotalBeforeTax(subtotal, tax),
     tax,
     total,
     taxRate: 0.18

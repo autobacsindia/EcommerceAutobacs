@@ -5,7 +5,14 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 
 export interface CheckoutQuote {
+  /** GST-inclusive goods subtotal (what the line prices add up to). */
   subtotal: number;
+  /**
+   * What a summary's "Subtotal" row prints: the subtotal before the GST inside it,
+   * so Subtotal − discounts + GST + shipping = total. Server-computed; optional only
+   * so a page served while the API is mid-deploy shows "—" instead of a wrong sum.
+   */
+  subtotalBeforeTax?: number;
   couponDiscount: number;
   freeShippingApplied: boolean;
   karmaDiscount: number;
