@@ -64,7 +64,7 @@ export default function LineSupplierPayment({ order, line, requests }: { order: 
         </div>
       ))}
       {canRaise && !raising && (
-        <button type="button" onClick={() => setRaising(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-950 hover:bg-amber-200"
+        <button type="button" onClick={() => setRaising(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-900 hover:bg-amber-200"
           title="Only when ordering from a supplier — our own stock ships without this">
           <Banknote className="h-4 w-4" /> Request supplier payment
         </button>
