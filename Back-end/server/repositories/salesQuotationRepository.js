@@ -3,6 +3,9 @@ import BaseRepository from './baseRepository.js';
 import SalesQuotation from '../models/SalesQuotation.js';
 
 /** GTM quotations (models/SalesQuotation.js). Access rules live in salesQuotationService. */
+/** `{ order: id }` in the shape the partial index quotation_order can serve. */
+export const byOrderFilter = (orderId) => ({ order: { $eq: orderId, $type: 'objectId' } });
+
 class SalesQuotationRepository extends BaseRepository {
   constructor() {
     super(SalesQuotation);
@@ -12,6 +15,15 @@ class SalesQuotationRepository extends BaseRepository {
   async page(filter, { before = null, limit = 25 } = {}) {
     const q = { ...filter, ...(before ? { _id: { $lt: before } } : {}) };
     return SalesQuotation.find(q).sort({ _id: -1 }).limit(limit).lean();
+  }
+
+  /**
+   * The quotation an order was accepted from. The `$type` is what lets the planner
+   * use the PARTIAL index quotation_order — a bare `{ order: id }` does not imply the
+   * index's `{ $type: 'objectId' }` filter and scans the whole collection.
+   */
+  async findByOrder(orderId, select = 'number version') {
+    return SalesQuotation.findOne(byOrderFilter(orderId)).select(select).lean();
   }
 
   /** Who the quotation is for and who sells it — nothing else (customer bank details). */

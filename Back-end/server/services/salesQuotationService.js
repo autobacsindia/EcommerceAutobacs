@@ -556,7 +556,7 @@ export async function getQuotationDocument(actor, id) {
 
 /** The quotation an order came from, if any (for the order screen). */
 export async function quotationForOrder(orderId) {
-  const q = await salesQuotationRepository.model.findOne({ order: orderId }).select('number version').lean();
+  const q = await salesQuotationRepository.findByOrder(orderId);
   return q ? { id: idOf(q._id), number: printedNumber(q) } : null;
 }
 

@@ -351,3 +351,17 @@ describe('editing after the customer accepted', () => {
     expect((await Order.findById(orderId).lean()).status).toBe('awaiting_payment');
   });
 });
+
+describe('finding the quotation an order came from', () => {
+  it('uses the partial index quotation_order, not a collection scan', async () => {
+    const { byOrderFilter } = await import('../repositories/salesQuotationRepository.js');
+    await SalesQuotation.createIndexes();
+    const plan = await SalesQuotation.collection
+      .find(byOrderFilter(new (await import('mongoose')).default.Types.ObjectId()))
+      .limit(1)
+      .explain('queryPlanner');
+    const winning = JSON.stringify(plan.queryPlanner.winningPlan);
+    expect(winning).toContain('"indexName":"quotation_order"');
+    expect(winning).not.toContain('COLLSCAN');
+  });
+});

@@ -410,7 +410,7 @@ export async function getSalesOrder(actor, orderId) {
     throw fail('Order not found.', 404);
   }
   // The quotation it came from (index quotation_order), for "Edit quotation".
-  const from = await salesQuotationRepository.model.findOne({ order: order._id }).select('number version').lean();
+  const from = await salesQuotationRepository.findByOrder(order._id);
   return {
     ...shape(order),
     quotation: from ? { id: String(from._id), number: from.version > 1 ? `${from.number}-v${from.version}` : from.number } : null,
