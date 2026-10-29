@@ -28,7 +28,10 @@ import ticketService from './ticketService.js';
 import messageRepository from '../repositories/supportMessageRepository.js';
 import { REPLY_SENTINEL } from './supportSanitizer.js';
 
-/** Postmark stream for support conversations. Falls back to the default stream. */
+/**
+ * Postmark stream for support conversations. Falls back to the default stream.
+ * Ignored under EMAIL_PROVIDER=zeptomail, which has no streams.
+ */
 const stream = () => process.env.POSTMARK_SUPPORT_STREAM || process.env.POSTMARK_MESSAGE_STREAM || 'outbound';
 
 /** The public support address customers see and reply to. */
