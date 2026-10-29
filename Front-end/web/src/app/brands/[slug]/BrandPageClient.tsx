@@ -1,7 +1,7 @@
 'use client';
 
 import type { StockStatus } from '@/lib/stock';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import Link from 'next/link';
@@ -10,6 +10,8 @@ import ProductGrid from '@/components/products/ProductGrid';
 import StorePageHeader from '@/components/store/StorePageHeader';
 import Pagination from '@/components/layout/Pagination';
 import apiClient from '@/lib/api';
+import { brandProductsPath } from '@/lib/brandProducts';
+import { normalizeProductsResponse } from '@/lib/categoryProducts';
 
 interface ProductImage {
   url: string;
@@ -56,33 +58,51 @@ interface ProductsData {
   pagination: Pagination;
 }
 
-async function getBrandProducts(brandName: string, page: number = 1, limit: number = 12): Promise<ProductsData> {
-  const data: any = await apiClient.get(`/products/brands/${encodeURIComponent(brandName)}?page=${page}&limit=${limit}`);
-  if (data?.products) {
-    const { total, pages, currentPage, hasNext, hasPrev, count } = data;
-    return { products: data.products, pagination: { total, pages, currentPage, hasNext, hasPrev, count } };
-  }
-  return { products: [], pagination: {} };
+async function getBrandProducts(brandName: string, page: number = 1): Promise<ProductsData> {
+  // Same request page.tsx pre-renders — see lib/brandProducts.ts.
+  const data: unknown = await apiClient.get(brandProductsPath(brandName, page));
+  return normalizeProductsResponse<Product>(data);
 }
 
-function BrandPageInner({ slug, initialBrand }: { slug: string; initialBrand: any }) {
+type ReadonlyParams = Pick<URLSearchParams, 'get' | 'toString'>;
+
+interface BrandViewProps {
+  slug: string;
+  initialBrand: any;
+  /** Page 1, fetched by page.tsx and trimmed to card fields. Seeds the grid on page 1. */
+  initialProducts?: ProductsData | null;
+  searchParams: ReadonlyParams;
+}
+
+/**
+ * The page with the URL passed IN, so the same tree renders as the server-side
+ * Suspense fallback (no params → page 1, with products) and for real on the
+ * client. See app/categories/[slug]/ClientPage.tsx — the same fix.
+ */
+function BrandView({ slug, initialBrand, initialProducts, searchParams }: BrandViewProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const [data, setData] = useState<ProductsData>({ products: [], pagination: {} });
+  const currentPage = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
+  // Seed only what the server rendered: page 1 of this brand.
+  const seeded = !!initialProducts && currentPage === 1;
+  // The mount refetch still runs (live prices win) but without a skeleton flash.
+  const silentFirstLoad = useRef(seeded);
+  const [data, setData] = useState<ProductsData>(seeded ? initialProducts! : { products: [], pagination: {} });
   const [logoFailed, setLogoFailed] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!seeded);
   const [error, setError] = useState<string | null>(null);
   // Seeded from the server fetch — see page.tsx. The brand is guaranteed to exist
   // by the time this renders, so there is no brand-loading or brand-missing state
   // left to model on the client.
   const brand = initialBrand;
 
-  const currentPage = searchParams.get('page') ? parseInt(searchParams.get('page')!) : 1;
-
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        setLoading(true);
+        if (silentFirstLoad.current) {
+          silentFirstLoad.current = false;
+        } else {
+          setLoading(true);
+        }
         setError(null);
         const result = await getBrandProducts(initialBrand?.slug || slug, currentPage);
         setData(result);
@@ -157,7 +177,7 @@ function BrandPageInner({ slug, initialBrand }: { slug: string; initialBrand: an
                 pagination={data.pagination}
                 currentPage={currentPage}
                 basePath={`/brands/${slug}`}
-                searchParams={searchParams}
+                searchParams={new URLSearchParams(searchParams.toString())}
               />
             </div>
           </>
@@ -181,10 +201,22 @@ function BrandPageInner({ slug, initialBrand }: { slug: string; initialBrand: an
 // the brand lookup, so a missing brand has thrown notFound() and committed a 404
 // before anything streams. A `loading.tsx` in this segment (or any ancestor)
 // would move the boundary above that await and put the soft 404 straight back.
-export default function BrandPageClient({ slug, initialBrand }: { slug: string; initialBrand: any }) {
+type BrandPageClientProps = Omit<BrandViewProps, 'searchParams'>;
+
+const NO_PARAMS: ReadonlyParams = new URLSearchParams();
+
+function BrandPageInner(props: BrandPageClientProps) {
+  return <BrandView {...props} searchParams={useSearchParams()} />;
+}
+
+export default function BrandPageClient({ slug, initialBrand, initialProducts }: BrandPageClientProps) {
   return (
-    <Suspense fallback={<div className="sp sh-theme" />}>
-      <BrandPageInner slug={slug} initialBrand={initialBrand} />
+    // The fallback is page 1 itself — what the static HTML contains, products and
+    // all — not an empty div. See app/categories/[slug]/ClientPage.tsx.
+    <Suspense
+      fallback={<BrandView slug={slug} initialBrand={initialBrand} initialProducts={initialProducts} searchParams={NO_PARAMS} />}
+    >
+      <BrandPageInner slug={slug} initialBrand={initialBrand} initialProducts={initialProducts} />
     </Suspense>
   );
 }

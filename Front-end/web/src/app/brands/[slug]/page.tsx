@@ -7,6 +7,8 @@ import { resolveSeo } from '@/lib/seo';
 import { SITE_URL } from '@/lib/siteUrl';
 
 import { brandSlugsForPrerender } from '@/lib/staticParams';
+import { brandProductsPath } from '@/lib/brandProducts';
+import { normalizeProductsResponse, toCardProduct } from '@/lib/categoryProducts';
 
 /**
  * Makes this route statically generatable, which is the point: a static route
@@ -124,10 +126,44 @@ export async function generateMetadata({
   };
 }
 
+/** How long the pre-render waits for products before leaving them to the client. */
+const FIRST_PAGE_TIMEOUT_MS = 4000;
+
+/**
+ * Page 1 of the brand's products, trimmed to card fields, for the server HTML —
+ * see lib/brandProducts.ts. Tagged `product:list`, which every product write
+ * purges (backend utils/nextTags.js), so a price edit reaches this HTML within
+ * seconds; the client refetches on mount regardless. Never throws: a failure just
+ * leaves the grid to the client, as before.
+ */
+async function getFirstPageProducts(brandSlug: string) {
+  try {
+    const res = await fetch(`${getServerApiBase()}${brandProductsPath(brandSlug)}`, {
+      headers: internalApiHeaders(),
+      next: { revalidate: 300, tags: ['product:list'] },
+      signal: AbortSignal.timeout(FIRST_PAGE_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const { products, pagination } = normalizeProductsResponse<Record<string, unknown>>(await res.json());
+    return { products: products.map(toCardProduct), pagination };
+  } catch (error) {
+    console.error('[brands/[slug]] first-page products fetch failed:', error);
+    return null;
+  }
+}
+
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const brand = await getBrand(slug);
   if (!brand) notFound();
 
-  return <BrandPageClient slug={slug} initialBrand={brand} />;
+  // The client requests `initialBrand?.slug || slug` — ask for exactly the same.
+  const initialProducts = await getFirstPageProducts(String(brand.slug || slug));
+  return (
+    <BrandPageClient
+      slug={slug}
+      initialBrand={brand}
+      initialProducts={initialProducts as Parameters<typeof BrandPageClient>[0]['initialProducts']}
+    />
+  );
 }
