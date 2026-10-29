@@ -113,7 +113,11 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
     /** Accounts (or admin): this out-of-stock refund can be sent / retried from here. */
     canSendRefund: boolean;
   }[];
-  history: { at: string; by: string; team: string; action: string; item: string; note: string }[];
+  history: {
+    at: string; by: string; team: string; action: string; item: string; note: string;
+    /** Raw action ('stock_in_stock', 'delivered'…) and its line, for the journey tracker. */
+    code?: string; itemId?: string | null;
+  }[];
   canShip: boolean;
   /** Procurement may dispatch "Our Warehouse" items (courier + tracking, no supplier). */
   canDispatchOwn: boolean;

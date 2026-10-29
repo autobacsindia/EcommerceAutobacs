@@ -544,7 +544,7 @@ textarea::placeholder {
 
 /* Team chat: briefly highlight the message a quote jumped to. */
 @keyframes chat-flash {
-  0%, 60% { background-color: rgb(209 250 229); }
+  0%, 60% { background-color: var(--color-emerald-100); }
   100% { background-color: transparent; }
 }
 .chat-flash > div:last-child { animation: chat-flash 1.6s ease-out; }

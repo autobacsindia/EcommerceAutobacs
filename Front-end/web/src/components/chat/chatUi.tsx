@@ -104,7 +104,7 @@ export function Avatar({
   const box = size === 'sm' ? 'h-7 w-7 text-[11px]' : 'h-9 w-9 text-sm';
   if (system) {
     return (
-      <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold text-white`} style={{ background: GREEN }} aria-hidden="true">
+      <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold text-[#fff]`} style={{ background: GREEN }} aria-hidden="true">
         R
       </span>
     );

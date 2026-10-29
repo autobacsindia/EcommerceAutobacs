@@ -291,6 +291,10 @@ function detail(u, o) {
       by: h.byName || (h.by ? 'Staff' : 'System'),
       team: h.team ? (STAFF_TEAM_LABELS[h.team] || (h.team === 'admin' ? 'Admin' : h.team)) : '',
       action: HISTORY_LABELS[h.action] || h.action,
+      // The raw action and line, so the order-journey tracker can place each
+      // entry on its step without matching on the display label above.
+      code: h.action,
+      itemId: h.itemId ? idOf(h.itemId) : null,
       item: h.itemId ? names.get(idOf(h.itemId)) || '' : '',
       note: h.note || '',
     })),

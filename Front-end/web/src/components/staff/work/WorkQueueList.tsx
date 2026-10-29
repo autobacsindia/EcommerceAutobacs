@@ -11,6 +11,7 @@ import { errorMessage, rupees } from '@/components/staff/sales/types';
 import WorkOrderPanel from './WorkOrderPanel';
 import { STAGE_TONE, type WorkQueue, type WorkRow } from './types';
 import { EtaRowBadge } from './ParcelEta';
+import OrderTypeTag from '@/components/orders/OrderTypeTag';
 
 type Page = { success: boolean; orders: WorkRow[]; nextCursor: string | null };
 
@@ -30,6 +31,7 @@ function Row({ order }: { order: WorkRow }) {
         <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
           <p className="text-sm font-semibold text-gray-900">
             {order.customer.name || 'Customer'} <span className="font-normal text-gray-500">· {order.orderNumber}</span>
+            <OrderTypeTag type="purchase" className="ml-2 align-middle" />
           </p>
           <p className="text-xs text-gray-500">
             Paid {formatDateTimeIST(order.enteredAt || order.createdAt)} · {order.soldBy}{order.city ? ` · ${order.city}` : ''}

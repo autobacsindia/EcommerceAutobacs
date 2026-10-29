@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { within, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import WorkOrderPanel from './WorkOrderPanel';
 import type { WorkOrder } from './types';
@@ -362,7 +362,12 @@ describe('WorkOrderPanel', () => {
         ? { requests: [] }
         : { success: true, order: { ...base, lines: [{ ...base.lines[0], stage: 'payment_pending', stageLabel: 'Payment Pending', actions: [] }] } }));
       renderPanel();
-      expect((await screen.findByText('Payment Pending')).className).toMatch(/bg-red-100/);
+      // The line's stage pill (the journey tracker above it names the step too).
+      const pill = (await screen.findAllByText('Payment Pending')).find((el) => el.tagName === 'SPAN');
+      expect(pill!.className).toMatch(/bg-red-100/);
+      // …and the panel opens with the order's journey, the current step marked.
+      const journey = screen.getByRole('list', { name: /^Journey of / });
+      expect(within(journey).getByText('Payment Pending').closest('li')).toHaveAttribute('aria-current', 'step');
     });
   });
 

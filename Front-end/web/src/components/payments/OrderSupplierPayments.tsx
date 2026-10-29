@@ -8,6 +8,7 @@ import apiClient from '@/lib/api-client';
 import { paymentKeys, rupees, slipHref, STATUS_TONE, type OrderPayment } from './api';
 import PaymentRequestForm from './PaymentRequestForm';
 import PaymentRequestDetail from './PaymentRequestDetail';
+import OrderTypeTag from '@/components/orders/OrderTypeTag';
 
 type Line = WorkOrder['lines'][number];
 const live = (r: OrderPayment) => r.status !== 'declined' && r.status !== 'cancelled';
@@ -48,6 +49,7 @@ export default function LineSupplierPayment({ order, line, requests }: { order: 
         <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
           <Banknote className="h-4 w-4 text-emerald-700" />
           <button type="button" onClick={() => setOpen({ id: r.id, edit: false })} className="font-medium text-blue-700 hover:underline">{r.number}</button>
+          <OrderTypeTag type="procurement" />
           <span className="text-gray-700">{rupees(r.amount)} to {r.payee}</span>
           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
           {r.canEdit && (
@@ -62,7 +64,7 @@ export default function LineSupplierPayment({ order, line, requests }: { order: 
         </div>
       ))}
       {canRaise && !raising && (
-        <button type="button" onClick={() => setRaising(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-950 hover:bg-amber-200"
+        <button type="button" onClick={() => setRaising(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-900 hover:bg-amber-200"
           title="Only when ordering from a supplier — our own stock ships without this">
           <Banknote className="h-4 w-4" /> Request supplier payment
         </button>
