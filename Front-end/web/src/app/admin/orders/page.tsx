@@ -22,6 +22,7 @@ import { outstandingParcels, hasCancellations, hasOpenReturn } from '@/lib/order
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
 import { getRefundBadge } from '@/lib/refundBadge';
 import { usePanel } from '@/lib/usePanel';
+import OrderTypeTag from '@/components/orders/OrderTypeTag';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -818,6 +819,7 @@ function AdminOrdersPageInner() {
                     <div className="text-sm font-medium text-gray-900">
                       #{order.orderNumber || order._id.slice(-8)}
                     </div>
+                    <OrderTypeTag type="purchase" className="mt-1" />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{order.user?.name || 'N/A'}</div>

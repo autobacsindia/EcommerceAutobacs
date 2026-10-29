@@ -132,6 +132,12 @@ describe('AdminOrderDetailPage', () => {
     expect(await screen.findByTestId('order-journey')).toHaveTextContent('order123');
   });
 
+  it('tags the order as a purchase order (a customer buying from us)', async () => {
+    render(<AdminOrderDetailPage />);
+    expect(await screen.findByText('Purchase order')).toBeInTheDocument();
+    expect(screen.queryByText('Procurement order')).toBeNull();
+  });
+
   /**
    * WHICH MODEL was ordered.
    *

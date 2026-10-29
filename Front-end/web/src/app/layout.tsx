@@ -16,7 +16,6 @@ import CampaignBanner from "@/components/campaign/CampaignBanner";
 import ConditionalPromoBanner from "@/components/layout/ConditionalPromoBanner";
 import { getNavCategories } from "@/lib/navCategories";
 import { getActivePromoBanner } from "@/lib/promoBanner";
-import { RETURN_POLICY_QUESTION, RETURN_POLICY_SUMMARY } from "@/lib/constants";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import ThemeScript from "@/components/theme/ThemeScript";
@@ -129,58 +128,10 @@ export const metadata: Metadata = {
   verification: {
     google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || '',
   },
-  
-  // FAQ Schema for common automotive questions
-  other: {
-    'application/ld+json': JSON.stringify({
-      '@context': 'https://schema.org',
-      '@type': 'FAQPage',
-      'mainEntity': [
-        {
-          '@type': 'Question',
-          'name': 'What types of automotive accessories do you sell?',
-          'acceptedAnswer': {
-            '@type': 'Answer',
-            'text': 'We sell premium automotive accessories including body kits, performance parts, lighting solutions, interior accessories, and vehicle-specific modifications for Indian vehicles.'
-          }
-        },
-        {
-          '@type': 'Question',
-          'name': 'Do you offer installation services for automotive accessories?',
-          'acceptedAnswer': {
-            '@type': 'Answer',
-            'text': 'Yes, we offer professional installation services for most automotive accessories at our authorized service centers across India.'
-          }
-        },
-        {
-          '@type': 'Question',
-          // Structured data is a machine-readable claim Google may surface directly
-          // in results, so it must state the policy the backend actually enforces.
-          'name': RETURN_POLICY_QUESTION,
-          'acceptedAnswer': {
-            '@type': 'Answer',
-            'text': RETURN_POLICY_SUMMARY
-          }
-        },
-        {
-          '@type': 'Question',
-          'name': 'Do you ship automotive accessories across India?',
-          'acceptedAnswer': {
-            '@type': 'Answer',
-            'text': 'Yes, we provide nationwide shipping for automotive accessories with free shipping on orders over ₹2,500.'
-          }
-        },
-        {
-          '@type': 'Question',
-          'name': 'How do I choose the right automotive accessories for my vehicle?',
-          'acceptedAnswer': {
-            '@type': 'Answer',
-            'text': 'Our vehicle-specific product mapping ensures compatibility. You can filter products by your vehicle make and model to find perfectly compatible accessories.'
-          }
-        }
-      ]
-    })
-  }
+  // No FAQ structured data here: Google only accepts FAQPage markup on the page
+  // that shows those questions, so it lives on /faq (app/faq/page.tsx), built
+  // from the same lib/help/faq.ts the page renders. (This used to be a <meta>
+  // tag — never read as JSON-LD — that also promised things the site does not do.)
 };
 
 export default async function RootLayout({

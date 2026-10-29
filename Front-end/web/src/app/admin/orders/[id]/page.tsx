@@ -29,6 +29,7 @@ import type { GatewayOffer } from '@/components/orders/PaymentSummary';
 import { usePanel } from '@/lib/usePanel';
 import { displayEmail } from '@/lib/internalEmail';
 import AdminOrderJourney from '@/components/orders/AdminOrderJourney';
+import OrderTypeTag from '@/components/orders/OrderTypeTag';
 
 /** What the gateway holds — and so the most a refund can send back. */
 const amountPaidOf = (o: { totalAmount: number; gatewayOffer?: GatewayOffer | null }) =>
@@ -481,6 +482,7 @@ function AdminOrderDetailPageInner() {
           {getStatusLabel(order.status)}
         </span>
         <PaymentStatusTag paymentStatus={order.paymentStatus} tone="admin" />
+        <OrderTypeTag type="purchase" />
         {/*
           Packing slip — the printable pick list, now including any won goodie as a
           tickable row. Lives here rather than inside the (removed) reward banner: the

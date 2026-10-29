@@ -31,7 +31,7 @@ export default function ShippingPage() {
               <div>
                 <h3 className="font-display text-ink tracking-[-0.01em] mb-1">Fast Delivery</h3>
                 <p className="text-ink/70 font-display text-sm leading-relaxed">
-                  Our standard delivery takes 3–5 business days, with express options available for urgent needs.
+                  Our standard delivery takes 3–5 business days, and delivery is free on every order.
                 </p>
               </div>
             </div>
@@ -56,23 +56,15 @@ export default function ShippingPage() {
                     </thead>
                     <tbody className="divide-y divide-hairline">
                       {[
+                        /* Checkout charges no shipping on any order (it sends shippingCost: 0),
+                           so this table must not quote a fee or offer a faster tier that
+                           checkout cannot sell. It used to list ₹199 / ₹399 / ₹599 options
+                           that no customer could ever choose or be charged. */
                         {
                           name: 'Standard Shipping',
-                          sub: 'Ground delivery',
+                          sub: 'Courier partners such as Delhivery',
                           time: '3–5 business days',
-                          cost: ['Free for orders over ₹2,999', '₹199 for orders under ₹2,999'],
-                        },
-                        {
-                          name: 'Express Shipping',
-                          sub: 'Priority delivery',
-                          time: '1–2 business days',
-                          cost: ['₹399 (flat rate)'],
-                        },
-                        {
-                          name: 'Same-Day Delivery',
-                          sub: 'Metro areas only',
-                          time: 'Same day (before 4 PM cutoff)',
-                          cost: ['₹599 (flat rate)'],
+                          cost: ['Free on every order'],
                         },
                       ].map(row => (
                         <tr key={row.name}>
