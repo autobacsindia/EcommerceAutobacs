@@ -55,7 +55,7 @@ The committed `.env.example` files are the contract — they document every vari
 | Redis queue/rate-limit (Upstash) | separate Upstash DB (`rediss://`) | prod Upstash |
 | Elasticsearch | dev index/deployment, or `ELASTICSEARCH_ENABLED=false` locally | prod ES |
 | Cloudinary | dedicated `dev/` folder/upload preset (or a dev cloud) | prod cloud |
-| Postmark | sandbox token or separate stream, or `ENABLE_EMAIL_NOTIFICATIONS=false` | prod token/stream |
+| Email (ZeptoMail; Postmark until cancelled) | `EMAIL_REDIRECT_TO=<your inbox>`, or `ENABLE_EMAIL_NOTIFICATIONS=false` | prod ZeptoMail token (+ Postmark token as rollback) |
 | Razorpay | `rzp_test_*` + a test-mode webhook | `rzp_test_*` until cutover → `rzp_live_*` + live webhook |
 | Google/Facebook OAuth | add `http://localhost:8080/...` redirect URIs to the app | prod redirect URIs |
 
@@ -87,7 +87,9 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 | `NODE_ENV` | `development` | `production` | gates validateEnv, cookie flags, logging |
 | `ELASTICSEARCH_NODE` / `_USERNAME` / `_PASSWORD` | dev index (or disabled) | prod ES | dev reindex must not touch prod index |
 | `CLOUDINARY_*` | dev cloud / `dev/` folder | prod | don't pollute prod media |
-| `POSTMARK_SERVER_TOKEN` / `POSTMARK_FROM_EMAIL` / `POSTMARK_MESSAGE_STREAM` | token + `noreply@autobacsindia.com` (or disabled) | prod token/sender | dev sends must not hit sender reputation |
+| `EMAIL_PROVIDER` | `postmark` or `zeptomail` | `zeptomail` once proven (rollback: `postmark`) | read per send; a selected-but-unconfigured provider fails every send, retryably |
+| `ZEPTOMAIL_SEND_MAIL_TOKEN` / `POSTMARK_SERVER_TOKEN` | token (+ `EMAIL_REDIRECT_TO`), or disabled | prod tokens | dev sends must not hit sender reputation or real customers |
+| `EMAIL_FROM_ADDRESS` / `EMAIL_FROM_NAME` (fallback `POSTMARK_FROM_*`) | `noreply@autobacsindia.com` | same | sender for both providers; must be on the verified domain |
 | `CAREERS_NOTIFICATION_EMAILS` / `CAREERS_FROM_EMAIL` | unset | the careers mailbox | the careers mailbox gets **employment email only** — job-application alerts go there, every store email skips it (`utils/careersMailbox.js`) |
 | `SENTRY_DSN` / `SENTRY_ENVIRONMENT` | unset / `development` | prod DSN / `production` | keep dev noise out of prod |
 | `SLACK_WEBHOOK_URL` | **unset locally** | prod webhook | dev 5xx must not page the team |
@@ -149,7 +151,7 @@ prod dashboards. For a one-off import, keep them in a local `.env.migration` you
 
 ## Setup checklist
 
-1. Provision the dev instances in the table above (Atlas DB, 2× Upstash, ES, Cloudinary, Postmark,
+1. Provision the dev instances in the table above (Atlas DB, 2× Upstash, ES, Cloudinary, email,
    Razorpay test webhook, OAuth localhost redirect URIs).
 2. Backend dev: copy `Back-end/server/.env.example` → `.env`; fill Bucket A dev + Bucket B; generate a
    fresh dev `JWT_SECRET`; set `MONGODB_URI` = dev `MONGO_URI`; leave `SLACK_WEBHOOK_URL` / prod
@@ -163,5 +165,5 @@ prod dashboards. For a one-off import, keep them in a local `.env.migration` you
 ## Rotating a secret
 
 - `JWT_SECRET`: update **both** the backend and frontend of that tier together (else edge auth breaks).
-- Service credentials (Razorpay/Cloudinary/Postmark/Redis/Mongo): rotate the dev and prod instances
+- Service credentials (Razorpay/Cloudinary/ZeptoMail/Postmark/Redis/Mongo): rotate the dev and prod instances
   independently. General rotation runbooks: `SECRETS_ROTATION_GUIDE.md`.

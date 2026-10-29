@@ -1,26 +1,47 @@
 /**
  * Email Handler Service
- * Handles all email notifications via Postmark.
+ * Handles all email notifications via Zoho ZeptoMail or Postmark.
  *
  * Provider is intentionally isolated to this file: the rest of the app only
  * depends on the public interface (sendEmail / sendMagicLinkEmail / getStatus),
  * so swapping providers never touches routes/controllers/workers.
  *
- * Future-proofing: Postmark Message Streams keep transactional and broadcast
- * (marketing) mail on separate reputations. Transactional uses the default
- * `outbound` stream; marketing can pass a `messageStream` (e.g. 'broadcast')
- * without any code change here.
+ * EMAIL_PROVIDER (`postmark` | `zeptomail`, default `postmark`) is read on every
+ * send, so switching — or rolling back — is a variable change plus a restart.
+ * Both clients are built at startup from whichever credentials are present.
+ * Each provider client takes the same message (Postmark field names) and has the
+ * same error contract, so every guard below applies to both.
+ *
+ * Postmark Message Streams keep transactional and broadcast (marketing) mail on
+ * separate reputations; `messageStream` is passed through to Postmark and has no
+ * ZeptoMail equivalent (there, isolation is per Mail Agent).
  */
 
 import postmark from 'postmark';
 import { MAIL_PURPOSE, isCareersMailbox } from '../utils/careersMailbox.js';
+import { ZeptoMailClient } from './email/zeptomailClient.js';
 
 const { ServerClient } = postmark;
+
+export const EMAIL_PROVIDERS = Object.freeze({ POSTMARK: 'postmark', ZEPTOMAIL: 'zeptomail' });
+
+/** The provider the next send will use. Read per call — see the header. */
+export const selectedProvider = () =>
+  (process.env.EMAIL_PROVIDER || EMAIL_PROVIDERS.POSTMARK).trim().toLowerCase();
+
+/**
+ * First non-blank value among the named variables. Sender settings have
+ * provider-neutral names (EMAIL_FROM_ADDRESS…) and fall back to the historical
+ * POSTMARK_* names, so nothing needs re-setting to switch provider.
+ */
+const envFirst = (...names) =>
+  names.map((name) => process.env[name]).find((value) => value && value.trim()) || undefined;
 
 class EmailHandler {
   constructor() {
     this.isEnabled = false;
-    this.client = null;
+    this.client = null;            // Postmark ServerClient (name kept: tests inject it)
+    this.zeptomailClient = null;
     this.fromEmail = null;
     this.fromName = null;
     this.defaultStream = process.env.POSTMARK_MESSAGE_STREAM || 'outbound';
@@ -49,24 +70,31 @@ class EmailHandler {
   }
 
   /**
-   * Initialize Postmark client and validate configuration
+   * Build the provider clients and validate configuration.
+   *
+   * Email is enabled when there is a valid sender and AT LEAST ONE provider is
+   * configured. A provider selected by EMAIL_PROVIDER but not configured is
+   * caught per send (see clientFor), not here, so it fails loudly and
+   * retryably instead of quietly disabling email.
    */
   initialize() {
-    const serverToken = process.env.POSTMARK_SERVER_TOKEN;
-    this.fromEmail = process.env.POSTMARK_FROM_EMAIL;
-    this.fromName = process.env.POSTMARK_FROM_NAME || 'Autobacs';
+    const postmarkToken = process.env.POSTMARK_SERVER_TOKEN;
+    const zeptomailToken = process.env.ZEPTOMAIL_SEND_MAIL_TOKEN;
+    this.fromEmail = envFirst('EMAIL_FROM_ADDRESS', 'POSTMARK_FROM_EMAIL');
+    this.fromName = envFirst('EMAIL_FROM_NAME', 'POSTMARK_FROM_NAME') || 'Autobacs';
     this.defaultStream = process.env.POSTMARK_MESSAGE_STREAM || 'outbound';
 
     // Reset enabled state so re-initialize (used by diagnostics/tests) is idempotent
     this.isEnabled = false;
     this.client = null;
+    this.zeptomailClient = null;
 
     // Check if email notifications are enabled (only the literal string 'false' disables)
     const enableEmail = process.env.ENABLE_EMAIL_NOTIFICATIONS !== 'false';
 
     // In test environment, suppress errors about missing credentials (mock mode)
     if (process.env.NODE_ENV === 'test') {
-      if (!serverToken || !this.fromEmail) {
+      if ((!postmarkToken && !zeptomailToken) || !this.fromEmail) {
         return;
       }
     }
@@ -77,14 +105,14 @@ class EmailHandler {
     }
 
     // Validate required credentials
-    if (!serverToken) {
-      this.error('[EmailHandler] POSTMARK_SERVER_TOKEN not found in environment variables');
+    if (!postmarkToken && !zeptomailToken) {
+      this.error('[EmailHandler] Neither ZEPTOMAIL_SEND_MAIL_TOKEN nor POSTMARK_SERVER_TOKEN is set');
       this.error('[EmailHandler] Email notifications DISABLED');
       return;
     }
 
     if (!this.fromEmail) {
-      this.error('[EmailHandler] POSTMARK_FROM_EMAIL not found in environment variables');
+      this.error('[EmailHandler] EMAIL_FROM_ADDRESS (or POSTMARK_FROM_EMAIL) not found in environment variables');
       this.error('[EmailHandler] Email notifications DISABLED');
       return;
     }
@@ -96,14 +124,53 @@ class EmailHandler {
       return;
     }
 
-    try {
-      this.client = new ServerClient(serverToken);
-      this.isEnabled = true;
-      this.log(`[EmailHandler] Initialized successfully (Postmark) | sender: ${this.fromEmail} | stream: ${this.defaultStream}`);
-    } catch (error) {
-      this.error('[EmailHandler] Failed to initialize Postmark:', error.message);
-      this.error('[EmailHandler] Email notifications DISABLED');
+    if (postmarkToken) {
+      try {
+        this.client = new ServerClient(postmarkToken);
+      } catch (error) {
+        this.error('[EmailHandler] Failed to initialize Postmark:', error.message);
+      }
     }
+
+    if (zeptomailToken) {
+      try {
+        const timeoutMs = parseInt(process.env.ZEPTOMAIL_TIMEOUT_MS || '', 10);
+        this.zeptomailClient = new ZeptoMailClient({
+          token: zeptomailToken,
+          apiUrl: process.env.ZEPTOMAIL_API_URL || undefined,
+          timeoutMs: Number.isNaN(timeoutMs) ? undefined : timeoutMs,
+        });
+      } catch (error) {
+        this.error('[EmailHandler] Failed to initialize ZeptoMail:', error.message);
+      }
+    }
+
+    if (!this.client && !this.zeptomailClient) {
+      this.error('[EmailHandler] Email notifications DISABLED');
+      return;
+    }
+
+    this.isEnabled = true;
+    const configured = this.configuredProviders().join(', ');
+    this.log(`[EmailHandler] Initialized | providers: ${configured} | selected: ${selectedProvider()} | sender: ${this.fromEmail}`);
+    if (!this.clientFor(selectedProvider())) {
+      this.error(`[EmailHandler] EMAIL_PROVIDER=${selectedProvider()} is not configured — every send will FAIL until it is`);
+    }
+  }
+
+  /** @returns {string[]} providers with a usable client */
+  configuredProviders() {
+    return [
+      ...(this.zeptomailClient ? [EMAIL_PROVIDERS.ZEPTOMAIL] : []),
+      ...(this.client ? [EMAIL_PROVIDERS.POSTMARK] : []),
+    ];
+  }
+
+  /** The client for a provider name, or null when unknown/unconfigured. */
+  clientFor(provider) {
+    if (provider === EMAIL_PROVIDERS.POSTMARK) return this.client;
+    if (provider === EMAIL_PROVIDERS.ZEPTOMAIL) return this.zeptomailClient;
+    return null;
   }
 
   /**
@@ -113,11 +180,12 @@ class EmailHandler {
    * @param {string} options.subject - Email subject
    * @param {string} options.text - Plain text body
    * @param {string} options.html - HTML body (optional)
-   * @param {string} options.messageStream - Postmark message stream (optional; defaults to transactional)
-   * @param {Array<Object>} options.attachments - Postmark attachments (optional):
+   * @param {string} options.messageStream - Postmark message stream (optional; defaults to
+   *        transactional). Ignored by ZeptoMail.
+   * @param {Array<Object>} options.attachments - Attachments (optional), either provider:
    *        [{ Name, Content (base64), ContentType }]
-   * @param {string} options.fromEmail - Override sender address (optional; must be a
-   *        verified sender/confirmed-domain address in Postmark). Defaults to POSTMARK_FROM_EMAIL.
+   * @param {string} options.fromEmail - Override sender address (optional; must be on a
+   *        domain verified with the provider). Defaults to EMAIL_FROM_ADDRESS.
    * @param {string} options.fromName - Override sender display name (optional).
    * @param {string} options.replyTo - Reply-To address (optional). Support mail uses
    *        this to carry a signed per-ticket token, so a customer's reply is
@@ -132,12 +200,14 @@ class EmailHandler {
    * @returns {Promise<Object>} - Result with success status and details
    */
   async sendEmail({ to, subject, text, html, messageStream, attachments, fromEmail, fromName, replyTo, headers, purpose }) {
+    const provider = selectedProvider();
+
     // Check if service is enabled
     if (!this.isEnabled) {
       return {
         success: false,
         error: 'Email service not enabled',
-        provider: 'postmark',
+        provider,
         fallbackToConsole: true
       };
     }
@@ -150,7 +220,7 @@ class EmailHandler {
         success: false,
         skipped: true,
         error: 'Recipient is an internal company account with no mailbox',
-        provider: 'postmark',
+        provider,
         retryable: false
       };
     }
@@ -164,7 +234,7 @@ class EmailHandler {
         success: false,
         skipped: true,
         error: 'The careers mailbox receives employment email only',
-        provider: 'postmark',
+        provider,
         retryable: false
       };
     }
@@ -174,7 +244,7 @@ class EmailHandler {
       return {
         success: false,
         error: `Invalid recipient email: ${to}`,
-        provider: 'postmark',
+        provider,
         retryable: false
       };
     }
@@ -196,13 +266,30 @@ class EmailHandler {
       return {
         success: false,
         error: 'Invalid EMAIL_REDIRECT_TO',
-        provider: 'postmark',
+        provider,
         retryable: false
       };
     }
     const recipient = redirectTo || to;
 
-    // Prepare Postmark message
+    // The selected provider must be usable. This is a misconfiguration, not
+    // "email is off": report it as a retryable failure so the queue keeps the
+    // job and the fix (set the token, or flip EMAIL_PROVIDER back) recovers it.
+    // Never fall back to the other provider silently — a rollback is a decision.
+    const client = this.clientFor(provider);
+    if (!client) {
+      this.error(`[EmailHandler] ✗ Not sent to ${to}: EMAIL_PROVIDER=${provider} is not configured | Subject: ${subject}`);
+      return {
+        success: false,
+        provider,
+        error: `Email provider "${provider}" is not configured`,
+        retryable: true,
+        recipient: to
+      };
+    }
+
+    // Prepare the message. Field names are Postmark's; the ZeptoMail client
+    // adapts them (services/email/zeptomailClient.js).
     const msg = {
       From: senderName ? `${senderName} <${senderEmail}>` : senderEmail,
       To: recipient,
@@ -234,15 +321,15 @@ class EmailHandler {
 
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
       try {
-        const response = await this.client.sendEmail(msg);
+        const response = await client.sendEmail(msg);
 
         const messageId = response?.MessageID;
 
-        this.log(`[EmailHandler] ✓ Email sent to ${recipient}${redirectTo ? ` (redirected from ${to})` : ''} | Subject: ${subject} | MessageID: ${messageId}`);
+        this.log(`[EmailHandler] ✓ Email sent via ${provider} to ${recipient}${redirectTo ? ` (redirected from ${to})` : ''} | Subject: ${subject} | MessageID: ${messageId}`);
 
         return {
           success: true,
-          provider: 'postmark',
+          provider,
           messageId,
           attempt,
           recipient,
@@ -255,7 +342,7 @@ class EmailHandler {
         // Check if error is retryable
         const isRetryable = this.isRetryableError(error);
 
-        this.error(`[EmailHandler] ✗ Attempt ${attempt}/${this.retryAttempts} failed for ${recipient}:`, error.message);
+        this.error(`[EmailHandler] ✗ ${provider} attempt ${attempt}/${this.retryAttempts} failed for ${recipient}:`, error.message);
 
         if (!isRetryable || attempt >= this.retryAttempts) {
           // Don't retry if error is not retryable or max attempts reached
@@ -272,10 +359,10 @@ class EmailHandler {
     // All attempts failed
     return {
       success: false,
-      provider: 'postmark',
+      provider,
       error: this.extractErrorMessage(lastError),
       statusCode: lastError?.statusCode,
-      postmarkErrorCode: lastError?.code,
+      providerErrorCode: lastError?.code,
       retryable: this.isRetryableError(lastError),
       recipient: to
     };
@@ -283,7 +370,8 @@ class EmailHandler {
 
   /**
    * Check if error is retryable
-   * @param {Error} error - Error object (Postmark errors expose statusCode + code)
+   * @param {Error} error - Error object. Both provider clients expose statusCode + code;
+   *        the ZeptoMail client also flags transient network failures `retryable`.
    * @returns {boolean} - True if error is retryable
    */
   isRetryableError(error) {
@@ -305,6 +393,9 @@ class EmailHandler {
     }
 
     // Network errors are retryable
+    if (error.retryable === true) {
+      return true;
+    }
     if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
       return true;
     }
@@ -320,9 +411,10 @@ class EmailHandler {
   extractErrorMessage(error) {
     if (!error) return 'Unknown error';
 
-    // Postmark errors carry a human-readable .message plus a numeric .code.
+    // Provider errors carry a human-readable .message plus a code (Postmark: numeric,
+    // ZeptoMail: e.g. TM_4001).
     if (error.message) {
-      return error.code ? `${error.message} (Postmark code ${error.code})` : error.message;
+      return error.code ? `${error.message} (code ${error.code})` : error.message;
     }
 
     return 'Failed to send email';
@@ -359,7 +451,8 @@ class EmailHandler {
   getStatus() {
     return {
       enabled: this.isEnabled,
-      provider: 'postmark',
+      provider: selectedProvider(),
+      configuredProviders: this.configuredProviders(),
       fromEmail: this.fromEmail,
       fromName: this.fromName,
       messageStream: this.defaultStream,
@@ -482,7 +575,7 @@ class EmailHandler {
    * @param {string} params.to - Recipient email
    * @param {Object} params.order - Order document (rupee amounts already computed)
    * @param {Object} [params.user] - User document (name)
-   * @param {Array<Object>} [params.attachments] - Postmark attachments (invoice PDF)
+   * @param {Array<Object>} [params.attachments] - attachments (invoice PDF)
    * @returns {Promise<Object>} - Result with success status
    */
   async sendOrderConfirmation({ to, order, user = null, attachments }) {
@@ -502,7 +595,7 @@ class EmailHandler {
    * @param {Object} params.order - Order document (Mongoose doc or lean)
    * @param {string} params.status - New status (shipped|delivered|cancelled|refunded)
    * @param {Object} [params.user] - User document (name)
-   * @param {Array<Object>} [params.attachments] - Postmark attachments (e.g. shipping slip PDF)
+   * @param {Array<Object>} [params.attachments] - attachments (e.g. shipping slip PDF)
    * @returns {Promise<Object>} - Result with success status
    */
   async sendOrderStatusUpdate({ to, order, status, user = null, attachments, payment = null, shipment = null }) {
@@ -617,9 +710,10 @@ class EmailHandler {
 
   /**
    * Send the welcome email on registration.
-   * Sent from a friendlier sender (POSTMARK_WELCOME_FROM_EMAIL, e.g. info@autobacsindia.com)
-   * than the default transactional noreply@ — falls back to the default sender if unset.
-   * The address must be on a verified sender / confirmed domain in Postmark.
+   * Sent from a friendlier sender (EMAIL_WELCOME_FROM_ADDRESS, else the historical
+   * POSTMARK_WELCOME_FROM_EMAIL — e.g. info@autobacsindia.com) than the default
+   * transactional noreply@; falls back to the default sender if unset. The address
+   * must be on a domain verified with the provider.
    * @param {string} to - Recipient email
    * @param {Object} params
    * @param {string} params.name - User's name
@@ -634,8 +728,8 @@ class EmailHandler {
       subject,
       text,
       html,
-      fromEmail: process.env.POSTMARK_WELCOME_FROM_EMAIL || undefined,
-      fromName: process.env.POSTMARK_WELCOME_FROM_NAME || undefined,
+      fromEmail: envFirst('EMAIL_WELCOME_FROM_ADDRESS', 'POSTMARK_WELCOME_FROM_EMAIL'),
+      fromName: envFirst('EMAIL_WELCOME_FROM_NAME', 'POSTMARK_WELCOME_FROM_NAME'),
     });
   }
 }

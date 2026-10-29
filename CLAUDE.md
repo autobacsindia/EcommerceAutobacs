@@ -32,11 +32,11 @@ The live site `autobacsindia.com` is still **WooCommerce/WordPress**. This repo 
 
 - **Now (dev):** backend + frontend both on Railway (`*.railway.app`).
 
-- **Target:** backend on Railway → `api.autobacsindia.com`; frontend on **Vercel** → `autobacsindia.com`. Redis/Cloudinary/Postmark stay (domain-independent); catalog search is Atlas Search, which lives with the database.
+- **Target:** backend on Railway → `api.autobacsindia.com`; frontend on **Vercel** → `autobacsindia.com`. Redis/Cloudinary/ZeptoMail stay (domain-independent); catalog search is Atlas Search, which lives with the database.
 
 - **The move is env-only** — code is env-driven, no host edits needed. Key vars: frontend `NEXT_PUBLIC_API_URL` (→ `https://api.autobacsindia.com`), `NEXT_PUBLIC_APP_URL` (→ `https://autobacsindia.com`), `BACKEND_API_URL` (suggestions route, needs `/api/v1`); backend `FRONTEND_URL`/`FRONTEND_URLS` (CORS), `GOOGLE_CALLBACK_URL`, `NODE_ENV=production`.
 
-- **Also at cutover:** split Redis into `REDIS_URL` (cache/sessions) + `QUEUE_REDIS_URL` (BullMQ/rate-limit); `COOKIE_DOMAIN`/`COOKIE_SAMESITE` matter once api/apex are separate subdomains. External dashboards: Cloudflare DNS (apex→Vercel, `api`→Railway, low TTL for rollback), Google OAuth redirect URI, Razorpay webhook, Postmark sender domain.
+- **Also at cutover:** split Redis into `REDIS_URL` (cache/sessions) + `QUEUE_REDIS_URL` (BullMQ/rate-limit); `COOKIE_DOMAIN`/`COOKIE_SAMESITE` matter once api/apex are separate subdomains. External dashboards: Cloudflare DNS (apex→Vercel, `api`→Railway, low TTL for rollback), Google OAuth redirect URI, Razorpay webhook, ZeptoMail sender domain (already verified on `autobacsindia.com`).
 
 - **Gotcha:** legacy `autobacsindia.com/wp-content/**` images (`next.config.ts` allowlist) die when the apex leaves WordPress — migrate to Cloudinary first. Flush Redis `route:*`/`public:*` after cutover.
 
@@ -148,7 +148,7 @@ A change is not done until, as applicable:
 
 The detail behind the [decisions table](#architecture-decisions-to-honor-correctness-scale--ux). These are how the platform stays correct, fast, and scalable. New code follows them where applicable; existing code is migrated in dedicated optimization passes, not smuggled into feature diffs. Optimization work identified for the task is a blocker for completion and must be finished before the task is declared done.
 
-> **Prefer what already exists.** The backing infrastructure is chosen and in place — **Razorpay** (payments), **MongoDB/Mongoose** (data), **MongoDB Atlas Search** (catalog search), **Redis** (cache/sessions) + **BullMQ** (jobs/queues), **Cloudinary** (media), **Postmark** (email), **Twilio** (SMS), **Cloudflare** (CDN), and the **config-driven SEO system**. Where one of these covers the job, **use it** — do not stand up a second, parallel way of doing the same thing (a rival cache, a hand-rolled search over Mongo regex, a bespoke queue). Named patterns below describe the *target*; if the repo already satisfies one with an equivalent choice, keep it. Replace an established primitive only as a deliberate, **measured** upgrade with a clear win.
+> **Prefer what already exists.** The backing infrastructure is chosen and in place — **Razorpay** (payments), **MongoDB/Mongoose** (data), **MongoDB Atlas Search** (catalog search), **Redis** (cache/sessions) + **BullMQ** (jobs/queues), **Cloudinary** (media), **Zoho ZeptoMail** (email; Postmark kept as rollback until cancelled), **Twilio** (SMS), **Cloudflare** (CDN), and the **config-driven SEO system**. Where one of these covers the job, **use it** — do not stand up a second, parallel way of doing the same thing (a rival cache, a hand-rolled search over Mongo regex, a bespoke queue). Named patterns below describe the *target*; if the repo already satisfies one with an equivalent choice, keep it. Replace an established primitive only as a deliberate, **measured** upgrade with a clear win.
 
 ### 1. Payments & orders (Razorpay)
 
@@ -266,11 +266,15 @@ Migrated off Elasticsearch on 2026-08-31 (Elastic Cloud's card payments kept bei
 
 - **Alert on the money path:** payment failures, webhook processing errors, reconciliation discrepancies, and order-state anomalies page someone.
 
-### 10. Transactional messaging (Postmark / Twilio)
+### 10. Transactional messaging (ZeptoMail / Twilio)
 
 - **Idempotent sends.** Order-confirmation and shipping emails/SMS fire once per state transition, keyed so a webhook retry doesn't re-send.
 
-- **Transactional stream only** (Postmark) for order lifecycle; marketing/opt-in mail is a separate concern and system.
+- **One send path.** All email goes through `services/emailHandler.js`; `EMAIL_PROVIDER` (`zeptomail` | `postmark`, read per send) picks the transport. ZeptoMail (`services/email/zeptomailClient.js`) is an adapter with the Postmark client's interface, so redirect/guards/retry apply to both. Never call a provider directly.
+
+- **Transactional only** for order lifecycle; ZeptoMail does not allow marketing mail at all. Marketing/opt-in mail is a separate concern and system.
+
+- **Support inbound still rides Postmark.** `POST /api/v1/support/inbound` is a Postmark *inbound* webhook; ZeptoMail is send-only. Cancelling Postmark silently stops support@ mail from becoming tickets unless inbound has moved elsewhere first — see `docs/RUNBOOK-support-inbox.md`.
 
 - **Failures are logged and retryable** (via the queue), never silently swallowed.
 

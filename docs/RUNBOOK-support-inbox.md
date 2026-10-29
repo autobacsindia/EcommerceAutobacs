@@ -13,6 +13,18 @@ archive and break-glass path) and the ticket system (where work happens). If
 ticketing ever breaks, the team opens Gmail as before and nothing is lost. That
 redundancy is deliberate; don't "clean it up" by moving MX to Postmark.
 
+> **Email provider change (2026-10).** Outbound mail — support replies included —
+> moves to Zoho ZeptoMail via `EMAIL_PROVIDER=zeptomail`. On ZeptoMail the
+> support "stream" (step 1) does not exist; support replies share the Mail Agent.
+> ZeptoMail also replaces our `Message-ID` with its own, so a customer reply is
+> matched to its ticket by the signed `support+t.…` Reply-To token (or the
+> subject reference), not by In-Reply-To.
+> **Inbound (step 2) still depends on Postmark**: ZeptoMail cannot receive mail.
+> Before Postmark is cancelled, either confirm this inbound path was never
+> switched on, or move it to another inbound provider — otherwise support@ mail
+> silently stops creating tickets (Gmail still gets it, so nothing is lost, but
+> nobody is working the queue).
+
 ---
 
 ## 1. Postmark — outbound stream
