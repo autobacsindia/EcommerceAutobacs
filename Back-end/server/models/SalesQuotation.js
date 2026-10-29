@@ -7,7 +7,10 @@ import mongoose from 'mongoose';
  *   open      → shared with the customer as a PDF; editable (each edit bumps
  *               `version` and keeps the previous lines in `revisions`)
  *   accepted  → the customer agreed: an Order was created from these exact lines
- *               (`order`), and payment is requested on that order
+ *               (`order`), and payment is requested on that order. Still editable
+ *               while nothing is paid: the edit cancels the unpaid order and its
+ *               links and re-opens the quotation for the customer to accept again
+ *               (salesQuotationService.updateQuotation)
  *   cancelled → withdrawn; kept for the record
  *
  * Nothing here is money owed: a quotation never appears in Orders, reports,
@@ -28,6 +31,23 @@ const LineSchema = new mongoose.Schema(
     listPrice: { type: Number, default: null }, // catalogue price, only when marked down
   },
   { _id: true }
+);
+
+/**
+ * A percentage off the whole quotation (utils/quoteDiscount.js). The seller sets
+ * `percent` + `reason`; `amount` is computed on the server from the lines and is
+ * what `totalAmount` is net of. `by`/`byName`/`at` = who set it — staff-only.
+ */
+const DiscountSchema = new mongoose.Schema(
+  {
+    percent: { type: Number, required: true },
+    amount: { type: Number, required: true }, // rupees, whole
+    reason: { type: String, required: true },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    byName: { type: String, default: '' },
+    at: { type: Date, required: true },
+  },
+  { _id: false }
 );
 
 const AddressSchema = new mongoose.Schema(
@@ -57,8 +77,9 @@ const SalesQuotationSchema = new mongoose.Schema(
     },
     shippingAddress: { type: AddressSchema, required: true },
     items: { type: [LineSchema], default: [] },
-    subtotal: { type: Number, required: true },
-    totalAmount: { type: Number, required: true },
+    subtotal: { type: Number, required: true }, // Σ lines, before the discount
+    discount: { type: DiscountSchema, default: undefined },
+    totalAmount: { type: Number, required: true }, // subtotal − discount.amount
     notes: { type: String, default: '' },
 
     salesUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -66,13 +87,19 @@ const SalesQuotationSchema = new mongoose.Schema(
     validUntil: { type: Date, required: true },
 
     // Previous versions, oldest first — what the customer was shown before an edit.
+    // `order` is set when that version had been accepted: the unpaid order the edit
+    // cancelled.
     revisions: [{
       _id: false,
       version: Number,
       items: [LineSchema],
+      subtotal: Number,
+      discount: { type: DiscountSchema, default: undefined },
       totalAmount: Number,
       savedAt: Date,
       savedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      savedByName: String,
+      order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: undefined },
     }],
 
     // "On hold — customer thinking" (utils/salesHold.js): still open, just parked

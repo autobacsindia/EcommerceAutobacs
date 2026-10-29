@@ -361,8 +361,13 @@ export const getOrderById = async (req, res) => {
   const {
     workflow: _workflow, salesAttribution: _salesAttribution, salesUser: _salesUser,
     salesRep: _salesRep, crmLeadId: _crmLeadId, bankTransferPendingAt: _bankTransferPendingAt,
-    offlinePayment: _offlinePayment, ...customerSafe
+    offlinePayment: _offlinePayment, salesDiscount: _salesDiscount, ...customerSafe
   } = order;
+  // A quotation's % discount: the customer sees the percent and amount; the reason
+  // and who gave it stay with staff.
+  if (order.salesDiscount?.percent) {
+    customerSafe.salesDiscount = { percent: order.salesDiscount.percent, amount: order.salesDiscount.amount };
+  }
 
   const normalizedOrder = {
     ...(staffView ? order : customerSafe),

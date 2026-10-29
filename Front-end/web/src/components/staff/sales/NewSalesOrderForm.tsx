@@ -7,7 +7,7 @@ import { ChevronDown, ChevronUp, Loader2, Minus, Plus, Search, Trash2 } from 'lu
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { deepDiscountLines, deepDiscountWarning, isDeepDiscount } from './offerGuard';
-import { errorMessage, rupees, type Quotation, type SalesOrder, type SalesProduct } from './types';
+import { discountRuleProblem, errorMessage, percentText, previewDiscount, rupees, type Quotation, type SalesOrder, type SalesProduct } from './types';
 import { mobileProblem, normalizeMobile } from './phone';
 import ProductLink from '@/components/staff/ProductLink';
 
@@ -28,6 +28,9 @@ type Line = {
   /** What the rep typed; empty = full price. */
   offer: string;
 };
+
+const REOPEN_CONFIRM = 'The client already accepted this quotation. Saving cancels its unpaid order and the payment links already sent, '
+  + 'and the quotation goes back to "waiting for the client". Continue?';
 
 const EMPTY_CUSTOMER = { name: '', email: '', phone: '' };
 const EMPTY_ADDRESS = { addressLine1: '', addressLine2: '', city: '', state: '', postalCode: '' };
@@ -124,6 +127,14 @@ export default function NewSalesOrderForm({
       offer: l.listPrice ? String(l.price) : '',
     })));
   const [notes, setNotes] = useState(quotation?.notes || '');
+  // % off the whole quotation. Only the percent and the reason are sent; the
+  // server computes the rupee amount and the total.
+  const [discountPercent, setDiscountPercent] = useState(quotation?.discount ? String(quotation.discount.percent) : '');
+  const [discountReason, setDiscountReason] = useState(quotation?.discount?.reason || '');
+  // Editing a quotation the customer already accepted (nothing paid yet).
+  const reopening = quotation?.status === 'accepted';
+  const needsNotPaidCheck = reopening && !!quotation?.editAfterAccept?.payDetailsShared;
+  const [confirmNotPaid, setConfirmNotPaid] = useState(false);
   const [q, setQ] = useState('');
   const [error, setError] = useState('');
   const term = useDebounced(q.trim(), 300);
@@ -212,6 +223,9 @@ export default function NewSalesOrderForm({
   const [phoneTouched, setPhoneTouched] = useState(false);
   const saving = Math.max(0, fullTotal - total);
   const hasProblem = lines.some((l) => lineProblem(l));
+  const percent = discountPercent.trim() === '' ? 0 : Number(discountPercent);
+  const discountProblem = discountRuleProblem(discountPercent, discountReason);
+  const preview = previewDiscount(total, discountProblem ? 0 : percent);
 
   const create = useMutation({
     mutationFn: async (): Promise<{ quotation: Quotation; orderId?: string }> => {
@@ -227,6 +241,8 @@ export default function NewSalesOrderForm({
           offerPrice: l.offer.trim() === '' ? null : Number(l.offer),
         })),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
+      discount: percent > 0 ? { percent, reason: discountReason.trim() } : null,
+      ...(reopening && needsNotPaidCheck ? { confirmNotPaid } : {}),
       };
       if (editing) return apiClient.put<{ quotation: Quotation }>(`/staff/sales/quotations/${quotation!.id}`, body);
       const created = await apiClient.post<{ quotation: Quotation }>('/staff/sales/quotations', body);
@@ -260,11 +276,14 @@ export default function NewSalesOrderForm({
     if (phoneProblem) { setPhoneTouched(true); setError(`Mobile number: ${phoneProblem}.`); return; }
     if (lines.length === 0) { setError('Add at least one product.'); return; }
     if (hasProblem) { setError('Fix the items marked in red.'); return; }
+    if (discountProblem) { setError(`Discount: ${discountProblem}`); return; }
+    if (needsNotPaidCheck && !confirmNotPaid) { setError('Tick the box to confirm the customer has not paid yet.'); return; }
     // Last stop before a real, payable order: a price under half the catalogue
     // one is far more often a dropped zero than a deal (see offerGuard).
     // Custom items have no catalogue price to compare with.
     const suspicious = deepDiscountLines(lines.filter((l) => !l.custom).map((l) => ({ ...l, offer: lineOffer(l) })));
     if (suspicious.length > 0 && !window.confirm(deepDiscountWarning(suspicious, rupees))) return;
+    if (reopening && !window.confirm(REOPEN_CONFIRM)) return;
     create.mutate();
   }
 
@@ -279,6 +298,21 @@ export default function NewSalesOrderForm({
         <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">
           Couldn&apos;t load that customer — fill in their details below.
         </p>
+      )}
+      {reopening && (
+        <div role="note" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">The client already accepted this quotation.</p>
+          <p>
+            Saving cancels its unpaid order and every payment link already sent, so the old amount can no longer be paid.
+            The quotation goes back to “waiting for the client” as a new version — share it again and accept it when they agree.
+          </p>
+          {needsNotPaidCheck && (
+            <label className="mt-2 flex items-start gap-2 font-medium">
+              <input type="checkbox" className="mt-0.5 h-4 w-4" checked={confirmNotPaid} onChange={(e) => setConfirmNotPaid(e.target.checked)} />
+              The customer has our bank / GPay QR details. I checked with them that they have not paid yet.
+            </label>
+          )}
+        </div>
       )}
       {/* Customer */}
       <section className="rounded-xl border border-gray-200 bg-white p-5">
@@ -534,6 +568,35 @@ export default function NewSalesOrderForm({
         )}
       </section>
 
+      <section className="rounded-xl border border-gray-200 bg-white p-5" aria-labelledby="discount-h">
+        <h2 id="discount-h" className="text-sm font-semibold text-gray-900">Discount on the total (optional)</h2>
+        <p className="mb-3 text-xs text-gray-500">A percentage off the whole quotation, after the offer prices. Your name and the reason are shown to the team only; the customer sees “Discount (5%)”.</p>
+        <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+          <div>
+            <label className={label} htmlFor="discount-percent">Discount %</label>
+            <div className="relative">
+              <input id="discount-percent" inputMode="decimal" className={`${input} pr-8`} placeholder="e.g. 5" maxLength={5}
+                value={discountPercent} aria-invalid={!!discountProblem && discountPercent.trim() !== ''}
+                onChange={(e) => setDiscountPercent(e.target.value.replace(/[^\d.]/g, ''))} />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">%</span>
+            </div>
+          </div>
+          <div>
+            <label className={label} htmlFor="discount-reason">Reason {percent > 0 ? '' : '(needed with a discount)'}</label>
+            <input id="discount-reason" className={input} maxLength={300} value={discountReason}
+              placeholder="e.g. Repeat customer, matched a competitor's price"
+              required={percent > 0} onChange={(e) => setDiscountReason(e.target.value)} />
+          </div>
+        </div>
+        {discountProblem && (discountPercent.trim() !== '' || discountReason.trim() !== '')
+          ? <p className="mt-2 text-xs text-red-600" role="status">{discountProblem}</p>
+          : percent > 0 && (
+            <p className="mt-2 text-xs text-gray-600" role="status">
+              {percentText(percent)} of {rupees(total)} = <span className="font-medium text-green-700">−{rupees(preview.amount)}</span> → customer pays {rupees(preview.total)}
+            </p>
+          )}
+      </section>
+
       <section className="rounded-xl border border-gray-200 bg-white p-5">
         <label className={label} htmlFor="notes">Note for the team (optional)</label>
         <textarea id="notes" rows={2} maxLength={1000} className={input} value={notes} onChange={(e) => setNotes(e.target.value)}
@@ -546,7 +609,8 @@ export default function NewSalesOrderForm({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs text-gray-500">{payFirst ? 'Amount to pay' : 'Quotation total'}</p>
-            <p className="text-2xl font-bold text-gray-900">{rupees(total)}</p>
+            <p className="text-2xl font-bold text-gray-900">{rupees(preview.total)}</p>
+            {preview.amount > 0 && <p className="text-xs font-medium text-green-700">After {percentText(percent)} discount (−{rupees(preview.amount)} on {rupees(total)})</p>}
             {saving > 0 && <p className="text-xs font-medium text-green-700">Offer saves {rupees(saving)} on {rupees(fullTotal)}</p>}
           </div>
           <button

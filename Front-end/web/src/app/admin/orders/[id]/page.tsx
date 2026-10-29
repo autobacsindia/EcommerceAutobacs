@@ -160,6 +160,8 @@ interface Order {
   totalAmount: number;
   /** A Razorpay offer at checkout: the customer paid (and can be refunded) less than totalAmount. */
   gatewayOffer?: GatewayOffer | null;
+  /** An accepted GTM quotation's % discount (inside `discount`): who gave it and why. */
+  salesDiscount?: { percent: number; amount: number; reason?: string; byName?: string; at?: string } | null;
   trackingNumber?: string;
   carrier?: {
     name?: string;
@@ -1156,10 +1158,16 @@ function AdminOrderDetailPageInner() {
               
               {order.discount > 0 && (
                 <div className="flex justify-between text-green-600">
-                  <span>Discount</span>
+                  <span>{order.salesDiscount?.percent ? `Discount (${order.salesDiscount.percent}%)` : 'Discount'}</span>
                   <span>-₹{order.discount.toFixed(2)}</span>
                 </div>
               )}
+              {order.salesDiscount?.percent ? (
+                <p className="text-xs text-gray-500">
+                  Quotation discount{order.salesDiscount.byName ? ` given by ${order.salesDiscount.byName}` : ''}
+                  {order.salesDiscount.reason ? ` — ${order.salesDiscount.reason}` : ''}
+                </p>
+              ) : null}
               
               <div className="border-t pt-3 mt-3 flex justify-between font-semibold">
                 <span>Total</span>

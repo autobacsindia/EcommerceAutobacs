@@ -185,7 +185,11 @@ class OrderStatusService {
       // parcels each deserve a notification. The review-request job is NOT suppressed:
       // it still fires exactly once, on final delivery.
       suppressStatusEmail = false,
-      session = null
+      session = null,
+      // With `session`: the caller voids any Spin-to-Win reward itself once its
+      // transaction commits (spinService.voidForOrder), so the in-transaction skip
+      // below is expected, not a forgotten clawback.
+      deferSpinVoid = false
     } = options;
 
     try {
@@ -338,7 +342,7 @@ class OrderStatusService {
       // Awaited (not queued) for the same reason as the CRM sync — deterministic for
       // callers and tests — but never fatal, because a reward is not worth failing a
       // legitimate status transition over.
-      await this._voidSpinRewardOnStatus(order, newStatus, session);
+      if (!(session && deferSpinVoid)) await this._voidSpinRewardOnStatus(order, newStatus, session);
 
       return {
         success: true,

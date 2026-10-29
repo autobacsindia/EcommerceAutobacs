@@ -29,6 +29,7 @@ import { formatInvoiceNumber, invoiceFileName } from '../utils/invoiceFormat.js'
 import { formatLongDateIST } from '../utils/datetime.js';
 import paymentRepository from '../repositories/paymentRepository.js';
 import { describeEmiPlan } from '../utils/paymentMethodDetails.js';
+import { discountLabel } from '../utils/quoteDiscount.js';
 
 /** Payment enum → invoice-facing label. */
 const PAYMENT_METHOD_LABELS = {
@@ -463,6 +464,8 @@ export const generateInvoicePdf = async (order, user = null) => {
       if (order.couponDiscount)
         sumRow(`Coupon${order.couponCode ? ` (${order.couponCode})` : ''}:`, `- ${rs(order.couponDiscount)}`);
       if (order.karmaDiscount) sumRow('Karma points:', `- ${rs(order.karmaDiscount)}`);
+      // A GTM quotation's percentage discount — percent and amount only.
+      if (order.salesDiscount?.amount) sumRow(`${discountLabel(order.salesDiscount.percent)}:`, `- ${rs(order.salesDiscount.amount)}`);
       // "Tax (incl.)" overstated what this number is. services/pricingService.js
       // back-calculates ONE blended rate with a hardcoded /1.18 and its own
       // comment says it is "for display only" — car accessories span 18% and 28%,

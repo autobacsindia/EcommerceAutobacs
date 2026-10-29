@@ -45,6 +45,8 @@ const saveBusinessProfile = (userId, buyer) =>
  * @param {Object} p.shippingAddress  validated address (addressLine1/city/state/postalCode present)
  * @param {number} [p.shippingCost]
  * @param {number} [p.discount]
+ * @param {Object} [p.salesDiscount]  an accepted quotation's % discount snapshot
+ *   { percent, amount, reason, by, byName, at } — `amount` must equal `discount`
  * @param {'processing'|'delivered'} [p.status]  final state for paymentMode 'paid'
  * @param {string} [p.notes]
  * @param {string} [p.leadId]
@@ -65,6 +67,7 @@ export async function createOfflineOrderRecord({
   shippingAddress,
   shippingCost = 0,
   discount = 0,
+  salesDiscount = null,
   status = 'processing',
   notes,
   leadId,
@@ -135,6 +138,7 @@ export async function createOfflineOrderRecord({
     source: 'offline',
     salesRep: salesRepId,
     ...(salesUserId && { salesUser: salesUserId }),
+    ...(salesDiscount && { salesDiscount }),
     ...(buyer.type === BUYER_TYPES.ENTERPRISE && { buyer }),
     legalAcceptance,
     // Link flow converts the chosen lead on payment (deferred), so remember it.

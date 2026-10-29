@@ -8,7 +8,7 @@ import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 import { QUOTATION_STATUS } from './QuotationDetail';
-import { errorMessage, rupees, type QuotationPage } from './types';
+import { errorMessage, percentText, rupees, type QuotationPage } from './types';
 
 const FILTERS = [
   { key: 'open', label: 'Open' },
@@ -68,7 +68,10 @@ export default function QuotationsList() {
               <span className="font-semibold text-gray-900">{r.number}</span>
               <span className="min-w-0 flex-1 truncate text-sm text-gray-700">{r.customer.name}</span>
               {team && r.salesPerson && <span className="text-xs text-gray-500">{r.salesPerson}</span>}
-              <span className="text-sm font-semibold text-gray-900">{rupees(r.totalAmount)}</span>
+              <span className="text-sm font-semibold text-gray-900">
+                {rupees(r.totalAmount)}
+                {r.discount && <span className="ml-1.5 rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-800">{percentText(r.discount.percent)} off</span>}
+              </span>
               {r.hold && (r.status === 'open' || r.status === 'expired')
                 ? <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${r.hold.due ? 'bg-orange-100 text-orange-800' : 'bg-amber-100 text-amber-800'}`}>
                     {r.hold.due ? 'Follow up now' : `On hold · follow up ${formatDateIST(r.hold.until)}`}

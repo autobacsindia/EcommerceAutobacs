@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import BaseRepository from './baseRepository.js';
 import SalesQuotation from '../models/SalesQuotation.js';
 
@@ -24,6 +25,18 @@ class SalesQuotationRepository extends BaseRepository {
    */
   async updateIfOpen(id, update, { session = null } = {}) {
     return SalesQuotation.findOneAndUpdate({ _id: id, status: 'open' }, update, { new: true, session }).lean();
+  }
+
+  /** Run `fn(session)` in one MongoDB transaction (retried on transient conflicts). */
+  async inTransaction(fn) {
+    const session = await mongoose.startSession();
+    try {
+      let out;
+      await session.withTransaction(async () => { out = await fn(session); });
+      return out;
+    } finally {
+      await session.endSession();
+    }
   }
 }
 

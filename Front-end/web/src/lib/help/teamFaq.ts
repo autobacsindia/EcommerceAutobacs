@@ -112,6 +112,16 @@ export const TEAM_HELP: TeamHelpSection[] = [
         links: [{ label: 'Payment first', href: '/team/sales/pay-first' }],
       },
       {
+        question: 'How do I give a discount on the whole quotation?',
+        answer: 'In the quotation, fill in "Discount %" and the reason. Example: 5% on ₹11,800 takes ₹590 off, so the customer pays ₹11,210. The customer sees "Discount (5%)"; your name and the reason are shown to the team only.',
+        links: [{ label: 'New quotation', href: '/team/sales/new' }],
+      },
+      {
+        question: 'The customer accepted, but now wants a change.',
+        answer: 'Open the quotation and choose Edit quotation. Saving cancels the unpaid order and every payment link already sent, and the quotation goes back to waiting for the customer as a new version. Share it again and accept it when they agree. This is not possible once any money is received or a bank transfer is waiting for accounts.',
+        links: [{ label: 'Quotations', href: '/team/sales/quotations' }],
+      },
+      {
         question: 'The customer paid by bank transfer instead of the link.',
         answer: 'Record it under Bank transfers. The order is paid only after accounts finds the money in the bank and confirms it.',
         links: [{ label: 'Bank transfers', href: '/team/bank-transfers' }],

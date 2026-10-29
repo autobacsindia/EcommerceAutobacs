@@ -91,6 +91,21 @@ it('saved details: ready to share as PDF and WhatsApp; not changeable once paid'
   expect(screen.queryByRole('button', { name: /Change/ })).not.toBeInTheDocument();
 });
 
+it('a cancelled order (e.g. replaced by an edited quotation) offers nothing to share', async () => {
+  const details: PayDetails = { method: 'other', bank: null, upiId: '', hasQr: false, note: 'Cash at the store', setBy: 'Asha', setAt: '' };
+  get.mockResolvedValue(ORDER({
+    payDetails: details, status: 'cancelled', subtotal: 24000, totalAmount: 23400,
+    discount: { percent: 2.5, amount: 600, reason: 'Diwali offer', byName: 'Asha', at: null },
+  }));
+  wrap(<SalesOrderPayment id="o1" />);
+  expect(await screen.findByText('This order was cancelled.')).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /Share on WhatsApp/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: /Payment request PDF/ })).not.toBeInTheDocument();
+  // The discount is still on record, with who gave it.
+  expect(screen.getByText('Discount 2.5%')).toBeInTheDocument();
+  expect(screen.getByText('Reason: Diwali offer')).toBeInTheDocument();
+});
+
 it('the message says to pay by bank only above ₹50,000', () => {
   const d: PayDetails = { method: 'upi_qr', bank: null, upiId: '', hasQr: true, note: '', setBy: '', setAt: null };
   const o = (total: number) => ({ orderNumber: '#A', totalAmount: total, customer: { name: 'Ravi K' } });
