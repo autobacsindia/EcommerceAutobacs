@@ -18,11 +18,15 @@ import {
 } from '@/lib/leads';
 import { usePanel } from '@/lib/usePanel';
 import { displayEmail } from '@/lib/internalEmail';
+import CustomerPastSales from '@/components/staff/pastSales/CustomerPastSales';
+import type { CustomerPastSale } from '@/components/staff/pastSales/types';
 
 interface LeadDetailResponse {
   success: boolean;
   lead: Lead;
   orderHistory: OrderHistoryItem[];
+  /** Bought in the store / by phone before the website, matched by phone. */
+  pastSales?: CustomerPastSale[];
 }
 
 export default function LeadDetailPage() {
@@ -30,6 +34,7 @@ export default function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [lead, setLead] = useState<Lead | null>(null);
   const [orderHistory, setOrderHistory] = useState<OrderHistoryItem[]>([]);
+  const [pastSales, setPastSales] = useState<CustomerPastSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -49,7 +54,7 @@ export default function LeadDetailPage() {
     setLoading(true);
     try {
       const res = await apiClient.get<LeadDetailResponse>(`/leads/${id}`);
-      if (res.success) { setLead(res.lead); setOrderHistory(res.orderHistory || []); }
+      if (res.success) { setLead(res.lead); setOrderHistory(res.orderHistory || []); setPastSales(res.pastSales || []); }
     } catch (e) {
       console.error('[Lead] load failed', e);
     } finally {
@@ -288,6 +293,8 @@ export default function LeadDetailPage() {
               </dl>
             </section>
           )}
+
+          <CustomerPastSales sales={pastSales} />
 
         </div>
       </div>

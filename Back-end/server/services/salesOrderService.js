@@ -160,6 +160,11 @@ function shape(o) {
  */
 export async function searchSalesProducts(actor, q) {
   if (!canSell(actor)) throw fail('Not authorized.', 403);
+  return findSalesProducts(q);
+}
+
+/** The search itself, for callers that have already decided who may use it (past sales). */
+export async function findSalesProducts(q) {
   const term = String(q || '').trim();
   if (term.length < 2) return [];
   const { products = [] } = await SearchService.searchProducts({ search: term, limit: 8, page: 1 });

@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import {
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
-  GraduationCap, HandCoins, Handshake, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
+  GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserRoundCog,
   Users, Wallet, Zap,
 } from 'lucide-react';
@@ -85,6 +85,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/leads', label: 'Leads', icon: Briefcase },
       { href: '/admin/sales-reps', label: 'Sales Reps', icon: UserRoundCog },
+      { href: '/admin/past-sales', label: 'Past sales', icon: History },
       { href: '/admin/affiliates', label: 'Affiliates', icon: Handshake },
       // Listed BEFORE the batches screen: "who is due" is the question you start from,
     // "what have we already built" is the follow-up.

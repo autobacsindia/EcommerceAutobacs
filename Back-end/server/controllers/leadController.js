@@ -11,6 +11,7 @@ import orderRepository from '../repositories/orderRepository.js';
 import { LEAD_HISTORY_FIELDS } from '../repositories/orderProjections.js';
 import salesRepRepository from '../repositories/salesRepRepository.js';
 import leadSyncService from '../services/leadSyncService.js';
+import { customerPastSales } from '../services/pastSaleService.js';
 import { resolveRep } from '../utils/salesRepResolver.js';
 import { escapeRegex, phoneSearchPattern } from '../utils/identity.js';
 import { LEAD_STATUSES, SOURCE_TYPES, NURTURE_SOURCE, OPEN_LEAD_STATUSES } from '../config/leadConstants.js';
@@ -235,7 +236,11 @@ export const getLeadById = async (req, res) => {
     });
   }
 
-  res.json({ success: true, lead, orderHistory });
+  // Sales made in the store / by phone before the website (models/PastSale.js),
+  // matched on the phone number however it was written.
+  const pastSales = await customerPastSales(lead.phone || lead.linkedUser?.phone);
+
+  res.json({ success: true, lead, orderHistory, pastSales });
 };
 
 // @desc    Claim an unassigned lead FOR a named rep (atomic)

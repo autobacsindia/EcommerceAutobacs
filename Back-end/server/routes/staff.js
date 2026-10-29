@@ -57,6 +57,7 @@ import {
   validateUndoDelivered,
 } from '../validators/staff.validator.js';
 import staffTaskRoutes from './staffTasks.js';
+import pastSaleRoutes from './pastSales.js';
 import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard, uploadPaymentProof, uploadPaymentRequestFiles } from '../middleware/uploadMiddleware.js';
 import {
   listQueue,
@@ -151,6 +152,9 @@ router.use(authenticatedUserRateLimit, protect, staffOrAdmin);
 
 // Tasks given to people in the panel (routes/staffTasks.js) — behind the gate above.
 router.use('/tasks', staffTaskRoutes);
+
+// Past (offline) sales (routes/pastSales.js) — GTM sellers, accounts, admin.
+router.use('/past-sales', pastSaleRoutes);
 
 // @route  GET /staff/me — the caller's team profile (null for an admin)
 router.get('/me', (req, res) => {

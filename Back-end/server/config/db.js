@@ -556,6 +556,30 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ BankTransfer indexes confirmed');
 
+    // Past (offline) sales (models/PastSale.js) — same names and options as the
+    // schema. The two unique indexes are what stop one bill being entered twice
+    // when two uploads or two clicks race; both are scoped to active rows so a
+    // deleted sale can be entered again.
+    await db.collection('pastsales').createIndex(
+      { invoiceKey: 1 },
+      { unique: true, partialFilterExpression: { active: true, invoiceKey: { $type: 'string' } }, name: 'past_sale_invoice_active', background: true }
+    );
+    await db.collection('pastsales').createIndex(
+      { fingerprint: 1 },
+      { unique: true, partialFilterExpression: { active: true }, name: 'past_sale_fingerprint_active', background: true }
+    );
+    await db.collection('pastsales').createIndex({ active: 1, saleDate: -1, _id: -1 }, { name: 'past_sale_recent', background: true });
+    await db.collection('pastsales').createIndex({ active: 1, salesUser: 1, saleDate: -1, _id: -1 }, { name: 'past_sale_by_seller', background: true });
+    await db.collection('pastsales').createIndex(
+      { 'customer.phoneKey': 1, saleDate: -1 },
+      { partialFilterExpression: { 'customer.phoneKey': { $type: 'string' } }, name: 'past_sale_customer_phone', background: true }
+    );
+    await db.collection('pastsales').createIndex(
+      { batchId: 1 },
+      { partialFilterExpression: { batchId: { $type: 'string' } }, name: 'past_sale_batch', background: true }
+    );
+    console.log('✓ PastSale indexes confirmed');
+
     // Staff tasks (models/StaffTask.js, StaffTaskComment.js) — same names as the
     // schemas. Every list and the bell count is one range on one of these; the
     // clientId indexes are what make a double-clicked create or comment land once.
