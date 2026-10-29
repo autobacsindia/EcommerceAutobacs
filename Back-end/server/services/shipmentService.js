@@ -66,12 +66,16 @@ class ShipmentService {
    * @param {object} [payload.proofPhoto] - team panel: supplier's private parcel photo ref
    * @param {boolean} [payload.dispatch=true] - false leaves the parcel `packed`
    * @param {string} [payload.notes]
+   * @param {Date}   [payload.shippedAt] - when it really left, for a parcel recorded
+   *   after the fact (a team correction); defaults to now
    * @param {object} [opts]
    * @param {string} [opts.userId] - admin creating it
+   * @param {boolean} [opts.notify=true] - false: no customer email and no review
+   *   request (a correction of an order the customer received long ago)
    * @returns {Promise<{success: boolean, message: string, order?: object, shipment?: object}>}
    */
   async createShipment(orderId, payload = {}, opts = {}) {
-    const { userId } = opts;
+    const { userId, notify = true } = opts;
     const dispatch = payload.dispatch !== false;
 
     for (let attempt = 0; attempt < MAX_PUSH_ATTEMPTS; attempt += 1) {
@@ -125,7 +129,7 @@ class ShipmentService {
       const check = validateProposedShipment(order, proposed);
       if (!check.valid) return { success: false, message: check.message };
 
-      const now = new Date();
+      const now = payload.shippedAt || new Date();
       const shipment = {
         sequence: (order.shipments?.length || 0) + 1,
         status: dispatch ? SHIPMENT_STATUS.SHIPPED : SHIPMENT_STATUS.PACKED,
@@ -171,8 +175,8 @@ class ShipmentService {
       if (!updated) continue; // lost the race — re-read and re-validate
 
       const created = updated.shipments[updated.shipments.length - 1];
-      await this._syncOrderStatus(updated, userId);
-      if (dispatch) this._enqueueShipmentEmail(orderId, created._id.toString(), 'shipped');
+      await this._syncOrderStatus(updated, userId, { notify, occurredAt: payload.shippedAt });
+      if (dispatch && notify) this._enqueueShipmentEmail(orderId, created._id.toString(), 'shipped');
 
       return {
         success: true,
@@ -199,11 +203,15 @@ class ShipmentService {
    * @param {string} shipmentId
    * @param {object} [opts]
    * @param {string} [opts.userId]
+   * @param {Date}   [opts.deliveredAt] - when it really arrived (a correction); defaults to now
+   * @param {boolean} [opts.notify=true] - false: no customer email and no review request
    * @returns {Promise<{success: boolean, message: string, order?: object, alreadyDelivered?: boolean}>}
    */
   async markShipmentDelivered(orderId, shipmentId, opts = {}) {
+    const { notify = true, deliveredAt } = opts;
     const updated = await orderRepository.transitionShipment(
       orderId, shipmentId, SHIPMENT_STATUS.SHIPPED, SHIPMENT_STATUS.DELIVERED,
+      deliveredAt ? { deliveredAt } : {},
     );
 
     if (!updated) {
@@ -220,8 +228,8 @@ class ShipmentService {
       };
     }
 
-    await this._syncOrderStatus(updated, opts.userId);
-    this._enqueueShipmentEmail(orderId, String(shipmentId), 'delivered');
+    await this._syncOrderStatus(updated, opts.userId, { notify, occurredAt: deliveredAt });
+    if (notify) this._enqueueShipmentEmail(orderId, String(shipmentId), 'delivered');
 
     return { success: true, message: 'Parcel marked delivered', order: updated };
   }
@@ -432,10 +440,12 @@ class ShipmentService {
    * i.e. when the LAST parcel lands, guarded by `karmaAwarded`).
    *
    * The customer status email is suppressed: parcels send their own, one each. The
-   * review-request job is NOT suppressed — it still fires once on final delivery.
+   * review-request job is NOT suppressed — it still fires once on final delivery —
+   * unless `notify` is false (a team correction of a long-finished order), which also
+   * dates the roll-up at `occurredAt` rather than now.
    * @private
    */
-  async _syncOrderStatus(order, userId) {
+  async _syncOrderStatus(order, userId, { notify = true, occurredAt } = {}) {
     const next = rollUpStatus(order);
     if (!next || next === order.status) return;
 
@@ -445,6 +455,8 @@ class ShipmentService {
       reason: 'admin_update',
       notes: `Rolled up from parcels (${fulfilmentSummary(order).label})`,
       suppressStatusEmail: true,
+      suppressReviewRequest: !notify,
+      occurredAt,
     });
 
     /*

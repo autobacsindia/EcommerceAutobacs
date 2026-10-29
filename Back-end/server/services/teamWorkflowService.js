@@ -56,6 +56,7 @@ import { PARCEL_STEP_VALUES, PARCEL_STEP_LABELS, TRACKING_EVENT_STATUS, MAX_PARC
 import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
 import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
 import { assertNoPendingSupplierPayment, openSupplierPaymentFor } from './paymentRequestService.js';
+import { correctionOptions, hasCorrections } from '../utils/orderCorrection.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -75,7 +76,7 @@ const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 const actorTeam = (u) => (isAdmin(u) ? 'admin' : u?.staff?.team || '');
 
 /** Teams (plus admin) that may perform each action. */
-const can = {
+export const can = {
   procurement: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.PROCUREMENT),
   accounts: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.ACCOUNTS),
   operations: (u) => isAdmin(u) || onTeam(u, STAFF_TEAMS.OPERATIONS),
@@ -88,7 +89,7 @@ const can = {
 };
 
 /** May this person see this order in the team panel at all? */
-function canView(u, order) {
+export function canView(u, order) {
   if (isAdmin(u)) return true;
   if (!isActiveStaff(u)) return false;
   const inWorkflow = !!order.workflow?.enteredAt;
@@ -212,6 +213,7 @@ const HISTORY_LABELS = {
   stock_undone: 'Stock decision undone',
   decision_undone: 'Customer decision undone',
   dispatch_edited: 'Dispatch details corrected',
+  corrected: 'Order corrected by hand',
   eta_set: 'Expected delivery date set',
 };
 
@@ -224,6 +226,7 @@ function detail(u, o) {
   const base = row(o, view);
   const wfLines = new Map((view?.lines || []).map((l) => [l.itemId, l]));
   const names = new Map((o.items || []).map((it) => [idOf(it._id), itemName(it)]));
+  const corrections = can.procurement(u) ? correctionOptions(o, view) : null;
 
   return {
     ...base,
@@ -297,6 +300,8 @@ function detail(u, o) {
     canContactCustomer: can.decide(u, o),
     // The customer's saved bank account (refunds / NEFT): accounts and admin.
     canSeeCustomerBank: can.accounts(u),
+    // "Edit order": bring an order handled outside the panel up to date (orderCorrectionService).
+    corrections: corrections && hasCorrections(corrections) ? corrections : null,
   };
 }
 
@@ -391,7 +396,7 @@ async function fetchBuffer(url) {
 
 // ── Writes ─────────────────────────────────────────────────────────────────────
 
-const event = (actor, action, { itemId, note } = {}) => ({
+export const event = (actor, action, { itemId, note } = {}) => ({
   at: new Date(),
   by: actor._id,
   byName: actor.name,
@@ -409,7 +414,7 @@ const enqueue = (name, data) => {
 };
 
 /** Re-derive whether the order still has team work, and file it accordingly. */
-async function refreshOpen(orderId) {
+export async function refreshOpen(orderId) {
   const o = await orderRepository.findForWorkflow(orderId);
   const view = o && workflowView(o);
   if (view) await orderRepository.setWorkflowOpen(orderId, view.open);

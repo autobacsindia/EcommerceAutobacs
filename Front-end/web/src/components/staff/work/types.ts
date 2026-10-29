@@ -121,6 +121,12 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
   canContactCustomer: boolean;
   /** Accounts or admin — the customer's saved bank account for refunds / NEFT. */
   canSeeCustomerBank?: boolean;
+  /**
+   * "Edit order" (procurement / admin): what may be corrected by hand — item ids not yet
+   * dispatched, parcel ids in transit / delivered / any, item ids that can go back to New
+   * Order. null when nothing may be corrected.
+   */
+  corrections?: { dispatch: string[]; inTransit: string[]; delivered: string[]; parcels: string[]; back: string[] } | null;
 };
 
 /*

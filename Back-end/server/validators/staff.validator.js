@@ -10,6 +10,7 @@ import mongoose from 'mongoose';
 import { STAFF_TEAM_VALUES, STAFF_USERNAME_PATTERN, STAFF_USERNAME_HINT, GTM_SUB_ROLE_VALUES } from '../config/staff.js';
 import { isCommonPassword, COMMON_PASSWORD_MESSAGE } from '../config/commonPasswords.js';
 import { PARCEL_STEP_VALUES, MAX_STEP_NOTE } from '../utils/parcelSteps.js';
+import { CORRECTION_VALUES, MIN_REASON, MAX_REASON } from '../utils/orderCorrection.js';
 
 const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v);
 
@@ -356,6 +357,29 @@ export const validateMarkDelivered = [
 export const validateUndoDelivered = [
   ...validateWorkOrder,
   body('shipmentId').custom(isObjectId).withMessage('Choose the parcel'),
+];
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const idMap = (v) => v == null || (typeof v === 'object' && !Array.isArray(v)
+  && Object.keys(v).length <= 100 && Object.entries(v).every(([k, x]) => isObjectId(k) && typeof x === 'string' && x.length <= 40));
+
+/** "Edit order" — procurement / admin correct an order by hand (orderCorrectionService). */
+export const validateOrderCorrection = [
+  ...validateWorkOrder,
+  body('action').isIn(CORRECTION_VALUES).withMessage('Choose what to correct'),
+  body('reason').isString().trim().isLength({ min: MIN_REASON, max: MAX_REASON })
+    .withMessage(`Say briefly why (${MIN_REASON}–${MAX_REASON} characters)`),
+  body('itemIds').optional().isArray({ max: 100 }).withMessage('Invalid items'),
+  body('itemIds.*').custom(isObjectId).withMessage('Invalid item'),
+  body('shipmentIds').optional().isArray({ max: 50 }).withMessage('Invalid parcels'),
+  body('shipmentIds.*').custom(isObjectId).withMessage('Invalid parcel'),
+  body('expectedStages').custom(idMap).withMessage('Refresh the order and try again'),
+  body('expectedParcels').custom(idMap).withMessage('Refresh the order and try again'),
+  body('courierName').optional({ values: 'null' }).isString().isLength({ max: 80 }).withMessage('Keep the courier under 80 characters'),
+  body('trackingNumber').optional({ values: 'null' }).isString().isLength({ max: 80 }).withMessage('Keep the tracking number under 80 characters'),
+  body('shippedOn').optional({ values: 'falsy' }).isString().matches(DAY).withMessage('Choose a valid dispatch date'),
+  body('deliveredOn').optional({ values: 'falsy' }).isString().matches(DAY).withMessage('Choose a valid delivery date'),
+  body('includesGift').optional().isBoolean().withMessage('Invalid gift choice').toBoolean(),
 ];
 
 /** Admin edits a team member. Every field optional; at least one is checked in the service. */

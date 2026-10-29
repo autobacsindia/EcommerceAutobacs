@@ -185,6 +185,10 @@ class OrderStatusService {
       // parcels each deserve a notification. The review-request job is NOT suppressed:
       // it still fires exactly once, on final delivery.
       suppressStatusEmail = false,
+      // A team correction recording what happened long ago: no review request, and
+      // the delivered / shipped dates are when it happened, not now.
+      suppressReviewRequest = false,
+      occurredAt = null,
       session = null
     } = options;
 
@@ -239,7 +243,7 @@ class OrderStatusService {
       order.statusHistory.push(historyEntry);
 
       // Update fulfillment metrics based on status
-      await this.updateFulfillmentMetrics(order, newStatus);
+      await this.updateFulfillmentMetrics(order, newStatus, occurredAt || new Date());
 
       // Update specific fields based on status
       switch (newStatus) {
@@ -303,9 +307,9 @@ class OrderStatusService {
           }
           break;
         case 'delivered':
-          order.deliveredAt = new Date();
+          order.deliveredAt = occurredAt || new Date();
           if (order.fulfillmentMetrics) {
-            order.fulfillmentMetrics.deliveredAt = new Date();
+            order.fulfillmentMetrics.deliveredAt = occurredAt || new Date();
           }
           break;
       }
@@ -319,7 +323,7 @@ class OrderStatusService {
 
       // Customer-facing emails run in the background too: a status-change email for
       // shipped/delivered/cancelled/refunded, plus a delayed review-request on delivery.
-      this._enqueueStatusNotification(order._id.toString(), newStatus, { suppressStatusEmail });
+      this._enqueueStatusNotification(order._id.toString(), newStatus, { suppressStatusEmail, suppressReviewRequest });
 
       // Internal alert to the support inbox when a customer cancels on their own.
       this._enqueueAdminOrderAlert(order, newStatus);
@@ -374,7 +378,7 @@ class OrderStatusService {
    * retry is harmless. Silently skips when Redis isn't configured.
    * @private
    */
-  _enqueueStatusNotification(orderId, newStatus, { suppressStatusEmail = false } = {}) {
+  _enqueueStatusNotification(orderId, newStatus, { suppressStatusEmail = false, suppressReviewRequest = false } = {}) {
     if (!CUSTOMER_NOTIFIED_STATUSES.has(newStatus) || !process.env.REDIS_URL) return;
 
     const queue = getNotificationsQueue();
@@ -385,7 +389,7 @@ class OrderStatusService {
     }
 
     // A day after delivery, ask the customer to review what they bought.
-    if (newStatus === 'delivered') {
+    if (newStatus === 'delivered' && !suppressReviewRequest) {
       queue
         .add('send-review-request', { orderId }, { delay: REVIEW_REQUEST_DELAY_MS })
         .catch(err => console.error(`[OrderStatus] Failed to enqueue send-review-request:`, err.message));
@@ -524,14 +528,13 @@ class OrderStatusService {
    * Update fulfillment metrics based on status change
    * @param {Object} order - Order document
    * @param {string} newStatus - New status
+   * @param {Date} [now] - when the change happened (a correction records the past)
    * @private
    */
-  async updateFulfillmentMetrics(order, newStatus) {
+  async updateFulfillmentMetrics(order, newStatus, now = new Date()) {
     if (!order.fulfillmentMetrics) {
       order.fulfillmentMetrics = {};
     }
-
-    const now = new Date();
 
     switch (newStatus) {
       case 'processing':
