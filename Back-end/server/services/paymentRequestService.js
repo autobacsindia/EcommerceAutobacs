@@ -32,6 +32,7 @@ import counterRepository from '../repositories/counterRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
 import { checkAttachments } from './storage/attachmentCheck.js';
+import { storeAll } from './storage/storeAll.js';
 import { MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
 import { postSystemMessage } from './chatService.js';
 import { orderNumber } from './invoiceService.js';
@@ -156,29 +157,22 @@ function checkFiles(files, kinds, { existing = 0 } = {}) {
   return [...checkedRest.map((c, i) => ({ ...c, kind: rest[i].kind })), ...checkedQr.map((c) => ({ ...c, kind: 'qr' }))];
 }
 
-/** Check, then store privately. Nothing half-saved: a failure removes what was stored before it. */
+/** Check, then store privately (a few at a time). Nothing half-saved: a failure removes what was stored. */
 async function storeFiles(files, kinds, actor, { existing = 0 } = {}) {
   const checked = checkFiles(files, kinds, { existing });
-  const stored = [];
-  try {
-    for (const { file, kind, contentType, ext, name } of checked) {
-      const ref = await putPrivateAsset({
-        buffer: file.buffer,
-        folder: PAYMENT_FILES_FOLDER,
-        basename: `${kind}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
-        contentType,
-        cloudinaryPrivate: true,
-      });
-      stored.push({
-        kind, publicId: ref.publicId, provider: ref.provider, contentType, bytes: ref.bytes,
-        name, uploadedBy: actor._id, uploadedAt: new Date(),
-      });
-    }
-  } catch (err) {
-    await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
-    throw err;
-  }
-  return stored;
+  return storeAll(checked, async ({ file, kind, contentType, ext, name }) => {
+    const ref = await putPrivateAsset({
+      buffer: file.buffer,
+      folder: PAYMENT_FILES_FOLDER,
+      basename: `${kind}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
+      contentType,
+      cloudinaryPrivate: true,
+    });
+    return {
+      kind, publicId: ref.publicId, provider: ref.provider, contentType, bytes: ref.bytes,
+      name, uploadedBy: actor._id, uploadedAt: new Date(),
+    };
+  }, (f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }));
 }
 
 /** `{ bill: [file], qr: [file] }` (multer fields) → ordered list with kinds. */
