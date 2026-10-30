@@ -53,7 +53,6 @@ const fetchImpl = async (url, init) => {
 const delivered = () => zeptoCalls.filter((c) => c.status >= 200 && c.status < 300).length;
 
 const originalFetch = global.fetch;
-const savedProvider = process.env.EMAIL_PROVIDER;
 
 beforeAll(() => {
   // The invoice renderer fetches the company logo; fail it so the PDF degrades
@@ -63,12 +62,9 @@ beforeAll(() => {
 
 afterAll(() => {
   global.fetch = originalFetch;
-  if (savedProvider === undefined) delete process.env.EMAIL_PROVIDER;
-  else process.env.EMAIL_PROVIDER = savedProvider;
 });
 
 beforeEach(() => {
-  process.env.EMAIL_PROVIDER = 'zeptomail';
   delete process.env.EMAIL_REDIRECT_TO;
   delete process.env.INVOICE_STORE_CLOUDINARY;
   zeptoCalls = [];
@@ -88,8 +84,7 @@ beforeEach(() => {
   emailHandler.isEnabled = true;
   emailHandler.fromEmail = 'noreply@autobacsindia.com';
   emailHandler.fromName = 'Autobacs India';
-  emailHandler.client = null; // Postmark not configured: proves nothing leaks there
-  emailHandler.zeptomailClient = new ZeptoMailClient({ token: 'test-token', fetchImpl });
+  emailHandler.client = new ZeptoMailClient({ token: 'test-token', fetchImpl });
 
   store.order = {
     _id: 'abcdef1234567890',
@@ -140,14 +135,16 @@ describe('order confirmation through ZeptoMail — exactly one email', () => {
     expect(delivered()).toBe(1);
   });
 
-  test('a provider misconfiguration fails the job without sending, and is recoverable', async () => {
-    emailHandler.zeptomailClient = null; // EMAIL_PROVIDER=zeptomail but no token
+  test('a rejected token fails the job without sending; after the fix the retry delivers once', async () => {
+    const rejected = () => ({ status: 401, ok: false, json: async () => ({ error: { code: 'TM_4001', message: 'Access Denied' } }) });
+    script = [rejected];
 
-    await expect(emailOrderInvoice('abcdef1234567890')).rejects.toThrow(/not configured/);
+    await expect(emailOrderInvoice('abcdef1234567890')).rejects.toThrow(/Invoice email failed/);
+    expect(zeptoCalls).toHaveLength(1); // a 401 is not retried in-process
+    expect(delivered()).toBe(0);
     expect(store.order.invoiceEmailedAt).toBeNull();
 
-    // Token set, process restarted → the retried job delivers.
-    emailHandler.zeptomailClient = new ZeptoMailClient({ token: 'test-token', fetchImpl });
+    // Token fixed, BullMQ retries the job → delivered exactly once.
     await expect(emailOrderInvoice('abcdef1234567890')).resolves.toEqual({ status: 'sent' });
     expect(delivered()).toBe(1);
   });

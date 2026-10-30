@@ -4,7 +4,7 @@ Operational steps to take the code changes (already merged) to production. Order
 **safe and reversible** — each step is a no-op until its env vars are set, and Railway
 Redis stays as rollback until Step 3 is verified.
 
-> For the ordered go-live "what to actually do" checklist (email/Postmark setup, the
+> For the ordered go-live "what to actually do" checklist (email/ZeptoMail setup, the
 > keep-default-URLs-now → single-flip-at-cutover model, and the env change table), see
 > [RUNBOOK-cutover-checklist.md](RUNBOOK-cutover-checklist.md). This doc is the infra detail.
 
@@ -157,9 +157,10 @@ Moving NS to Cloudflare migrates the **whole zone**. Get this right or you break
 live WooCommerce site:
 1. In Hostinger DNS, **export/screenshot every record**. Cloudflare's onboarding auto-scans
    and imports, but **verify nothing is missed** — especially:
-   - **Email (critical):** `MX`, the SPF `TXT` (`v=spf1 …`), **DKIM** `TXT`/CNAME (Postmark's
-     `*._domainkey`), and the `DMARC` `TXT` (`_dmarc`). A missed record = silent mail failure
-     (Postmark sends from `autobacsindia.com` — see [[postmark-email-setup]]).
+   - **Email (critical):** `MX`, the SPF `TXT` (`v=spf1 …`), **DKIM** `TXT` (ZeptoMail's
+     `29151755._domainkey`), the ZeptoMail bounce CNAME (`bounce-zem` → `cluster89.zeptomail.in`,
+     DNS only), and the `DMARC` `TXT` (`_dmarc`). A missed record = silent mail failure
+     (ZeptoMail sends from `autobacsindia.com`).
    - Any domain-verification `TXT` (Google, etc.).
 2. Keep **apex `@` / `www` exactly as-is, DNS-only (grey cloud)** → still pointing at the
    WordPress/WooCommerce host. The live site must not change.

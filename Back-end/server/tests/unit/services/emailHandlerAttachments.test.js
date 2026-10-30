@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-// emailHandler is a singleton; inject a fake Postmark client so we can assert the
+// emailHandler is a singleton; inject a fake client so we can assert the
 // exact message object it builds (no network, no real credentials).
 const { default: emailHandler } = await import('../../../services/emailHandler.js');
 
@@ -16,7 +16,7 @@ describe('emailHandler.sendEmail — attachments passthrough', () => {
     emailHandler.defaultStream = 'outbound';
   });
 
-  test('forwards Attachments to Postmark when provided', async () => {
+  test('forwards Attachments to the provider when provided', async () => {
     const attachments = [{ Name: 'AB-1234.pdf', Content: 'base64data', ContentType: 'application/pdf' }];
 
     const res = await emailHandler.sendEmail({
@@ -69,9 +69,9 @@ describe('emailHandler — sender override + welcome email', () => {
     expect(fakeClient.sendEmail.mock.calls[0][0].From).toBe('Autobacs India <noreply@autobacsindia.com>');
   });
 
-  test('sendWelcomeEmail sends from POSTMARK_WELCOME_FROM_EMAIL with a welcome subject', async () => {
-    process.env.POSTMARK_WELCOME_FROM_EMAIL = 'info@autobacsindia.com';
-    process.env.POSTMARK_WELCOME_FROM_NAME = 'Autobacs India';
+  test('sendWelcomeEmail sends from EMAIL_WELCOME_FROM_ADDRESS with a welcome subject', async () => {
+    process.env.EMAIL_WELCOME_FROM_ADDRESS = 'info@autobacsindia.com';
+    process.env.EMAIL_WELCOME_FROM_NAME = 'Autobacs India';
 
     const res = await emailHandler.sendWelcomeEmail('newuser@example.com', { name: 'Asha Rao' });
 
@@ -82,13 +82,13 @@ describe('emailHandler — sender override + welcome email', () => {
     expect(msg.Subject).toMatch(/welcome/i);
     expect(msg.HtmlBody).toContain('Asha'); // first name personalization
 
-    delete process.env.POSTMARK_WELCOME_FROM_EMAIL;
-    delete process.env.POSTMARK_WELCOME_FROM_NAME;
+    delete process.env.EMAIL_WELCOME_FROM_ADDRESS;
+    delete process.env.EMAIL_WELCOME_FROM_NAME;
   });
 
   test('sendWelcomeEmail falls back to the default sender when the welcome sender is unset', async () => {
-    delete process.env.POSTMARK_WELCOME_FROM_EMAIL;
-    delete process.env.POSTMARK_WELCOME_FROM_NAME;
+    delete process.env.EMAIL_WELCOME_FROM_ADDRESS;
+    delete process.env.EMAIL_WELCOME_FROM_NAME;
 
     await emailHandler.sendWelcomeEmail('newuser@example.com', { name: 'Sam' });
 

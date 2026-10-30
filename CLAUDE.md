@@ -148,7 +148,7 @@ A change is not done until, as applicable:
 
 The detail behind the [decisions table](#architecture-decisions-to-honor-correctness-scale--ux). These are how the platform stays correct, fast, and scalable. New code follows them where applicable; existing code is migrated in dedicated optimization passes, not smuggled into feature diffs. Optimization work identified for the task is a blocker for completion and must be finished before the task is declared done.
 
-> **Prefer what already exists.** The backing infrastructure is chosen and in place — **Razorpay** (payments), **MongoDB/Mongoose** (data), **MongoDB Atlas Search** (catalog search), **Redis** (cache/sessions) + **BullMQ** (jobs/queues), **Cloudinary** (media), **Zoho ZeptoMail** (email; Postmark kept as rollback until cancelled), **Twilio** (SMS), **Cloudflare** (CDN), and the **config-driven SEO system**. Where one of these covers the job, **use it** — do not stand up a second, parallel way of doing the same thing (a rival cache, a hand-rolled search over Mongo regex, a bespoke queue). Named patterns below describe the *target*; if the repo already satisfies one with an equivalent choice, keep it. Replace an established primitive only as a deliberate, **measured** upgrade with a clear win.
+> **Prefer what already exists.** The backing infrastructure is chosen and in place — **Razorpay** (payments), **MongoDB/Mongoose** (data), **MongoDB Atlas Search** (catalog search), **Redis** (cache/sessions) + **BullMQ** (jobs/queues), **Cloudinary** (media), **Zoho ZeptoMail** (email), **Twilio** (SMS), **Cloudflare** (CDN), and the **config-driven SEO system**. Where one of these covers the job, **use it** — do not stand up a second, parallel way of doing the same thing (a rival cache, a hand-rolled search over Mongo regex, a bespoke queue). Named patterns below describe the *target*; if the repo already satisfies one with an equivalent choice, keep it. Replace an established primitive only as a deliberate, **measured** upgrade with a clear win.
 
 ### 1. Payments & orders (Razorpay)
 
@@ -270,11 +270,13 @@ Migrated off Elasticsearch on 2026-08-31 (Elastic Cloud's card payments kept bei
 
 - **Idempotent sends.** Order-confirmation and shipping emails/SMS fire once per state transition, keyed so a webhook retry doesn't re-send.
 
-- **One send path.** All email goes through `services/emailHandler.js`; `EMAIL_PROVIDER` (`zeptomail` | `postmark`, read per send) picks the transport. ZeptoMail (`services/email/zeptomailClient.js`) is an adapter with the Postmark client's interface, so redirect/guards/retry apply to both. Never call a provider directly.
+- **One send path.** All email goes through `services/emailHandler.js` → **Zoho ZeptoMail** (`services/email/zeptomailClient.js`, India host `cpaas.zoho.in`). Never call the provider directly. Postmark was removed in 2026-10.
 
 - **Transactional only** for order lifecycle; ZeptoMail does not allow marketing mail at all. Marketing/opt-in mail is a separate concern and system.
 
-- **Support inbound still rides Postmark.** `POST /api/v1/support/inbound` is a Postmark *inbound* webhook; ZeptoMail is send-only. Cancelling Postmark silently stops support@ mail from becoming tickets unless inbound has moved elsewhere first — see `docs/RUNBOOK-support-inbox.md`.
+- **ZeptoMail replaces our `Message-ID`**, so support replies thread by the signed `support+t.…` Reply-To token, not In-Reply-To.
+
+- **Support inbound is not active.** `POST /api/v1/support/inbound` expects a Postmark-format inbound webhook that was never switched on (`POSTMARK_INBOUND_SECRET` unset → it rejects everything). ZeptoMail is send-only; turning inbound on needs a new inbound provider — see `docs/RUNBOOK-support-inbox.md`.
 
 - **Failures are logged and retryable** (via the queue), never silently swallowed.
 

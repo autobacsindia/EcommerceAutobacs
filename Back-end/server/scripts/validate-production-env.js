@@ -11,8 +11,6 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const emailProvider = () => (process.env.EMAIL_PROVIDER || 'postmark').trim().toLowerCase();
-
 const requiredEnvVars = {
   // Database
   MONGO_URI: {
@@ -91,46 +89,21 @@ const requiredEnvVars = {
     }
   },
   
-  // Email Service. EMAIL_PROVIDER picks ZeptoMail or Postmark (default postmark);
-  // only the selected provider's token is required. SendGrid was retired.
-  // `requiredWhen` makes an otherwise-optional variable required conditionally.
-  EMAIL_PROVIDER: {
-    description: 'Transactional email provider: zeptomail | postmark',
-    required: false,
-    validate: (value) => {
-      if (value && !['zeptomail', 'postmark'].includes(value.trim().toLowerCase())) {
-        return 'Must be "zeptomail" or "postmark"';
-      }
-      return null;
-    }
-  },
-  POSTMARK_SERVER_TOKEN: {
-    description: 'Postmark server token (required while EMAIL_PROVIDER is postmark)',
-    required: false,
-    requiredWhen: () => emailProvider() === 'postmark',
-    validate: (value) => {
-      if (/^your_|^changeme/i.test(value)) {
-        return 'Still set to the .env.example placeholder';
-      }
-      return null;
-    }
-  },
+  // Email Service (Zoho ZeptoMail — Postmark and SendGrid were retired; see .env.example)
   ZEPTOMAIL_SEND_MAIL_TOKEN: {
-    description: 'ZeptoMail Send Mail token (required while EMAIL_PROVIDER is zeptomail)',
-    required: false,
-    requiredWhen: () => emailProvider() === 'zeptomail',
+    description: 'ZeptoMail Send Mail token for transactional email',
     validate: (value) => {
+      if (!value) return 'Required for transactional email';
       if (/^your_|^changeme/i.test(value)) {
         return 'Still set to the .env.example placeholder';
       }
       return null;
     }
   },
-  POSTMARK_FROM_EMAIL: {
-    description: 'Sender address on the verified domain (EMAIL_FROM_ADDRESS overrides it)',
-    required: false,
-    requiredWhen: () => !process.env.EMAIL_FROM_ADDRESS,
+  EMAIL_FROM_ADDRESS: {
+    description: 'Sender address on the domain verified in ZeptoMail',
     validate: (value) => {
+      if (!value) return 'Required for transactional email';
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) {
         return 'Invalid format - should be an email address';
       }
@@ -248,8 +221,7 @@ function validateEnvironment() {
   for (const [varName, config] of Object.entries(requiredEnvVars)) {
     const value = process.env[varName];
     
-    const required = config.required !== false || Boolean(config.requiredWhen?.());
-    if (!value && required) {
+    if (!value && config.required !== false) {
       errors.push(`${varName}: Missing - ${config.description}`);
       continue;
     }
