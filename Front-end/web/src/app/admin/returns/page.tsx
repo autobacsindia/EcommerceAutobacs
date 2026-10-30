@@ -457,15 +457,19 @@ function DetailModal({ request, loading, onClose, onActioned }: {
 
   /** The choices as the refund route takes them. Amounts are re-checked by the server. */
   const refundChoices = useCallback(() => ({
-    shippingDeduction: Number(refund.shippingDeduction) || 0,
-    pickupDeductionReason: refund.pickupReason.trim() || undefined,
+    // Sent only when the operator can see the box: otherwise the pickup cost operations
+    // recorded at inspection stands (the server uses it when none is sent).
+    ...(preview?.hasCustomerFault ? {
+      shippingDeduction: Number(refund.shippingDeduction) || 0,
+      pickupDeductionReason: refund.pickupReason.trim() || undefined,
+    } : {}),
     restockingDeduction: Number(refund.restockingDeduction) || 0,
     serviceLines: Object.entries(services).map(([orderItemId, v]) => ({
       orderItemId,
       ...(v.amount.trim() !== '' ? { amountRupees: Number(v.amount), reductionReason: v.reason.trim() || undefined } : {}),
     })),
     creditNoteNo: refund.creditNoteNo.trim() || undefined,
-  }), [refund, services]);
+  }), [refund, services, preview?.hasCustomerFault]);
 
   // Re-preview on every change of choices: the amount on the button is ALWAYS the
   // server's figure for exactly these choices — never computed here.
@@ -500,7 +504,8 @@ function DetailModal({ request, loading, onClose, onActioned }: {
       // never typed, on exactly the high-value orders where the 10% suggestion applies.
       setRefund((r) => ({
         ...r,
-        shippingDeduction: res.preview.fullRefundOnly ? '' : r.shippingDeduction,
+        // Pre-filled with what operations recorded at inspection, if anything.
+        shippingDeduction: res.preview.fullRefundOnly ? '' : (r.shippingDeduction || (res.preview.breakdown?.pickupDeduction ? String(res.preview.breakdown.pickupDeduction) : '')),
         restockingDeduction:
           !res.preview.fullRefundOnly && res.preview.suggestedRestocking
             ? String(res.preview.suggestedRestocking)
@@ -512,6 +517,12 @@ function DetailModal({ request, loading, onClose, onActioned }: {
   useEffect(() => {
     if (request && request.status === 'received' && request.inspection?.passed === true) loadPreview(request._id);
   }, [request, loadPreview]);
+
+  // The reason operations gave for the pickup cost, so a pre-filled cost previews cleanly.
+  useEffect(() => {
+    const reason = request?.refund?.pickupDeductionReason;
+    if (reason) setRefund((r) => (r.pickupReason ? r : { ...r, pickupReason: reason }));
+  }, [request?.refund?.pickupDeductionReason]);
 
   // Seed the courier inputs from what was actually booked, so the correction form opens
   // showing the current values instead of making the operator retype an AWB from memory.
