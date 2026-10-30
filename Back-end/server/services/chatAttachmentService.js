@@ -24,6 +24,7 @@ import { uploadToCloudinary, uploadRawToCloudinary, deleteFromCloudinary } from 
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
 import { storageProvider } from '../config/storage.js';
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
+import { storeAll } from './storage/storeAll.js';
 
 /** The staff-wide limits (config/attachments.js): 10 MB a file, 20 files a message. */
 export const MAX_ATTACHMENT_SIZE = MAX_ATTACHMENT_BYTES;
@@ -102,7 +103,8 @@ export function safeName(original, ext) {
 /**
  * Verify and upload one batch. Resolves to attachment descriptors ready to
  * store on a message. If any file fails, everything already uploaded in this
- * batch is removed so a half-finished upload never lingers in Cloudinary.
+ * batch is removed so a half-finished upload never lingers (storage/storeAll.js:
+ * a few at a time, all or nothing).
  */
 export async function uploadChatAttachments(files, { channelId }) {
   if (!files?.length) return [];
@@ -125,39 +127,30 @@ export async function uploadChatAttachments(files, { channelId }) {
   // fallback only while STORAGE_PROVIDER says so.
   if (storageProvider() === 'r2') return uploadToR2(files, channelId);
 
-  const done = [];
-  try {
-    for (const file of files) {
-      const type = TYPES[file.mimetype];
-      const folder = `autobacs/chat/${channelId}`;
-      const name = safeName(file.originalname, type.ext);
-      const result =
-        type.kind === 'image'
-          ? await uploadToCloudinary(file.buffer, { folder })
-          // Raw assets keep their extension in the public id so the download URL
-          // ends in .pdf/.xlsx and opens in the right app.
-          : await uploadRawToCloudinary(file.buffer, {
-              folder,
-              publicId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${name}`,
-            });
-      done.push({
-        url: result.secure_url,
-        publicId: result.public_id,
-        kind: type.kind,
-        name,
-        mime: file.mimetype,
-        size: file.size,
-        width: null,
-        height: null,
-      });
-    }
-  } catch (err) {
-    await Promise.all(
-      done.map((a) => deleteFromCloudinary(a.publicId, a.kind === 'image' ? 'image' : 'raw').catch(() => {})),
-    );
-    throw err;
-  }
-  return done;
+  return storeAll(files, async (file) => {
+    const type = TYPES[file.mimetype];
+    const folder = `autobacs/chat/${channelId}`;
+    const name = safeName(file.originalname, type.ext);
+    const result =
+      type.kind === 'image'
+        ? await uploadToCloudinary(file.buffer, { folder })
+        // Raw assets keep their extension in the public id so the download URL
+        // ends in .pdf/.xlsx and opens in the right app.
+        : await uploadRawToCloudinary(file.buffer, {
+            folder,
+            publicId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${name}`,
+          });
+    return {
+      url: result.secure_url,
+      publicId: result.public_id,
+      kind: type.kind,
+      name,
+      mime: file.mimetype,
+      size: file.size,
+      width: null,
+      height: null,
+    };
+  }, (a) => deleteFromCloudinary(a.publicId, a.kind === 'image' ? 'image' : 'raw'));
 }
 
 /** Where a channel's files live in the private bucket. */
@@ -174,29 +167,22 @@ export function chatFileType(basename) {
 }
 
 async function uploadToR2(files, channelId) {
-  const done = [];
-  try {
-    for (const file of files) {
-      const type = TYPES[file.mimetype];
-      const basename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${safeName(file.originalname, type.ext)}`;
-      const stored = await putPrivateAsset({ buffer: file.buffer, folder: chatFolder(channelId), basename, contentType: file.mimetype });
-      done.push({
-        url: chatFileUrl(channelId, basename),
-        publicId: stored.publicId,
-        provider: 'r2',
-        kind: type.kind,
-        name: safeName(file.originalname, type.ext),
-        mime: file.mimetype,
-        size: file.size,
-        width: null,
-        height: null,
-      });
-    }
-  } catch (err) {
-    await Promise.all(done.map((a) => deletePrivateAsset({ publicId: a.publicId, provider: 'r2' })));
-    throw err;
-  }
-  return done;
+  return storeAll(files, async (file) => {
+    const type = TYPES[file.mimetype];
+    const basename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}-${safeName(file.originalname, type.ext)}`;
+    const stored = await putPrivateAsset({ buffer: file.buffer, folder: chatFolder(channelId), basename, contentType: file.mimetype });
+    return {
+      url: chatFileUrl(channelId, basename),
+      publicId: stored.publicId,
+      provider: 'r2',
+      kind: type.kind,
+      name: safeName(file.originalname, type.ext),
+      mime: file.mimetype,
+      size: file.size,
+      width: null,
+      height: null,
+    };
+  }, (a) => deletePrivateAsset({ publicId: a.publicId, provider: 'r2' }));
 }
 
 /**

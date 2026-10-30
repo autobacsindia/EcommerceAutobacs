@@ -39,6 +39,7 @@ import { retireAllParts } from './salesPaymentService.js';
 import { retireCurrentLink } from './salesOrderService.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
 import { checkAttachments } from './storage/attachmentCheck.js';
+import { storeAll } from './storage/storeAll.js';
 import { MAX_ATTACHMENTS } from '../config/attachments.js';
 import { postSystemMessage } from './chatService.js';
 import { orderNumber } from './invoiceService.js';
@@ -107,23 +108,16 @@ const removeFiles = (stored) => Promise.all(stored.map((f) =>
   deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
 
 async function storeFiles(checked) {
-  const stored = [];
-  try {
-    for (const { file, contentType, ext, name } of checked) {
-      const ref = await putPrivateAsset({
-        buffer: file.buffer,
-        folder: BANK_TRANSFER_FOLDER,
-        basename: `transfer-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
-        contentType,
-        cloudinaryPrivate: true,
-      });
-      stored.push({ publicId: ref.publicId, provider: ref.provider, contentType, bytes: ref.bytes, name });
-    }
-  } catch (err) {
-    await removeFiles(stored);
-    throw err;
-  }
-  return stored;
+  return storeAll(checked, async ({ file, contentType, ext, name }) => {
+    const ref = await putPrivateAsset({
+      buffer: file.buffer,
+      folder: BANK_TRANSFER_FOLDER,
+      basename: `transfer-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
+      contentType,
+      cloudinaryPrivate: true,
+    });
+    return { publicId: ref.publicId, provider: ref.provider, contentType, bytes: ref.bytes, name };
+  }, (f) => removeFiles([f]));
 }
 
 // ── Shape ───────────────────────────────────────────────────────────────────

@@ -47,6 +47,7 @@ import shipmentService from './shipmentService.js';
 import cancellationService from './cancellationService.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
 import { checkAttachments } from './storage/attachmentCheck.js';
+import { storeAll } from './storage/storeAll.js';
 import { MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
 import { parcelProofs, proofFilePath, LEGACY_PROOF_ID } from '../utils/shipmentView.js';
 import { getNotificationsQueue } from '../queue/queues.js';
@@ -406,27 +407,20 @@ const removeProofs = (refs) => Promise.all(refs.map((r) =>
 /** Check a parcel's proofs (photos or PDFs) before anything is stored. */
 const checkProofs = (files, { existing = 0 } = {}) => checkAttachments(files, { existing, noun: 'photo' });
 
-/** Store checked proofs privately; a failure part-way removes what was stored. */
+/** Store checked proofs privately, a few at a time; a failure part-way removes what was stored. */
 async function storeProofs(checked, orderId, actor) {
-  const stored = [];
-  try {
-    for (const { file, contentType, ext, name } of checked) {
-      const ref = await putPrivateAsset({
-        buffer: file.buffer, folder: PROOF_FOLDER,
-        basename: `proof-${orderId}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
-        contentType, cloudinaryPrivate: true,
-      });
-      stored.push({
-        _id: new mongoose.Types.ObjectId(),
-        publicId: ref.publicId, provider: ref.provider, url: ref.url || undefined,
-        contentType, bytes: ref.bytes, name, uploadedAt: new Date(), uploadedBy: actor._id,
-      });
-    }
-  } catch (err) {
-    await removeProofs(stored);
-    throw err;
-  }
-  return stored;
+  return storeAll(checked, async ({ file, contentType, ext, name }) => {
+    const ref = await putPrivateAsset({
+      buffer: file.buffer, folder: PROOF_FOLDER,
+      basename: `proof-${orderId}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
+      contentType, cloudinaryPrivate: true,
+    });
+    return {
+      _id: new mongoose.Types.ObjectId(),
+      publicId: ref.publicId, provider: ref.provider, url: ref.url || undefined,
+      contentType, bytes: ref.bytes, name, uploadedAt: new Date(), uploadedBy: actor._id,
+    };
+  }, (r) => removeProofs([r]));
 }
 
 async function fetchBuffer(url) {
