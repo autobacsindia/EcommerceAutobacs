@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History } from 'lucide-react';
+import { LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Receipt } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -47,6 +47,15 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   if (team === 'accounts') nav.push({ href: '/team/refunds', label: 'Refund approvals', icon: Wallet }, paid, delivered);
   if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid, delivered);
   if (team === 'marketing') nav.push(...MARKETING_AREAS.map(({ href, label, icon }) => ({ href, label, icon })));
+  /*
+    Returns: operations checks, picks up and inspects; procurement handles suppliers;
+    accounts sends the customer refund (its own page) and confirms supplier money;
+    sellers raise returns for customers and follow their own.
+  */
+  if (['operations', 'procurement', 'accounts'].includes(team) || (team === 'sales' && canSell)) {
+    nav.push({ href: '/team/returns', label: 'Returns', icon: Undo2 });
+  }
+  if (team === 'accounts') nav.push({ href: '/team/return-refunds', label: 'Return refunds', icon: Receipt });
   /*
     Payment requests: supplier payments (procurement), expenses (EVERY team —
     anyone can need fuel, a courier or a tool), and approving them (accounts).

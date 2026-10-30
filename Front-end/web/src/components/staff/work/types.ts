@@ -128,6 +128,8 @@ export type WorkOrder = Omit<WorkRow, 'lines'> & {
   canContactCustomer: boolean;
   /** Accounts or admin — the customer's saved bank account for refunds / NEFT. */
   canSeeCustomerBank?: boolean;
+  /** GTM seller, operations or admin, on a paid order that reached the customer. */
+  canRaiseReturn?: boolean;
 };
 
 /*
