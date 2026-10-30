@@ -1,11 +1,25 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import OrderDetailPage from './page';
 import { useAuth } from '@/context/AuthContext';
 import orderService from '@/lib/services/orderService';
 import { useRazorpay } from '@/hooks/useRazorpay';
 import { useCart } from '@/context/CartContext';
 import { useRouter, useParams } from 'next/navigation';
+
+// GET /returns/my-returns?orderId= — the per-order return tracker. Empty by default.
+const mockApiGet = jest.fn();
+jest.mock('@/lib/api-client', () => {
+  const actual = jest.requireActual('@/lib/api-client');
+  return { ...actual, __esModule: true, default: { get: (...a: unknown[]) => mockApiGet(...a), post: jest.fn() } };
+});
+
+// The page reads its returns through TanStack Query, so every render needs a client.
+const renderPage = () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}><OrderDetailPage /></QueryClientProvider>);
+};
 
 // Mock dependencies
 jest.mock('@/context/AuthContext');
@@ -32,7 +46,12 @@ jest.mock('react-hot-toast', () => ({
 
 // Mock child components
 jest.mock('@/components/orders/CancelOrderModal', () => () => <div data-testid="cancel-modal" />);
-jest.mock('@/components/orders/ReturnRequestModal', () => () => <div data-testid="return-modal" />);
+// Captures what the page hands the return form: which lines, and how many were left out.
+const mockReturnModalProps = jest.fn();
+jest.mock('@/components/orders/ReturnRequestModal', () => (props: Record<string, unknown>) => {
+  mockReturnModalProps(props);
+  return <div data-testid="return-modal" />;
+});
 jest.mock('@/components/reviews/WriteReviewModal', () => () => <div data-testid="review-modal" />);
 jest.mock('@/components/tracking/TimelineProgress', () => ({ TimelineProgress: () => <div data-testid="timeline" /> }));
 jest.mock('@/components/skeletons/OrderDetailSkeleton', () => () => <div data-testid="skeleton" />);
@@ -136,10 +155,11 @@ describe('OrderDetailPage', () => {
     (useParams as jest.Mock).mockReturnValue({ id: '12345678' });
     // Mock window.confirm
     window.confirm = jest.fn().mockReturnValue(true);
+    mockApiGet.mockResolvedValue({ success: true, requests: [] });
   });
 
   it('renders order details', async () => {
-    render(<OrderDetailPage />);
+    renderPage();
     
     await waitFor(() => {
       expect(screen.getByText('#12345678')).toBeInTheDocument();
@@ -155,7 +175,7 @@ describe('OrderDetailPage', () => {
     (orderService.getOrderById as jest.Mock).mockResolvedValue({
       ...mockOrder, subtotal: 157300, subtotalBeforeTax: 133305.08, tax: 23994.92, shippingCost: 0, totalAmount: 157300,
     });
-    render(<OrderDetailPage />);
+    renderPage();
 
     const label = await screen.findByText('Subtotal (before GST)');
     expect(label.nextElementSibling).toHaveTextContent('₹133305.08');
@@ -163,7 +183,7 @@ describe('OrderDetailPage', () => {
   });
 
   it('handles buy again', async () => {
-    render(<OrderDetailPage />);
+    renderPage();
     
     await waitFor(() => screen.getByText('#12345678'));
     
@@ -200,7 +220,7 @@ describe('OrderDetailPage', () => {
       }],
     });
 
-    render(<OrderDetailPage />);
+    renderPage();
     await waitFor(() => screen.getByText('#12345678'));
 
     // The model is on screen — the whole point of the change.
@@ -222,7 +242,7 @@ describe('OrderDetailPage', () => {
       ],
     });
 
-    render(<OrderDetailPage />);
+    renderPage();
     await waitFor(() => screen.getByText('#12345678'));
 
     // Two lines of ONE product: without the label they are the same string, which is
@@ -232,7 +252,7 @@ describe('OrderDetailPage', () => {
   });
 
   it('renders no variant node for a simple product', async () => {
-    render(<OrderDetailPage />);
+    renderPage();
     await waitFor(() => screen.getByText('#12345678'));
     // ~1,560 of 1,598 production orders are this case; they must look untouched.
     expect(screen.queryByText('Black')).not.toBeInTheDocument();
@@ -245,7 +265,7 @@ describe('OrderDetailPage', () => {
     });
     (orderService.deleteOrder as jest.Mock).mockResolvedValue({ success: true });
     
-    render(<OrderDetailPage />);
+    renderPage();
     
     await waitFor(() => screen.getByText('#12345678'));
     
@@ -293,7 +313,7 @@ describe('OrderDetailPage', () => {
     // THE REGRESSION. Before the fix this found zero Review buttons.
     it('offers Review for the item that arrived, on an order still marked shipped', async () => {
       (orderService.getOrderById as jest.Mock).mockResolvedValue(splitOrder);
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Arrived Item'));
 
       expect(screen.getAllByText('Review')).toHaveLength(1);
@@ -301,7 +321,7 @@ describe('OrderDetailPage', () => {
 
     it('does not offer Review for the item still in transit', async () => {
       (orderService.getOrderById as jest.Mock).mockResolvedValue(splitOrder);
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Still Coming'));
 
       // One Review button total, and it is not the second row's.
@@ -312,7 +332,7 @@ describe('OrderDetailPage', () => {
 
     it('states where each line has got to', async () => {
       (orderService.getOrderById as jest.Mock).mockResolvedValue(splitOrder);
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Arrived Item'));
 
       expect(screen.getByText(/^Delivered /)).toBeInTheDocument();
@@ -326,7 +346,7 @@ describe('OrderDetailPage', () => {
     */
     it('suppresses the order-level tracking card once there are two parcels', async () => {
       (orderService.getOrderById as jest.Mock).mockResolvedValue(splitOrder);
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Arrived Item'));
 
       expect(screen.queryByText('Tracking Information')).not.toBeInTheDocument();
@@ -340,7 +360,7 @@ describe('OrderDetailPage', () => {
         ...splitOrder,
         shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: 'item1', quantity: 1 }] }],
       });
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Arrived Item'));
 
       expect(screen.getByText('Tracking Information')).toBeInTheDocument();
@@ -358,7 +378,7 @@ describe('OrderDetailPage', () => {
         status: 'delivered',
         shipments: [],
       });
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Arrived Item'));
 
       expect(screen.getByText('Tracking Information')).toBeInTheDocument();
@@ -377,7 +397,7 @@ describe('OrderDetailPage', () => {
           { _id: 's2', status: 'lost', lines: [{ itemId: 'item2', quantity: 1 }] },
         ],
       });
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Still Coming'));
 
       expect(screen.getByText('Not shipped yet')).toBeInTheDocument();
@@ -413,7 +433,7 @@ describe('OrderDetailPage', () => {
 
     it('keeps the cancelled line visible and marks it cancelled', async () => {
       (orderService.getOrderById as jest.Mock).mockResolvedValue(partlyCancelled);
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Dropped Item'));
 
       expect(screen.getByText('Cancelled')).toBeInTheDocument();
@@ -424,7 +444,7 @@ describe('OrderDetailPage', () => {
         ...partlyCancelled,
         cancellations: [{ ...partlyCancelled.cancellations[0], lines: [{ itemId: 'item2', quantity: 1 }] }],
       });
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Dropped Item'));
 
       expect(screen.getByText('1 of 2 cancelled')).toBeInTheDocument();
@@ -437,7 +457,7 @@ describe('OrderDetailPage', () => {
     */
     it('shows the refund the server recorded, not the line total', async () => {
       (orderService.getOrderById as jest.Mock).mockResolvedValue(partlyCancelled);
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Cancelled Items'));
 
       // ₹80.00 refunded — NOT the ₹100 list value of 2 × ₹50.
@@ -460,7 +480,7 @@ describe('OrderDetailPage', () => {
           refund: { productValuePaise: 8000, amountPaise: 0, status: 'not_applicable' },
         }],
       });
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Cancelled Items'));
 
       expect(screen.queryByText(/refund on its way/i)).not.toBeInTheDocument();
@@ -475,7 +495,7 @@ describe('OrderDetailPage', () => {
           refund: { productValuePaise: 8000, amountPaise: 8000, status: 'failed' },
         }],
       });
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Cancelled Items'));
 
       expect(screen.queryByText(/refund on its way/i)).not.toBeInTheDocument();
@@ -490,7 +510,7 @@ describe('OrderDetailPage', () => {
           refund: { productValuePaise: 8000, amountPaise: 0, status: 'pending' },
         }],
       });
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Cancelled Items'));
 
       expect(screen.getByText(/₹80\.00 refund on its way/)).toBeInTheDocument();
@@ -502,7 +522,7 @@ describe('OrderDetailPage', () => {
         ...partlyCancelled,
         shipments: [{ _id: 's1', status: 'shipped', lines: [{ itemId: 'item1', quantity: 1 }] }],
       });
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Dropped Item'));
 
       expect(screen.queryByText('Not shipped yet')).not.toBeInTheDocument();
@@ -514,11 +534,112 @@ describe('OrderDetailPage', () => {
       (orderService.getOrderById as jest.Mock).mockResolvedValue({
         ...partlyCancelled, cancellations: [],
       });
-      render(<OrderDetailPage />);
+      renderPage();
       await waitFor(() => screen.getByText('Kept Item'));
 
       expect(screen.queryByText('Cancelled Items')).not.toBeInTheDocument();
       expect(screen.queryByText('Cancelled')).not.toBeInTheDocument();
+    });
+  });
+
+  /*
+    Returns: the button follows the LONGER window (7 days, a fault on our side), an
+    order can carry several returns, and units already on their way back are not offered
+    again. The tracker lists every return with its own progress.
+  */
+  describe('returns', () => {
+    const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
+    const deliveredOrder = (days: number, extra = {}) => ({
+      ...mockOrder,
+      quantity: undefined,
+      items: [{ ...mockOrder.items[0], quantity: 2 }],
+      fulfillmentMetrics: { deliveredAt: daysAgo(days) },
+      ...extra,
+    });
+    const aReturn = (over: Record<string, unknown> = {}) => ({
+      _id: 'aaaaaaaabbbbbbbb',
+      status: 'pending',
+      createdAt: daysAgo(1),
+      rejectionReason: null,
+      items: [{ orderItemId: 'item1', product: { _id: 'p1', name: 'Product 1' }, quantity: 1, reason: 'transit_damage', fault: 'ours' }],
+      courier: null,
+      pickupMode: null,
+      inspection: null,
+      refund: { status: 'pending', finalAmount: null, method: 'original_payment' },
+      ...over,
+    });
+
+    it('offers Return six days after delivery (inside the 7-day window)', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue(deliveredOrder(6));
+      renderPage();
+      expect(await screen.findByRole('button', { name: /^Return$/ })).toBeInTheDocument();
+      expect(mockApiGet).toHaveBeenCalledWith('/returns/my-returns?orderId=12345678');
+    });
+
+    it('does not offer Return eight days after delivery', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue(deliveredOrder(8));
+      renderPage();
+      await screen.findByText('Product 1', { selector: '*' }).catch(() => null);
+      await waitFor(() => expect(mockApiGet).toHaveBeenCalled());
+      expect(screen.queryByRole('button', { name: /^Return$/ })).not.toBeInTheDocument();
+    });
+
+    it('still offers Return for the unit left when one of two is already coming back', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue(
+        deliveredOrder(2, { returnRequest: { status: 'pending', requestedAt: daysAgo(1) } }),
+      );
+      mockApiGet.mockResolvedValue({ success: true, requests: [aReturn()] });
+      renderPage();
+      // The legacy single-return gate no longer hides the button.
+      expect(await screen.findByRole('button', { name: /^Return$/ })).toBeInTheDocument();
+    });
+
+    it('hides Return once every unit is in a return, and lists the returns', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue(deliveredOrder(2));
+      mockApiGet.mockResolvedValue({
+        success: true,
+        requests: [aReturn(), aReturn({ _id: 'ccccccccdddddddd', status: 'refunded', refund: { status: 'completed', finalAmount: 150, method: 'original_payment' } })],
+      });
+      renderPage();
+      expect(await screen.findByText('Returns (2)')).toBeInTheDocument();
+      expect(screen.getByText('Refund:', { exact: false })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Return$/ })).not.toBeInTheDocument();
+    });
+
+    it('a rejected return frees its units again', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue(deliveredOrder(2));
+      mockApiGet.mockResolvedValue({
+        success: true,
+        requests: [aReturn({ status: 'rejected', rejectionReason: 'Item was used', items: [{ orderItemId: 'item1', product: { _id: 'p1', name: 'Product 1' }, quantity: 2, reason: 'changed_mind', fault: 'customer' }] })],
+      });
+      renderPage();
+      expect(await screen.findByText('Why: Item was used')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Return$/ })).toBeInTheDocument();
+    });
+
+    it('never offers an installation line, and does not count it as left out', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue(deliveredOrder(2, {
+        items: [
+          { ...mockOrder.items[0], quantity: 1 },
+          { _id: 'fit1', product: null, custom: true, name: 'Installation', price: 1000, quantity: 1 },
+        ],
+        payment: { paymentMethod: 'razorpay', status: 'completed', fullRefundOnly: true, emiPlanLabel: 'Debit Card EMI' },
+      }));
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: /^Return$/ }));
+      const props = mockReturnModalProps.mock.calls.at(-1)[0] as { items: { _id: string }[]; excludedCount: number };
+      expect(props.items.map((i) => i._id)).toEqual(['item1']);
+      // On a debit-card EMI order a non-zero count sends the customer to support instead.
+      expect(props.excludedCount).toBe(0);
+    });
+
+    it('falls back to the old summary card when the returns list cannot load', async () => {
+      (orderService.getOrderById as jest.Mock).mockResolvedValue(
+        deliveredOrder(20, { returnRequest: { status: 'approved', requestedAt: daysAgo(10) } }),
+      );
+      mockApiGet.mockRejectedValue(new Error('down'));
+      renderPage();
+      expect(await screen.findByText('Return Request')).toBeInTheDocument();
     });
   });
 });

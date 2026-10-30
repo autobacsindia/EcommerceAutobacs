@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import React from 'react';
 import { buildPageMetadata } from '@/lib/pageSeo';
 import Link from 'next/link';
-import { RETURN_WINDOW_DAYS } from '@/lib/constants';
+import { RETURN_WINDOW_DAYS, RETURN_WINDOW_DAYS_OURS } from '@/lib/constants';
 import StorePageHeader from '@/components/store/StorePageHeader';
 
 // Admin-managed via /admin/seo (override -> this fallback -> site default).
@@ -53,8 +53,9 @@ export default function HelpPage() {
           <div className="bg-obsidian border border-hairline rounded-lg p-6">
             <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-3">Returns & Refunds</h2>
             <p className="text-ink/70 font-display leading-relaxed">
-              Items can be returned within {RETURN_WINDOW_DAYS} days of delivery where the fault is ours — a wrong
-              item, transit damage, or a manufacturing defect. A continuous unboxing video is required. Visit our{' '}
+              If the fault is ours — a wrong item, transit damage, a defect or a missing part — you can return it within{' '}
+              {RETURN_WINDOW_DAYS_OURS} days of delivery for a full refund. For your own reason it is {RETURN_WINDOW_DAYS} days,
+              unused and in its box, minus the pickup cost. Add at least one photo when you raise it. Visit our{' '}
               <Link href="/returns" className="text-gold hover:text-ink transition-colors">Returns page</Link>{' '}
               to initiate a return request.
             </p>
