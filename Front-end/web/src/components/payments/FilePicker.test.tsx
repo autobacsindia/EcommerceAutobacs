@@ -6,17 +6,18 @@
 import React, { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import FilePicker from './FilePicker';
-import { MAX_ATTACHMENTS, PHOTO_OR_PDF, shrinkForUpload } from '@/lib/attachments';
+import { acceptsFile, isPdf, likelyType, MAX_ATTACHMENTS, PHOTO_ONLY, PHOTO_OR_PDF, shrinkForUpload } from '@/lib/attachments';
+import { __resetPasteZones } from '@/hooks/usePasteFiles';
 
 const file = (name: string, type: string, size = 10) => new File([new Uint8Array(size)], name, { type });
 const MB = 1024 * 1024;
 
-function Picker({ max = MAX_ATTACHMENTS }: { max?: number }) {
+function Picker({ max = MAX_ATTACHMENTS, accept = PHOTO_OR_PDF, wrongType }: { max?: number; accept?: string; wrongType?: (f: File) => string }) {
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState('');
   return (
     <div>
-      <FilePicker files={files} onChange={setFiles} max={max} accept={PHOTO_OR_PDF} label="Attach screenshot or PDF" icon={null} onError={setError} />
+      <FilePicker files={files} onChange={setFiles} max={max} accept={accept} label="Attach screenshot or PDF" icon={null} onError={setError} wrongType={wrongType} />
       <ul aria-label="attached">{files.map((f, i) => <li key={i}>{f.name}</li>)}</ul>
       {error && <p role="alert">{error}</p>}
     </div>
@@ -64,6 +65,56 @@ describe('FilePicker', () => {
     pick([file('a.png', 'image/png'), file('b.pdf', 'application/pdf')]);
     fireEvent.click(screen.getByRole('button', { name: 'Remove a.png' }));
     expect(attached()).toEqual(['b.pdf']);
+  });
+
+  /*
+    Chrome on Windows always offers "All files" in its file window, so the input's
+    `accept` does not stop a wrong file being chosen. Production, 2026-10-30: a
+    PDF chosen that way went to the server seven times and came back refused.
+  */
+  describe('file type — chosen files are checked too, not only pasted ones', () => {
+    beforeEach(() => __resetPasteZones());
+
+    it('refuses a chosen file this picker does not take, saying what it does take', () => {
+      render(<Picker />);
+      pick([file('notes.txt', 'text/plain')]);
+      expect(screen.getByRole('alert')).toHaveTextContent('"notes.txt" can\'t be attached here — only a photo (JPG, PNG, WebP) or a PDF.');
+      expect(attached()).toEqual([]);
+    });
+
+    it('a photo-only picker refuses a PDF, in the words the form gives it', () => {
+      render(<Picker max={1} accept={PHOTO_ONLY} wrongType={(f) => `${f.name}: use "Customer already paid" for receipts.`} />);
+      pick([file('receipt.pdf', 'application/pdf')]);
+      expect(screen.getByRole('alert')).toHaveTextContent('receipt.pdf: use "Customer already paid" for receipts.');
+      expect(attached()).toEqual([]);
+    });
+
+    it('takes a real PDF whatever Windows labels it, and a photo with an old-style label', () => {
+      render(<Picker />);
+      pick([file('receipt.pdf', 'application/x-pdf'), file('Statement.PDF', 'application/octet-stream'), file('no-label.pdf', ''), file('cam.jpg', 'image/pjpeg')]);
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(attached()).toEqual(['receipt.pdf', 'Statement.PDF', 'no-label.pdf', 'cam.jpg']);
+    });
+
+    it('a pasted PDF goes through the same checks as a chosen one', () => {
+      render(<Picker />);
+      fireEvent.paste(document.body, { clipboardData: { files: [file('bank.pdf', 'application/pdf')], items: [], types: ['Files'], getData: () => '' } });
+      expect(attached()).toEqual(['bank.pdf']);
+    });
+
+    it('label rules: likelyType / acceptsFile / isPdf', () => {
+      expect(likelyType(file('a.pdf', 'application/x-pdf'))).toBe('application/pdf');
+      expect(likelyType(file('a.PDF', 'application/octet-stream'))).toBe('application/pdf');
+      expect(likelyType(file('a.jpeg', ''))).toBe('image/jpeg');
+      expect(likelyType(file('a.txt', 'application/octet-stream'))).toBe('application/octet-stream');
+      // A real label wins over the name: a web page called receipt.pdf is still a web page.
+      expect(likelyType(file('receipt.pdf', 'text/html'))).toBe('text/html');
+      expect(acceptsFile(file('receipt.pdf', 'text/html'), PHOTO_OR_PDF)).toBe(false);
+      expect(acceptsFile(file('a.pdf', 'application/x-pdf'), PHOTO_ONLY)).toBe(false);
+      expect(acceptsFile(file('sheet.xlsx', ''), '.xlsx')).toBe(true);
+      expect(isPdf(file('x.pdf', ''))).toBe(true);
+      expect(isPdf(file('x.png', 'image/png'))).toBe(false);
+    });
   });
 
   describe('shrinking a big phone photo', () => {

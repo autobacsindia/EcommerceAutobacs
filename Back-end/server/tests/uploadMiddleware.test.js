@@ -9,7 +9,7 @@
 import { EventEmitter } from 'events';
 import multer from 'multer';
 import {
-  validateUploadedFiles, validatePdfUpload, attachmentSizeGuard, concurrentUploadGuard, handleAttachmentError,
+  validateUploadedFiles, validatePdfUpload, attachmentSizeGuard, concurrentUploadGuard, handleAttachmentError, claimedKind,
 } from '../middleware/uploadMiddleware.js';
 import { jest } from '@jest/globals';
 
@@ -431,5 +431,34 @@ describe('staff attachment middleware', () => {
     const err = new Error('boom');
     handleAttachmentError(err, {}, emitterRes(), next);
     expect(next).toHaveBeenCalledWith(err);
+  });
+});
+
+describe('claimedKind — the label sieve before the byte check', () => {
+  const k = (mimetype, originalname = 'x') => claimedKind({ mimetype, originalname });
+  it('reads the usual labels', () => {
+    expect(k('image/jpeg')).toBe('photo');
+    expect(k('image/png')).toBe('photo');
+    expect(k('image/webp')).toBe('photo');
+    expect(k('image/jpg')).toBe('photo');
+    expect(k('image/pjpeg')).toBe('photo');
+    expect(k('application/pdf')).toBe('pdf');
+  });
+  it('takes the PDF labels Windows PCs use', () => {
+    expect(k('application/x-pdf')).toBe('pdf');
+    expect(k('application/acrobat')).toBe('pdf');
+    expect(k('APPLICATION/PDF')).toBe('pdf');
+  });
+  it('a label that says nothing falls back to the file name', () => {
+    expect(k('application/octet-stream', 'Receipt.PDF')).toBe('pdf');
+    expect(k('', 'shot.jpeg')).toBe('photo');
+    expect(k('application/octet-stream', 'notes.txt')).toBeNull();
+    expect(k(undefined, 'noext')).toBeNull();
+  });
+  it('a real other type is refused, whatever its name', () => {
+    expect(k('text/html', 'receipt.pdf')).toBeNull();
+    expect(k('image/gif', 'a.gif')).toBeNull();
+    expect(k('image/heic', 'IMG_1.heic')).toBeNull();
+    expect(k('application/x-msdownload', 'pay.pdf')).toBeNull();
   });
 });

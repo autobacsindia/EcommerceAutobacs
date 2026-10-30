@@ -3,6 +3,7 @@
  * and auth are real; Razorpay link cancelling and private storage are doubles.
  * The rules themselves are in bankTransfers.test.js — this proves the wiring.
  */
+import http from 'http';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { jest } from '@jest/globals';
@@ -55,7 +56,7 @@ async function signIn(email) {
     form: (url, fields = {}, files = []) => {
       let r = agent.post(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf);
       for (const [k, v] of Object.entries(fields)) r = r.field(k, String(v));
-      for (const f of files) r = r.attach('proof', f.buffer, { filename: f.name, contentType: f.type });
+      for (const f of files) r = r.attach(f.field || 'proof', f.buffer, { filename: f.name, contentType: f.type });
       return r;
     },
   };
@@ -95,11 +96,38 @@ describe('Bank transfer routes', () => {
   const fields = { amount: 52000, reference: 'UTR123456789012', paidOn: new Date().toISOString().slice(0, 10) };
 
   it('refuses a request whose files add up to more than 40 MB before reading it', async () => {
-    const big = { buffer: Buffer.concat([JPEG, Buffer.alloc(9 * 1024 * 1024)]), name: 'big.jpg', type: 'image/jpeg' };
-    const res = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields, [big, big, big, big, big]);
-    expect(res.status).toBe(413);
-    expect(res.body.message).toBe('These files add up to more than 40 MB. Send fewer at a time.');
-    expect(stored.size).toBe(0);
+    /*
+      Declare 45 MB and send almost none of it: the answer must come from the
+      declared size alone. (Sending the real 45 MB raced — the server answers and
+      closes while the client is still writing, and the test failed with EPIPE
+      about one run in three.)
+    */
+    const server = app.listen(0);
+    try {
+      const { port } = server.address();
+      const login = await request(server).post(`${BASE}/auth/login`).send({ email: lead.user.email, password: PW });
+      const cookies = login.headers['set-cookie'].map((c) => c.split(';')[0]).join('; ');
+      const res = await new Promise((resolve, reject) => {
+        const req = http.request({
+          port, method: 'POST', path: `${BASE}/staff/sales/orders/${order._id}/bank-transfer`,
+          headers: {
+            Cookie: cookies, 'X-XSRF-TOKEN': csrfFrom(login),
+            'Content-Type': 'multipart/form-data; boundary=x', 'Content-Length': String(45 * 1024 * 1024),
+          },
+        }, (r) => {
+          let body = '';
+          r.on('data', (c) => { body += c; });
+          r.on('end', () => { resolve({ status: r.statusCode, body: JSON.parse(body) }); req.destroy(); });
+        });
+        req.on('error', reject);
+        req.write('--x\r\n');
+      });
+      expect(res.status).toBe(413);
+      expect(res.body.message).toBe('These files add up to more than 40 MB. Send fewer at a time.');
+      expect(stored.size).toBe(0);
+    } finally {
+      server.close();
+    }
   });
 
   it('records with up to twenty screenshots, then accounts confirms; the order is paid', async () => {
@@ -144,6 +172,56 @@ describe('Bank transfer routes', () => {
     expect(ok.status).toBe(200);
     expect(ok.body.transfer.status).toBe('confirmed');
     expect((await Order.findById(order._id).lean()).paymentStatus).toBe('paid');
+  });
+
+  /*
+    Chrome on Windows labels a file from the PC's own settings, so a real PDF can
+    arrive as application/x-pdf or with no useful label. The bytes decide; the
+    label must not refuse it first. (Production, 2026-10-30: a GTM lead on a
+    Windows PC could not attach a payment PDF.)
+  */
+  it('takes a real PDF whatever the browser labels it; refuses what is not a photo or PDF', async () => {
+    const PDF = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(200, 32)]);
+    const res = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields, [
+      { buffer: PDF, name: 'receipt.pdf', type: 'application/x-pdf' },
+      { buffer: Buffer.concat([PDF, Buffer.from('2')]), name: 'Statement.PDF', type: 'application/octet-stream' },
+      shot(1),
+    ]);
+    expect(res.status).toBe(201);
+    expect(res.body.transfer.files.map((f) => [f.name, f.contentType])).toEqual([
+      ['receipt.pdf', 'application/pdf'], ['Statement.PDF', 'application/pdf'], ['t1.jpg', 'image/jpeg'],
+    ]);
+    const opened = await lead.session.get(`/staff/bank-transfers/${res.body.transfer.id}/files/${res.body.transfer.files[0].id}`);
+    expect(opened.headers['content-type']).toBe('application/pdf');
+    expect(Buffer.from(opened.body).subarray(0, 5).toString()).toBe('%PDF-');
+    await lead.session.post(`/staff/bank-transfers/${res.body.transfer.id}/withdraw`);
+    stored.clear();
+
+    for (const bad of [
+      { buffer: Buffer.from('just text'), name: 'notes.txt', type: 'text/plain' },
+      { buffer: Buffer.from('just text'), name: 'notes.txt', type: 'application/octet-stream' },
+      { buffer: Buffer.from('<html>'), name: 'receipt.html', type: 'text/html' },
+    ]) {
+      const refused = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields, [bad]);
+      expect(refused.status).toBe(400);
+      expect(refused.body.message).toBe(`"${bad.name}" is not a photo (JPG, PNG, WebP) or a PDF.`);
+    }
+    // A label that says nothing lets a file through to the bytes — which still refuse a renamed program.
+    const renamed = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields,
+      [{ buffer: Buffer.from('MZ\x90\x00 program'), name: 'receipt.pdf', type: 'application/octet-stream' }]);
+    expect(renamed.status).toBe(400);
+    expect(renamed.body.message).toMatch(/"receipt.pdf" is not a photo/);
+    expect(stored.size).toBe(0);
+  });
+
+  it('the GPay QR box refuses a PDF and says where a customer\'s receipt goes', async () => {
+    const res = await lead.session.form(`/staff/sales/orders/${order._id}/pay-details`, { method: 'upi_qr' },
+      [{ field: 'qr', buffer: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(100, 32)]), name: 'gpay receipt.pdf', type: 'application/pdf' }]);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/^"gpay receipt.pdf" is not a picture\. The QR box takes a picture of our GPay \/ UPI QR only/);
+    expect(res.body.message).toContain('"Customer already paid"');
+    expect(stored.size).toBe(0);
+    expect((await Order.findById(order._id).lean()).salesPayDetails?.method).toBeUndefined();
   });
 
   it('validates ids, filters and the rejection reason', async () => {

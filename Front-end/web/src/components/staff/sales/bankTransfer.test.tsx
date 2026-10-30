@@ -45,6 +45,7 @@ const TRANSFER = (extra: Partial<BankTransfer> = {}): BankTransfer => ({
 });
 
 const shot = (name = 'shot.jpg') => new File(['x'], name, { type: 'image/jpeg' });
+const receiptPdf = (name = 'gpay-receipt.pdf', type = 'application/pdf') => new File(['%PDF-1.4'], name, { type });
 
 beforeEach(() => {
   get.mockReset(); post.mockReset(); postForm.mockReset();
@@ -57,10 +58,10 @@ describe('recording a bank transfer (salesman)', () => {
     postForm.mockResolvedValue({ transfer: {} });
     wrap(<SalesOrderPayment id="o1" />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Customer paid by bank transfer/ }));
-    fireEvent.change(screen.getByLabelText(/UTR \/ bank reference/), { target: { value: ' UTR123456789 ' } });
+    fireEvent.click(await screen.findByRole('button', { name: /Customer already paid — attach receipt/ }));
+    fireEvent.change(screen.getByLabelText(/UTR \/ bank or UPI reference/), { target: { value: ' UTR123456789 ' } });
     fireEvent.change(screen.getByLabelText('Date paid'), { target: { value: '2026-10-20' } });
-    fireEvent.change(screen.getByLabelText('Attach screenshot or PDF'), { target: { files: [shot('a.jpg'), shot('b.jpg')] } });
+    fireEvent.change(screen.getByLabelText('Attach receipt (PDF or photo)'), { target: { files: [shot('a.jpg'), shot('b.jpg')] } });
     fireEvent.click(screen.getByRole('button', { name: /Send to accounts/ }));
 
     await waitFor(() => expect(postForm).toHaveBeenCalledTimes(1));
@@ -72,11 +73,62 @@ describe('recording a bank transfer (salesman)', () => {
     expect(form.getAll('proof')).toHaveLength(2);
   });
 
+  /*
+    Production, 2026-10-30: a GTM lead holding a customer's PDF receipt went to
+    "How will the customer pay?" (it is first on the page) and tried the GPay QR
+    box seven times. That box now has a way here, and this form says "receipt".
+  */
+  it('"How will the customer pay?" offers "Customer already paid"; a PDF receipt and a screenshot go together', async () => {
+    get.mockResolvedValue(ORDER());
+    postForm.mockResolvedValue({ transfer: {} });
+    wrap(<SalesOrderPayment id="o1" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Customer already paid — attach receipt/ }));
+    const form = screen.getByRole('form', { name: 'Record a bank transfer' });
+    expect(within(form).getByText(/Customer already paid — ₹52,000/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/UTR \/ bank or UPI reference/)).toHaveFocus();
+    // The choices stay where they were; the form opens below them, in view.
+    expect(screen.queryByText('How will the customer pay?')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/UTR \/ bank or UPI reference/), { target: { value: '430912345678' } });
+    fireEvent.change(screen.getByLabelText('Attach receipt (PDF or photo)'), { target: { files: [receiptPdf(), shot('gpay.jpg'), receiptPdf('bank.pdf', 'application/x-pdf')] } });
+    expect(within(form).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['gpay-receipt.pdf', 'gpay.jpg', 'bank.pdf']);
+    fireEvent.click(screen.getByRole('button', { name: /Send to accounts/ }));
+
+    await waitFor(() => expect(postForm).toHaveBeenCalledTimes(1));
+    const [endpoint, body] = postForm.mock.calls[0] as [string, FormData];
+    expect(endpoint).toBe('/staff/sales/orders/o1/bank-transfer');
+    expect((body.getAll('proof') as File[]).map((f) => f.name)).toEqual(['gpay-receipt.pdf', 'gpay.jpg', 'bank.pdf']);
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('Record a payment of ₹52,000'));
+  });
+
+  it('one "Customer already paid" at a time: up top while asking how to pay, below once details are shared', async () => {
+    get.mockResolvedValue(ORDER());
+    const { unmount } = wrap(<SalesOrderPayment id="o1" />);
+    await screen.findByText('How will the customer pay?');
+    expect(screen.getAllByRole('button', { name: /Customer already paid/ })).toHaveLength(1);
+    unmount();
+
+    get.mockResolvedValue(ORDER({ payDetails: { method: 'other', bank: null, upiId: '', hasQr: false, note: 'Cash at the Kochi office', setBy: 'Asha', setAt: '' } }));
+    wrap(<SalesOrderPayment id="o1" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Customer already paid (bank transfer / GPay / UPI)' }));
+    expect(screen.getByRole('form', { name: 'Record a bank transfer' })).toBeInTheDocument();
+  });
+
+  it('a file the form does not take is refused before anything is sent', async () => {
+    get.mockResolvedValue(ORDER());
+    wrap(<SalesOrderPayment id="o1" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Customer already paid — attach receipt/ }));
+    fireEvent.change(screen.getByLabelText('Attach receipt (PDF or photo)'), { target: { files: [new File(['x'], 'receipt.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })] } });
+    expect(screen.getByRole('alert')).toHaveTextContent('"receipt.docx" can\'t be attached here — only a photo (JPG, PNG, WebP) or a PDF.');
+    expect(postForm).not.toHaveBeenCalled();
+  });
+
   it('will not send without a screenshot', async () => {
     get.mockResolvedValue(ORDER());
     wrap(<SalesOrderPayment id="o1" />);
-    fireEvent.click(await screen.findByRole('button', { name: /Customer paid by bank transfer/ }));
-    fireEvent.change(screen.getByLabelText(/UTR \/ bank reference/), { target: { value: 'UTR123456789' } });
+    fireEvent.click(await screen.findByRole('button', { name: /Customer already paid — attach receipt/ }));
+    fireEvent.change(screen.getByLabelText(/UTR \/ bank or UPI reference/), { target: { value: 'UTR123456789' } });
     fireEvent.click(screen.getByRole('button', { name: /Send to accounts/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Add the payment screenshot');
     expect(postForm).not.toHaveBeenCalled();
@@ -86,9 +138,9 @@ describe('recording a bank transfer (salesman)', () => {
     get.mockResolvedValue(ORDER());
     postForm.mockRejectedValue(Object.assign(new Error('x'), { rawData: { message: 'This UTR is already recorded on order #ZZ.' } }));
     wrap(<SalesOrderPayment id="o1" />);
-    fireEvent.click(await screen.findByRole('button', { name: /Customer paid by bank transfer/ }));
-    fireEvent.change(screen.getByLabelText(/UTR \/ bank reference/), { target: { value: 'UTR123456789' } });
-    fireEvent.change(screen.getByLabelText('Attach screenshot or PDF'), { target: { files: [shot()] } });
+    fireEvent.click(await screen.findByRole('button', { name: /Customer already paid — attach receipt/ }));
+    fireEvent.change(screen.getByLabelText(/UTR \/ bank or UPI reference/), { target: { value: 'UTR123456789' } });
+    fireEvent.change(screen.getByLabelText('Attach receipt (PDF or photo)'), { target: { files: [shot()] } });
     fireEvent.click(screen.getByRole('button', { name: /Send to accounts/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already recorded on order #ZZ');
   });
@@ -97,8 +149,11 @@ describe('recording a bank transfer (salesman)', () => {
     get.mockResolvedValue(ORDER({ bankTransferPending: true }));
     wrap(<SalesOrderPayment id="o1" />);
     expect(await screen.findByText(/Bank transfer recorded — waiting for accounts/)).toBeInTheDocument();
+    // Where to see what was sent: the receipts open from Bank transfers.
+    expect(screen.getByRole('link', { name: /See it and its receipt in Bank transfers/ })).toHaveAttribute('href', '/team/bank-transfers');
+    expect(screen.queryByRole('button', { name: /Customer already paid/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Create payment link/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Customer paid by bank transfer/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Customer already paid/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cancel order/ })).not.toBeInTheDocument();
   });
 

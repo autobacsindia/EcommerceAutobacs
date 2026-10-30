@@ -58,7 +58,7 @@ import {
 import staffTaskRoutes from './staffTasks.js';
 import pastSaleRoutes from './pastSales.js';
 import {
-  uploadProofPhotos, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPaymentRequestFiles,
+  uploadProofPhotos, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPayDetailsQr,
 } from '../middleware/uploadMiddleware.js';
 import {
   listQueue,
@@ -387,7 +387,7 @@ router.put('/attribution/orders/:id', validateSetSeller, validateRequest, asyncH
 
 // @route  POST /staff/sales/orders/:id/pay-details — multipart: method (bank|upi_qr|other), bank(JSON)?, upiId?, note?, qr(image)?
 //         The bank / GPay QR / other way the customer is told to pay. Unpaid orders only.
-router.post('/sales/orders/:id/pay-details', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError,
+router.post('/sales/orders/:id/pay-details', concurrentUploadGuard, attachmentSizeGuard, uploadPayDetailsQr, handleAttachmentError,
   validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
     const qr = req.files?.qr?.[0] || null;
     res.json({ success: true, order: await setPayDetails(req.user, req.params.id, req.body, qr, req) });

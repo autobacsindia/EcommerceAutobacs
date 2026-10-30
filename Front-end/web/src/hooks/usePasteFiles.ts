@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
-import { filesFromClipboard, matchesAccept, namePastedFile } from '@/lib/clipboardFiles';
+import { filesFromClipboard, namePastedFile } from '@/lib/clipboardFiles';
+import { acceptsFile } from '@/lib/attachments';
 
 /**
  * Ctrl/Cmd+V of a screenshot attaches it to a file picker, exactly as if it had
@@ -49,7 +50,7 @@ function inDocumentOrder(list: Zone[]): Zone[] {
 
 export function pickZone(target: EventTarget | null, files: File[]): Zone | null {
   const all = inDocumentOrder([...zones].filter((z) => z.el.current));
-  const fits = (z: Zone) => z.hasRoom() && files.some((f) => matchesAccept(f, z.accept()));
+  const fits = (z: Zone) => z.hasRoom() && files.some((f) => acceptsFile(f, z.accept()));
   for (const t of [target, lastPointer]) {
     if (!isNode(t)) continue;
     const own = all.find((z) => z.el.current!.contains(t));

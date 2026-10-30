@@ -75,6 +75,43 @@ it('GPay QR above ₹50,000: warns, and refuses to save without a QR image', asy
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+/*
+  Production, 2026-10-30: seven failed saves of this form from a Windows PC, each
+  carrying a PDF in the QR box (Windows' file window offers "All files"). The QR
+  box is for OUR QR picture; a customer's receipt goes under "Customer already paid".
+*/
+it('a PDF in the GPay QR box: refused on the spot, with a way to the receipt form', async () => {
+  get.mockResolvedValue(ORDER());
+  wrap(<SalesOrderPayment id="o1" startWithDetails />);
+  fireEvent.click(await screen.findByRole('radio', { name: 'GPay / UPI QR' }));
+  fireEvent.change(screen.getByLabelText('Attach the GPay / UPI QR'), { target: { files: [new File(['%PDF'], 'gpay receipt.pdf', { type: 'application/pdf' })] } });
+  expect(screen.getByRole('alert')).toHaveTextContent('"gpay receipt.pdf" is a PDF. This box is only for a picture of our GPay / UPI QR');
+  expect(screen.getByRole('alert')).toHaveTextContent('Record it under "Customer already paid" — PDFs and screenshots both work there.');
+  expect(fetchMock).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole('button', { name: /Customer already paid — attach receipt/ }));
+  expect(screen.queryByRole('form', { name: 'Payment details' })).not.toBeInTheDocument();
+  expect(screen.getByRole('form', { name: 'Record a bank transfer' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Attach receipt (PDF or photo)')).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp,application/pdf');
+});
+
+it('a QR picture is still taken; another refusal does not offer the receipt form', async () => {
+  get.mockResolvedValue(ORDER({ totalAmount: 30000 }));
+  wrap(<SalesOrderPayment id="o1" startWithDetails />);
+  fireEvent.click(await screen.findByRole('radio', { name: 'GPay / UPI QR' }));
+  fireEvent.change(screen.getByLabelText('Attach the GPay / UPI QR'), { target: { files: [new File(['%PDF'], 'r.pdf', { type: 'application/pdf' })] } });
+  expect(screen.getByRole('button', { name: /Customer already paid — attach receipt/ })).toBeInTheDocument();
+  // Too big is a different problem: no receipt hint.
+  fireEvent.change(screen.getByLabelText('Attach the GPay / UPI QR'), { target: { files: [new File([new Uint8Array(11 * 1024 * 1024)], 'qr.png', { type: 'image/png' })] } });
+  expect(screen.getByRole('alert')).toHaveTextContent('"qr.png" is too large');
+  expect(screen.queryByRole('button', { name: /Customer already paid — attach receipt/ })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Attach the GPay / UPI QR'), { target: { files: [new File(['png'], 'our-qr.png', { type: 'image/png' })] } });
+  expect(screen.queryByRole('alert')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /Save payment details/ }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  expect(((fetchMock.mock.calls[0][1] as RequestInit).body as FormData).get('qr')).toMatchObject({ name: 'our-qr.png' });
+});
+
 it('saved details: ready to share as PDF and WhatsApp; not changeable once paid', async () => {
   const details: PayDetails = { method: 'upi_qr', bank: BANK, upiId: 'autobacs@okhdfcbank', hasQr: true, note: '', setBy: 'Asha', setAt: '' };
   get.mockResolvedValue(ORDER({ payDetails: details }));

@@ -393,28 +393,60 @@ export const attachmentSizeGuard = (req, res, next) => {
   return next();
 };
 
-const staffAttachmentFilter = (photoOnlyFields = []) => (req, file, cb) => {
-  const pdfOk = !photoOnlyFields.includes(file.fieldname);
-  const ok = ALLOWED_MIME_TYPES.includes(file.mimetype) || (pdfOk && file.mimetype === 'application/pdf');
-  if (!ok) {
-    return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE',
-      pdfOk
-        ? `"${file.originalname}" is not a photo (JPG, PNG, WebP) or a PDF.`
-        : `"${file.originalname}" is not a photo (JPG, PNG or WebP).`), false);
+/*
+  The browser's label on a file is only a first sieve here — the service decides
+  from the BYTES (attachmentCheck.js). So the sieve must not refuse a real file
+  just because of its label: Chrome on Windows labels a PDF from the PC's own
+  settings, which can say `application/x-pdf`, or nothing useful at all. A
+  generic label passes when the file name says what it is; a renamed .exe still
+  fails on its bytes.
+*/
+const PDF_LABELS = new Set(['application/pdf', 'application/x-pdf', 'application/acrobat', 'applications/vnd.pdf', 'text/pdf', 'text/x-pdf']);
+const NO_LABEL = new Set(['', 'application/octet-stream', 'binary/octet-stream', 'application/unknown']);
+const PHOTO_LABELS = new Set([...ALLOWED_MIME_TYPES, 'image/pjpeg']);
+
+/** 'photo' | 'pdf' | null — what a staff upload claims to be, from its label or (if the label says nothing) its name. */
+export const claimedKind = ({ mimetype, originalname }) => {
+  const type = String(mimetype || '').toLowerCase();
+  if (PHOTO_LABELS.has(type)) return 'photo';
+  if (PDF_LABELS.has(type)) return 'pdf';
+  if (NO_LABEL.has(type)) {
+    const ext = String(originalname || '').toLowerCase().split('.').pop();
+    if (ext === 'pdf') return 'pdf';
+    if (['jpg', 'jpeg', 'png', 'webp'].includes(ext)) return 'photo';
   }
-  return cb(null, true);
+  return null;
 };
 
-const staffUpload = (photoOnlyFields) => multer({
+/** @param {(file: object) => string} [photoOnlyMessage] what to say when a photo-only field gets anything else */
+const staffAttachmentFilter = (photoOnlyFields = [], photoOnlyMessage) => (req, file, cb) => {
+  const pdfOk = !photoOnlyFields.includes(file.fieldname);
+  const kind = claimedKind(file);
+  if (kind === 'photo' || (pdfOk && kind === 'pdf')) return cb(null, true);
+  let message;
+  if (pdfOk) message = `"${file.originalname}" is not a photo (JPG, PNG, WebP) or a PDF.`;
+  else message = photoOnlyMessage ? photoOnlyMessage(file) : `"${file.originalname}" is not a photo (JPG, PNG or WebP).`;
+  return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', message), false);
+};
+
+const staffUpload = (photoOnlyFields, photoOnlyMessage) => multer({
   storage,
-  fileFilter: staffAttachmentFilter(photoOnlyFields),
+  fileFilter: staffAttachmentFilter(photoOnlyFields, photoOnlyMessage),
   limits: { fileSize: MAX_ATTACHMENT_BYTES, files: MAX_ATTACHMENTS + 1 },
 });
 
-/** Raising a payment request: up to MAX_ATTACHMENTS bills and one payee QR (a photo). Also GTM's pay-details QR. */
+/** Raising a payment request: up to MAX_ATTACHMENTS bills and one payee QR (a photo). */
 export const uploadPaymentRequestFiles = staffUpload(['qr']).fields([
   { name: 'bill', maxCount: MAX_ATTACHMENTS }, { name: 'qr', maxCount: 1 },
 ]);
+/**
+ * GTM's pay-details: one picture of OUR GPay / UPI QR (it is drawn onto the
+ * payment request PDF). A salesman holding the customer's receipt tends to land
+ * here first (production, 2026-10-30), so a refusal says where a receipt goes.
+ */
+export const uploadPayDetailsQr = staffUpload(['qr'], (file) => `"${file.originalname}" is not a picture. `
+  + 'The QR box takes a picture of our GPay / UPI QR only — a customer\'s payment receipt goes under "Customer already paid".')
+  .fields([{ name: 'qr', maxCount: 1 }]);
 /** Recording a payment or a bank transfer: up to MAX_ATTACHMENTS screenshots (field `proof`). */
 export const uploadPaymentProof = staffUpload().array('proof', MAX_ATTACHMENTS);
 /** Parcel proof: up to MAX_ATTACHMENTS photos or PDFs (field `photo`, repeated). */
