@@ -50,6 +50,9 @@ router.patch("/admin/:id/received", protect, admin, validateIdParam, markReceive
 router.patch("/admin/:id/offline-received", protect, admin, validateOfflineReceived, markReturnedOffline);
 router.patch("/admin/:id/inspection", protect, admin, validateIdParam, recordInspection);
 router.get("/admin/:id/refund-preview", protect, admin, validateIdParam, refundPreview);
+// The same preview for the operator's choices (installation lines, pickup cost) — the
+// body has the refund route's shape, so the figure shown is the figure that will be sent.
+router.post("/admin/:id/refund-preview", protect, admin, validateReturnRefundBody, refundPreview);
 router.post("/admin/:id/refund", protect, admin, validateReturnRefundBody, initiateReturnRefund);
 // Withdraw an OFFLINE refund record that was a mistake. Refuses for a gateway refund —
 // that money has genuinely left and cannot be un-refunded by a field write.

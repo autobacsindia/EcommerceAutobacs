@@ -84,14 +84,33 @@ describe('returnEmail — refunded', () => {
       refund: { finalAmount: 450, shippingDeduction: 100, restockingDeduction: 50, method: 'offline', offlineMethod: 'upi', reference: 'U1' },
     });
     const { text } = returnEmail({ event: 'refunded', rr, order, company });
-    expect(text).toContain('Shipping deduction: ₹100.00');
+    expect(text).toContain('Pickup cost deducted: ₹100.00');
     expect(text).toContain('Restocking (10%): ₹50.00');
+  });
+
+  it('itemises the our-fault parts: delivery share and installation', () => {
+    const rr = makeReturn({
+      refund: {
+        finalAmount: 10200, productValue: 9000, shippingShare: 200,
+        serviceLines: [{ name: 'Installation', amountPaise: 100000 }], creditNoteNo: 'CN-9',
+      },
+    });
+    const { text } = returnEmail({ event: 'refunded', rr, order, company });
+    expect(text).toContain('Item(s): ₹9,000.00');
+    expect(text).toContain('Delivery charge refunded: ₹200.00');
+    expect(text).toContain('Installation refunded: ₹1,000.00');
+    expect(text).toContain('Credit note: CN-9');
+  });
+
+  it('does not list the item alone when nothing was added or deducted', () => {
+    const rr = makeReturn({ refund: { finalAmount: 900, productValue: 900 } });
+    expect(returnEmail({ event: 'refunded', rr, order, company }).text).not.toContain('Item(s)');
   });
 
   it('itemises deductions when the operator applied them', () => {
     const rr = makeReturn({ refund: { finalAmount: 450, shippingDeduction: 100, restockingDeduction: 50 } });
     const { text } = returnEmail({ event: 'refunded', rr, order, company });
-    expect(text).toContain('Shipping deduction: ₹100.00');
+    expect(text).toContain('Pickup cost deducted: ₹100.00');
     expect(text).toContain('Restocking (10%): ₹50.00');
   });
 

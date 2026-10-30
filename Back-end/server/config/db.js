@@ -482,6 +482,24 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ ReturnRequest unique in-flight-return index confirmed');
 
+    // MONEY: one refund per installation (service) line across all returns — the
+    // race-safe backstop for returnRequestRepository.claimForRefund. Declared in
+    // models/ReturnRequest.js with the reasoning; mirrored here because autoIndex is
+    // off in prod. A new name on a field no earlier index used, so nothing to drop.
+    await db.collection('returnrequests').createIndex(
+      { 'refund.serviceLines.orderItemId': 1 },
+      {
+        name: 'unique_refunded_service_line',
+        unique: true,
+        partialFilterExpression: {
+          'refund.status': { $in: ['processing', 'completed'] },
+          'refund.serviceLines.orderItemId': { $exists: true },
+        },
+        background: true
+      }
+    );
+    console.log('✓ ReturnRequest unique refunded-service-line index confirmed');
+
     // ── Spin-to-Win ────────────────────────────────────────────────────────────
     // THE idempotency guarantee for the reward wheel: one spin per order, forever.
     // spinService pre-checks with a findOne, but under snapshot isolation two

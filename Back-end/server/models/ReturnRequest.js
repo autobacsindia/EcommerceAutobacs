@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { RETURN_REASONS, IN_FLIGHT_RETURN_STATUSES } from "../config/returnPolicy.js";
+import { RETURN_REASONS, IN_FLIGHT_RETURN_STATUSES, FAULTS, DISPOSITIONS } from "../config/returnPolicy.js";
 import { revertFields } from "./shared/offlineRefundFields.js";
 
 /**
@@ -23,6 +23,35 @@ const CloudAssetSchema = new mongoose.Schema({
 
 }, { _id: false });
 
+/**
+ * Who caused the problem, for ONE line (rule 2). The customer's reason only claims a
+ * fault; operations confirms it at review and may change it at inspection, always with
+ * a note. The refund maths reads `confirmed ?? claimed` (returnPolicy.effectiveFault).
+ * Absent on rows from before 2026-10-30 — those resolve through their reason.
+ */
+const LineFaultSchema = new mongoose.Schema({
+  claimed:   { type: String, enum: FAULTS, default: null },
+  confirmed: { type: String, enum: [...FAULTS, null], default: null },
+  changedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  changedAt: { type: Date, default: null },
+  note:      { type: String, trim: true, maxlength: 500, default: null },
+}, { _id: false });
+
+/**
+ * One installation (service) line refunded with this return — a CUSTOM line on the
+ * order (sales panel), picked by staff. `netPaidPaise` is the server's figure for what
+ * the customer paid for it (its share of any discount taken off); `amountPaise` is what
+ * is refunded, which staff may LOWER (with a reason) but never raise. A unique index
+ * (db.js) makes one order line refundable at most once across all returns.
+ */
+const ServiceLineSchema = new mongoose.Schema({
+  orderItemId:     { type: mongoose.Schema.Types.ObjectId, required: true },
+  name:            { type: String, trim: true, maxlength: 200, default: '' },
+  netPaidPaise:    { type: Number, min: 0, default: 0 },
+  amountPaise:     { type: Number, min: 0, required: true },
+  reductionReason: { type: String, trim: true, maxlength: 500, default: null },
+}, { _id: false });
+
 const ReturnRequestSchema = new mongoose.Schema({
   order: {
     type: mongoose.Schema.Types.ObjectId,
@@ -37,7 +66,8 @@ const ReturnRequestSchema = new mongoose.Schema({
     // no user (Order.user has the same conditional shape), and those are exactly the
     // orders most likely to be settled over the counter. reverseReturnLtvOnce already
     // no-ops on a userless return, so net LTV is simply not adjusted for one.
-    required: function () { return this.origin !== "admin_offline"; }
+    // A STAFF-raised return is the same: a salesperson raising one for a guest order.
+    required: function () { return this.origin === "customer"; }
   },
   items: [{
     product: {
@@ -45,6 +75,12 @@ const ReturnRequestSchema = new mongoose.Schema({
       ref: "Product",
       required: true
     },
+    /*
+      The order line this return line came from (Order.items[]._id) — the exact handle.
+      Product + variant is only NEARLY exact: one product can sit on two lines. Absent
+      on rows from before 2026-10-30; matchOrderLine falls back to product + variant.
+    */
+    orderItemId: { type: mongoose.Schema.Types.ObjectId, default: null },
     // Set for a returned line of a variable product (which variant was bought).
     variantId: { type: mongoose.Schema.Types.ObjectId, default: null },
     /**
@@ -72,6 +108,7 @@ const ReturnRequestSchema = new mongoose.Schema({
       enum: RETURN_REASONS,
       required: true
     },
+    fault: { type: LineFaultSchema, default: undefined },
     // Charged price of ONE unit at request time (rupees). Snapshotted from the
     // order line so the refund calculation never re-reads a since-changed product
     // price. Sum(unitPrice × quantity) is the refundable product value.
@@ -99,13 +136,22 @@ const ReturnRequestSchema = new mongoose.Schema({
   // No `index: true`: nothing queries by origin today, and prod runs autoIndex:false —
   // a declared-but-never-built index is exactly the drift `npm run audit-index-drift`
   // exists to catch. Add it with a migration if an origin filter is ever needed.
+  //   staff        → a salesperson / operations raised it ON THE CUSTOMER'S BEHALF
+  //                  (phone, WhatsApp, walk-in). Unlike admin_offline, every policy
+  //                  gate applies — window, evidence (at least one photo or video the
+  //                  customer sent), returnable product — and it runs the full flow.
   origin: {
     type: String,
-    enum: ["customer", "admin_offline"],
+    enum: ["customer", "admin_offline", "staff"],
     default: "customer"
   },
   // The admin who recorded an offline return (null for a customer-raised one).
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  // The staff member who raised a `staff` return.
+  raisedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  // A customer-reason return is allowed only for goods that are unused, uninstalled
+  // and in the original box. When the customer (or staff, for them) declared that.
+  unusedDeclaredAt: { type: Date, default: null },
   // Lifecycle:
   //   pending        → submitted, awaiting operations review
   //   approved       → operations approved; return courier to be booked by us
@@ -150,7 +196,21 @@ const ReturnRequestSchema = new mongoose.Schema({
     passed: { type: Boolean, default: null },
     notes:  String,
     at:     Date,
-    by:     { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+    by:     { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    // What happens to the item now. A record only — stock is the coarse in/low/out
+    // enum, so nothing here moves a quantity.
+    disposition: { type: String, enum: [...DISPOSITIONS, null], default: null },
+  },
+
+  // Each failed pickup attempt. MAX_FAILED_PICKUPS of them cancel the request.
+  pickupAttempts: {
+    type: [{
+      at:   { type: Date, required: true },
+      note: { type: String, trim: true, maxlength: 500 },
+      by:   { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      _id: false,
+    }],
+    default: [],
   },
 
   // Refund is decided BY HAND at initiation (full, or minus shipping / restocking).
@@ -168,7 +228,17 @@ const ReturnRequestSchema = new mongoose.Schema({
     // re-deriving it from an order that may since have been edited.
     listValue:            { type: Number, default: 0 },
     discountShare:        { type: Number, default: 0 },
-    shippingDeduction:    { type: Number, default: 0 }, // manual, variable
+    shippingDeduction:    { type: Number, default: 0 }, // manual, variable — mirrors pickupDeduction
+    // Our-fault lines only: their share of the original shipping charge (rupees).
+    shippingShare:        { type: Number, default: 0 },
+    // Our-fault returns only: the installation line(s) refunded with this return.
+    serviceLines:         { type: [ServiceLineSchema], default: [] },
+    // Customer-reason lines only: the real pickup cost (rupees) and why. Kept beside
+    // the legacy `shippingDeduction`, which carries the same figure for older readers.
+    pickupDeduction:       { type: Number, default: 0 },
+    pickupDeductionReason: { type: String, trim: true, maxlength: 500, default: null },
+    // GST credit note number accounts types on the refund. Free text; never computed.
+    creditNoteNo:          { type: String, trim: true, maxlength: 60, default: null },
     restockingDeduction:  { type: Number, default: 0 }, // 10% on >₹1L (suggested) / oversized (manual)
     finalAmount:          { type: Number, default: 0 },
     // original_payment → sent through Razorpay to the instrument that paid.
@@ -227,6 +297,14 @@ const ReturnRequestSchema = new mongoose.Schema({
   // Email idempotency stamp: set once the "request received" acknowledgement is
   // accepted by the provider, so a queue retry never double-mails the customer.
   submittedEmailedAt: { type: Date, default: null },
+  // The same idea for every LATER email: one key per email actually accepted by the
+  // provider ("approved", "refunded", "courier_booked:<AWB>"…). A queue retry or a
+  // double-click finds the key and sends nothing. The courier key carries the AWB so a
+  // CORRECTED AWB is still emailed — that is a different message, on purpose.
+  emailsSent: {
+    type: [{ key: { type: String, required: true }, at: { type: Date, required: true }, _id: false }],
+    default: [],
+  },
 
   timeline: [{
     status:    String,
@@ -272,6 +350,31 @@ ReturnRequestSchema.index(
     name: 'unique_inflight_return_per_order_product',
     unique: true,
     partialFilterExpression: { status: { $in: IN_FLIGHT_RETURN_STATUSES } }
+  }
+);
+
+/*
+  MONEY: an installation (service) line is refunded at most ONCE across every return on
+  the order. Two returns refunded at the same moment by two people would each pass a
+  read-then-write check, so the guarantee is this unique index: claimForRefund writes the
+  service lines in the SAME atomic update that moves the refund to `processing`, and the
+  second claim for the same order line hits E11000 instead of paying twice.
+
+  Scoped to committed refunds only. A `failed` attempt or a reverted offline record drops
+  out of the index, so the line can be claimed again by a retry. The `$exists` limb keeps
+  every return WITHOUT service lines out of the index: a unique index treats a missing
+  field as null, and every such return would otherwise collide with the next.
+  Built by db.js ensureCriticalIndexes (autoIndex is off in prod).
+*/
+ReturnRequestSchema.index(
+  { 'refund.serviceLines.orderItemId': 1 },
+  {
+    name: 'unique_refunded_service_line',
+    unique: true,
+    partialFilterExpression: {
+      'refund.status': { $in: ['processing', 'completed'] },
+      'refund.serviceLines.orderItemId': { $exists: true },
+    },
   }
 );
 

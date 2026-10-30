@@ -20,9 +20,11 @@
  * CONVENTIONS
  * -----------
  *  - All arithmetic is integer paise (utils/money.js); rupees only at the edges.
- *  - Shipping is NEVER refunded (signed policy: "the original delivery charge is
- *    never refunded"), so proration covers the GOODS amount only:
+ *  - Proration covers the GOODS amount only:
  *        goodsNet = subtotal − discount        [== totalAmount − shippingCost]
+ *    Shipping is refunded only by returnRefundBreakdown, and only for an OUR-FAULT
+ *    return line (owner-approved rules, 2026-10-30). Cancellations and every other
+ *    caller still never refund it.
  *  - Tax is embedded in prices and display-only — it is not a separate limb here.
  *  - A line's share of the discount is proportional to its gross value. Partial-
  *    quantity returns take a per-unit share of their own line.
@@ -32,6 +34,8 @@
  */
 
 import { toPaise, fromPaise } from '../utils/money.js';
+import { effectiveFault } from '../config/returnPolicy.js';
+import { cancelledQuantityByItem } from '../utils/orderCancellation.js';
 
 /** Refund states that have already committed money (or are about to). */
 const COMMITTED_REFUND_STATUSES = ['processing', 'completed'];
@@ -91,64 +95,14 @@ function grossLinesPaise(lines) {
  *   discountShareRupees  the difference, i.e. their share of the order-level discount
  */
 export function refundableForLines(order, returnedLines) {
-  const orderLines = order?.items || [];
-  const orderGrossPaise = grossLinesPaise(orderLines);
-  const goodsNetPaise = orderGoodsNetPaise(order);
-
-  // Per-line attribution when the order carries it; proration otherwise. Legacy orders,
-  // ordinary coupons and cart-value campaigns all take the proration path unchanged.
-  const usePerLine = perLineDiscountPaise(orderLines) > 0;
-  const orderKarmaPaise = toPaise(order?.karmaDiscount || 0);
+  const ctx = proration(order);
 
   let grossPaise = 0;
   let netPaise = 0;
-
   for (const rl of returnedLines || []) {
-    const orderLine = matchOrderLine(orderLines, rl);
-    // Prefer the order's own price over the return's snapshot: the order is the
-    // record of what was charged, and a snapshot can only ever be staler.
-    const unitPaise = toPaise(orderLine?.price ?? rl.unitPrice ?? 0);
-    const orderQty = Number(orderLine?.quantity) || 0;
-    const qty = Math.min(Number(rl.quantity) || 0, orderQty || Number(rl.quantity) || 0);
-
-    const lineGrossPaise = unitPaise * qty;
-    grossPaise += lineGrossPaise;
-
-    let linePaise;
-    if (usePerLine) {
-      /*
-        The order recorded what THIS line was actually discounted by, so use it.
-
-        Proration by gross value — the branch below — is exact only while every line
-        shares one percentage. Once a cart can hold 3%, 5%, 8% and 2% lines together it
-        answers with the cart AVERAGE: return the already-on-offer item discounted 2%
-        and it is refunded as though it had carried the cart's blended rate, refunding
-        money that was never taken off it. Same class of defect as the list-price
-        over-refund fixed on 2026-08-03, which is why the attribution is snapshotted.
-
-        Partial-quantity returns take a per-unit share of their OWN line, floored — the
-        same never-round-a-refund-up rule as everywhere else here.
-
-        Karma stays prorated: it is a whole-cart discount with no per-line meaning, so
-        the only defensible split is by value.
-      */
-      const lineDiscountPaise = Math.max(0, Math.floor(Number(orderLine?.discountPaise) || 0));
-      const couponSharePaise = orderQty > 0
-        ? Math.floor((lineDiscountPaise * qty) / orderQty)
-        : lineDiscountPaise;
-      const karmaSharePaise = orderGrossPaise > 0
-        ? Math.floor((lineGrossPaise * orderKarmaPaise) / orderGrossPaise)
-        : 0;
-      linePaise = Math.max(0, lineGrossPaise - couponSharePaise - karmaSharePaise);
-    } else {
-      // Proportional share of the goods-net pot. When the order carries no discount
-      // this collapses to the gross value exactly (ratio == 1), so a full-price order
-      // is unaffected by the proration path.
-      linePaise = orderGrossPaise > 0
-        ? Math.floor((lineGrossPaise * goodsNetPaise) / orderGrossPaise)
-        : 0;
-    }
-    netPaise += linePaise;
+    const line = lineNet(ctx, rl);
+    grossPaise += line.grossPaise;
+    netPaise += line.netPaise;
   }
 
   // Two independent ceilings, both belt-and-braces:
@@ -157,13 +111,80 @@ export function refundableForLines(order, returnedLines) {
   //     net > gross means an upstream figure is corrupt (e.g. a negative `order.discount`
   //     on a hand-edited offline order). Without this the inflated number would be
   //     invisible, because `discountShareRupees` floors at 0 and would still read ₹0.
-  netPaise = Math.min(netPaise, goodsNetPaise, grossPaise);
+  netPaise = Math.min(netPaise, ctx.goodsNetPaise, grossPaise);
 
   return {
     grossRupees: fromPaise(grossPaise),
     netRupees: fromPaise(netPaise),
     discountShareRupees: fromPaise(Math.max(0, grossPaise - netPaise)),
   };
+}
+
+/** The order-wide figures every per-line share is taken against. */
+function proration(order) {
+  const orderLines = order?.items || [];
+  return {
+    orderLines,
+    orderGrossPaise: grossLinesPaise(orderLines),
+    goodsNetPaise: orderGoodsNetPaise(order),
+    // Per-line attribution when the order carries it; proration otherwise. Legacy orders,
+    // ordinary coupons and cart-value campaigns all take the proration path unchanged.
+    usePerLine: perLineDiscountPaise(orderLines) > 0,
+    orderKarmaPaise: toPaise(order?.karmaDiscount || 0),
+  };
+}
+
+/**
+ * What the customer paid for ONE returned (or refunded) line — its gross value less its
+ * share of the order-level discount, floored. The body of refundableForLines, split out
+ * so the return breakdown can price each line on its own (each carries its own fault).
+ */
+function lineNet(ctx, rl) {
+  const { orderLines, orderGrossPaise, goodsNetPaise, usePerLine, orderKarmaPaise } = ctx;
+  const orderLine = matchOrderLine(orderLines, rl);
+  // Prefer the order's own price over the return's snapshot: the order is the
+  // record of what was charged, and a snapshot can only ever be staler.
+  const unitPaise = toPaise(orderLine?.price ?? rl.unitPrice ?? 0);
+  const orderQty = Number(orderLine?.quantity) || 0;
+  const qty = Math.min(Number(rl.quantity) || 0, orderQty || Number(rl.quantity) || 0);
+
+  const lineGrossPaise = unitPaise * qty;
+
+  let linePaise;
+  if (usePerLine) {
+    /*
+      The order recorded what THIS line was actually discounted by, so use it.
+
+      Proration by gross value — the branch below — is exact only while every line
+      shares one percentage. Once a cart can hold 3%, 5%, 8% and 2% lines together it
+      answers with the cart AVERAGE: return the already-on-offer item discounted 2%
+      and it is refunded as though it had carried the cart's blended rate, refunding
+      money that was never taken off it. Same class of defect as the list-price
+      over-refund fixed on 2026-08-03, which is why the attribution is snapshotted.
+
+      Partial-quantity returns take a per-unit share of their OWN line, floored — the
+      same never-round-a-refund-up rule as everywhere else here.
+
+      Karma stays prorated: it is a whole-cart discount with no per-line meaning, so
+      the only defensible split is by value.
+    */
+    const lineDiscountPaise = Math.max(0, Math.floor(Number(orderLine?.discountPaise) || 0));
+    const couponSharePaise = orderQty > 0
+      ? Math.floor((lineDiscountPaise * qty) / orderQty)
+      : lineDiscountPaise;
+    const karmaSharePaise = orderGrossPaise > 0
+      ? Math.floor((lineGrossPaise * orderKarmaPaise) / orderGrossPaise)
+      : 0;
+    linePaise = Math.max(0, lineGrossPaise - couponSharePaise - karmaSharePaise);
+  } else {
+    // Proportional share of the goods-net pot. When the order carries no discount
+    // this collapses to the gross value exactly (ratio == 1), so a full-price order
+    // is unaffected by the proration path.
+    linePaise = orderGrossPaise > 0
+      ? Math.floor((lineGrossPaise * goodsNetPaise) / orderGrossPaise)
+      : 0;
+  }
+  return { orderLine, qty, grossPaise: lineGrossPaise, netPaise: linePaise };
 }
 
 /**
@@ -272,4 +293,205 @@ export function remainingRefundable(
   };
 }
 
-export default { orderGoodsNetPaise, refundableForLines, remainingRefundable, matchOrderLine };
+/** A refund input the breakdown refuses. `status` is the HTTP status to answer with. */
+export class RefundBreakdownError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.name = 'RefundBreakdownError';
+    this.status = status;
+  }
+}
+
+const idStr = (v) => (v == null ? '' : String(v._id ?? v));
+/** A sales-panel CUSTOM line (installation, fitting…): no catalogue product behind it. */
+const isCustomLine = (line) => line?.custom === true;
+const wholePaise = (n) => Math.max(0, Math.floor(Number(n) || 0));
+
+/**
+ * The full money breakdown of ONE return, in integer paise, floored line by line.
+ * Owner-approved rule 1 (2026-10-30): whoever caused the problem pays.
+ *
+ *   goods net         every line: what the customer paid for it (coupon-aware, as above)
+ * + shipping share    OUR-FAULT lines: shippingCost × the line's share of the goods
+ * + service lines     only when some line is our fault: the installation line(s) staff
+ *                     picked, at their net paid — lowered with a reason, never raised
+ * − pickup deduction  CUSTOMER-REASON lines only: the real pickup cost, with a reason
+ * − restocking        CUSTOMER-REASON lines only, optional
+ *
+ * Both deductions are bounded by the customer-reason lines' own goods net, so a
+ * deduction can never eat into money owed for an our-fault line.
+ *
+ * "The line's share of the goods" is taken over the CATALOGUE lines only. Custom lines
+ * (installation) were never shipped, and a custom line can never be a return line
+ * (ReturnRequest.items.product is required) — so returning every catalogue unit
+ * refunds exactly the whole shipping charge and never more.
+ *
+ * Pure: no I/O. The caller recomputes it from the order at refund time, caps the total
+ * with remainingRefundable, and never stores a client figure.
+ *
+ * @param {Object} order
+ * @param {{ items: Array }} request - the return (items carry reason, fault, quantity)
+ * @param {Object} [choices]
+ * @param {Array}  [choices.serviceLines] - [{ orderItemId, amountPaise?, reductionReason? }]
+ * @param {number} [choices.pickupDeductionPaise]
+ * @param {string} [choices.pickupDeductionReason]
+ * @param {number} [choices.restockingPaise]
+ * @param {Array}  [choices.serviceItemIdsTaken] - custom line ids another return already refunded
+ * @returns {{ lines, goodsGrossPaise, goodsNetPaise, shippingSharePaise, serviceLines,
+ *   servicePaise, pickupDeductionPaise, restockingPaise, totalPaise, hasOurFault, hasCustomerFault }}
+ * @throws {RefundBreakdownError}
+ */
+export function returnRefundBreakdown(order, request, choices = {}) {
+  const ctx = proration(order);
+  const shippingPaise = wholePaise(toPaise(order?.shippingCost || 0));
+  const catalogueGrossPaise = grossLinesPaise(ctx.orderLines.filter((l) => !isCustomLine(l)));
+
+  const lines = [];
+  let goodsGrossPaise = 0;
+  let goodsNetPaise = 0;
+  let customerNetPaise = 0;
+  let shippingSharePaise = 0;
+  for (const raw of request?.items || []) {
+    // A return loaded from the database carries Mongoose subdocuments, whose fields are
+    // getters: spreading one copies none of them (quantity, product… all undefined) and
+    // the line silently prices at ₹0. Always work on a plain copy.
+    const item = typeof raw?.toObject === 'function' ? raw.toObject() : raw;
+    const fault = effectiveFault(item);
+    const priced = lineNet(ctx, { ...item, itemId: item.orderItemId });
+    const sharePaise = fault === 'ours' && catalogueGrossPaise > 0
+      ? Math.floor((priced.grossPaise * shippingPaise) / catalogueGrossPaise)
+      : 0;
+    goodsGrossPaise += priced.grossPaise;
+    goodsNetPaise += priced.netPaise;
+    if (fault === 'customer') customerNetPaise += priced.netPaise;
+    shippingSharePaise += sharePaise;
+    lines.push({
+      orderItemId: idStr(priced.orderLine?._id) || null,
+      product: idStr(item.product) || null,
+      quantity: priced.qty,
+      reason: item.reason,
+      fault,
+      grossPaise: priced.grossPaise,
+      netPaise: priced.netPaise,
+      shippingSharePaise: sharePaise,
+    });
+  }
+  // The same two ceilings refundableForLines applies — see the note there.
+  goodsNetPaise = Math.min(goodsNetPaise, ctx.goodsNetPaise, goodsGrossPaise);
+  customerNetPaise = Math.min(customerNetPaise, goodsNetPaise);
+  shippingSharePaise = Math.min(shippingSharePaise, shippingPaise);
+
+  const hasOurFault = lines.some((l) => l.fault === 'ours');
+  const hasCustomerFault = lines.some((l) => l.fault === 'customer');
+
+  // ── Service (installation) lines ──────────────────────────────────────────────
+  const picked = Array.isArray(choices.serviceLines) ? choices.serviceLines : [];
+  if (picked.length && !hasOurFault) {
+    throw new RefundBreakdownError('Installation is refunded only when the fault is ours.');
+  }
+  const taken = new Set((choices.serviceItemIdsTaken || []).map(idStr));
+  const cancelled = cancelledQuantityByItem(order);
+  const seen = new Set();
+  const serviceLines = [];
+  for (const choice of picked) {
+    const wanted = idStr(choice?.orderItemId);
+    const orderLine = ctx.orderLines.find((l) => idStr(l._id) === wanted);
+    if (!orderLine || !isCustomLine(orderLine)) {
+      throw new RefundBreakdownError('Pick an installation line from this order’s bill.');
+    }
+    const name = orderLine.name || 'Installation';
+    if (seen.has(wanted)) throw new RefundBreakdownError(`"${name}" is listed twice.`);
+    seen.add(wanted);
+    if (taken.has(wanted)) {
+      throw new RefundBreakdownError(`"${name}" was already refunded with another return.`, 409);
+    }
+    // Units of the line already cancelled were refunded by the cancellation; only the
+    // rest is still owed.
+    const qty = Number(orderLine.quantity) || 0;
+    const liveQty = Math.max(0, qty - (cancelled.get(wanted) || 0));
+    if (liveQty === 0) {
+      throw new RefundBreakdownError(`"${name}" was cancelled and refunded already.`, 409);
+    }
+    const netPaidPaise = lineNet(ctx, { itemId: wanted, quantity: liveQty }).netPaise;
+
+    let amountPaise = netPaidPaise;
+    let reductionReason = null;
+    if (choice.amountPaise != null && choice.amountPaise !== '') {
+      const requested = Number(choice.amountPaise);
+      if (!Number.isFinite(requested) || requested < 0) {
+        throw new RefundBreakdownError(`Enter a valid amount for "${name}".`);
+      }
+      if (Math.floor(requested) > netPaidPaise) {
+        throw new RefundBreakdownError(
+          `"${name}" can be refunded up to ₹${fromPaise(netPaidPaise)} — the amount the customer paid for it.`,
+        );
+      }
+      amountPaise = Math.floor(requested);
+      if (amountPaise < netPaidPaise) {
+        reductionReason = String(choice.reductionReason || '').trim();
+        if (!reductionReason) {
+          throw new RefundBreakdownError(`Say why "${name}" is refunded for less than was paid.`);
+        }
+      }
+    }
+    serviceLines.push({ orderItemId: wanted, name, netPaidPaise, amountPaise, reductionReason });
+  }
+  const servicePaise = serviceLines.reduce((sum, l) => sum + l.amountPaise, 0);
+
+  // ── Deductions (customer-reason lines only) ───────────────────────────────────
+  const pickupDeductionPaise = wholePaise(choices.pickupDeductionPaise);
+  const restockingPaise = wholePaise(choices.restockingPaise);
+  if ((pickupDeductionPaise || restockingPaise) && !hasCustomerFault) {
+    throw new RefundBreakdownError('Pickup and restocking are deducted only when the return is for the customer’s own reason.');
+  }
+  if (pickupDeductionPaise && !String(choices.pickupDeductionReason || '').trim()) {
+    throw new RefundBreakdownError('Say what the pickup cost is for (courier and AWB, or the receipt).');
+  }
+  if (pickupDeductionPaise + restockingPaise > customerNetPaise) {
+    throw new RefundBreakdownError(
+      `Deductions can be at most ₹${fromPaise(customerNetPaise)} — what the customer paid for the items returned for their own reason.`,
+    );
+  }
+
+  const totalPaise = goodsNetPaise + shippingSharePaise + servicePaise - pickupDeductionPaise - restockingPaise;
+
+  return {
+    lines,
+    goodsGrossPaise,
+    goodsNetPaise,
+    shippingSharePaise,
+    serviceLines,
+    servicePaise,
+    pickupDeductionPaise,
+    restockingPaise,
+    totalPaise: Math.max(0, totalPaise),
+    hasOurFault,
+    hasCustomerFault,
+  };
+}
+
+/**
+ * The installation lines a return MAY refund: the order's custom lines, each with what
+ * the customer paid for its still-live units. For the staff picker and the estimate.
+ */
+export function serviceLineOptions(order) {
+  const ctx = proration(order);
+  const cancelled = cancelledQuantityByItem(order);
+  return ctx.orderLines
+    .filter(isCustomLine)
+    .map((l) => {
+      const liveQty = Math.max(0, (Number(l.quantity) || 0) - (cancelled.get(idStr(l._id)) || 0));
+      return {
+        orderItemId: idStr(l._id),
+        name: l.name || 'Installation',
+        quantity: liveQty,
+        netPaidPaise: liveQty > 0 ? lineNet(ctx, { itemId: idStr(l._id), quantity: liveQty }).netPaise : 0,
+      };
+    })
+    .filter((l) => l.quantity > 0);
+}
+
+export default {
+  orderGoodsNetPaise, refundableForLines, remainingRefundable, matchOrderLine,
+  returnRefundBreakdown, serviceLineOptions,
+};

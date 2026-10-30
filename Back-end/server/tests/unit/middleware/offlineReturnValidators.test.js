@@ -49,8 +49,13 @@ describe('validateOfflineReturnCreate', () => {
   });
 
   it('rejects a reason outside the policy set', async () => {
-    const res = await post({ ...base, items: [{ itemId: OID, quantity: 1, reason: 'changed_mind' }] });
+    const res = await post({ ...base, items: [{ itemId: OID, quantity: 1, reason: 'not_a_reason' }] });
     expect(res.status).toBe(400);
+  });
+
+  it("accepts a customer-reason return (an admin may record a change of mind)", async () => {
+    const res = await post({ ...base, items: [{ itemId: OID, quantity: 1, reason: 'changed_mind' }] });
+    expect(res.status).not.toBe(400);
   });
 
   it('requires the operator note', async () => {
@@ -84,6 +89,22 @@ describe('validateReturnRefundBody', () => {
 
   it('rejects a negative deduction', async () => {
     expect((await post({ shippingDeduction: -5 })).status).toBe(400);
+    expect((await post({ pickupDeduction: -5 })).status).toBe(400);
+  });
+
+  it('accepts installation lines by order-line id, with an optional lower amount', async () => {
+    const res = await post({
+      serviceLines: [{ orderItemId: OID }, { orderItemId: OID, amountRupees: 500, reductionReason: 'Partial refit' }],
+      pickupDeduction: 0,
+      creditNoteNo: 'CN-1',
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects a malformed installation line or a negative installation amount', async () => {
+    expect((await post({ serviceLines: [{ orderItemId: 'nope' }] })).status).toBe(400);
+    expect((await post({ serviceLines: [{ orderItemId: OID, amountRupees: -1 }] })).status).toBe(400);
+    expect((await post({ serviceLines: 'all' })).status).toBe(400);
   });
 });
 

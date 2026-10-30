@@ -448,6 +448,30 @@ export const RETURN_REASONS = [
   { value: 'manufacturing_defect', label: 'Manufacturing defect', description: 'A genuine defect in the product as supplied' },
 ] as const;
 
+// Every reason a return line can carry, and the fault it claims — what staff (admin,
+// the team panel) choose from. Mirrors config/returnPolicy.js REASON_FAULT and
+// RETURN_REASON_LABELS; keep both in sync. `staffOnly` reasons are never offered to a
+// customer (they cannot self-certify our installer's damage).
+export const RETURN_REASON_OPTIONS = [
+  { value: 'wrong_item', label: 'Wrong item shipped', fault: 'ours', staffOnly: false },
+  { value: 'transit_damage', label: 'Damaged in transit', fault: 'ours', staffOnly: false },
+  { value: 'manufacturing_defect', label: 'Manufacturing defect', fault: 'ours', staffOnly: false },
+  { value: 'missing_part', label: 'Missing part', fault: 'ours', staffOnly: false },
+  { value: 'wrong_fitment_info', label: 'Website said it fits, but it does not', fault: 'ours', staffOnly: false },
+  { value: 'installer_damage', label: 'Damaged by our installer', fault: 'ours', staffOnly: true },
+  { value: 'ordered_wrong', label: 'Ordered the wrong model or size', fault: 'customer', staffOnly: false },
+  { value: 'changed_mind', label: 'Changed their mind', fault: 'customer', staffOnly: false },
+] as const;
+
+export const RETURN_FAULT_LABELS: Record<'ours' | 'customer', string> = {
+  ours: 'Our fault',
+  customer: "Customer's reason",
+};
+
+/** Human label for a return reason code (falls back to the code, spaced). */
+export const returnReasonLabel = (reason: string): string =>
+  RETURN_REASON_OPTIONS.find((r) => r.value === reason)?.label ?? reason.replace(/_/g, ' ');
+
 // Return window (days from delivery). Mirrors backend RETURN_WINDOW_DAYS.
 export const RETURN_WINDOW_DAYS = 4;
 

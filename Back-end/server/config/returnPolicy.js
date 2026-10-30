@@ -9,13 +9,55 @@
  *
  * Scope note (deliberate, per operations sign-off 2026-07-31):
  *  - Exchanges and store-credit refunds are OUT. Every accepted return refunds
- *    to the original payment method; every accepted reason is a Roavion-fault
- *    reason. Shipping/restocking deductions are a manual, per-case decision the
- *    operator makes at refund-initiation time — never auto-applied to money.
+ *    to the original payment method. Deductions are a per-case decision the
+ *    operator makes — never auto-applied to money.
+ *  - 2026-10-30 (owner-approved): customer-reason returns are back (unused, in the
+ *    box, returnable product only), and every line carries a FAULT that decides the
+ *    money — see FAULTS and services/refundMathService.returnRefundBreakdown.
  */
 
-// Customers may raise a return only within this many days of delivery.
+// Customers may raise a return only within this many days of delivery — for a
+// CUSTOMER-reason return (ordered wrong, changed mind). Kept under its old name
+// because it is also the strictest window, which is what older callers meant by it.
 export const RETURN_WINDOW_DAYS = 4;
+
+/**
+ * Who caused the problem. Decides what the customer gets back (rule 1 of the
+ * owner-approved return rules, 2026-10-30):
+ *   ours     → goods net paid + a share of the original shipping + the installation
+ *              line(s); we pay for the pickup.
+ *   customer → goods net paid only; the real pickup cost is deducted.
+ * The customer's reason only CLAIMS a fault. Operations confirms it per line.
+ */
+export const FAULTS = Object.freeze(['ours', 'customer']);
+export const FAULT_LABELS = Object.freeze({ ours: 'Our fault', customer: "Customer's reason" });
+
+// Days from delivery, per fault. Our-fault goods get longer: defects surface late.
+export const RETURN_WINDOW_DAYS_BY_FAULT = Object.freeze({ ours: 7, customer: RETURN_WINDOW_DAYS });
+
+// The longest window any line can have. Anything that must wait until NO return can
+// still be raised (affiliate commission maturity) waits this long.
+export const LONGEST_RETURN_WINDOW_DAYS = Math.max(...Object.values(RETURN_WINDOW_DAYS_BY_FAULT));
+
+// A video is required for transit damage, and for any line worth more than this.
+export const VIDEO_REQUIRED_ABOVE_RUPEES = 10000;
+
+// Accounts members may send a return refund up to this much; above it needs the
+// accounts head or an admin.
+export const ACCOUNTS_REFUND_LIMIT_RUPEES = 25000;
+
+// Failed pickup attempts that cancel a return automatically.
+export const MAX_FAILED_PICKUPS = 2;
+
+// What happens to a returned item after inspection. A RECORD only — stock stays the
+// coarse in/low/out enum, so nothing here moves a quantity.
+export const DISPOSITIONS = Object.freeze(['resell', 'open_box', 'return_to_supplier', 'scrap']);
+export const DISPOSITION_LABELS = Object.freeze({
+  resell: 'Resell', open_box: 'Sell as open-box', return_to_supplier: 'Send back to supplier', scrap: 'Scrap',
+});
+
+// The repeat-returner flag counts requests over this many days. A flag, never a block.
+export const REPEAT_RETURNER_DAYS = 183;
 
 // The 10% restocking / warehouse-handling charge and the price threshold above
 // which it MAY apply. Applying it is always an operator decision (the "oversized
@@ -23,9 +65,51 @@ export const RETURN_WINDOW_DAYS = 4;
 export const RESTOCK_PCT = 10;
 export const RESTOCK_THRESHOLD_RUPEES = 100000; // ₹1,00,000
 
-// The only reasons a return is accepted for. All three are Roavion-attributable
-// ("our fault") — there is no change-of-mind / buyer's-remorse path.
-export const RETURN_REASONS = Object.freeze(['wrong_item', 'transit_damage', 'manufacturing_defect']);
+// Every reason a return line can carry, and the fault each one CLAIMS. The first
+// three are the original July set; old rows keep validating against this list.
+export const REASON_FAULT = Object.freeze({
+  wrong_item: 'ours',
+  transit_damage: 'ours',
+  manufacturing_defect: 'ours',
+  missing_part: 'ours',
+  wrong_fitment_info: 'ours',   // our website said it fits, and it does not
+  installer_damage: 'ours',     // our installer caused it — staff only, goes to admin
+  ordered_wrong: 'customer',    // wrong model / size
+  changed_mind: 'customer',
+});
+export const RETURN_REASONS = Object.freeze(Object.keys(REASON_FAULT));
+
+// The July set — all our fault. The storefront form still offers only these until it
+// gains the fault-based rules (unused-in-box declaration, per-fault window, evidence).
+export const ORIGINAL_REASONS = Object.freeze(['wrong_item', 'transit_damage', 'manufacturing_defect']);
+
+// Reasons only staff may record. A customer cannot self-certify installer damage.
+export const STAFF_ONLY_REASONS = Object.freeze(['installer_damage']);
+export const CUSTOMER_REASONS = Object.freeze(RETURN_REASONS.filter((r) => !STAFF_ONLY_REASONS.includes(r)));
+
+/** The fault a reason claims ('ours' for anything unknown — the legacy default). */
+export const claimedFaultFor = (reason) => REASON_FAULT[reason] || 'ours';
+
+/**
+ * The fault that decides a line's money: operations' confirmation when it exists,
+ * else what the reason claimed. Rows from before faults existed carry neither and
+ * resolve through their reason, which was always an our-fault one.
+ */
+export const effectiveFault = (item) => {
+  const confirmed = item?.fault?.confirmed;
+  if (FAULTS.includes(confirmed)) return confirmed;
+  const claimed = item?.fault?.claimed;
+  if (FAULTS.includes(claimed)) return claimed;
+  return claimedFaultFor(item?.reason);
+};
+
+/** Days a line may be returned in, from its delivery. */
+export const windowDaysFor = (fault) => RETURN_WINDOW_DAYS_BY_FAULT[fault] ?? RETURN_WINDOW_DAYS;
+
+/** Is a video required for this line? Transit damage always; otherwise above the threshold. */
+export const videoRequiredFor = ({ reason, unitPrice, quantity }) =>
+  reason === 'transit_damage'
+  || (Number(unitPrice) || 0) * (Number(quantity) || 1) > VIDEO_REQUIRED_ABOVE_RUPEES;
 
 // Why a product can never be returned. Set per-product in the admin editor
 // (Product.returnPolicy.nonReturnReason); mirrors the policy's non-returnable list.
@@ -81,6 +165,11 @@ export const RETURN_REASON_LABELS = Object.freeze({
   wrong_item: 'Wrong item shipped',
   transit_damage: 'Damaged in transit',
   manufacturing_defect: 'Manufacturing defect',
+  missing_part: 'Missing part',
+  wrong_fitment_info: 'Website said it fits, but it does not',
+  installer_damage: 'Damaged by our installer',
+  ordered_wrong: 'Ordered the wrong model or size',
+  changed_mind: 'Changed my mind',
 });
 
 /**
@@ -99,6 +188,21 @@ export const suggestedRestockingRupees = (unitPriceRupees, quantity = 1) => {
 
 export default {
   RETURN_WINDOW_DAYS,
+  FAULTS,
+  RETURN_WINDOW_DAYS_BY_FAULT,
+  LONGEST_RETURN_WINDOW_DAYS,
+  VIDEO_REQUIRED_ABOVE_RUPEES,
+  ACCOUNTS_REFUND_LIMIT_RUPEES,
+  MAX_FAILED_PICKUPS,
+  DISPOSITIONS,
+  REASON_FAULT,
+  ORIGINAL_REASONS,
+  STAFF_ONLY_REASONS,
+  CUSTOMER_REASONS,
+  claimedFaultFor,
+  effectiveFault,
+  windowDaysFor,
+  videoRequiredFor,
   RESTOCK_PCT,
   RESTOCK_THRESHOLD_RUPEES,
   RETURN_REASONS,

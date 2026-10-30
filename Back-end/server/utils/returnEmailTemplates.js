@@ -52,6 +52,29 @@ const OFFLINE_METHOD_WORDS = Object.freeze({
   other: 'an offline payment',
 });
 
+/**
+ * The lines that explain a refund amount to the customer, beyond the item itself:
+ *   + their share of the original delivery charge  (our fault)
+ *   + each installation line refunded               (our fault)
+ *   − the pickup cost, and restocking                (their own reason)
+ * Plain text, one entry per line; absent parts are left out.
+ */
+export const refundBreakdownLines = (refund) => {
+  const lines = [];
+  if (!refund) return lines;
+  if (refund.shippingShare) lines.push(`Delivery charge refunded: ${inr(refund.shippingShare)}`);
+  for (const l of refund.serviceLines || []) {
+    if (l?.amountPaise) lines.push(`${l.name || 'Installation'} refunded: ${inr(l.amountPaise / 100)}`);
+  }
+  if (refund.shippingDeduction) lines.push(`Pickup cost deducted: ${inr(refund.shippingDeduction)}`);
+  if (refund.restockingDeduction) lines.push(`Restocking (10%): ${inr(refund.restockingDeduction)}`);
+  // The item line is only worth showing beside something added or taken away;
+  // alone it would just repeat the total.
+  if (lines.length && refund.productValue) lines.unshift(`Item(s): ${inr(refund.productValue)}`);
+  if (refund.creditNoteNo) lines.push(`Credit note: ${refund.creditNoteNo}`);
+  return lines;
+};
+
 export const returnEmail = ({ event, rr, order, company, payment = null }) => {
   const ref = order?.orderNumber || String(rr.order);
   const items = itemLines(rr);
@@ -123,6 +146,9 @@ export const returnEmail = ({ event, rr, order, company, payment = null }) => {
       break;
     case 'refunded': {
       const amt = rr.refund?.finalAmount || 0;
+      // What the refund is made of, beyond the item itself: the fault-based parts
+      // (2026-10-30) and the deductions. One list for both payout routes.
+      const breakdownParts = refundBreakdownLines(rr.refund);
       // A refund settled OUTSIDE the gateway is already in the customer's hands — cash
       // over the counter, a bank transfer, UPI. Telling them it "is on its way" and to
       // allow 5-9 business days would be plainly wrong, and invites a support ticket
@@ -134,9 +160,7 @@ export const returnEmail = ({ event, rr, order, company, payment = null }) => {
         subject = `Refund confirmed — ${inr(amt)} — Order #${ref}`;
         heading = 'Your refund has been processed';
         intro = `This confirms a refund of <strong>${inr(amt)}</strong> for order #${ref}, paid to you by <strong>${esc(how)}</strong>.${esc(refText)}`;
-        const offlineParts = [];
-        if (rr.refund?.shippingDeduction) offlineParts.push(`Shipping deduction: ${inr(rr.refund.shippingDeduction)}`);
-        if (rr.refund?.restockingDeduction) offlineParts.push(`Restocking (10%): ${inr(rr.refund.restockingDeduction)}`);
+        const offlineParts = [...breakdownParts];
         textLines = [
           `This confirms a refund of ${inr(amt)} for order #${ref}, paid to you by ${how}.${refText}`,
           ...offlineParts,
@@ -147,9 +171,7 @@ export const returnEmail = ({ event, rr, order, company, payment = null }) => {
       subject = `Refund initiated — ${inr(amt)} — Order #${ref}`;
       heading = 'Your refund is on its way';
       intro = `We’ve initiated a refund of <strong>${inr(amt)}</strong> for order #${ref} to your original payment method. It typically settles in <strong>5–9 business days</strong>, depending on your bank or payment provider.`;
-      const parts = [];
-      if (rr.refund?.shippingDeduction) parts.push(`Shipping deduction: ${inr(rr.refund.shippingDeduction)}`);
-      if (rr.refund?.restockingDeduction) parts.push(`Restocking (10%): ${inr(rr.refund.restockingDeduction)}`);
+      const parts = [...breakdownParts];
       // EMI orders: the refund covers PRINCIPAL only. Interest the bank has already
       // billed, and any cancellation charge it levies, are the bank's and cannot be
       // reversed by us or by Razorpay. Saying so here — plainly, in the same email that
@@ -195,4 +217,4 @@ export const returnEmail = ({ event, rr, order, company, payment = null }) => {
   return { subject, text, html };
 };
 
-export default { returnEmail };
+export default { returnEmail, refundBreakdownLines };
