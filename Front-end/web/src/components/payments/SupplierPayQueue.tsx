@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronLeft, Loader2, Paperclip } from 'lucide-react';
 import { errorMessage, paymentKeys, postForm, rupees, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
+import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import { getPayGroup, listPayGroups, payQueueKeys, sumRupees } from './suppliers';
 import { formatDateIST } from '@/lib/datetime';
 
@@ -106,7 +107,7 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
                 <div className="sm:col-span-2"><label className={label} htmlFor="pb-at">Transaction date &amp; time (when the money was sent)</label>
                   <input id="pb-at" type="datetime-local" className={input} required max={toLocalInput()} value={at} onChange={(e) => setAt(e.target.value)} /></div>
               </div>
-              <FilePicker files={proof} onChange={setProof} max={3} accept="image/jpeg,image/png,image/webp,application/pdf" label="Attach payment screenshot" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+              <FilePicker files={proof} onChange={setProof} max={MAX_ATTACHMENTS} accept={PHOTO_OR_PDF} label="Attach payment screenshots" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
               {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
               <button type="submit" disabled={busy || !chosen.length} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">
                 {busy && <Loader2 className="h-4 w-4 animate-spin" />} Record payment of {rupees(total)}

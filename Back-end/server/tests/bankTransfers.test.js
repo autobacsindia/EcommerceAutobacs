@@ -142,6 +142,17 @@ describe('recording', () => {
     expect((await Order.findById(order._id).lean()).paymentLinkExpiresAt.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
+  it('takes up to 20 screenshots at once, photos and PDFs mixed; the stored type comes from the bytes', async () => {
+    const order = await salesOrder(lead);
+    const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), Buffer.alloc(100, 1)]);
+    const files = Array.from({ length: 20 }, (_, i) => (i % 2 ? shot(PDF, `s${i}.pdf`, 'application/pdf') : shot(PNG, `s${i}.jpg`, 'image/jpeg')));
+    const t = await bt.recordBankTransfer(lead, order._id, input(), files, req);
+    expect(t.files).toHaveLength(20);
+    expect(stored.size).toBe(20);
+    expect(t.files[0]).toMatchObject({ contentType: 'image/png', name: 's0.jpg' }); // labelled JPEG, bytes say PNG
+    expect(t.files[1]).toMatchObject({ contentType: 'application/pdf', name: 's1.pdf' });
+  });
+
   it('if Razorpay will not cancel a link (customer may have just paid), records nothing', async () => {
     const order = await salesOrder(lead);
     rz.failCancel = true;
@@ -165,7 +176,10 @@ describe('recording', () => {
       [input({ paidOn: '2026-02-30' }), [shot()], /date/],
       [input(), [], /screenshot/],
       [input(), [shot(Buffer.from('not an image at all'))], /photo/],
-      [input(), [shot(), shot(), shot(), shot()], /at most 3/],
+      [input(), Array.from({ length: 21 }, () => shot()), /up to 20 screenshots/],
+      [input(), [shot(Buffer.concat([Buffer.from('%PDF-'), Buffer.alloc(10 * 1024 * 1024)]), 'big.pdf', 'application/pdf')], /too large \(10 MB/],
+      [input(), Array.from({ length: 5 }, () => shot(Buffer.concat([JPEG, Buffer.alloc(9 * 1024 * 1024)]))), /add up to more than 40 MB/],
+      [input(), [shot(Buffer.from('<html><script>alert(1)</script>'), 'slip.pdf', 'application/pdf')], /not a photo .* or a PDF/],
     ];
     for (const [i, files, message] of bad) {
       await expect(bt.recordBankTransfer(lead, order._id, i, files, req)).rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(message) });

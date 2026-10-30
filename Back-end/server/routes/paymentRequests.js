@@ -1,9 +1,10 @@
 import express from 'express';
-import multer from 'multer';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { protect, staffOrAdmin } from '../middleware/authMiddleware.js';
 import { authenticatedUserRateLimit } from '../middleware/rateLimitMiddleware.js';
-import { concurrentUploadGuard, uploadPaymentRequestFiles, uploadPaymentProof } from '../middleware/uploadMiddleware.js';
+import {
+  concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, uploadPaymentProof, handleAttachmentError,
+} from '../middleware/uploadMiddleware.js';
 import * as pr from '../services/paymentRequestService.js';
 import { renderPaymentSlip } from '../services/paymentSlipService.js';
 
@@ -24,29 +25,19 @@ const json = (v, fallback) => {
   try { return JSON.parse(v); } catch { return fallback; }
 };
 
-const fileErrors = (err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    const message = err.code === 'LIMIT_FILE_SIZE' ? 'A file is too large (8 MB maximum).'
-      : err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE' ? (err.field && err.field.includes(' ') ? err.field : 'Too many files: up to 5 bills, 1 payment QR, and 3 payment screenshots.')
-        : err.message;
-    return res.status(400).json({ success: false, message });
-  }
-  next(err);
-};
-
 // GET /payment-requests?status=open|submitted|…&team=&cursor=
 router.get('/', asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await pr.list(req.user, req.query)) });
 }));
 
 // POST /payment-requests/expenses — multipart: team?, category, amount, description, payee(JSON), bill, qr
-router.post('/expenses', concurrentUploadGuard, uploadPaymentRequestFiles, fileErrors, asyncHandler(async (req, res) => {
+router.post('/expenses', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError, asyncHandler(async (req, res) => {
   const request = await pr.createExpense(req.user, { ...req.body, payee: json(req.body.payee, {}) }, req.files || {}, req);
   res.status(201).json({ success: true, request });
 }));
 
 // POST /payment-requests/supplier — multipart: orderId, itemIds(JSON), amount, description, payee(JSON), bill, qr
-router.post('/supplier', concurrentUploadGuard, uploadPaymentRequestFiles, fileErrors, asyncHandler(async (req, res) => {
+router.post('/supplier', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError, asyncHandler(async (req, res) => {
   const request = await pr.createSupplierRequest(req.user, {
     ...req.body, payee: json(req.body.payee, {}), itemIds: json(req.body.itemIds, req.body.itemIds),
   }, req.files || {}, req);
@@ -69,7 +60,7 @@ router.get('/to-pay/suppliers/:groupId', asyncHandler(async (req, res) => {
 }));
 
 // POST /payment-requests/pay-batch — multipart: ids(JSON), expectedTotal, method, reference, note?, proof
-router.post('/pay-batch', concurrentUploadGuard, uploadPaymentProof, fileErrors, asyncHandler(async (req, res) => {
+router.post('/pay-batch', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await pr.payBatch(req.user, req.body, req.files || [], req)) });
 }));
 
@@ -116,12 +107,12 @@ router.post('/:id/hold', asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.hold(req.user, req.params.id, req.body, req) });
 }));
 // POST /payment-requests/:id/pay — multipart: method, reference, note?, proof
-router.post('/:id/pay', concurrentUploadGuard, uploadPaymentProof, fileErrors, asyncHandler(async (req, res) => {
+router.post('/:id/pay', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError, asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.markPaid(req.user, req.params.id, req.body, req.files || [], req) });
 }));
 // PUT /payment-requests/:id/payment — multipart: method?, reference?, note?, removeFileIds(JSON)?, proof (new screenshots)
 // The admin corrects a paid payment's record (not the amount or the payee).
-router.put('/:id/payment', concurrentUploadGuard, uploadPaymentProof, fileErrors, asyncHandler(async (req, res) => {
+router.put('/:id/payment', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError, asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.editPayment(req.user, req.params.id, req.body, req.files || [], req) });
 }));
 router.post('/:id/cancel', asyncHandler(async (req, res) => {

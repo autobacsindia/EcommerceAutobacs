@@ -5,11 +5,12 @@ import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { EXPENSE_CATEGORIES, errorMessage, getRequest, postForm, type PaymentRequest } from './api';
 import FilePicker from './FilePicker';
+import { MAX_ATTACHMENTS, PHOTO_ONLY, PHOTO_OR_PDF } from '@/lib/attachments';
 import SupplierPicker, { SupplierSuggestions } from './SupplierPicker';
 import type { Supplier } from './suppliers';
 
 /** The server takes up to five bills and one payee QR per request. */
-const MAX_BILLS = 5;
+const MAX_BILLS = MAX_ATTACHMENTS;
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
@@ -215,9 +216,9 @@ export default function PaymentRequestForm({
       </div>
 
       <div className="flex flex-wrap gap-3 text-sm">
-        <FilePicker files={bills} onChange={setBills} max={MAX_BILLS} accept="image/jpeg,image/png,image/webp,application/pdf"
+        <FilePicker files={bills} onChange={setBills} max={MAX_BILLS} accept={PHOTO_OR_PDF}
           label="Attach bills / invoices" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
-        <FilePicker files={qr} onChange={setQr} max={1} accept="image/jpeg,image/png,image/webp"
+        <FilePicker files={qr} onChange={setQr} max={1} accept={PHOTO_ONLY}
           label="Attach their payment QR" icon={<QrCode className="h-4 w-4" />} onError={setError} />
       </div>
 

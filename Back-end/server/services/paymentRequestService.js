@@ -31,7 +31,8 @@ import orderRepository from '../repositories/orderRepository.js';
 import counterRepository from '../repositories/counterRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
-import { detectKind, KIND } from './storage/contentSniff.js';
+import { checkAttachments } from './storage/attachmentCheck.js';
+import { MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
 import { postSystemMessage } from './chatService.js';
 import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
@@ -44,7 +45,7 @@ const fail = (message, status) => new AppError(message, status, { expose: true }
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 
 export const PAYMENT_FILES_FOLDER = 'payment-requests'; // a PRIVATE prefix (storage/assetScope.js)
-export const MAX_PAYMENT_FILE_BYTES = 8 * 1024 * 1024;
+export const MAX_PAYMENT_FILE_BYTES = MAX_ATTACHMENT_BYTES;
 export const MAX_AMOUNT = 10000000; // ₹1 crore: a typo guard, not a business limit
 export const EXPENSE_CATEGORIES = Object.freeze(['fuel', 'travel', 'food', 'purchase', 'other']);
 /**
@@ -139,17 +140,28 @@ export { cleanPayee, maskAccount };
 /** Cloudinary keeps PDFs as 'raw' and photos as 'image' — deletes must say which. */
 const resourceTypeOf = (f) => (f.contentType === 'application/pdf' ? 'raw' : 'image');
 
-/** Store uploaded files privately after checking the bytes are a photo or a PDF. */
-async function storeFiles(files, kinds, actor) {
+/**
+ * Check every file before anything is stored: bills and payment screenshots are
+ * photos or PDFs (up to MAX_ATTACHMENTS a save), a payee QR is one photo, and a
+ * request holds at most MAX_ATTACHMENTS_PER_RECORD files over its life.
+ */
+function checkFiles(files, kinds, { existing = 0 } = {}) {
+  const pairs = files.map((file, i) => ({ file, kind: kinds[i] })).filter((p) => p.file?.buffer?.length);
+  const qr = pairs.filter((p) => p.kind === 'qr');
+  const rest = pairs.filter((p) => p.kind !== 'qr');
+  if (qr.length > 1) throw fail('Attach one QR code picture.', 400);
+  const checkedQr = checkAttachments(qr.map((p) => p.file), { allowPdf: false, max: 1, noun: 'QR code' });
+  const noun = rest.some((p) => p.kind === 'proof') ? 'screenshot' : 'bill';
+  const checkedRest = checkAttachments(rest.map((p) => p.file), { existing: existing + checkedQr.length, noun });
+  return [...checkedRest.map((c, i) => ({ ...c, kind: rest[i].kind })), ...checkedQr.map((c) => ({ ...c, kind: 'qr' }))];
+}
+
+/** Check, then store privately. Nothing half-saved: a failure removes what was stored before it. */
+async function storeFiles(files, kinds, actor, { existing = 0 } = {}) {
+  const checked = checkFiles(files, kinds, { existing });
   const stored = [];
   try {
-    for (const { file, kind } of files.map((file, i) => ({ file, kind: kinds[i] }))) {
-      if (!file?.buffer?.length) continue;
-      if (file.buffer.length > MAX_PAYMENT_FILE_BYTES) throw fail('A file is too large (8 MB maximum).', 400);
-      const sniffed = detectKind(file.buffer);
-      if (sniffed !== KIND.IMAGE && sniffed !== KIND.PDF) throw fail('Upload a photo (JPG, PNG, WebP) or a PDF.', 400);
-      const ext = sniffed === KIND.PDF ? 'pdf' : ({ 'image/png': 'png', 'image/webp': 'webp' }[file.mimetype] || 'jpg');
-      const contentType = sniffed === KIND.PDF ? 'application/pdf' : (file.mimetype || 'image/jpeg');
+    for (const { file, kind, contentType, ext, name } of checked) {
       const ref = await putPrivateAsset({
         buffer: file.buffer,
         folder: PAYMENT_FILES_FOLDER,
@@ -159,11 +171,10 @@ async function storeFiles(files, kinds, actor) {
       });
       stored.push({
         kind, publicId: ref.publicId, provider: ref.provider, contentType, bytes: ref.bytes,
-        name: String(file.originalname || '').slice(0, 200), uploadedBy: actor._id, uploadedAt: new Date(),
+        name, uploadedBy: actor._id, uploadedAt: new Date(),
       });
     }
   } catch (err) {
-    // Nothing half-saved: remove what was stored before the failure.
     await Promise.all(stored.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
     throw err;
   }
@@ -505,7 +516,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   // The admin paying a request still waiting for approval approves it in the same step.
   const from = ['submitted', 'approved', 'on_hold'];
   const uploads = (Array.isArray(proofFiles) ? proofFiles : [proofFiles]).filter(Boolean);
-  const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor) : [];
+  const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor, { existing: (r0.files || []).length }) : [];
   const r = await paymentRequestRepository.transition(id, from, {
     ...(r0.status === 'submitted' ? { approvedBy: actor._id, approvedAt: now } : {}),
     status: 'paid',
@@ -627,7 +638,10 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   const extra = String(note || '').trim().slice(0, 500);
   if (!changes.length && !extra) return shape(r0, actor);
 
-  const stored = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor) : [];
+  // Checked before anything changes; room is what the record holds after the removals.
+  const stored = uploads.length
+    ? await storeFiles(uploads, uploads.map(() => 'proof'), actor, { existing: (r0.files || []).length - removing.length })
+    : [];
   const batch = r0.payment?.batch || '';
   const targets = batch ? (await paymentRequestRepository.findPaidBatch(batch)).map((r) => r._id) : [r0._id];
   const publicIds = removing.map((f) => f.publicId);
@@ -837,7 +851,8 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   }
 
   const uploads = (Array.isArray(proofFiles) ? proofFiles : [proofFiles]).filter(Boolean);
-  const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor) : [];
+  const fullest = Math.max(0, ...rows.map((r) => (r.files || []).length));
+  const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor, { existing: fullest }) : [];
   const batch = `PB-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
   const now = new Date();
   const payment = { method: how, reference: ref.slice(0, 120), paidAt: now, transactionAt: txAt, paidBy: actor._id, paidByName: actor.name || '', batch };

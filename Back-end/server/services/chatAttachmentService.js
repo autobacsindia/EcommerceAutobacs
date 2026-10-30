@@ -23,9 +23,11 @@ import AppError from '../utils/AppError.js';
 import { uploadToCloudinary, uploadRawToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelpers.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
 import { storageProvider } from '../config/storage.js';
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
 
-export const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10 MB
-export const MAX_ATTACHMENTS_PER_MESSAGE = 5;
+/** The staff-wide limits (config/attachments.js): 10 MB a file, 20 files a message. */
+export const MAX_ATTACHMENT_SIZE = MAX_ATTACHMENT_BYTES;
+export const MAX_ATTACHMENTS_PER_MESSAGE = MAX_ATTACHMENTS;
 
 /** mime → { kind, ext, verify(buffer) }. Anything not here is refused. */
 const starts = (buf, sig) => buf.length >= sig.length && buf.subarray(0, sig.length).equals(Buffer.from(sig));

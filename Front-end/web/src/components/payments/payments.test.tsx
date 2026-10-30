@@ -64,15 +64,15 @@ describe('raising', () => {
     expect(form.getAll('qr').map((f) => (f as File).name)).toEqual(['qr.png']);
   });
 
-  it('stops at five bills and refuses a file over 8 MB, saying why', () => {
+  it('takes up to twenty bills (photos or PDFs) and refuses a file over 10 MB, saying why', () => {
     wrap(<PaymentRequestForm onDone={() => {}} />);
-    fireEvent.change(bills(), { target: { files: [1, 2, 3, 4].map((i) => shot(`b${i}.jpg`)) } });
-    fireEvent.change(bills(), { target: { files: [shot('b5.jpg'), shot('b6.jpg')] } });
-    expect(screen.getByRole('alert')).toHaveTextContent('up to 5 files');
-    expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(4);
-    fireEvent.change(bills(), { target: { files: [shot('huge.jpg', 'image/jpeg', 8 * 1024 * 1024 + 1)] } });
-    expect(screen.getByRole('alert')).toHaveTextContent('"huge.jpg" is too large');
-    fireEvent.change(bills(), { target: { files: [shot('b5.jpg')] } });
+    fireEvent.change(bills(), { target: { files: Array.from({ length: 19 }, (_, i) => shot(`b${i}.${i % 2 ? 'pdf' : 'jpg'}`, i % 2 ? 'application/pdf' : 'image/jpeg')) } });
+    fireEvent.change(bills(), { target: { files: [shot('b19.jpg'), shot('b20.jpg')] } });
+    expect(screen.getByRole('alert')).toHaveTextContent('up to 20 files');
+    expect(screen.getAllByRole('button', { name: /^Remove / })).toHaveLength(19);
+    fireEvent.change(bills(), { target: { files: [shot('huge.pdf', 'application/pdf', 10 * 1024 * 1024 + 1)] } });
+    expect(screen.getByRole('alert')).toHaveTextContent('"huge.pdf" is too large (10 MB maximum)');
+    fireEvent.change(bills(), { target: { files: [shot('b19.jpg')] } });
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.queryByLabelText(/Attach bills/)).toBeNull(); // full
   });
@@ -151,7 +151,7 @@ describe('detail', () => {
     expect(await within(panel).findByRole('link', { name: /Payment receipt/ })).toBeInTheDocument();
   });
 
-  it('sends every payment screenshot attached, up to three', async () => {
+  it('sends every payment screenshot attached — several picks, photos and PDFs', async () => {
     get.mockResolvedValue({ request: base });
     wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
     const panel = await screen.findByRole('complementary', { name: 'Payment request' });
@@ -159,13 +159,15 @@ describe('detail', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Record payment' }));
     const pick = () => within(panel).getByLabelText(/Attach payment screenshots/);
     fireEvent.change(pick(), { target: { files: [shot('a.jpg'), shot('b.pdf', 'application/pdf')] } });
-    fireEvent.change(pick(), { target: { files: [shot('c.jpg')] } });
-    // Full: the picker hides rather than letting a fourth through.
+    fireEvent.change(pick(), { target: { files: Array.from({ length: 18 }, (_, i) => shot(`c${i}.jpg`)) } });
+    // Full at twenty: the picker hides rather than letting a twenty-first through.
     expect(within(panel).queryByLabelText(/Attach payment screenshots/)).toBeNull();
     fireEvent.change(within(panel).getByLabelText('Payment reference'), { target: { value: 'UTR12345' } });
     fireEvent.click(within(panel).getByRole('button', { name: /Mark as paid/ }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect((fetchMock.mock.calls[0][1].body as FormData).getAll('proof').map((f) => (f as File).name)).toEqual(['a.jpg', 'b.pdf', 'c.jpg']);
+    const sent = (fetchMock.mock.calls[0][1].body as FormData).getAll('proof').map((f) => (f as File).name);
+    expect(sent).toHaveLength(20);
+    expect(sent.slice(0, 3)).toEqual(['a.jpg', 'b.pdf', 'c0.jpg']);
   });
 
   it('declining asks for a reason first', async () => {

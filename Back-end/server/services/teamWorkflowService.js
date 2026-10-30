@@ -39,13 +39,16 @@
  */
 
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
 import orderRepository from '../repositories/orderRepository.js';
 import shipmentService from './shipmentService.js';
 import cancellationService from './cancellationService.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
-import { detectKind, KIND } from './storage/contentSniff.js';
+import { checkAttachments } from './storage/attachmentCheck.js';
+import { MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
+import { parcelProofs, proofFilePath, LEGACY_PROOF_ID } from '../utils/shipmentView.js';
 import { getNotificationsQueue } from '../queue/queues.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, canSell } from '../config/staff.js';
 import { workflowView, STAGE, STOCK, STAGE_LABELS, unshippedQuantity } from '../utils/teamWorkflow.js';
@@ -62,7 +65,7 @@ const fail = (message, status) => new AppError(message, status, { expose: true }
 const PAGE_SIZE = 25;
 const SCAN_BATCH = 50;
 const MAX_SCAN = 500;
-export const MAX_PROOF_BYTES = 8 * 1024 * 1024;
+export const MAX_PROOF_BYTES = MAX_ATTACHMENT_BYTES;
 const PROOF_FOLDER = 'shipping-slips'; // already a PRIVATE prefix (storage/assetScope.js)
 
 // ── Who is acting ───────────────────────────────────────────────────────────────
@@ -256,7 +259,11 @@ function detail(u, o) {
       shippedAt: s.shippedAt || null,
       deliveredAt: s.deliveredAt || null,
       items: (s.lines || []).map((l) => ({ name: names.get(idOf(l.itemId)) || 'Item', quantity: l.quantity })),
-      photoUrl: s.proofPhoto?.publicId ? photoPath(idOf(o._id), idOf(s._id)) : null,
+      // photoUrl: the first proof (the WhatsApp "we shared a photo" line keys off it).
+      photoUrl: parcelProofs(s).length ? photoPath(idOf(o._id), idOf(s._id)) : null,
+      photos: parcelProofs(s).map(({ id, ref }) => ({
+        id, url: proofFilePath(idOf(o._id), idOf(s._id), id), contentType: ref.contentType || 'image/jpeg', name: ref.name || '',
+      })),
       canMarkDelivered: s.status === SHIPMENT_STATUS.SHIPPED && can.operations(u),
       // Marked delivered by mistake: operations (or the admin) puts it back in transit.
       canUndoDelivered: s.status === SHIPMENT_STATUS.DELIVERED && can.operations(u),
@@ -376,15 +383,50 @@ export async function getOrder(actor, orderId) {
   return detail(actor, o);
 }
 
-/** The supplier's photo for one parcel — streamed through us, never a public link. */
-export async function getProofPhoto(actor, orderId, shipmentId) {
+/**
+ * One proof of a parcel (by id; the first when none is given) — streamed through
+ * us after the same permission check as the order, never a public link.
+ */
+export async function getProofPhoto(actor, orderId, shipmentId, photoId = null) {
   const o = await orderRepository.findForWorkflow(orderId);
   if (!o || !canView(actor, o)) throw fail('Not found.', 404);
   const parcel = (o.shipments || []).find((s) => idOf(s._id) === String(shipmentId));
-  const ref = parcel?.proofPhoto;
-  if (!ref?.publicId) throw fail('This parcel has no photo.', 404);
+  const proofs = parcelProofs(parcel);
+  const found = photoId == null ? proofs[0] : proofs.find((p) => p.id === String(photoId));
+  if (!found) throw fail(proofs.length ? 'Photo not found.' : 'This parcel has no photo.', 404);
+  const { ref } = found;
   const buffer = await readPrivateAsset(ref, fetchBuffer);
-  return { buffer, contentType: ref.contentType || 'image/jpeg' };
+  return { buffer, contentType: ref.contentType || 'image/jpeg', name: ref.name || '' };
+}
+
+const resourceTypeOf = (ref) => (ref?.contentType === 'application/pdf' ? 'raw' : 'image');
+const removeProofs = (refs) => Promise.all(refs.map((r) =>
+  deletePrivateAsset({ publicId: r.publicId, resourceType: resourceTypeOf(r), provider: r.provider }).catch(() => {})));
+
+/** Check a parcel's proofs (photos or PDFs) before anything is stored. */
+const checkProofs = (files, { existing = 0 } = {}) => checkAttachments(files, { existing, noun: 'photo' });
+
+/** Store checked proofs privately; a failure part-way removes what was stored. */
+async function storeProofs(checked, orderId, actor) {
+  const stored = [];
+  try {
+    for (const { file, contentType, ext, name } of checked) {
+      const ref = await putPrivateAsset({
+        buffer: file.buffer, folder: PROOF_FOLDER,
+        basename: `proof-${orderId}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
+        contentType, cloudinaryPrivate: true,
+      });
+      stored.push({
+        _id: new mongoose.Types.ObjectId(),
+        publicId: ref.publicId, provider: ref.provider, url: ref.url || undefined,
+        contentType, bytes: ref.bytes, name, uploadedAt: new Date(), uploadedBy: actor._id,
+      });
+    }
+  } catch (err) {
+    await removeProofs(stored);
+    throw err;
+  }
+  return stored;
 }
 
 async function fetchBuffer(url) {
@@ -589,10 +631,15 @@ export async function undoDecision(actor, orderId, itemId, req) {
 }
 
 /**
- * Procurement: correct a parcel's dispatch details (courier, tracking number,
- * proof photo) at any time while it is still in transit.
+ * Procurement: correct a parcel's dispatch details (courier, tracking number) and
+ * its proofs — add photos / PDFs, remove chosen ones — while it is in transit.
+ *
+ * The proof list is written whole (`$set`), guarded on the exact list read, so two
+ * people editing at once cannot lose each other's photos: the second is refused
+ * and asked to refresh. A parcel still on the single legacy `proofPhoto` has it
+ * folded into the list here.
  */
-export async function editShipment(actor, orderId, shipmentId, { courierName, trackingNumber } = {}, file, req) {
+export async function editShipment(actor, orderId, shipmentId, { courierName, trackingNumber, removePhotoIds } = {}, files = [], req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can change dispatch details.', 403);
   const o = await orderRepository.findForWorkflow(orderId);
   if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
@@ -602,6 +649,7 @@ export async function editShipment(actor, orderId, shipmentId, { courierName, tr
     throw fail('Dispatch details can only be corrected while the parcel is in transit.', 409);
   }
   const set = {};
+  const unset = {};
   const changes = [];
   if (courierName != null) {
     const c = String(courierName).trim().slice(0, 80);
@@ -611,32 +659,43 @@ export async function editShipment(actor, orderId, shipmentId, { courierName, tr
     const t = String(trackingNumber).trim().slice(0, 80);
     if (t !== (parcel.trackingNumber || '')) { set['shipments.$.trackingNumber'] = t; changes.push(`tracking ${t || '—'}`); }
   }
-  let stored = null;
-  if (file?.buffer?.length) {
-    if (file.buffer.length > MAX_PROOF_BYTES) throw fail('The photo is too large (8 MB maximum).', 400);
-    if (detectKind(file.buffer) !== KIND.IMAGE) throw fail('The proof must be a photo or screenshot (JPG, PNG or WebP).', 400);
-    const ext = { jpeg: 'jpg', png: 'png', webp: 'webp' }[String(file.mimetype || '').split('/')[1]] || 'jpg';
-    stored = await putPrivateAsset({
-      buffer: file.buffer, folder: PROOF_FOLDER, basename: `proof-${orderId}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
-      contentType: file.mimetype || 'image/jpeg', cloudinaryPrivate: true,
-    });
-    set['shipments.$.proofPhoto'] = {
-      publicId: stored.publicId, provider: stored.provider, url: stored.url || undefined,
-      contentType: file.mimetype || 'image/jpeg', bytes: stored.bytes, uploadedAt: new Date(), uploadedBy: actor._id,
-    };
-    changes.push('proof photo');
+
+  let removeIds = removePhotoIds;
+  if (typeof removeIds === 'string') { try { removeIds = JSON.parse(removeIds); } catch { removeIds = [removeIds]; } }
+  removeIds = new Set((Array.isArray(removeIds) ? removeIds : []).map(String));
+  const proofs = parcelProofs(parcel);
+  const removing = proofs.filter((p) => removeIds.has(p.id));
+  const keeping = proofs.filter((p) => !removeIds.has(p.id));
+  const checked = checkProofs(files, { existing: keeping.length });
+  if (proofs.length && !keeping.length && !checked.length) {
+    throw fail('Keep at least one photo of the parcel, or add a new one.', 400);
   }
+  if (removing.length) changes.push(`${removing.length} proof${removing.length === 1 ? '' : 's'} removed`);
+  if (checked.length) changes.push(`${checked.length} proof${checked.length === 1 ? '' : 's'} added`);
   if (!changes.length) return getOrder(actor, orderId);
 
-  const updated = await orderRepository.updateShipmentIf(orderId, shipmentId, { status: SHIPMENT_STATUS.SHIPPED }, set,
-    event(actor, 'dispatch_edited', { note: `Parcel ${parcel.sequence}: ${changes.join(', ')}` }));
+  // Guard: the proofs are exactly what we read (same legacy ref, same list).
+  const guard = { status: SHIPMENT_STATUS.SHIPPED };
+  let stored = [];
+  if (removing.length || checked.length) {
+    const listIds = (parcel.proofPhotos || []).map((p) => p._id);
+    guard.proofPhotos = listIds.length ? { $size: listIds.length, $all: listIds.map((id) => ({ $elemMatch: { _id: id } })) } : { $in: [null, []] };
+    guard['proofPhoto.publicId'] = parcel.proofPhoto?.publicId || { $exists: false };
+    stored = await storeProofs(checked, orderId, actor);
+    set['shipments.$.proofPhotos'] = [
+      ...keeping.map(({ id, ref }) => (id === LEGACY_PROOF_ID ? { ...ref, _id: new mongoose.Types.ObjectId() } : ref)),
+      ...stored,
+    ];
+    if (parcel.proofPhoto?.publicId) unset['shipments.$.proofPhoto'] = '';
+  }
+
+  const updated = await orderRepository.updateShipmentIf(orderId, shipmentId, guard, set,
+    event(actor, 'dispatch_edited', { note: `Parcel ${parcel.sequence}: ${changes.join(', ')}` }), { unset });
   if (!updated) {
-    if (stored) await deletePrivateAsset({ publicId: stored.publicId, resourceType: 'image', provider: stored.provider });
+    await removeProofs(stored);
     throw fail('This parcel changed just now — refresh and try again.', 409);
   }
-  if (stored && parcel.proofPhoto?.publicId) {
-    await deletePrivateAsset({ publicId: parcel.proofPhoto.publicId, resourceType: 'image', provider: parcel.proofPhoto.provider });
-  }
+  await removeProofs(removing.map((p) => p.ref));
   auditLogger.logAction(req, 'UPDATE', 'Order', orderId, { change: 'team_dispatch_edited', shipmentId: String(shipmentId), fields: changes });
   return getOrder(actor, orderId);
 }
@@ -722,12 +781,6 @@ export async function setPaymentInitiated(actor) {
   throw fail('"Payment initiated" is replaced by "Request supplier payment" on the item.', 410);
 }
 
-/** Check a dispatch photo before anything is stored. */
-function assertProofPhoto(file) {
-  if (file.buffer.length > MAX_PROOF_BYTES) throw fail('The photo is too large (8 MB maximum).', 400);
-  if (detectKind(file.buffer) !== KIND.IMAGE) throw fail('The proof must be a photo or screenshot (JPG, PNG or WebP).', 400);
-}
-
 /**
  * The lines a parcel will carry: the chosen items (or every eligible one), each with
  * what is still owed. Only lines in `stages` may go; asking for any other is a 409.
@@ -745,44 +798,25 @@ function parcelLines(o, stages, itemIds, refusal) {
 }
 
 /**
- * Store the optional photo, create the parcel through shipmentService (which emails
- * the customer exactly as an admin shipment does and rolls the order status up), and
- * record it. The photo is removed again if the parcel cannot be recorded.
+ * Store the checked proofs (photos / PDFs, may be none), create the parcel through
+ * shipmentService (which emails the customer exactly as an admin shipment does and
+ * rolls the order status up), and record it. The proofs are removed again if the
+ * parcel cannot be recorded.
  */
-async function createTeamParcel(actor, orderId, { lines, file, courier, tracking, includesReward, notes, action }) {
-  let stored = null;
-  let proofPhoto;
-  if (file) {
-    const ext = { jpeg: 'jpg', png: 'png', webp: 'webp' }[String(file.mimetype || '').split('/')[1]] || 'jpg';
-    stored = await putPrivateAsset({
-      buffer: file.buffer,
-      folder: PROOF_FOLDER,
-      basename: `proof-${orderId}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
-      contentType: file.mimetype || 'image/jpeg',
-      cloudinaryPrivate: true,
-    });
-    proofPhoto = {
-      publicId: stored.publicId,
-      provider: stored.provider,
-      url: stored.url || undefined,
-      contentType: file.mimetype || 'image/jpeg',
-      bytes: stored.bytes,
-      uploadedAt: new Date(),
-      uploadedBy: actor._id,
-    };
-  }
+async function createTeamParcel(actor, orderId, { lines, proofs = [], courier, tracking, includesReward, notes, action }) {
+  const stored = await storeProofs(proofs, orderId, actor);
 
   const result = await shipmentService.createShipment(orderId, {
     lines,
     trackingNumber: tracking || undefined,
     carrier: courier ? { name: courier } : undefined,
-    proofPhoto,
+    proofPhotos: stored,
     includesReward,
     notes,
   }, { userId: actor._id });
 
   if (!result.success) {
-    if (stored) await deletePrivateAsset({ publicId: stored.publicId, resourceType: 'image', provider: stored.provider });
+    await removeProofs(stored);
     throw fail(result.message || 'Could not record the shipment.', 409);
   }
 
@@ -797,10 +831,10 @@ async function createTeamParcel(actor, orderId, { lines, file, courier, tracking
  * tracking when known). Creates a parcel for the chosen items through
  * shipmentService, which emails the customer exactly as an admin shipment does.
  */
-export async function shipWithProof(actor, orderId, { itemIds = [], courierName, trackingNumber } = {}, file, req) {
+export async function shipWithProof(actor, orderId, { itemIds = [], courierName, trackingNumber } = {}, files = [], req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can upload shipping proof.', 403);
-  if (!file?.buffer?.length) throw fail('Add a photo of the parcel, the courier receipt, or the supplier\'s screenshot.', 400);
-  assertProofPhoto(file);
+  const proofs = checkProofs(files);
+  if (!proofs.length) throw fail('Add a photo of the parcel, the courier receipt, or the supplier\'s screenshot.', 400);
 
   const o = await orderRepository.findForWorkflow(orderId);
   if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
@@ -812,7 +846,7 @@ export async function shipWithProof(actor, orderId, { itemIds = [], courierName,
 
   const shipment = await createTeamParcel(actor, orderId, {
     lines,
-    file,
+    proofs,
     courier: String(courierName || '').trim().slice(0, 80),
     tracking: String(trackingNumber || '').trim().slice(0, 80),
     // Drop-shipped by a supplier: any free gift owed on the order is NOT in this box.
@@ -856,14 +890,13 @@ const OWN_STOCK_STAGES = new Set([STAGE.OWN_STOCK]);
  * A double press or two people at once create ONE parcel: shipmentService's
  * compare-and-set re-validates against what is still owed, and the loser is refused.
  */
-export async function dispatchOwnStock(actor, orderId, { itemIds = [], courierName, trackingNumber } = {}, file, req) {
+export async function dispatchOwnStock(actor, orderId, { itemIds = [], courierName, trackingNumber } = {}, files = [], req) {
   if (!can.procurement(actor)) throw fail('Only the procurement team can dispatch from our warehouse.', 403);
   const courier = String(courierName || '').trim().slice(0, 80);
   const tracking = String(trackingNumber || '').trim().slice(0, 80);
   if (!courier) throw fail('Enter the courier name.', 400);
   if (!tracking) throw fail('Enter the tracking number.', 400);
-  const photo = file?.buffer?.length ? file : null;
-  if (photo) assertProofPhoto(photo);
+  const proofs = checkProofs(files); // optional here
 
   const o = await orderRepository.findForWorkflow(orderId);
   if (!o?.workflow?.enteredAt) throw fail('Order not found in the team workflow.', 404);
@@ -875,7 +908,7 @@ export async function dispatchOwnStock(actor, orderId, { itemIds = [], courierNa
 
   const shipment = await createTeamParcel(actor, orderId, {
     lines,
-    file: photo,
+    proofs,
     courier,
     tracking,
     includesReward: owesGoodie(o) && !rewardShipped(o),

@@ -186,12 +186,27 @@ describe('Payment requests', () => {
       ]);
     });
 
-    it('refuses a sixth bill — and stores none of them', async () => {
+    it('takes twenty bills, photos and PDFs; refuses a twenty-first — and stores none of them', async () => {
       const before = stored.size;
-      const res = await expense(ops.session, {}, bills(6));
+      const res = await expense(ops.session, {}, bills(21));
       expect(res.status).toBe(400);
-      expect(res.body.message).toMatch(/up to 5 bills/);
+      expect(res.body.message).toBe('You can attach up to 20 files at a time.');
       expect(stored.size).toBe(before);
+
+      const twenty = [...bills(19), { field: 'bill', buffer: PDF, name: 'invoice.pdf', type: 'application/pdf' }];
+      const ok = await expense(ops.session, {}, twenty);
+      expect(ok.status).toBe(201);
+      expect(ok.body.request.files.filter((f) => f.kind === 'bill')).toHaveLength(20);
+      expect(ok.body.request.files.at(-1)).toMatchObject({ name: 'invoice.pdf', contentType: 'application/pdf' });
+    });
+
+    it('a payee QR must be a picture, and only one', async () => {
+      const pdfQr = await expense(ops.session, {}, [{ field: 'qr', buffer: PDF, name: 'qr.pdf', type: 'application/pdf' }]);
+      expect(pdfQr.status).toBe(400);
+      expect(pdfQr.body.message).toBe('"qr.pdf" is not a photo (JPG, PNG or WebP).');
+      const twoQr = await expense(ops.session, {}, [0, 1].map((i) => ({ field: 'qr', buffer: JPEG, name: `qr${i}.jpg`, type: 'image/jpeg' })));
+      expect(twoQr.status).toBe(400);
+      expect(twoQr.body.message).toBe('Attach one QR code picture.');
     });
 
     it('one bad file among several stores nothing (no half-saved request)', async () => {
@@ -235,12 +250,13 @@ describe('Payment requests', () => {
       expect((await ops.session.get(`/payment-requests/${id}`)).body.request.status).toBe('paid');
     });
 
-    it('the admin can attach up to three payment screenshots; a fourth is refused', async () => {
+    it('the admin can attach up to twenty payment screenshots; a twenty-first is refused', async () => {
       const id = await raise();
       const shot = (i) => ({ field: 'proof', buffer: i === 1 ? PDF : JPEG, name: `paid-${i}.${i === 1 ? 'pdf' : 'jpg'}`, type: i === 1 ? 'application/pdf' : 'image/jpeg' });
       const before = stored.size;
-      const tooMany = await admin.session.form(`/payment-requests/${id}/pay`, { method: 'bank', reference: 'UTR99887766' }, [0, 1, 2, 3].map(shot));
+      const tooMany = await admin.session.form(`/payment-requests/${id}/pay`, { method: 'bank', reference: 'UTR99887766' }, Array.from({ length: 21 }, (_, i) => shot(i)));
       expect(tooMany.status).toBe(400);
+      expect(tooMany.body.message).toBe('You can attach up to 20 files at a time.');
       expect(stored.size).toBe(before);
       expect((await PaymentRequest.findById(id).lean()).status).toBe('submitted');
 

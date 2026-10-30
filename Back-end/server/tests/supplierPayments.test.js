@@ -421,6 +421,22 @@ describe('Supplier directory and one-transfer payments', () => {
       expect([...stored.keys()].some((k) => k.includes('wrong'))).toBe(false); // old screenshot deleted
     });
 
+    it('a payment holds at most 50 files: adding past that is refused, removing makes room', async () => {
+      const r = await paidOne();
+      const doc = await PaymentRequest.findById(r.id).lean();
+      const filler = Array.from({ length: 50 - doc.files.length }, (_, i) => ({ ...doc.files.at(-1), _id: undefined, publicId: `payment-requests/old-${i}.jpg`, name: `old-${i}.jpg` }));
+      await PaymentRequest.updateOne({ _id: r.id }, { $push: { files: { $each: filler } } });
+      const before = stored.size;
+      const full = await admin.session.formPut(`/payment-requests/${r.id}/payment`, { note: 'more' }, [SHOT]);
+      expect(full.status).toBe(400);
+      expect(full.body.message).toBe('This record already has 50 files, the most it can hold.');
+      expect(stored.size).toBe(before);
+      const swap = (await PaymentRequest.findById(r.id).lean()).files.find((f) => f.name === 'old-0.jpg');
+      const ok = await admin.session.formPut(`/payment-requests/${r.id}/payment`, { removeFileIds: [String(swap._id)] }, [SHOT]);
+      expect(ok.status).toBe(200);
+      expect((await PaymentRequest.findById(r.id).lean()).files).toHaveLength(50);
+    });
+
     it('only the admin, only once paid', async () => {
       const r = await paidOne();
       expect((await accounts.session.formPut(`/payment-requests/${r.id}/payment`, { reference: 'X1234' })).status).toBe(403);

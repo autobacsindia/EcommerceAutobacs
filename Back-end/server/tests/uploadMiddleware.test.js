@@ -6,7 +6,11 @@
  * No HTTP server, no DB.
  */
 
-import { validateUploadedFiles, validatePdfUpload } from '../middleware/uploadMiddleware.js';
+import { EventEmitter } from 'events';
+import multer from 'multer';
+import {
+  validateUploadedFiles, validatePdfUpload, attachmentSizeGuard, concurrentUploadGuard, handleAttachmentError,
+} from '../middleware/uploadMiddleware.js';
 import { jest } from '@jest/globals';
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
@@ -369,5 +373,63 @@ describe('validatePdfUpload', () => {
     validatePdfUpload({ file: makeFile(makeJpegBuffer(), 'application/pdf', 'slip.pdf') }, res, next);
     expect(res._status).toBe(400);
     expect(next).not.toHaveBeenCalled();
+  });
+});
+
+// ── Staff attachments (also in staffAttachments.test.js; here so CI's subset covers them) ──
+
+describe('staff attachment middleware', () => {
+  const emitterRes = () => {
+    const res = new EventEmitter();
+    res.status = (code) => { res._status = code; return res; };
+    res.json = (body) => { res._body = body; return res; };
+    return res;
+  };
+  const multipart = (headers) => ({
+    headers: { 'content-type': 'multipart/form-data; boundary=x', ...headers },
+    is: (t) => (t === 'multipart/form-data' ? t : false),
+  });
+
+  it('attachmentSizeGuard: passes ≤ 40 MB, 413 above, 411 with no length, ignores non-uploads', () => {
+    const next = jest.fn();
+    attachmentSizeGuard(multipart({ 'content-length': String(40 * 1024 * 1024) }), emitterRes(), next);
+    expect(next).toHaveBeenCalledTimes(1);
+    const big = emitterRes();
+    attachmentSizeGuard(multipart({ 'content-length': String(42 * 1024 * 1024) }), big, next);
+    expect(big._status).toBe(413);
+    const chunked = emitterRes();
+    attachmentSizeGuard(multipart({}), chunked, next);
+    expect(chunked._status).toBe(411);
+    attachmentSizeGuard({ headers: {}, is: () => false }, emitterRes(), next);
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  it('concurrentUploadGuard: a dropped upload frees its slot exactly once', () => {
+    for (let i = 0; i < 6; i += 1) {
+      const res = emitterRes();
+      const next = jest.fn();
+      concurrentUploadGuard({}, res, next);
+      expect(next).toHaveBeenCalled();
+      res.emit('close'); res.emit('finish');
+    }
+    const held = Array.from({ length: 5 }, () => { const r = emitterRes(); concurrentUploadGuard({}, r, jest.fn()); return r; });
+    const blocked = emitterRes();
+    concurrentUploadGuard({}, blocked, jest.fn());
+    expect(blocked._status).toBe(429);
+    held.forEach((r) => r.emit('finish'));
+  });
+
+  it('handleAttachmentError: plain words for each multer refusal; other errors pass on', () => {
+    const run = (err) => { const res = emitterRes(); handleAttachmentError(err, {}, res, jest.fn()); return res._body?.message; };
+    expect(run(new multer.MulterError('LIMIT_FILE_SIZE'))).toBe('A file is too large (10 MB maximum).');
+    expect(run(new multer.MulterError('LIMIT_FILE_COUNT'))).toBe('You can attach up to 20 files at a time.');
+    expect(run(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'proof'))).toBe('You can attach up to 20 files at a time.');
+    expect(run(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'qr'))).toBe('Attach one QR code picture.');
+    expect(run(new multer.MulterError('LIMIT_UNEXPECTED_FILE', '"a.exe" is not a photo (JPG, PNG, WebP) or a PDF.'))).toMatch(/a\.exe/);
+    expect(run(new multer.MulterError('LIMIT_PART_COUNT'))).toBeTruthy();
+    const next = jest.fn();
+    const err = new Error('boom');
+    handleAttachmentError(err, {}, emitterRes(), next);
+    expect(next).toHaveBeenCalledWith(err);
   });
 });

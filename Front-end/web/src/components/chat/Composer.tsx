@@ -7,9 +7,11 @@ import { useRecentOrders } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, GREEN, fileSize, newClientId } from './chatUi';
 import { STAFF_TEAMS } from '@/lib/staffTeams';
 import EmojiPicker from './EmojiPicker';
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, mb } from '@/lib/attachments';
 
-const MAX_FILES = 5;
-const MAX_FILE_MB = 10;
+/** The server's limits (config/attachments.js): 20 files a message, 10 MB each, 40 MB together. */
+const MAX_FILES = MAX_ATTACHMENTS;
+const MAX_FILE_MB = MAX_ATTACHMENT_BYTES / (1024 * 1024);
 
 /** Teams that can be addressed as a group. One list — see lib/staffTeams.ts. */
 const TEAMS = STAFF_TEAMS;
@@ -119,8 +121,12 @@ export default function Composer({
     if (room <= 0) return setError(`You can attach up to ${MAX_FILES} files at a time.`);
     const tooBig = list.find((f) => f.size > MAX_FILE_MB * 1024 * 1024);
     if (tooBig) setError(`"${tooBig.name}" is over ${MAX_FILE_MB} MB and was not added.`);
-    const accepted = list.filter((f) => f.size <= MAX_FILE_MB * 1024 * 1024).slice(0, room);
-    if (accepted.length) setError('');
+    const fitting = list.filter((f) => f.size <= MAX_FILE_MB * 1024 * 1024).slice(0, room);
+    // Keep adding while the message stays under the total; say so for the rest.
+    let total = files.reduce((sum, f) => sum + f.file.size, 0);
+    const accepted = fitting.filter((f) => (total + f.size <= MAX_ATTACHMENTS_TOTAL_BYTES ? ((total += f.size), true) : false));
+    if (accepted.length < fitting.length) setError(`Files in one message can add up to ${mb(MAX_ATTACHMENTS_TOTAL_BYTES)} — send the rest in another message.`);
+    else if (accepted.length && !tooBig) setError('');
     setFiles((prev) => [
       ...prev,
       ...accepted.map((file) => ({

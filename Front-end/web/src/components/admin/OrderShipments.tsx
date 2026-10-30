@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Package, Truck, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Package, Truck, CheckCircle2, AlertTriangle, FileText } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { formatLongDateIST } from '@/lib/datetime';
@@ -49,6 +49,8 @@ export interface Shipment {
   notes?: string;
   /** Supplier's photo from the team panel — a private, staff-only link (admins only). */
   proofPhotoUrl?: string;
+  /** Every proof (photos and PDFs) through the same private link; absent from an older server. */
+  proofFiles?: { id: string; url: string; contentType: string; name: string }[];
 }
 
 interface RemainingLine {
@@ -493,23 +495,29 @@ export default function OrderShipments({ orderId, itemNames, rewardName, onChang
               )}
             </div>
 
-            {shipment.proofPhotoUrl && (
-              <a
-                href={shipment.proofPhotoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-3 rounded-lg border border-gray-200 p-1.5 pr-3 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={shipment.proofPhotoUrl}
-                  alt={`Dispatch photo for parcel ${shipment.sequence}`}
-                  className="h-16 w-16 rounded object-cover"
-                  loading="lazy"
-                />
-                Dispatch photo — open full size
-              </a>
-            )}
+            {(() => {
+              const proofs = shipment.proofFiles
+                ?? (shipment.proofPhotoUrl ? [{ id: 'first', url: shipment.proofPhotoUrl, contentType: 'image/jpeg', name: '' }] : []);
+              if (!proofs.length) return null;
+              return (
+                <ul className="mt-2 flex flex-wrap gap-2" aria-label={`Dispatch proof for parcel ${shipment.sequence}`}>
+                  {proofs.map((p, i) => (
+                    <li key={p.id}>
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" title={p.name || undefined}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-200 p-1.5 pr-3 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                        {p.contentType === 'application/pdf' ? (
+                          <FileText className="h-8 w-8 text-red-700" />
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.url} alt={`Dispatch photo ${i + 1} for parcel ${shipment.sequence}`} className="h-16 w-16 rounded object-cover" loading="lazy" />
+                        )}
+                        {p.contentType === 'application/pdf' ? 'PDF' : 'Photo'}{proofs.length > 1 ? ` ${i + 1}` : ''} — open
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              );
+            })()}
 
             <ul className="mt-2 space-y-0.5 text-sm text-gray-700">
               {describe(shipment).map((line) => (

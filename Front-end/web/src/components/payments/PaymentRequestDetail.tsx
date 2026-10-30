@@ -7,12 +7,13 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import {
   actOn, errorMessage, fileHref, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
+import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import EditPaymentRequest from './EditPaymentRequest';
 import EditPaidPayment from './EditPaidPayment';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 
 /** The server takes up to three payment screenshots per payment. */
-const MAX_PROOFS = 3;
+const MAX_PROOFS = MAX_ATTACHMENTS;
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50';
@@ -115,11 +116,17 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className={`${btn} border border-gray-300 bg-white text-gray-800 hover:bg-gray-50`}>
                 <FileText className="h-4 w-4 text-emerald-700" /> {r.status === 'paid' ? 'Payment receipt (PDF)' : 'Request slip (PDF)'}
               </a>
-              {r.files.map((f) => (
-                <a key={f.id} href={fileHref(r.id, f.id)} target="_blank" rel="noopener noreferrer" className={`${btn} border border-gray-300 bg-white text-gray-800 hover:bg-gray-50`}>
-                  <Paperclip className="h-4 w-4" /> {FILE_LABELS[f.kind]}
-                </a>
-              ))}
+              {r.files.map((f) => {
+                // With many bills or screenshots, number them within their kind: "Bill 3", "Payment screenshot 2".
+                const same = r.files.filter((x) => x.kind === f.kind);
+                const n = same.length > 1 ? ` ${same.indexOf(f) + 1}` : '';
+                return (
+                  <a key={f.id} href={fileHref(r.id, f.id)} target="_blank" rel="noopener noreferrer" title={f.name || undefined}
+                    className={`${btn} border border-gray-300 bg-white text-gray-800 hover:bg-gray-50`}>
+                    <Paperclip className="h-4 w-4" /> {FILE_LABELS[f.kind]}{n}{f.contentType === 'application/pdf' ? ' (PDF)' : ''}
+                  </a>
+                );
+              })}
             </div>
 
             {/* Actions — only what the server says this person may do now. */}
@@ -182,7 +189,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                       </label>
                     </div>
                     <div className="text-sm">
-                      <FilePicker files={proof} onChange={setProof} max={MAX_PROOFS} accept="image/jpeg,image/png,image/webp,application/pdf"
+                      <FilePicker files={proof} onChange={setProof} max={MAX_PROOFS} accept={PHOTO_OR_PDF}
                         label="Attach payment screenshots" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
                     </div>
                     <textarea aria-label="Note" className={input} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />

@@ -51,6 +51,7 @@ const { default: razorpayService } = await import('../services/razorpayService.j
 const { default: cancellationService } = await import('../services/cancellationService.js');
 const { default: Payment } = await import('../models/Payment.js');
 const wf = await import('../services/teamWorkflowService.js');
+const { default: orderRepository } = await import('../repositories/orderRepository.js');
 const { default: karmaService } = await import('../services/karmaService.js');
 const { default: KarmaLedger } = await import('../models/KarmaLedger.js');
 const { default: affiliateCommissionRepository } = await import('../repositories/affiliateCommissionRepository.js');
@@ -228,7 +229,8 @@ describe('in stock → supplier → proof → delivered', () => {
     expect(fresh.shipments).toHaveLength(1);
     expect(fresh.shipments[0]).toMatchObject({ status: 'shipped', trackingNumber: 'DL123', includesReward: false });
     expect(fresh.shipments[0].carrier.name).toBe('Delhivery');
-    expect(fresh.shipments[0].proofPhoto.publicId).toMatch(/^shipping-slips\/proof-/);
+    expect(fresh.shipments[0].proofPhotos[0].publicId).toMatch(/^shipping-slips\/proof-/);
+    expect(fresh.shipments[0].proofPhoto?.publicId).toBeUndefined(); // new parcels use the list only
     expect(stored.size).toBe(1);
     // The customer's normal per-parcel email, and the team alert.
     expect(enqueued.map((j) => j.name)).toEqual(expect.arrayContaining(['send-shipment-email', 'send-team-shipped-alert']));
@@ -312,13 +314,93 @@ describe('in stock → supplier → proof → delivered', () => {
     expect((await Order.findById(id).lean()).shipments).toHaveLength(1);
   });
 
-  it('refuses a file that is not really an image', async () => {
+  it('refuses a file that is not really a photo or a PDF — and stores none of the batch', async () => {
     const p = await staff('procurement');
     const order = await paidOrder();
     await wf.setStock(p, String(order._id), ids(order)[0], { stock: 'in_stock' }, req);
-    const fake = { buffer: Buffer.from('%PDF-1.4 not an image'), mimetype: 'image/jpeg' };
-    await expect(wf.shipWithProof(p, String(order._id), {}, fake, req)).rejects.toMatchObject({ statusCode: 400 });
+    const fake = { buffer: Buffer.from('MZ\x90\x00 a program'), mimetype: 'image/jpeg', originalname: 'parcel.jpg' };
+    await expect(wf.shipWithProof(p, String(order._id), {}, [photo(), fake], req))
+      .rejects.toMatchObject({ statusCode: 400, message: '"parcel.jpg" is not a photo (JPG, PNG, WebP) or a PDF.' });
     expect(stored.size).toBe(0);
+  });
+
+  it('takes several proofs at once — photos and the courier\'s PDF receipt — and serves each privately', async () => {
+    const p = await staff('procurement');
+    const order = await paidOrder();
+    const id = String(order._id);
+    await wf.setStock(p, id, ids(order)[0], { stock: 'in_stock' }, req);
+    const pdf = { buffer: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(100, 32)]), mimetype: 'application/pdf', originalname: 'receipt.pdf' };
+    const view = await wf.shipWithProof(p, id, { itemIds: [ids(order)[0]] }, [photo(), photo(), pdf], req);
+    const parcel = view.parcels[0];
+    expect(parcel.photos.map((x) => [x.contentType, x.name])).toEqual([['image/jpeg', 'proof.jpg'], ['image/jpeg', 'proof.jpg'], ['application/pdf', 'receipt.pdf']]);
+    expect(parcel.photos[2].url).toBe(`/api/v1/staff/work/orders/${id}/parcels/${parcel.id}/photos/${parcel.photos[2].id}`);
+    expect(stored.size).toBe(3);
+    const got = await wf.getProofPhoto(await staff('operations'), id, parcel.id, parcel.photos[2].id);
+    expect(got).toMatchObject({ contentType: 'application/pdf', name: 'receipt.pdf' });
+    await expect(wf.getProofPhoto(p, id, parcel.id, String(new mongoose.Types.ObjectId()))).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('an old parcel with one photo still shows it, and editing folds it into the list', async () => {
+    const p = await staff('procurement');
+    const order = await paidOrder();
+    const id = String(order._id);
+    await wf.shipWithProof(p, id, {}, photo(), req);
+    // Re-shape the parcel as parcels were before Oct 2026: a single proofPhoto.
+    const o = await Order.findById(id).lean();
+    const old = o.shipments[0].proofPhotos[0];
+    await Order.collection.updateOne({ _id: o._id }, {
+      $set: { 'shipments.0.proofPhoto': { publicId: old.publicId, provider: old.provider, contentType: 'image/jpeg', bytes: old.bytes } },
+      $unset: { 'shipments.0.proofPhotos': '' },
+    });
+    let view = await wf.getOrder(p, id);
+    const parcel = view.parcels[0];
+    expect(parcel.photos).toEqual([{ id: 'legacy', url: `/api/v1/staff/work/orders/${id}/parcels/${parcel.id}/photos/legacy`, contentType: 'image/jpeg', name: '' }]);
+    expect(parcel.photoUrl).toMatch(/\/photo$/);
+    expect((await wf.getProofPhoto(p, id, parcel.id)).contentType).toBe('image/jpeg');
+    expect((await wf.getProofPhoto(p, id, parcel.id, 'legacy')).buffer).toBeTruthy();
+
+    view = await wf.editShipment(p, id, parcel.id, {}, [photo()], req);
+    expect(view.parcels[0].photos).toHaveLength(2);
+    expect(view.parcels[0].photos.every((x) => x.id !== 'legacy')).toBe(true);
+    const fresh = (await Order.findById(id).lean()).shipments[0];
+    expect(fresh.proofPhoto).toBeUndefined();
+    expect(fresh.proofPhotos.map((x) => x.publicId)[0]).toBe(old.publicId); // the old photo kept, first
+    expect(stored.size).toBe(2);
+  });
+
+  it('edit: remove chosen proofs (files deleted), never the last one; two editors at once cannot lose a photo', async () => {
+    const p = await staff('procurement');
+    const order = await paidOrder();
+    const id = String(order._id);
+    let view = await wf.shipWithProof(p, id, {}, [photo(), photo()], req);
+    const parcel = view.parcels[0];
+    const [first, second] = parcel.photos;
+    view = await wf.editShipment(p, id, parcel.id, { removePhotoIds: JSON.stringify([first.id]) }, [], req);
+    expect(view.parcels[0].photos.map((x) => x.id)).toEqual([second.id]);
+    expect(stored.size).toBe(1);
+    await expect(wf.editShipment(p, id, parcel.id, { removePhotoIds: [second.id] }, [], req))
+      .rejects.toMatchObject({ statusCode: 400, message: 'Keep at least one photo of the parcel, or add a new one.' });
+
+    // Someone else added a photo after we read the parcel: our whole-list write is refused, theirs stands.
+    const findForWorkflow = orderRepository.findForWorkflow.bind(orderRepository);
+    const stale = await findForWorkflow(id);
+    await wf.editShipment(p, id, parcel.id, {}, [photo()], req);
+    const spy = jest.spyOn(orderRepository, 'findForWorkflow').mockResolvedValueOnce(stale);
+    await expect(wf.editShipment(p, id, parcel.id, {}, [photo()], req)).rejects.toMatchObject({ statusCode: 409 });
+    spy.mockRestore();
+    expect((await Order.findById(id).lean()).shipments[0].proofPhotos).toHaveLength(2);
+    expect(stored.size).toBe(2); // the refused upload was removed again
+  });
+
+  it('a parcel holds at most 50 proofs', async () => {
+    const p = await staff('procurement');
+    const order = await paidOrder();
+    const id = String(order._id);
+    const view = await wf.shipWithProof(p, id, {}, Array.from({ length: 20 }, () => photo()), req);
+    await wf.editShipment(p, id, view.parcels[0].id, {}, Array.from({ length: 20 }, () => photo()), req);
+    await expect(wf.editShipment(p, id, view.parcels[0].id, {}, Array.from({ length: 11 }, () => photo()), req))
+      .rejects.toMatchObject({ statusCode: 400, message: 'This record can hold 50 files in all — you can add 10 more.' });
+    expect(stored.size).toBe(40);
   });
 
   it('removes the uploaded photo if the parcel cannot be created', async () => {
@@ -708,7 +790,7 @@ describe('undo and correct — no time limit, the owning team', () => {
     expect(view.parcels[0]).toMatchObject({ courier: 'Blue Dart', trackingNumber: 'BD999' });
     expect(view.history[0]).toMatchObject({ action: 'Dispatch details corrected' });
     const o = await Order.findById(id).lean();
-    const shipments = o.shipments.map((s) => ({ ...s, proofPhoto: { ...s.proofPhoto, uploadedAt: new Date(Date.now() - 5 * 24 * 3600000) } }));
+    const shipments = o.shipments.map((s) => ({ ...s, proofPhotos: s.proofPhotos.map((x) => ({ ...x, uploadedAt: new Date(Date.now() - 5 * 24 * 3600000) })) }));
     await Order.collection.updateOne({ _id: o._id }, { $set: { shipments } });
     const teammate = await staff('procurement', { name: 'Pavan' });
     view = await wf.editShipment(teammate, id, parcel.id, { trackingNumber: 'BD1000' }, null, req);
