@@ -35,7 +35,7 @@ const itemLines = (rr) =>
 /**
  * Build the email for a given lifecycle event.
  * @param {Object} params
- * @param {'submitted'|'approved'|'courier_booked'|'received'|'rejected'|'refunded'} params.event
+ * @param {'submitted'|'approved'|'courier_booked'|'received'|'rejected'|'refunded'|'pickup_failed'} params.event
  * @param {Object} params.rr - ReturnRequest (items.product populated)
  * @param {Object} params.order - Order ({ orderNumber })
  * @param {Object} params.company - companyInfo
@@ -127,7 +127,8 @@ export const returnEmail = ({ event, rr, order, company, payment = null }) => {
     case 'received':
       subject = `We’ve received your returned item — Order #${ref}`;
       heading = 'Your returned item is with us';
-      intro = `We’ve received the returned item for order #${ref}. It’s now with our warehouse for inspection — we’ll email you as soon as the inspection is complete and your refund is processed.`;
+      // A direct-to-supplier return is inspected at the supplier, not our warehouse.
+      intro = `We’ve received the returned item for order #${ref}. It’s now ${rr.pickup?.mode === 'supplier_direct' ? 'being inspected' : 'with our warehouse for inspection'} — we’ll email you as soon as the inspection is complete and your refund is processed.`;
       textLines = [
         `We've received the returned item for order #${ref}.`,
         `It's now under inspection. We'll email you once it's complete and your refund is processed.`,
@@ -143,6 +144,17 @@ export const returnEmail = ({ event, rr, order, company, payment = null }) => {
         rr.rejectionReason ? `Reason: ${rr.rejectionReason}` : null,
         `If you have questions, reply to this email or contact ${company.email}.`,
       ].filter(Boolean);
+      break;
+    case 'pickup_failed':
+      // Two pickup attempts failed, so the request was cancelled automatically.
+      subject = `Return cancelled — Order #${ref}`;
+      heading = 'Your return request was cancelled';
+      intro = `Our courier tried twice to collect the return for order #${ref} and could not, so the request has been cancelled. `
+        + `If you still want to return the item, reply to this email or contact ${esc(company.email)} and we'll set it up again.`;
+      textLines = [
+        `Our courier tried twice to collect the return for order #${ref} and could not, so the request has been cancelled.`,
+        `If you still want to return the item, reply to this email or contact ${company.email}.`,
+      ];
       break;
     case 'refunded': {
       const amt = rr.refund?.finalAmount || 0;

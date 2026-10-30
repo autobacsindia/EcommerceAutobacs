@@ -58,6 +58,82 @@ class ReturnRequestRepository {
     return rows.flatMap((r) => (r.refund?.serviceLines || []).map((l) => String(l.orderItemId)));
   }
 
+  /**
+   * Compare-and-set: apply `update` only while the return still matches `expect` (its
+   * status, an unset field…). The serialization point for every team-panel step — a
+   * double-click or two people at once get one winner; the loser gets null.
+   */
+  transitionIf(id, expect, update) {
+    return ReturnRequest.findOneAndUpdate({ _id: id, ...expect }, update, { new: true });
+  }
+
+  /**
+   * One keyset page of returns, newest first: `(createdAt, _id)` strictly before the
+   * cursor. Bounded by `limit`; never skip/offset (the collection only grows).
+   */
+  page(query, { before = null, limit }) {
+    const filter = before
+      ? { $and: [query, { $or: [{ createdAt: { $lt: before.createdAt } }, { createdAt: before.createdAt, _id: { $lt: before.id } }] }] }
+      : query;
+    return ReturnRequest.find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .populate('order', 'orderNumber wpId shippingAddress.fullName salesUser totalAmount')
+      .populate('items.product', 'name')
+      .select('-video -proofOfPurchase -images -staffFiles -emailsSent')
+      .lean();
+  }
+
+  /**
+   * Supplier settlements promised but not yet received — the "Suppliers owe us" list.
+   * Oldest promise first (what is most overdue), keyset on (promisedAt, claim _id).
+   */
+  owedPage({ after = null, limit }) {
+    const pipeline = [
+      { $match: { 'supplierClaims.status': 'promised' } },
+      { $unwind: '$supplierClaims' },
+      { $match: { 'supplierClaims.status': 'promised' } },
+    ];
+    if (after) {
+      pipeline.push({ $match: { $or: [
+        { 'supplierClaims.settlement.promisedAt': { $gt: after.at } },
+        { 'supplierClaims.settlement.promisedAt': after.at, 'supplierClaims._id': { $gt: after.id } },
+      ] } });
+    }
+    pipeline.push(
+      { $sort: { 'supplierClaims.settlement.promisedAt': 1, 'supplierClaims._id': 1 } },
+      { $limit: limit },
+      { $project: { order: 1, claim: '$supplierClaims' } },
+    );
+    return ReturnRequest.aggregate(pipeline);
+  }
+
+  /** Totals still owed, per supplier (the summary above the list). Small: one row per supplier. */
+  owedTotals() {
+    return ReturnRequest.aggregate([
+      { $match: { 'supplierClaims.status': 'promised' } },
+      { $unwind: '$supplierClaims' },
+      { $match: { 'supplierClaims.status': 'promised' } },
+      { $group: {
+        _id: '$supplierClaims.supplierName',
+        amountPaise: { $sum: { $ifNull: ['$supplierClaims.settlement.amountPaise', 0] } },
+        claims: { $sum: 1 },
+        oldestPromisedAt: { $min: '$supplierClaims.settlement.promisedAt' },
+      } },
+      { $sort: { oldestPromisedAt: 1 } },
+      { $limit: 200 },
+    ]);
+  }
+
+  /** Requests this customer raised in the window — the repeat-returner flag. */
+  countRecentForCustomer({ user, phone }, since) {
+    const who = [];
+    if (user) who.push({ user });
+    if (phone) who.push({ customerPhone: phone });
+    if (!who.length) return Promise.resolve(0);
+    return ReturnRequest.countDocuments({ $or: who, createdAt: { $gte: since } });
+  }
+
   /** Has the customer email under this key already been accepted by the provider? */
   async wasEmailed(id, key) {
     return !!(await ReturnRequest.exists({ _id: id, 'emailsSent.key': key }));

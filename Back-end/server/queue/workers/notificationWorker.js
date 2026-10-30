@@ -24,7 +24,8 @@
  *   send-admin-order-cancelled-alert { orderId }        — notify support inbox of a customer/admin cancellation
  *   send-admin-refund-failed-alert   { orderId }        — notify support inbox that a refund failed at the gateway
  *   send-return-submitted            { returnId }        — acknowledge a new return request to the customer (idempotent)
- *   send-return-status-email         { returnId, event } — return lifecycle email to the customer (approved/courier_booked/received/rejected/refunded)
+ *   send-return-status-email         { returnId, event } — return lifecycle email to the customer (approved/courier_booked/received/rejected/refunded/pickup_failed), once per key
+ *   post-return-update               { event, returnId } — team-chat post for a return step (chat-only; push via chat)
  *   send-admin-return-alert          { returnId }        — notify support inbox of a new return request
  *   send-admin-return-refunded-alert { returnId }        — log to support inbox that a return refund was initiated
  *   process-inbound-email            { inboundId }       — parse a captured support email into a ticket (idempotent)
@@ -36,7 +37,7 @@
  */
 
 import { Worker } from 'bullmq';
-import { hasChatUpdate, postBusinessUpdate, WORKFLOW_CHAT_JOB } from '../../services/chatBusinessUpdates.js';
+import { hasChatUpdate, postBusinessUpdate, WORKFLOW_CHAT_JOB, RETURN_CHAT_JOB } from '../../services/chatBusinessUpdates.js';
 import { createConnection } from '../connection.js';
 import emailHandler from '../../services/emailHandler.js';
 import { emailOrderInvoice } from '../../services/invoiceService.js';
@@ -168,6 +169,8 @@ const handlers = {
   // Workflow steps that are a chat line only (ordered, customer waits, refund sent
   // back, delivered). Nothing to email; the chat hook below does the posting.
   [WORKFLOW_CHAT_JOB]: async () => ({ status: 'chat-only' }),
+  // Return steps (services/returnService.js): chat-only too.
+  [RETURN_CHAT_JOB]: async () => ({ status: 'chat-only' }),
 
   'send-admin-order-cancelled-alert': async (job) => {
     const { orderId } = job.data;

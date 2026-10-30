@@ -1,11 +1,11 @@
 import { body, param } from 'express-validator';
 import { validateRequest } from '../validateRequest.js';
 import mongoose from 'mongoose';
-import { RETURN_REASONS, ORIGINAL_REASONS } from '../../config/returnPolicy.js';
+import { RETURN_REASONS, CUSTOMER_REASONS } from '../../config/returnPolicy.js';
 
-// Create a return. Shape validation only — business rules (4-day window,
-// non-returnable products, mandatory-doc verification against Cloudinary) live in
-// the controller, which owns the order + product context.
+// Create a return. Shape validation only — business rules (windows per fault, the
+// non-returnable list, quantities, the evidence rule checked against storage) live in
+// services/returnService.js, which owns the order + product context.
 export const validateReturnRequest = [
   body('orderId')
     .notEmpty()
@@ -13,37 +13,45 @@ export const validateReturnRequest = [
     .custom((value) => mongoose.Types.ObjectId.isValid(value))
     .withMessage('Invalid Order ID'),
   body('items')
-    .isArray({ min: 1 })
+    .isArray({ min: 1, max: 50 })
     .withMessage('Select at least one item to return'),
-  body('items.*.productId')
-    .notEmpty()
-    .withMessage('Valid Product ID is required')
-    .custom((value) => mongoose.Types.ObjectId.isValid(value))
-    .withMessage('Invalid Product ID'),
+  // A line is the order line's own id (exact) or its product id (older clients).
+  body('items.*').custom((item) => {
+    if (!item || (!item.itemId && !item.productId)) throw new Error('Each item needs an order line or a product');
+    return true;
+  }),
+  body('items.*.itemId').optional().custom((value) => mongoose.Types.ObjectId.isValid(value)).withMessage('Invalid order line'),
+  body('items.*.productId').optional().custom((value) => mongoose.Types.ObjectId.isValid(value)).withMessage('Invalid Product ID'),
   body('items.*.quantity')
     .isInt({ min: 1 })
     .withMessage('Quantity must be at least 1'),
   body('items.*.reason')
-    .isIn(ORIGINAL_REASONS)
-    .withMessage('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect'),
+    .isIn(CUSTOMER_REASONS)
+    .withMessage('Choose a reason for the return'),
   body('problemDescription')
     .isString().withMessage('A problem description is required')
     .bail()
     .trim()
     .notEmpty().withMessage('A problem description is required')
     .isLength({ max: 2000 }).withMessage('Description cannot exceed 2000 characters'),
-  body('video')
-    .notEmpty().withMessage('A continuous unboxing video is required'),
-  body('video.publicId')
-    .isString().withMessage('A continuous unboxing video is required'),
-  body('proofOfPurchase')
-    .notEmpty().withMessage('Proof of purchase is required'),
-  body('proofOfPurchase.publicId')
-    .isString().withMessage('Proof of purchase is required'),
+  body('unusedDeclared').optional().isBoolean().withMessage('Invalid declaration'),
+  body('video.publicId').optional().isString().withMessage('Invalid video'),
+  body('proofOfPurchase.publicId').optional().isString().withMessage('Invalid proof of purchase'),
   body('images')
     .optional()
-    .isArray()
-    .withMessage('Images must be an array'),
+    .isArray({ max: 5 })
+    .withMessage('Up to 5 photos'),
+  validateRequest
+];
+
+// The estimate a customer sees before submitting. Same line shape, no evidence.
+export const validateReturnEstimate = [
+  body('orderId').custom((value) => mongoose.Types.ObjectId.isValid(value)).withMessage('Invalid Order ID'),
+  body('items').isArray({ min: 1, max: 50 }).withMessage('Select at least one item'),
+  body('items.*.itemId').optional().custom((value) => mongoose.Types.ObjectId.isValid(value)).withMessage('Invalid order line'),
+  body('items.*.productId').optional().custom((value) => mongoose.Types.ObjectId.isValid(value)).withMessage('Invalid Product ID'),
+  body('items.*.quantity').optional().isInt({ min: 1 }),
+  body('items.*.reason').optional().isIn(CUSTOMER_REASONS),
   validateRequest
 ];
 
