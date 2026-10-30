@@ -22,7 +22,7 @@ import Affiliate from '../models/Affiliate.js';
 import Order from '../models/Order.js';
 import ReturnRequest from '../models/ReturnRequest.js';
 import { orderGoodsNetPaise } from '../services/refundMathService.js';
-import { RETURN_WINDOW_DAYS } from '../config/returnPolicy.js';
+import { LONGEST_RETURN_WINDOW_DAYS as RETURN_WINDOW_DAYS } from '../config/returnPolicy.js';
 import { COMMISSION_STATUS, COMMISSION_TYPE } from '../config/affiliate.js';
 import { ensureCriticalIndexes } from '../config/db.js';
 

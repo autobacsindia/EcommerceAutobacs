@@ -55,7 +55,7 @@ import { orderGoodsNetPaise, refundableForLines } from './refundMathService.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import { deliveredAtForItem, isFullyDelivered } from '../utils/orderFulfilment.js';
 import { cancelledQuantityByItem } from '../utils/orderCancellation.js';
-import { IN_FLIGHT_RETURN_STATUSES, RETURN_WINDOW_DAYS } from '../config/returnPolicy.js';
+import { IN_FLIGHT_RETURN_STATUSES, LONGEST_RETURN_WINDOW_DAYS } from '../config/returnPolicy.js';
 import {
   COMMISSION_STATUS,
   COMMISSION_TYPE,
@@ -136,7 +136,9 @@ export const maturityDateFor = (order) => {
   }
 
   if (!latest) return null;
-  return new Date(latest.getTime() + RETURN_WINDOW_DAYS * DAY_MS);
+  // The LONGEST window: an our-fault return can still be raised after a customer-reason
+  // one could not, and commission must not mature while any return is still possible.
+  return new Date(latest.getTime() + LONGEST_RETURN_WINDOW_DAYS * DAY_MS);
 };
 
 /** Is any return on this order still moving? A raised return freezes maturation. */

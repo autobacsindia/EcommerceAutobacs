@@ -189,6 +189,22 @@ export interface ReturnRequestItem {
   quantity: number;
   reason: string;
   unitPrice?: number;
+  /** The order line this came from. Absent on requests raised before 2026-10-30. */
+  orderItemId?: string | null;
+  /** Who caused the problem — the reason claims it, operations confirms it. */
+  fault?: { claimed?: ReturnFault | null; confirmed?: ReturnFault | null; note?: string | null } | null;
+}
+
+/** Who caused the problem on a return line: decides what the customer gets back. */
+export type ReturnFault = 'ours' | 'customer';
+
+/** An installation (service) line refunded with a return. Amounts in paise. */
+export interface ReturnServiceLine {
+  orderItemId: string;
+  name: string;
+  netPaidPaise: number;
+  amountPaise: number;
+  reductionReason?: string | null;
 }
 
 /** A signed, viewable copy of a private return asset (admin detail response). */
@@ -219,6 +235,15 @@ export interface ReturnRefund {
   discountShare?: number;
   shippingDeduction?: number;
   restockingDeduction?: number;
+  /** Our-fault lines: their share of the original delivery charge. */
+  shippingShare?: number;
+  /** Our-fault returns: installation lines refunded with it. */
+  serviceLines?: ReturnServiceLine[];
+  /** Customer-reason lines: the real pickup cost deducted, and why. */
+  pickupDeduction?: number;
+  pickupDeductionReason?: string | null;
+  /** GST credit note number accounts typed on the refund. */
+  creditNoteNo?: string | null;
   finalAmount?: number;
   /** `offline` = paid back by hand (cash/NEFT/UPI/cheque) and recorded, not sent to Razorpay. */
   method?: 'original_payment' | 'offline';
@@ -254,6 +279,25 @@ export interface ReturnRefundPreview {
    */
   fullRefundOnly: boolean;
   note: string;
+  /** The server's fault-based breakdown (rupees) for the choices previewed. */
+  breakdown?: {
+    goodsGross: number;
+    goodsNet: number;
+    discountShare: number;
+    shippingShare: number;
+    service: number;
+    pickupDeduction: number;
+    restocking: number;
+    total: number;
+  };
+  /** What will actually be sent: the breakdown capped at what is left on the order. */
+  refundNow?: number;
+  lines?: { orderItemId: string | null; product: string | null; quantity: number; reason: string; fault: ReturnFault; net: number; shippingShare: number }[];
+  hasOurFault?: boolean;
+  hasCustomerFault?: boolean;
+  /** The order's installation lines staff may pick, at what the customer paid. */
+  serviceLineOptions?: { orderItemId: string; name: string; quantity: number; netPaid: number; alreadyRefunded: boolean }[];
+  serviceLines?: { orderItemId: string; name: string; netPaid: number; amount: number }[];
 }
 
 export interface ReturnRequest {
@@ -267,7 +311,7 @@ export interface ReturnRequest {
    * carries no unboxing video or proof of purchase by design. Don't render the evidence
    * block as "missing" for these.
    */
-  origin?: 'customer' | 'admin_offline';
+  origin?: 'customer' | 'admin_offline' | 'staff';
   status: ReturnStatus;
   problemDescription?: string;
   // On the admin DETAIL response these are signed { url } objects; on the list

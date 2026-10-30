@@ -1,7 +1,7 @@
 import { body, param } from 'express-validator';
 import { validateRequest } from '../validateRequest.js';
 import mongoose from 'mongoose';
-import { RETURN_REASONS } from '../../config/returnPolicy.js';
+import { RETURN_REASONS, ORIGINAL_REASONS } from '../../config/returnPolicy.js';
 
 // Create a return. Shape validation only — business rules (4-day window,
 // non-returnable products, mandatory-doc verification against Cloudinary) live in
@@ -24,7 +24,7 @@ export const validateReturnRequest = [
     .isInt({ min: 1 })
     .withMessage('Quantity must be at least 1'),
   body('items.*.reason')
-    .isIn(RETURN_REASONS)
+    .isIn(ORIGINAL_REASONS)
     .withMessage('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect'),
   body('problemDescription')
     .isString().withMessage('A problem description is required')
@@ -106,7 +106,7 @@ export const validateOfflineReturnCreate = [
     .withMessage('Quantity must be at least 1'),
   body('items.*.reason')
     .isIn(RETURN_REASONS)
-    .withMessage('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect'),
+    .withMessage('Choose a return reason for each item'),
   body('note')
     .isString().withMessage('A note describing what happened is required')
     .bail()
@@ -157,6 +157,23 @@ export const validateReturnRefundBody = [
   body('paidAt').optional({ values: 'falsy' }).isISO8601().withMessage('The payout date is not a valid date'),
   body('shippingDeduction').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Shipping deduction cannot be negative'),
   body('restockingDeduction').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Restocking deduction cannot be negative'),
+  // The real pickup cost, for a customer-reason return. `shippingDeduction` above is
+  // its older name and is still accepted; the controller treats the two as one figure.
+  body('pickupDeduction').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Pickup cost cannot be negative'),
+  body('pickupDeductionReason').optional({ values: 'null' }).isString().trim().isLength({ max: 500 })
+    .withMessage('Pickup cost note cannot exceed 500 characters'),
+  // Installation lines to refund with an our-fault return. Only ids and an optional
+  // LOWER amount are taken; what each line is worth is recomputed from the order.
+  body('serviceLines').optional().isArray({ max: 20 }).withMessage('Installation lines must be a list'),
+  body('serviceLines.*.orderItemId')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid installation line'),
+  body('serviceLines.*.amountRupees').optional({ values: 'null' }).isFloat({ min: 0 })
+    .withMessage('Installation amount cannot be negative'),
+  body('serviceLines.*.reductionReason').optional({ values: 'null' }).isString().trim().isLength({ max: 500 })
+    .withMessage('Reason cannot exceed 500 characters'),
+  body('creditNoteNo').optional({ values: 'null' }).isString().trim().isLength({ max: 60 })
+    .withMessage('Credit note number cannot exceed 60 characters'),
   body('notifyCustomer').optional().isBoolean().withMessage('notifyCustomer must be true or false'),
   validateRequest
 ];

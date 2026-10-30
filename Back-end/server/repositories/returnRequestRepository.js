@@ -42,6 +42,39 @@ class ReturnRequestRepository {
     return !!(await ReturnRequest.exists({ order: orderId, status: { $in: statuses } }));
   }
 
+  /**
+   * Installation (service) lines of this order already refunded by ANOTHER return —
+   * the friendly pre-check in front of the unique_refunded_service_line index.
+   * @returns {Promise<string[]>} order line ids
+   */
+  async refundedServiceLineIds(orderId, excludeReturnId = null) {
+    const filter = {
+      order: orderId,
+      'refund.status': { $in: ['processing', 'completed'] },
+      'refund.serviceLines.0': { $exists: true },
+    };
+    if (excludeReturnId) filter._id = { $ne: excludeReturnId };
+    const rows = await ReturnRequest.find(filter).select('refund.serviceLines.orderItemId').lean();
+    return rows.flatMap((r) => (r.refund?.serviceLines || []).map((l) => String(l.orderItemId)));
+  }
+
+  /** Has the customer email under this key already been accepted by the provider? */
+  async wasEmailed(id, key) {
+    return !!(await ReturnRequest.exists({ _id: id, 'emailsSent.key': key }));
+  }
+
+  /**
+   * Record that the email under `key` was sent. Conditional, so two workers racing on
+   * the same key leave one entry. Returns true when THIS call recorded it.
+   */
+  async markEmailed(id, key) {
+    const res = await ReturnRequest.updateOne(
+      { _id: id, 'emailsSent.key': { $ne: key } },
+      { $push: { emailsSent: { key, at: new Date() } } },
+    );
+    return res.modifiedCount === 1;
+  }
+
   async returnedQuantityByProduct(orderId) {
     const rows = await ReturnRequest.aggregate([
       { $match: { order: new mongoose.Types.ObjectId(String(orderId)),
@@ -56,6 +89,7 @@ class ReturnRequestRepository {
     productValue, listValue, discountShare,
     shippingDeduction, restockingDeduction, finalAmount, initiatedBy,
     method = 'original_payment', offlineMethod = null, reference = null, paidAt = null,
+    shippingShare = 0, serviceLines = [], pickupDeductionReason = null, creditNoteNo = null,
   }) {
     const isOffline = method === 'offline';
     const $set = {
@@ -68,6 +102,15 @@ class ReturnRequestRepository {
       'refund.shippingDeduction': shippingDeduction,
       'refund.restockingDeduction': restockingDeduction,
       'refund.finalAmount': finalAmount,
+      // The fault-based parts of the breakdown (returnRefundBreakdown). `serviceLines`
+      // MUST be written in this same update: the unique_refunded_service_line index only
+      // serializes two returns claiming one installation line if the line and the
+      // `processing` status land together — a later write would leave a window.
+      'refund.shippingShare': shippingShare,
+      'refund.serviceLines': serviceLines,
+      'refund.pickupDeduction': shippingDeduction,
+      'refund.pickupDeductionReason': pickupDeductionReason,
+      'refund.creditNoteNo': creditNoteNo,
       // 'offline' records a payout that already happened outside the gateway. It is
       // claimed through this SAME atomic gate as a Razorpay refund on purpose: one
       // serialization point means a double-submit — or one admin recording cash while

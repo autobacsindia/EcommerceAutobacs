@@ -24,6 +24,7 @@ const mockReturnRepo = {
   create: jest.fn(),
   save: jest.fn(),
   claimForRefund: jest.fn(),
+  refundedServiceLineIds: jest.fn().mockResolvedValue([]),
   claimPaymentRecord: jest.fn(),
   find: jest.fn(),
   // productId → units already spoken for by an in-flight/refunded return. The offline
@@ -573,7 +574,9 @@ describe('initiateReturnRefund — recording money paid back outside the gateway
       order: 'order-1',
       status: 'received',
       inspection: { passed: true },
-      items: [{ product: 'prod-1', quantity: 2, unitPrice: 500 }],
+      // Customer-reason by default: these tests pin the goods-only arithmetic and the
+      // deductions, which the our-fault shipping share would otherwise blur.
+      items: [{ product: 'prod-1', quantity: 2, unitPrice: 500, reason: 'changed_mind' }],
       refund: { productValue: 1000, status: 'pending' },
       timeline: [],
       user: { email: 'c@x.com' },
@@ -691,25 +694,31 @@ describe('initiateReturnRefund — recording money paid back outside the gateway
   it('deducts shipping and restocking exactly as the gateway path does', async () => {
     await run(initiateReturnRefund, {
       params: { id: 'ret-1' },
-      body: { ...offlineBody, shippingDeduction: 100, restockingDeduction: 50 },
+      body: { ...offlineBody, shippingDeduction: 100, pickupDeductionReason: 'Courier receipt 77', restockingDeduction: 50 },
       user: ADMIN,
     });
     expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({ finalAmount: 850 }));
   });
 
-  it('still refuses to pay out more than the order has left, before anything moves', async () => {
+  it('never records more than the order has left — caps it, exactly as the gateway path does', async () => {
     // A sibling return already drew ₹1200 of the ₹1500 captured.
     mockSiblings([{ _id: 'ret-other', refund: { status: 'completed', finalAmount: 1200 } }]);
+    await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: offlineBody, user: ADMIN });
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({ finalAmount: 300 }));
+  });
+
+  it('refuses to record anything when the order has nothing left, before anything moves', async () => {
+    mockSiblings([{ _id: 'ret-other', refund: { status: 'completed', finalAmount: 1500 } }]);
     const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: offlineBody, user: ADMIN });
     expect(status).toBe(422);
-    expect(error.message).toMatch(/exceeds what is left/i);
+    expect(error.message).toMatch(/Nothing is left to refund/i);
     expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
   });
 
   it('still refuses a payout of ₹0 after deductions', async () => {
     const { status } = await run(initiateReturnRefund, {
       params: { id: 'ret-1' },
-      body: { ...offlineBody, shippingDeduction: 1000 },
+      body: { ...offlineBody, shippingDeduction: 1000, pickupDeductionReason: 'Courier' },
       user: ADMIN,
     });
     expect(status).toBe(400);
@@ -817,10 +826,9 @@ describe('initiateReturnRefund — recording money paid back outside the gateway
     // ₹1500 captured; a sibling return already handed ₹1200 back in cash. The gateway
     // must only be allowed the ₹300 balance — the whole point of recording cash.
     mockSiblings([{ _id: 'ret-other', refund: { status: 'completed', method: 'offline', finalAmount: 1200 } }]);
-    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: ADMIN });
-    expect(status).toBe(422);
-    expect(error.message).toMatch(/₹300 of ₹1500 captured/);
-    expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
+    const { next } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: ADMIN });
+    expect(next).not.toHaveBeenCalled();
+    expect(mockRazorpay.refundPayment).toHaveBeenCalledWith('pay_123', 30000, expect.any(Object));
   });
 
   it('leaves the gateway path untouched when no method is given', async () => {

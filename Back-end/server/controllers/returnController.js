@@ -38,9 +38,16 @@ import razorpayService from '../services/razorpayService.js';
 import { reverseReturnLtvOnce } from '../services/returnRefundLtvService.js';
 import { reverseRefundSideEffects } from '../services/refundReversalService.js';
 import auditLogger from '../services/auditLogger.js';
-import { refundableForLines, remainingRefundable, matchOrderLine } from '../services/refundMathService.js';
+import {
+  refundableForLines,
+  remainingRefundable,
+  matchOrderLine,
+  returnRefundBreakdown,
+  serviceLineOptions,
+  RefundBreakdownError,
+} from '../services/refundMathService.js';
 import { supportsPartialRefund, describeEmiPlan } from '../utils/paymentMethodDetails.js';
-import { toPaise } from '../utils/money.js';
+import { toPaise, fromPaise } from '../utils/money.js';
 import { deliveredAtForItem } from '../utils/orderFulfilment.js';
 import { coversEveryDeliveredLine } from '../utils/orderReturns.js';
 import { enqueueNotification } from '../queue/queues.js';
@@ -48,8 +55,11 @@ import { OFFLINE_METHODS, offlineMethodLabel } from '../config/offlineRefund.js'
 import {
   RETURN_WINDOW_DAYS,
   RETURN_REASONS,
+  ORIGINAL_REASONS,
   IN_FLIGHT_RETURN_STATUSES,
   suggestedRestockingRupees,
+  claimedFaultFor,
+  effectiveFault,
 } from '../config/returnPolicy.js';
 import {
   RETURNS_FOLDER_BASE,
@@ -273,6 +283,49 @@ const resolveRefundBasis = async (rr) => {
 };
 
 /**
+ * The staff's choices for a refund, read from a request body and converted to paise.
+ * Only ids, deductions and a LOWER installation amount are taken from the client; every
+ * figure they are checked against is recomputed from the order by returnRefundBreakdown.
+ * `shippingDeduction` is the older name for the pickup cost and is still accepted.
+ */
+export const refundChoicesFromBody = (body = {}) => ({
+  serviceLines: (Array.isArray(body.serviceLines) ? body.serviceLines : []).map((l) => ({
+    orderItemId: l?.orderItemId,
+    amountPaise: l?.amountRupees == null || l?.amountRupees === '' ? null : toPaise(Math.max(0, Number(l.amountRupees) || 0)),
+    reductionReason: l?.reductionReason,
+  })),
+  pickupDeductionPaise: toPaise(Math.max(0, Number(body.pickupDeduction ?? body.shippingDeduction) || 0)),
+  pickupDeductionReason: typeof body.pickupDeductionReason === 'string' ? body.pickupDeductionReason.trim() : null,
+  restockingPaise: toPaise(Math.max(0, Number(body.restockingDeduction) || 0)),
+});
+
+/**
+ * The fault-based breakdown for a return, with the installation lines another return
+ * already refunded ruled out. Maps the pure function's refusal to an AppError.
+ */
+const breakdownFor = async (order, rr, choices) => {
+  const serviceItemIdsTaken = await returnRequestRepository.refundedServiceLineIds(order._id, rr._id);
+  try {
+    return returnRefundBreakdown(order, rr, { ...choices, serviceItemIdsTaken });
+  } catch (err) {
+    if (err instanceof RefundBreakdownError) throw new AppError(err.message, err.status);
+    throw err;
+  }
+};
+
+/** Rupee view of a breakdown, for the preview, the response and the stored record. */
+const breakdownRupees = (b) => ({
+  goodsGross: fromPaise(b.goodsGrossPaise),
+  goodsNet: fromPaise(b.goodsNetPaise),
+  discountShare: fromPaise(Math.max(0, b.goodsGrossPaise - b.goodsNetPaise)),
+  shippingShare: fromPaise(b.shippingSharePaise),
+  service: fromPaise(b.servicePaise),
+  pickupDeduction: fromPaise(b.pickupDeductionPaise),
+  restocking: fromPaise(b.restockingPaise),
+  total: fromPaise(b.totalPaise),
+});
+
+/**
  * Debit-card EMI is FULL-REFUND-ONLY at the issuer.
  *
  * The bank is never told which line of a multi-item order came back — it only holds a
@@ -435,7 +488,7 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
         400,
       );
     }
-    if (!RETURN_REASONS.includes(item.reason)) {
+    if (!ORIGINAL_REASONS.includes(item.reason)) {
       throw new AppError('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect.', 400);
     }
     // Non-returnable classes (electrical/custom/imported/installed) are blocked.
@@ -498,12 +551,15 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
     const qty = requested;
     returnItems.push({
       product: item.productId,
+      orderItemId: orderLine._id || null,
       variantId: orderLine.variantId || null,
       // Snapshotted beside the id, like unitPrice: the admin screen must be able to
       // say WHICH model is coming back without dereferencing the live product.
       variantLabel: orderLine.variantLabel || null,
       quantity: qty,
       reason: item.reason,
+      // The customer's reason only CLAIMS a fault; operations confirms it at review.
+      fault: { claimed: claimedFaultFor(item.reason) },
       unitPrice: money(orderLine.price),
     });
   }
@@ -809,7 +865,7 @@ const snapshotReturnLines = (order, items) => {
     seen.add(lineKey);
 
     if (!RETURN_REASONS.includes(item.reason)) {
-      throw new AppError('Returns are only accepted for a wrong item, transit damage, or a manufacturing defect.', 400);
+      throw new AppError('Choose a return reason for each item.', 400);
     }
     const productId = orderLine.product?._id || orderLine.product;
     if (!productId) {
@@ -823,12 +879,14 @@ const snapshotReturnLines = (order, items) => {
     }
     lines.push({
       product: productId,
+      orderItemId: orderLine._id || null,
       variantId: orderLine.variantId || null,
       variantLabel: orderLine.variantLabel || null,
       // Clamped to what was actually bought — the refund base is Σ(unitPrice × qty),
       // so an over-entered quantity is an over-refund.
       quantity: Math.min(Number(item.quantity) || 1, orderLine.quantity),
       reason: item.reason,
+      fault: { claimed: claimedFaultFor(item.reason) },
       unitPrice: money(orderLine.price),
     });
   }
@@ -1253,10 +1311,17 @@ export const refundPreview = asyncHandler(async (req, res) => {
     throw new AppError('Return request not found', 404);
   }
   const { order, payment, refundable, headroom } = await resolveRefundBasis(rr);
+  // GET previews the defaults; POST previews the staff's choices (installation lines,
+  // deductions) so the screen shows the server's figure for exactly what will be sent.
+  const breakdown = await breakdownFor(order, rr, refundChoicesFromBody(req.method === 'POST' ? req.body : {}));
+  const taken = new Set(await returnRequestRepository.refundedServiceLineIds(order._id, rr._id));
 
-  // Suggested restocking = sum of the price-threshold limb over returned lines.
+  // Suggested restocking = the price-threshold limb, over CUSTOMER-REASON lines only:
+  // an our-fault return is never charged for restocking.
   const suggestedRestocking = money(
-    rr.items.reduce((sum, it) => sum + suggestedRestockingRupees(it.unitPrice, it.quantity), 0)
+    rr.items
+      .filter((it) => effectiveFault(it) === 'customer')
+      .reduce((sum, it) => sum + suggestedRestockingRupees(it.unitPrice, it.quantity), 0)
   );
   res.json({
     success: true,
@@ -1265,21 +1330,47 @@ export const refundPreview = asyncHandler(async (req, res) => {
       // amount — chiefly debit-card EMI, which the bank can only refund in full.
       paidBy: describeEmiPlan(payment) || null,
       fullRefundOnly: !supportsPartialRefund(payment),
-      // What the customer actually paid for these lines — the number the refund is
-      // computed from and the one shown on the button.
+      // What the customer actually paid for these lines — the goods part of the refund.
       productValue: refundable.netRupees,
       // Context for the operator: the list value we used to (wrongly) refund, and the
       // slice of the order-level coupon/karma discount attributable to these lines.
       listValue: refundable.grossRupees,
       discountShare: refundable.discountShareRupees,
       couponCode: order.couponCode || null,
+      // The fault-based breakdown (rule 1): what each part adds or takes away.
+      breakdown: breakdownRupees(breakdown),
+      lines: breakdown.lines.map((l) => ({
+        orderItemId: l.orderItemId,
+        product: l.product,
+        quantity: l.quantity,
+        reason: l.reason,
+        fault: l.fault,
+        net: fromPaise(l.netPaise),
+        shippingShare: fromPaise(l.shippingSharePaise),
+      })),
+      hasOurFault: breakdown.hasOurFault,
+      hasCustomerFault: breakdown.hasCustomerFault,
+      // The order's installation lines staff may pick, each at what the customer paid.
+      serviceLineOptions: serviceLineOptions(order).map((o) => ({
+        orderItemId: o.orderItemId,
+        name: o.name,
+        quantity: o.quantity,
+        netPaid: fromPaise(o.netPaidPaise),
+        alreadyRefunded: taken.has(o.orderItemId),
+      })),
+      serviceLines: breakdown.serviceLines.map((l) => ({
+        orderItemId: l.orderItemId, name: l.name, netPaid: fromPaise(l.netPaidPaise), amount: fromPaise(l.amountPaise),
+      })),
+      // What will actually be sent: the breakdown, capped at what is left on the order.
+      refundNow: money(Math.min(fromPaise(breakdown.totalPaise), headroom.remainingRupees)),
       // Gateway headroom. Razorpay rejects anything above this outright.
       orderTotal: headroom.capturedRupees,
       alreadyRefunded: headroom.alreadyRefundedRupees,
       maxRefundable: headroom.remainingRupees,
       suggestedRestocking, // operator may accept, change, or zero this
-      shippingDeductionDefault: rr.shippingBorneBy === 'customer' ? null : 0,
-      note: 'Refunds are based on what the customer actually paid, after any coupon or karma discount. The original delivery charge is never refunded. Restocking (10%) suggested for items over ₹1,00,000; add manually for oversized items. Enter the actual return-shipping cost to deduct when the customer bears it.',
+      shippingDeductionDefault: 0,
+      note: 'Our fault: the customer gets what they paid for the item, a share of the original delivery charge, and any installation you pick. '
+        + 'Customer\'s reason: what they paid for the item, minus the real pickup cost (and restocking, for items over ₹1,00,000).',
     },
   });
 });
@@ -1602,30 +1693,51 @@ export const initiateReturnRefund = asyncHandler(async (req, res) => {
     throw new AppError(`A refund for this return is already ${existing.refund.status}.`, 409);
   }
 
-  // Recompute the base from the ORDER — never from existing.refund.productValue, which
+  // Recompute everything from the ORDER — never from existing.refund.productValue, which
   // is a create-time hint and, for returns raised before 2026-08-03, a GROSS figure.
   const { order, payment, refundable, headroom } = await resolveRefundBasis(existing);
 
-  const shippingDeduction = money(Math.max(0, Number(req.body.shippingDeduction) || 0));
-  const restockingDeduction = money(Math.max(0, Number(req.body.restockingDeduction) || 0));
+  // The fault-based breakdown (rule 1): goods net + our-fault shipping share + picked
+  // installation lines − customer-reason pickup cost − restocking. Only ids and
+  // deductions come from the client; every amount is recomputed here.
+  const breakdown = await breakdownFor(order, existing, refundChoicesFromBody(req.body));
+  const rupees = breakdownRupees(breakdown);
+  const shippingDeduction = rupees.pickupDeduction;
+  const restockingDeduction = rupees.restocking;
   const productValue = refundable.netRupees;
-  const finalAmount = money(productValue - shippingDeduction - restockingDeduction);
+  /*
+    The cap: what the customer actually paid (a Razorpay offer at the gateway is money
+    they never handed over) less everything already refunded on the order — returns AND
+    cancellations (remainingRefundable). An our-fault return of the whole order adds up
+    to the order total, so on an offer order the breakdown is ABOVE what was captured by
+    exactly the offer; refusing would leave the operator no amount to lower. So the
+    figure is capped here and the cap is shown on the preview and the timeline.
+  */
+  const finalAmount = money(Math.min(rupees.total, headroom.remainingRupees));
+  const cappedBy = money(rupees.total - finalAmount);
+  const creditNoteNo = typeof req.body.creditNoteNo === 'string' && req.body.creditNoteNo.trim()
+    ? req.body.creditNoteNo.trim()
+    : null;
 
-  // finalAmount can only be ≤ productValue (both deductions are clamped ≥ 0), so the
-  // only real bound to assert is that something is left to refund after deductions.
+  // Deductions are bounded inside the breakdown by the customer-reason lines' own net,
+  // so the only bound left to assert is that something is left to refund.
   if (finalAmount <= 0) {
-    throw new AppError('The refund amount after deductions must be greater than ₹0.', 400);
+    throw new AppError(
+      rupees.total > 0
+        ? `Nothing is left to refund on this order (₹${headroom.alreadyRefundedRupees} of ₹${headroom.capturedRupees} already refunded).`
+        : 'The refund amount after deductions must be greater than ₹0.',
+      rupees.total > 0 ? 422 : 400,
+    );
   }
 
-  // Gateway headroom guard. Razorpay rejects a refund above the captured amount with
-  // an opaque error AFTER we have already claimed the return into `processing`; this
-  // catches it first, before any state moves, and says which number is wrong. It is
-  // also the backstop against a second return on the same order over-drawing it.
+  // Gateway headroom guard. The cap above makes this unreachable today; it stays as the
+  // backstop so a future edit to the cap can never send Razorpay more than it holds
+  // (an opaque rejection AFTER the return was claimed into `processing`).
   if (finalAmount > headroom.remainingRupees) {
     throw new AppError(
       `Refund of ₹${finalAmount} exceeds what is left on this order (₹${headroom.remainingRupees} of ₹${headroom.capturedRupees} captured` +
       `${headroom.alreadyRefundedRupees > 0 ? `, ₹${headroom.alreadyRefundedRupees} already refunded` : ''}). ` +
-      'Reduce the amount or refund the balance manually in the Razorpay dashboard.',
+      'Refund the balance manually in the Razorpay dashboard.',
       422
     );
   }
@@ -1672,13 +1784,27 @@ export const initiateReturnRefund = asyncHandler(async (req, res) => {
   // touching the gateway. A double-click / two-admin race resolves to a single
   // winner here; the loser matches zero docs, gets null, and 409s — never firing a
   // second Razorpay refund. `rr` is the freshly-claimed document we mutate below.
-  const rr = await returnRequestRepository.claimForRefund(req.params.id, {
-    productValue,
-    listValue: refundable.grossRupees,
-    discountShare: refundable.discountShareRupees,
-    shippingDeduction, restockingDeduction, finalAmount, initiatedBy: req.user._id,
-    method, offlineMethod, reference, paidAt,
-  });
+  let rr;
+  try {
+    rr = await returnRequestRepository.claimForRefund(req.params.id, {
+      productValue,
+      listValue: refundable.grossRupees,
+      discountShare: refundable.discountShareRupees,
+      shippingDeduction, restockingDeduction, finalAmount, initiatedBy: req.user._id,
+      method, offlineMethod, reference, paidAt,
+      shippingShare: rupees.shippingShare,
+      serviceLines: breakdown.serviceLines,
+      pickupDeductionReason: shippingDeduction > 0 ? refundChoicesFromBody(req.body).pickupDeductionReason : null,
+      creditNoteNo,
+    });
+  } catch (err) {
+    // unique_refunded_service_line: another return claimed the same installation line
+    // between our pre-check and this claim. Nothing was written; nothing was paid.
+    if (err?.code === 11000) {
+      throw new AppError('That installation was just refunded with another return. Refresh and check the amount.', 409);
+    }
+    throw err;
+  }
   if (!rr) {
     throw new AppError('This refund is already being processed.', 409);
   }
@@ -1699,7 +1825,12 @@ export const initiateReturnRefund = asyncHandler(async (req, res) => {
     rr.refund.razorpayRefundId = result.refundId;
     rr.refund.status = completed ? 'completed' : 'processing';
     if (completed) rr.refund.completedAt = new Date();
-    transition(rr, 'refunded', `Refund ${completed ? 'completed' : 'initiated'} — ₹${finalAmount} to original payment`, req.user._id);
+    transition(
+      rr, 'refunded',
+      `Refund ${completed ? 'completed' : 'initiated'} — ₹${finalAmount} to original payment`
+        + (cappedBy > 0 ? ` (₹${cappedBy} less than the breakdown: capped at what is left on the order)` : ''),
+      req.user._id,
+    );
     await returnRequestRepository.save(rr);
 
     // Mirror THIS refund onto the order as a best-effort LATEST-refund summary. It is

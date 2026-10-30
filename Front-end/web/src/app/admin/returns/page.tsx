@@ -3,10 +3,10 @@
 import ProductLink from '@/components/staff/ProductLink';
 import { useState, useEffect, useCallback } from 'react';
 import apiClient from '@/lib/api';
-import { API_ENDPOINTS } from '@/lib/constants';
+import { API_ENDPOINTS, RETURN_REASON_OPTIONS, RETURN_FAULT_LABELS, returnReasonLabel } from '@/lib/constants';
 import { Search, Eye, Package, Video, FileText, ExternalLink, X, Truck, ClipboardCheck, Store, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { ReturnRequest, PaginatedReturnRequests, ReturnRefundPreview, Order, OrderItem, OfflineRefundMethod } from '@/lib/types';
+import { ReturnRequest, ReturnRequestItem, PaginatedReturnRequests, ReturnRefundPreview, Order, OrderItem, OfflineRefundMethod } from '@/lib/types';
 import { OFFLINE_REFUND_METHODS, offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 
@@ -24,13 +24,16 @@ const label = (s: string) => s.replace(/_/g, ' ').toUpperCase();
 const inr = (n?: number) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const userName = (u: ReturnRequest['user']) => (typeof u === 'object' ? u?.name || u?.email || '—' : '—');
 
-// The three reasons the policy accepts. Mirrors config/returnPolicy.js RETURN_REASONS —
-// the schema enum, which the offline path does NOT bypass.
-const RETURN_REASONS: { value: string; label: string }[] = [
-  { value: 'wrong_item', label: 'Wrong item shipped' },
-  { value: 'transit_damage', label: 'Damaged in transit' },
-  { value: 'manufacturing_defect', label: 'Manufacturing defect' },
-];
+// Every reason the policy accepts (the schema enum, which the offline path does NOT
+// bypass), each tagged with the fault it claims. Mirrors config/returnPolicy.js.
+const RETURN_REASONS = RETURN_REASON_OPTIONS.map((r) => ({
+  value: r.value,
+  label: `${r.label} — ${RETURN_FAULT_LABELS[r.fault]}`,
+}));
+
+/** The fault that decides a line's money: operations' confirmation, else the claim. */
+const lineFault = (item: ReturnRequestItem) =>
+  item.fault?.confirmed || item.fault?.claimed || RETURN_REASON_OPTIONS.find((r) => r.value === item.reason)?.fault || 'ours';
 
 // Shared with the order and cancellation refund screens — see src/lib/offlineRefund.ts.
 const OFFLINE_METHODS = OFFLINE_REFUND_METHODS;
@@ -435,8 +438,12 @@ function DetailModal({ request, loading, onClose, onActioned }: {
   const [rejectReason, setRejectReason] = useState('');
   const [courier, setCourier] = useState({ provider: '', trackingNumber: '' });
   const [inspectionNotes, setInspectionNotes] = useState('');
-  const [refund, setRefund] = useState({ shippingDeduction: '', restockingDeduction: '' });
+  const [refund, setRefund] = useState({ shippingDeduction: '', pickupReason: '', restockingDeduction: '', creditNoteNo: '' });
+  // Installation lines picked for an our-fault return: id → optional LOWER amount + why.
+  const [services, setServices] = useState<Record<string, { amount: string; reason: string }>>({});
   const [preview, setPreview] = useState<ReturnRefundPreview | null>(null);
+  const [previewError, setPreviewError] = useState('');
+  const [previewing, setPreviewing] = useState(false);
   const [refundMethod, setRefundMethod] = useState<'original_payment' | 'offline'>('original_payment');
   const [offlinePay, setOfflinePay] = useState<{ method: OfflineRefundMethod; reference: string }>({ method: 'cash', reference: '' });
   const [offlineNote, setOfflineNote] = useState('');
@@ -447,6 +454,41 @@ function DetailModal({ request, loading, onClose, onActioned }: {
     catch (e) { alert((e as Error).message || 'Action failed'); }
     finally { setBusy(false); }
   };
+
+  /** The choices as the refund route takes them. Amounts are re-checked by the server. */
+  const refundChoices = useCallback(() => ({
+    shippingDeduction: Number(refund.shippingDeduction) || 0,
+    pickupDeductionReason: refund.pickupReason.trim() || undefined,
+    restockingDeduction: Number(refund.restockingDeduction) || 0,
+    serviceLines: Object.entries(services).map(([orderItemId, v]) => ({
+      orderItemId,
+      ...(v.amount.trim() !== '' ? { amountRupees: Number(v.amount), reductionReason: v.reason.trim() || undefined } : {}),
+    })),
+    creditNoteNo: refund.creditNoteNo.trim() || undefined,
+  }), [refund, services]);
+
+  // Re-preview on every change of choices: the amount on the button is ALWAYS the
+  // server's figure for exactly these choices — never computed here.
+  useEffect(() => {
+    if (!request || request.status !== 'received' || request.inspection?.passed !== true || !preview) return undefined;
+    const t = setTimeout(async () => {
+      setPreviewing(true);
+      try {
+        const res = await apiClient.post<{ preview: ReturnRefundPreview }>(API_ENDPOINTS.RETURN_REFUND_PREVIEW(request._id), refundChoices());
+        if (!res?.preview) throw new Error('Could not work out the refund.');
+        setPreview(res.preview);
+        setPreviewError('');
+      } catch (e) {
+        setPreviewError((e as Error).message || 'Could not work out the refund.');
+      } finally {
+        setPreviewing(false);
+      }
+    }, 350);
+    return () => clearTimeout(t);
+    // `preview` is deliberately not a dependency: the first GET seeds it, and every
+    // later preview is driven by a change in the choices only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refundChoices, request?._id]);
 
   const loadPreview = useCallback(async (id: string) => {
     try {
@@ -539,7 +581,12 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                           </p>
                         )}
                         <p className="text-gray-500">Qty: {item.quantity} · {inr(item.unitPrice)}</p>
-                        <p className="text-red-600">{label(item.reason)}</p>
+                        <p className="text-red-600">{returnReasonLabel(item.reason)}</p>
+                        <p className="mt-0.5">
+                          <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${lineFault(item) === 'ours' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {RETURN_FAULT_LABELS[lineFault(item)]}{item.fault?.confirmed ? ' · confirmed' : ''}
+                          </span>
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -591,9 +638,15 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                       </>
                     )}
                     <Line k="Customer paid" v={inr(request.refund.productValue)} />
-                    <Line k="Shipping deducted" v={inr(request.refund.shippingDeduction)} />
+                    {(request.refund.shippingShare ?? 0) > 0 && <Line k="Delivery charge share" v={`+${inr(request.refund.shippingShare)}`} />}
+                    {(request.refund.serviceLines || []).map((l) => (
+                      <Line key={l.orderItemId} k={l.name || 'Installation'} v={`+${inr(l.amountPaise / 100)}`} />
+                    ))}
+                    <Line k="Pickup cost deducted" v={inr(request.refund.shippingDeduction)} />
+                    {request.refund.pickupDeductionReason && <p className="text-xs text-gray-500 text-right">{request.refund.pickupDeductionReason}</p>}
                     <Line k="Restocking deducted" v={inr(request.refund.restockingDeduction)} />
                     <Line k="Refunded" v={inr(request.refund.finalAmount)} bold />
+                    {request.refund.creditNoteNo && <Line k="GST credit note" v={request.refund.creditNoteNo} />}
                     <Line k="Status" v={request.refund.status || ''} />
                     {request.refund.method === 'offline' && (
                       <>
@@ -721,9 +774,10 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                 // discounted order and is rejected outright by Razorpay once the gap
                 // exceeds the capture — the 2026-08-03 bug.
                 const base = preview?.productValue ?? request.refund?.productValue ?? 0;
-                const deductions = (Number(refund.shippingDeduction) || 0) + (Number(refund.restockingDeduction) || 0);
-                const payout = base - deductions;
-                const overHeadroom = preview != null && payout > preview.maxRefundable;
+                // The server's figure for the current choices (capped at what is left on
+                // the order). Never computed here — see the preview effect above.
+                const payout = preview?.refundNow ?? preview?.breakdown?.total ?? 0;
+                const capped = preview?.breakdown != null && payout < preview.breakdown.total;
                 const isOffline = refundMethod === 'offline';
                 // Debit-card EMI: the issuer can only unwind the whole loan, so anything
                 // short of the full capture is rejected at the gateway. Mirrors the
@@ -784,6 +838,70 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                       )}
                     </div>
 
+                    {preview?.breakdown && (
+                      <div className="rounded border bg-gray-50 p-3 text-sm space-y-1">
+                        <Line k="Item(s) — what the customer paid" v={inr(preview.breakdown.goodsNet)} />
+                        {preview.breakdown.shippingShare > 0 && <Line k="Delivery charge share (our fault)" v={`+${inr(preview.breakdown.shippingShare)}`} />}
+                        {preview.breakdown.service > 0 && <Line k="Installation (our fault)" v={`+${inr(preview.breakdown.service)}`} />}
+                        {preview.breakdown.pickupDeduction > 0 && <Line k="Pickup cost (customer's reason)" v={`−${inr(preview.breakdown.pickupDeduction)}`} />}
+                        {preview.breakdown.restocking > 0 && <Line k="Restocking" v={`−${inr(preview.breakdown.restocking)}`} />}
+                        <Line k="Refund" v={inr(payout)} bold />
+                        {capped && (
+                          <p className="text-xs text-amber-700">
+                            Capped at {inr(payout)} — what is left of what the customer paid on this order ({inr(preview.breakdown.total)} before the cap).
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Installation lines: our-fault returns only. Staff pick which custom
+                        line(s) on the bill were the installation; the server prices each. */}
+                    {preview?.hasOurFault && (preview.serviceLineOptions?.length ?? 0) > 0 && (
+                      <div className="space-y-2 text-sm">
+                        <p className="font-medium">Installation to refund</p>
+                        {preview.serviceLineOptions!.map((o) => {
+                          const picked = services[o.orderItemId];
+                          return (
+                            <div key={o.orderItemId} className="rounded border p-2">
+                              <label className={`flex items-center gap-2 ${o.alreadyRefunded ? 'opacity-50' : 'cursor-pointer'}`}>
+                                <input
+                                  type="checkbox"
+                                  disabled={o.alreadyRefunded}
+                                  checked={!!picked}
+                                  onChange={(e) => setServices((cur) => {
+                                    const next = { ...cur };
+                                    if (e.target.checked) next[o.orderItemId] = { amount: '', reason: '' };
+                                    else delete next[o.orderItemId];
+                                    return next;
+                                  })}
+                                />
+                                {o.name} — paid {inr(o.netPaid)}{o.alreadyRefunded ? ' (already refunded with another return)' : ''}
+                              </label>
+                              {picked && (
+                                <div className="mt-2 flex gap-2 flex-wrap">
+                                  <input
+                                    type="number" min="0" max={o.netPaid} placeholder={`Full ${inr(o.netPaid)}`}
+                                    value={picked.amount}
+                                    onChange={(e) => setServices((cur) => ({ ...cur, [o.orderItemId]: { ...picked, amount: e.target.value } }))}
+                                    className="border rounded px-2 py-1 text-sm w-36"
+                                    aria-label={`Lower amount for ${o.name}`}
+                                  />
+                                  {picked.amount.trim() !== '' && Number(picked.amount) < o.netPaid && (
+                                    <input
+                                      placeholder="Why less? (required)"
+                                      value={picked.reason}
+                                      onChange={(e) => setServices((cur) => ({ ...cur, [o.orderItemId]: { ...picked, reason: e.target.value } }))}
+                                      className="border rounded px-2 py-1 text-sm flex-1 min-w-[12rem]"
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {/* Debit-card EMI: the issuer can only unwind the whole loan, so any
                         deduction makes this a partial refund it will reject. Say so once,
                         next to the disabled inputs, instead of leaving the operator to
@@ -818,18 +936,32 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                       </div>
                     )}
 
+                    {/* Deductions: customer-reason lines only (we pay the pickup when the
+                        fault is ours). The server refuses them otherwise. */}
+                    {preview?.hasCustomerFault && (
+                      <div className="flex gap-3 items-end flex-wrap">
+                        <label className={`text-sm ${lockDeductions ? 'opacity-50' : ''}`}>Pickup cost (₹)
+                          <input type="number" min="0" disabled={lockDeductions} value={refund.shippingDeduction} onChange={(e) => setRefund({ ...refund, shippingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40 disabled:cursor-not-allowed disabled:bg-gray-100" />
+                        </label>
+                        {(Number(refund.shippingDeduction) || 0) > 0 && (
+                          <label className="text-sm flex-1 min-w-[12rem]">What for <span className="text-red-600">*</span>
+                            <input value={refund.pickupReason} onChange={(e) => setRefund({ ...refund, pickupReason: e.target.value })} placeholder="Courier + AWB, or receipt no" className="block w-full border rounded px-3 py-2 text-sm mt-1" />
+                          </label>
+                        )}
+                        <label className={`text-sm ${lockDeductions ? 'opacity-50' : ''}`}>Restocking (₹)
+                          <input type="number" min="0" disabled={lockDeductions} value={refund.restockingDeduction} onChange={(e) => setRefund({ ...refund, restockingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40 disabled:cursor-not-allowed disabled:bg-gray-100" />
+                        </label>
+                      </div>
+                    )}
+
                     <div className="flex gap-3 items-end flex-wrap">
-                      <label className={`text-sm ${lockDeductions ? 'opacity-50' : ''}`}>Shipping deduction (₹)
-                        <input type="number" min="0" disabled={lockDeductions} value={refund.shippingDeduction} onChange={(e) => setRefund({ ...refund, shippingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40 disabled:cursor-not-allowed disabled:bg-gray-100" />
-                      </label>
-                      <label className={`text-sm ${lockDeductions ? 'opacity-50' : ''}`}>Restocking deduction (₹)
-                        <input type="number" min="0" disabled={lockDeductions} value={refund.restockingDeduction} onChange={(e) => setRefund({ ...refund, restockingDeduction: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-40 disabled:cursor-not-allowed disabled:bg-gray-100" />
+                      <label className="text-sm">GST credit note no. (optional)
+                        <input value={refund.creditNoteNo} onChange={(e) => setRefund({ ...refund, creditNoteNo: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-48" />
                       </label>
                       <button
-                        disabled={busy || payout <= 0 || overHeadroom || blockedPartialEmi || missingReference}
+                        disabled={busy || previewing || !!previewError || payout <= 0 || blockedPartialEmi || missingReference}
                         onClick={() => call(() => apiClient.post(API_ENDPOINTS.RETURN_REFUND(request._id), {
-                          shippingDeduction: Number(refund.shippingDeduction) || 0,
-                          restockingDeduction: Number(refund.restockingDeduction) || 0,
+                          ...refundChoices(),
                           ...(isOffline
                             ? { method: 'offline', offlineMethod: offlinePay.method, reference: offlinePay.reference.trim() }
                             : {}),
@@ -840,13 +972,7 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                       </button>
                     </div>
 
-                    {/* Mirrors the server-side 422. Better to say so here than to let the
-                        operator discover it as a gateway rejection. */}
-                    {overHeadroom && (
-                      <p className="text-xs text-red-600">
-                        {inr(payout)} exceeds the {inr(preview!.maxRefundable)} still refundable on this order. Reduce the amount, or refund the balance manually in Razorpay.
-                      </p>
-                    )}
+                    {previewError && <p className="text-xs text-red-600">{previewError}</p>}
                     {missingReference && (
                       <p className="text-xs text-red-600">
                         A reference is required — with no gateway record, it is the only evidence the money moved.
@@ -860,7 +986,7 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                         gateway and record it manually.
                       </p>
                     )}
-                    {payout <= 0 && <p className="text-xs text-red-600">Deductions leave nothing to refund.</p>}
+                    {preview != null && !previewError && payout <= 0 && <p className="text-xs text-red-600">Nothing is left to refund.</p>}
                     {preview?.note && <p className="text-xs text-gray-500">{preview.note}</p>}
                   </div>
                 );

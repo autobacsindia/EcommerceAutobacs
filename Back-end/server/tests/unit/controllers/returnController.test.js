@@ -10,6 +10,8 @@ import { jest } from '@jest/globals';
 const mockReturnRepo = {
   findOne: jest.fn(),
   returnedQuantityByProduct: jest.fn().mockResolvedValue(new Map()),
+  // Installation lines another return already refunded (none, by default).
+  refundedServiceLineIds: jest.fn().mockResolvedValue([]),
   findById: jest.fn(),
   create: jest.fn(),
   save: jest.fn(),
@@ -323,7 +325,9 @@ describe('initiateReturnRefund — deductions + gate', () => {
       order: 'order-1',
       status: 'received',
       inspection: { passed: true },
-      items: [{ product: 'prod-1', quantity: 2, unitPrice: 500 }],
+      // A CUSTOMER-reason line by default, so the goods-only arithmetic these tests pin
+      // is isolated from the our-fault shipping share (tested on its own further down).
+      items: [{ product: 'prod-1', quantity: 2, unitPrice: 500, reason: 'changed_mind' }],
       refund: { productValue: 1000, status: 'pending' },
       timeline: [],
       user: { email: 'c@x.com' },
@@ -359,14 +363,14 @@ describe('initiateReturnRefund — deductions + gate', () => {
   });
 
   it('deducts shipping + restocking from the refund amount', async () => {
-    await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: { shippingDeduction: 100, restockingDeduction: 50 }, user: { _id: 'a1' } });
+    await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: { shippingDeduction: 100, pickupDeductionReason: 'Delhivery AWB 123', restockingDeduction: 50 }, user: { _id: 'a1' } });
     // (1000 - 100 - 50) = ₹850 → 85000 paise
     expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({ finalAmount: 850 }));
     expect(mockRazorpay.refundPayment).toHaveBeenCalledWith('pay_123', 85000, expect.any(Object));
   });
 
   it('rejects deductions that wipe out the refund (never claims)', async () => {
-    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: { shippingDeduction: 1000 }, user: { _id: 'a1' } });
+    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: { shippingDeduction: 1000, pickupDeductionReason: 'Courier' }, user: { _id: 'a1' } });
     expect(status).toBe(400);
     expect(error.message).toMatch(/greater than ₹0/);
     expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
@@ -402,7 +406,7 @@ describe('initiateReturnRefund — deductions + gate', () => {
     mockOrderRepo.findById.mockResolvedValue(
       makeRefundOrder({ subtotal: 1500, shippingCost: 0, items: [{ product: 'prod-1', quantity: 2, price: 750, variantId: null }] })
     );
-    mockReturnRepo.findById.mockResolvedValue(makeReturn({ items: [{ product: 'prod-1', quantity: 2, unitPrice: 750 }] }));
+    mockReturnRepo.findById.mockResolvedValue(makeReturn({ items: [{ product: 'prod-1', quantity: 2, unitPrice: 750, reason: 'changed_mind' }] }));
     const { next } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
     expect(next).not.toHaveBeenCalled();
     expect(mockRazorpay.refundPayment).toHaveBeenCalledWith('pay_123', 150000, expect.any(Object));
@@ -476,18 +480,25 @@ describe('initiateReturnRefund — deductions + gate', () => {
     }));
   });
 
-  it('refuses a refund larger than what is left on the order, before any state moves', async () => {
+  it('caps the refund at what is left on the order — never sends the gateway more', async () => {
     // A prior return already took ₹1200 of the ₹1500 captured; only ₹300 remains.
     mockSiblings([
       { _id: 'ret-0', refund: { status: 'completed', finalAmount: 1200 } },
       { _id: 'ret-1', refund: { status: 'pending', finalAmount: 1000 } }, // self — excluded
     ]);
+    const { next } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+
+    expect(next).not.toHaveBeenCalled();
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({ finalAmount: 300 }));
+    expect(mockRazorpay.refundPayment).toHaveBeenCalledWith('pay_123', 30000, expect.any(Object));
+  });
+
+  it('refuses when NOTHING is left on the order, before any state moves', async () => {
+    mockSiblings([{ _id: 'ret-0', refund: { status: 'completed', finalAmount: 1500 } }]);
     const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
 
     expect(status).toBe(422);
-    expect(error.message).toMatch(/exceeds what is left/i);
-    expect(error.message).toMatch(/₹300 of ₹1500/);
-    // Nothing may move: no claim, and above all no gateway call.
+    expect(error.message).toMatch(/Nothing is left to refund/i);
     expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
     expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
   });
@@ -522,13 +533,145 @@ describe('initiateReturnRefund — deductions + gate', () => {
 
   it('counts money the Payment row already knows about when computing headroom', async () => {
     // ₹1500 captured, payment says ₹1400 already refunded → only ₹100 left, so a ₹1000
-    // refund must be refused even though no sibling ReturnRequest records it.
+    // refund is capped at ₹100 even though no sibling ReturnRequest records it.
     mockPaymentRepo.findById.mockResolvedValue({ _id: 'payment-1', gatewayPaymentId: 'pay_123', refundAmount: 1400 });
-    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
 
-    expect(status).toBe(422);
-    expect(error.message).toMatch(/exceeds what is left/i);
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({ finalAmount: 100 }));
+    expect(mockRazorpay.refundPayment).toHaveBeenCalledWith('pay_123', 10000, expect.any(Object));
+  });
+
+  // ── Fault-based money (owner-approved rule 1, 2026-10-30) ──────────────────────
+  //
+  // Dash cam ₹9,000 + installation ₹1,000 (a CUSTOM line) + ₹200 shipping = ₹10,200.
+  function dashCamOrder(overrides = {}) {
+    return makeRefundOrder({
+      subtotal: 10000, discount: 0, shippingCost: 200, totalAmount: 10200,
+      items: [
+        { _id: 'line-cam', product: 'prod-cam', quantity: 1, price: 9000, variantId: null },
+        { _id: 'line-fit', product: null, custom: true, name: 'Installation', quantity: 1, price: 1000 },
+      ],
+      ...overrides,
+    });
+  }
+  const camReturn = (reason, extra = {}) => makeReturn({
+    items: [{ product: 'prod-cam', orderItemId: 'line-cam', quantity: 1, unitPrice: 9000, reason, fault: { claimed: reason === 'changed_mind' || reason === 'ordered_wrong' ? 'customer' : 'ours' } }],
+    ...extra,
+  });
+
+  it('our fault: refunds the item, the whole shipping share and the picked installation — ₹10,200', async () => {
+    mockOrderRepo.findById.mockResolvedValue(dashCamOrder());
+    mockReturnRepo.findById.mockResolvedValue(camReturn('wrong_item'));
+    await run(initiateReturnRefund, {
+      params: { id: 'ret-1' }, body: { serviceLines: [{ orderItemId: 'line-fit' }] }, user: { _id: 'a1' },
+    });
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({
+      finalAmount: 10200,
+      productValue: 9000,
+      shippingShare: 200,
+      serviceLines: [expect.objectContaining({ orderItemId: 'line-fit', amountPaise: 100000, netPaidPaise: 100000 })],
+      shippingDeduction: 0,
+    }));
+    expect(mockRazorpay.refundPayment).toHaveBeenCalledWith('pay_123', 1020000, expect.any(Object));
+  });
+
+  it("customer's reason: refunds the item minus the real pickup cost — ₹8,700", async () => {
+    mockOrderRepo.findById.mockResolvedValue(dashCamOrder());
+    mockReturnRepo.findById.mockResolvedValue(camReturn('ordered_wrong'));
+    await run(initiateReturnRefund, {
+      params: { id: 'ret-1' }, body: { pickupDeduction: 300, pickupDeductionReason: 'Delhivery AWB 99' }, user: { _id: 'a1' },
+    });
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({
+      finalAmount: 8700, shippingShare: 0, serviceLines: [], shippingDeduction: 300, pickupDeductionReason: 'Delhivery AWB 99',
+    }));
+  });
+
+  it("customer's reason: refuses to refund installation (never claims)", async () => {
+    mockOrderRepo.findById.mockResolvedValue(dashCamOrder());
+    mockReturnRepo.findById.mockResolvedValue(camReturn('changed_mind'));
+    const { status, error } = await run(initiateReturnRefund, {
+      params: { id: 'ret-1' }, body: { serviceLines: [{ orderItemId: 'line-fit' }] }, user: { _id: 'a1' },
+    });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/only when the fault is ours/i);
+    expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
+  });
+
+  it('our fault: refuses a pickup deduction — we pay for the pickup', async () => {
+    mockOrderRepo.findById.mockResolvedValue(dashCamOrder());
+    mockReturnRepo.findById.mockResolvedValue(camReturn('transit_damage'));
+    const { status } = await run(initiateReturnRefund, {
+      params: { id: 'ret-1' }, body: { pickupDeduction: 300, pickupDeductionReason: 'Courier' }, user: { _id: 'a1' },
+    });
+    expect(status).toBe(400);
+    expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
+  });
+
+  it('ignores a client-sent amount above what was paid for installation (never raises it)', async () => {
+    mockOrderRepo.findById.mockResolvedValue(dashCamOrder());
+    mockReturnRepo.findById.mockResolvedValue(camReturn('wrong_item'));
+    const { status, error } = await run(initiateReturnRefund, {
+      params: { id: 'ret-1' }, body: { serviceLines: [{ orderItemId: 'line-fit', amountRupees: 5000 }] }, user: { _id: 'a1' },
+    });
+    expect(status).toBe(400);
+    expect(error.message).toMatch(/up to ₹1000/);
+    expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
+  });
+
+  it('lets staff LOWER the installation amount with a reason', async () => {
+    mockOrderRepo.findById.mockResolvedValue(dashCamOrder());
+    mockReturnRepo.findById.mockResolvedValue(camReturn('wrong_item'));
+    await run(initiateReturnRefund, {
+      params: { id: 'ret-1' },
+      body: { serviceLines: [{ orderItemId: 'line-fit', amountRupees: 600, reductionReason: 'Only the wiring was redone' }] },
+      user: { _id: 'a1' },
+    });
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({
+      finalAmount: 9800,
+      serviceLines: [expect.objectContaining({ amountPaise: 60000, reductionReason: 'Only the wiring was redone' })],
+    }));
+  });
+
+  it('refuses installation another return already refunded (never claims)', async () => {
+    mockOrderRepo.findById.mockResolvedValue(dashCamOrder());
+    mockReturnRepo.findById.mockResolvedValue(camReturn('wrong_item'));
+    mockReturnRepo.refundedServiceLineIds.mockResolvedValueOnce(['line-fit']);
+    const { status, error } = await run(initiateReturnRefund, {
+      params: { id: 'ret-1' }, body: { serviceLines: [{ orderItemId: 'line-fit' }] }, user: { _id: 'a1' },
+    });
+    expect(status).toBe(409);
+    expect(error.message).toMatch(/already refunded/i);
+    expect(mockReturnRepo.claimForRefund).not.toHaveBeenCalled();
+  });
+
+  it('turns a lost installation race (unique index) into a 409, never a payout', async () => {
+    mockOrderRepo.findById.mockResolvedValue(dashCamOrder());
+    mockReturnRepo.findById.mockResolvedValue(camReturn('wrong_item'));
+    mockReturnRepo.claimForRefund.mockRejectedValueOnce(Object.assign(new Error('E11000 duplicate key'), { code: 11000 }));
+    const { status, error } = await run(initiateReturnRefund, {
+      params: { id: 'ret-1' }, body: { serviceLines: [{ orderItemId: 'line-fit' }] }, user: { _id: 'a1' },
+    });
+    expect(status).toBe(409);
+    expect(error.message).toMatch(/just refunded with another return/i);
     expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
+  });
+
+  it('caps an our-fault full return at what the gateway captured when a Razorpay offer applied', async () => {
+    // ₹100 instant discount at the gateway: the customer paid ₹10,100, not ₹10,200.
+    mockOrderRepo.findById.mockResolvedValue(dashCamOrder({ gatewayOffer: { discount: 100, amountPaid: 10100 } }));
+    mockReturnRepo.findById.mockResolvedValue(camReturn('wrong_item'));
+    await run(initiateReturnRefund, {
+      params: { id: 'ret-1' }, body: { serviceLines: [{ orderItemId: 'line-fit' }] }, user: { _id: 'a1' },
+    });
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({ finalAmount: 10100 }));
+    expect(mockRazorpay.refundPayment).toHaveBeenCalledWith('pay_123', 1010000, expect.any(Object));
+  });
+
+  it('stores the GST credit note number accounts typed', async () => {
+    mockOrderRepo.findById.mockResolvedValue(dashCamOrder());
+    mockReturnRepo.findById.mockResolvedValue(camReturn('wrong_item'));
+    await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: { creditNoteNo: ' CN-2026-0042 ' }, user: { _id: 'a1' } });
+    expect(mockReturnRepo.claimForRefund).toHaveBeenCalledWith('ret-1', expect.objectContaining({ creditNoteNo: 'CN-2026-0042' }));
   });
 
   it('surfaces a gateway rejection as an operational 502, not a 500 page-out', async () => {

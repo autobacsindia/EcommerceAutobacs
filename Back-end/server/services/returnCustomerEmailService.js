@@ -7,8 +7,10 @@
  *
  * Idempotency: the "submitted" acknowledgement stamps submittedEmailedAt only
  * AFTER the provider accepts it, so a BullMQ retry re-sends on transient failure
- * but never double-mails on success. Status emails (approved/received/rejected/
- * refunded) fire once per operator action, so they are not separately de-duped.
+ * but never double-mails on success. Status emails get the same guarantee from
+ * ReturnRequest.emailsSent: one key per email (see emailKey), checked before the send
+ * and stamped only after the provider accepts it. A queue retry, a double-click, or a
+ * second team member pressing the same button therefore mails the customer once.
  */
 
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
@@ -82,10 +84,29 @@ export const emailReturnSubmitted = async (returnId) => {
 };
 
 /**
+ * The once-only key for a status email, read off the return AS IT IS NOW.
+ *
+ * Most events happen once in a return's life, so the event name is the key. Two do not:
+ *   courier_booked — a corrected AWB is a NEW message the customer must get, so the key
+ *                    carries the AWB. Two quick corrections still send once: the first
+ *                    job reads the latest AWB and sends it, the second finds the key.
+ *   refunded       — an offline refund record can be withdrawn and the refund issued
+ *                    again; each claim stamps a fresh initiatedAt, so each refund mails.
+ */
+export const emailKey = (rr, event) => {
+  if (event === 'courier_booked') return `courier_booked:${rr?.courier?.trackingNumber || ''}`;
+  if (event === 'refunded') {
+    const at = rr?.refund?.initiatedAt ? new Date(rr.refund.initiatedAt).getTime() : '';
+    return `refunded:${at}`;
+  }
+  return event;
+};
+
+/**
  * Send a lifecycle status email (approved / courier_booked / received / rejected / refunded).
  * @param {string} returnId
  * @param {'approved'|'courier_booked'|'received'|'rejected'|'refunded'} event
- * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'|'no-recipient'}>}
+ * @returns {Promise<{status: 'sent'|'skipped'|'skipped-disabled'|'not-found'|'no-recipient'}>}
  */
 export const emailReturnStatus = async (returnId, event) => {
   const rr = await loadReturn(returnId);
@@ -93,12 +114,26 @@ export const emailReturnStatus = async (returnId, event) => {
   const to = recipientEmail(rr);
   if (!to) return { status: 'no-recipient' };
 
+  const key = emailKey(rr, event);
+  if (await returnRequestRepository.wasEmailed(rr._id, key)) {
+    log(`${event}: already sent for ${returnId} (${key}) — skipping`);
+    return { status: 'skipped' };
+  }
+
   const payment = event === 'refunded' ? await loadPaymentForRefundEmail(rr) : null;
   const { subject, text, html } = returnEmail({ event, rr, order: rr.order, company: companyInfo, payment });
   const result = await emailHandler.sendEmail({ to, subject, text, html });
 
   if (result?.fallbackToConsole) return { status: 'skipped-disabled' };
   if (result?.success) {
+    // Stamp AFTER the provider accepted it — a failed send stays unstamped and the
+    // BullMQ retry sends it. A failed stamp is logged, never thrown: throwing would
+    // make the queue retry and mail the customer a second time.
+    try {
+      await returnRequestRepository.markEmailed(rr._id, key);
+    } catch (err) {
+      warn(`${event}: sent for ${returnId} but could not record it (${err.message})`);
+    }
     log(`${event}: SENT to ${to} for ${returnId}`);
     return { status: 'sent' };
   }
