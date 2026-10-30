@@ -9,13 +9,16 @@ import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
 import orderService from '@/lib/services/orderService';
-import { API_ENDPOINTS, PAYMENT_METHOD_LABELS, RETURN_WINDOW_DAYS } from '@/lib/constants';
+import { API_ENDPOINTS, PAYMENT_METHOD_LABELS, RETURN_WINDOW_DAYS_OURS } from '@/lib/constants';
 import {
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle,
   XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2, RefreshCcw, ShoppingCart, Star, HelpCircle, ChevronDown, Building2
 } from 'lucide-react';
 import CancelOrderModal from '@/components/orders/CancelOrderModal';
 import ReturnRequestModal from '@/components/orders/ReturnRequestModal';
+import OrderReturns, { returnedUnits, useOrderReturns } from '@/components/orders/OrderReturns';
+import { useQueryClient } from '@tanstack/react-query';
+import { customerReturnKeys } from '@/hooks/queries/keys';
 import WriteReviewModal from '@/components/reviews/WriteReviewModal';
 import { TimelineProgress } from '@/components/tracking/TimelineProgress';
 import { useRazorpay } from '@/hooks/useRazorpay';
@@ -96,6 +99,8 @@ interface OrderDetail {
     price: number;
     name?: string;
     image?: string;
+    /** A service line (installation, fitting) added by staff — never a returnable product. */
+    custom?: boolean;
     /**
      * Which model of a variable product this line is, snapshotted at purchase.
      * `null`/absent on a simple product and on every pre-variants order.
@@ -222,6 +227,10 @@ export default function OrderDetailPage() {
   const [selectedItemForReview, setSelectedItemForReview] = useState<any>(null);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
+  const queryClient = useQueryClient();
+  // Every return on this order (an order can have several). Feeds the tracker card and
+  // tells the Return button which units are already on their way back.
+  const orderReturns = useOrderReturns(isAuthenticated ? orderId : undefined);
 
   const { processPayment, isProcessing: isPaymentProcessing } = useRazorpay({
     onSuccess: () => fetchOrderDetail(),
@@ -380,23 +389,28 @@ export default function OrderDetailPage() {
 
     Deliberately not "is the order delivered". A split order sits at `shipped` until its
     LAST parcel lands, so gating on the order status would hide the Return button from a
-    customer holding a damaged item that arrived days ago — and their 4-day window could
+    customer holding a damaged item that arrived days ago — and their window could
     expire before the final parcel ever flipped the order to `delivered`. The window is
     per line, measured from the parcel that line came in (lib/orderFulfilment.ts).
+
+    The window used here is the LONGER one (7 days, a fault on our side); the form
+    applies the 4-day limit for the customer's own reason per line. A line whose every
+    unit is already in an open or refunded return is not offered again.
 
     Legacy orders have no parcels and fall through to the order-level delivery date, so
     they behave exactly as before.
   */
-  const canReturnOrder = (order: OrderDetail) => {
+  const alreadyReturned = returnedUnits(orderReturns.data?.requests);
+  const unitsLeft = (item: OrderDetail['items'][number]) => {
+    const used = alreadyReturned.get(String(item._id))
+      ?? (item.product?._id ? alreadyReturned.get(`product:${item.product._id}`) : undefined)
+      ?? 0;
+    return Math.max(0, (Number(item.quantity) || 0) - used);
+  };
+  const statusAllowsReturn = (order: OrderDetail) => {
     const status = order.status.toLowerCase();
     const isSplit = (order.shipments?.length || 0) > 0;
-    if (!['delivered', 'returned'].includes(status) && !(isSplit && status === 'shipped')) {
-      return false;
-    }
-    // Mirror the signed policy's RETURN_WINDOW_DAYS (4). Kept in sync with the
-    // backend config/returnPolicy.js via lib/constants.ts.
-    return order.items.some((item) =>
-      item._id && canReturnItem(order, String(item._id), RETURN_WINDOW_DAYS));
+    return ['delivered', 'returned'].includes(status) || (isSplit && status === 'shipped');
   };
   /*
     The lines the return form may offer, and the oldest of their delivery dates (which
@@ -404,9 +418,24 @@ export default function OrderDetailPage() {
     `canReturnOrder`, so the button and the form can never disagree about what is
     returnable — a mismatch there means an empty form or a rejected submission.
   */
-  const returnableItems = order
-    ? order.items.filter((item) => item._id && canReturnItem(order, String(item._id), RETURN_WINDOW_DAYS))
+  const returnableItems = order && statusAllowsReturn(order)
+    ? order.items
+      // Service lines (installation) are refunded WITH the goods when the fault is ours;
+      // they are never sent back on their own, so the form never offers them. (A product
+      // later deleted from the catalogue is still returnable — only `custom` is excluded.)
+      .filter((item) => item._id && item.custom !== true
+        && canReturnItem(order, String(item._id), RETURN_WINDOW_DAYS_OURS) && unitsLeft(item) > 0)
+      .map((item) => ({
+        ...item,
+        quantity: unitsLeft(item),
+        deliveredAt: deliveredAtForItem(order, String(item._id))?.toISOString() ?? null,
+      }))
     : [];
+  // Wait for the returns list before offering the button, so a fully-returned line is
+  // never offered for a moment and then withdrawn. A failed read does not block it —
+  // the server re-checks every quantity.
+  const canReturnOrder = (order: OrderDetail) =>
+    statusAllowsReturn(order) && !orderReturns.isPending && returnableItems.length > 0;
   const oldestReturnableDelivery = returnableItems
     .map((item) => deliveredAtForItem(order!, String(item._id)))
     .filter((d): d is Date => Boolean(d))
@@ -550,10 +579,10 @@ export default function OrderDetailPage() {
                 Track Package
               </Link>
             )}
-            {canReturnOrder(order) && !hasReturnRequest(order) && (
+            {canReturnOrder(order) && (
               <button onClick={() => setShowReturnDialog(true)} className="flex items-center gap-2 px-4 py-2 border border-orange-500/40 text-orange-700 hover:bg-orange-500/10 rounded-full font-display font-bold text-[15px] transition-colors">
                 <RotateCcw className="h-4 w-4" />
-                Return / Exchange
+                Return
               </button>
             )}
             {canDeleteOrder(order.status) && (
@@ -622,8 +651,18 @@ export default function OrderDetailPage() {
           </div>
         )}
 
-        {/* Return Request — only when a return was actually raised */}
-        {hasReturnRequest(order) && order.returnRequest && (
+        {/* Every return on this order, each with its own progress. */}
+        <OrderReturns
+          requests={orderReturns.data?.requests}
+          itemName={(orderItemId, productId) => {
+            const line = order.items.find((i) => String(i._id) === orderItemId)
+              || order.items.find((i) => productId && i.product?._id === productId);
+            return line?.product?.name || line?.name || 'Item';
+          }}
+        />
+
+        {/* Legacy single-return summary — only if the per-return list could not load. */}
+        {orderReturns.isError && hasReturnRequest(order) && order.returnRequest && (
           <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-6 mb-6">
             <h2 className="font-display font-bold text-orange-700 uppercase tracking-wide mb-4">Return Request</h2>
             <div className="grid md:grid-cols-2 gap-4">
@@ -1107,14 +1146,19 @@ export default function OrderDetailPage() {
               they had already picked a reason and uploaded evidence.
             */
             items={returnableItems}
-            excludedCount={order.items.length - returnableItems.length}
+            // Products only: a service line (installation) is never offered, so it must not
+            // count as "left out" (on a debit-card EMI order that would block the return).
+            excludedCount={order.items.filter((i) => i.custom !== true).length - returnableItems.length}
             deliveredAt={oldestReturnableDelivery ?? ''}
             // Debit-card EMI is all-or-nothing at the bank; the form says so up front
             // rather than letting the customer find out after we've collected the goods.
             fullRefundOnly={(order.payment as OrderPaymentSummary)?.fullRefundOnly ?? false}
             paidByLabel={(order.payment as OrderPaymentSummary)?.emiPlanLabel ?? null}
             onClose={() => setShowReturnDialog(false)}
-            onSuccess={() => fetchOrderDetail()}
+            onSuccess={() => {
+              fetchOrderDetail();
+              queryClient.invalidateQueries({ queryKey: customerReturnKeys.forOrder(order._id) });
+            }}
           />
         )}
         {showReviewDialog && selectedItemForReview && order && (

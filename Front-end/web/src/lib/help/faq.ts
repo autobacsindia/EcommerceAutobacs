@@ -8,7 +8,7 @@
  * here repeats only what another page or the checkout already commits to:
  *
  *   • cancellation  — app/terms ("7. Orders and Cancellations")
- *   • refund timing — app/returns (inspection, then 7–14 business days)
+ *   • refund timing — app/returns (inspection, then 5–9 business days)
  *   • return policy — RETURN_POLICY_SUMMARY (lib/constants.ts)
  *   • delivery      — free on every order (checkout sends shippingCost: 0);
  *                     standard times as app/shipping states them
@@ -103,12 +103,12 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         question: 'How do I return an item?',
-        answer: 'Sign in, open "My Orders", choose the order and tap "Return / Exchange". Add the reason and your unboxing video. Once we approve the request, we arrange the pickup.',
+        answer: 'Sign in, open "My Orders", choose the order and tap "Return". Pick the items and the reason, and add at least one photo (a video for transit damage or items over ₹10,000). You can also call or WhatsApp us and our team raises it for you. Once we approve the request, we arrange the pickup.',
         links: [{ label: 'My orders', href: '/orders' }, { label: 'Return policy', href: '/returns' }],
       },
       {
         question: 'How long does it take to process a refund?',
-        answer: 'When the returned item reaches our warehouse we inspect it, and once it passes, the refund is processed within 7 to 14 business days to your original payment method. How soon it shows in your account then depends on your bank.',
+        answer: 'When the returned item reaches our warehouse we inspect it, and once it passes, the refund is sent to your original payment method and usually reaches you in 5 to 9 business days. How soon it shows in your account then depends on your bank.',
         links: [{ label: 'Return policy', href: '/returns' }],
       },
       {
