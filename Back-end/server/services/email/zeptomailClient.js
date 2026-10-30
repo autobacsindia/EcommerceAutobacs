@@ -1,13 +1,12 @@
 /**
  * Zoho ZeptoMail transport (now marketed as "Zoho CPaaS" email).
  *
- * Deliberately an ADAPTER with the same surface as the Postmark SDK's
- * ServerClient: `sendEmail(message)` takes the message object emailHandler
- * already builds (Postmark field names — From, To, Subject, TextBody, HtmlBody,
- * ReplyTo, Headers, Attachments, MessageStream), resolves to `{ MessageID }`,
- * and rejects with an Error carrying `statusCode` and `code`. That keeps every
- * guarantee in emailHandler — redirect, careers-mailbox guard, retry/backoff,
- * retryable classification — provider-independent, with no second code path.
+ * `sendEmail(message)` takes the message object emailHandler builds
+ * (PascalCase fields — From, To, Subject, TextBody, HtmlBody, ReplyTo, Headers,
+ * Attachments; inherited from Postmark, the provider until 2026-10), resolves
+ * to `{ MessageID }`, and rejects with an Error carrying `statusCode` and
+ * `code`. Every guarantee — redirect, careers-mailbox guard, retry/backoff,
+ * retryable classification — stays in emailHandler.
  *
  * Plain fetch, no SDK: one POST with JSON is all the API needs.
  *
@@ -71,10 +70,7 @@ export const parseMailbox = (value) => {
 };
 
 /**
- * Map emailHandler's message (Postmark field names) to a ZeptoMail payload.
- *
- * `MessageStream` has no ZeptoMail equivalent (isolation there is per Mail
- * Agent, i.e. per token) and is dropped.
+ * Map emailHandler's message (PascalCase fields) to a ZeptoMail payload.
  *
  * A custom `Message-ID` header is sent but NOT honoured: ZeptoMail stamps its
  * own (`<request_id@bounce-zem.autobacsindia.com>`, observed in a live send

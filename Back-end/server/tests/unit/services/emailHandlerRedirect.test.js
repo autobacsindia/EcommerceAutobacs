@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-// emailHandler is a singleton; inject a fake Postmark client so we can assert the
+// emailHandler is a singleton; inject a fake client so we can assert the
 // exact message object it builds (no network, no real credentials).
 const { default: emailHandler } = await import('../../../services/emailHandler.js');
 

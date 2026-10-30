@@ -1,6 +1,6 @@
 /**
- * Diagnostic: send a real password-reset email through the configured provider
- * (EMAIL_PROVIDER — zeptomail or postmark) and sender (noreply@ by default),
+ * Diagnostic: send a real password-reset email through ZeptoMail from the
+ * configured sender (noreply@ by default),
  * using the same template the app uses. To exercise attachments and support
  * headers as well, use scripts/send-test-email.js.
  *
@@ -9,8 +9,7 @@
  *
  * Requires these in the environment it runs in (Back-end/server/.env locally, or
  * the Railway shell in prod):
- *   ZEPTOMAIL_SEND_MAIL_TOKEN or POSTMARK_SERVER_TOKEN, EMAIL_FROM_ADDRESS
- *   (or POSTMARK_FROM_EMAIL) = noreply@autobacsindia.com,
+ *   ZEPTOMAIL_SEND_MAIL_TOKEN, EMAIL_FROM_ADDRESS = noreply@autobacsindia.com,
  *   ENABLE_EMAIL_NOTIFICATIONS=true, FRONTEND_URL
  *
  * It generates a throwaway reset link (not tied to any account — this only tests
@@ -34,8 +33,7 @@ console.log('[test] Email service status:', status);
 if (!status.enabled) {
   console.error(
     '\n[test] Email service is DISABLED in this environment.\n' +
-    '       Set a provider token (ZEPTOMAIL_SEND_MAIL_TOKEN or POSTMARK_SERVER_TOKEN) +\n' +
-    '       EMAIL_FROM_ADDRESS + ENABLE_EMAIL_NOTIFICATIONS=true\n' +
+    '       Set ZEPTOMAIL_SEND_MAIL_TOKEN + EMAIL_FROM_ADDRESS + ENABLE_EMAIL_NOTIFICATIONS=true\n' +
     '       (in Back-end/server/.env for a local test, or run this in the Railway shell).\n'
   );
   process.exit(1);

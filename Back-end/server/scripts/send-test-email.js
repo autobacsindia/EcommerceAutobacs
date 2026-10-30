@@ -1,6 +1,6 @@
 /**
- * Diagnostic: send the three SHAPES of mail the store sends, through one chosen
- * provider, to one inbox — to prove a provider before switching EMAIL_PROVIDER.
+ * Diagnostic: send the three SHAPES of mail the store sends, through ZeptoMail,
+ * to one inbox — to prove delivery after a configuration or DNS change.
  *
  *   1. Password reset  — plain transactional, default sender (noreply@)
  *   2. Invoice         — the order-confirmation shape: a PDF attachment
@@ -9,10 +9,9 @@
  *
  * Usage (prod variables injected by Railway, run from Back-end/server):
  *   railway run --service EcommerceAutobacs --environment production -- \
- *     node scripts/send-test-email.js --provider zeptomail you@example.com
+ *     node scripts/send-test-email.js you@example.com
  *
- * --provider overrides EMAIL_PROVIDER for THIS process only; the live service is
- * untouched. Nothing is written to the database, no customer is mailed, and no
+ * The live service is untouched. Nothing is written to the database, no customer is mailed, and no
  * credential is printed. Exit code 0 only when all three were accepted.
  *
  * Afterwards, in the received mail: "Show original" (Gmail) must say
@@ -23,15 +22,10 @@ import crypto from 'crypto';
 import PDFDocument from 'pdfkit';
 
 const args = process.argv.slice(2);
-const providerFlag = args.indexOf('--provider');
-if (providerFlag !== -1) {
-  process.env.EMAIL_PROVIDER = args[providerFlag + 1];
-  args.splice(providerFlag, 2);
-}
 const to = args[0] || process.env.TEST_EMAIL_RECIPIENT;
 
 if (!to) {
-  console.error('Usage: node scripts/send-test-email.js [--provider zeptomail|postmark] <recipient@email>');
+  console.error('Usage: node scripts/send-test-email.js <recipient@email>');
   process.exit(2);
 }
 
@@ -40,16 +34,15 @@ if (process.env.EMAIL_REDIRECT_TO) {
   console.warn(`[test] EMAIL_REDIRECT_TO is set — mail goes there, not to ${to}`);
 }
 
-// Import after the provider override so the handler logs the intended selection.
 const { default: emailHandler } = await import('../services/emailHandler.js');
 const { passwordResetEmail } = await import('../utils/emailTemplates.js');
 
 const status = emailHandler.getStatus();
-console.log('[test] provider:', status.provider, '| configured:', status.configuredProviders.join(', ') || 'none');
+console.log('[test] provider:', status.provider);
 console.log('[test] sender:', `${status.fromName} <${status.fromEmail}>`);
 
-if (!status.enabled || !status.configuredProviders.includes(status.provider)) {
-  console.error(`\n[test] "${status.provider}" is not configured in this environment — nothing sent.`);
+if (!status.enabled) {
+  console.error('\n[test] Email is not configured in this environment (ZEPTOMAIL_SEND_MAIL_TOKEN, EMAIL_FROM_ADDRESS) — nothing sent.');
   process.exit(1);
 }
 
@@ -89,8 +82,8 @@ const sends = [
     to,
     subject: `[Test 3/3 · ${stamp}] Support reply headers`,
     text: 'Reply-To should be support@. Sent from the welcome sender.',
-    fromEmail: process.env.EMAIL_WELCOME_FROM_ADDRESS || process.env.POSTMARK_WELCOME_FROM_EMAIL || undefined,
-    fromName: process.env.EMAIL_WELCOME_FROM_NAME || process.env.POSTMARK_WELCOME_FROM_NAME || undefined,
+    fromEmail: process.env.EMAIL_WELCOME_FROM_ADDRESS || undefined,
+    fromName: process.env.EMAIL_WELCOME_FROM_NAME || undefined,
     replyTo: process.env.SUPPORT_EMAIL || 'support@autobacsindia.com',
     headers: {
       'Message-ID': messageId,

@@ -13,17 +13,20 @@ archive and break-glass path) and the ticket system (where work happens). If
 ticketing ever breaks, the team opens Gmail as before and nothing is lost. That
 redundancy is deliberate; don't "clean it up" by moving MX to Postmark.
 
-> **Email provider change (2026-10).** Outbound mail — support replies included —
-> moves to Zoho ZeptoMail via `EMAIL_PROVIDER=zeptomail`. On ZeptoMail the
-> support "stream" (step 1) does not exist; support replies share the Mail Agent.
-> ZeptoMail also replaces our `Message-ID` with its own, so a customer reply is
-> matched to its ticket by the signed `support+t.…` Reply-To token (or the
-> subject reference), not by In-Reply-To.
-> **Inbound (step 2) still depends on Postmark**: ZeptoMail cannot receive mail.
-> Before Postmark is cancelled, either confirm this inbound path was never
-> switched on, or move it to another inbound provider — otherwise support@ mail
-> silently stops creating tickets (Gmail still gets it, so nothing is lost, but
-> nobody is working the queue).
+> **⚠ Status (2026-10-29): inbound is NOT active, and Postmark is gone.**
+> This runbook was written for Postmark. Production never had
+> `POSTMARK_INBOUND_SECRET` set, so the inbound webhook has rejected every delivery
+> and support@ mail has only ever landed in Gmail. Postmark was then removed
+> entirely in favour of Zoho ZeptoMail, which is **send-only**.
+>
+> - **Outbound** (acknowledgements, agent replies) works through ZeptoMail from
+>   support@. There is no separate support stream (step 1 is obsolete). ZeptoMail
+>   replaces our `Message-ID`, so customer replies thread by the signed
+>   `support+t.…` Reply-To token (or the subject reference), not In-Reply-To.
+> - **Inbound (step 2)** needs a provider that can POST received mail to
+>   `/api/v1/support/inbound` in the Postmark inbound JSON shape (or an adapter in
+>   `middleware/supportInboundWebhook.js` for another provider's shape). Until
+>   then, steps 2–3 below do not apply.
 
 ---
 

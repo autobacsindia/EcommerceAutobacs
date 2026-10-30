@@ -10,10 +10,10 @@
  *    inject messages into any ticket by guessing "ABI-1042" — the reference is
  *    printed in every email and is trivially enumerable.
  *
- * 2. **A dedicated Postmark message stream.** A shared support inbox attracts
- *    spam complaints and replies to compromised addresses. Isolating the stream
- *    means a support-mail reputation problem cannot degrade delivery of order
- *    confirmations and invoices, which are the mails that must never fail.
+ * 2. **Its own sender.** Support mail goes out from support@ rather than
+ *    noreply@. (Under Postmark it also had its own message stream; ZeptoMail
+ *    has no streams — a second Mail Agent would be the equivalent if a support
+ *    reputation problem ever needs isolating from order mail.)
  *
  * 3. **Loop suppression.** Every automated message carries
  *    `Auto-Submitted: auto-generated` so well-behaved autoresponders stay quiet,
@@ -27,12 +27,6 @@ import companyInfo from '../config/company.js';
 import ticketService from './ticketService.js';
 import messageRepository from '../repositories/supportMessageRepository.js';
 import { REPLY_SENTINEL } from './supportSanitizer.js';
-
-/**
- * Postmark stream for support conversations. Falls back to the default stream.
- * Ignored under EMAIL_PROVIDER=zeptomail, which has no streams.
- */
-const stream = () => process.env.POSTMARK_SUPPORT_STREAM || process.env.POSTMARK_MESSAGE_STREAM || 'outbound';
 
 /** The public support address customers see and reply to. */
 const supportAddress = () =>
@@ -194,7 +188,6 @@ const send = async ({
     fromEmail: supportAddress(),
     fromName: supportName(),
     replyTo: buildReplyTo(ticket.reference),
-    messageStream: stream(),
     headers: {
       'Message-ID': messageId,
       ...(latest?.messageId && { 'In-Reply-To': latest.messageId }),
@@ -223,7 +216,6 @@ const send = async ({
       inReplyTo: latest?.messageId || null,
       references,
       providerMessageId: result?.messageId || null,
-      providerStream: stream(),
     });
   }
 

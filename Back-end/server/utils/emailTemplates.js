@@ -677,7 +677,7 @@ ${companyName}
 
 /**
  * Welcome Email Template (sent once, when the account is verified — see
- * routes/auth.js sendWelcomeOnce). Sent from POSTMARK_WELCOME_FROM_EMAIL.
+ * routes/auth.js sendWelcomeOnce). Sent from EMAIL_WELCOME_FROM_ADDRESS.
  *
  * Built for email clients, not browsers: tables, inline styles, a bulletproof
  * button, no web font required (DM Sans where supported, Arial otherwise), and

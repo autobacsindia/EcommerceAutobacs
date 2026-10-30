@@ -29,7 +29,7 @@ The three services you stand up new:
 
 - **Railway** — backend API.
 - **Vercel** — frontend (Next.js).
-- **Postmark** — transactional email.
+- **Zoho ZeptoMail** — transactional email (replaced Postmark, 2026-10).
 
 Backing services that are already live and **don't change** at cutover: **MongoDB Atlas,
 Redis (Upstash cache + queue), Elasticsearch, Cloudinary, Razorpay, Google OAuth**.
@@ -37,37 +37,21 @@ Redis (Upstash cache + queue), Elasticsearch, Cloudinary, Razorpay, Google OAuth
 
 ---
 
-## Step 0 — Email now (do this ~1–2 weeks BEFORE cutover)
+## Step 0 — Email ✅ done (2026-10-29)
 
-Postmark's code is already wired to env vars; you only need values + domain
-authentication. This is safe to do now because the live WooCommerce site sends from a
-plain `info@autobacsindia.com` mailbox, **not** domain-authenticated sending — so adding
-Postmark's email DNS records does not touch WooCommerce or the website.
+Transactional email runs on **Zoho ZeptoMail** (Zoho CPaaS, India DC). Already in place:
 
-### 0a. Postmark dashboard
-1. Create/confirm a **Server** → copy its **Server API Token** (`POSTMARK_SERVER_TOKEN`).
-2. **Sender Domains → Add Domain** `autobacsindia.com`. Postmark shows a **DKIM** record
-   and a **Return-Path (custom bounce) CNAME**.
+- Domain `autobacsindia.com` verified in ZeptoMail (agent `agent_1`), with these Cloudflare
+  records (DNS only): `29151755._domainkey` TXT (DKIM) and `bounce-zem` CNAME →
+  `cluster89.zeptomail.in`. SPF/DKIM/DMARC all pass in Gmail.
+- Railway: `ZEPTOMAIL_SEND_MAIL_TOKEN`, `EMAIL_FROM_ADDRESS=noreply@autobacsindia.com`,
+  `EMAIL_FROM_NAME=Autobacs India`, `EMAIL_WELCOME_FROM_ADDRESS=info@autobacsindia.com`,
+  `EMAIL_WELCOME_FROM_NAME=Autobacs India`, `ENABLE_EMAIL_NOTIFICATIONS=true`.
+- Check delivery any time: `npm run test-email -- you@example.com` (Back-end/server, with the
+  Railway environment) sends a plain mail, a PDF attachment and a support-style reply.
 
-### 0b. Hostinger DNS (email records only — website untouched)
-In Hostinger → **Domains → autobacsindia.com → Manage DNS records**:
-1. **DKIM** — add the `TXT`/CNAME Postmark gives, exactly.
-2. **Return-Path** — add the CNAME Postmark gives (e.g. `pm-bounces → pm.mtasv.net`).
-3. **SPF** — find the existing `TXT` starting `v=spf1`. **Do NOT add a second SPF record.**
-   Merge Postmark in: `v=spf1 include:spf.mtasv.net <existing includes> ~all`. If none
-   exists: `v=spf1 include:spf.mtasv.net ~all`.
-4. **DMARC** — if no `_dmarc` `TXT` exists, add monitor-only:
-   `v=DMARC1; p=none; rua=mailto:dmarc@autobacsindia.com`. (Rejects nothing — safe.)
-5. Wait for propagation, click **Verify** in Postmark until DKIM + Return-Path go green.
-
-### 0c. Set values in Railway (backend)
+Invoice/company details printed on the PDF still come from Railway:
 ```
-POSTMARK_SERVER_TOKEN=<token>
-POSTMARK_FROM_EMAIL=noreply@autobacsindia.com     # or hi@autobacsindia.com
-POSTMARK_FROM_NAME=Autobacs India
-POSTMARK_MESSAGE_STREAM=outbound
-ENABLE_EMAIL_NOTIFICATIONS=true
-# Invoice/company details printed on the PDF:
 COMPANY_NAME=Autobacs India
 COMPANY_GSTIN=...
 COMPANY_ADDRESS=...
@@ -76,9 +60,6 @@ COMPANY_PHONE=...  COMPANY_EMAIL=support@autobacsindia.com
 # Optional: also archive invoice PDFs to Cloudinary (email always attaches the PDF regardless):
 INVOICE_STORE_CLOUDINARY=false
 ```
-Then send a few real test emails (password reset, place a test order) so Postmark warms
-up the sender reputation before launch day. **Cold-starting email on launch day = order
-receipts landing in spam.**
 
 > Invoice/receipt emails: an invoice PDF is generated and emailed automatically on
 > **payment success** (Razorpay `payment.captured` webhook → order `confirmed`). It is
@@ -151,7 +132,7 @@ Redeploy frontend on Vercel so the new `NEXT_PUBLIC_*` values bake in.
 ### 3c. External dashboards to update (not env vars)
 - **Google OAuth**: add the prod redirect URI `https://api.autobacsindia.com/api/v1/auth/google/callback`.
 - **Razorpay**: point the webhook to `https://api.autobacsindia.com/...` and switch to Live mode.
-- **Postmark**: re-verify the email records survived the Cloudflare import.
+- **ZeptoMail**: re-verify the email records survived the Cloudflare import (Zoho CPaaS → Email → Domains).
 
 ### 3d. Verify on the real domain
 - Log in (Google + password) → cart → **place one real (small) order** → confirm the
