@@ -952,11 +952,15 @@ class OrderRepository extends BaseRepository {
    * Change fields on one parcel (already-prefixed `shipments.$.…` keys) only if it
    * still matches `expect` (e.g. still in transit); with a workflow history event.
    */
-  async updateShipmentIf(orderId, shipmentId, expect, set, event) {
+  async updateShipmentIf(orderId, shipmentId, expect, set, event, { unset = {} } = {}) {
     const match = Object.fromEntries(Object.entries(expect).map(([k, v]) => [k, v]));
     return Order.findOneAndUpdate(
       { _id: orderId, shipments: { $elemMatch: { _id: shipmentId, ...match } } },
-      { $set: set, ...(event ? { $push: { 'workflow.history': { $each: [event], $slice: -300 } } } : {}) },
+      {
+        $set: set,
+        ...(Object.keys(unset).length ? { $unset: unset } : {}),
+        ...(event ? { $push: { 'workflow.history': { $each: [event], $slice: -300 } } } : {}),
+      },
       { new: true },
     ).lean();
   }

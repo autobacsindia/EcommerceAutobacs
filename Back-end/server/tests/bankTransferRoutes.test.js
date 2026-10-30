@@ -94,15 +94,34 @@ describe('Bank transfer routes', () => {
 
   const fields = { amount: 52000, reference: 'UTR123456789012', paidOn: new Date().toISOString().slice(0, 10) };
 
-  it('records with up to three screenshots, then accounts confirms; the order is paid', async () => {
-    const tooMany = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields, [0, 1, 2, 3].map(shot));
+  it('refuses a request whose files add up to more than 40 MB before reading it', async () => {
+    const big = { buffer: Buffer.concat([JPEG, Buffer.alloc(9 * 1024 * 1024)]), name: 'big.jpg', type: 'image/jpeg' };
+    const res = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields, [big, big, big, big, big]);
+    expect(res.status).toBe(413);
+    expect(res.body.message).toBe('These files add up to more than 40 MB. Send fewer at a time.');
+    expect(stored.size).toBe(0);
+  });
+
+  it('records with up to twenty screenshots, then accounts confirms; the order is paid', async () => {
+    const tooMany = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields, Array.from({ length: 21 }, (_, i) => shot(i)));
     expect(tooMany.status).toBe(400);
-    expect(tooMany.body.message).toMatch(/at most 3/);
+    expect(tooMany.body.message).toBe('You can attach up to 20 files at a time.');
     expect(stored.size).toBe(0);
 
-    const res = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields, [shot(0), shot(1)]);
+    const fakePdf = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields,
+      [{ buffer: Buffer.from('MZ\x90\x00 not a pdf'), name: 'statement.pdf', type: 'application/pdf' }]);
+    expect(fakePdf.status).toBe(400);
+    expect(fakePdf.body.message).toMatch(/"statement.pdf" is not a photo/);
+    const exe = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields,
+      [{ buffer: Buffer.from('MZ'), name: 'pay.exe', type: 'application/x-msdownload' }]);
+    expect(exe.status).toBe(400);
+    expect(exe.body.message).toMatch(/"pay.exe" is not a photo \(JPG, PNG, WebP\) or a PDF/);
+    expect(stored.size).toBe(0);
+
+    const pdf = { buffer: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(200, 32)]), name: 'statement.pdf', type: 'application/pdf' };
+    const res = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields, [...Array.from({ length: 19 }, (_, i) => shot(i)), pdf]);
     expect(res.status).toBe(201);
-    expect(res.body.transfer.files).toHaveLength(2);
+    expect(res.body.transfer.files).toHaveLength(20);
     const id = res.body.transfer.id;
 
     // The seller sees it, and can open the screenshot — privately.
@@ -111,6 +130,14 @@ describe('Bank transfer routes', () => {
     expect(file.status).toBe(200);
     expect(file.headers['cache-control']).toBe('private, no-store');
     expect(file.headers['x-content-type-options']).toBe('nosniff');
+    // A PDF opens in the browser tab, through the same permission-checked proxy.
+    const pdfFile = await lead.session.get(`/staff/bank-transfers/${id}/files/${res.body.transfer.files[19].id}`);
+    expect(pdfFile.status).toBe(200);
+    expect(pdfFile.headers['content-type']).toBe('application/pdf');
+    expect(pdfFile.headers['content-disposition']).toBe('inline; filename="statement.pdf"');
+    // Someone outside the order cannot open it.
+    const other = await makeUser('Ops', 'staff', { team: 'operations', isHead: false, active: true });
+    expect((await other.session.get(`/staff/bank-transfers/${id}/files/${res.body.transfer.files[19].id}`)).status).toBe(403);
 
     expect((await lead.session.post(`/staff/bank-transfers/${id}/confirm`)).status).toBe(403);
     const ok = await accounts.session.post(`/staff/bank-transfers/${id}/confirm`);

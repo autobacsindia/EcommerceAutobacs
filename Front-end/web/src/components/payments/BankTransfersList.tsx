@@ -120,7 +120,7 @@ function TransferCard({ t }: { t: BankTransfer }) {
           {t.files.map((f, i) => (
             <a key={f.id} href={transferFileHref(t.id, f.id)} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
-              <FileText className="h-4 w-4 text-emerald-700" /> Screenshot {t.files.length > 1 ? i + 1 : ''}
+              <FileText className="h-4 w-4 text-emerald-700" /> {f.contentType === 'application/pdf' ? 'PDF' : 'Screenshot'} {t.files.length > 1 ? i + 1 : ''}
             </a>
           ))}
         </div>

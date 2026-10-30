@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Loader2, Paperclip } from 'lucide-react';
 import { errorMessage, fileHref, postForm, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
+import { MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD, PHOTO_OR_PDF } from '@/lib/attachments';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
@@ -24,6 +25,8 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const proofs = r.files.filter((f) => f.kind === 'proof');
+  // The server's per-save and per-record limits, counting the ones ticked for removal as gone.
+  const room = Math.max(0, Math.min(MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD - (r.files.length - remove.length)));
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -77,8 +80,12 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
         </fieldset>
       )}
       <div className="text-sm">
-        <FilePicker files={add} onChange={setAdd} max={3} accept="image/jpeg,image/png,image/webp,application/pdf"
-          label="Add payment screenshots" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+        {room > 0 || add.length ? (
+          <FilePicker files={add} onChange={setAdd} max={Math.max(room, add.length)} accept={PHOTO_OR_PDF}
+            label="Add payment screenshots" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+        ) : (
+          <p className="text-xs text-gray-600">This payment already has {MAX_ATTACHMENTS_PER_RECORD} files. Tick one to remove before adding another.</p>
+        )}
       </div>
       <textarea aria-label="Why the change" className={input} rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why the change (optional, kept in the history)" />
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

@@ -10,7 +10,6 @@ jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: (...a: 
 jest.mock('@/lib/http/tokenManager', () => ({
   tokenManager: { ensureCsrfToken: jest.fn().mockResolvedValue(undefined), getHeaders: () => ({ 'Content-Type': 'application/json', 'X-XSRF-TOKEN': 't' }) },
 }));
-jest.mock('./types', () => ({ ...jest.requireActual('./types'), shrinkPhoto: async (f: File) => f }));
 
 const base: WorkOrder = {
   id: 'o1', orderNumber: 'ORD1', createdAt: '2026-10-06T05:00:00Z', enteredAt: '2026-10-06T05:00:00Z',
@@ -129,6 +128,53 @@ describe('WorkOrderPanel', () => {
     expect(form.get('courierName')).toBe('Delhivery');
     expect(JSON.parse(form.get('itemIds') as string)).toEqual(['i1']);
     expect(form.get('photo')).toBeInstanceOf(Blob);
+  });
+
+  it('sends several proofs in one dispatch — photos and a PDF receipt', async () => {
+    const shippable = { ...base, canShip: true, lines: [{ ...base.lines[0], stage: 'with_supplier' as const, actions: ['ship' as const] }] };
+    get.mockResolvedValue({ success: true, order: shippable });
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, order: base }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderPanel();
+    const jpg = (n: string) => new File([new Uint8Array([0xff, 0xd8, 0xff])], n, { type: 'image/jpeg' });
+    fireEvent.change(await screen.findByLabelText('Dispatch photo'), { target: { files: [jpg('box.jpg'), jpg('label.jpg')] } });
+    fireEvent.change(screen.getByLabelText('Dispatch photo'), { target: { files: [new File(['%PDF-1.4'], 'receipt.pdf', { type: 'application/pdf' })] } });
+    expect(screen.getByText('Add another (3 of 20)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /upload proof/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.getAll('photo').map((f) => (f as File).name)).toEqual(['box.jpg', 'label.jpg', 'receipt.pdf']);
+  });
+
+  it('shows every proof on a parcel (a PDF as a tile), and the edit form removes ticked ones and adds new', async () => {
+    const parcel = {
+      id: 's1', sequence: 1, status: 'shipped' as const, courier: 'Delhivery', trackingNumber: 'DL1', shippedAt: null, deliveredAt: null,
+      items: [], photoUrl: '/api/v1/staff/work/orders/o1/parcels/s1/photo', canMarkDelivered: false, canEdit: true,
+      photos: [
+        { id: 'legacy', url: '/api/v1/staff/work/orders/o1/parcels/s1/photos/legacy', contentType: 'image/jpeg', name: '' },
+        { id: 'p2', url: '/api/v1/staff/work/orders/o1/parcels/s1/photos/p2', contentType: 'application/pdf', name: 'receipt.pdf' },
+      ],
+    };
+    get.mockResolvedValue({ success: true, order: { ...base, parcels: [parcel] } });
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, order: base }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderPanel();
+    const list = await screen.findByRole('list', { name: 'Proof for parcel 1' });
+    expect(within(list).getByRole('img', { name: 'Dispatch photo 1 for parcel 1' })).toHaveAttribute('src', parcel.photos[0].url);
+    expect(within(list).getByText(/PDF/).closest('a')).toHaveAttribute('href', parcel.photos[1].url);
+    expect(screen.getByRole('button', { name: /Share 2 files/ })).toBeInTheDocument(); // one is a PDF
+
+    fireEvent.click(screen.getByRole('button', { name: /Edit dispatch details/ }));
+    fireEvent.click(screen.getByLabelText('Remove proof 1'));
+    fireEvent.change(screen.getByLabelText('Add photos or PDFs (optional)'), { target: { files: [new File(['x'], 'new.jpg', { type: 'image/jpeg' })] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/v1/staff/work/orders/o1/parcels/s1');
+    expect(init.method).toBe('PUT');
+    const form = init.body as FormData;
+    expect(JSON.parse(form.get('removePhotoIds') as string)).toEqual(['legacy']);
+    expect(form.getAll('photo').map((f) => (f as File).name)).toEqual(['new.jpg']);
   });
 
   it('takes a pasted screenshot as the dispatch photo, exactly like a chosen one', async () => {

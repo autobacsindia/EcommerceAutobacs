@@ -763,6 +763,25 @@ const OrderSchema = new mongoose.Schema({
       uploadedAt: Date,
       uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
     },
+    /*
+      Since Oct 2026 a parcel holds several proofs — photos or PDFs (the courier's
+      receipt) — with the same privacy as above. `proofPhoto` is the single proof
+      parcels had before: it is still read (shown first, id 'legacy') and is folded
+      into this list the next time the parcel's proof is edited. No data migration.
+    */
+    proofPhotos: {
+      type: [{
+        publicId: String,
+        provider: { type: String, enum: ['cloudinary', 'r2'], default: undefined },
+        url: String,
+        contentType: String,
+        bytes: Number,
+        name: String,
+        uploadedAt: Date,
+        uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }
+      }],
+      default: undefined,
+    },
     estimatedDelivery: Date,
     shippedAt: Date,
     deliveredAt: Date,

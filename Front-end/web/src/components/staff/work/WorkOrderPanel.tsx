@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Camera, CheckCircle2, Gift, Loader2, MessageCircle, Pencil, Share2, Truck, Undo2, Warehouse } from 'lucide-react';
+import { Camera, CheckCircle2, FileText, Gift, Loader2, MessageCircle, Pencil, Share2, Truck, Undo2, Warehouse } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { tokenManager } from '@/lib/http/tokenManager';
 import { staffKeys } from '@/hooks/queries/keys';
@@ -10,17 +10,14 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import CustomerBankCard from '@/components/staff/sales/CustomerBankCard';
 import { whatsappNumber } from '@/components/staff/sales/PaymentLinkCard';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
-import { shrinkPhoto, STAGE_TONE, PARCEL_STEP_OPTIONS, type LineAction, type ParcelStepStatus, type WorkOrder } from './types';
+import { STAGE_TONE, PARCEL_STEP_OPTIONS, type LineAction, type ParcelStepStatus, type WorkOrder } from './types';
 import LineSupplierPayment, { useOrderSupplierPayments } from '@/components/payments/OrderSupplierPayments';
 import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
 import ParcelEta from './ParcelEta';
 import OrderJourney from '@/components/orders/OrderJourney';
 import FilePicker from '@/components/payments/FilePicker';
-
-/** Dispatch photos: what the server takes. Any size — shrinkPhoto brings it under the server's 8 MB. */
-const PHOTO_TYPES = 'image/jpeg,image/png,image/webp';
-const pickPhoto = (set: (f: File | null) => void) => (files: File[]) => set(files[0] ?? null);
+import { MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD, PHOTO_OR_PDF } from '@/lib/attachments';
 
 type OrderResponse = { success: boolean; order: WorkOrder };
 
@@ -59,19 +56,32 @@ function shippedMessage(o: WorkOrder, parcel: WorkOrder['parcels'][number]) {
   ].filter(Boolean).join('\n');
 }
 
-async function sharePhoto(url: string, name: string) {
-  const res = await fetch(url, { credentials: 'include' });
-  if (!res.ok) throw new Error('Could not load the photo');
-  const blob = await res.blob();
-  const file = new File([blob], name, { type: blob.type || 'image/jpeg' });
-  if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file] }); return; } catch (e) { if ((e as Error).name === 'AbortError') return; }
+type Parcel = WorkOrder['parcels'][number];
+type ParcelProof = NonNullable<Parcel['photos']>[number];
+
+/** A parcel's proofs; an older server sends only the first one's URL. */
+const proofsOf = (p: Parcel): ParcelProof[] =>
+  p.photos ?? (p.photoUrl ? [{ id: 'first', url: p.photoUrl, contentType: 'image/jpeg', name: '' }] : []);
+
+/** Share a parcel's proofs to WhatsApp etc. in one go (the phone's share sheet); a computer downloads them. */
+async function shareProofs(proofs: ParcelProof[], baseName: string) {
+  const files = await Promise.all(proofs.map(async (p, i) => {
+    const res = await fetch(p.url, { credentials: 'include' });
+    if (!res.ok) throw new Error('Could not load the photo');
+    const blob = await res.blob();
+    const ext = (blob.type || p.contentType) === 'application/pdf' ? 'pdf' : 'jpg';
+    return new File([blob], `${baseName}${proofs.length > 1 ? `-${i + 1}` : ''}.${ext}`, { type: blob.type || p.contentType });
+  }));
+  if (navigator.canShare?.({ files })) {
+    try { await navigator.share({ files }); return; } catch (e) { if ((e as Error).name === 'AbortError') return; }
   }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  for (const file of files) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(file);
+    a.download = file.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
 }
 
 /**
@@ -85,7 +95,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const supplierPayments = useOrderSupplierPayments(orderId);
   const [editParcel, setEditParcel] = useState<string | null>(null);
   const [parcelFix, setParcelFix] = useState({ courier: '', tracking: '' });
-  const [parcelPhoto, setParcelPhoto] = useState<File | null>(null);
+  const [parcelFiles, setParcelFiles] = useState<File[]>([]);
+  const [removeProofs, setRemoveProofs] = useState<string[]>([]);
   // Operations: the courier step being added to one parcel.
   const [stepFor, setStepFor] = useState<{ parcelId: string; status: ParcelStepStatus | ''; note: string } | null>(null);
   const [noteFor, setNoteFor] = useState<{ itemId: string; kind: 'reject' } | null>(null);
@@ -119,10 +130,11 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
       const form = new FormData();
       form.append('courierName', parcelFix.courier.trim());
       form.append('trackingNumber', parcelFix.tracking.trim());
-      if (parcelPhoto) form.append('photo', await shrinkPhoto(parcelPhoto), 'proof.jpg');
+      for (const f of parcelFiles) form.append('photo', f, f.name);
+      if (removeProofs.length) form.append('removePhotoIds', JSON.stringify(removeProofs));
       return postForm<OrderResponse>(`/staff/work/orders/${orderId}/parcels/${shipmentId}`, form, 'PUT');
     },
-    onSuccess: (res) => { done(res); setEditParcel(null); setParcelPhoto(null); },
+    onSuccess: (res) => { done(res); setEditParcel(null); setParcelFiles([]); setRemoveProofs([]); },
     onError: (e) => setError(errorMessage(e, 'Could not save the dispatch details.')),
   });
 
@@ -261,13 +273,25 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
         <div>
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Parcels</p>
           <ul className="space-y-3">
-            {o.parcels.map((p) => (
+            {o.parcels.map((p) => { const photos = proofsOf(p); return (
               <li key={p.id} className="flex flex-col gap-3 rounded-lg border border-gray-200 p-3 sm:flex-row">
-                {p.photoUrl && (
-                  <a href={p.photoUrl} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.photoUrl} alt={`Dispatch photo for parcel ${p.sequence}`} className="h-28 w-28 rounded-lg border border-gray-200 object-cover" loading="lazy" />
-                  </a>
+                {photos.length > 0 && (
+                  <ul className="flex shrink-0 flex-wrap gap-2 sm:max-w-[15rem]" aria-label={`Proof for parcel ${p.sequence}`}>
+                    {photos.map((ph, i) => (
+                      <li key={ph.id}>
+                        <a href={ph.url} target="_blank" rel="noopener noreferrer" title={ph.name || undefined}>
+                          {ph.contentType === 'application/pdf' ? (
+                            <span className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded-lg border border-gray-200 bg-gray-50 text-xs text-gray-700">
+                              <FileText className="h-6 w-6 text-red-700" /> PDF {photos.length > 1 ? i + 1 : ''}
+                            </span>
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={ph.url} alt={`Dispatch photo ${i + 1} for parcel ${p.sequence}`} className="h-28 w-28 rounded-lg border border-gray-200 object-cover" loading="lazy" />
+                          )}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 )}
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="font-medium text-gray-900">
@@ -289,15 +313,17 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                         <MessageCircle className="h-3.5 w-3.5" /> Send to customer
                       </a>
                     )}
-                    {p.photoUrl && (
+                    {photos.length > 0 && (
                       <button type="button" className={secondary}
-                        onClick={() => sharePhoto(p.photoUrl!, `Autobacs-${o.orderNumber}-parcel-${p.sequence}.jpg`).catch((e) => setError((e as Error).message))}>
-                        <Share2 className="h-3.5 w-3.5" /> Share photo
+                        onClick={() => shareProofs(photos, `Autobacs-${o.orderNumber}-parcel-${p.sequence}`).catch((e) => setError((e as Error).message))}>
+                        <Share2 className="h-3.5 w-3.5" /> {photos.length > 1
+                          ? `Share ${photos.length} ${photos.some((ph) => ph.contentType === 'application/pdf') ? 'files' : 'photos'}`
+                          : 'Share photo'}
                       </button>
                     )}
                     {p.canEdit && editParcel !== p.id && (
                       <button type="button" className={secondary} title="While the parcel is in transit"
-                        onClick={() => { setEditParcel(p.id); setParcelFix({ courier: p.courier, tracking: p.trackingNumber }); setParcelPhoto(null); }}>
+                        onClick={() => { setEditParcel(p.id); setParcelFix({ courier: p.courier, tracking: p.trackingNumber }); setParcelFiles([]); setRemoveProofs([]); }}>
                         <Pencil className="h-3.5 w-3.5" /> Edit dispatch details
                       </button>
                     )}
@@ -354,8 +380,23 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                         <input className={`${input} max-w-[12rem]`} aria-label="Courier" maxLength={80} value={parcelFix.courier} onChange={(e) => setParcelFix({ ...parcelFix, courier: e.target.value })} placeholder="Courier" />
                         <input className={`${input} max-w-[12rem]`} aria-label="Tracking number" maxLength={80} value={parcelFix.tracking} onChange={(e) => setParcelFix({ ...parcelFix, tracking: e.target.value })} placeholder="Tracking number" />
                       </div>
-                      <FilePicker files={parcelPhoto ? [parcelPhoto] : []} onChange={pickPhoto(setParcelPhoto)} max={1} accept={PHOTO_TYPES}
-                        maxBytes={Infinity} label="Replace the photo (optional)" icon={<Camera className="h-4 w-4" />} onError={setError} />
+                      {photos.length > 0 && (
+                        <fieldset className="space-y-1">
+                          <legend className="text-xs font-medium text-gray-700">Tick a photo to remove it</legend>
+                          {photos.map((ph, i) => (
+                            <label key={ph.id} className="flex items-center gap-2 text-sm text-gray-800">
+                              <input type="checkbox" checked={removeProofs.includes(ph.id)} aria-label={`Remove proof ${i + 1}`}
+                                onChange={(e) => setRemoveProofs(e.target.checked ? [...removeProofs, ph.id] : removeProofs.filter((x) => x !== ph.id))} />
+                              <a href={ph.url} target="_blank" rel="noopener noreferrer" className={`text-blue-700 hover:underline ${removeProofs.includes(ph.id) ? 'line-through opacity-60' : ''}`}>
+                                {ph.contentType === 'application/pdf' ? 'PDF' : 'Photo'} {i + 1}{ph.name ? ` — ${ph.name}` : ''}
+                              </a>
+                            </label>
+                          ))}
+                        </fieldset>
+                      )}
+                      <FilePicker files={parcelFiles} onChange={setParcelFiles} accept={PHOTO_OR_PDF}
+                        max={Math.max(parcelFiles.length, Math.min(MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD - (photos.length - removeProofs.length)))}
+                        label="Add photos or PDFs (optional)" icon={<Camera className="h-4 w-4" />} onError={setError} />
                       <div className="flex gap-2">
                         <button type="submit" disabled={editParcelMutation.isPending} className={primary}>Save</button>
                         <button type="button" className={secondary} onClick={() => setEditParcel(null)}>Cancel</button>
@@ -364,7 +405,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                   )}
                 </div>
               </li>
-            ))}
+            ); })}
           </ul>
         </div>
       )}
@@ -428,7 +469,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
 function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: (r: OrderResponse) => void; onError: (m: string) => void }) {
   const shippable = order.lines.filter((l) => l.actions.includes('ship') && l.unshipped > 0);
   const [selected, setSelected] = useState<string[]>(shippable.map((l) => l.itemId));
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [courier, setCourier] = useState('');
   const [tracking, setTracking] = useState('');
   const [busy, setBusy] = useState(false);
@@ -436,18 +477,17 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) { onError('Add a photo of the parcel, the courier receipt, or the supplier\'s screenshot.'); return; }
+    if (!files.length) { onError('Add a photo of the parcel, the courier receipt, or the supplier\'s screenshot.'); return; }
     if (!selected.length) { onError('Choose at least one item in this parcel.'); return; }
     setBusy(true);
     try {
-      const photo = await shrinkPhoto(file);
       const form = new FormData();
-      form.append('photo', photo, 'proof.jpg');
+      for (const f of files) form.append('photo', f, f.name); // big photos were shrunk as they were added
       form.append('itemIds', JSON.stringify(selected));
       if (courier.trim()) form.append('courierName', courier.trim());
       if (tracking.trim()) form.append('trackingNumber', tracking.trim());
       onShipped(await postForm<OrderResponse>(`/staff/work/orders/${order.id}/ship`, form));
-      setFile(null); setCourier(''); setTracking('');
+      setFiles([]); setCourier(''); setTracking('');
     } catch (err) {
       onError(errorMessage(err, 'Could not upload the proof. Please try again.'));
     } finally {
@@ -481,9 +521,9 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
         </fieldset>
       )}
       <div>
-        <p className="mb-1 text-xs font-medium text-gray-700">Photo of the parcel / courier receipt, or the supplier&apos;s screenshot</p>
-        <FilePicker files={file ? [file] : []} onChange={pickPhoto(setFile)} max={1} accept={PHOTO_TYPES} maxBytes={Infinity}
-          label="Add photo" inputLabel="Dispatch photo" icon={<Camera className="h-4 w-4" />} onError={onError} />
+        <p className="mb-1 text-xs font-medium text-gray-700">Photos of the parcel / courier receipt, or the supplier&apos;s screenshots</p>
+        <FilePicker files={files} onChange={setFiles} max={MAX_ATTACHMENTS} accept={PHOTO_OR_PDF}
+          label="Add photo or PDF" inputLabel="Dispatch photo" icon={<Camera className="h-4 w-4" />} onError={onError} />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
@@ -495,7 +535,7 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
           <input className={input} maxLength={80} value={tracking} onChange={(e) => setTracking(e.target.value)} />
         </label>
       </div>
-      <button type="submit" disabled={busy || !file || !selected.length} className={primary}>
+      <button type="submit" disabled={busy || !files.length || !selected.length} className={primary}>
         {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
         {shippable.length > 1 && allChosen ? 'Upload proof & ship all items'
           : shippable.length > 1 ? `Upload proof & ship ${selected.length} of ${shippable.length} items` : 'Upload proof & mark shipped'}
@@ -513,7 +553,7 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
 function OwnStockForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: (r: OrderResponse) => void; onError: (m: string) => void }) {
   const ours = order.lines.filter((l) => l.actions.includes('dispatch_own') && l.unshipped > 0);
   const [selected, setSelected] = useState<string[]>(ours.map((l) => l.itemId));
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [courier, setCourier] = useState('');
   const [tracking, setTracking] = useState('');
   const [busy, setBusy] = useState(false);
@@ -530,7 +570,7 @@ function OwnStockForm({ order, onShipped, onError }: { order: WorkOrder; onShipp
       form.append('courierName', courier.trim());
       form.append('trackingNumber', tracking.trim());
       form.append('itemIds', JSON.stringify(selected));
-      if (file) form.append('photo', await shrinkPhoto(file), 'parcel.jpg');
+      for (const f of files) form.append('photo', f, f.name);
       onShipped(await postForm<OrderResponse>(`/staff/work/orders/${order.id}/dispatch-own`, form));
     } catch (err) {
       onError(errorMessage(err, 'Could not dispatch. Please try again.'));
@@ -573,9 +613,9 @@ function OwnStockForm({ order, onShipped, onError }: { order: WorkOrder; onShipp
         </label>
       </div>
       <div>
-        <p className="mb-1 text-xs font-medium text-gray-700">Photo of the packed parcel (optional)</p>
-        <FilePicker files={file ? [file] : []} onChange={pickPhoto(setFile)} max={1} accept={PHOTO_TYPES} maxBytes={Infinity}
-          label="Add photo" inputLabel="Parcel photo (optional)" icon={<Camera className="h-4 w-4" />} onError={onError} />
+        <p className="mb-1 text-xs font-medium text-gray-700">Photos of the packed parcel (optional)</p>
+        <FilePicker files={files} onChange={setFiles} max={MAX_ATTACHMENTS} accept={PHOTO_OR_PDF}
+          label="Add photo or PDF" inputLabel="Parcel photo (optional)" icon={<Camera className="h-4 w-4" />} onError={onError} />
       </div>
       <button type="submit" disabled={busy || !ready} className={primary}>
         {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

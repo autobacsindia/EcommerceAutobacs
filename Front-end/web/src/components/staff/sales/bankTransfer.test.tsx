@@ -60,7 +60,7 @@ describe('recording a bank transfer (salesman)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Customer paid by bank transfer/ }));
     fireEvent.change(screen.getByLabelText(/UTR \/ bank reference/), { target: { value: ' UTR123456789 ' } });
     fireEvent.change(screen.getByLabelText('Date paid'), { target: { value: '2026-10-20' } });
-    fireEvent.change(screen.getByLabelText('Attach screenshot'), { target: { files: [shot('a.jpg'), shot('b.jpg')] } });
+    fireEvent.change(screen.getByLabelText('Attach screenshot or PDF'), { target: { files: [shot('a.jpg'), shot('b.jpg')] } });
     fireEvent.click(screen.getByRole('button', { name: /Send to accounts/ }));
 
     await waitFor(() => expect(postForm).toHaveBeenCalledTimes(1));
@@ -88,7 +88,7 @@ describe('recording a bank transfer (salesman)', () => {
     wrap(<SalesOrderPayment id="o1" />);
     fireEvent.click(await screen.findByRole('button', { name: /Customer paid by bank transfer/ }));
     fireEvent.change(screen.getByLabelText(/UTR \/ bank reference/), { target: { value: 'UTR123456789' } });
-    fireEvent.change(screen.getByLabelText('Attach screenshot'), { target: { files: [shot()] } });
+    fireEvent.change(screen.getByLabelText('Attach screenshot or PDF'), { target: { files: [shot()] } });
     fireEvent.click(screen.getByRole('button', { name: /Send to accounts/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already recorded on order #ZZ');
   });

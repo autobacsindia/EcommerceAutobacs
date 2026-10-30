@@ -99,6 +99,36 @@ it('uploads the supplier photo as multipart and serves it back privately', async
   expect(Buffer.compare(photo.body, JPEG)).toBe(0);
 });
 
+it('takes several proofs (photos and a PDF) in one upload and serves each one, permission-checked', async () => {
+  const order = await paidOrder();
+  const itemId = String(order.items[0]._id);
+  const procurement = await login('staff', { team: 'procurement' });
+  const operations = await login('staff', { team: 'operations' });
+  const customer = await login('customer');
+  await request(app).post(`${BASE}/staff/work/orders/${order._id}/lines/${itemId}/stock`)
+    .set(as(procurement)).send({ stock: 'in_stock' }).expect(200);
+  const PDF = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(100, 32)]);
+  let req21 = request(app).post(`${BASE}/staff/work/orders/${order._id}/ship`).set(as(procurement)).field('trackingNumber', 'DL1');
+  for (let i = 0; i < 21; i += 1) req21 = req21.attach('photo', JPEG, { filename: `p${i}.jpg`, contentType: 'image/jpeg' });
+  const refused = await req21;
+  expect(refused.status).toBe(400);
+  expect(refused.body.message).toBe('You can attach up to 20 files at a time.');
+
+  const shipped = await request(app).post(`${BASE}/staff/work/orders/${order._id}/ship`).set(as(procurement))
+    .field('trackingNumber', 'DL1')
+    .attach('photo', JPEG, { filename: 'box.jpg', contentType: 'image/jpeg' })
+    .attach('photo', PDF, { filename: 'receipt.pdf', contentType: 'application/pdf' })
+    .expect(200);
+  const parcel = shipped.body.order.parcels[0];
+  expect(parcel.photos).toHaveLength(2);
+  const pdf = await request(app).get(parcel.photos[1].url.replace('/api/v1', BASE)).set(as(operations)).expect(200);
+  expect(pdf.headers['content-type']).toBe('application/pdf');
+  expect(pdf.headers['content-disposition']).toBe('inline; filename="receipt.pdf"');
+  expect(pdf.headers['cache-control']).toBe('private, no-store');
+  expect((await request(app).get(parcel.photos[1].url.replace('/api/v1', BASE)).set(as(customer))).status).toBe(403);
+  expect((await request(app).get(`${parcel.photos[1].url.replace('/api/v1', BASE).replace(/[^/]+$/, 'nope')}`).set(as(operations))).status).toBe(400);
+});
+
 it('rejects a non-image upload with a clear message', async () => {
   const order = await paidOrder();
   const procurement = await login('staff', { team: 'procurement' });
@@ -107,9 +137,9 @@ it('rejects a non-image upload with a clear message', async () => {
 
   const res = await request(app).post(`${BASE}/staff/work/orders/${order._id}/ship`)
     .set(as(procurement))
-    .attach('photo', Buffer.from('%PDF-1.4'), { filename: 'x.pdf', contentType: 'application/pdf' });
+    .attach('photo', Buffer.from('MZ\x90\x00 program'), { filename: 'x.pdf', contentType: 'application/pdf' });
   expect(res.status).toBe(400);
-  expect(res.body.message).toMatch(/JPG, PNG or WebP/);
+  expect(res.body.message).toBe('"x.pdf" is not a photo (JPG, PNG, WebP) or a PDF.');
 });
 
 it('validates the queue name', async () => {

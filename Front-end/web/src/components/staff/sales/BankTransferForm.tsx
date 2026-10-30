@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { Landmark, Loader2, Paperclip } from 'lucide-react';
 import FilePicker from '@/components/payments/FilePicker';
 import { postForm } from '@/components/payments/api';
+import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import { errorMessage, rupees, type SalesOrder } from './types';
 
 /** Same as the server's MAX_TRANSFER_FILES (services/bankTransferService.js). */
-export const MAX_TRANSFER_FILES = 3;
+export const MAX_TRANSFER_FILES = MAX_ATTACHMENTS;
 
 /** Today as YYYY-MM-DD in the browser's (the salesman's) own calendar. */
 function today(): string {
@@ -92,9 +93,9 @@ export default function BankTransferForm({ order, onDone }: { order: SalesOrder;
       </label>
 
       <div className="text-sm">
-        <p className="mb-1 font-medium text-gray-800">Payment screenshot</p>
-        <FilePicker files={files} onChange={setFiles} max={MAX_TRANSFER_FILES} accept="image/jpeg,image/png,image/webp,application/pdf"
-          label="Attach screenshot" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+        <p className="mb-1 font-medium text-gray-800">Payment screenshots or bank statement</p>
+        <FilePicker files={files} onChange={setFiles} max={MAX_TRANSFER_FILES} accept={PHOTO_OR_PDF}
+          label="Attach screenshot or PDF" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
       </div>
 
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

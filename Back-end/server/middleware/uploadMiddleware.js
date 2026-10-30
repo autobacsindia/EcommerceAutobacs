@@ -23,6 +23,9 @@
  */
 import multer from 'multer';
 import crypto from 'crypto';
+import {
+  MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, mb,
+} from '../config/attachments.js';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -173,7 +176,7 @@ const upload = multer({
 /**
  * concurrentUploadGuard — place BEFORE multer to block overloaded upload slots.
  *
- * Increments activeUploads on entry, decrements on res.finish.
+ * Increments activeUploads on entry, decrements once the response finishes or the client drops.
  * Returns 429 immediately if the server is already at MAX_CONCURRENT_UPLOADS.
  *
  * @example
@@ -193,11 +196,19 @@ export const concurrentUploadGuard = (req, res, next) => {
   activeUploads++;
   console.log(`[Upload] Upload slot acquired. Active: ${activeUploads}/${MAX_CONCURRENT_UPLOADS}`);
 
-  // Always release the slot when the response finishes (success or error)
-  res.on('finish', () => {
+  // Release the slot exactly once when the response ends — 'finish' on a sent
+  // response, 'close' when the client drops mid-upload (a phone losing signal
+  // halfway through 20 photos). Listening for 'finish' alone leaked the slot on
+  // every dropped upload, and five leaks blocked all uploads until a restart.
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
     activeUploads = Math.max(0, activeUploads - 1);
     console.log(`[Upload] Upload slot released. Active: ${activeUploads}/${MAX_CONCURRENT_UPLOADS}`);
-  });
+  };
+  res.on('finish', release);
+  res.on('close', release);
 
   next();
 };
@@ -343,67 +354,85 @@ export const validatePdfUpload = (req, res, next) => {
   next();
 };
 
-// ── Team panel: supplier shipping proof ─────────────────────────────────────
+// ── Team panel: staff attachments (payments, bills, parcel proof) ────────────
+
+/*
+  One rule set for every panel screen that takes a payment screenshot, a bill or
+  a parcel photo: up to MAX_ATTACHMENTS files per save, each a photo or a PDF
+  (a bank's statement or a supplier's invoice is often a PDF), within the limits
+  in config/attachments.js. The service re-checks count, total and the BYTES
+  (services/storage/attachmentCheck.js) before anything is stored.
+*/
+export { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES };
+
+/** Room on top of the file bytes for multipart boundaries, part headers and text fields. */
+const FORM_OVERHEAD_BYTES = 1024 * 1024;
 
 /**
- * 8 MB, one photo. Larger than the product-image limit because this is a phone
- * photo or WhatsApp screenshot, not a catalogue asset — the panel also shrinks it
- * before upload, so the cap is a backstop. The service re-checks the bytes are a
- * real image (services/storage/contentSniff.js) before storing anything.
+ * attachmentSizeGuard — place BEFORE multer, after concurrentUploadGuard.
+ *
+ * Multer limits each file and the file COUNT, but not the request as a whole,
+ * and it buffers everything in memory before the service sees it. Refusing on
+ * the declared Content-Length stops an oversize request before a byte is
+ * buffered. A multipart body with no declared length (chunked) is refused: every
+ * browser sends the length for a FormData upload, so only a hand-rolled client
+ * would hit this, and it is exactly the client that could stream without end.
  */
-export const MAX_PROOF_PHOTO_SIZE = 8 * 1024 * 1024;
-
-const proofPhotoUpload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE',
-        `Invalid file type "${file.mimetype}". Upload a JPG, PNG or WebP photo.`), false);
-    }
-    cb(null, true);
-  },
-  limits: { fileSize: MAX_PROOF_PHOTO_SIZE, files: 1 },
-});
-
-// ── Payment requests: bills, payee QR, payment screenshot ─────────────────────
-
-/**
- * A photo or a PDF (a supplier's invoice is often a PDF), 8 MB each. The
- * service re-checks the bytes (contentSniff) before anything is stored.
- */
-/** Per-request file caps for payment requests (each file still ≤ MAX_PROOF_PHOTO_SIZE). */
-export const MAX_BILL_FILES = 5;
-export const MAX_PROOF_FILES = 3;
-
-const paymentFileUpload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    if (![...ALLOWED_MIME_TYPES, 'application/pdf'].includes(file.mimetype)) {
-      return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE',
-        `Invalid file type "${file.mimetype}". Upload a JPG, PNG or WebP photo, or a PDF.`), false);
-    }
-    cb(null, true);
-  },
-  limits: { fileSize: MAX_PROOF_PHOTO_SIZE, files: MAX_BILL_FILES + 1 },
-});
-
-/** Raising a request: up to five bills and one payee QR. */
-export const uploadPaymentRequestFiles = paymentFileUpload.fields([{ name: 'bill', maxCount: MAX_BILL_FILES }, { name: 'qr', maxCount: 1 }]);
-/** Recording a payment: up to three screenshots (field `proof`). */
-export const uploadPaymentProof = paymentFileUpload.array('proof', MAX_PROOF_FILES);
-
-/** Single proof photo (field `photo`). Errors go through handleProofPhotoError. */
-export const uploadProofPhoto = proofPhotoUpload.single('photo');
-
-/** Multer errors for the proof upload, with this route's own size limit in the message. */
-export const handleProofPhotoError = (err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    const message = err.code === 'LIMIT_FILE_SIZE'
-      ? 'The photo is too large (8 MB maximum).'
-      : (err.field || err.message || 'Upload error.');
-    return res.status(400).json({ success: false, message });
+export const attachmentSizeGuard = (req, res, next) => {
+  if (!req.is('multipart/form-data')) return next();
+  const declared = req.headers['content-length'];
+  if (declared === undefined) {
+    return res.status(411).json({ success: false, message: 'The upload size is missing. Please try again.' });
   }
-  next(err);
+  if (Number(declared) > MAX_ATTACHMENTS_TOTAL_BYTES + FORM_OVERHEAD_BYTES) {
+    return res.status(413).json({
+      success: false,
+      message: `These files add up to more than ${mb(MAX_ATTACHMENTS_TOTAL_BYTES)}. Send fewer at a time.`,
+    });
+  }
+  return next();
+};
+
+const staffAttachmentFilter = (photoOnlyFields = []) => (req, file, cb) => {
+  const pdfOk = !photoOnlyFields.includes(file.fieldname);
+  const ok = ALLOWED_MIME_TYPES.includes(file.mimetype) || (pdfOk && file.mimetype === 'application/pdf');
+  if (!ok) {
+    return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE',
+      pdfOk
+        ? `"${file.originalname}" is not a photo (JPG, PNG, WebP) or a PDF.`
+        : `"${file.originalname}" is not a photo (JPG, PNG or WebP).`), false);
+  }
+  return cb(null, true);
+};
+
+const staffUpload = (photoOnlyFields) => multer({
+  storage,
+  fileFilter: staffAttachmentFilter(photoOnlyFields),
+  limits: { fileSize: MAX_ATTACHMENT_BYTES, files: MAX_ATTACHMENTS + 1 },
+});
+
+/** Raising a payment request: up to MAX_ATTACHMENTS bills and one payee QR (a photo). Also GTM's pay-details QR. */
+export const uploadPaymentRequestFiles = staffUpload(['qr']).fields([
+  { name: 'bill', maxCount: MAX_ATTACHMENTS }, { name: 'qr', maxCount: 1 },
+]);
+/** Recording a payment or a bank transfer: up to MAX_ATTACHMENTS screenshots (field `proof`). */
+export const uploadPaymentProof = staffUpload().array('proof', MAX_ATTACHMENTS);
+/** Parcel proof: up to MAX_ATTACHMENTS photos or PDFs (field `photo`, repeated). */
+export const uploadProofPhotos = staffUpload().array('photo', MAX_ATTACHMENTS);
+
+/** Multer errors on any staff attachment route → a 400 with words, never a 500. */
+export const handleAttachmentError = (err, req, res, next) => {
+  if (!(err instanceof multer.MulterError)) return next(err);
+  const tooMany = `You can attach up to ${MAX_ATTACHMENTS} files at a time.`;
+  let message;
+  if (err.code === 'LIMIT_FILE_SIZE') message = `A file is too large (${mb(MAX_ATTACHMENT_BYTES)} maximum).`;
+  else if (err.code === 'LIMIT_FILE_COUNT') message = tooMany;
+  else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+    // Our type check puts its sentence in `field`; otherwise multer means "one file too many on this field".
+    const field = String(err.field || '');
+    message = field.startsWith('"') ? field : field === 'qr' ? 'Attach one QR code picture.' : tooMany;
+  } else message = err.message || 'Upload error.';
+  return res.status(400).json({ success: false, message });
 };
 
 // ── Exported middleware factories ──────────────────────────────────────────

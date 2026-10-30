@@ -137,6 +137,16 @@ describe('Team chat — files, mentions, order refs, automatic updates', () => {
       expect(files.body.files[0]).toMatchObject({ name: 'damage.png', sharedBy: { name: 'Sana' } });
     });
 
+    it('up to twenty files in one message; a twenty-first is refused with words', async () => {
+      const files = (n) => Array.from({ length: n }, (_, i) => ({ buffer: PNG, name: `p${i}.png`, type: 'image/png' }));
+      const ok = await salesHead.upload(`/chat/channels/${company}/messages`, { text: 'All the photos' }, files(20));
+      expect(ok.status).toBe(201);
+      expect(ok.body.message.attachments).toHaveLength(20);
+      const tooMany = await salesHead.upload(`/chat/channels/${company}/messages`, { text: 'x' }, files(21));
+      expect(tooMany.status).toBe(400);
+      expect(tooMany.body.message).toBe('Too many files. You can attach up to 20 at a time.');
+    });
+
     it('a PDF is stored as a download, not an inline image', async () => {
       const res = await accounts.upload(`/chat/channels/${company}/messages`, { text: 'Invoice' },
         [{ buffer: PDF, name: 'invoice.pdf', type: 'application/pdf' }]);

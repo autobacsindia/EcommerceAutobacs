@@ -38,7 +38,8 @@ import orderStatusService from './orderStatusService.js';
 import { retireAllParts } from './salesPaymentService.js';
 import { retireCurrentLink } from './salesOrderService.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
-import { detectKind, KIND } from './storage/contentSniff.js';
+import { checkAttachments } from './storage/attachmentCheck.js';
+import { MAX_ATTACHMENTS } from '../config/attachments.js';
 import { postSystemMessage } from './chatService.js';
 import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
@@ -46,8 +47,7 @@ import { STAFF_TEAMS, canSell } from '../config/staff.js';
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
 export const BANK_TRANSFER_FOLDER = 'bank-transfers'; // a PRIVATE prefix (storage/assetScope.js)
-export const MAX_TRANSFER_FILES = 3;
-const MAX_FILE_BYTES = 8 * 1024 * 1024;
+export const MAX_TRANSFER_FILES = MAX_ATTACHMENTS;
 const PAGE_SIZE = 25;
 const PAID_ON_MAX_AGE_DAYS = 90;
 
@@ -97,20 +97,9 @@ export function cleanPaidOn(raw, now = Date.now()) {
 
 /** Check every file's bytes before anything is stored or claimed. */
 function checkFiles(files) {
-  const uploads = (files || []).filter((f) => f?.buffer?.length);
-  if (!uploads.length) throw fail('Add the payment screenshot from the customer.', 400);
-  if (uploads.length > MAX_TRANSFER_FILES) throw fail(`Attach at most ${MAX_TRANSFER_FILES} screenshots.`, 400);
-  return uploads.map((file) => {
-    if (file.buffer.length > MAX_FILE_BYTES) throw fail('A file is too large (8 MB maximum).', 400);
-    const kind = detectKind(file.buffer);
-    if (kind !== KIND.IMAGE && kind !== KIND.PDF) throw fail('Upload a photo (JPG, PNG, WebP) or a PDF.', 400);
-    const pdf = kind === KIND.PDF;
-    return {
-      file,
-      contentType: pdf ? 'application/pdf' : (file.mimetype || 'image/jpeg'),
-      ext: pdf ? 'pdf' : ({ 'image/png': 'png', 'image/webp': 'webp' }[file.mimetype] || 'jpg'),
-    };
-  });
+  const checked = checkAttachments(files, { noun: 'screenshot' });
+  if (!checked.length) throw fail('Add the payment screenshot from the customer.', 400);
+  return checked;
 }
 
 const resourceTypeOf = (f) => (f.contentType === 'application/pdf' ? 'raw' : 'image');
@@ -120,7 +109,7 @@ const removeFiles = (stored) => Promise.all(stored.map((f) =>
 async function storeFiles(checked) {
   const stored = [];
   try {
-    for (const { file, contentType, ext } of checked) {
+    for (const { file, contentType, ext, name } of checked) {
       const ref = await putPrivateAsset({
         buffer: file.buffer,
         folder: BANK_TRANSFER_FOLDER,
@@ -128,7 +117,7 @@ async function storeFiles(checked) {
         contentType,
         cloudinaryPrivate: true,
       });
-      stored.push({ publicId: ref.publicId, provider: ref.provider, contentType, bytes: ref.bytes, name: String(file.originalname || '').slice(0, 200) });
+      stored.push({ publicId: ref.publicId, provider: ref.provider, contentType, bytes: ref.bytes, name });
     }
   } catch (err) {
     await removeFiles(stored);

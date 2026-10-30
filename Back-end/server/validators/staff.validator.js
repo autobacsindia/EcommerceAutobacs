@@ -279,6 +279,11 @@ export const validateWorkParcel = [
   param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
 ];
 
+export const validateWorkParcelPhoto = [
+  ...validateWorkParcel,
+  param('photoId').custom((v) => v === 'legacy' || isObjectId(v)).withMessage('Invalid photo'),
+];
+
 export const validateStockUpdate = [
   ...validateWorkLine,
   body('stock').isIn(['in_stock', 'own_stock', 'ordered', 'out_of_stock']).withMessage('Unknown stock status'),
@@ -298,6 +303,8 @@ export const validateEditParcel = [
   param('shipmentId').custom(isObjectId).withMessage('Invalid parcel'),
   body('courierName').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Courier name is too long'),
   body('trackingNumber').optional({ values: 'null' }).isString().trim().isLength({ max: 80 }).withMessage('Tracking number is too long'),
+  // JSON list of proof ids to remove (multipart sends it as a string).
+  body('removePhotoIds').optional().isString().isLength({ max: 2000 }).withMessage('Invalid photo list'),
 ];
 
 export const validateParcelEta = [

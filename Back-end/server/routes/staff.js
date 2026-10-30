@@ -1,5 +1,4 @@
 import express from 'express';
-import multer from 'multer';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { protect, staffOrAdmin } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
@@ -38,7 +37,7 @@ import {
   validatePaymentPartParam,
   validateWorkQueue,
   validateWorkOrder,
-  validateWorkParcel,
+  validateWorkParcel, validateWorkParcelPhoto,
   validateStockUpdate,
   validatePaymentInitiated,
   validateShipWithProof,
@@ -58,7 +57,9 @@ import {
 } from '../validators/staff.validator.js';
 import staffTaskRoutes from './staffTasks.js';
 import pastSaleRoutes from './pastSales.js';
-import { uploadProofPhoto, handleProofPhotoError, concurrentUploadGuard, uploadPaymentProof, uploadPaymentRequestFiles } from '../middleware/uploadMiddleware.js';
+import {
+  uploadProofPhotos, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPaymentRequestFiles,
+} from '../middleware/uploadMiddleware.js';
 import {
   listQueue,
   getOrder as getWorkOrder,
@@ -384,20 +385,9 @@ router.put('/attribution/orders/:id', validateSetSeller, validateRequest, asyncH
 
 // ── Bank transfers (scope enforced in bankTransferService) ──────────────────
 
-/** Multer errors on the screenshot upload → a 400 with words, not a 500. */
-const transferFileErrors = (err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    const message = err.code === 'LIMIT_FILE_SIZE' ? 'A file is too large (8 MB maximum).'
-      : err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE' ? 'Attach at most 3 screenshots (photos or PDFs).'
-        : err.message;
-    return res.status(400).json({ success: false, message });
-  }
-  return next(err);
-};
-
 // @route  POST /staff/sales/orders/:id/pay-details — multipart: method (bank|upi_qr|other), bank(JSON)?, upiId?, note?, qr(image)?
 //         The bank / GPay QR / other way the customer is told to pay. Unpaid orders only.
-router.post('/sales/orders/:id/pay-details', concurrentUploadGuard, uploadPaymentRequestFiles, transferFileErrors,
+router.post('/sales/orders/:id/pay-details', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError,
   validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
     const qr = req.files?.qr?.[0] || null;
     res.json({ success: true, order: await setPayDetails(req.user, req.params.id, req.body, qr, req) });
@@ -410,8 +400,8 @@ router.get('/sales/orders/:id/pay-details/qr', validateOrderIdParam, validateReq
   res.send(buffer);
 }));
 
-// @route  POST /staff/sales/orders/:id/bank-transfer — multipart: amount, reference, paidOn, note?, proof (1–3)
-router.post('/sales/orders/:id/bank-transfer', concurrentUploadGuard, uploadPaymentProof, transferFileErrors,
+// @route  POST /staff/sales/orders/:id/bank-transfer — multipart: amount, reference, paidOn, note?, proof (1–20)
+router.post('/sales/orders/:id/bank-transfer', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError,
   validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
     res.status(201).json({ success: true, transfer: await recordBankTransfer(req.user, req.params.id, req.body, req.files || [], req) });
   }));
@@ -472,12 +462,21 @@ router.get('/work/orders/:id', validateWorkOrder, validateRequest, asyncHandler(
 }));
 
 // @route  GET /staff/work/orders/:id/parcels/:shipmentId/photo — supplier proof (private)
-router.get('/work/orders/:id/parcels/:shipmentId/photo', validateWorkParcel, validateRequest, asyncHandler(async (req, res) => {
-  const { buffer, contentType } = await getProofPhoto(req.user, req.params.id, req.params.shipmentId);
+const sendProof = (res, { buffer, contentType, name }) => {
   res.setHeader('Content-Type', contentType);
+  if (name) res.setHeader('Content-Disposition', `inline; filename="${String(name).replace(/[^\w.-]+/g, '_')}"`);
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.send(buffer);
+};
+
+router.get('/work/orders/:id/parcels/:shipmentId/photo', validateWorkParcel, validateRequest, asyncHandler(async (req, res) => {
+  sendProof(res, await getProofPhoto(req.user, req.params.id, req.params.shipmentId));
+}));
+
+// @route  GET /staff/work/orders/:id/parcels/:shipmentId/photos/:photoId — one proof of several (private; 'legacy' = the old single photo)
+router.get('/work/orders/:id/parcels/:shipmentId/photos/:photoId', validateWorkParcelPhoto, validateRequest, asyncHandler(async (req, res) => {
+  sendProof(res, await getProofPhoto(req.user, req.params.id, req.params.shipmentId, req.params.photoId));
 }));
 
 // @route  POST /staff/work/orders/:id/lines/:itemId/stock  { stock, supplierName? } — procurement
@@ -490,45 +489,48 @@ router.post('/work/orders/:id/lines/:itemId/payment', validatePaymentInitiated, 
   res.json({ success: true, order: await setPaymentInitiated(req.user, req.params.id, req.params.itemId, req.body, req) });
 }));
 
-// @route  PUT /staff/work/orders/:id/parcels/:shipmentId  multipart: courierName?, trackingNumber?, photo? — correct dispatch details (30 min)
+// @route  PUT /staff/work/orders/:id/parcels/:shipmentId  multipart: courierName?, trackingNumber?, photo[]?, removePhotoIds(JSON)? — correct dispatch details (30 min)
 router.put(
   '/work/orders/:id/parcels/:shipmentId',
   concurrentUploadGuard,
-  uploadProofPhoto,
-  handleProofPhotoError,
+  attachmentSizeGuard,
+  uploadProofPhotos,
+  handleAttachmentError,
   validateEditParcel,
   validateRequest,
   asyncHandler(async (req, res) => {
-    const { courierName, trackingNumber } = req.body;
-    res.json({ success: true, order: await editShipment(req.user, req.params.id, req.params.shipmentId, { courierName, trackingNumber }, req.file, req) });
+    const { courierName, trackingNumber, removePhotoIds } = req.body;
+    res.json({ success: true, order: await editShipment(req.user, req.params.id, req.params.shipmentId, { courierName, trackingNumber, removePhotoIds }, req.files || [], req) });
   }),
 );
 
-// @route  POST /staff/work/orders/:id/ship  multipart: photo, itemIds?, courierName?, trackingNumber? — procurement
+// @route  POST /staff/work/orders/:id/ship  multipart: photo[] (1–20), itemIds?, courierName?, trackingNumber? — procurement
 router.post(
   '/work/orders/:id/ship',
   concurrentUploadGuard,
-  uploadProofPhoto,
-  handleProofPhotoError,
+  attachmentSizeGuard,
+  uploadProofPhotos,
+  handleAttachmentError,
   validateShipWithProof,
   validateRequest,
   asyncHandler(async (req, res) => {
     const { itemIds = [], courierName, trackingNumber } = req.body;
-    res.json({ success: true, order: await shipWithProof(req.user, req.params.id, { itemIds, courierName, trackingNumber }, req.file, req) });
+    res.json({ success: true, order: await shipWithProof(req.user, req.params.id, { itemIds, courierName, trackingNumber }, req.files || [], req) });
   }),
 );
 
-// @route  POST /staff/work/orders/:id/dispatch-own  multipart: courierName, trackingNumber, itemIds?, photo? — procurement, our own warehouse
+// @route  POST /staff/work/orders/:id/dispatch-own  multipart: courierName, trackingNumber, itemIds?, photo[]? — procurement, our own warehouse
 router.post(
   '/work/orders/:id/dispatch-own',
   concurrentUploadGuard,
-  uploadProofPhoto,
-  handleProofPhotoError,
+  attachmentSizeGuard,
+  uploadProofPhotos,
+  handleAttachmentError,
   validateDispatchOwnStock,
   validateRequest,
   asyncHandler(async (req, res) => {
     const { itemIds = [], courierName, trackingNumber } = req.body;
-    res.json({ success: true, order: await dispatchOwnStock(req.user, req.params.id, { itemIds, courierName, trackingNumber }, req.file, req) });
+    res.json({ success: true, order: await dispatchOwnStock(req.user, req.params.id, { itemIds, courierName, trackingNumber }, req.files || [], req) });
   }),
 );
 

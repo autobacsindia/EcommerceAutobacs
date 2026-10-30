@@ -63,6 +63,7 @@ import {
 import { onChatEvent } from '../services/chatEvents.js';
 import { markOnline, markOffline } from '../services/chatPresence.js';
 import { uploadChatFiles, handleChatUploadError } from '../services/chatAttachmentService.js';
+import { attachmentSizeGuard } from '../middleware/uploadMiddleware.js';
 
 /**
  * Team chat API (/api/v1/chat) — admins and active staff only. Customers get 403
@@ -258,7 +259,7 @@ const asArray = (value) => {
 // POST /chat/channels/:id/messages — JSON, or multipart when files are attached.
 // multer ignores non-multipart bodies, so one route serves both.
 router.post('/channels/:id/messages',
-  uploadChatFiles, handleChatUploadError,
+  attachmentSizeGuard, uploadChatFiles, handleChatUploadError,
   validateChannelIdParam, validateSendMessage, validateRequest,
   asyncHandler(async (req, res) => {
     const { message, duplicate, thread } = await sendMessage(req.user, req.params.id, {

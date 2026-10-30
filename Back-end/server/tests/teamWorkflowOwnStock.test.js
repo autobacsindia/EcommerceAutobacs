@@ -165,13 +165,13 @@ describe('our warehouse → courier + tracking → operations → delivered', ()
     expect((await Order.findById(id).lean()).shipments).toHaveLength(0);
   });
 
-  it('takes an optional photo — and refuses one that is not really an image, storing nothing', async () => {
+  it('takes optional proofs — and refuses one that is not really a photo or PDF, storing nothing', async () => {
     const p = await staff('procurement');
     const order = await paidOrder();
     const id = String(order._id);
     for (const itemId of ids(order)) await wf.setStock(p, id, itemId, { stock: 'own_stock' }, req);
 
-    await expect(wf.dispatchOwnStock(p, id, TRACK, photo(Buffer.from('%PDF-1.4 not a photo')), req)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(wf.dispatchOwnStock(p, id, TRACK, [photo(), photo(Buffer.from('<html>not a photo</html>'))], req)).rejects.toMatchObject({ statusCode: 400 });
     expect(stored.size).toBe(0);
 
     const view = await wf.dispatchOwnStock(p, id, TRACK, photo(), req);
