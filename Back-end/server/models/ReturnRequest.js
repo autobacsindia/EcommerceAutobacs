@@ -1,5 +1,16 @@
 import mongoose from "mongoose";
-import { RETURN_REASONS, IN_FLIGHT_RETURN_STATUSES, FAULTS, DISPOSITIONS } from "../config/returnPolicy.js";
+import {
+  RETURN_REASONS,
+  IN_FLIGHT_RETURN_STATUSES,
+  FAULTS,
+  DISPOSITIONS,
+  RETURN_DESTINATIONS,
+  PICKUP_MODES,
+  FAILED_INSPECTION_ACTIONS,
+  SUPPLIER_CLAIM_STATUSES,
+  SUPPLIER_SETTLEMENT_KINDS,
+  SUPPLIER_MONEY_METHODS,
+} from "../config/returnPolicy.js";
 import { revertFields } from "./shared/offlineRefundFields.js";
 
 /**
@@ -51,6 +62,91 @@ const ServiceLineSchema = new mongoose.Schema({
   amountPaise:     { type: Number, min: 0, required: true },
   reductionReason: { type: String, trim: true, maxlength: 500, default: null },
 }, { _id: false });
+
+/**
+ * A photo or PDF staff attached in the team panel (inspection photos, the supplier's
+ * check, a courier receipt). Private, like parcel proofs: served only through the
+ * staff route after the same permission check as the return itself.
+ */
+const StaffFileSchema = new mongoose.Schema({
+  purpose:     { type: String, enum: ['inspection', 'supplier_check', 'supplier_ship_back', 'pickup'], required: true },
+  claimId:     { type: mongoose.Schema.Types.ObjectId, default: null },
+  publicId:    { type: String, required: true },
+  provider:    { type: String, enum: ['cloudinary', 'r2'], default: 'cloudinary' },
+  url:         String,
+  contentType: { type: String, default: 'image/jpeg' },
+  bytes:       { type: Number, default: 0 },
+  name:        { type: String, default: '' },
+  uploadedAt:  { type: Date, default: Date.now },
+  uploadedBy:  { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+});
+
+const ByAt = {
+  by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  byName: { type: String, default: '' },
+  at: { type: Date, default: null },
+};
+
+/**
+ * The supplier track (rule 9.5B): procurement claims from the supplier the lines that
+ * came from them, by hand, and records each step here; accounts confirms the money.
+ * One claim per supplier on the return. Never blocks the customer refund.
+ */
+const SupplierClaimSchema = new mongoose.Schema({
+  status:       { type: String, enum: SUPPLIER_CLAIM_STATUSES, default: 'open' },
+  supplierName: { type: String, trim: true, maxlength: 120, required: true },
+  supplier:     { type: mongoose.Schema.Types.ObjectId, ref: "Supplier", default: null },
+  // The order lines (Order.items[]._id) this claim covers.
+  orderItemIds: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+  // The supplier payment request we paid for these lines (PR-0000), when one exists.
+  paymentRequest:    { type: mongoose.Schema.Types.ObjectId, ref: "PaymentRequest", default: null },
+  paymentRequestRef: { type: String, trim: true, maxlength: 20, default: null },
+  openedAt:     { type: Date, default: Date.now },
+  // The supplier's answer.
+  answer: {
+    accepted:  { type: Boolean, default: null },
+    reference: { type: String, trim: true, maxlength: 120, default: null }, // their RMA / reference
+    note:      { type: String, trim: true, maxlength: 1000, default: null },
+    ...ByAt,
+  },
+  // The item on its way back to the supplier (when it came to our warehouse first).
+  shipBack: {
+    courier:        { type: String, trim: true, maxlength: 80, default: null },
+    trackingNumber: { type: String, trim: true, maxlength: 80, default: null },
+    ...ByAt,
+  },
+  // The supplier's own inspection.
+  supplierCheck: {
+    passed: { type: Boolean, default: null },
+    notes:  { type: String, trim: true, maxlength: 1000, default: null },
+    ...ByAt,
+  },
+  // What the supplier promised, and — set by accounts, once — that it arrived.
+  settlement: {
+    kind:        { type: String, enum: [...SUPPLIER_SETTLEMENT_KINDS, null], default: null },
+    amountPaise: { type: Number, min: 0, default: null },
+    reference:   { type: String, trim: true, maxlength: 120, default: null },
+    promisedAt:  { type: Date, default: null },
+    promisedBy:  { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    promisedByName: { type: String, default: '' },
+    received: {
+      method:          { type: String, enum: [...SUPPLIER_MONEY_METHODS, null], default: null },
+      utr:             { type: String, trim: true, maxlength: 120, default: null },
+      deductedFromRef: { type: String, trim: true, maxlength: 20, default: null }, // PR-0000
+      deductedFrom:    { type: mongoose.Schema.Types.ObjectId, ref: "PaymentRequest", default: null },
+      note:            { type: String, trim: true, maxlength: 500, default: null },
+      ...ByAt,
+    },
+  },
+  // Supplier rejected a claim operations confirmed as OUR fault: the customer is still
+  // refunded, and the loss is recorded against the supplier here.
+  loss: {
+    recorded: { type: Boolean, default: false },
+    note:     { type: String, trim: true, maxlength: 1000, default: null },
+    ...ByAt,
+  },
+  closedAt: { type: Date, default: null },
+});
 
 const ReturnRequestSchema = new mongoose.Schema({
   order: {
@@ -149,6 +245,30 @@ const ReturnRequestSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   // The staff member who raised a `staff` return.
   raisedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  // Snapshots from the order, for the team panel: the seller (Order.salesUser) is told
+  // at each step and sees the return under "Mine"; the phone counts a guest customer's
+  // earlier returns (the repeat-returner flag). Absent on rows from before 2026-10-30.
+  seller:        { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  customerPhone: { type: String, trim: true, maxlength: 15, default: null },
+  // Check 1 (rule 9.2): who reviewed the evidence, and when — the 1-day target is
+  // measured from createdAt to reviewedAt.
+  reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  reviewedAt: { type: Date, default: null },
+  // Refund only in phase 1. Same-product replacement is phase 2.
+  resolution: { type: String, enum: ["refund"], default: "refund" },
+  // Where the item goes, confirmed at check 1 (pre-filled from the order).
+  destination: {
+    kind:         { type: String, enum: [...RETURN_DESTINATIONS, null], default: null },
+    supplierName: { type: String, trim: true, maxlength: 120, default: null },
+  },
+  // How it travels back. `courier` below holds the courier + AWB for both courier
+  // modes; `bookedBy` says who booked a direct-to-supplier pickup.
+  pickup: {
+    mode:     { type: String, enum: [...PICKUP_MODES, null], default: null },
+    bookedBy: { type: String, enum: ['us', 'supplier', null], default: null },
+    note:     { type: String, trim: true, maxlength: 500, default: null },
+    at:       { type: Date, default: null },
+  },
   // A customer-reason return is allowed only for goods that are unused, uninstalled
   // and in the original box. When the customer (or staff, for them) declared that.
   unusedDeclaredAt: { type: Date, default: null },
@@ -200,7 +320,23 @@ const ReturnRequestSchema = new mongoose.Schema({
     // What happens to the item now. A record only — stock is the coarse in/low/out
     // enum, so nothing here moves a quantity.
     disposition: { type: String, enum: [...DISPOSITIONS, null], default: null },
+    // Failed (customer damage): sent back at their cost, or held then disposed of.
+    failAction:  { type: String, enum: [...FAILED_INSPECTION_ACTIONS, null], default: null },
+    holdUntil:   { type: Date, default: null },
+    // Direct-to-supplier: procurement records the supplier's check; operations then
+    // confirms it (operations always owns the fault decision towards the customer).
+    supplierCheck: {
+      passed: { type: Boolean, default: null },
+      notes:  { type: String, trim: true, maxlength: 1000, default: null },
+      ...ByAt,
+    },
   },
+
+  // Photos / PDFs staff attached in the team panel (see StaffFileSchema).
+  staffFiles: { type: [StaffFileSchema], default: [] },
+
+  // The supplier track — one claim per supplier the returned lines came from.
+  supplierClaims: { type: [SupplierClaimSchema], default: [] },
 
   // Each failed pickup attempt. MAX_FAILED_PICKUPS of them cancel the request.
   pickupAttempts: {

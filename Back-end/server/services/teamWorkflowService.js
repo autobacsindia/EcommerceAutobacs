@@ -309,6 +309,10 @@ function detail(u, o) {
     canContactCustomer: can.decide(u, o),
     // The customer's saved bank account (refunds / NEFT): accounts and admin.
     canSeeCustomerBank: can.accounts(u),
+    // "Raise return" on a paid order that has reached the customer: GTM sellers,
+    // operations and admin (services/returnService.js re-checks every rule).
+    canRaiseReturn: (isAdmin(u) || onTeam(u, STAFF_TEAMS.OPERATIONS) || canSell(u))
+      && o.paymentStatus === 'paid' && ['shipped', 'delivered', 'returned'].includes(o.status),
   };
 }
 

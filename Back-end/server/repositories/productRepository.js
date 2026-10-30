@@ -131,6 +131,16 @@ class ProductRepository {
   }
 
   /**
+   * Name and return policy of the given products (deleted ones included — an order line
+   * keeps pointing at a product after it leaves the catalogue). Lean, bounded by `ids`.
+   * @returns {Promise<Map<string, {name: string, returnPolicy?: object}>>}
+   */
+  async findReturnPolicies(ids) {
+    const rows = await Product.find({ _id: { $in: ids } }).select('name returnPolicy').lean();
+    return new Map(rows.map((p) => [String(p._id), p]));
+  }
+
+  /**
    * Find products by query
    */
   async find(query, options = {}) {

@@ -546,8 +546,9 @@ describe('Payment requests', () => {
     });
 
     it('a team that only raises requests is told about nothing', async () => {
-      await expense(ops.session, { payee: BANK });
-      const { body } = await bell(ops);
+      // Marketing: operations is no longer such a team — it works the return queues.
+      await expense(marketing.session, { payee: BANK });
+      const { body } = await bell(marketing);
       // Its own request is not work waiting ON it — it is waiting on accounts.
       expect(body.items).toEqual([]);
       expect(body.total).toBe(0);

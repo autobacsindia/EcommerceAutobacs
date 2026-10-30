@@ -2,6 +2,7 @@ import express from "express";
 import {
   getReturnUploadSignature,
   createReturnRequest,
+  estimateReturn,
   getMyReturns,
   cancelMyReturn,
   getAllReturns,
@@ -19,6 +20,7 @@ import {
 import { protect, admin } from "../middleware/authMiddleware.js";
 import {
   validateReturnRequest,
+  validateReturnEstimate,
   validateReturnReview,
   validateRefundsQuery,
   validateIdParam,
@@ -33,6 +35,8 @@ const router = express.Router();
 // ── Customer ────────────────────────────────────────────────────────────────
 router.post("/upload-signature", protect, getReturnUploadSignature);
 router.post("/", protect, validateReturnRequest, createReturnRequest);
+// What the customer would roughly get back for the chosen lines (no deductions yet).
+router.post("/estimate", protect, validateReturnEstimate, estimateReturn);
 router.get("/my-returns", protect, getMyReturns);
 router.patch("/:id/cancel", protect, validateIdParam, cancelMyReturn);
 

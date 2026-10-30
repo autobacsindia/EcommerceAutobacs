@@ -107,6 +107,35 @@ class OrderRepository extends BaseRepository {
     return Order.findById(orderId).populate('items.product', 'name');
   }
 
+  /**
+   * An order as a STAFF-raised return needs it: the whole document — parcels,
+   * cancellations and workflow lines decide which units are still returnable and where
+   * each line came from. No ownership filter: the caller is team staff raising it on the
+   * customer's behalf (guest and legacy orders included).
+   *
+   * NOT populated on purpose: populating `items.product` turns a line whose product has
+   * since left the catalogue into `product: null`, and the line would then look like a
+   * custom (non-catalogue) line that can never be returned. The caller looks the
+   * products up by id instead (productRepository.findReturnPolicies).
+   */
+  async findForReturn(orderId) {
+    return Order.findById(orderId).lean();
+  }
+
+  /** The same, for the customer who owns the order (a storefront return). */
+  async findOwnedForReturn(orderId, userId) {
+    return Order.findOne({ _id: orderId, user: userId }).lean();
+  }
+
+  /**
+   * Replace the order's one-return summary (the legacy `returnRequest` field older admin
+   * views read). Replaced whole, so a previous return's leaves (approvedAt, rejectedReason…)
+   * can never be read as this one's.
+   */
+  async setReturnRequestSummary(orderId, summary) {
+    return Order.updateOne({ _id: orderId }, { $set: { returnRequest: summary } });
+  }
+
   /** Mirror the return-request status onto the order summary subdoc. */
   async setReturnRequestStatus(orderId, status) {
     return Order.findByIdAndUpdate(orderId, { 'returnRequest.status': status });

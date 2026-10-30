@@ -24,6 +24,18 @@
  *   order cancelled               #procurement   procurement — stop sourcing
  *   consultation request          #sales         sales — follow up
  *
+ *   RETURNS (job `post-return-update`, services/returnService.js):
+ *   return raised                 #operations    operations — check the evidence (1 day)
+ *   return raised on the website  #sales         the seller (website: sales heads) — call the customer
+ *   return approved / rejected    #sales         the seller — tell the customer
+ *   return goes to the supplier   #procurement   procurement — arrange the pickup
+ *   two pickups failed            #sales         the seller — the return was cancelled
+ *   passed inspection             #accounts      accounts — send the refund
+ *   failed inspection             #sales         the seller — tell the customer
+ *   supplier claim opened         #procurement   procurement — contact the supplier
+ *   supplier promised money       #accounts      accounts — confirm when it arrives
+ *   refund sent                   #sales         the seller — tell the customer
+ *
  * #company is never used: it is for people, not for the order feed.
  *
  * ── HOW THEY ARRIVE ─────────────────────────────────────────────────────────────
@@ -53,6 +65,7 @@ import { postSystemMessage } from './chatService.js';
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import consultationRepository from '../repositories/consultationRepository.js';
+import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import { orderNumber } from './invoiceService.js';
 import { variantDisplayName } from '../utils/orderLines.js';
 
@@ -281,6 +294,117 @@ const WORKFLOW_EVENTS = {
       text: `🏁 Delivered ${orderNumber(order)} — ${customerOf(order)}${by ? ` (confirmed by ${by})` : ''}. ${address(owners, 'GTM')}: a good moment to check they are happy.`,
     });
   },
+};
+
+/**
+ * Return steps, delivered by the chat-only job `post-return-update` ({ event, returnId }).
+ * One thread per order per space, like every order update.
+ */
+export const RETURN_CHAT_JOB = 'post-return-update';
+
+const returnItems = (rr) => (rr.items || [])
+  .map((i) => `${variantDisplayName(i.product?.name, i.variantLabel)}${i.quantity > 1 ? ` ×${i.quantity}` : ''}`)
+  .join(', ') || 'items';
+const returnTag = (rr) => `return ${idOf(rr._id).slice(-8).toUpperCase()}`;
+
+const RETURN_EVENTS = {
+  raised_ops: (order, rr) => orderPost(order, {
+    space: SPACE.operations,
+    key: `return-raised-${idOf(rr._id)}`,
+    text: `↩️ New ${returnTag(rr)} on ${orderNumber(order)} — ${returnItems(rr)} — ${customerOf(order)}. Operations: check the photos today.`,
+  }),
+  raised_sales: async (order, rr) => {
+    const owners = await salesOwners(order);
+    return orderPost(order, {
+      space: SPACE.sales,
+      key: `return-raised-sales-${idOf(rr._id)}`,
+      mention: owners,
+      text: `↩️ ${customerOf(order)} asked to return ${returnItems(rr)} on ${orderNumber(order)} (website). ${address(owners, 'GTM')}: please call them.`,
+    });
+  },
+  approved: async (order, rr) => {
+    const owners = await salesOwners(order);
+    const where = rr.destination?.kind === 'supplier' ? `straight to ${rr.destination.supplierName}` : 'to our warehouse';
+    return orderPost(order, {
+      space: SPACE.sales,
+      key: `return-approved-${idOf(rr._id)}`,
+      mention: owners,
+      text: `✅ ${returnTag(rr)} on ${orderNumber(order)} approved — pickup ${where}. ${address(owners, 'GTM')}: let ${customerOf(order)} know.`,
+    });
+  },
+  rejected: async (order, rr) => {
+    const owners = await salesOwners(order);
+    return orderPost(order, {
+      space: SPACE.sales,
+      key: `return-rejected-${idOf(rr._id)}`,
+      mention: owners,
+      text: `⛔ ${returnTag(rr)} on ${orderNumber(order)} rejected — ${rr.rejectionReason || 'see the return'}. ${address(owners, 'GTM')}: please call ${customerOf(order)}.`,
+    });
+  },
+  supplier_pickup: (order, rr) => orderPost(order, {
+    space: SPACE.procurement,
+    key: `return-supplier-pickup-${idOf(rr._id)}`,
+    text: `🚚 ${returnTag(rr)} on ${orderNumber(order)} goes straight to ${rr.destination?.supplierName || 'the supplier'} — ${returnItems(rr)}. Procurement: arrange the pickup.`,
+  }),
+  pickup_cancelled: async (order, rr) => {
+    const owners = await salesOwners(order);
+    return orderPost(order, {
+      space: SPACE.sales,
+      key: `return-pickup-cancelled-${idOf(rr._id)}`,
+      mention: owners,
+      text: `⚠️ ${returnTag(rr)} on ${orderNumber(order)} was cancelled after two failed pickups. ${address(owners, 'GTM')}: please call ${customerOf(order)}.`,
+    });
+  },
+  inspected_pass: (order, rr) => orderPost(order, {
+    space: SPACE.accounts,
+    key: `return-passed-${idOf(rr._id)}`,
+    text: `🧾 ${returnTag(rr)} on ${orderNumber(order)} passed inspection — ${returnItems(rr)}. Accounts: please send the refund from Return refunds.`,
+  }),
+  inspected_fail: async (order, rr) => {
+    const owners = await salesOwners(order);
+    return orderPost(order, {
+      space: SPACE.sales,
+      key: `return-failed-${idOf(rr._id)}`,
+      mention: owners,
+      text: `⛔ ${returnTag(rr)} on ${orderNumber(order)} failed inspection — ${rr.inspection?.notes || 'see the return'}. ${address(owners, 'GTM')}: please call ${customerOf(order)}.`,
+    });
+  },
+  supplier_claim_opened: (order, rr) => orderPost(order, {
+    space: SPACE.procurement,
+    key: `return-claim-${idOf(rr._id)}`,
+    text: `📮 ${returnTag(rr)} on ${orderNumber(order)}: claim from ${(rr.supplierClaims || []).map((c) => c.supplierName).join(', ') || 'the supplier'}. Procurement: please contact them.`,
+  }),
+  settlement_promised: (order, rr, { claimId }) => {
+    const claim = (rr.supplierClaims || []).find((c) => idOf(c._id) === String(claimId));
+    if (!claim) return null;
+    const amount = claim.settlement?.amountPaise ? ` ${inr(claim.settlement.amountPaise / 100)}` : '';
+    return orderPost(order, {
+      space: SPACE.accounts,
+      key: `return-promised-${idOf(rr._id)}-${claimId}`,
+      text: `💰 ${claim.supplierName} promised${amount} (${String(claim.settlement?.kind || '').replace('_', ' ')}) for ${returnTag(rr)} on ${orderNumber(order)}. Accounts: confirm it when it arrives.`,
+    });
+  },
+  // Can recur: a withdrawn offline record can be refunded again — keyed by the job.
+  refunded: async (order, rr, _data, { jobId }) => {
+    const owners = await salesOwners(order);
+    return orderPost(order, {
+      space: SPACE.sales,
+      key: keyOf(`return-refunded-${idOf(rr._id)}`, jobId),
+      mention: owners,
+      text: `💸 Refund of ${inr(rr.refund?.finalAmount)} sent for ${returnTag(rr)} on ${orderNumber(order)}. ${address(owners, 'GTM')}: let ${customerOf(order)} know.`,
+    });
+  },
+};
+export const RETURN_CHAT_EVENTS = Object.freeze(Object.keys(RETURN_EVENTS));
+
+UPDATES[RETURN_CHAT_JOB] = async (data, ctx) => {
+  const build = RETURN_EVENTS[data?.event];
+  if (!build) return null;
+  const rr = await returnRequestRepository.findById(data.returnId).populate('items.product', 'name').lean();
+  if (!rr) return null;
+  const order = await loadOrder(rr.order);
+  if (!order) return null;
+  return build(order, rr, data, ctx);
 };
 
 export const WORKFLOW_CHAT_JOB = 'post-team-chat-update';
