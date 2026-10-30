@@ -16,6 +16,7 @@ import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
 import ParcelEta from './ParcelEta';
 import OrderJourney from '@/components/orders/OrderJourney';
+import RaiseReturnButton from '@/components/staff/returns/RaiseReturnDialog';
 import FilePicker from '@/components/payments/FilePicker';
 import { MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD, PHOTO_OR_PDF } from '@/lib/attachments';
 
@@ -411,6 +412,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
       )}
 
       {o.canSeeCustomerBank && <CustomerBankCard kind="order" id={o.id} />}
+
+      {o.canRaiseReturn && <div><RaiseReturnButton orderId={o.id} /></div>}
 
       {/* Refunds */}
       {o.cancellations.length > 0 && (
