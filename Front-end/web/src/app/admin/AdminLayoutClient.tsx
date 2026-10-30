@@ -52,6 +52,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/orders', label: 'Orders', icon: Package },
       { href: '/admin/returns', label: 'Returns', icon: Undo2 },
+      { href: '/admin/returns-workflow', label: 'Returns workflow', icon: Undo2 },
       { href: '/admin/refunds', label: 'Refunds', icon: HandCoins },
       { href: '/admin/spin', label: 'Spin to Win', icon: FerrisWheel },
       /*

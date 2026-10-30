@@ -211,6 +211,13 @@ export const staffKeys = {
   /** Team workflow — invalidate `orders()` after any action, since one action moves an order between lists. */
   workQueue: (queue: string, filters: object = {}) => [...staffKeys.orders(), 'work', queue, filters] as const,
   workOrder: (id: string) => [...staffKeys.orders(), 'work-order', id] as const,
+  /** Returns in the team panel — invalidate `returns()` after any return action. */
+  returns: () => [...staffKeys.all, 'returns'] as const,
+  returnList: (queue: string) => [...staffKeys.returns(), 'list', queue] as const,
+  returnOne: (id: string) => [...staffKeys.returns(), 'one', id] as const,
+  returnPreview: (id: string, choices: object = {}) => [...staffKeys.returns(), 'preview', id, choices] as const,
+  suppliersOwe: () => [...staffKeys.returns(), 'owed'] as const,
+  returnOptions: (orderId: string) => [...staffKeys.returns(), 'options', orderId] as const,
   /** A customer's saved bank account, as seen from one quotation / order (masked). */
   customerBanks: () => [...staffKeys.all, 'customer-bank'] as const,
   customerBank: (kind: string, id: string) => [...staffKeys.customerBanks(), kind, id] as const,
