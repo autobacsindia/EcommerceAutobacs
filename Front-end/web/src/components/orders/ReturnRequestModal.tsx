@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, CheckCircle, ChevronRight, ChevronLeft, AlertCircle, Video, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api';
-import { API_ENDPOINTS, RETURN_REASONS, RETURN_WINDOW_DAYS } from '@/lib/constants';
+import {
+  API_ENDPOINTS, RETURN_REASONS, RETURN_VIDEO_ABOVE_RUPEES, RETURN_WINDOW_DAYS, RETURN_WINDOW_DAYS_OURS,
+} from '@/lib/constants';
 import {
   getReturnUploadSignature,
   uploadReturnFile,
@@ -19,9 +21,13 @@ interface OrderItem {
   price: number;
   name?: string;
   image?: string;
+  /** When THIS line was delivered (its own parcel on a split order) — drives the 4-day check. */
+  deliveredAt?: string | null;
 }
 
 interface SelectedItem { productId: string; quantity: number }
+/** POST /returns/estimate — what the server says would come back, in rupees. */
+interface Estimate { goods: number; shippingShare: number; total: number; pickupCostDeducted: boolean; installationOnBill: boolean }
 interface Uploaded {
   publicId: string;
   // Which store holds it. Sent back with the ref so the API verifies against the
@@ -36,9 +42,10 @@ interface ReturnRequestModalProps {
   orderId: string;
   orderNumber: string;
   /**
-   * ELIGIBLE items only — delivered, and still inside their own return window. On a
-   * split order each line's window runs from the parcel it arrived in, so the caller
-   * filters (see lib/orderFulfilment.ts) rather than this modal re-deriving it.
+   * ELIGIBLE items only — delivered, and still inside the LONGER (our-fault, 7-day)
+   * window. On a split order each line's window runs from the parcel it arrived in, so
+   * the caller filters (see lib/orderFulfilment.ts). The shorter 4-day window for the
+   * customer's own reason is applied here, per line, from `item.deliveredAt`.
    */
   items: OrderItem[];
   /**
@@ -64,6 +71,10 @@ const MB = 1024 * 1024;
 const VIDEO_MAX = 60 * MB;
 const PROOF_MAX = 15 * MB;
 const PHOTO_MAX = 10 * MB;
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+const reasonFault = (value: string) => RETURN_REASONS.find((r) => r.value === value)?.fault;
+const rupees = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
 export default function ReturnRequestModal({ orderId, orderNumber, items, excludedCount = 0, deliveredAt, fullRefundOnly = false, paidByLabel, onClose, onSuccess }: ReturnRequestModalProps) {
   const [currentStep, setCurrentStep] = useState(1);
@@ -74,7 +85,10 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
   const [proof, setProof] = useState<Uploaded | null>(null);
   const [photos, setPhotos] = useState<Uploaded[]>([]);
   const [uploading, setUploading] = useState<{ slot: string; pct: number } | null>(null);
+  const [unusedDeclared, setUnusedDeclared] = useState(false);
   const [policyAccepted, setPolicyAccepted] = useState(false);
+  const [estimate, setEstimate] = useState<{ key: string; value: Estimate | null; failed: boolean } | null>(null);
+  const [now] = useState(() => Date.now());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -112,11 +126,50 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
   const totalSteps = 4;
 
   const daysSinceDelivery = deliveredAt
-    ? Math.floor((Date.now() - new Date(deliveredAt).getTime()) / (1000 * 60 * 60 * 24))
+    ? Math.floor((now - new Date(deliveredAt).getTime()) / DAY_MS)
     : 0;
 
-  // ── Eligibility gate: 4-day window ─────────────────────────────────────────
-  if (deliveredAt && daysSinceDelivery > RETURN_WINDOW_DAYS) {
+  /*
+    The customer's own reason (ordered wrong, changed mind) has the SHORTER window. A line
+    without a delivery date on the item falls back to the order's; the server re-checks
+    every line either way, this only stops the customer picking a reason it will refuse.
+  */
+  const selectedLines = Array.from(selectedItems.entries()).map(([id, sel]) => ({ id, sel, item: items.find((i) => i._id === id) }));
+  const customerReasonClosed = selectedLines.some(({ item }) => {
+    const at = item?.deliveredAt || deliveredAt;
+    return at ? (now - new Date(at).getTime()) / DAY_MS > RETURN_WINDOW_DAYS : false;
+  });
+  const isCustomerReason = reasonFault(returnReason) === 'customer';
+  // Mirrors config/returnPolicy.js videoRequiredFor: transit damage, or a line worth more than ₹10,000.
+  const needsVideo = returnReason === 'transit_damage'
+    || selectedLines.some(({ sel, item }) => (item?.price || 0) * sel.quantity > RETURN_VIDEO_ABOVE_RUPEES);
+  const estimateKey = JSON.stringify([returnReason, selectedLines.map(({ id, sel }) => [id, sel.quantity])]);
+
+  /*
+    The refund estimate comes from the SERVER (POST /returns/estimate), never from
+    client maths — money is never computed in the browser. Fetched on the review step,
+    once per selection; a failure just hides the figure, it never blocks the request.
+  */
+  const estimateBody = useMemo(() => ({
+    orderId,
+    items: Array.from(selectedItems.entries()).map(([itemId, s]) => ({ itemId, quantity: s.quantity, reason: returnReason })),
+  }), [orderId, selectedItems, returnReason]);
+  useEffect(() => {
+    if (currentStep !== 4 || !returnReason || !estimateBody.items.length) return;
+    if (estimate?.key === estimateKey) return;
+    let live = true;
+    apiClient.post<{ success: boolean; estimate?: Estimate }>(API_ENDPOINTS.RETURN_ESTIMATE, estimateBody)
+      .then((res) => {
+        const value = typeof res?.estimate?.total === 'number' ? res.estimate : null;
+        if (live) setEstimate({ key: estimateKey, value, failed: !value });
+      })
+      .catch(() => { if (live) setEstimate({ key: estimateKey, value: null, failed: true }); });
+    return () => { live = false; };
+  }, [currentStep, returnReason, estimateBody, estimateKey, estimate?.key]);
+  const shownEstimate = estimate?.key === estimateKey ? estimate : null;
+
+  // ── Eligibility gate: the longest (our-fault) window ───────────────────────
+  if (deliveredAt && daysSinceDelivery > RETURN_WINDOW_DAYS_OURS) {
     return (
       <Shell>
         <div className="p-6 max-w-md">
@@ -127,7 +180,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
           </div>
           <h3 className="text-xl font-bold text-center mb-2">Return window closed</h3>
           <p className="text-ink-muted text-center mb-6">
-            Returns must be raised within {RETURN_WINDOW_DAYS} days of delivery. This order was delivered {daysSinceDelivery} days ago.
+            Returns must be raised within {RETURN_WINDOW_DAYS_OURS} days of delivery. This order was delivered {daysSinceDelivery} days ago.
           </p>
           <button onClick={onClose} className="w-full bg-gold text-white px-4 py-3 rounded-lg font-medium">Close</button>
         </div>
@@ -230,12 +283,16 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
         break;
       case 2:
         if (!returnReason) return 'Select a reason for the return.';
+        if (isCustomerReason && customerReasonClosed) {
+          return `Returns for your own reason must be raised within ${RETURN_WINDOW_DAYS} days of delivery. If something is wrong with the item, pick that reason instead.`;
+        }
+        if (isCustomerReason && !unusedDeclared) return 'Please confirm the item is unused, not installed, and in its original box.';
         if (!description.trim()) return 'Describe the problem.';
         if (description.length > 2000) return 'Description cannot exceed 2000 characters.';
         break;
       case 3:
-        if (!video) return 'A continuous unboxing video is required.';
-        if (!proof) return 'Proof of purchase is required.';
+        if (photos.length === 0) return 'Add at least one photo of the item.';
+        if (needsVideo && !video) return 'A video is needed for transit damage, and for any item worth more than ₹10,000.';
         break;
       case 4: if (!policyAccepted) return 'Please accept the return policy to continue.'; break;
     }
@@ -260,15 +317,17 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
       setError(null);
       const payload = {
         orderId,
-        items: Array.from(selectedItems.values()).map((s) => ({ productId: s.productId, quantity: s.quantity, reason: returnReason })),
+        // The order line's own id: exact even when one product sits on two lines.
+        items: Array.from(selectedItems.entries()).map(([itemId, s]) => ({ itemId, quantity: s.quantity, reason: returnReason })),
         problemDescription: description.trim(),
+        ...(isCustomerReason && { unusedDeclared: true }),
         /*
           `provider` rides along so the API verifies each asset against the store
           it actually went to. Everything else about the file — size, format —
           the server re-derives there; these two fields are the whole claim.
         */
-        video: { publicId: video!.publicId, provider: video!.provider, resourceType: video!.resourceType },
-        proofOfPurchase: { publicId: proof!.publicId, provider: proof!.provider, resourceType: proof!.resourceType },
+        ...(video && { video: { publicId: video.publicId, provider: video.provider, resourceType: video.resourceType } }),
+        ...(proof && { proofOfPurchase: { publicId: proof.publicId, provider: proof.provider, resourceType: proof.resourceType } }),
         images: photos.map((p) => ({ publicId: p.publicId, provider: p.provider, resourceType: p.resourceType })),
       };
       await apiClient.post(API_ENDPOINTS.RETURN_CREATE, payload);
@@ -291,10 +350,10 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
           </div>
           <h3 className="text-2xl font-bold text-center mb-2">Request submitted</h3>
           <p className="text-ink-muted text-center mb-6">
-            Your return request for order #{orderNumber} has been received. We review every request within <strong>3–5 business days</strong> and will email you the decision.
+            Your return request for order #{orderNumber} has been received. We usually check it within <strong>one working day</strong> and will email you the decision.
           </p>
           <div className="bg-gold/10 border border-gold/40 rounded-lg p-4 mb-6 text-sm text-gold space-y-2">
-            <p>1. We review your request and the unboxing video.</p>
+            <p>1. We check your photos{video ? ' and video' : ''}.</p>
             <p>2. If approved, <strong>we arrange the return pickup</strong>.</p>
             <p>3. After the item reaches us and passes inspection, your refund is issued to your original payment method.</p>
           </div>
@@ -347,8 +406,8 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
               {excludedCount > 0 && (
                 <p className="text-sm text-ink-muted border border-hairline rounded-lg p-3">
                   {excludedCount === 1 ? '1 item from this order is' : `${excludedCount} items from this order are`}{' '}
-                  not shown: {excludedCount === 1 ? 'it has' : 'they have'} either not been delivered yet,
-                  or {excludedCount === 1 ? 'its' : 'their'} {RETURN_WINDOW_DAYS}-day return window has closed.
+                  not shown: {excludedCount === 1 ? 'it has' : 'they have'} not been delivered yet, {excludedCount === 1 ? 'is' : 'are'} already
+                  being returned, or {excludedCount === 1 ? 'its' : 'their'} {RETURN_WINDOW_DAYS_OURS}-day return window has closed.
                 </p>
               )}
             </div>
@@ -409,19 +468,36 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
           <div className="space-y-6">
             <div>
               <h4 className="font-bold text-lg mb-1">Reason for return</h4>
-              <p className="text-sm text-ink-muted mb-4">We accept returns only for these reasons.</p>
+              <p className="text-sm text-ink-muted mb-4">
+                If something is wrong with the item, you get everything back. For your own reason, it must be unused and in its box,
+                and the pickup cost is deducted.
+              </p>
             </div>
             <div className="space-y-3">
-              {RETURN_REASONS.map((reason) => (
-                <label key={reason.value} className={`flex p-4 border rounded-lg cursor-pointer transition ${returnReason === reason.value ? 'border-gold bg-gold/10' : 'border-hairline'}`}>
-                  <input type="radio" name="returnReason" value={reason.value} checked={returnReason === reason.value} onChange={(e) => setReturnReason(e.target.value)} className="h-4 w-4 text-gold mt-1" />
-                  <div className="ml-3">
-                    <span className="font-medium text-ink">{reason.label}</span>
-                    <p className="text-sm text-ink-muted mt-1">{reason.description}</p>
-                  </div>
-                </label>
-              ))}
+              {RETURN_REASONS.map((reason) => {
+                const closed = reason.fault === 'customer' && customerReasonClosed;
+                return (
+                  <label key={reason.value} className={`flex p-4 border rounded-lg transition ${closed ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${returnReason === reason.value ? 'border-gold bg-gold/10' : 'border-hairline'}`}>
+                    <input type="radio" name="returnReason" value={reason.value} checked={returnReason === reason.value} disabled={closed}
+                      onChange={(e) => setReturnReason(e.target.value)} className="h-4 w-4 text-gold mt-1" />
+                    <div className="ml-3">
+                      <span className="font-medium text-ink">{reason.label}</span>
+                      <p className="text-sm text-ink-muted mt-1">
+                        {closed ? `Only within ${RETURN_WINDOW_DAYS} days of delivery — that has passed.` : reason.description}
+                      </p>
+                    </div>
+                  </label>
+                );
+              })}
             </div>
+            {isCustomerReason && (
+              <label className="flex items-start gap-3 p-4 bg-obsidian-deep rounded-lg cursor-pointer">
+                <input type="checkbox" checked={unusedDeclared} onChange={(e) => setUnusedDeclared(e.target.checked)} className="h-5 w-5 text-gold rounded mt-0.5" />
+                <span className="text-sm text-ink/80">
+                  The item is unused, has not been installed, and is in its original box with all accessories, manuals and tags.
+                </span>
+              </label>
+            )}
             <div>
               <label htmlFor="description" className="block text-sm font-medium text-ink/80 mb-2">Describe the problem <span className="text-red-500">*</span></label>
               <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} maxLength={2000}
@@ -435,24 +511,19 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
         {currentStep === 3 && (
           <div className="space-y-6">
             <div>
-              <h4 className="font-bold text-lg mb-1">Mandatory evidence</h4>
-              <p className="text-sm text-ink-muted">A continuous, uncut unboxing video and proof of purchase are <strong>required</strong> — a request without both cannot be reviewed.</p>
+              <h4 className="font-bold text-lg mb-1">Photos{needsVideo ? ' and a video' : ''}</h4>
+              <p className="text-sm text-ink-muted">
+                At least one photo of the item is <strong>required</strong>.
+                {needsVideo
+                  ? ' A video is also required — for transit damage, and for any item worth more than ₹10,000.'
+                  : ' A video helps us decide faster, but is optional here.'}
+              </p>
             </div>
-
-            <UploadRow
-              icon={<Video className="h-5 w-5" />} label="Unboxing video" required uploaded={video} accept="video/*"
-              busy={uploading?.slot === 'video' ? uploading.pct : null} hint="Continuous, uncut, from the sealed package. Max 60MB."
-              onFile={(f) => handleUpload(f, 'video', 'video', VIDEO_MAX)} onRemove={() => setVideo(null)} />
-
-            <UploadRow
-              icon={<FileText className="h-5 w-5" />} label="Proof of purchase" required uploaded={proof} accept="image/*,application/pdf"
-              busy={uploading?.slot === 'proof' ? uploading.pct : null} hint="Invoice, order confirmation or payment receipt (image or PDF). Max 15MB."
-              onFile={(f) => handleUpload(f, 'proof', f.type === 'application/pdf' ? 'raw' : 'image', PROOF_MAX)} onRemove={() => setProof(null)} />
 
             <div>
               <UploadRow
-                icon={<ImageIcon className="h-5 w-5" />} label={`Photos (optional, up to 5)`} uploaded={null} accept="image/*"
-                busy={uploading?.slot === 'photo' ? uploading.pct : null} hint="Close-up photos of the issue. Max 10MB each." disabled={photos.length >= 5}
+                icon={<ImageIcon className="h-5 w-5" />} label="Photos (at least 1, up to 5)" required uploaded={null} accept="image/*"
+                busy={uploading?.slot === 'photo' ? uploading.pct : null} hint="Close-up photos of the item and the problem. Max 10MB each." disabled={photos.length >= 5}
                 onFile={(f) => handleUpload(f, 'photo', 'image', PHOTO_MAX)} onRemove={() => {}} />
               {photos.length > 0 && (
                 <ul className="mt-2 space-y-1">
@@ -465,6 +536,16 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
                 </ul>
               )}
             </div>
+
+            <UploadRow
+              icon={<Video className="h-5 w-5" />} label={needsVideo ? 'Video' : 'Video (optional)'} required={needsVideo} uploaded={video} accept="video/*"
+              busy={uploading?.slot === 'video' ? uploading.pct : null} hint="Show the item and the problem; for transit damage, the parcel as it arrived. Max 60MB."
+              onFile={(f) => handleUpload(f, 'video', 'video', VIDEO_MAX)} onRemove={() => setVideo(null)} />
+
+            <UploadRow
+              icon={<FileText className="h-5 w-5" />} label="Invoice (optional)" uploaded={proof} accept="image/*,application/pdf"
+              busy={uploading?.slot === 'proof' ? uploading.pct : null} hint="Only if you bought it somewhere other than this website account. Image or PDF, max 15MB."
+              onFile={(f) => handleUpload(f, 'proof', f.type === 'application/pdf' ? 'raw' : 'image', PROOF_MAX)} onRemove={() => setProof(null)} />
           </div>
         )}
 
@@ -483,11 +564,14 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
                 return <div key={id} className="text-ink/80">{(it?.product?.name || it?.name || 'Item')} × {s.quantity}</div>;
               })}
               <div className="pt-2 border-t border-hairline flex gap-4 text-ink-muted text-xs">
-                <span>Video ✓</span><span>Proof ✓</span>{photos.length > 0 && <span>{photos.length} photo(s)</span>}
+                <span>{photos.length} photo(s)</span>{video && <span>Video ✓</span>}{proof && <span>Invoice ✓</span>}
               </div>
             </div>
+            <EstimateBox estimate={shownEstimate} />
             <div className="bg-obsidian-deep rounded-lg p-4 text-xs text-ink-muted">
-              Refund (if approved) is issued to your original payment method after the item is received and passes inspection. The original delivery charge is not refundable. Approval is at our discretion, subject to warehouse verification.
+              {isCustomerReason
+                ? 'Refund (if approved) is the item price minus the real pickup cost, paid to your original payment method after the item reaches us unused and in its box. The original delivery charge and any installation charge are not refunded.'
+                : 'Refund (if approved) is paid to your original payment method after the item reaches us and we confirm the problem. When the fault is ours you get everything back, including the delivery charge share and any installation charge for it.'}
             </div>
             <label className="flex items-start gap-3 p-4 bg-obsidian-deep rounded-lg cursor-pointer">
               <input type="checkbox" checked={policyAccepted} onChange={(e) => setPolicyAccepted(e.target.checked)} className="h-5 w-5 text-gold rounded mt-0.5" />
@@ -520,6 +604,28 @@ function Shell({ children, wide }: { children: React.ReactNode; wide?: boolean }
   );
 }
 
+/** The server's estimate for the review step. Hidden when it could not be fetched. */
+function EstimateBox({ estimate }: { estimate: { value: Estimate | null; failed: boolean } | null }) {
+  if (!estimate) {
+    return <p className="flex items-center gap-2 text-sm text-ink-muted"><Loader2 className="h-4 w-4 animate-spin" /> Working out your refund…</p>;
+  }
+  const e = estimate.value;
+  if (!e) return null;
+  return (
+    <div className="border border-gold/30 bg-gold/5 rounded-lg p-4 text-sm space-y-1" data-testid="return-estimate">
+      <p className="font-medium text-ink">What you would get back (estimate)</p>
+      <Row k="Item(s)" v={rupees(e.goods)} />
+      {e.shippingShare > 0 && <Row k="Delivery charge share" v={rupees(e.shippingShare)} />}
+      <div className="flex justify-between pt-1 border-t border-hairline font-semibold">
+        <span className="text-ink">Estimated refund</span><span className="text-ink">{rupees(e.total)}</span>
+      </div>
+      {e.installationOnBill && <p className="text-xs text-ink-muted">Plus any installation charge on your bill for these items.</p>}
+      {e.pickupCostDeducted && <p className="text-xs text-ink-muted">Minus the real pickup cost, which we tell you before we refund.</p>}
+      <p className="text-xs text-ink-muted">The final amount is confirmed after the item reaches us.</p>
+    </div>
+  );
+}
+
 function Row({ k, v }: { k: string; v: string }) {
   return <div className="flex justify-between"><span className="text-ink-muted">{k}</span><span className="text-ink">{v}</span></div>;
 }
@@ -537,7 +643,7 @@ function UploadRow({
         <div className="text-gold">{icon}</div>
         <div className="flex-1">
           <p className="font-medium text-ink text-sm">{label}{required && <span className="text-red-500"> *</span>}</p>
-          <p className="text-xs text-ink-muted">{hint}</p>
+          <p className="text-xs text-ink-muted">{uploaded ? uploaded.fileName : hint}</p>
         </div>
         {uploaded ? (
           <div className="flex items-center gap-2">

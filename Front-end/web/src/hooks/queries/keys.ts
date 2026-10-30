@@ -268,5 +268,11 @@ export const attributionKeys = {
 /** `/admin/overview` — the admin's Company overview (teams, money waiting, activity). */
 export const overviewKeys = { all: ['admin-overview'] as const };
 
+// A customer's own returns, per order (the tracker on the order page).
+export const customerReturnKeys = {
+  all: ['customer-returns'] as const,
+  forOrder: (orderId: string) => ['customer-returns', 'order', orderId] as const,
+};
+
 /** `/notifications/summary` — what is waiting on me, for the header bell. */
 export const notificationKeys = { all: ['notifications'] as const, summary: () => ['notifications', 'summary'] as const };
