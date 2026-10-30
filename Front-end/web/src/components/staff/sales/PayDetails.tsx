@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { AlertTriangle, Copy, FileText, Loader2, MessageCircle, Pencil, QrCode } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { AlertTriangle, Copy, FileText, Loader2, MessageCircle, Pencil, QrCode, ReceiptText } from 'lucide-react';
 import { postForm } from '@/components/payments/api';
 import FilePicker from '@/components/payments/FilePicker';
+import { isPdf, PHOTO_ONLY } from '@/lib/attachments';
 import { whatsappNumber } from './PaymentLinkCard';
 import {
   errorMessage, paymentRequestHref, payDetailsMessage, payDetailsQrHref, QR_LIMIT, QR_LIMIT_NOTE, rupees,
@@ -23,8 +24,19 @@ const METHODS: { value: PayMethod; text: string }[] = [
  * server checks every field and saves it only on an unpaid order; nothing here
  * marks anything paid — the payment is recorded later with its UTR and accounts
  * confirms it.
+ *
+ * The QR box takes OUR QR as a picture: it is printed on the payment request PDF,
+ * and a PDF cannot be drawn inside a PDF. A salesman holding the customer's
+ * receipt (often a PDF) tends to land here first, so a PDF in this box is met
+ * with a way to the receipt form (`onCustomerPaid`) rather than a bare "no".
  */
-export function PayDetailsForm({ order, onDone, onCancel }: { order: SalesOrder; onDone: () => void; onCancel?: () => void }) {
+export function PayDetailsForm({ order, onDone, onCancel, onCustomerPaid }: {
+  order: SalesOrder;
+  onDone: () => void;
+  onCancel?: () => void;
+  /** Open "Customer already paid" (the receipt form) instead. */
+  onCustomerPaid?: () => void;
+}) {
   const was = order.payDetails;
   const [method, setMethod] = useState<PayMethod>(was?.method ?? 'bank');
   const [bank, setBank] = useState({
@@ -36,6 +48,9 @@ export function PayDetailsForm({ order, onDone, onCancel }: { order: SalesOrder;
   const [qr, setQr] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // The last refusal was a document in the QR box — likely the customer's receipt.
+  const [receiptHere, setReceiptHere] = useState(false);
+  const wrongTypeNow = useRef(false);
   const over = order.totalAmount > QR_LIMIT;
   const hasBank = Object.values(bank).some((v) => v.trim());
   const set = (k: keyof typeof bank) => (e: React.ChangeEvent<HTMLInputElement>) => setBank({ ...bank, [k]: e.target.value });
@@ -43,6 +58,7 @@ export function PayDetailsForm({ order, onDone, onCancel }: { order: SalesOrder;
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    setReceiptHere(false);
     if (method === 'upi_qr' && !qr.length && !was?.hasQr) { setError('Attach the GPay / UPI QR image.'); return; }
     const form = new FormData();
     form.append('method', method);
@@ -102,9 +118,27 @@ export function PayDetailsForm({ order, onDone, onCancel }: { order: SalesOrder;
               // eslint-disable-next-line @next/next/no-img-element -- a private image from our API, not a public asset
               <img src={payDetailsQrHref(order.id)} alt="Saved QR" className="h-24 w-24 rounded-lg border border-gray-200 object-contain" />
             )}
-            <FilePicker files={qr} onChange={setQr} max={1} accept="image/jpeg,image/png,image/webp"
-              label={was?.hasQr ? 'Replace the QR image' : 'Attach the GPay / UPI QR'} icon={<QrCode className="h-4 w-4" />} onError={setError} />
+            <FilePicker files={qr} onChange={setQr} max={1} accept={PHOTO_ONLY}
+              label={was?.hasQr ? 'Replace the QR image' : 'Attach the GPay / UPI QR'} icon={<QrCode className="h-4 w-4" />}
+              onError={(message) => { setError(message); setReceiptHere(wrongTypeNow.current); wrongTypeNow.current = false; }}
+              wrongType={(f) => {
+                wrongTypeNow.current = true;
+                return `"${f.name}" ${isPdf(f) ? 'is a PDF' : 'is not a picture'}. This box is only for a picture of our GPay / UPI QR, which the customer scans to pay. `
+                  + 'Is it the customer\'s payment receipt? Record it under "Customer already paid" — PDFs and screenshots both work there.';
+              }} />
           </div>
+          {/* Right under the picker, where the eye is — not at the foot of a long form. */}
+          {error && receiptHere && (
+            <div role="alert" className="space-y-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              <p>{error}</p>
+              {onCustomerPaid && (
+                <button type="button" onClick={onCustomerPaid}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50">
+                  <ReceiptText className="h-4 w-4" /> Customer already paid — attach receipt
+                </button>
+              )}
+            </div>
+          )}
           <input aria-label="UPI ID" className={input} value={upiId} onChange={(e) => setUpiId(e.target.value)} placeholder="UPI ID (optional), e.g. autobacs@okhdfcbank" autoCapitalize="none" />
           <div>
             <span className={label}>Bank details {over ? '(needed above ₹50,000)' : '(optional)'}</span>
@@ -119,7 +153,7 @@ export function PayDetailsForm({ order, onDone, onCancel }: { order: SalesOrder;
           value={note} onChange={(e) => setNote(e.target.value)} placeholder={method === 'other' ? 'e.g. Cash at our Kochi office' : 'e.g. Please mention the order number'} />
       </div>
 
-      {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {error && !receiptHere && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
           {busy && <Loader2 className="h-4 w-4 animate-spin" />} Save payment details

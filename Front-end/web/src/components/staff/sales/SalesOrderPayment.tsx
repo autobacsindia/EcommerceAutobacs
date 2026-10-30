@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Banknote, FileText, Link2, Loader2, Plus, Split, Trash2, X } from 'lucide-react';
+import { Banknote, FileText, Link2, Loader2, Plus, ReceiptText, Split, Trash2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
@@ -120,6 +120,9 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
   const [error, setError] = useState('');
   // How the customer is asked to pay: bank / GPay QR / other details, or a Razorpay link.
   const [choice, setChoice] = useState<null | 'details' | 'link'>(startWithDetails ? 'details' : null);
+  // "Customer already paid": the receipt form, opened from the buttons above it too.
+  const [recordPaid, setRecordPaid] = useState(false);
+  const customerPaid = () => { setChoice(null); setRecordPaid(true); };
   const q = useQuery({
     queryKey: staffKeys.salesOrder(id),
     queryFn: () => apiClient.get<{ order: SalesOrder }>(`/staff/sales/orders/${encodeURIComponent(id)}`),
@@ -152,6 +155,7 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
   // Recorded as paid by bank transfer: accounts is checking — no new link, no cancel.
   const transferWaiting = open && !!o.bankTransferPending;
   const canPay = open && !transferWaiting;
+  const askHowToPay = canPay && !o.payDetails && parts.length === 0 && choice === null;
 
   return (
     <div className="space-y-5">
@@ -196,7 +200,8 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
 
       {transferWaiting && (
         <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          <span className="font-semibold">Bank transfer recorded — waiting for accounts.</span> They will check the bank and confirm it, and the order then goes to Procurement. If they reject it, you will see why in team chat and can record it again or send a new link.
+          <span className="font-semibold">Bank transfer recorded — waiting for accounts.</span> They will check the bank and confirm it, and the order then goes to Procurement. If they reject it, you will see why in team chat and can record it again or send a new link.{' '}
+          <Link href="/team/bank-transfers" className="font-medium text-amber-950 underline">See it and its receipt in Bank transfers</Link>
         </p>
       )}
 
@@ -205,7 +210,7 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
       )}
 
       {/* How to pay: nothing chosen yet → ask; details saved → the card to share; Razorpay link → as before. */}
-      {canPay && !o.payDetails && parts.length === 0 && choice === null && (
+      {askHowToPay && (
         <section className="rounded-xl border border-gray-200 bg-white p-5">
           <h2 className="text-sm font-semibold text-gray-900">How will the customer pay?</h2>
           <p className="mb-3 text-xs text-gray-500">You can change this until the payment is recorded.</p>
@@ -218,11 +223,16 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
               className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">
               <Link2 className="h-4 w-4" /> Razorpay payment link
             </button>
+            <button type="button" onClick={customerPaid}
+              className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50">
+              <ReceiptText className="h-4 w-4" /> Customer already paid — attach receipt
+            </button>
           </div>
         </section>
       )}
       {canPay && choice === 'details' && (
-        <PayDetailsForm order={o} onCancel={() => setChoice(null)} onDone={() => { setChoice(null); refresh(); }} />
+        <PayDetailsForm order={o} onCancel={() => setChoice(null)} onDone={() => { setChoice(null); refresh(); }}
+          onCustomerPaid={anyPaid ? undefined : customerPaid} />
       )}
       {/* Not on a cancelled order (e.g. replaced by an edited quotation): its share
           buttons would send the customer an amount nobody should pay. */}
@@ -238,7 +248,7 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
         <RequestPayment key={pay.amountToRequest} order={o} onDone={() => { setChoice(null); refresh(); }} />
       )}
 
-      {canPay && !anyPaid && <BankTransferForm order={o} onDone={refresh} />}
+      {canPay && !anyPaid && <BankTransferForm order={o} onDone={refresh} open={recordPaid} onOpenChange={setRecordPaid} showButton={!askHowToPay} />}
 
       {parts.length > 0 && (
         <section className="space-y-3">

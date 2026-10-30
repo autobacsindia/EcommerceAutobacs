@@ -73,7 +73,7 @@ describe('pasting into a picker', () => {
   it('applies the same limits as choosing: type, size and count, with the same errors', () => {
     render(<Picker label="Bills" max={2} />);
     paste(document.body, [shot('notes.txt', 'text/plain')]);
-    expect(screen.getByRole('alert')).toHaveTextContent('"notes.txt" can\'t be attached here.');
+    expect(screen.getByRole('alert')).toHaveTextContent('"notes.txt" can\'t be attached here — only a photo (JPG, PNG or WebP).');
     paste(document.body, [shot('big.png', 'image/png', 10 * 1024 * 1024 + 1)]);
     expect(screen.getByRole('alert')).toHaveTextContent('"big.png" is too large (10 MB maximum).');
     paste(document.body, [shot('a.png'), shot('b.png'), shot('c.png')]);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Landmark, Loader2, Paperclip } from 'lucide-react';
 import FilePicker from '@/components/payments/FilePicker';
 import { postForm } from '@/components/payments/api';
@@ -17,13 +17,36 @@ function today(): string {
 }
 
 /**
- * The customer paid by bank transfer instead of the link. Recording it does NOT
- * mark the order paid: the server cancels the payment links (so the customer
- * cannot pay twice) and accounts confirms once the money is in the bank. The
- * amount is always the full order total; the server checks it again.
+ * The customer already paid into our account — bank transfer, or GPay / UPI to
+ * our QR (that money lands in the same bank account and has a UTR too). The
+ * salesman attaches the customer's receipt: a screenshot or a PDF.
+ *
+ * Recording it does NOT mark the order paid: the server cancels the payment
+ * links (so the customer cannot pay twice) and accounts confirms once the money
+ * is in the bank. The amount is always the full order total; the server checks
+ * it again.
+ *
+ * `open` / `onOpenChange` let the page open it from "How will the customer pay?"
+ * — the salesman holding a receipt looks there first.
  */
-export default function BankTransferForm({ order, onDone }: { order: SalesOrder; onDone: () => void }) {
-  const [openForm, setOpenForm] = useState(false);
+export default function BankTransferForm({ order, onDone, open, onOpenChange, showButton = true }: {
+  order: SalesOrder;
+  onDone: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** False when the page already offers "Customer already paid" higher up. */
+  showButton?: boolean;
+}) {
+  const [ownOpen, setOwnOpen] = useState(false);
+  const openForm = open ?? ownOpen;
+  const setOpenForm = (next: boolean) => { setOwnOpen(next); onOpenChange?.(next); };
+  const utr = useRef<HTMLInputElement>(null);
+  // Opened from the top of the page: bring the form into view, ready to type.
+  useEffect(() => {
+    if (!open) return;
+    utr.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    utr.current?.focus({ preventScroll: true });
+  }, [open]);
   const [reference, setReference] = useState('');
   const [paidOn, setPaidOn] = useState(today);
   const [note, setNote] = useState('');
@@ -32,10 +55,11 @@ export default function BankTransferForm({ order, onDone }: { order: SalesOrder;
   const [error, setError] = useState('');
 
   if (!openForm) {
+    if (!showButton) return null;
     return (
       <button type="button" onClick={() => setOpenForm(true)}
         className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
-        <Landmark className="h-4 w-4 text-emerald-700" /> Customer paid by bank transfer
+        <Landmark className="h-4 w-4 text-emerald-700" /> Customer already paid (bank transfer / GPay / UPI)
       </button>
     );
   }
@@ -43,8 +67,8 @@ export default function BankTransferForm({ order, onDone }: { order: SalesOrder;
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (!files.length) { setError('Add the payment screenshot from the customer.'); return; }
-    if (!window.confirm(`Record a bank transfer of ${rupees(order.totalAmount)}? The payment links for ${order.orderNumber} will be cancelled, and accounts will check the bank.`)) return;
+    if (!files.length) { setError('Add the payment screenshot or receipt from the customer.'); return; }
+    if (!window.confirm(`Record a payment of ${rupees(order.totalAmount)}? The payment links for ${order.orderNumber} will be cancelled, and accounts will check the bank.`)) return;
     const form = new FormData();
     form.append('amount', String(order.totalAmount));
     form.append('reference', reference.trim());
@@ -68,7 +92,7 @@ export default function BankTransferForm({ order, onDone }: { order: SalesOrder;
   return (
     <form onSubmit={submit} className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-5" aria-label="Record a bank transfer">
       <div>
-        <h2 className="text-sm font-semibold text-gray-900">Customer paid by bank transfer — {rupees(order.totalAmount)}</h2>
+        <h2 className="text-sm font-semibold text-gray-900">Customer already paid — {rupees(order.totalAmount)}</h2>
         <p className="mt-1 text-sm text-gray-600">
           The order stays unpaid until accounts finds the money in the bank and confirms it. Recording this cancels the payment links, so the customer cannot pay twice.
         </p>
@@ -76,9 +100,9 @@ export default function BankTransferForm({ order, onDone }: { order: SalesOrder;
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="mb-1 block font-medium text-gray-800">UTR / bank reference</span>
-          <input value={reference} onChange={(e) => setReference(e.target.value)} required maxLength={40}
-            placeholder="From the customer's screenshot" autoComplete="off" className={input} />
+          <span className="mb-1 block font-medium text-gray-800">UTR / bank or UPI reference</span>
+          <input ref={utr} value={reference} onChange={(e) => setReference(e.target.value)} required maxLength={40}
+            placeholder="From the customer's receipt" autoComplete="off" className={input} />
         </label>
         <label className="block text-sm">
           <span className="mb-1 block font-medium text-gray-800">Date paid</span>
@@ -93,9 +117,9 @@ export default function BankTransferForm({ order, onDone }: { order: SalesOrder;
       </label>
 
       <div className="text-sm">
-        <p className="mb-1 font-medium text-gray-800">Payment screenshots or bank statement</p>
+        <p className="mb-1 font-medium text-gray-800">Payment receipt — screenshot or PDF</p>
         <FilePicker files={files} onChange={setFiles} max={MAX_TRANSFER_FILES} accept={PHOTO_OR_PDF}
-          label="Attach screenshot or PDF" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
+          label="Attach receipt (PDF or photo)" icon={<Paperclip className="h-4 w-4" />} onError={setError} />
       </div>
 
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}

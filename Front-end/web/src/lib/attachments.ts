@@ -3,6 +3,7 @@
  * Back-end/server/config/attachments.js. Change both together. The server
  * re-checks everything; these only let the panel say no before a long upload.
  */
+import { matchesAccept } from './clipboardFiles';
 
 /** Files in one save (one form submit / one chat message). */
 export const MAX_ATTACHMENTS = 20;
@@ -21,6 +22,33 @@ export const PHOTO_OR_PDF = 'image/jpeg,image/png,image/webp,application/pdf';
 export const PHOTO_ONLY = 'image/jpeg,image/png,image/webp';
 
 export const mb = (bytes: number) => `${Math.round(bytes / (1024 * 1024))} MB`;
+
+/**
+ * Labels a browser can put on a real PDF besides `application/pdf`. Chrome on
+ * Windows takes the label from the PC's own settings, so a PDF can arrive as
+ * `application/x-pdf`, or with no useful label at all. The server decides from
+ * the file's bytes; this only stops the panel refusing a real PDF up front.
+ */
+const PDF_LABELS = new Set(['application/pdf', 'application/x-pdf', 'application/acrobat', 'applications/vnd.pdf', 'text/pdf', 'text/x-pdf']);
+const NO_LABEL = new Set(['', 'application/octet-stream', 'binary/octet-stream', 'application/unknown']);
+const BY_EXTENSION: Record<string, string> = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+
+/** The type a file most likely is: its label, or — for an odd or missing label — its extension. */
+export function likelyType(file: Pick<File, 'name' | 'type'>): string {
+  const type = (file.type || '').toLowerCase();
+  const ext = (file.name || '').toLowerCase().split('.').pop() || '';
+  if (PDF_LABELS.has(type)) return 'application/pdf';
+  if (type === 'image/jpg' || type === 'image/pjpeg') return 'image/jpeg';
+  if (NO_LABEL.has(type)) return BY_EXTENSION[ext] || type;
+  return type;
+}
+
+/** Whether a picker that takes `accept` (exact types, e.g. PHOTO_OR_PDF) should take this file. */
+export function acceptsFile(file: Pick<File, 'name' | 'type'>, accept: string): boolean {
+  return matchesAccept(file, accept) || matchesAccept({ name: file.name, type: likelyType(file) }, accept);
+}
+
+export const isPdf = (file: Pick<File, 'name' | 'type'>) => likelyType(file) === 'application/pdf';
 
 const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 

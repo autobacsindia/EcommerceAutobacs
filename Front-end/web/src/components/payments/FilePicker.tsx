@@ -2,9 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
-import { matchesAccept } from '@/lib/clipboardFiles';
 import { usePasteFiles, usePasteShortcut } from '@/hooks/usePasteFiles';
-import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, mb, needsShrink, shrinkForUpload } from '@/lib/attachments';
+import { acceptsFile, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, mb, needsShrink, shrinkForUpload } from '@/lib/attachments';
 
 /** Same as the server's per-file limit (config/attachments.js MAX_ATTACHMENT_BYTES). */
 export const MAX_FILE_BYTES = MAX_ATTACHMENT_BYTES;
@@ -19,6 +18,11 @@ export const MAX_FILE_BYTES = MAX_ATTACHMENT_BYTES;
  *
  * A screenshot can also be pasted (Ctrl/Cmd+V) — it goes through the same checks
  * as a chosen file. With `max={1}` a paste replaces the file already attached.
+ *
+ * The type is checked for chosen files too, not only pasted ones: Chrome on
+ * Windows always offers "All files" in its file window, so `accept` alone does
+ * not stop a PDF reaching a photo-only picker — it used to go all the way to the
+ * server and come back as an error.
  */
 export default function FilePicker({
   files,
@@ -30,6 +34,7 @@ export default function FilePicker({
   icon,
   onError,
   maxBytes = MAX_FILE_BYTES,
+  wrongType,
 }: {
   files: File[];
   onChange: (files: File[]) => void;
@@ -43,10 +48,13 @@ export default function FilePicker({
   onError: (message: string) => void;
   /** Per-file limit, checked after a big photo has been shrunk. */
   maxBytes?: number;
+  /** What to say when a file of the wrong type is chosen or pasted (default: what this picker takes). */
+  wrongType?: (file: File) => string;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const shortcut = usePasteShortcut();
   const [preparing, setPreparing] = useState(false);
+  const takesPdf = accept.includes('application/pdf');
 
   /** Size checks run on the files as they will be sent (after shrinking). */
   function finish(kept: File[], ready: File[]) {
@@ -64,9 +72,11 @@ export default function FilePicker({
   function add(picked: FileList | File[] | null, { pasted = false } = {}) {
     const chosen = Array.from(picked || []);
     if (!chosen.length || preparing) return;
-    // A file dialog already filters by `accept`; a paste can carry anything.
-    const wrongType = pasted && chosen.find((f) => !matchesAccept(f, accept));
-    if (wrongType) { onError(`"${wrongType.name}" can't be attached here.`); return; }
+    const wrong = chosen.find((f) => !acceptsFile(f, accept));
+    if (wrong) {
+      onError(wrongType ? wrongType(wrong) : `"${wrong.name}" can't be attached here — ${takesPdf ? 'only a photo (JPG, PNG, WebP) or a PDF' : 'only a photo (JPG, PNG or WebP)'}.`);
+      return;
+    }
     const kept = pasted && max === 1 ? [] : files;
     if (kept.length + chosen.length > max) { onError(max === 1 ? 'You can attach one file here.' : `You can attach up to ${max} files here.`); return; }
     // Nothing to shrink (PDFs, screenshots under 1.5 MB): attach straight away.
@@ -79,7 +89,6 @@ export default function FilePicker({
 
   usePasteFiles(root, { accept, hasRoom: !preparing && (max === 1 || files.length < max), take: (pasted) => add(pasted, { pasted: true }) });
 
-  const takesPdf = accept.includes('application/pdf');
   return (
     <div ref={root} className="space-y-2">
       {files.length < max && (

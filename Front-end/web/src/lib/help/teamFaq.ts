@@ -122,9 +122,9 @@ export const TEAM_HELP: TeamHelpSection[] = [
         links: [{ label: 'Quotations', href: '/team/sales/quotations' }],
       },
       {
-        question: 'The customer paid by bank transfer instead of the link.',
-        answer: 'Record it under Bank transfers. The order is paid only after accounts finds the money in the bank and confirms it.',
-        links: [{ label: 'Bank transfers', href: '/team/bank-transfers' }],
+        question: 'The customer already paid (bank transfer, GPay or UPI) and sent a receipt.',
+        answer: 'Open the order and choose "Customer already paid — attach receipt". Type the UTR or UPI reference and attach the receipt: a screenshot or a PDF, up to 20 files. The order is paid only after accounts finds the money in the bank and confirms it; you can follow it under Bank transfers. (The "GPay / UPI QR" box is only for a picture of our own QR, which the customer scans to pay.)',
+        links: [{ label: 'My orders', href: '/team/sales' }, { label: 'Bank transfers', href: '/team/bank-transfers' }],
       },
       {
         question: 'What is "Customer decisions"?',
