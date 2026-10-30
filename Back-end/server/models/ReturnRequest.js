@@ -456,6 +456,24 @@ const ReturnRequestSchema = new mongoose.Schema({
 ReturnRequestSchema.index({ user: 1, status: 1 });
 ReturnRequestSchema.index({ order: 1 });
 ReturnRequestSchema.index({ status: 1, createdAt: -1 }); // admin queue (filter + sort)
+/*
+  Team-panel read paths that otherwise scan the whole collection. Measured on 60k seeded
+  returns (explain executionStats): each was a COLLSCAN reading all 60,000 documents;
+  with these each reads at most a few hundred. The bells poll, so they pay it repeatedly.
+  Mirrored in db.js ensureCriticalIndexes (autoIndex is off in prod).
+*/
+// Procurement's "supplier claims" queue + bell, accounts' "supplier money" bell, and the
+// "Suppliers owe us" page/totals — all filter on the claim status.
+ReturnRequestSchema.index({ 'supplierClaims.status': 1 }, { name: 'supplier_claim_status' });
+// "Mine" ($or raisedBy / seller, newest first): one index per branch lets the planner
+// SORT_MERGE the two and stop at the page size.
+ReturnRequestSchema.index({ raisedBy: 1, createdAt: -1, _id: -1 }, { name: 'raised_by_newest' });
+ReturnRequestSchema.index({ seller: 1, createdAt: -1, _id: -1 }, { name: 'seller_newest' });
+// "All", newest first — the keyset order of returnRequestRepository.page.
+ReturnRequestSchema.index({ createdAt: -1, _id: -1 }, { name: 'newest' });
+// Repeat-returner check ($or user / customerPhone in a window). Every $or branch needs
+// an index or the whole query falls back to a COLLSCAN; `user` is covered by user_1_status_1.
+ReturnRequestSchema.index({ customerPhone: 1, createdAt: -1 }, { name: 'customer_phone_recent' });
 // DB-level idempotency: one IN-FLIGHT return per order+product pair.
 // This is the race-safe backstop the controller pre-check relies on — two
 // concurrent POST /returns for the same line both pass the findOne check, then the
