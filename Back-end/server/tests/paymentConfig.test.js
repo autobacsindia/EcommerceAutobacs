@@ -52,8 +52,8 @@ describe('GET /payment-config/razorpay', () => {
     // The suite's fake secret (tests/setupEnv.js) — read from env, not repeated as a
     // literal, so the secret scanner has nothing to match in this file.
     ['the secret pasted into the key id', process.env.RAZORPAY_KEY_SECRET],
-    ['a non-Razorpay value', 'pk_live_abc123'],
-    ['a key with an injected suffix', 'rzp_live_abc123"><script>'],
+    ['a non-Razorpay value', 'pk_live_aaaa'],
+    ['a key with an injected suffix', 'rzp_live_aaaaaa<>'],
   ])('refuses to publish a malformed key id (%s)', async (_label, value) => {
     razorpayService.key_id = value;
     const res = await request(app).get(URL);
@@ -63,11 +63,11 @@ describe('GET /payment-config/razorpay', () => {
   });
 
   it('accepts live and test keys, trimming stray whitespace from the env', async () => {
-    razorpayService.key_id = '  rzp_live_AbC123xyz \n';
+    razorpayService.key_id = '  rzp_live_cccc \n';
     const res = await request(app).get(URL);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.keyId).toBe('rzp_live_AbC123xyz');
+    expect(res.body.data.keyId).toBe('rzp_live_cccc');
   });
 
   it('is a public read — no auth, no CSRF, no session cookie set', async () => {

@@ -33,7 +33,7 @@ const get = apiClient.get as jest.Mock;
 
 const WIDGET_ID = 'razorpay-affordability-widget';
 const FALLBACK = /pay-later options are shown at checkout/i;
-const SERVED_KEY = 'rzp_live_FromBackend123';
+const SERVED_KEY = 'rzp_live_aaaaaa';
 /** How long after render() the fake frame "reports" its height. */
 const REPORT_DELAY_MS = 300;
 
@@ -100,7 +100,7 @@ beforeEach(() => {
   // A stale build-time key must be IGNORED. Set one so a regression back to reading
   // it shows up as the wrong key in `constructedWith`, not as a vacuous pass.
   realEnvKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-  process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID = 'rzp_live_StaleBakedIn999';
+  process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID = 'rzp_live_bbbbbb';
 
   // The component injects the CDN <script> itself; stub the load so onload fires
   // and the constructor is available, without touching the network.
