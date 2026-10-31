@@ -126,6 +126,20 @@ describe('checkout review step totals', () => {
     }, { timeout: 3000 });
   });
 
+  /*
+    Shipping is never charged online: the customer pays the courier on delivery, by
+    cash or GPay / UPI. The row must say so — not "free", not a ₹ figure.
+  */
+  it('shows shipping as extra, paid on delivery', async () => {
+    render(<CheckoutPage />);
+    await screen.findByText('Review Your Cart');
+    // "Shipping" is also a step in the progress bar; the summary row is the one with a value.
+    const value = screen.getByText('Extra — paid on delivery');
+    const row = value.parentElement!;
+    expect(row).toHaveTextContent(/^Shipping/);
+    expect(row).not.toHaveTextContent(/free|₹/i);
+  });
+
   it('never prints a confident total before the server answers', async () => {
     /* Printing cart.total while the quote was in flight is what made checkout open on
        the full price and drop a second later — read as the price changing underfoot. */

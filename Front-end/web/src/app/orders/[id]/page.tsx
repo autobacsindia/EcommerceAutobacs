@@ -799,7 +799,7 @@ export default function OrderDetailPage() {
             <div className="font-display text-sm space-y-2">
               {/* Before GST, so Subtotal + Tax − Discount (+ Shipping) = Total. */}
               <div className="flex justify-between"><span className="text-ink-muted">Subtotal (before GST)</span><span className="text-ink/70">{order.subtotalBeforeTax != null ? `₹${order.subtotalBeforeTax.toFixed(2)}` : '—'}</span></div>
-              <div className="flex justify-between"><span className="text-ink-muted">Shipping</span><span className="text-ink/70">{(order.shippingCost || 0) > 0 ? `₹${order.shippingCost.toFixed(2)}` : 'Calculated at delivery'}</span></div>
+              <div className="flex justify-between"><span className="text-ink-muted">Shipping</span><span className="text-ink/70">{(order.shippingCost || 0) > 0 ? `₹${order.shippingCost.toFixed(2)}` : 'Extra — paid on delivery'}</span></div>
               <div className="flex justify-between"><span className="text-ink-muted">Tax</span><span className="text-ink/70">₹{(order.tax || 0).toFixed(2)}</span></div>
               {(order.discount || 0) > 0 && (
                 <div className="flex justify-between"><span className="text-ink-muted">{order.salesDiscount?.percent ? `Discount (${order.salesDiscount.percent}%)` : 'Discount'}</span><span className="text-green-700">-₹{(order.discount || 0).toFixed(2)}</span></div>

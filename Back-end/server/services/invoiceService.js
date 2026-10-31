@@ -473,7 +473,8 @@ export const generateInvoicePdf = async (order, user = null) => {
       if (order.tax) sumRow(TAX_ROW_LABEL, rs(order.tax));
       sumRow(
         'Shipping Charges (Extra):',
-        shippingExtra ? 'Calculated at delivery' : rs(order.shippingCost),
+        // The label already says "(Extra)"; the customer pays the courier on delivery.
+        shippingExtra ? 'Paid on delivery' : rs(order.shippingCost),
         { muted: shippingExtra }
       );
       doc.moveTo(sumLabelX, y).lineTo(RIGHT, y).strokeColor('#111').lineWidth(1).stroke();

@@ -24,7 +24,7 @@ it('shows the offer and the amount actually paid', () => {
   });
   expect(text).toMatch(/Order total: ₹2,176\.00/);
   expect(text).toMatch(/Razorpay offer \(Flat ₹100 off on Amex\): -₹100\.00/);
-  // Shipping here is "calculated at delivery", so the label reads "Total (excl. shipping)".
+  // Shipping here is "extra, paid on delivery", so the label reads "Total (excl. shipping)".
   expect(text).toMatch(/Total \(excl\. shipping\): ₹2,076\.00/);
   expect(html).toContain('Razorpay offer (Flat ₹100 off on Amex)');
 });

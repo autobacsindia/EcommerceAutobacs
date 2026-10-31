@@ -67,15 +67,27 @@ it('the chat button opens WhatsApp in a new tab', () => {
 });
 
 /*
-  Checkout charges no shipping (it sends shippingCost: 0). The FAQ and the
-  Shipping page used to quote ₹199 / ₹399 / ₹599 fees nobody could be charged,
-  and the old layout JSON-LD a fourth, different threshold.
+  Checkout charges no shipping (it sends shippingCost: 0): the customer pays the
+  courier on delivery, by cash or GPay / UPI, and the amount depends on the parcel
+  and the address. The FAQ and the Shipping page used to quote ₹199 / ₹399 / ₹599
+  fees nobody could be charged, then told customers delivery was free — it is not.
 */
 it('neither the FAQ nor the Shipping page quotes a delivery fee', () => {
   const delivery = FAQ_CATEGORIES.find((c) => c.id === 'shipping')!.faqs.map((f) => f.answer).join(' ');
   expect(delivery).not.toMatch(/₹/);
-  expect(delivery).toMatch(/free on every order/i);
   const { container } = render(<ShippingPage />);
   expect(container.textContent).not.toMatch(/₹/);
-  expect(container.textContent).toMatch(/Free on every order/);
+});
+
+it('the FAQ and the Shipping page say shipping is extra and paid on delivery, never free', () => {
+  const delivery = FAQ_CATEGORIES.find((c) => c.id === 'shipping')!.faqs.map((f) => f.answer).join(' ');
+  expect(delivery).toMatch(/pay it on delivery by cash or GPay \/ UPI/);
+  expect(delivery).not.toMatch(/\bfree\b/i);
+
+  const { container } = render(<ShippingPage />);
+  const text = container.textContent ?? '';
+  expect(text).not.toMatch(/\bfree\b/i);
+  expect(text).toMatch(/Extra — paid on delivery/);
+  expect(text).toMatch(/Cash or GPay \/ UPI to the courier/);
+  expect(text).toMatch(/Shipping charges are extra and paid on delivery, by cash or GPay \/ UPI\./);
 });

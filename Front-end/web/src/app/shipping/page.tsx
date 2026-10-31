@@ -5,7 +5,7 @@ import { Truck, Clock, MapPin, CreditCard } from 'lucide-react';
 import StorePageHeader from '@/components/store/StorePageHeader';
 
 export default function ShippingPage() {
-  const lastUpdated = 'December 9, 2025';
+  const lastUpdated = 'October 30, 2026';
 
   return (
     <div className="sp sh-theme">
@@ -31,7 +31,7 @@ export default function ShippingPage() {
               <div>
                 <h3 className="font-display text-ink tracking-[-0.01em] mb-1">Fast Delivery</h3>
                 <p className="text-ink/70 font-display text-sm leading-relaxed">
-                  Our standard delivery takes 3–5 business days, and delivery is free on every order.
+                  Our standard delivery takes 3–5 business days. Shipping charges are extra and paid on delivery, by cash or GPay / UPI.
                 </p>
               </div>
             </div>
@@ -56,15 +56,17 @@ export default function ShippingPage() {
                     </thead>
                     <tbody className="divide-y divide-hairline">
                       {[
-                        /* Checkout charges no shipping on any order (it sends shippingCost: 0),
-                           so this table must not quote a fee or offer a faster tier that
+                        /* Checkout charges no shipping on any order (it sends shippingCost: 0):
+                           the customer pays the courier on delivery, by cash or GPay / UPI, and
+                           the amount depends on the parcel and the address. So this table must
+                           not quote a fee, call delivery free, or offer a faster tier that
                            checkout cannot sell. It used to list ₹199 / ₹399 / ₹599 options
                            that no customer could ever choose or be charged. */
                         {
                           name: 'Standard Shipping',
                           sub: 'Courier partners such as Delhivery',
                           time: '3–5 business days',
-                          cost: ['Free on every order'],
+                          cost: ['Extra — paid on delivery', 'Cash or GPay / UPI to the courier'],
                         },
                       ].map(row => (
                         <tr key={row.name}>

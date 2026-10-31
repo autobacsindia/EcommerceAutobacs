@@ -27,6 +27,16 @@ describe('the knowledge behind the bot', () => {
   });
 });
 
+describe('the shipping answer', () => {
+  // Shipping is paid to the courier on delivery. The bot reads the FAQ, so this
+  // pins that the reply a customer actually sees never promises free delivery.
+  it.each(['how much is shipping', 'is shipping free', 'delivery charge'])('"%s" → extra, paid on delivery', (q) => {
+    const reply = answerFor(q);
+    expect(reply.text).toMatch(/pay it on delivery by cash or GPay \/ UPI/);
+    expect(reply.text).not.toMatch(/\bfree\b/i);
+  });
+});
+
 describe('routing a question to the right intent', () => {
   it.each([
     ['where is my order', 'order-status'],
