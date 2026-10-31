@@ -118,7 +118,7 @@ jest.mock('@/components/checkout/PaymentMethodSelector', () => {
     return (
       <div data-testid="payment-method-selector">
         <button onClick={() => onSelect('razorpay')}>Select Razorpay</button>
-        <button onClick={() => onSelect('cod')}>Select COD</button>
+        <button onClick={() => onSelect('razorpay_emi')}>Select EMI</button>
         <span data-testid="selected-method">{selectedMethod}</span>
       </div>
     );
@@ -223,13 +223,13 @@ describe('CheckoutPage', () => {
     });
   });
 
-  it('completes order with COD', async () => {
+  it('pays by EMI: records the Razorpay method and opens Razorpay on its EMI section', async () => {
+    // There is no COD. EMI is a display choice only — the order must still record
+    // 'razorpay' and the amount must still be the server's, so the choice cannot
+    // change what is charged or skip payment.
     render(<CheckoutPage />);
 
-    // Cart -> Shipping
     fireEvent.click(screen.getByText(/continue to shipping/i));
-
-    // Fill Address
     await waitFor(() => {
        expect(screen.getByPlaceholderText(/full name/i)).toBeInTheDocument();
     });
@@ -240,49 +240,41 @@ describe('CheckoutPage', () => {
     fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
     fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
 
-    // Shipping -> Payment
     fireEvent.click(screen.getByText(/continue to payment/i));
-
     await waitFor(() => {
       expect(screen.getByTestId('payment-method-selector')).toBeInTheDocument();
     });
 
-    // Select COD
-    fireEvent.click(screen.getByText('Select COD'));
-    expect(screen.getByTestId('selected-method')).toHaveTextContent('cod');
+    fireEvent.click(screen.getByText('Select EMI'));
+    expect(screen.getByTestId('selected-method')).toHaveTextContent('razorpay_emi');
 
-    // Continue to Review
     fireEvent.click(screen.getByText(/continue to review/i));
-
     await waitFor(() => {
       expect(screen.getByText('Review Your Order')).toBeInTheDocument();
     });
+    expect(screen.getAllByText(/EMI — pay monthly on your card/).length).toBeGreaterThan(0);
 
-    // Mock order creation API
     (apiClient.post as jest.Mock).mockResolvedValue({
       success: true,
-      order: {
-        _id: 'order_123',
-        totalAmount: 118
-      }
+      order: { _id: 'order_123', totalAmount: 118 }
     });
 
-    // Place Order — acceptance first, or the gate short-circuits it.
     acceptTerms();
-    const placeOrderBtn = screen.getByText(/place order/i);
-    fireEvent.click(placeOrderBtn);
+    await act(async () => {
+      fireEvent.click(screen.getByText(/place order/i));
+    });
 
     await waitFor(() => {
       expect(apiClient.post).toHaveBeenCalledWith('/orders', expect.objectContaining({
-        paymentMethod: 'cod',
-        shippingAddress: expect.objectContaining({
-          fullName: 'John Doe'
-        })
+        paymentMethod: 'razorpay',
+        shippingAddress: expect.objectContaining({ fullName: 'John Doe' })
       }));
-      expect(mockClearCart).toHaveBeenCalled();
-      expect(screen.getByText('Order Placed!')).toBeInTheDocument();
+      expect(mockProcessPayment).toHaveBeenCalledWith(
+        'order_123', 118, expect.anything(), { startMethod: 'emi' }
+      );
     });
-
+    // Payment has not succeeded yet, so no inline "Order Placed!" without paying.
+    expect(screen.queryByText('Order Placed!')).not.toBeInTheDocument();
   });
 
   it('will not place an order until the Terms are accepted', async () => {
@@ -300,7 +292,7 @@ describe('CheckoutPage', () => {
     fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
     fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
     fireEvent.click(screen.getByText(/continue to payment/i));
-    fireEvent.click(screen.getByText('Select COD'));
+    fireEvent.click(screen.getByText('Select EMI'));
     fireEvent.click(screen.getByText(/continue to review/i));
     await waitFor(() => expect(screen.getByText('Review Your Order')).toBeInTheDocument());
 
@@ -329,7 +321,7 @@ describe('CheckoutPage', () => {
     fireEvent.change(screen.getByPlaceholderText(/postal code/i), { target: { value: '400001' } });
     fireEvent.change(screen.getByPlaceholderText(/phone/i), { target: { value: '9999999999' } });
     fireEvent.click(screen.getByText(/continue to payment/i));
-    fireEvent.click(screen.getByText('Select COD'));
+    fireEvent.click(screen.getByText('Select EMI'));
     fireEvent.click(screen.getByText(/continue to review/i));
     await waitFor(() => expect(screen.getByText('Review Your Order')).toBeInTheDocument());
 

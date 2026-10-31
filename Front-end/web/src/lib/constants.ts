@@ -369,7 +369,9 @@ export const PAYMENT_METHODS = {
 } as const;
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  [PAYMENT_METHODS.RAZORPAY]: 'Razorpay (Card/UPI/Wallet)',
+  // Shown on the order page for the RECORDED method. Razorpay covers every instrument the
+  // window offers, EMI included — the old "(Card/UPI/Wallet)" read as if EMI were missing.
+  [PAYMENT_METHODS.RAZORPAY]: 'Razorpay (Card/UPI/Netbanking/Wallet/EMI)',
 };
 
 // Navigation Links - Bottom Row (Main Navigation)

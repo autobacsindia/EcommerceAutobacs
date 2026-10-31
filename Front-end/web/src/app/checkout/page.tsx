@@ -13,7 +13,15 @@ import {
 } from '@/lib/analytics';
 import { trackGoogleBeginCheckout } from '@/lib/googleAdsEvents';
 import orderService from '@/lib/services/orderService';
-import { API_ENDPOINTS, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '@/lib/constants';
+import { API_ENDPOINTS, PAYMENT_METHODS } from '@/lib/constants';
+import {
+  PAYMENT_CHOICES,
+  PAYMENT_CHOICE_LABELS,
+  isPaymentChoice,
+  paymentMethodForChoice,
+  razorpayStartMethodForChoice,
+  type PaymentChoice,
+} from '@/lib/paymentChoices';
 import { isValidIndianMobile } from '@/lib/utils';
 import { BUYER_TYPES, checkGstin, normalizeGstin, type BuyerType } from '@/lib/legal/buyerTypes';
 import { enterpriseBlockError } from '@/lib/legal/checkoutBuyer';
@@ -253,7 +261,11 @@ function CheckoutPageContent() {
   const gstinCheck = useMemo(() => checkGstin(business.gstin), [business.gstin]);
   const isEnterprise = buyerType === BUYER_TYPES.ENTERPRISE;
 
-  const [paymentMethod, setPaymentMethod] = useState<string>(PAYMENT_METHODS.RAZORPAY);
+  // What the shopper picked (pay in full vs EMI). The ORDER always records the method
+  // derived from it — 'razorpay' — so this choice can only change how the Razorpay window
+  // opens, never what is charged or how it is verified.
+  const [paymentChoice, setPaymentChoice] = useState<PaymentChoice>(PAYMENT_CHOICES.RAZORPAY);
+  const paymentMethod = paymentMethodForChoice(paymentChoice);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [shouldSaveAddress, setShouldSaveAddress] = useState(false);
   const [showAddressForm, setShowAddressForm] = useState(false);
@@ -545,11 +557,16 @@ function CheckoutPageContent() {
         // Pass the post-discount charged total as a hint for the Razorpay modal display.
         // The backend /razorpay/create-order ignores this and uses order.totalAmount
         // from the DB — the browser never controls the charged amount.
-        await processPayment(newOrderId, chargedTotal, {
-          name: user?.name || address.fullName,
-          email: user?.email || guestEmail || '',
-          phone: address.phone,
-        });
+        await processPayment(
+          newOrderId,
+          chargedTotal,
+          {
+            name: user?.name || address.fullName,
+            email: user?.email || guestEmail || '',
+            phone: address.phone,
+          },
+          { startMethod: razorpayStartMethodForChoice(paymentChoice) }
+        );
       } else {
         // Mark the purchase BEFORE clearCart() so the empty-cart guard effect
         // doesn't redirect us to /cart instead of showing the confirmation step.
@@ -654,7 +671,7 @@ function CheckoutPageContent() {
             <h3 className="font-display font-bold text-ink uppercase tracking-[0.12em] text-sm mb-4">Payment Details</h3>
             <div className="flex justify-between mb-3 text-sm">
               <span className="text-ink-muted font-display">Method</span>
-              <span className="text-ink/70 font-display font-bold">{PAYMENT_METHOD_LABELS[paymentMethod]}</span>
+              <span className="text-ink/70 font-display font-bold">{PAYMENT_CHOICE_LABELS[paymentChoice]}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-ink-muted font-display">Status</span>
@@ -1064,9 +1081,12 @@ function CheckoutPageContent() {
           <div>
             <h2 className="text-xl font-display font-bold text-ink tracking-[-0.01em] mb-6">Payment Method</h2>
             <div className="mb-8">
-              <PaymentMethodSelector selectedMethod={paymentMethod} onSelect={setPaymentMethod} />
+              <PaymentMethodSelector
+                selectedMethod={paymentChoice}
+                onSelect={(choice) => { if (isPaymentChoice(choice)) setPaymentChoice(choice); }}
+              />
             </div>
-            <button onClick={() => { trackAddPaymentInfo({ method: paymentMethod, value: lastCartTotalRef.current }); setCurrentStep('review'); }} className="w-full bg-gold hover:opacity-90 text-white font-display font-bold py-3 rounded-full transition-colors">
+            <button onClick={() => { trackAddPaymentInfo({ method: paymentChoice, value: lastCartTotalRef.current }); setCurrentStep('review'); }} className="w-full bg-gold hover:opacity-90 text-white font-display font-bold py-3 rounded-full transition-colors">
               Continue to Review
             </button>
           </div>
@@ -1142,7 +1162,7 @@ function CheckoutPageContent() {
               </div>
               <div className="border-t border-hairline pt-4">
                 <h3 className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-2">Payment Method</h3>
-                <p className="text-ink/70 font-display text-sm">{PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod}</p>
+                <p className="text-ink/70 font-display text-sm">{PAYMENT_CHOICE_LABELS[paymentChoice]}</p>
               </div>
               <div className="border-t border-hairline pt-4">
                 {/* Coupon + karma + server-computed breakdown (single source of truth). */}

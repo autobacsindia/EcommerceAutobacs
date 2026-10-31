@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 import apiClient from '@/lib/api';
+import type { RazorpayStartMethod } from '@/lib/paymentChoices';
 
 interface RazorpayOptions {
   key: string;
@@ -18,6 +19,8 @@ interface RazorpayOptions {
     name: string;
     email: string;
     contact: string;
+    /** Opens the window on this section (e.g. EMI). The shopper can still switch. */
+    method?: RazorpayStartMethod;
   };
   theme: {
     color: string;
@@ -131,7 +134,10 @@ export const useRazorpay = ({
   const processPayment = async (
     orderId: string, 
     amount: number, 
-    userDetails: { name: string; email: string; phone: string }
+    userDetails: { name: string; email: string; phone: string },
+    // Display-only: which section the Razorpay window opens on. Never affects the amount
+    // (always the server's order total) or how the payment is verified and fulfilled.
+    displayOptions: { startMethod?: RazorpayStartMethod } = {}
   ) => {
     // CRITICAL: Prevent double-trigger (race condition)
     if (isProcessing || processingRef.current) {
@@ -261,6 +267,7 @@ export const useRazorpay = ({
           name: userDetails.name,
           email: userDetails.email,
           contact: userDetails.phone,
+          ...(displayOptions.startMethod && { method: displayOptions.startMethod }),
         },
         theme: {
           color: '#2563eb'
@@ -313,7 +320,8 @@ export const useRazorpay = ({
   const retryPayment = async (
     orderId: string,
     amount: number,
-    userDetails: { name: string; email: string; phone: string }
+    userDetails: { name: string; email: string; phone: string },
+    displayOptions: { startMethod?: RazorpayStartMethod } = {}
   ) => {
     // Circuit breaker: Stop after max retries
     if (retryCount >= MAX_RETRIES) {
@@ -351,7 +359,7 @@ export const useRazorpay = ({
     // Reset promise cache to allow script reload (handles CDN issues)
     razorpayPromise = null;
     
-    await processPayment(orderId, amount, userDetails);
+    await processPayment(orderId, amount, userDetails, displayOptions);
   };
 
   /**
