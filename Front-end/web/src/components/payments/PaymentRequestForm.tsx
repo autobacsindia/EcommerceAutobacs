@@ -1,9 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import apiClient from '@/lib/api-client';
-import { EXPENSE_CATEGORIES, errorMessage, getRequest, postForm, type PaymentRequest } from './api';
+import {
+  errorMessage, getExpenseOptions, getRequest, paymentKeys, postForm, previewRupees, rupees, type PaymentRequest,
+} from './api';
 import FilePicker from './FilePicker';
 import { MAX_ATTACHMENTS, PHOTO_ONLY, PHOTO_OR_PDF } from '@/lib/attachments';
 import SupplierPicker, { SupplierSuggestions } from './SupplierPicker';
@@ -42,7 +45,10 @@ export default function PaymentRequestForm({
   onDone: (r: PaymentRequest) => void;
   onCancel?: () => void;
 }) {
-  const [category, setCategory] = useState<string>('fuel');
+  const [category, setCategory] = useState('');
+  const [currency, setCurrency] = useState('INR');
+  const [foreignAmount, setForeignAmount] = useState('');
+  const [fxRate, setFxRate] = useState('');
   const [itemIds, setItemIds] = useState<string[]>(supplier ? supplier.lines.map((l) => l.itemId) : []);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -55,6 +61,19 @@ export default function PaymentRequestForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [filling, setFilling] = useState(false);
+
+  // An expense: this team's own options and currencies, from the server.
+  const optionsQ = useQuery({
+    queryKey: paymentKeys.options('mine'),
+    queryFn: () => getExpenseOptions(),
+    enabled: !supplier,
+    staleTime: 10 * 60 * 1000,
+  });
+  const options = optionsQ.data?.options;
+  const chosen = options?.categories.find((c) => c.value === category) ?? options?.categories[0];
+  const noteRequired = !supplier && (chosen?.noteRequired ?? true);
+  const foreign = !supplier && currency !== (options?.baseCurrency ?? 'INR');
+  const comesTo = foreign ? previewRupees(foreignAmount, fxRate) : null;
 
   /** Refill from the previous payment: its saved supplier, or the details typed then. */
   async function fillSame() {
@@ -88,8 +107,16 @@ export default function PaymentRequestForm({
     setError('');
     if (supplier && itemIds.length === 0) { setError('Choose the item(s) this payment is for.'); return; }
     if (!picked && method === 'upi' && !payee.upiId.trim() && qr.length === 0) { setError('Enter their UPI ID, or attach their payment QR.'); return; }
+    if (!supplier && !chosen) { setError('The options are still loading — try again in a moment.'); return; }
     const form = new FormData();
-    form.append('amount', amount);
+    // A foreign bill sends what was billed and the rate; the server works out the rupees.
+    if (foreign) {
+      form.append('currency', currency);
+      form.append('foreignAmount', foreignAmount);
+      form.append('fxRate', fxRate);
+    } else {
+      form.append('amount', amount);
+    }
     form.append('description', description.trim());
     // A saved supplier is sent by id: the server copies its details itself.
     if (picked) form.append('supplierId', picked.id);
@@ -101,7 +128,7 @@ export default function PaymentRequestForm({
       form.append('itemIds', JSON.stringify(itemIds));
       if (!picked && saveSupplier) form.append('saveSupplier', 'true');
     } else {
-      form.append('category', category);
+      form.append('category', chosen!.value);
     }
     for (const f of bills) form.append('bill', f);
     for (const f of qr) form.append('qr', f);
@@ -140,19 +167,60 @@ export default function PaymentRequestForm({
           </fieldset>
         </div>
       ) : (
-        <div>
-          <label className={label} htmlFor="pr-category">What for</label>
-          <select id="pr-category" className={input} value={category} onChange={(e) => setCategory(e.target.value)}>
-            {EXPENSE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-          </select>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className={label} htmlFor="pr-category">What for</label>
+            {optionsQ.isError ? (
+              <p role="alert" className="text-sm text-red-700">
+                {errorMessage(optionsQ.error, 'Could not load the options.')}{' '}
+                <button type="button" onClick={() => optionsQ.refetch()} className="font-medium underline">Try again</button>
+              </p>
+            ) : !options ? (
+              <p className="flex items-center gap-2 py-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>
+            ) : (
+              <select id="pr-category" className={input} value={chosen?.value ?? ''} onChange={(e) => setCategory(e.target.value)}>
+                {options.categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            )}
+          </div>
+          {options && options.currencies.length > 1 && (
+            <div>
+              <label className={label} htmlFor="pr-currency">Currency</label>
+              <select id="pr-currency" className={input} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                {options.currencies.map((c) => <option key={c.code} value={c.code}>{c.code} — {c.label}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+      )}
+
+      {foreign && (
+        <div className="rounded-lg bg-gray-50 p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className={label} htmlFor="pr-foreign">Bill amount ({currency})</label>
+              <input id="pr-foreign" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={foreignAmount} onChange={(e) => setForeignAmount(e.target.value)} placeholder="e.g. 10000" />
+            </div>
+            <div>
+              <label className={label} htmlFor="pr-rate">Rate (₹ for 1 {currency})</label>
+              <input id="pr-rate" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,6})?" value={fxRate} onChange={(e) => setFxRate(e.target.value)} placeholder="From your bank / forex quote, e.g. 2.45" />
+            </div>
+          </div>
+          <p className="mt-2 text-sm text-gray-700" aria-live="polite">
+            {comesTo != null
+              ? <>Comes to about <strong>{rupees(comesTo)}</strong>. Accounts approves the rupee amount; the website works it out from the bill and the rate.</>
+              : 'Enter the bill amount and the rate from your quote — the rupee amount is worked out from them.'}
+          </p>
         </div>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label className={label} htmlFor="pr-amount">Amount (₹)</label>
-          <input id="pr-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 1250" />
-        </div>
+        {!foreign && (
+          <div>
+            <label className={label} htmlFor="pr-amount">Amount (₹)</label>
+            <input id="pr-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 1250" />
+          </div>
+        )}
         {!picked && (
           <div>
             <label className={label} htmlFor="pr-payee">{supplier ? 'Supplier' : 'Pay to'}</label>
@@ -210,9 +278,12 @@ export default function PaymentRequestForm({
       )}
 
       <div>
-        <label className={label} htmlFor="pr-desc">Details</label>
-        <textarea id="pr-desc" className={input} rows={2} required={!supplier} minLength={supplier ? 0 : 3} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)}
-          placeholder={supplier ? 'Supplier invoice number, anything accounts should know' : 'What was bought / where you travelled, and why'} />
+        <div className="flex items-baseline justify-between gap-2">
+          <label className={label} htmlFor="pr-desc">Details</label>
+          {!supplier && <span className="text-xs text-gray-500">{noteRequired ? 'Required' : 'Optional'}</span>}
+        </div>
+        <textarea id="pr-desc" className={input} rows={2} required={noteRequired} minLength={noteRequired ? 3 : 0} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)}
+          placeholder={supplier ? 'Supplier invoice number, anything accounts should know' : noteRequired ? 'Say what it was for (e.g. which tool, which month’s GST)' : 'What was bought / where you travelled, and why'} />
       </div>
 
       <div className="flex flex-wrap gap-3 text-sm">

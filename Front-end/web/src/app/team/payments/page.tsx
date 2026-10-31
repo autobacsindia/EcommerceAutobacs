@@ -13,7 +13,7 @@ import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 
 /**
  * Payments in the team panel.
- *   every team  — raise expenses (fuel, travel, food, a purchase) and follow them
+ *   every team  — raise expenses (each team's own options, from the server) and follow them
  *   procurement — also follows supplier payments (raised from each order)
  *   accounts    — approves or declines everything, and sees every team;
  *                 the admin then pays

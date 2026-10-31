@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Loader2, Paperclip, Pencil, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
 import {
-  actOn, errorMessage, fileHref, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
+  actOn, categoryName, errorMessage, fileHref, foreignBill, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import EditPaymentRequest from './EditPaymentRequest';
@@ -87,8 +87,9 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
         {r && (
           <div className="space-y-5">
             <div className="rounded-xl bg-gray-50 p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-500">{r.kind === 'supplier' ? 'Supplier payment' : `${r.category} expense`} · {r.teamLabel}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">{r.kind === 'supplier' ? 'Supplier payment' : `${categoryName(r)} expense`} · {r.teamLabel}</p>
               <p className="text-2xl font-bold text-gray-900">{rupees(r.amount)}</p>
+              {foreignBill(r) && <p className="text-sm text-gray-700">Bill: {foreignBill(r)}</p>}
               <p className="text-sm text-gray-600">to {r.payee.name}</p>
             </div>
 
