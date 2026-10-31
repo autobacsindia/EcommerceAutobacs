@@ -12,6 +12,8 @@ jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ logout: jest.fn() 
 jest.mock('@/hooks/queries/useTeamChat', () => ({
   useChatUnreadTotal: () => 0,
   useChatUnreadSplit: () => ({ chat: 0, updates: 0, updatesChannelId: null }),
+  useChatChannels: () => ({ data: [] }),
+  countedUnread: () => ({ chat: 0, updates: 0 }),
 }));
 // The header now carries the notification bell. This file is about the NAV, so
 // the bell's own data is stubbed — its behaviour is covered in

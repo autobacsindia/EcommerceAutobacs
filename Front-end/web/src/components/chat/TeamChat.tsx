@@ -35,6 +35,7 @@ import MessageSearch from './MessageSearch';
 import StarredPanel from './StarredPanel';
 import StatusDialog from './StatusDialog';
 import { ONE_PANE_BELOW, useFitToViewport } from './useFitToViewport';
+import { setOpenConversation } from '@/lib/chatSound';
 
 type Pages = InfiniteData<MessagePage, number>;
 
@@ -244,6 +245,11 @@ export default function TeamChat() {
 
   const selectedId = params.get('c');
   const selected = channels.find((c) => c.id === selectedId) ?? null;
+  // The bell stays quiet for the conversation on screen (lib/chatSound.ts).
+  useEffect(() => {
+    setOpenConversation(selected?.id ?? null);
+    return () => setOpenConversation(null);
+  }, [selected?.id]);
   // ?t=updates: opened from an order-update pop-up or the bell — start on Order updates.
   const initialTab = params.get('t') === 'updates' ? 'updates' as const : undefined;
 
