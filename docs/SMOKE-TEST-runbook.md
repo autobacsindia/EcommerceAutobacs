@@ -53,7 +53,7 @@ Confirm you're pointed at the right things and nothing charges real money.
 
 - [ ] **Frontend URL** (Vercel) loads: `https://autobacsindia.com` **or** the current `*.vercel.app` preview.
 - [ ] **Backend health**: `GET https://<railway-host>/api/v1/health` (or the frontend proxy `GET /api/health`) returns `200`.
-- [ ] **Razorpay is TEST**: Vercel `NEXT_PUBLIC_RAZORPAY_KEY_ID` starts with `rzp_test_`; Railway `RAZORPAY_KEY_ID` is the matching **test** key. **If you see `rzp_live_`, STOP.**
+- [ ] **Razorpay is TEST**: Railway `RAZORPAY_KEY_ID` starts with `rzp_test_` (it is the only copy — `GET /api/payment-config/razorpay` shows the key the storefront will use). **If you see `rzp_live_`, STOP.**
 - [ ] **Webhook** points at the Railway backend `…/api/v1/razorpay/webhook` and `RAZORPAY_WEBHOOK_SECRET` is set (payment-success side effects — invoice email, karma earn — depend on it).
 - [ ] **CORS**: Railway `FRONTEND_URL`/`FRONTEND_URLS` includes the exact Vercel origin you're testing from.
 - [ ] **Email**: Postmark is in TEST/single-sender mode (per project notes) — invoice/review emails will only reach the verified sender inbox. Use that inbox for the customer account so you can actually receive them.

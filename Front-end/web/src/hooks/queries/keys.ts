@@ -281,3 +281,9 @@ export const customerReturnKeys = {
 
 /** `/notifications/summary` — what is waiting on me, for the header bell. */
 export const notificationKeys = { all: ['notifications'] as const, summary: () => ['notifications', 'summary'] as const };
+
+export const paymentConfigKeys = {
+  all: ['payment-config'] as const,
+  /** `/payment-config/razorpay` — the public key id checkout and the EMI widget share. */
+  razorpay: () => [...paymentConfigKeys.all, 'razorpay'] as const,
+};

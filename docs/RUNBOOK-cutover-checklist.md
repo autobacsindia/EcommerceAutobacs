@@ -90,7 +90,6 @@ Set on Vercel:
 NEXT_PUBLIC_API_URL=https://<backend>.up.railway.app      # Railway default URL for now
 NEXT_PUBLIC_APP_URL=https://<project>.vercel.app          # Vercel default URL for now
 JWT_SECRET=<identical to backend prod JWT_SECRET>
-NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_test_...                  # matches backend tier
 NEXT_PUBLIC_ALLOW_WP_IMAGES=true                          # while apex still on WordPress
 ```
 Set on Railway (CORS): `FRONTEND_URL` + `FRONTEND_URLS` = the Vercel URL. Smoke-test:
@@ -125,9 +124,9 @@ log in → cart → test Razorpay order. Cookies run `SameSite=none` (two differ
 | Railway | `COOKIE_SAMESITE` | `lax` |
 | Railway | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | `rzp_live_...` |
 | Railway | `RAZORPAY_WEBHOOK_SECRET` | live webhook secret |
-| Vercel | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | `rzp_live_...` (match backend) |
 
-Redeploy frontend on Vercel so the new `NEXT_PUBLIC_*` values bake in.
+Redeploy frontend on Vercel so the new `NEXT_PUBLIC_*` values bake in. (There is no
+frontend Razorpay key: checkout and the EMI widget read Railway's `RAZORPAY_KEY_ID`.)
 
 ### 3c. External dashboards to update (not env vars)
 - **Google OAuth**: add the prod redirect URI `https://api.autobacsindia.com/api/v1/auth/google/callback`.
