@@ -4,10 +4,13 @@ import PushPrompt from './PushPrompt';
 
 const resync = jest.fn();
 const enable = jest.fn();
+const keepAlive = jest.fn();
+const stopKeepAlive = jest.fn();
 let optedOut = false;
 let homeScreen = false;
 jest.mock('@/lib/push', () => ({
   resyncPush: () => resync(),
+  startPushKeepAlive: () => { keepAlive(); return stopKeepAlive; },
   enablePush: () => enable(),
   pushOptedOut: () => optedOut,
   needsHomeScreen: () => homeScreen,
@@ -16,6 +19,8 @@ jest.mock('@/lib/push', () => ({
 beforeEach(() => {
   resync.mockReset();
   enable.mockReset();
+  keepAlive.mockReset();
+  stopKeepAlive.mockReset();
   optedOut = false;
   homeScreen = false;
   localStorage.clear();
@@ -27,7 +32,29 @@ it('off → asks; "Turn on" asks the browser and says how to check', async () =>
   render(<PushPrompt />);
   fireEvent.click(await screen.findByRole('button', { name: 'Turn on' }));
   await waitFor(() => expect(enable).toHaveBeenCalled());
-  expect(await screen.findByRole('status')).toHaveTextContent(/Pop-ups are on.*Send a test.*System Settings/);
+  expect(await screen.findByRole('status')).toHaveTextContent(/Pop-ups are on.*Send me a test pop-up/);
+});
+
+it('"Turn on" failing after Allow (Brave\'s push service is off) says how to fix it, not nothing', async () => {
+  Object.defineProperty(navigator, 'brave', { configurable: true, value: {} });
+  try {
+    resync.mockResolvedValue('off');
+    enable.mockRejectedValue(new Error('push service error'));
+    render(<PushPrompt />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Turn on' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/could not be turned on.*Use Google services for push messaging/);
+  } finally {
+    delete (navigator as unknown as { brave?: unknown }).brave;
+  }
+});
+
+it('keeps an open tab signed up while it is open, and stops when it closes', async () => {
+  resync.mockResolvedValue('on');
+  const { unmount } = render(<PushPrompt />);
+  await waitFor(() => expect(resync).toHaveBeenCalled());
+  expect(keepAlive).toHaveBeenCalledTimes(1);
+  unmount();
+  expect(stopKeepAlive).toHaveBeenCalled();
 });
 
 it('the browser\'s "Block" answer turns the strip into how to unblock', async () => {

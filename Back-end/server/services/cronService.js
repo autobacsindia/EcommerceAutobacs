@@ -67,6 +67,7 @@ class CronService {
     this.scheduleChatStuckDigest();
     this.scheduleOverdueReport();
     this.scheduleEtaReminders();
+    this.schedulePushCleanup();
 
     if (process.env.NODE_ENV !== 'test') {
       console.log('Cron jobs initialized');
@@ -448,6 +449,39 @@ class CronService {
     if (process.env.NODE_ENV !== 'test') {
       console.log(`[CronService] Delivery-date reminders scheduled: "${schedule}"`);
     }
+  }
+
+  /**
+   * Pop-up devices nobody has opened the panel on for 60 days (pushService.STALE_DAYS).
+   * Harmless to repeat or to run on several instances at once (one deleteMany), and a
+   * device still in use re-adds itself when the panel next opens on it.
+   */
+  schedulePushCleanup() {
+    const schedule = process.env.PUSH_CLEANUP_CRON || '20 4 * * *'; // 04:20 IST daily
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid PUSH_CLEANUP_CRON "${schedule}" — pop-up device clean-up NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:pushCleanup', 10 * 60, () => this.runPushCleanupOnce()),
+      { scheduled: true, timezone: process.env.WP_SYNC_TZ || 'Asia/Kolkata' }
+    );
+    this.scheduledTasks.push({
+      name: 'pushCleanup',
+      task,
+      schedule,
+      description: 'Remove pop-up (push) devices not seen for 60 days',
+    });
+    if (process.env.NODE_ENV !== 'test') {
+      console.log(`[CronService] Pop-up device clean-up scheduled: "${schedule}"`);
+    }
+  }
+
+  async runPushCleanupOnce(now = Date.now()) {
+    const { removeStaleDevices } = await import('./pushService.js');
+    const result = await removeStaleDevices(now);
+    console.log(`[CronService] Pop-up device clean-up: removed ${result.removed}`);
+    return result;
   }
 
   /** One scan per IST day (see scheduleEtaReminders). Never throws. */

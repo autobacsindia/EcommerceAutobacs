@@ -250,6 +250,11 @@ export const teamActivityKeys = {
   order: (orderId: string) => [...teamActivityKeys.all, 'order', orderId] as const,
 };
 
+/** `/push/devices` — the admin's "who has pop-ups working". */
+export const pushDeviceKeys = {
+  all: ['push-devices'] as const,
+};
+
 /** `/staff/attribution/*` — crediting a paid website order to a salesman (admin, marketing). */
 export const attributionKeys = {
   all: ['attribution'] as const,
