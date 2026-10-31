@@ -27,7 +27,7 @@ export default function HelpPage() {
             },
             {
               title: 'Payments',
-              body: 'We accept UPI, debit/credit cards, and net banking via Razorpay. All transactions are encrypted and secure. Cash on delivery is not currently available.',
+              body: 'We accept UPI, debit/credit cards, and net banking via Razorpay. All transactions are encrypted and secure. Your order is paid for online; only the shipping charge is paid on delivery, by cash or GPay / UPI.',
             },
             {
               title: 'Vehicle Compatibility',

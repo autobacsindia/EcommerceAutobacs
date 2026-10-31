@@ -235,7 +235,7 @@ export default function BuyBox({
         )}
       </div>
       <p className="mt-2 text-[13px] text-ink-muted">
-        {needsSelection ? 'Select a model to see its price · ' : ''}Inclusive of all taxes · shipping at checkout
+        {needsSelection ? 'Select a model to see its price · ' : ''}Inclusive of all taxes · shipping extra, paid on delivery
       </p>
 
       {/* The campaign, made visible where the buying decision is actually made. Hidden

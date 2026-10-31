@@ -102,4 +102,28 @@ describe('cart Order Summary', () => {
 
     expect(rowValue('Subtotal (before GST)')).toBe('—');
   });
+
+  /*
+    Shipping is never in the website total: the customer pays the courier on
+    delivery, by cash or GPay / UPI. The cart says so, and promises nothing free.
+  */
+  it('shows shipping as extra, paid on delivery', () => {
+    (useCheckoutQuote as jest.Mock).mockReturnValue({ quote: QUOTE, quotedCouponCode: null, loading: false, error: null });
+    render(<CartPage />);
+
+    expect(rowValue('Shipping')).toBe('Extra — paid on delivery');
+    expect(rowValue('Total')).toBe('₹157300');   // shipping is not added to it
+  });
+
+  it('a referral coupon that saves nothing is offered without promising free shipping', () => {
+    (useCheckoutQuote as jest.Mock).mockReturnValue({
+      quote: { ...QUOTE, suggestedCoupon: { code: 'ASHA10', estimatedDiscount: 0, freeShipping: true } },
+      quotedCouponCode: null, loading: false, error: null,
+    });
+    render(<CartPage />);
+
+    const offer = screen.getByText('ASHA10').closest('button')!;
+    expect(offer).toHaveTextContent('You were referred — apply ASHA10');
+    expect(offer).not.toHaveTextContent(/free/i);
+  });
 });

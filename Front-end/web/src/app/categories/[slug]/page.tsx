@@ -60,7 +60,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   const computedDescription = category.description
     ? category.description.substring(0, 160).replace(/\n/g, ' ')
-    : `Shop ${category.name} at Autobacs India - Premium automotive accessories, body kits, and performance parts for Indian vehicles. Free shipping across India.`;
+    : `Shop ${category.name} at Autobacs India - Premium automotive accessories, body kits, and performance parts for Indian vehicles. Delivery across India.`;
 
   const defaultImage = category.image
     ? (typeof category.image === 'string' ? category.image : category.image.url)

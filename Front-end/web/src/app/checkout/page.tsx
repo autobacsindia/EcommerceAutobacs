@@ -780,7 +780,7 @@ function CheckoutPageContent() {
                 )}
                 <div className="flex justify-between text-sm">
                   <span className="text-ink-muted font-display">Shipping</span>
-                  <span className="text-ink-muted font-display text-xs">Calculated at delivery</span>
+                  <span className="text-ink-muted font-display text-xs">Extra — paid on delivery</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-ink-muted font-display">Tax (18% GST)</span>

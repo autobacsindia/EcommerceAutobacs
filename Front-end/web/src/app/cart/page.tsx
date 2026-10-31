@@ -536,6 +536,12 @@ function CartPageContent() {
                     <span>{formatPrice(quote.savings.total, { exact: true })}</span>
                   </div>
                 )}
+                {/* Shipping is never in the website total: the customer pays the courier
+                    on delivery, by cash or GPay / UPI. Same wording as checkout. */}
+                <div className="flex justify-between text-ink/70 font-display text-sm">
+                  <span>Shipping</span>
+                  <span className="text-ink-muted text-xs">Extra — paid on delivery</span>
+                </div>
                 <div className="flex justify-between text-ink/70 font-display text-sm">
                   <span>Tax (18% GST)</span>
                   {/* Never print a confident ₹0. Tax is inclusive and always non-zero on a
@@ -644,9 +650,12 @@ function CartPageContent() {
                     <span className="text-xs font-display text-ink-muted">
                       You were referred — apply{' '}
                       <strong className="font-mono text-gold">{quote.suggestedCoupon.code}</strong>
-                      {quote.suggestedCoupon.estimatedDiscount > 0
-                        ? <> to save {formatPrice(quote.suggestedCoupon.estimatedDiscount)}</>
-                        : <> for free shipping</>}
+                      {/* Nothing is promised when it saves nothing: a free-shipping coupon
+                          waives nothing, because shipping is never charged online — the
+                          customer pays the courier on delivery. */}
+                      {quote.suggestedCoupon.estimatedDiscount > 0 && (
+                        <> to save {formatPrice(quote.suggestedCoupon.estimatedDiscount)}</>
+                      )}
                     </span>
                   </button>
                 )}

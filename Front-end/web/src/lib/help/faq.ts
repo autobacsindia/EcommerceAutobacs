@@ -10,7 +10,8 @@
  *   • cancellation  — app/terms ("7. Orders and Cancellations")
  *   • refund timing — app/returns (inspection, then 5–9 business days)
  *   • return policy — RETURN_POLICY_SUMMARY (lib/constants.ts)
- *   • delivery      — free on every order (checkout sends shippingCost: 0);
+ *   • delivery      — extra, paid to the courier on delivery (checkout sends
+ *                     shippingCost: 0, so nothing is charged online);
  *                     standard times as app/shipping states them
  *
  * `links` send the shopper to the page that does the thing the answer
@@ -79,7 +80,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         question: 'How much does shipping cost?',
-        answer: 'Delivery is free on every order. The total you see at checkout is the total you pay.',
+        answer: "Shipping is not included in the website total. The charge depends on the parcel's size and your location, and you pay it on delivery by cash or GPay / UPI.",
       },
       {
         question: 'Do you ship internationally?',

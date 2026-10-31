@@ -20,5 +20,5 @@ export interface TrustBadge {
 export const TRUST_BADGES: TrustBadge[] = [
   { icon: 'Shield', label: 'Genuine Products' },
   { icon: 'CreditCard', label: 'Secure Checkout' },
-  { icon: 'Truck', label: 'Shipping calculated at checkout' },
+  { icon: 'Truck', label: 'Shipping extra, paid on delivery' },
 ];
