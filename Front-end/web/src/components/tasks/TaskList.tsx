@@ -123,7 +123,7 @@ function Group({ status, tasks, onOpen, collapsed, onToggle, quickAddFor, footer
 }) {
   const Chevron = collapsed ? ChevronRight : ChevronDown;
   return (
-    <section aria-label={STATUS_STYLE[status].label} className="rounded-xl border border-gray-200 bg-white shadow-sm">
+    <section aria-label={STATUS_STYLE[status].label} className="rounded-2xl border border-gray-200 bg-white shadow-sm">
       <button type="button" onClick={onToggle} aria-expanded={!collapsed} className="flex w-full items-center gap-2 rounded-t-xl px-3 py-2.5 text-left hover:bg-gray-50">
         <Chevron aria-hidden className="h-4 w-4 text-gray-400" />
         <StatusDot status={status} />

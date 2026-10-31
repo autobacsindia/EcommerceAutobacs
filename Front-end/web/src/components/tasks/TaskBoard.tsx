@@ -35,13 +35,13 @@ function BoardCard({ t, onOpen, onMove, moving }: {
         <p className={`flex-1 text-sm font-medium leading-snug ${t.status === 'done' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</p>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-[26px]"><TaskMeta t={t} /></div>
-      <div className="mt-2.5 flex items-center justify-between gap-2 pl-[26px]">
+      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 pl-[26px]">
         <span className="flex items-center gap-2">
           <PriorityFlag priority={t.priority} />
           <DuePill t={t} />
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="font-mono text-[10px] text-gray-400">{t.code}</span>
+        <span className="ml-auto flex items-center gap-1.5">
+          <span className="whitespace-nowrap font-mono text-[10px] text-gray-400">{t.code}</span>
           <Avatar name={t.assignee.name} id={t.assignee.id} size="xs" />
         </span>
       </div>

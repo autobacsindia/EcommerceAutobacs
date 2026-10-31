@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { CornerUpRight, Download, Phone, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Pin, PinOff, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
+import { ChevronRight, CornerUpRight, Download, Phone, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Pin, PinOff, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { meetLinkIn } from './meet';
 import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf, useOpenUpwardIfCut } from './chatUi';
@@ -120,10 +120,16 @@ function OrderRefs({ refs, orderHref }: { refs: ChatMessage['refs']; orderHref: 
         <Link
           key={r.id}
           href={orderHref(r.id)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+          className="group/ref inline-flex min-w-[13rem] items-center gap-3 rounded-xl border border-gray-200 bg-white py-2 pl-2 pr-3 text-sm shadow-sm transition-colors hover:border-blue-300 hover:bg-blue-50"
         >
-          <Package className="h-3.5 w-3.5" aria-hidden="true" />
-          Order {r.code}
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-800">
+            <Package className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold text-gray-900">Order {r.code}</span>
+            <span className="block text-xs text-gray-500">Open the order</span>
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-hover/ref:translate-x-0.5" aria-hidden="true" />
         </Link>
       ))}
     </div>
@@ -142,13 +148,13 @@ function ThreadSummary({ m, meId, onOpen }: { m: ChatMessage; meId: string; onOp
     <button
       type="button"
       onClick={onOpen}
-      className={`mt-1.5 flex w-full max-w-xl items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs ${
-        forMe ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-gray-50 hover:border-emerald-600 hover:bg-emerald-50'
+      className={`mt-1.5 flex w-full max-w-xl items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left text-xs transition-colors ${
+        forMe ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
       }`}
       aria-label={`Open thread, ${m.replyCount} ${m.replyCount === 1 ? 'reply' : 'replies'}`}
     >
-      <MessageSquareReply className="h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
-      <span className="shrink-0 font-semibold text-emerald-800">
+      <MessageSquareReply className="h-4 w-4 shrink-0 text-blue-600" aria-hidden="true" />
+      <span className="shrink-0 font-semibold text-blue-700">
         {m.replyCount} {m.replyCount === 1 ? 'reply' : 'replies'}
       </span>
       <span className="min-w-0 flex-1 truncate text-gray-600">
@@ -202,8 +208,8 @@ function Reactions({
             title={`${who} reacted with ${r.emoji}`}
             className={`inline-flex h-7 items-center gap-1 rounded-full border px-2 text-sm leading-none transition-colors ${
               mine
-                ? 'border-emerald-600 bg-emerald-50 text-emerald-900'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
+                ? 'border-blue-300 bg-blue-50 text-blue-800'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50'
             } disabled:cursor-default`}
           >
             <span className="text-base">{r.emoji}</span>
@@ -275,7 +281,7 @@ const isTouchScreen = () =>
 const INTERACTIVE = 'a,button,input,textarea,select,label,[role="menu"],[role="dialog"],[role="alertdialog"]';
 
 /** The action-bar buttons: a bigger target on a touch screen. */
-const ACTION_BTN = 'rounded-full p-1.5 text-gray-600 pointer-coarse:p-2.5';
+const ACTION_BTN = 'rounded-lg p-1.5 text-gray-600 pointer-coarse:p-2.5';
 
 /** The DOM id of a message row, so a quote can scroll to what it quotes. */
 export const messageDomId = (id: string) => `chat-msg-${id}`;
@@ -532,14 +538,14 @@ export default function MessageItem({
         ref={row}
         onClick={onRowTap}
         className={`group relative flex gap-3 rounded-xl px-3 transition-colors ${grouped ? 'py-0.5' : 'mt-1 pb-1 pt-2'} ${
-          mentionsMe ? 'bg-amber-50 ring-1 ring-amber-200' : actionsOpen ? 'bg-gray-100/70' : 'hover:bg-gray-100/70'
+          mentionsMe ? 'bg-amber-50 ring-1 ring-amber-200' : actionsOpen ? 'bg-gray-50' : 'hover:bg-gray-50'
         }`}
       >
         {grouped ? <span className="w-9 shrink-0" /> : <Avatar person={m.sender} system={m.kind === 'system'} />}
         <div className="min-w-0 flex-1">
           {!grouped && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span className="text-sm font-semibold text-gray-900">
+              <span className="text-sm font-bold text-gray-900">
                 {m.kind === 'system' ? 'Roavion updates' : mine ? 'You' : m.sender?.name ?? 'Former member'}
               </span>
               {m.kind === 'system' ? (
@@ -681,7 +687,7 @@ export default function MessageItem({
             data-testid="message-actions"
             // A pick closes the bar on a touch screen; what it opened (picker, menu) stays.
             onClick={() => setActionsOpen(false)}
-            className={`absolute -top-3 right-3 z-10 items-center gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 shadow-md focus-within:flex group-hover:flex ${
+            className={`absolute -top-3.5 right-3 z-10 items-center gap-0.5 rounded-xl border border-gray-200 bg-white p-0.5 shadow-lg focus-within:flex group-hover:flex ${
               actionsOpen ? 'flex' : 'hidden'
             }`}
           >
@@ -689,7 +695,7 @@ export default function MessageItem({
               <button
                 type="button"
                 onClick={() => setPicking(true)}
-                className={`${ACTION_BTN} hover:bg-emerald-50 hover:text-emerald-800`}
+                className={`${ACTION_BTN} hover:bg-blue-50 hover:text-blue-700`}
                 aria-label="Add reaction"
                 title="Add reaction"
               >
@@ -700,7 +706,7 @@ export default function MessageItem({
               <button
                 type="button"
                 onClick={() => onQuote!(m)}
-                className={`${ACTION_BTN} hover:bg-emerald-50 hover:text-emerald-800`}
+                className={`${ACTION_BTN} hover:bg-blue-50 hover:text-blue-700`}
                 aria-label="Quote in reply"
                 title="Quote in reply"
               >
@@ -711,7 +717,7 @@ export default function MessageItem({
               <button
                 type="button"
                 onClick={() => onOpenThread!(m)}
-                className={`${ACTION_BTN} hover:bg-emerald-50 hover:text-emerald-800`}
+                className={`${ACTION_BTN} hover:bg-blue-50 hover:text-blue-700`}
                 aria-label="Reply in thread"
                 title="Reply in thread"
               >
@@ -722,7 +728,7 @@ export default function MessageItem({
               <button
                 type="button"
                 onClick={startEdit}
-                className={`${ACTION_BTN} hover:bg-emerald-50 hover:text-emerald-800`}
+                className={`${ACTION_BTN} hover:bg-blue-50 hover:text-blue-700`}
                 aria-label="Edit message"
                 title="Edit (within 30 minutes of sending)"
               >
@@ -744,7 +750,7 @@ export default function MessageItem({
               <button
                 type="button"
                 onClick={() => setMoreOpen(true)}
-                className={`${ACTION_BTN} hover:bg-emerald-50 hover:text-emerald-800`}
+                className={`${ACTION_BTN} hover:bg-blue-50 hover:text-blue-700`}
                 aria-label="More actions"
                 aria-haspopup="menu"
                 title="More"

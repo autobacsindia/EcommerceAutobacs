@@ -43,6 +43,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
   countedUnread: () => ({ chat: 0, updates: 0 }),
   notifyOf: () => 'all',
   liveStatus: () => null,
+  useOpenDm: () => ({ mutate: jest.fn(), isPending: false }),
 }));
 
 /** Pretend to be a phone (coarse pointer) or a computer with a mouse. */

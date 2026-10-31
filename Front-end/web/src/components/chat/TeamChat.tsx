@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ChevronDown, MessageSquarePlus, Plus, Search, Star } from 'lucide-react';
+import { ChevronDown, Keyboard, MessageSquarePlus, Plus, Search, Star } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from '@/hooks/queries/keys';
@@ -29,6 +29,8 @@ import {
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, ChatReaction, MessagePage, ThreadData } from '@/hooks/queries/useTeamChat';
 import { Avatar, ChannelIcon, Dialog, GREEN, OnlineDot, shortWhen } from './chatUi';
+import QuickSwitcher, { channelTitle } from './QuickSwitcher';
+import { Kbd, ShortcutsDialog, modKeyLabel, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import Conversation from './Conversation';
 import { NotifyIcon } from './NotifyMenu';
 import MessageSearch from './MessageSearch';
@@ -226,7 +228,11 @@ export default function TeamChat() {
   const online = usePresence(canChat);
   const [editingStatus, setEditingStatus] = useState(false);
   const [dialog, setDialog] = useState<'space' | 'dm' | null>(null);
-  const [filter, setFilter] = useState('');
+  // The list: everything, or only conversations with something unread.
+  const [show, setShow] = useState<'all' | 'unread'>('all');
+  const [switcher, setSwitcher] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
+  const openDm = useOpenDm();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // null = closed. 'all' = every channel I can see; otherwise one channel id.
   const [searching, setSearching] = useState<string | null>(null);
@@ -375,6 +381,53 @@ export default function TeamChat() {
     [channels],
   );
 
+  /** What a row's badge counts: on "@mentions only" the mentions, on "Off" nothing. */
+  const loud = (c: ChatChannel) => { const u = countedUnread(c); return u.chat + u.updates; };
+
+  const { spaces, betweenTeams, dms } = useMemo(() => {
+    // "Unread" keeps the open conversation in the list, so it does not vanish
+    // the moment it is read.
+    const visible = channels.filter((c) => show === 'all' || c.unread > 0 || c.id === selectedId);
+    return {
+      spaces: visible.filter((c) => c.kind === 'space' && c.audience !== 'teams'),
+      betweenTeams: visible
+        .filter((c) => c.audience === 'teams')
+        // Busiest first: the conversation that moved last is the one to look at.
+        .sort((x, y) => new Date(y.lastMessageAt || 0).getTime() - new Date(x.lastMessageAt || 0).getTime()),
+      dms: visible.filter((c) => c.kind === 'dm'),
+    };
+  }, [channels, show, selectedId]);
+
+  const openPerson = useCallback(async (personId: string) => {
+    setSwitcher(false);
+    try {
+      const res = await openDm.mutateAsync([personId]);
+      select(res.channel.id);
+    } catch { /* the mutation's own error state; the list is unchanged */ }
+    // openDm is a stable mutation object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [select]);
+
+  // Alt+↑ / Alt+↓ walk the list in the order it is drawn (collapsed sections skipped).
+  const step = useCallback((by: number) => {
+    const order = [
+      ...(collapsed.has('spaces') ? [] : spaces),
+      ...(collapsed.has('teams') ? [] : betweenTeams),
+      ...(collapsed.has('dms') ? [] : dms),
+    ];
+    if (!order.length) return;
+    const at = order.findIndex((c) => c.id === selectedId);
+    const next = order[at < 0 ? 0 : (at + by + order.length) % order.length];
+    select(next.id);
+  }, [spaces, betweenTeams, dms, collapsed, selectedId, select]);
+
+  useHotkeys([
+    { key: 'k', mod: true, run: (e) => { e.preventDefault(); setSwitcher(true); } },
+    { key: '?', run: (e) => { e.preventDefault(); setShortcuts(true); } },
+    { key: 'ArrowUp', alt: true, run: (e) => { e.preventDefault(); step(-1); } },
+    { key: 'ArrowDown', alt: true, run: (e) => { e.preventDefault(); step(1); } },
+  ], canChat);
+
   const box = useRef<HTMLDivElement>(null);
   useFitToViewport(box, canChat);
 
@@ -382,22 +435,11 @@ export default function TeamChat() {
     return <p className="p-6 text-gray-600">Team chat is available to staff and admins only.</p>;
   }
 
-  const term = filter.trim().toLowerCase();
-  const visible = channels.filter((c) => !term || c.name.toLowerCase().includes(term));
-  const spaces = visible.filter((c) => c.kind === 'space' && c.audience !== 'teams');
-  const betweenTeams = visible
-    .filter((c) => c.audience === 'teams')
-    // Busiest first: the conversation that moved last is the one to look at.
-    .sort((x, y) => new Date(y.lastMessageAt || 0).getTime() - new Date(x.lastMessageAt || 0).getTime());
-  const dms = visible.filter((c) => c.kind === 'dm');
-
-  /** What a row's badge counts: on "@mentions only" the mentions, on "Off" nothing. */
-  const loud = (c: ChatChannel) => { const u = countedUnread(c); return u.chat + u.updates; };
-
   const row = (c: ChatChannel) => {
     const active = c.id === selectedId;
     const level = notifyOf(c);
     const counted = loud(c);
+    const status = c.kind === 'dm' && !c.group && c.partner ? liveStatus(peopleById.get(c.partner.id)?.status) : null;
     return (
       <li key={c.id}>
         <button
@@ -405,19 +447,17 @@ export default function TeamChat() {
           onClick={() => select(c.id)}
           aria-current={active ? 'true' : undefined}
           title={c.description || c.name}
-          className={`flex w-full items-center gap-3 rounded-full py-1.5 pl-2 pr-3 text-left text-sm transition-colors ${
-            active ? 'bg-emerald-100 text-emerald-900' : 'text-gray-700 hover:bg-gray-200/70'
+          className={`flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left text-sm transition-colors ${
+            active ? 'bg-blue-50 text-blue-900' : 'text-gray-700 hover:bg-gray-100'
           } ${counted > 0 ? 'font-semibold text-gray-900' : ''}`}
         >
           <span className="relative inline-flex shrink-0">
             <ChannelIcon channel={c} />
             {c.kind === 'dm' && !c.group && c.partner && online.has(c.partner.id) && <OnlineDot />}
           </span>
-          <span className="min-w-0 flex-1 truncate">
-            {c.audience === 'teams' || c.kind === 'dm' ? c.name : `#${c.name}`}
-            {c.kind === 'dm' && !c.group && c.partner && liveStatus(peopleById.get(c.partner.id)?.status) && (
-              <span className="ml-1.5 font-normal text-gray-500">· {liveStatus(peopleById.get(c.partner.id)?.status)!.text}</span>
-            )}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{channelTitle(c)}</span>
+            {status && <span className="block truncate text-xs font-normal text-gray-500">{status.text}</span>}
           </span>
           {level !== 'all' && (
             <span className="shrink-0 text-gray-400" title={level === 'off' ? 'Notifications off' : 'Only @mentions'}>
@@ -425,7 +465,7 @@ export default function TeamChat() {
             </span>
           )}
           {counted > 0 ? (
-            <span className="min-w-[22px] rounded-full px-1.5 text-center text-xs font-bold leading-[20px] text-[#fff]" style={{ background: GREEN }}
+            <span className="min-w-[22px] rounded-full bg-blue-600 px-1.5 text-center text-xs font-bold leading-[20px] text-white"
               aria-label={level === 'mentions' ? `${counted} unread mentions` : `${counted} unread`}>
               {level === 'mentions' ? '@' : ''}{counted > 99 ? '99+' : counted}
             </span>
@@ -448,8 +488,8 @@ export default function TeamChat() {
     const open = !collapsed.has(key);
     const unread = items.reduce((n, c) => n + loud(c), 0);
     return (
-      <div className="mt-3">
-        <div className="flex items-center justify-between pl-2 pr-1">
+      <div className="mt-4 first:mt-1">
+        <div className="flex items-center justify-between pl-1 pr-1">
           <button
             type="button"
             onClick={() => setCollapsed((prev) => {
@@ -457,12 +497,12 @@ export default function TeamChat() {
               if (next.has(key)) next.delete(key); else next.add(key);
               return next;
             })}
-            className="flex items-center gap-1 rounded-full px-1 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-800"
+            className="flex items-center gap-1 rounded-lg px-1 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-gray-500 hover:text-gray-800"
             aria-expanded={open}
           >
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden="true" />
             {label}
-            {!open && unread > 0 && <span className="ml-1 h-2 w-2 rounded-full" style={{ background: GREEN }} aria-label={`${unread} unread`} />}
+            {!open && unread > 0 && <span className="ml-1 h-2 w-2 rounded-full bg-blue-600" aria-label={`${unread} unread`} />}
           </button>
           {action}
         </div>
@@ -476,6 +516,24 @@ export default function TeamChat() {
     );
   };
 
+  const mod = modKeyLabel();
+  const shortcutGroups: ShortcutGroup[] = [
+    { title: 'Moving around', items: [
+      { keys: [mod, 'K'], label: 'Jump to a space, team or person' },
+      { keys: ['Alt', '↑'], label: 'Previous conversation' },
+      { keys: ['Alt', '↓'], label: 'Next conversation' },
+      { keys: ['Esc'], label: 'Close a thread or a pop-up' },
+      { keys: ['?'], label: 'Show these shortcuts' },
+    ] },
+    { title: 'Writing a message', items: [
+      { keys: ['Enter'], label: 'Send' },
+      { keys: ['Shift', 'Enter'], label: 'New line' },
+      { keys: ['@'], label: 'Mention a person or a team' },
+      { keys: [mod, 'B'], label: 'Bold' },
+      { keys: [mod, 'I'], label: 'Italic' },
+    ] },
+  ];
+
   return (
     // Below lg: edge to edge (cancelling the panel's padding), one pane at a time,
     // height fitted to the visible screen by useFitToViewport. From lg: list beside
@@ -485,86 +543,131 @@ export default function TeamChat() {
       className="relative -mx-4 -mb-4 flex h-[calc(100dvh-4.5rem)] gap-0 overflow-hidden bg-[var(--pn-chat,#f2f6fc)] p-0 md:-mx-6 md:-mb-6 lg:mx-0 lg:mb-0 lg:h-[calc(100dvh-140px)] lg:min-h-[480px] lg:gap-2 lg:rounded-2xl lg:p-2"
     >
       <aside
-        className={`w-full min-w-0 shrink-0 flex-col lg:flex lg:w-72 ${selected ? 'hidden' : 'flex'}`}
+        className={`w-full min-w-0 shrink-0 flex-col bg-white lg:flex lg:w-80 lg:rounded-2xl lg:shadow-sm ${selected ? 'hidden' : 'flex'}`}
         aria-label="Chat channels"
       >
-        <div className="px-2 pb-1 pt-2">
-          <div className="flex items-center justify-between px-1">
-            <h1 className="text-lg font-semibold text-gray-900">
-              Chat
-              {totalUnread > 0 && <span className="ml-2 align-middle text-xs font-semibold text-emerald-700">{totalUnread} new</span>}
+        <div className="space-y-3 px-3 pb-2 pt-3">
+          <div className="flex items-center gap-1">
+            <h1 className="pn-title min-w-0 flex-1 truncate text-xl text-gray-900">
+              Team chat
             </h1>
-            <span className="flex items-center">
-              <button
-                type="button"
-                onClick={() => setShowStarred(true)}
-                className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
-                aria-label="Starred messages"
-                title="Starred messages"
-              >
-                <Star className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearching('all')}
-                className="rounded-full p-2 text-gray-600 hover:bg-gray-200"
-                aria-label="Search all messages"
-                title="Search all messages"
-              >
-                <Search className="h-5 w-5" />
-              </button>
-            </span>
+            <button
+              type="button"
+              onClick={() => setShowStarred(true)}
+              className="grid h-9 w-9 place-items-center rounded-lg text-gray-600 hover:bg-gray-100"
+              aria-label="Starred messages"
+              title="Starred messages"
+            >
+              <Star className="h-[18px] w-[18px]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSearching('all')}
+              className="grid h-9 w-9 place-items-center rounded-lg text-gray-600 hover:bg-gray-100"
+              aria-label="Search all messages"
+              title="Search all messages"
+            >
+              <Search className="h-[18px] w-[18px]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDialog('dm')}
+              className="grid h-9 w-9 place-items-center rounded-lg bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+              aria-label="New chat"
+              title="New chat"
+            >
+              <MessageSquarePlus className="h-[18px] w-[18px]" />
+            </button>
           </div>
           <button
             type="button"
-            onClick={() => setDialog('dm')}
-            className="mt-2 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-gray-800 shadow-sm hover:shadow-md"
+            onClick={() => setSwitcher(true)}
+            className="flex h-10 w-full items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 text-left text-sm text-gray-500 transition-colors hover:border-gray-300 hover:bg-white"
           >
-            <MessageSquarePlus className="h-5 w-5 text-emerald-700" /> New chat
+            <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">Jump to…</span>
+            <span className="hidden shrink-0 items-center gap-0.5 sm:flex"><Kbd>{mod}</Kbd><Kbd>K</Kbd></span>
           </button>
-          <button
-            type="button"
-            onClick={() => setEditingStatus(true)}
-            className="mt-2 block w-full truncate rounded-full px-3 py-1 text-left text-xs text-gray-600 hover:bg-gray-200/70"
-            title="Set a status everyone in chat can see"
-          >
-            {myStatus ? <>Your status: <span className="font-medium text-gray-800">{myStatus.text}</span></> : '＋ Set a status'}
-          </button>
-          <div className="relative mt-3">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
-            <input
-              type="search"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Find a space, team or person"
-              aria-label="Find a space, team or person"
-              className="h-9 w-full rounded-full border border-transparent bg-white pl-9 pr-3 text-sm outline-none focus:border-emerald-600"
-            />
+          <div className="flex items-center gap-1.5" role="group" aria-label="Show">
+            {(['all', 'unread'] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setShow(key)}
+                aria-pressed={show === key}
+                className={`h-7 rounded-full px-3 text-xs font-semibold transition-colors ${
+                  show === key ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {key === 'all' ? 'All' : `Unread${totalUnread ? ` · ${totalUnread > 99 ? '99+' : totalUnread}` : ''}`}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setShortcuts(true)}
+              className="ml-auto hidden h-7 w-7 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 sm:grid"
+              aria-label="Keyboard shortcuts"
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-4">
-          {isLoading && <p className="px-3 py-4 text-sm text-gray-500">Loading…</p>}
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+          {isLoading && (
+            <ul className="space-y-2 px-1 py-2" aria-label="Loading conversations">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <li key={i} className="flex animate-pulse items-center gap-3 px-1">
+                  <span className="h-7 w-7 rounded-xl bg-gray-100" />
+                  <span className="h-3 flex-1 rounded bg-gray-100" />
+                </li>
+              ))}
+            </ul>
+          )}
           {isError && (
             <p className="px-3 py-4 text-sm text-gray-600">
               Couldn&apos;t load chat.{' '}
-              <button type="button" className="font-semibold text-emerald-700 underline" onClick={() => refetch()}>
+              <button type="button" className="font-semibold text-blue-700 underline" onClick={() => refetch()}>
                 Retry
               </button>
             </p>
           )}
+          {!isLoading && show === 'unread' && !spaces.length && !betweenTeams.length && !dms.length && (
+            <div className="px-4 py-10 text-center">
+              <p className="text-sm font-semibold text-gray-800">You’re all caught up</p>
+              <p className="mt-1 text-xs text-gray-500">Nothing unread anywhere.</p>
+              <button type="button" onClick={() => setShow('all')} className="mt-3 text-xs font-semibold text-blue-700 underline">Show all conversations</button>
+            </div>
+          )}
 
-          {section('spaces', 'Spaces', spaces, 'No spaces match',
+          {(show === 'all' || spaces.length > 0) && section('spaces', 'Spaces', spaces, 'No spaces',
             me?.canCreateSpace ? (
-              <button type="button" onClick={() => setDialog('space')} className="rounded-full p-1 text-gray-500 hover:bg-gray-200" aria-label="New space" title="New space">
+              <button type="button" onClick={() => setDialog('space')} className="rounded-lg p-1 text-gray-500 hover:bg-gray-100" aria-label="New space" title="New space">
                 <Plus className="h-4 w-4" />
               </button>
             ) : undefined)}
-          {section('teams', 'Between teams', betweenTeams, 'No team conversations match')}
-          {section('dms', 'Direct messages', dms, 'No direct messages yet',
-            <button type="button" onClick={() => setDialog('dm')} className="rounded-full p-1 text-gray-500 hover:bg-gray-200" aria-label="Start a direct message" title="Start a direct message">
+          {(show === 'all' || betweenTeams.length > 0) && section('teams', 'Between teams', betweenTeams, 'No team conversations')}
+          {(show === 'all' || dms.length > 0) && section('dms', 'Direct messages', dms, 'No direct messages yet',
+            <button type="button" onClick={() => setDialog('dm')} className="rounded-lg p-1 text-gray-500 hover:bg-gray-100" aria-label="Start a direct message" title="Start a direct message">
               <Plus className="h-4 w-4" />
             </button>)}
+        </div>
+
+        <div className="flex items-center gap-2.5 border-t border-gray-100 px-3 py-2.5">
+          <Avatar person={peopleById.get(meId) ?? { id: meId, name: meName, role: isAdmin ? 'admin' : 'staff', team: null, teamLabel: null, isHead: false }} size="sm" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-gray-900">{meName}</span>
+            <span className="block truncate text-xs text-gray-500">{myStatus ? myStatus.text : 'Active'}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setEditingStatus(true)}
+            className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            title="Set a status everyone in chat can see"
+          >
+            {myStatus ? 'Change status' : 'Set a status'}
+          </button>
         </div>
       </aside>
 
@@ -584,9 +687,12 @@ export default function TeamChat() {
           initialTab={initialTab}
         />
       ) : (
-        <div className="hidden flex-1 flex-col items-center justify-center gap-2 rounded-2xl bg-white text-gray-500 lg:flex">
-          <MessageSquarePlus className="h-10 w-10 text-gray-300" aria-hidden="true" />
-          Pick a space, team or person to start chatting
+        <div className="hidden flex-1 flex-col items-center justify-center gap-3 rounded-2xl bg-white px-6 text-center lg:flex">
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+            <MessageSquarePlus className="h-7 w-7" aria-hidden="true" />
+          </span>
+          <p className="pn-title text-lg text-gray-900">Pick a conversation</p>
+          <p className="max-w-xs text-sm text-gray-500">Choose a space, team or person on the left — or press <Kbd>{modKeyLabel()}</Kbd> <Kbd>K</Kbd> to jump straight to one.</p>
         </div>
       )}
 
@@ -598,6 +704,18 @@ export default function TeamChat() {
           onClose={() => setSearching(null)}
         />
       )}
+
+      {switcher && (
+        <QuickSwitcher
+          channels={channels}
+          people={people}
+          meId={meId}
+          onPickChannel={(id) => { setSwitcher(false); select(id); }}
+          onPickPerson={(id) => void openPerson(id)}
+          onClose={() => setSwitcher(false)}
+        />
+      )}
+      {shortcuts && <ShortcutsDialog groups={shortcutGroups} onClose={() => setShortcuts(false)} />}
 
       {editingStatus && <StatusDialog current={myStatus} onClose={() => setEditingStatus(false)} />}
 

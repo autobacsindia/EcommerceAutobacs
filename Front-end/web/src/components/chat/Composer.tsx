@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bold, Code, Italic, List, Package, Paperclip, Quote, Send, Smile, Strikethrough, Type, X } from 'lucide-react';
 import type { ChatChannel, ChatMessage, ChatPerson, RecentOrder, SendVars } from '@/hooks/queries/useTeamChat';
 import { useRecentOrders } from '@/hooks/queries/useTeamChat';
-import { Avatar, FileKindIcon, GREEN, fileSize, newClientId } from './chatUi';
+import { Avatar, FileKindIcon, fileSize, newClientId } from './chatUi';
 import { STAFF_TEAMS } from '@/lib/staffTeams';
 import EmojiPicker from './EmojiPicker';
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, mb } from '@/lib/attachments';
@@ -364,11 +364,14 @@ export default function Composer({
             ))}
           </div>
         )}
-        <div className="flex items-end gap-1 rounded-3xl border border-transparent bg-gray-100 p-1.5 transition-colors focus-within:border-emerald-600 focus-within:bg-white">
+        {/* Phones: one row (tools, text, send), like a messaging app. From sm the
+            text box takes the full first row and the tools sit under it, as in
+            Google Chat — `order` moves the box without changing tab order. */}
+        <div className="flex flex-wrap items-end gap-1 rounded-3xl border border-gray-200 bg-gray-50 p-1.5 transition-[border-color,box-shadow,background-color] focus-within:border-blue-500 focus-within:bg-white focus-within:shadow-[0_0_0_4px_var(--color-blue-50)] sm:rounded-2xl sm:bg-white sm:p-2 sm:shadow-sm">
           <button
             type="button"
             onClick={() => fileInput.current?.click()}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 hover:text-gray-800"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-100 sm:order-2 sm:rounded-lg hover:text-gray-800"
             aria-label="Attach a file"
             title="Attach a photo or document"
           >
@@ -377,7 +380,7 @@ export default function Composer({
           <button
             type="button"
             onClick={() => setShowOrders((v) => !v)}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 hover:text-gray-800"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-100 sm:order-2 sm:rounded-lg hover:text-gray-800"
             aria-label="Link an order"
             title="Link an order"
           >
@@ -386,7 +389,7 @@ export default function Composer({
           <button
             type="button"
             onClick={() => setShowEmoji((v) => !v)}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 hover:text-gray-800"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-100 sm:order-2 sm:rounded-lg hover:text-gray-800"
             aria-label="Add an emoji"
             title="Emoji"
           >
@@ -396,7 +399,7 @@ export default function Composer({
             type="button"
             onClick={() => setShowFormat((v) => !v)}
             aria-pressed={showFormat}
-            className={`hidden h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-gray-200 hover:text-gray-800 sm:grid ${showFormat ? 'bg-gray-200 text-gray-900' : 'text-gray-600'}`}
+            className={`hidden h-9 w-9 shrink-0 place-items-center rounded-lg hover:bg-gray-100 hover:text-gray-800 sm:order-2 sm:grid ${showFormat ? 'bg-gray-100 text-gray-900' : 'text-gray-600'}`}
             aria-label="Formatting"
             title="Formatting: *bold* _italic_ ~strike~ `code`"
           >
@@ -451,21 +454,23 @@ export default function Composer({
             maxLength={4000}
             placeholder={placeholder ?? `Message ${channelName}`}
             aria-label={placeholder ?? `Message ${channelName}`}
-            className="max-h-40 min-h-[40px] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-[15px] text-gray-900 outline-none"
+            className="max-h-40 min-h-[40px] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-[15px] text-gray-900 outline-none sm:order-1 sm:basis-full"
           />
+          <span className="hidden min-w-0 flex-1 truncate px-2 text-right text-[11px] text-gray-400 sm:order-3 sm:block">
+            Enter to send · Shift + Enter for a new line
+          </span>
           <button
             type="submit"
             disabled={!text.trim() && !files.length}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-[#fff] disabled:opacity-40"
-            style={{ background: GREEN }}
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-600 text-white transition-[background-color,transform] hover:bg-blue-700 active:scale-95 disabled:opacity-40 sm:order-4 sm:h-9 sm:w-11 sm:rounded-xl"
             aria-label="Send message"
           >
             <Send className="h-4 w-4" />
           </button>
         </div>
       </div>
-      <p className="mt-1 hidden text-[11px] text-gray-400 sm:block">
-        Enter to send · Shift + Enter for a new line · @ to mention · *bold* _italic_ ~strike~ `code` · drag a file in to share it
+      <p className="mt-1 hidden text-[11px] text-gray-400 lg:block">
+        @ to mention · *bold* _italic_ ~strike~ `code` · paste or drag in a photo or PDF to share it
       </p>
     </form>
   );
