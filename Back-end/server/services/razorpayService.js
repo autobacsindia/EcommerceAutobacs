@@ -45,6 +45,23 @@ class RazorpayService {
   }
 
   /**
+   * The public key id the storefront embeds (Affordability/EMI widget), or null when
+   * it is missing or not shaped like a Razorpay key id.
+   *
+   * This is the SAME value createOrder hands to checkout, so the widget and checkout
+   * can never drift apart again: the EMI strip once died on every PDP because the
+   * frontend baked in its own copy of the key that went stale after a rotation.
+   *
+   * The shape check is a guard against a mis-paste: if the secret ever lands in
+   * RAZORPAY_KEY_ID it must not be published to every visitor.
+   * @returns {string|null}
+   */
+  getPublicKeyId() {
+    const keyId = typeof this.key_id === 'string' ? this.key_id.trim() : '';
+    return /^rzp_(test|live)_[A-Za-z0-9]+$/.test(keyId) ? keyId : null;
+  }
+
+  /**
    * Create a Razorpay order
    * @param {Object} orderData - Order information
    * @param {string} orderData.orderId - Internal order ID

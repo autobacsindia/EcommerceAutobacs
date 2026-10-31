@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRazorpayKeyId } from '@/hooks/queries/useRazorpayKeyId';
 
 /**
  * Razorpay Affordability Widget — the "EMI from ₹X/month · View plans" strip
@@ -21,6 +22,12 @@ import { useEffect, useRef, useState } from 'react';
  * Amount is the product's unit price (in paise). The widget renders once on
  * mount; it is intentionally not re-rendered on quantity changes (the SDK has
  * no clean live-amount update, and per-unit EMI matches standard PDP behaviour).
+ *
+ * The key comes from the backend (`useRazorpayKeyId`) — the same value that signs
+ * checkout orders — never from a build-time NEXT_PUBLIC_* copy. A baked-in key
+ * outlived a Razorpay key rotation once: Razorpay answered it with 401, the widget
+ * collapsed to nothing on every PDP, and checkout (already server-keyed) kept working,
+ * so nobody noticed.
  */
 
 // Module-level promise cache: dedupe the <script> across every PDP mount and
@@ -29,10 +36,11 @@ const WIDGET_SRC = 'https://cdn.razorpay.com/widgets/affordability/affordability
 let widgetScriptPromise: Promise<boolean> | null = null;
 
 /**
- * How long to wait for the widget to paint before falling back to plain copy.
+ * How long to wait for the widget's verdict before falling back to plain copy.
  * The widget fetches the account's affordability config over the network, so this
  * has to tolerate a slow connection; the MutationObserver below usually resolves
- * it far sooner.
+ * it far sooner. A verdict that arrives AFTER the timeout still wins — a late
+ * paint replaces the fallback line rather than being ignored.
  */
 const WIDGET_RENDER_TIMEOUT_MS = 3500;
 
@@ -95,6 +103,54 @@ function loadWidgetScript(): Promise<boolean> {
  */
 const WIDGET_CONTAINER_ID = 'razorpay-affordability-widget';
 
+/**
+ * Has the widget decided to show something? Read from what Razorpay's bundle writes to
+ * the DOM, because "an iframe exists" proves nothing:
+ *
+ *   1. `render()` inserts its iframe at a DEFAULT `height="105px"` before the frame has
+ *      loaded or asked Razorpay anything.
+ *   2. The frame then posts `setWidgetHeight`, and the bundle writes the real height
+ *      onto the iframe (`iframe.height = r ? r+5 : r` px) and sets the container to
+ *      `display: none` when that height is 0.
+ *
+ * Step 2 lands as 0 whenever there is nothing to show: Affordability not enabled on the
+ * account, no lender for this amount — or a key Razorpay rejects (401), which is what
+ * happened in production. Counting step 1 as "painted" left a blank strip and suppressed
+ * the fallback line. So only a height the widget has REPORTED (an attribute write we
+ * observed after insertion) counts, and only if it is visibly non-zero.
+ *
+ * Returns true / false once the widget has a verdict, null while it is still deciding.
+ * Attributes rather than offsetHeight: they are exactly what the bundle writes, and they
+ * read the same while our wrapper is still collapsed (and under jsdom).
+ */
+function readWidgetVerdict(container: HTMLElement, heightReported: boolean): boolean | null {
+  const iframe = container.querySelector('iframe');
+  if (!iframe) return null;
+  if (container.style.display === 'none') return false;
+  if (!heightReported) return null;
+  const height = parseFloat(iframe.getAttribute('height') ?? '');
+  const width = parseFloat(iframe.getAttribute('width') ?? '');
+  // A width of exactly 0 is the "container was zero-width at mount" failure (see the
+  // width warning in the JSX). NaN (unset / "100%") is fine — the iframe fills the box.
+  return height > 0 && width !== 0;
+}
+
+/**
+ * Razorpay inserts its main frame with `loading="lazy"`. While we wait for a verdict our
+ * wrapper is collapsed (`h-0 overflow-hidden`), which clips the frame to zero area — so
+ * the browser never considers it near the viewport and never loads it. An unloaded frame
+ * never reports a height, and without a height we never reveal the wrapper: a deadlock
+ * that showed the fallback even for a perfectly valid key (seen in the preview, where the
+ * frame loaded on one reload and not the next).
+ *
+ * Flipping the attribute to eager before the frame has loaded makes the browser start the
+ * deferred load (HTML "lazy load resumption steps"). It costs one small iframe load on
+ * PDPs whose strip is below the fold — the price of a widget that can actually decide.
+ */
+function loadWidgetFramesEagerly(container: HTMLElement) {
+  container.querySelectorAll('iframe[loading="lazy"]').forEach((f) => f.setAttribute('loading', 'eager'));
+}
+
 interface RazorpayAffordabilitySuiteInstance {
   render: () => void;
   destroy?: () => void;
@@ -111,45 +167,61 @@ interface EmiOptionsProps {
 }
 
 export default function EmiOptions({ price, className }: EmiOptionsProps) {
-  const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+  // undefined while loading, null when the backend has no valid key (or is unreachable).
+  const { data: keyId, isPending: keyPending } = useRazorpayKeyId();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // null = still waiting. Drives the fallback copy: the widget silently renders
   // nothing when Affordability is not enabled on the Razorpay account, when no
-  // lender covers this amount, or when the CDN is blocked — and a blank gap where
-  // the EMI strip should be is indistinguishable from a broken page.
+  // lender covers this amount, when Razorpay rejects the key, or when the CDN is
+  // blocked — and a blank gap where the EMI strip should be is indistinguishable
+  // from a broken page.
   const [widgetPainted, setWidgetPainted] = useState<boolean | null>(null);
 
   const amountPaise = Math.round(price * 100);
+  // Below the lender floor there is no EMI to describe — render nothing at all
+  // rather than a promise we cannot keep.
+  const eligibleForEmi = price >= EMI_MIN_AMOUNT;
 
   useEffect(() => {
-    // Nothing to show without a configured key or a valid amount.
-    if (!keyId || !Number.isFinite(amountPaise) || amountPaise <= 0) return;
+    // Nothing to show without a configured key, a valid amount, or an eligible price.
+    if (!keyId || !eligibleForEmi || !Number.isFinite(amountPaise) || amountPaise <= 0) return;
 
     let cancelled = false;
     let instance: RazorpayAffordabilitySuiteInstance | null = null;
     const container = containerRef.current;
 
-    // Watch for the widget painting into our container rather than guessing at a
-    // fixed delay — resolves immediately on a fast connection, and the timeout
-    // below is only the floor for "it never came".
-    // Declared before assignment so the callback can disconnect the very observer it
-    // belongs to (a `const` initialised with a closure over itself is not in scope yet).
+    // Follow the widget's own verdict rather than guessing at a fixed delay — resolves
+    // as soon as Razorpay reports a height, and the timeout below is only the floor for
+    // "it never decided". The observer stays connected after a verdict: the widget can
+    // re-report (e.g. a late paint after we already showed the fallback), and the UI
+    // should follow its latest word.
+    let heightReported = false;
     let observer: MutationObserver | null = null;
     if (container) {
-      observer = new MutationObserver(() => {
-        if (container.childElementCount > 0) {
-          setWidgetPainted(true);
-          observer?.disconnect();
+      observer = new MutationObserver((records) => {
+        loadWidgetFramesEagerly(container);
+        for (const r of records) {
+          if (r.type === 'attributes' && r.attributeName === 'height' && r.target instanceof HTMLIFrameElement) {
+            heightReported = true;
+          }
         }
+        const verdict = readWidgetVerdict(container, heightReported);
+        if (verdict !== null) setWidgetPainted(verdict);
       });
-      observer.observe(container, { childList: true, subtree: true });
+      observer.observe(container, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['height', 'style'],
+      });
     }
 
     const timer = setTimeout(() => {
       if (cancelled) return;
-      setWidgetPainted((container?.childElementCount ?? 0) > 0);
-      observer?.disconnect();
+      // No verdict yet → be honest and show the fallback line; a late verdict still
+      // flips it via the observer above.
+      setWidgetPainted(container ? (readWidgetVerdict(container, heightReported) ?? false) : false);
     }, WIDGET_RENDER_TIMEOUT_MS);
 
     loadWidgetScript().then((ok) => {
@@ -167,6 +239,9 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
       try {
         instance = new Ctor({ key: keyId, amount: amountPaise });
         instance.render();
+        // render() inserts the frame synchronously when it finds the container; don't
+        // wait for the observer's microtask to un-lazy it.
+        loadWidgetFramesEagerly(container);
       } catch {
         // Widget failure must never break the PDP — fall back to plain copy.
         setWidgetPainted(false);
@@ -184,14 +259,13 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
       }
       if (container) container.innerHTML = '';
     };
-  }, [keyId, amountPaise]);
+  }, [keyId, amountPaise, eligibleForEmi]);
 
-  if (!keyId) return null;
-
-  // Below the lender floor there is no EMI to describe — render nothing at all
-  // rather than a promise we cannot keep.
-  const eligibleForEmi = price >= EMI_MIN_AMOUNT;
   if (!eligibleForEmi) return null;
+  // No key (backend unconfigured or unreachable) means no widget AND a broken checkout,
+  // so even the "shown at checkout" line would be a promise we cannot keep. While the
+  // key is still loading, render the shell so the explainer does not pop in later.
+  if (!keyPending && !keyId) return null;
 
   return (
     <div className={className}>
@@ -229,8 +303,8 @@ export default function EmiOptions({ price, className }: EmiOptionsProps) {
       </div>
 
       {/* Widget silent (Affordability not enabled on the account, no lender for this
-          amount, or the CDN blocked). State only what is true regardless — Razorpay
-          checkout shows whatever methods the account has enabled. No rate claims. */}
+          amount, key rejected, or the CDN blocked). State only what is true regardless —
+          Razorpay checkout shows whatever methods the account has enabled. No rate claims. */}
       {widgetPainted === false && (
         <p className="text-[12px] uppercase tracking-[0.12em] text-ink-muted font-semibold">
           EMI &amp; pay-later options are shown at checkout

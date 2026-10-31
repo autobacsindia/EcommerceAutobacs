@@ -8,6 +8,19 @@ export const publicBrowsingRateLimit = rateLimit({
   keyGenerator: (req) => `rate_limit:public:${req.ip || req.connection.remoteAddress}`
 });
 
+// GET /payment-config/razorpay — read once per storefront session (the client caches
+// it) and edge-cacheable, so real traffic barely reaches the origin. Keyed on
+// cf-connecting-ip: behind Cloudflare req.ip is the edge, which would put every
+// shopper in one bucket.
+export const paymentConfigRateLimit = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: process.env.NODE_ENV === 'development' ? 1000 : 120,
+  burst: 40,
+  message: 'Too many requests. Please slow down.',
+  keyGenerator: (req) =>
+    `rate_limit:payment-config:${req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress}`
+});
+
 export const authenticatedUserRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 600,

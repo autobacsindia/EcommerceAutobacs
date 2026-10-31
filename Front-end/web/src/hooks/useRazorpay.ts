@@ -173,9 +173,11 @@ export const useRazorpay = ({
         throw new Error('Failed to create Razorpay order');
       }
 
-      // Prefer the key the backend signed this order with; the build-time env var
-      // is only a fallback for older backends.
-      const razorpayKey = razorpayResponse.data.keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+      // The key MUST be the one the backend signed this order with. There is no
+      // build-time fallback on purpose: a NEXT_PUBLIC_* copy goes stale on a key
+      // rotation, and a key that does not match the order's account fails checkout
+      // anyway — better a clear "not configured" error than a confusing gateway one.
+      const razorpayKey = razorpayResponse.data.keyId;
       if (!razorpayKey) {
         throw new Error('Payment gateway is not configured. Please contact support.');
       }

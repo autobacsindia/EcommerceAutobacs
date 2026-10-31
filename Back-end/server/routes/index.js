@@ -49,6 +49,7 @@ import orderRoutes from './orders.js';
 import returnRoutes from './returnRoutes.js';
 import razorpayRoutes from './razorpay.js';
 import paymentMethodRoutes from './paymentMethods.js';
+import paymentConfigRoutes from './paymentConfig.js';
 import checkoutRoutes from './checkout.js';
 import couponRoutes from './coupons.js';
 import loyaltyRoutes from './loyalty.js';
@@ -139,6 +140,9 @@ apiRouter.use('/orders', setRequestTimeout(120000), checkoutRateLimit, orderRout
 apiRouter.use('/returns', setRequestTimeout(60000), returnsRateLimit, returnRoutes);
 apiRouter.use('/razorpay', setRequestTimeout(120000), checkoutRateLimit, razorpayRoutes);
 apiRouter.use('/payment-methods', checkoutRateLimit, paymentMethodRoutes);
+// Public, non-secret payment config read by the PDP (EMI widget key). Carries its own
+// cf-connecting-ip limiter in-route — not checkoutRateLimit, which is sized for checkout.
+apiRouter.use('/payment-config', paymentConfigRoutes);
 // Checkout pricing preview (coupon + karma). optionalAuth personalises eligibility for guests/users.
 apiRouter.use('/checkout', checkoutRateLimit, optionalAuth, checkoutRoutes);
 // Coupons: /available is public; admin CRUD is guarded in-route.

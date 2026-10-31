@@ -77,7 +77,7 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 | `MONGODB_URI` | = dev `MONGO_URI` (footgun, see below) | unset unless a prod script needs it | scripts/tests read this name |
 | `REDIS_URL` | dev Upstash | prod Upstash | dev must not poison prod cache |
 | `QUEUE_REDIS_URL` | dev Upstash | prod Upstash | **dev worker must not consume prod jobs** |
-| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | `rzp_test_*` | `rzp_test_*` → `rzp_live_*` at cutover | test vs live mode |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | `rzp_test_*` | `rzp_test_*` → `rzp_live_*` at cutover | test vs live mode. The ONLY copy of the key id: checkout gets it from create-order and the PDP EMI widget from `GET /payment-config/razorpay` — there is no frontend `NEXT_PUBLIC_RAZORPAY_KEY_ID` any more |
 | `RAZORPAY_WEBHOOK_SECRET` | test-mode webhook secret | live-mode webhook secret at cutover | separate webhook endpoints |
 | `JWT_SECRET` | dev secret (≥64 chars) | prod secret (≥64 chars) | leaked dev token must not forge prod sessions; **must match frontend in same tier** |
 | `FRONTEND_URL` | `http://localhost:3000` | `https://autobacsindia.com` | CORS/redirects; prod must be HTTPS (validateEnv enforces) |
@@ -103,7 +103,6 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 |---|---|---|---|
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | `https://api.autobacsindia.com` | `/api/*` rewrite target |
 | `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | `https://autobacsindia.com` | build-time baked site URL |
-| `NEXT_PUBLIC_RAZORPAY_KEY_ID` | `rzp_test_*` | matches backend tier | must match backend key |
 | `JWT_SECRET` (server-side, NOT public) | = backend dev `JWT_SECRET` | = backend prod `JWT_SECRET` | edge middleware verifies backend JWTs |
 | `NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_LOGROCKET_APP_ID` | dev project or unset | prod project | keep dev events out of prod analytics |
 | `NEXT_PUBLIC_ALLOW_WP_IMAGES` | `true` | `true` pre-cutover → `false` after Cloudinary migration | env-gates legacy `autobacsindia.com/wp-content` image allowlist in `next.config.ts` |

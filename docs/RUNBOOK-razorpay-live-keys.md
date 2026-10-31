@@ -85,20 +85,16 @@ Confirm you are on the **production** environment, not `test`. Redeploy the serv
 Leave the `test` environment untouched — it keeps its `rzp_test_*` keys and its own
 webhook secret. That is the separation.
 
-## Step 4 — Vercel frontend (do not skip)
+## Step 4 — Vercel frontend: nothing to set
 
-`NEXT_PUBLIC_RAZORPAY_KEY_ID` is read by `src/hooks/useRazorpay.ts` when opening the
-checkout modal. If the backend mints a **live** `order_id` while the browser opens checkout
-with a **test** key, Razorpay rejects the mismatch and every checkout fails.
+The frontend holds **no** Razorpay key. Checkout takes the key id from the backend's
+create-order response, and the PDP EMI widget from `GET /api/v1/payment-config/razorpay`
+— both read Railway's `RAZORPAY_KEY_ID`. Restarting Railway in step 3 switches both at
+once; there is no frontend redeploy and no window where the two disagree.
 
-Vercel → project → Settings → Environment Variables → **Production**:
-
-```
-NEXT_PUBLIC_RAZORPAY_KEY_ID = rzp_live_…   (key id only — never the key secret)
-```
-
-`NEXT_PUBLIC_*` is inlined at **build** time, so this needs a **redeploy**, not just a
-restart. Steps 3 and 4 should land close together; between them, checkout is broken.
+If an old `NEXT_PUBLIC_RAZORPAY_KEY_ID` is still set in Vercel, delete it — nothing reads
+it. (A stale copy of it is what once made Razorpay reject the EMI widget with 401 on every
+product page.)
 
 Doing this *before* the domain cutover is deliberate: `autobacsindia.com` still serves
 WooCommerce, so the Railway/Vercel stack has no real customers to break.
