@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { ChevronRight, LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PushPrompt from '@/components/notifications/PushPrompt';
+import PanelThemeSwitch from './PanelThemeSwitch';
 import './panel.css';
 
 export type PanelNavItem = {
@@ -194,7 +195,10 @@ export default function PanelShell({
             <Menu className="h-5 w-5" />
           </button>
           <div className="min-w-0 flex-1">{heading}</div>
-          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+          <div className="flex flex-wrap items-center gap-2">
+            <PanelThemeSwitch />
+            {actions}
+          </div>
         </header>
         <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8">
           <PushPrompt />

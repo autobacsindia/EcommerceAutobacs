@@ -16,6 +16,16 @@
  *   • `text-white` on an inline literal colour (`style={{ background: GREEN }}`):
  *     `text-white` turns dark in the dark theme, the inline colour does not. Use
  *     `text-[#fff]`.
+ *   • `bg-opacity-50` (and the other `*-opacity-*`): Tailwind v4 dropped them, so
+ *     `bg-black bg-opacity-50` was a SOLID backdrop — black in light, white in
+ *     dark — hiding the page behind the Users / brand / vehicle dialogs. Use
+ *     `bg-black/50`.
+ *   • the zinc ramp as a dark surface with `text-white` on the page (the
+ *     Campaigns screens, written for an all-dark admin): white on the light page,
+ *     dark on the dark one. Use the panel's gray ramp and `text-gray-900`.
+ *   • `text-black`: the panel keeps black for backdrops (`bg-black/50`), so black
+ *     text would be black on the dark page. Use `text-gray-900`; a sheet that
+ *     must stay black-on-white (the packing slip) opts in with `pn-paper`.
  */
 import fs from 'fs';
 import path from 'path';
@@ -47,6 +57,9 @@ const STATUS = 'green|emerald|red|rose|amber|yellow|orange|sky|purple|indigo|tea
 const TINT = new RegExp(`(?:^|\\s)bg-(${STATUS})-(50|100|200)(?=[\\s/]|$)`, 'g');
 const INK = new RegExp(`(?:^|\\s)text-(${STATUS})-(\\d+)(?=[\\s/]|$)`, 'g');
 const LITERAL_BG = /(?:^|\s)bg-\[#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\](?!\/)/g;
+const OPACITY_UTILITY = /(?:^|\s)(?:[a-z-]+:)?(bg|text|border|ring|divide|placeholder)-opacity-\d+(?=\s|$)/;
+const ZINC = /(?:^|\s)(?:[a-z-]+:)?(?:bg|text|border|divide|ring)-zinc-\d+/;
+const BLACK_TEXT = /(?:^|\s)text-black(?=[\s/]|$)/;
 const STRINGS = /'[^'\n]*'|"[^"\n]*"|`[^`]*`/g;
 
 function luminance(hex: string): number {
@@ -68,6 +81,13 @@ export function offences(source: string, redefined: Set<string>): string[] {
     if (tinted && stuckInk) out.push(`${stuckInk[0].trim()} on a dark-theme tint: ${literal}`);
     const light = [...s.matchAll(LITERAL_BG)].find((m) => luminance(m[1]) > 0.7);
     if (light) out.push(`literal light surface ${light[0].trim()}: ${literal}`);
+    const opacity = s.match(OPACITY_UTILITY);
+    if (opacity) out.push(`${opacity[0].trim()} does nothing in Tailwind v4 (use bg-black/50): ${literal}`);
+    const zinc = s.match(ZINC);
+    if (zinc) out.push(`${zinc[0].trim()} — the panel uses the gray ramp: ${literal}`);
+    if (BLACK_TEXT.test(s) && !/(?:^|\s)pn-paper(?=\s|$)/.test(s) && !/(?:^|\s)bg-gold(?=[\s/]|$)/.test(s)) {
+      out.push(`text-black is black on the dark panel (use text-gray-900): ${literal}`);
+    }
   }
   // className="… text-white …" followed by style={{ background: … }} on the same element.
   for (const m of source.matchAll(/className=(?:"[^"]*"|\{`[^`]*`\})[^<>]{0,120}?style=\{\{\s*background:/g)) {
@@ -95,6 +115,9 @@ describe('panel dark theme — inks that flip with their surface', () => {
     expect(offences(`'bg-fuchsia-100 text-fuchsia-800'`, redefined)).toHaveLength(1);
     expect(offences(`<span className="rounded-full text-white" style={{ background: GREEN }}>`, redefined)).toHaveLength(1);
     expect(offences(`<button className="h-10 text-white"\n  style={{ background: GREEN }}>`, redefined)).toHaveLength(1);
+    expect(offences(`className="fixed inset-0 bg-black bg-opacity-50"`, redefined)).toHaveLength(1);
+    expect(offences(`className="rounded-lg border border-zinc-800 bg-zinc-900/40 text-zinc-400"`, redefined)).toHaveLength(1);
+    expect(offences(`className="p-4 text-black"`, redefined)).toHaveLength(1);
 
     expect(offences(`className="bg-amber-100 text-amber-900"`, redefined)).toHaveLength(0);
     // A bright step that does not flip, with an ink that does not either: the same pair in both themes.
@@ -102,11 +125,29 @@ describe('panel dark theme — inks that flip with their surface', () => {
     expect(offences(`className="bg-[var(--pn-chat,#f2f6fc)]"`, redefined)).toHaveLength(0);
     expect(offences(`className="bg-[#25D366] text-white"`, redefined)).toHaveLength(0);
     expect(offences(`<span className="text-[#fff]" style={{ background: GREEN }}>`, redefined)).toHaveLength(0);
+    expect(offences(`className="fixed inset-0 bg-black/50"`, redefined)).toHaveLength(0);
+    expect(offences(`className="pn-paper bg-white p-8 text-black"`, redefined)).toHaveLength(0);
+    expect(offences(`className="rounded bg-gold px-4 text-black"`, redefined)).toHaveLength(0);
   });
 
   it('no panel screen has one', () => {
     const found = PANEL_DIRS.flatMap(sourceFiles).flatMap((file) =>
       offences(fs.readFileSync(file, 'utf8'), redefined).map((o) => `${path.relative(SRC, file)}: ${o}`));
     expect(found).toEqual([]);
+  });
+});
+
+describe('panel dark theme — what panel.css must keep', () => {
+  const css = fs.readFileSync(path.join(SRC, 'components/panel/panel.css'), 'utf8');
+  const dark = css.slice(css.indexOf("[data-theme='dark'] .panel-theme {"), css.indexOf('\n}', css.indexOf("[data-theme='dark'] .panel-theme {")));
+
+  it('black stays black, so dialog backdrops darken the page instead of whitening it', () => {
+    expect(dark).toMatch(/--color-black:\s*#000/);
+  });
+
+  it('paper (the packing slip) is black on white in both themes', () => {
+    const paper = css.slice(css.indexOf('.pn-paper {'), css.indexOf('}', css.indexOf('.pn-paper {')));
+    expect(paper).toMatch(/--color-white:\s*#fff/);
+    expect(paper).toMatch(/color:\s*#000/);
   });
 });

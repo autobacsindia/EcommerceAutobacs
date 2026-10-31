@@ -14,9 +14,9 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Moon, Sun } from 'lucide-react';
+import { THEME_KEY, type Theme } from './themeChoice';
 
-export const THEME_KEY = 'roavion-theme';
-export type Theme = 'light' | 'dark';
+export { THEME_KEY, type Theme };
 
 function current(): Theme {
   if (typeof document === 'undefined') return 'light';
@@ -31,7 +31,8 @@ function current(): Theme {
  */
 const NO_TRANSITION = 'theme-switching';
 
-export function applyTheme(theme: Theme): void {
+/** Paint `theme` on the page without saving it (the panel's choice is saved apart). */
+export function paintTheme(theme: Theme): void {
   const root = document.documentElement;
 
   /*
@@ -63,7 +64,11 @@ export function applyTheme(theme: Theme): void {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => root.classList.remove(NO_TRANSITION));
   });
+}
 
+/** The storefront switch: paint and remember. */
+export function applyTheme(theme: Theme): void {
+  paintTheme(theme);
   try {
     localStorage.setItem(THEME_KEY, theme);
   } catch {

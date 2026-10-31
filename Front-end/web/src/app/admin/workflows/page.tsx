@@ -260,7 +260,7 @@ function OrderFulfillmentFlow() {
                 </div>
                 <h3 className="font-bold text-gray-900 mb-1">{stage.title}</h3>
                 <p className="text-sm text-gray-600 mb-2">{stage.description}</p>
-                <div className={`${stage.color} bg-opacity-20 text-xs px-2 py-1 rounded inline-block`}>
+                <div className="text-xs px-2 py-1 rounded inline-block bg-gray-100 text-gray-700">
                   {stage.status.toUpperCase()}
                 </div>
                 <div className="mt-2 text-xs text-gray-500">⏱️ {stage.duration}</div>

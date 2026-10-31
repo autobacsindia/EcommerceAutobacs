@@ -114,12 +114,12 @@ const inr = (n: number | null | undefined) => `₹${(n ?? 0).toLocaleString('en-
 // IST-aware, so a 15 Aug start does not read back as 14 Aug. See lib/istDate.ts.
 const toDateInput = (d: string | null) => toISTDateInput(d);
 
-const label = 'block text-xs font-medium uppercase tracking-wide text-zinc-500 mb-1.5';
+const label = 'block text-xs font-medium uppercase tracking-wide text-gray-500 mb-1.5';
 // Width is NOT baked in: `field` + a `w-*` override is two competing width utilities,
 // and which one wins is decided by Tailwind's stylesheet order, not by the class list.
-const fieldBase = 'rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:border-gold focus:outline-none';
+const fieldBase = 'rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-gold focus:outline-none';
 const field = `w-full ${fieldBase}`;
-const card = 'rounded-lg border border-zinc-800 bg-zinc-900/40 p-6';
+const card = 'rounded-lg border border-gray-200 bg-white p-6';
 
 export default function AdminCampaignEditor() {
   const { base } = usePanel();
@@ -154,7 +154,7 @@ export default function AdminCampaignEditor() {
     onError: (e: Error) => setSaveError(e.message),
   });
 
-  if (isLoading || !campaign) return <div className="p-8 text-zinc-400">Loading…</div>;
+  if (isLoading || !campaign) return <div className="p-8 text-gray-600">Loading…</div>;
 
   const tiers = (value('tiers') ?? []) as Tier[];
   const setTier = (i: number, patch: Partial<Tier>) =>
@@ -174,13 +174,13 @@ export default function AdminCampaignEditor() {
 
   return (
     <div className="p-8 max-w-5xl">
-      <Link href={`${base}/campaigns`} className="mb-6 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white">
+      <Link href={`${base}/campaigns`} className="mb-6 inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
         <ArrowLeft size={14} /> All campaigns
       </Link>
 
       <div className="mb-8 flex items-baseline justify-between">
-        <h1 className="text-2xl font-bold text-white">{campaign.name}</h1>
-        <span className="text-sm text-zinc-500">
+        <h1 className="text-2xl font-bold text-gray-900">{campaign.name}</h1>
+        <span className="text-sm text-gray-500">
           {campaign.status} · {campaign.audience === 'list' ? 'invited only' : 'everyone'}
         </span>
       </div>
@@ -188,7 +188,7 @@ export default function AdminCampaignEditor() {
       {/* ── Results ─────────────────────────────────────────────────────────── */}
       {report && (
         <div className={`${card} mb-6`}>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-400">Results</h2>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-600">Results</h2>
           <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
             {[
               /*
@@ -208,15 +208,15 @@ export default function AdminCampaignEditor() {
               ['Given away', inr(report.discountGivenRupees)] as const,
             ].map(([k, v]) => (
               <div key={k as string}>
-                <p className="text-xs uppercase tracking-wide text-zinc-500">{k}</p>
-                <p className="mt-1 text-2xl font-semibold text-white">{v}</p>
+                <p className="text-xs uppercase tracking-wide text-gray-500">{k}</p>
+                <p className="mt-1 text-2xl font-semibold text-gray-900">{v}</p>
               </div>
             ))}
           </div>
           {report.remainingExposureRupees != null && (
-            <p className="mt-4 border-t border-zinc-800 pt-4 text-sm text-zinc-400">
+            <p className="mt-4 border-t border-gray-200 pt-4 text-sm text-gray-600">
               Still on the table if every remaining slot redeems the maximum:{' '}
-              <span className="text-white">{inr(report.remainingExposureRupees)}</span>
+              <span className="text-gray-900">{inr(report.remainingExposureRupees)}</span>
             </p>
           )}
 
@@ -228,8 +228,8 @@ export default function AdminCampaignEditor() {
             inferred.
           */}
           {report.money && (
-            <div className="mt-4 border-t border-zinc-800 pt-4">
-              <p className="mb-3 text-xs uppercase tracking-wide text-zinc-500">
+            <div className="mt-4 border-t border-gray-200 pt-4">
+              <p className="mb-3 text-xs uppercase tracking-wide text-gray-500">
                 Actually paid for
               </p>
               <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
@@ -240,12 +240,12 @@ export default function AdminCampaignEditor() {
                   ['Avg order', inr(Math.round(report.money.paid.avgOrderValue))],
                 ] as const).map(([k, v]) => (
                   <div key={k}>
-                    <p className="text-xs uppercase tracking-wide text-zinc-500">{k}</p>
-                    <p className="mt-1 text-2xl font-semibold text-white">{v}</p>
+                    <p className="text-xs uppercase tracking-wide text-gray-500">{k}</p>
+                    <p className="mt-1 text-2xl font-semibold text-gray-900">{v}</p>
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-xs text-zinc-500">
+              <p className="mt-3 text-xs text-gray-500">
                 {report.money.unpaid.count} not paid for
                 {report.money.unpaid.count > 0 && ` (${inr(report.money.unpaid.discount)} committed, may still convert or be released)`}
                 {report.money.refunded.count > 0 &&
@@ -266,8 +266,8 @@ export default function AdminCampaignEditor() {
       {/* ── The CART-VALUE ladder — only for a campaign priced that way ─────── */}
       {!isProductMode && (
       <div className={`${card} mb-6`}>
-        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">Discount tiers</h2>
-        <p className="mb-4 text-xs text-zinc-500">
+        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-600">Discount tiers</h2>
+        <p className="mb-4 text-xs text-gray-500">
           {value('resolution') === 'best'
             ? 'Best-for-customer: whichever tier gives the most is applied, so a customer’s saving never falls as their cart grows.'
             : 'Window: the first tier whose range contains the cart value wins. This can reduce a discount as a cart grows.'}
@@ -275,7 +275,7 @@ export default function AdminCampaignEditor() {
 
         <div className="space-y-3">
           {tiers.map((t, i) => (
-            <div key={i} className="grid grid-cols-2 gap-3 rounded border border-zinc-800 p-3 sm:grid-cols-5">
+            <div key={i} className="grid grid-cols-2 gap-3 rounded border border-gray-200 p-3 sm:grid-cols-5">
               <div>
                 <label className={label}>Label</label>
                 <input className={field} value={t.label ?? ''} onChange={(e) => setTier(i, { label: e.target.value })} />
@@ -298,7 +298,7 @@ export default function AdminCampaignEditor() {
               <div className="flex items-end">
                 <button
                   onClick={() => set({ tiers: tiers.filter((_, j) => j !== i) })}
-                  className="rounded p-2 text-zinc-500 hover:bg-zinc-800 hover:text-red-400"
+                  className="rounded p-2 text-gray-500 hover:bg-gray-100 hover:text-red-700"
                   title="Remove tier"
                 >
                   <Trash2 size={16} />
@@ -310,7 +310,7 @@ export default function AdminCampaignEditor() {
 
         <button
           onClick={() => set({ tiers: [...tiers, { id: `tier${tiers.length + 1}`, minCartValue: 0, percent: 10, maxDiscount: null }] })}
-          className="mt-3 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white"
+          className="mt-3 inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
         >
           <Plus size={14} /> Add a tier
         </button>
@@ -334,13 +334,13 @@ export default function AdminCampaignEditor() {
         campaign cannot go live without one.
       */}
       <div className={`${card} mb-6`}>
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-400">Limits</h2>
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-600">Limits</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={label}>Most any single order can save ₹</label>
             <input type="number" className={field} value={value('maxDiscountPerOrder') ?? ''}
               onChange={(e) => set({ maxDiscountPerOrder: e.target.value === '' ? null : Number(e.target.value) })} />
-            <p className="mt-1 text-xs text-zinc-600">
+            <p className="mt-1 text-xs text-gray-400">
               {isProductMode
                 ? 'Ceiling across the whole order, shared out across the discounted lines.'
                 : 'Bounds an uncapped tier on a very large cart.'}
@@ -355,7 +355,7 @@ export default function AdminCampaignEditor() {
                 much it is worth anywhere. That is a silent outcome nothing else reports,
                 so it is said here, next to the empty box that causes it.
               */
-              <p className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-300">
+              <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
                 No ceiling set. The offer will still discount correctly, but the banner,
                 the cart and the landing page will show no &ldquo;up to ₹X off&rdquo;
                 figure — they quote this number and nothing else.
@@ -366,7 +366,7 @@ export default function AdminCampaignEditor() {
             <label className={label}>Maximum redemptions</label>
             <input type="number" className={field} value={value('maxRedemptions') ?? ''}
               onChange={(e) => set({ maxRedemptions: e.target.value === '' ? null : Number(e.target.value) })} />
-            <p className="mt-1 text-xs text-zinc-600">
+            <p className="mt-1 text-xs text-gray-400">
               The campaign closes itself when this is reached.
               {!isAllowlist && ' Required before an open campaign can go live.'}
             </p>
@@ -382,19 +382,19 @@ export default function AdminCampaignEditor() {
 
       {/* ── Schedule and audience ───────────────────────────────────────────── */}
       <div className={`${card} mb-6`}>
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-400">Schedule &amp; audience</h2>
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-600">Schedule &amp; audience</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={label}>Starts</label>
             <input type="date" className={field} value={toDateInput(value('startsAt') ?? null)}
               onChange={(e) => set({ startsAt: e.target.value ? istStartOfDayISO(e.target.value) : null })} />
-            <p className="mt-1 text-xs text-zinc-600">Opens at 00:00 IST on this date.</p>
+            <p className="mt-1 text-xs text-gray-400">Opens at 00:00 IST on this date.</p>
           </div>
           <div>
             <label className={label}>Ends</label>
             <input type="date" className={field} value={toDateInput(value('endsAt') ?? null)}
               onChange={(e) => set({ endsAt: e.target.value ? istEndOfDayISO(e.target.value) : null })} />
-            <p className="mt-1 text-xs text-zinc-600">Closes at 23:59 IST on this date. Required before the campaign can run.</p>
+            <p className="mt-1 text-xs text-gray-400">Closes at 23:59 IST on this date. Required before the campaign can run.</p>
           </div>
           <div>
             <label className={label}>Who qualifies</label>
@@ -407,19 +407,19 @@ export default function AdminCampaignEditor() {
         </div>
 
         <div className="mt-4 space-y-2">
-          <label className="flex items-center gap-2 text-sm text-zinc-300">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={value('requireVerifiedEmail') ?? true}
               onChange={(e) => set({ requireVerifiedEmail: e.target.checked })} />
             Require a confirmed email address
           </label>
           {value('requireVerifiedEmail') === false && (
-            <p className="flex items-start gap-2 rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
+            <p className="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
               <AlertTriangle size={14} className="mt-0.5 shrink-0" />
               With this off, anyone who guesses an invited customer&apos;s address can register it and
               take the offer without ever opening that inbox. Leave it on unless you have a specific reason.
             </p>
           )}
-          <label className="flex items-center gap-2 text-sm text-zinc-300">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={value('requireActivation') ?? false}
               onChange={(e) => set({ requireActivation: e.target.checked })} />
             Only customers who activated it on the landing page
@@ -428,7 +428,7 @@ export default function AdminCampaignEditor() {
             /* Stated plainly because the cost is invisible from this screen: switching
                this on takes the offer away from everyone who has not been to the landing
                page, including customers who can see it right now. */
-            <p className="flex items-start gap-2 rounded border border-sky-500/30 bg-sky-500/10 p-3 text-xs text-sky-300">
+            <p className="flex items-start gap-2 rounded border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800">
               <AlertTriangle size={14} className="mt-0.5 shrink-0" />
               The offer reaches only people who opened{' '}
               <span className="font-semibold">{value('landingPath') || 'the landing page'}</span>{' '}
@@ -438,7 +438,7 @@ export default function AdminCampaignEditor() {
               affected.
             </p>
           )}
-          <label className="flex items-center gap-2 text-sm text-zinc-300">
+          <label className="flex items-center gap-2 text-sm text-gray-700">
             <input type="checkbox" checked={value('allowKarmaStacking') ?? false}
               onChange={(e) => set({ allowKarmaStacking: e.target.checked })} />
             Allow karma points on top of this discount
@@ -459,7 +459,7 @@ export default function AdminCampaignEditor() {
 
       {/* ── Save ────────────────────────────────────────────────────────────── */}
       {saveError && (
-        <p className="mb-4 rounded border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{saveError}</p>
+        <p className="mb-4 rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">{saveError}</p>
       )}
       <div className="flex items-center gap-3">
         <button
@@ -470,7 +470,7 @@ export default function AdminCampaignEditor() {
           {save.isPending ? 'Saving…' : 'Save changes'}
         </button>
         {draft && (
-          <button onClick={() => { setDraft(null); setSaveError(null); }} className="text-sm text-zinc-400 hover:text-white">
+          <button onClick={() => { setDraft(null); setSaveError(null); }} className="text-sm text-gray-600 hover:text-gray-900">
             Discard
           </button>
         )}
@@ -499,16 +499,16 @@ function ProductLadderCard({ tiers, setTier, setAll }: {
 
   return (
     <div className={`${card} mb-6`}>
-      <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-zinc-400">Product tiers</h2>
-      <p className="mb-4 text-xs text-zinc-500">
+      <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-gray-600">Product tiers</h2>
+      <p className="mb-4 text-xs text-gray-500">
         Each line earns the rate of the tier its product is in. Where a product matches
-        several tiers the <span className="text-zinc-300">lowest</span> rate wins, and anything
+        several tiers the <span className="text-gray-700">lowest</span> rate wins, and anything
         already on offer is capped at 2%.
       </p>
 
       <div className="space-y-3">
         {tiers.map((t, i) => (
-          <div key={t.code} className="grid grid-cols-2 gap-3 rounded border border-zinc-800 p-3 sm:grid-cols-5">
+          <div key={t.code} className="grid grid-cols-2 gap-3 rounded border border-gray-200 p-3 sm:grid-cols-5">
             <div>
               <label className={label}>Code</label>
               <input className={`${field} cursor-not-allowed opacity-60`} value={t.code} readOnly
@@ -525,7 +525,7 @@ function ProductLadderCard({ tiers, setTier, setAll }: {
                 onChange={(e) => setTier(i, { percent: Number(e.target.value) })} />
             </div>
             <div className="flex items-end">
-              <label className="flex items-center gap-2 text-xs text-zinc-400">
+              <label className="flex items-center gap-2 text-xs text-gray-600">
                 <input type="radio" name="defaultTier" checked={!!t.isDefault}
                   onChange={() => setAll(tiers.map((x, j) => ({ ...x, isDefault: j === i })))} />
                 Everything else
@@ -537,7 +537,7 @@ function ProductLadderCard({ tiers, setTier, setAll }: {
                   than a silently missing control. */}
               <button
                 onClick={() => setAll(tiers.filter((_, j) => j !== i))}
-                className="rounded p-2 text-zinc-500 hover:bg-zinc-800 hover:text-red-400"
+                className="rounded p-2 text-gray-500 hover:bg-gray-100 hover:text-red-700"
                 title="Remove tier"
               >
                 <Trash2 size={16} />
@@ -548,7 +548,7 @@ function ProductLadderCard({ tiers, setTier, setAll }: {
       </div>
 
       {defaultCount !== 1 && (
-        <p className="mt-3 flex items-center gap-2 text-xs text-amber-400">
+        <p className="mt-3 flex items-center gap-2 text-xs text-amber-800">
           <AlertTriangle size={13} />
           Exactly one tier must be “everything else”, or products in no tier earn nothing.
         </p>
@@ -556,7 +556,7 @@ function ProductLadderCard({ tiers, setTier, setAll }: {
 
       <button
         onClick={() => setAll([...tiers, { code: `tier${tiers.length + 1}`, label: '', percent: 5 }])}
-        className="mt-3 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white"
+        className="mt-3 inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
       >
         <Plus size={14} /> Add a tier
       </button>
@@ -597,10 +597,10 @@ function ProductCalculatorPanel({ campaignId }: { campaignId: string }) {
 
   return (
     <div className={`${card} mb-6`}>
-      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-zinc-400">
+      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-600">
         <Calculator size={14} /> Calculator
       </h2>
-      <p className="mb-4 text-xs text-zinc-500">
+      <p className="mb-4 text-xs text-gray-500">
         Uses the SAVED ladder and the SAVED assignments — save first to test a change.
       </p>
 
@@ -618,19 +618,19 @@ function ProductCalculatorPanel({ campaignId }: { campaignId: string }) {
             className={`${fieldBase} w-full`} />
         </div>
         <button onClick={() => run.mutate()} disabled={!input.trim() || run.isPending}
-          className="shrink-0 rounded bg-zinc-800 px-4 py-2 text-sm text-white hover:bg-zinc-700 disabled:opacity-40">
+          className="shrink-0 rounded bg-gray-100 px-4 py-2 text-sm text-gray-900 hover:bg-gray-200 disabled:opacity-40">
           {run.isPending ? '…' : 'Resolve'}
         </button>
       </div>
 
-      {run.isError && <p className="mt-3 text-sm text-red-400">{(run.error as Error).message}</p>}
+      {run.isError && <p className="mt-3 text-sm text-red-700">{(run.error as Error).message}</p>}
 
       {run.data && (
         <>
           {run.data.unassignedCount > 0 && (
             /* The finding worth shouting about: these look identical to a deliberate
                "everything else" in the discount column. */
-            <p className="mt-4 flex items-start gap-2 rounded border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300">
+            <p className="mt-4 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" />
               {run.data.unassignedCount} of {run.data.matched} are in no tier and are taking
               the default rate. If they were meant to be in one, assign them below.
@@ -640,24 +640,24 @@ function ProductCalculatorPanel({ campaignId }: { campaignId: string }) {
           <div className="overflow-x-auto">
             <table className="mt-4 w-full text-sm">
               <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-zinc-500">
+                <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                   <th className="pb-2">Product</th><th className="pb-2">Tier</th>
                   <th className="pb-2">Rate</th><th className="pb-2">They save</th>
                 </tr>
               </thead>
-              <tbody className="text-zinc-300">
+              <tbody className="text-gray-700">
                 {run.data.products.map((p) => (
-                  <tr key={p.id} className="border-t border-zinc-800">
+                  <tr key={p.id} className="border-t border-gray-200">
                     <td className="py-2">{p.name}</td>
                     <td className="py-2">
                       {p.tierLabel ?? '—'}
-                      {p.unassigned && <span className="ml-2 text-xs text-amber-400">unassigned</span>}
+                      {p.unassigned && <span className="ml-2 text-xs text-amber-800">unassigned</span>}
                     </td>
                     <td className="py-2">
                       {p.percent}%
-                      {p.onSaleCapped && <span className="ml-2 text-xs text-zinc-500">capped, already on offer</span>}
+                      {p.onSaleCapped && <span className="ml-2 text-xs text-gray-500">capped, already on offer</span>}
                     </td>
-                    <td className="py-2 text-emerald-400">{inr(p.savesRupees)}</td>
+                    <td className="py-2 text-emerald-800">{inr(p.savesRupees)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -667,12 +667,12 @@ function ProductCalculatorPanel({ campaignId }: { campaignId: string }) {
           {run.data.orderCapRupees != null && (
             /* Stated because the column does NOT add up to what a cart of these would
                save — the order ceiling is applied across all lines together. */
-            <p className="mt-3 text-xs text-zinc-600">
+            <p className="mt-3 text-xs text-gray-400">
               Per item. A single order is capped at {inr(run.data.orderCapRupees)} across everything in it.
             </p>
           )}
           {run.data.truncated && (
-            <p className="mt-2 text-xs text-zinc-600">Showing the first matches only — narrow the search to see the rest.</p>
+            <p className="mt-2 text-xs text-gray-400">Showing the first matches only — narrow the search to see the rest.</p>
           )}
         </>
       )}
@@ -694,15 +694,15 @@ function SimulatorPanel({ campaignId }: { campaignId: string }) {
 
   return (
     <div className={`${card} mb-6`}>
-      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-zinc-400">
+      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-600">
         <Calculator size={14} /> Calculator
       </h2>
-      <p className="mb-4 text-xs text-zinc-500">Uses the SAVED tiers — save first to test a change.</p>
+      <p className="mb-4 text-xs text-gray-500">Uses the SAVED tiers — save first to test a change.</p>
 
       <div className="flex gap-3">
         <input className={field} value={input} onChange={(e) => setInput(e.target.value)} />
         <button onClick={() => run.mutate()} disabled={run.isPending}
-          className="shrink-0 rounded bg-zinc-800 px-4 py-2 text-sm text-white hover:bg-zinc-700 disabled:opacity-40">
+          className="shrink-0 rounded bg-gray-100 px-4 py-2 text-sm text-gray-900 hover:bg-gray-200 disabled:opacity-40">
           Calculate
         </button>
       </div>
@@ -711,23 +711,23 @@ function SimulatorPanel({ campaignId }: { campaignId: string }) {
         <div className="overflow-x-auto">
           <table className="mt-4 w-full text-sm">
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-zinc-500">
+              <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                 <th className="pb-2">Cart</th><th className="pb-2">They save</th><th className="pb-2">Tier</th>
               </tr>
             </thead>
-            <tbody className="text-zinc-300">
+            <tbody className="text-gray-700">
               {run.data.results.map((r) => (
-                <tr key={r.cartRupees} className="border-t border-zinc-800">
+                <tr key={r.cartRupees} className="border-t border-gray-200">
                   <td className="py-2">{inr(r.cartRupees)}</td>
-                  <td className="py-2 text-emerald-400">{inr(r.discountRupees)}</td>
-                  <td className="py-2 text-zinc-500">{r.label ?? '—'}</td>
+                  <td className="py-2 text-emerald-800">{inr(r.discountRupees)}</td>
+                  <td className="py-2 text-gray-500">{r.label ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-      {run.isError && <p className="mt-3 text-sm text-red-400">{(run.error as Error).message}</p>}
+      {run.isError && <p className="mt-3 text-sm text-red-700">{(run.error as Error).message}</p>}
     </div>
   );
 }
@@ -762,10 +762,10 @@ function MemberImportPanel({ campaignId, slug }: { campaignId: string; slug: str
 
   return (
     <div className={`${card} mb-6`}>
-      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-zinc-400">
+      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-600">
         <Upload size={14} /> Invited customers
       </h2>
-      <p className="mb-4 text-xs text-zinc-500">
+      <p className="mb-4 text-xs text-gray-500">
         One per line, as <span className="font-mono">email</span> or <span className="font-mono">Name,email</span>.
         Re-importing updates names without touching anyone&apos;s claim or redemption history.
       </p>
@@ -777,21 +777,21 @@ function MemberImportPanel({ campaignId, slug }: { campaignId: string; slug: str
         onChange={(e) => setText(e.target.value)}
       />
       <button onClick={() => upload.mutate()} disabled={!text.trim() || upload.isPending}
-        className="mt-3 rounded bg-zinc-800 px-4 py-2 text-sm text-white hover:bg-zinc-700 disabled:opacity-40">
+        className="mt-3 rounded bg-gray-100 px-4 py-2 text-sm text-gray-900 hover:bg-gray-200 disabled:opacity-40">
         {upload.isPending ? 'Importing…' : 'Import'}
       </button>
 
       {upload.data && (
-        <div className="mt-3 text-sm text-zinc-300">
+        <div className="mt-3 text-sm text-gray-700">
           <p>{upload.data.inserted} added, {upload.data.updated} updated.</p>
           {upload.data.rejected.length > 0 && (
-            <ul className="mt-2 space-y-1 text-xs text-amber-400">
+            <ul className="mt-2 space-y-1 text-xs text-amber-800">
               {upload.data.rejected.map((r, i) => <li key={i}>{r.email || '(blank)'} — {r.reason}</li>)}
             </ul>
           )}
         </div>
       )}
-      {upload.isError && <p className="mt-3 text-sm text-red-400">{(upload.error as Error).message}</p>}
+      {upload.isError && <p className="mt-3 text-sm text-red-700">{(upload.error as Error).message}</p>}
     </div>
   );
 }
