@@ -27,6 +27,7 @@ import orderRepository from '../repositories/orderRepository.js';
 import { STAFF_TEAMS } from '../config/staff.js';
 import { countPending as countPendingBankTransfers } from './bankTransferService.js';
 import { countDueForBell as countTasksDue } from './staffTaskService.js';
+import { countsFor as countReturnsFor } from './returnService.js';
 
 const isAdmin = (u) => u?.role === 'admin';
 const isActiveStaff = (u) => u?.role === 'staff' && u?.staff?.active === true;
@@ -44,13 +45,15 @@ export async function summaryFor(user) {
 
   const wantsPayments = isAdmin(user) || isAccounts(user);
   // One aggregate covers both payment queues; refunds are a separate table.
-  const [byStatus, refunds, transfers, tasksDue] = await Promise.all([
+  const [byStatus, refunds, transfers, tasksDue, returnItems] = await Promise.all([
     wantsPayments ? paymentRequestRepository.countByStatus() : Promise.resolve([]),
     isAdmin(user) || isAccounts(user) ? orderRepository.countPendingCancellationRefunds() : Promise.resolve(0),
     // A small collection (a handful of rows a week), so a count is cheap.
     wantsPayments ? countPendingBankTransfers() : Promise.resolve(0),
     // One index range (staff_task_assignee): this person's open tasks due by today.
     countTasksDue(user),
+    // Returns waiting on this person's team — the same queries as the return lists.
+    countReturnsFor(user),
   ]);
   const n = (status) => byStatus.find((r) => r._id === status)?.n || 0;
 
@@ -102,6 +105,8 @@ export async function summaryFor(user) {
       href: isAdmin(user) ? '/admin/tasks?due=late' : '/team/tasks?due=late',
     });
   }
+
+  items.push(...returnItems);
 
   // Zero-count rows are kept so the dropdown can say "nothing waiting" for a
   // queue that IS yours, rather than hiding it and looking like it vanished.

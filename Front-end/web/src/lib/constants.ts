@@ -101,6 +101,7 @@ export const API_ENDPOINTS = {
   // Returns — customer
   RETURN_CREATE: '/returns',
   RETURN_UPLOAD_SIGNATURE: '/returns/upload-signature',
+  RETURN_ESTIMATE: '/returns/estimate',
   MY_RETURNS: '/returns/my-returns',
   RETURN_CANCEL: (id: string) => `/returns/${id}/cancel`,
   // Returns — admin
@@ -439,13 +440,17 @@ export const CANCELLATION_REASONS = [
   { value: 'customer_request', label: 'Other' },
 ] as const;
 
-// Return Reasons — the ONLY accepted reasons per the signed policy (all
-// Roavion-attributable). No change-of-mind / "other" path. Mirrors the backend
-// config/returnPolicy.js RETURN_REASONS — keep both in sync.
+// What a customer can pick on the website: every reason except the staff-only ones,
+// each with the fault it claims (which sets the window and what comes back). Mirrors
+// config/returnPolicy.js CUSTOMER_REASONS — keep both in sync.
 export const RETURN_REASONS = [
-  { value: 'wrong_item', label: 'Wrong item shipped', description: 'The item received differs from what was ordered' },
-  { value: 'transit_damage', label: 'Damaged in transit', description: 'The product arrived damaged (shown in your unboxing video)' },
-  { value: 'manufacturing_defect', label: 'Manufacturing defect', description: 'A genuine defect in the product as supplied' },
+  { value: 'wrong_item', label: 'Wrong item shipped', fault: 'ours', description: 'The item received differs from what was ordered' },
+  { value: 'transit_damage', label: 'Damaged in transit', fault: 'ours', description: 'It arrived damaged (a video of the parcel and the damage is needed)' },
+  { value: 'manufacturing_defect', label: 'Manufacturing defect', fault: 'ours', description: 'A genuine defect in the product as supplied' },
+  { value: 'missing_part', label: 'Missing part', fault: 'ours', description: 'Something that should be in the box is not' },
+  { value: 'wrong_fitment_info', label: 'Website said it fits, but it does not', fault: 'ours', description: 'Our fitment information for your car was wrong' },
+  { value: 'ordered_wrong', label: 'I ordered the wrong model or size', fault: 'customer', description: 'Unused and in its box — the pickup cost is deducted' },
+  { value: 'changed_mind', label: 'I changed my mind', fault: 'customer', description: 'Unused and in its box — the pickup cost is deducted' },
 ] as const;
 
 // Every reason a return line can carry, and the fault it claims — what staff (admin,
@@ -472,15 +477,19 @@ export const RETURN_FAULT_LABELS: Record<'ours' | 'customer', string> = {
 export const returnReasonLabel = (reason: string): string =>
   RETURN_REASON_OPTIONS.find((r) => r.value === reason)?.label ?? reason.replace(/_/g, ' ');
 
-// Return window (days from delivery). Mirrors backend RETURN_WINDOW_DAYS.
+// Return windows (days from delivery). Mirrors backend RETURN_WINDOW_DAYS_BY_FAULT:
+// 7 days when the fault is ours, 4 for the customer's own reason.
 export const RETURN_WINDOW_DAYS = 4;
+export const RETURN_WINDOW_DAYS_OURS = 7;
+// Above this item value (₹) a video is needed with the return, whatever the reason.
+export const RETURN_VIDEO_ABOVE_RUPEES = 10000;
 
 export const RETURN_POLICY_POINTS = [
-  `Requests must be raised within ${RETURN_WINDOW_DAYS} days of delivery`,
-  'A continuous unboxing video and proof of purchase are mandatory',
-  'We arrange the return pickup after approval',
-  'Refund is issued to your original payment method after the item passes inspection',
-  'Electrical/electronic, custom-made and imported items are not returnable',
+  `Our fault (wrong, damaged, defective, missing part): raise it within ${RETURN_WINDOW_DAYS_OURS} days of delivery and get everything back`,
+  `Your own reason: raise it within ${RETURN_WINDOW_DAYS} days, unused and in its box; the pickup cost is deducted`,
+  'Add at least one photo; a video is needed for transit damage or items over ₹10,000',
+  'Refund goes to your original payment method after the item passes inspection',
+  'Electrical/electronic items once installed, custom-made and non-returnable imported items cannot come back for your own reason',
 ];
 
 /**
@@ -492,21 +501,23 @@ export const RETURN_POLICY_POINTS = [
  * surfaces had drifted to three different windows (30 / 7 / 4 days) and to an
  * any-reason "unused items" promise the backend never honoured, which is both a
  * consumer-protection exposure and a top support-ticket driver. Deriving the
- * copy from RETURN_WINDOW_DAYS is what stops it re-drifting.
+ * copy from the window constants is what stops it re-drifting.
  *
- * The wording tracks the signed Roavion "Return, Refund, Exchange & Cancellation
- * Policy" (v1.0) that Back-end/server/config/returnPolicy.js encodes: a
- * RETURN_WINDOW_DAYS window, the three fault-only RETURN_REASONS, and refund to
- * the original payment method. There is deliberately no change-of-mind path and
- * no exchange path — do not reintroduce either here without a policy change.
+ * The wording tracks Back-end/server/config/returnPolicy.js: who pays depends on
+ * whose fault it is (7 days and a full refund when it is ours; 4 days, unused and
+ * boxed, minus the real pickup cost for the customer's own reason), refund to the
+ * original payment method, no store credit. There is deliberately no exchange path
+ * — a different product is a new order.
  */
 export const RETURN_POLICY_SUMMARY =
-  `Returns are accepted within ${RETURN_WINDOW_DAYS} days of delivery where the fault is ours — ` +
-  'a wrong item shipped, damage in transit, or a manufacturing defect. ' +
-  'A continuous unboxing video and proof of purchase are required, and we arrange ' +
-  'the pickup once the request is approved. Approved returns are refunded to your ' +
-  'original payment method after inspection; we do not offer exchanges or store credit. ' +
-  'Electrical/electronic, custom-made, imported and already-installed items are not returnable.';
+  `If the fault is ours — a wrong item, damage in transit, a manufacturing defect, a missing part, ` +
+  `or a product our website said would fit but does not — you can return it within ${RETURN_WINDOW_DAYS_OURS} days ` +
+  'of delivery and we refund everything, including its share of delivery and any installation charge. ' +
+  `For your own reason (ordered the wrong one, changed your mind) you can return it within ${RETURN_WINDOW_DAYS} days ` +
+  'if it is unused, not installed and in its original box; you get the item price back minus the real pickup cost. ' +
+  'Add at least one photo when you raise it (a video for transit damage or items over ₹10,000). ' +
+  'Refunds go to your original payment method after inspection; we do not offer store credit. ' +
+  'Installed electrical/electronic, custom-made and non-returnable imported items cannot be returned for your own reason.';
 
 /** Shared question wording, so the FAQ strips and the JSON-LD stay identical. */
 export const RETURN_POLICY_QUESTION = 'What is your return policy?';

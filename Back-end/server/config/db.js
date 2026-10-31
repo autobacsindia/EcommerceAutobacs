@@ -500,6 +500,19 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ ReturnRequest unique refunded-service-line index confirmed');
 
+    // Team-panel queues and bells — reasoning and measurements in models/ReturnRequest.js.
+    // New names on new key patterns, so nothing to drop first.
+    for (const [key, name] of [
+      [{ 'supplierClaims.status': 1 }, 'supplier_claim_status'],
+      [{ raisedBy: 1, createdAt: -1, _id: -1 }, 'raised_by_newest'],
+      [{ seller: 1, createdAt: -1, _id: -1 }, 'seller_newest'],
+      [{ createdAt: -1, _id: -1 }, 'newest'],
+      [{ customerPhone: 1, createdAt: -1 }, 'customer_phone_recent'],
+    ]) {
+      await db.collection('returnrequests').createIndex(key, { name, background: true });
+    }
+    console.log('✓ ReturnRequest team-queue indexes confirmed');
+
     // ── Spin-to-Win ────────────────────────────────────────────────────────────
     // THE idempotency guarantee for the reward wheel: one spin per order, forever.
     // spinService pre-checks with a findOne, but under snapshot isolation two

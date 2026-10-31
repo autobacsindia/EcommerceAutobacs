@@ -71,9 +71,12 @@ export interface ReturnUploadRef {
 export async function getReturnUploadSignature(
   slot?: string,
   contentType?: string,
+  // The team panel asks its own route (staff raise a return for the customer); the
+  // credentials and the server-side checks are the same.
+  endpoint: string = API_ENDPOINTS.RETURN_UPLOAD_SIGNATURE,
 ): Promise<ReturnCredentials> {
   const body = slot ? { files: [{ slot, contentType: contentType || 'application/octet-stream' }] } : {};
-  return (await apiClient.post(API_ENDPOINTS.RETURN_UPLOAD_SIGNATURE, body)) as ReturnCredentials;
+  return (await apiClient.post(endpoint, body)) as ReturnCredentials;
 }
 
 /** One presigned PUT. XHR rather than fetch() purely for upload progress. */

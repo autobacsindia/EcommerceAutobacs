@@ -56,6 +56,40 @@ export const DISPOSITION_LABELS = Object.freeze({
   resell: 'Resell', open_box: 'Sell as open-box', return_to_supplier: 'Send back to supplier', scrap: 'Scrap',
 });
 
+// Where an approved return goes. Operations confirms it at check 1; the system
+// pre-fills "Supplier: <name>" from the order's workflow line when one is known.
+export const RETURN_DESTINATIONS = Object.freeze(['warehouse', 'supplier']);
+
+// How the item travels back.
+//   courier          → we book a courier to our warehouse (operations)
+//   dropped_at_store → the customer brought it in (operations)
+//   supplier_direct  → it goes straight to the supplier (procurement); the supplier
+//                      or we book the courier
+export const PICKUP_MODES = Object.freeze(['courier', 'dropped_at_store', 'supplier_direct']);
+
+// After a failed inspection (customer damage): send it back at the customer's cost,
+// or hold it for HOLD_REJECTED_DAYS and then dispose of it.
+export const FAILED_INSPECTION_ACTIONS = Object.freeze(['send_back', 'hold']);
+export const HOLD_REJECTED_DAYS = 30;
+
+/*
+  The supplier track (rule 9.5B) — procurement chases the supplier by hand; accounts
+  confirms the money arrived. Independent of the customer refund: neither waits.
+
+    open                → procurement has to contact the supplier
+    accepted / rejected → the supplier's answer (a rejection of a claim operations
+                          confirmed as our fault is a LOSS against that supplier)
+    promised            → the supplier promised a settlement (amount + reference)
+    settled             → accounts confirmed the money (or the replacement) arrived
+*/
+export const SUPPLIER_CLAIM_STATUSES = Object.freeze(['open', 'accepted', 'rejected', 'promised', 'settled']);
+export const SUPPLIER_SETTLEMENT_KINDS = Object.freeze(['credit_note', 'refund', 'free_replacement']);
+export const SUPPLIER_SETTLEMENT_LABELS = Object.freeze({
+  credit_note: 'Credit note', refund: 'Refund to us', free_replacement: 'Free replacement',
+});
+// How promised money reached us: into the bank (UTR), or taken off a later supplier bill.
+export const SUPPLIER_MONEY_METHODS = Object.freeze(['bank', 'deducted']);
+
 // The repeat-returner flag counts requests over this many days. A flag, never a block.
 export const REPEAT_RETURNER_DAYS = 183;
 
@@ -195,6 +229,12 @@ export default {
   ACCOUNTS_REFUND_LIMIT_RUPEES,
   MAX_FAILED_PICKUPS,
   DISPOSITIONS,
+  RETURN_DESTINATIONS,
+  PICKUP_MODES,
+  FAILED_INSPECTION_ACTIONS,
+  SUPPLIER_CLAIM_STATUSES,
+  SUPPLIER_SETTLEMENT_KINDS,
+  SUPPLIER_MONEY_METHODS,
   REASON_FAULT,
   ORIGINAL_REASONS,
   STAFF_ONLY_REASONS,
