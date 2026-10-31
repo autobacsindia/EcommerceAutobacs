@@ -185,6 +185,14 @@ export default function Conversation({
   const isGroup = channel.kind === 'space' && channel.audience === 'members';
   const [quote, setQuote] = useState<ChatMessage | null>(null);
   const [atBottom, setAtBottom] = useState(true);
+  /*
+    "New messages" line: where Chat was read up to when this conversation was
+    opened, taken once (this component is keyed by channel). It stays put while
+    you read — reading moves the real position, not the line — and is gone the
+    next time you open the conversation.
+  */
+  const [newFrom] = useState(() => (unreadChatOf(channel) > 0 ? channel.lastReadSeq : null));
+  const positioned = useRef(false);
   const [thread, setThread] = useState<string | null>(null);
 
   const scroller = useRef<HTMLDivElement>(null);
@@ -245,6 +253,22 @@ export default function Conversation({
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el || tab !== 'messages') return;
+    /*
+      Jump to unread: the first time the messages are on screen, if pinning to
+      the bottom would scroll the "New messages" line out of sight, open at the
+      line instead (Google Chat does the same). Nothing is marked read until the
+      newest message is actually reached.
+    */
+    if (!positioned.current && visible.length > 0) {
+      positioned.current = true;
+      const line = el.querySelector<HTMLElement>('[data-new-messages]');
+      if (line && line.offsetTop < el.scrollHeight - el.clientHeight) {
+        el.scrollTop = Math.max(0, line.offsetTop - 24);
+        stickToBottom.current = false;
+        setAtBottom(false);
+        return;
+      }
+    }
     if (restoreFrom.current != null) {
       el.scrollTop = el.scrollHeight - restoreFrom.current;
       restoreFrom.current = null;
@@ -381,6 +405,11 @@ export default function Conversation({
     });
   };
 
+  // The first message past the read position when the conversation was opened — not your own.
+  const firstNewId = newFrom == null
+    ? null
+    : chatMessages.find((m) => !m.pending && activityOf(m) > newFrom && m.sender?.id !== meId)?.id ?? null;
+
   const title = channel.kind === 'dm' ? channel.name : channel.audience === 'teams' ? channel.name : `#${channel.name}`;
   const subtitle =
     channel.group
@@ -399,7 +428,7 @@ export default function Conversation({
     // header icons) and every message is clipped on a phone, Send off-screen.
     <div className="relative flex h-full min-h-0 min-w-0 flex-1">
       <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white lg:rounded-2xl" aria-label={`Conversation ${title}`}>
-        <header className="border-b border-gray-100 px-4 pt-3">
+        <header className="border-b border-gray-100 px-4 pt-3 sm:px-5">
           <div className="flex items-center gap-2 sm:gap-3">
             <button type="button" onClick={onBack} className="-ml-1.5 shrink-0 rounded-lg p-2 text-gray-600 hover:bg-gray-100 lg:hidden" aria-label="Back to channels">
               <ArrowLeft className="h-5 w-5" />
@@ -408,7 +437,7 @@ export default function Conversation({
               ? <Avatar person={channel.partner} online={!!channel.partner && !!online?.has(channel.partner.id)} />
               : <ChannelIcon channel={channel} size="md" />}
             <div className="min-w-0 flex-1">
-              <h2 className="truncate text-base font-semibold text-gray-900">{title}</h2>
+              <h2 className="pn-title truncate text-[17px] text-gray-900">{title}</h2>
               {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
@@ -432,7 +461,7 @@ export default function Conversation({
               )}
             </div>
           </div>
-          <div className="mt-2 flex gap-4" role="tablist" aria-label="Conversation sections">
+          <div className="mt-2 flex gap-5 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Conversation sections">
             {([
               'messages',
               ...(hasUpdatesTab ? (['updates'] as const) : []),
@@ -445,15 +474,15 @@ export default function Conversation({
                 role="tab"
                 aria-selected={tab === key}
                 onClick={() => setTab(key)}
-                className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-2 text-sm font-medium capitalize ${
-                  tab === key ? 'border-emerald-700 text-emerald-800' : 'border-transparent text-gray-500 hover:text-gray-700'
+                className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-2.5 pt-1 text-sm capitalize transition-colors ${
+                  tab === key ? 'border-blue-600 font-semibold text-blue-700' : 'border-transparent font-medium text-gray-500 hover:text-gray-800'
                 }`}
               >
                 {key === 'messages' ? 'Chat' : key === 'updates' ? 'Order updates' : key === 'files' ? 'Files' : 'Members'}
                 {(() => {
                   const n = key === 'messages' ? unreadChatOf(channel) : key === 'updates' ? unreadUpdatesOf(channel) : 0;
                   return n > 0 && (
-                    <span className="ml-1.5 rounded-full bg-emerald-600 px-1.5 text-[11px] font-bold leading-[18px] text-white" aria-label={`${n} unread`}>
+                    <span className={`ml-1.5 rounded-full px-1.5 text-[11px] font-bold leading-[18px] ${key === 'updates' ? 'bg-amber-100 text-amber-800' : 'bg-blue-600 text-white'}`} aria-label={`${n} unread`}>
                       {n > 99 ? '99+' : n}
                     </span>
                   );
@@ -471,7 +500,7 @@ export default function Conversation({
         ) : (
           <>
             <div className="relative min-h-0 flex-1">
-              <div ref={scroller} onScroll={onScroll} className="h-full overflow-y-auto px-4 py-3" aria-live="polite">
+              <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3 sm:px-4" aria-live="polite">
                 {tab === 'messages' && isFetchingNextPage && <p className="py-2 text-center text-xs text-gray-500">Loading older messages…</p>}
                 {tab === 'messages' && !hasNextPage && !isLoading && visible.length > 0 && (
                   <p className="py-3 text-center text-xs text-gray-400">This is the beginning of {title}</p>
@@ -505,6 +534,12 @@ export default function Conversation({
 
                 {visible.map((m, i) => (
                   <div key={m.id}>
+                  {tab === 'messages' && m.id === firstNewId && (
+                    <div data-new-messages role="separator" aria-label="New messages" className="my-2 flex items-center gap-3 text-xs font-bold text-blue-700">
+                      <span className="h-px flex-1 bg-blue-400" />
+                      New messages
+                    </div>
+                  )}
                   {tab === 'updates' && unreadFrom !== null && activityOf(m) > unreadFrom && (
                     <span className="mt-2 inline-block rounded-full bg-red-600 px-2 text-[11px] font-bold uppercase leading-5 tracking-wide text-white">
                       Unread
@@ -541,9 +576,9 @@ export default function Conversation({
                 <button
                   type="button"
                   onClick={scrollToBottom}
-                  className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white shadow-lg"
+                  className="pn-pop absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-blue-700"
                 >
-                  <ArrowDown className="h-3.5 w-3.5" /> Newest messages
+                  <ArrowDown className="h-3.5 w-3.5" /> {unreadChatOf(channel) > 0 ? `${unreadChatOf(channel)} new · ` : ''}Newest messages
                 </button>
               )}
             </div>

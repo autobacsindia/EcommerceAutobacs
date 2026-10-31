@@ -269,6 +269,17 @@
   .pn-drawer, .pn-drawer[data-open='true'] { transition: none; }
 }
 
+/* ── Motion ──────────────────────────────────────────────────────────────────
+   Light and quick: a dialog or menu pops in, a new row rises a few pixels.
+   Nothing moves for someone who asked their computer for less motion. */
+@keyframes pn-pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes pn-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.pn-pop { animation: pn-pop 0.16s ease-out both; }
+.pn-rise { animation: pn-rise 0.18s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .pn-pop, .pn-rise { animation: none; }
+}
+
 /* Paper: a document that is printed or shown as a sheet (the packing slip).
    Always black on white, whatever the panel's theme — a dark slip prints as
    light text on white paper, since browsers drop backgrounds when printing. */

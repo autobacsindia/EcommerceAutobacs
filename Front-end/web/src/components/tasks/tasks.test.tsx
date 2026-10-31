@@ -198,6 +198,38 @@ describe('the Tasks page', () => {
     expect(await screen.findByRole('dialog', { name: 'New task' })).toBeInTheDocument();
   });
 
+  it('the side list picks whose tasks; the header names the list; "needs attention" shows only when something is late or due', async () => {
+    serve({ summary: { late: 0, today: 0 } });
+    workspace({ canSeeTeam: true });
+    const nav = await screen.findByRole('navigation', { name: 'Task lists' });
+    expect(screen.getByRole('heading', { level: 1, name: 'Tasks for me' })).toBeInTheDocument();
+    expect(within(nav).queryByRole('button', { name: /late/ })).toBeNull();
+    fireEvent.click(within(nav).getByRole('button', { name: 'I gave out' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'I gave out' })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'I gave out' })).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=created&state=open'));
+  });
+
+  it('L and B switch list and board; "?" lists the shortcuts; none of them fire while typing', async () => {
+    serve();
+    workspace();
+    await screen.findByText('Call Bosch');
+    fireEvent.keyDown(window, { key: 'b' });
+    expect(screen.getByRole('tab', { name: /Board/ })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(screen.getByLabelText('Search tasks'), { key: 'l' });
+    expect(screen.getByRole('tab', { name: /Board/ })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(window, { key: 'l' });
+    expect(screen.getByRole('tab', { name: /List/ })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(window, { key: '?' });
+    const sheet = screen.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    expect(sheet).toHaveTextContent('Show as a board');
+    // While a pop-up is open, "n" does not open a second one behind it.
+    fireEvent.keyDown(window, { key: 'n' });
+    expect(screen.queryByRole('dialog', { name: 'New task' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull();
+  });
+
   it('explains how tasks work until hidden, and remembers that', async () => {
     serve();
     const { unmount } = workspace();
