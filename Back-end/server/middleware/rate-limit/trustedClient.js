@@ -1,7 +1,7 @@
 /**
  * Trusted internal caller detection for rate limiting.
  *
- * WHY: the public limiters key on `req.ip`. That is correct for browser traffic,
+ * WHY: the public limiters key on the client IP. That is correct for browser traffic,
  * but the Next.js frontend also calls this API *server-side* (SSR, ISR
  * revalidation, generateMetadata, sitemap). Those requests all leave Vercel from
  * a small pool of egress IPs, so every server-rendered page in the fleet shares a

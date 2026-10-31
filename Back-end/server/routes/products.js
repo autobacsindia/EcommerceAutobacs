@@ -4,6 +4,7 @@ import { body } from "express-validator";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import productRepository from "../repositories/productRepository.js";
 import rateLimit from 'express-rate-limit';
+import { getClientIp } from '../middleware/rate-limit/clientIp.js';
 import { searchRateLimit, searchBurstLimit, publicBrowsingRateLimit } from '../middleware/rateLimitMiddleware.js';
 import {
   validateProductIdParam,
@@ -89,6 +90,9 @@ const publicProductRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // express-rate-limit defaults to `req.ip`, the Cloudflare edge — key on the
+  // real client instead. The key stays the bare IP, as the default was.
+  keyGenerator: getClientIp,
 });
 
 // @route   GET /products

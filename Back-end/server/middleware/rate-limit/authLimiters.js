@@ -1,6 +1,5 @@
 import { rateLimit } from './core.js';
-
-const clientIp = (req) => req.headers['cf-connecting-ip'] || req.ip;
+import { getClientIp as clientIp } from './clientIp.js';
 
 export const authenticationRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000,

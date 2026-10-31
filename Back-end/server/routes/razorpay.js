@@ -10,6 +10,7 @@ import { getRedisClient } from '../services/cache/redisClient.js';
 import csrfProtection from '../middleware/csrfMiddleware.js';
 import rateLimit from 'express-rate-limit';
 import { buildCookieOptions } from '../utils/cookieOptions.js';
+import { getClientIp } from '../middleware/rate-limit/clientIp.js';
 
 const router = express.Router();
 
@@ -39,18 +40,28 @@ function getUserAgent(req) {
   return req.get('user-agent') || 'unknown';
 }
 
+/**
+ * Rate-limit identity for the payment endpoints: user > guest session > real IP.
+ * The IP is the Cloudflare client header (getClientIp), never bare `req.ip`,
+ * which behind Cloudflare is the edge and would put every guest without a
+ * session cookie into one shared bucket. Prefix `ip:` kept so existing counters
+ * keep their meaning.
+ * @param {Request} req
+ * @returns {string}
+ */
+export function paymentIdentityKey(req) {
+  return (
+    req.user?.id ||
+    req.cookies?.guest_session ||
+    `ip:${getClientIp(req) || 'unknown'}`
+  );
+}
+
 // RATE LIMITING: /create-order - Identity-based (prevent API quota exhaustion)
 const createOrderLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
   max: 15, // 15 orders per identity per 10 min
-  keyGenerator: (req) => {
-    // Identity-based: user > guest session > order ID > IP
-    return (
-      req.user?.id ||
-      req.cookies.guest_session ||
-      `ip:${req.ip || 'unknown'}`
-    );
-  },
+  keyGenerator: paymentIdentityKey,
   message: {
     success: false,
     message: 'Too many orders created. Please try again later.'
@@ -63,14 +74,7 @@ const createOrderLimiter = rateLimit({
 const verifyIPRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 50, // 50 requests per identity per 15 min
-  keyGenerator: (req) => {
-    // Identity-based: user > guest session > IP
-    return (
-      req.user?.id ||
-      req.cookies.guest_session ||
-      `ip:${req.ip || 'unknown'}`
-    );
-  },
+  keyGenerator: paymentIdentityKey,
   message: {
     success: false,
     message: 'Too many verification attempts. Please try again later.'

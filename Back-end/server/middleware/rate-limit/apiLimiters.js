@@ -1,13 +1,14 @@
 import { rateLimit } from './core.js';
+import { getClientIp } from './clientIp.js';
 
 export const globalApiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === 'production' ? 500 : 10000,
   message: 'Too many requests. Please slow down.',
-  keyGenerator: (req) => `rate_limit:global:${req.ip || req.connection.remoteAddress}`,
+  keyGenerator: (req) => `rate_limit:global:${getClientIp(req)}`,
   handler: (req, res) => {
     console.warn(
-      `[RateLimit] Global API limit exceeded | IP: ${req.ip} | Path: ${req.path} | ` +
+      `[RateLimit] Global API limit exceeded | IP: ${getClientIp(req)} | Path: ${req.path} | ` +
       `UA: ${req.get('user-agent') || 'unknown'}`
     );
     res.status(429).json({
