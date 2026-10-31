@@ -24,6 +24,26 @@ const arrayUnchanged = (field, expected) => (
     : { [field]: { $size: expected } }
 );
 
+/**
+ * MONEY: the refund fence (Order.refundSeq) as a compare-and-set condition — "no refund
+ * has been claimed on this order since I read it". Every claim that draws on the order's
+ * capture matches on the value it read WITH the order it computed "what is left" from,
+ * and advances it in the same write ($inc), so two refunds computed from one snapshot
+ * cannot both commit.
+ *
+ * `seen` missing counts as 0, and 0 also matches an order written before the field
+ * existed (the arrayUnchanged trap above): `{ refundSeq: 0 }` alone would match none.
+ * There is no "skip the fence" value on purpose — a caller that forgets to pass it fails
+ * closed on any order that has had a refund, instead of quietly racing.
+ *
+ * @param {number|undefined|null} seen - order.refundSeq as read with the order
+ * @returns {object} a query fragment
+ */
+export const refundFence = (seen) => {
+  const n = Number(seen) || 0;
+  return n === 0 ? { refundSeq: { $in: [0, null] } } : { refundSeq: n };
+};
+
 class OrderRepository extends BaseRepository {
   constructor() {
     super(Order);
@@ -238,6 +258,8 @@ class OrderRepository extends BaseRepository {
         _id: order._id,
         status: 'cancelled',
         paymentStatus: 'paid',
+        // The refund fence, read from the SAME order the caller computed the cap from.
+        ...refundFence(order.refundSeq),
         $or: [
           { 'refundDetails.status': { $in: ['pending', 'failed'] } },
           { refundDetails: { $exists: false } },
@@ -265,7 +287,8 @@ class OrderRepository extends BaseRepository {
           // applyRefundWebhook rejects a webhook whose id ≠ the freshly stored one).
           'refundDetails.transactionId': null,
           'refundDetails.processedAt': null
-        }
+        },
+        $inc: { refundSeq: 1 },
       },
       session ? { session } : {}
     );
@@ -359,7 +382,7 @@ class OrderRepository extends BaseRepository {
    */
   async markRefundOfflineCompleted(orderId, opts, session = null) {
     const {
-      amount, refundType, offlineMethod, offlineReference, paidAt, userId, markRefunded,
+      amount, refundType, offlineMethod, offlineReference, paidAt, userId, markRefunded, refundSeq,
     } = opts;
     const now = new Date();
     const res = await Order.updateOne(
@@ -367,6 +390,7 @@ class OrderRepository extends BaseRepository {
         _id: orderId,
         status: 'cancelled',
         paymentStatus: 'paid',
+        ...refundFence(refundSeq),
         $or: [
           { 'refundDetails.status': { $in: ['pending', 'failed'] } },
           { refundDetails: { $exists: false } },
@@ -409,7 +433,8 @@ class OrderRepository extends BaseRepository {
           'refundDetails.affiliateClawbackPaise': '',
           'refundDetails.paymentRecordedPaise': '',
           'refundDetails.ltvDecrementedPaise': ''
-        }
+        },
+        $inc: { refundSeq: 1 },
       },
       session ? { session } : {}
     );
@@ -1115,10 +1140,12 @@ class OrderRepository extends BaseRepository {
    *
    * @returns {Promise<object|null>} updated order, or null if it was not pending
    */
-  async claimCancellationRefund(orderId, cancellationId, amountPaise) {
+  async claimCancellationRefund(orderId, cancellationId, amountPaise, refundSeq) {
     return Order.findOneAndUpdate(
       {
         _id: orderId,
+        // The refund fence — see refundFence. `refundSeq` is the value read with the order.
+        ...refundFence(refundSeq),
         cancellations: {
           $elemMatch: {
             _id: cancellationId,
@@ -1140,6 +1167,7 @@ class OrderRepository extends BaseRepository {
           'cancellations.$.refund.amountPaise': amountPaise,
           'cancellations.$.refund.initiatedAt': new Date(),
         },
+        $inc: { refundSeq: 1 },
       },
       { new: true },
     );
@@ -1210,11 +1238,12 @@ class OrderRepository extends BaseRepository {
    * added later fails closed.
    */
   async markCancellationRefundOffline(orderId, cancellationId, opts) {
-    const { amountPaise, offlineMethod, offlineReference, paidAt, userId } = opts;
+    const { amountPaise, offlineMethod, offlineReference, paidAt, userId, refundSeq } = opts;
     const now = new Date();
     return Order.findOneAndUpdate(
       {
         _id: orderId,
+        ...refundFence(refundSeq),
         cancellations: {
           $elemMatch: {
             _id: cancellationId,
@@ -1245,10 +1274,27 @@ class OrderRepository extends BaseRepository {
           'cancellations.$.refund.affiliateClawbackPaise': '',
           'cancellations.$.refund.paymentRecordedPaise': '',
           'cancellations.$.refund.ltvDecrementedPaise': ''
-        }
+        },
+        $inc: { refundSeq: 1 },
       },
       { new: false }
     );
+  }
+
+  /**
+   * Advance the refund fence for a claim recorded on ANOTHER document — a return's
+   * refund is claimed on the ReturnRequest, so it cannot move the counter in the same
+   * write. The caller claims first and advances second: a reader who sees the new value
+   * therefore also sees the claim. False means another refund on this order committed
+   * since `seen` was read; the caller must release its claim and pay nothing.
+   *
+   * @param {string} orderId
+   * @param {number|undefined|null} seen - order.refundSeq as read with the order
+   * @returns {Promise<boolean>}
+   */
+  async advanceRefundSeq(orderId, seen) {
+    const res = await Order.updateOne({ _id: orderId, ...refundFence(seen) }, { $inc: { refundSeq: 1 } });
+    return res.modifiedCount === 1;
   }
 
   /**

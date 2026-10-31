@@ -222,7 +222,10 @@ describe('claimRefundRevert', () => {
 
     await orderRepository.markRefundOfflineCompleted(order._id, { ...OFFLINE, userId });
     await orderRepository.claimRefundRevert(order._id, { userId, reason: 'first was wrong' });
-    const second = await orderRepository.markRefundOfflineCompleted(order._id, { ...OFFLINE, userId });
+    // A second request reads the order afresh — and with it the refund fence the first
+    // payout advanced (Order.refundSeq).
+    const reread = await Order.findById(order._id).lean();
+    const second = await orderRepository.markRefundOfflineCompleted(order._id, { ...OFFLINE, userId, refundSeq: reread.refundSeq });
 
     expect(second).toBe(true);
     const fresh = await Order.findById(order._id).lean();

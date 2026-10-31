@@ -229,6 +229,22 @@ class ReturnRequestRepository {
   }
 
   /**
+   * Undo a refund claim that lost the order's refund fence (orderRepository
+   * .advanceRefundSeq): another refund on the same order committed between our read and
+   * our claim, so nothing may be paid. The refund goes back to the status it had before
+   * the claim, which makes the return claimable again and drops it out of
+   * remainingRefundable and the unique service-line index. Matched on `processing` AND
+   * the claim's own initiatedAt, so it can only ever undo THIS claim.
+   */
+  releaseRefundClaim(id, initiatedAt, priorStatus) {
+    return ReturnRequest.findOneAndUpdate(
+      { _id: id, 'refund.status': 'processing', 'refund.initiatedAt': initiatedAt },
+      { $set: { 'refund.status': priorStatus === 'failed' ? 'failed' : 'pending' } },
+      { new: true },
+    );
+  }
+
+  /**
    * Atomically claim the net-LTV reversal for a completed refund exactly once. Returns
    * the return document the first time (refund.ltvReversed flips false→true), and null
    * on every subsequent call — so the immediate-completion path and the refund.processed

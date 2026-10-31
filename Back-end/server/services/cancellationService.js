@@ -271,7 +271,7 @@ class CancellationService {
       // Nothing left to send. Recording it as not_applicable (rather than failing) stops
       // the admin retrying a button that can never succeed — e.g. a ₹0 line, or an
       // order whose capture has already been fully refunded by a return.
-      await orderRepository.claimCancellationRefund(orderId, record._id, 0);
+      await orderRepository.claimCancellationRefund(orderId, record._id, 0, order.refundSeq);
       await orderRepository.settleCancellationRefund(orderId, record._id, 'not_applicable', {
         failureReason: wantedPaise > 0
           ? `No refundable balance left on this order (₹${headroom.alreadyRefundedRupees} of ₹${headroom.capturedRupees} already refunded).`
@@ -286,10 +286,16 @@ class CancellationService {
       };
     }
 
-    // Race-safe claim: only the first caller proceeds to the gateway.
-    const claimed = await orderRepository.claimCancellationRefund(orderId, record._id, amountPaise);
+    // Race-safe claim: only the first caller proceeds to the gateway. Fenced on the
+    // order's refundSeq as read above, so a refund on ANOTHER line or return of this
+    // order committed since that read (which the cap could not see) also refuses it.
+    const claimed = await orderRepository.claimCancellationRefund(orderId, record._id, amountPaise, order.refundSeq);
     if (!claimed) {
-      return { success: false, message: 'A refund for this cancellation is already being processed.', statusCode: 409 };
+      return {
+        success: false,
+        message: 'A refund for this cancellation is already being processed, or another refund on this order just went through. Refresh and check the amount.',
+        statusCode: 409,
+      };
     }
 
     try {

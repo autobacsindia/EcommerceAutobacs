@@ -1005,6 +1005,17 @@ const OrderSchema = new mongoose.Schema({
     itemReceivedAt: Date,
     inspectionNotes: String
   },
+  /*
+    MONEY: the refund fence. Every refund that draws on this order's capture — a return
+    (gateway or offline), a line cancellation, the whole-order cancellation — advances
+    this by one when it claims, conditional on the value it read with the order. Two
+    refunds that computed "what is left" from the same snapshot cannot both commit: the
+    second finds the counter moved and claims nothing. See orderRepository.refundFence.
+
+    No default ON PURPOSE: a hydrated order then never carries it as a modified path, so
+    an order.save() later in a refund flow can never write back the stale value it read.
+  */
+  refundSeq: { type: Number },
   refundDetails: {
     requestedAt: Date,
     amount: Number,

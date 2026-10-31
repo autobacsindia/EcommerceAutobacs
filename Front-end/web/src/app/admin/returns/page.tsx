@@ -447,6 +447,9 @@ function DetailModal({ request, loading, onClose, onActioned }: {
   const [refundMethod, setRefundMethod] = useState<'original_payment' | 'offline'>('original_payment');
   const [offlinePay, setOfflinePay] = useState<{ method: OfflineRefundMethod; reference: string }>({ method: 'cash', reference: '' });
   const [offlineNote, setOfflineNote] = useState('');
+  // Money goes out on the SECOND click: the first one asks "send ₹X?". Holds the amount
+  // and method being confirmed, so any change to either drops back to the first step.
+  const [confirmRefund, setConfirmRefund] = useState<{ amount: number; offline: boolean } | null>(null);
 
   const call = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -799,6 +802,11 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                 // Deductions are only locked out on the gateway path for the same reason.
                 const lockDeductions = !isOffline && !!preview?.fullRefundOnly;
                 const missingReference = isOffline && !offlinePay.reference.trim();
+                const sendDisabled = busy || previewing || !!previewError || payout <= 0 || blockedPartialEmi || missingReference;
+                // Only while the amount and method are exactly what was confirmed — a new
+                // preview, a ticked line or a switch to offline goes back to step one.
+                const confirming = confirmRefund != null
+                  && confirmRefund.amount === payout && confirmRefund.offline === isOffline && !sendDisabled;
 
                 return (
                   <div className="space-y-3">
@@ -969,19 +977,49 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                       <label className="text-sm">GST credit note no. (optional)
                         <input value={refund.creditNoteNo} onChange={(e) => setRefund({ ...refund, creditNoteNo: e.target.value })} className="block border rounded px-3 py-2 text-sm mt-1 w-48" />
                       </label>
-                      <button
-                        disabled={busy || previewing || !!previewError || payout <= 0 || blockedPartialEmi || missingReference}
-                        onClick={() => call(() => apiClient.post(API_ENDPOINTS.RETURN_REFUND(request._id), {
-                          ...refundChoices(),
-                          ...(isOffline
-                            ? { method: 'offline', offlineMethod: offlinePay.method, reference: offlinePay.reference.trim() }
-                            : {}),
-                        }))}
-                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-                      >
-                        {isOffline ? `Record ${inr(payout)} refunded` : `Refund ${inr(payout)}`}
-                      </button>
+                      {!confirming && (
+                        <button
+                          disabled={sendDisabled}
+                          onClick={() => setConfirmRefund({ amount: payout, offline: isOffline })}
+                          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                        >
+                          {isOffline ? `Record ${inr(payout)} refunded` : `Refund ${inr(payout)}`}
+                        </button>
+                      )}
                     </div>
+
+                    {confirming && (
+                      <div role="group" aria-label="Confirm refund" className="rounded border border-green-300 bg-green-50 p-3 text-sm space-y-2">
+                        <p>
+                          {isOffline
+                            ? `Record ${inr(payout)} as paid back to the customer by ${offlineMethodLabel(offlinePay.method)} (ref ${offlinePay.reference.trim()})?`
+                            : `Send ${inr(payout)} to the customer's original payment? This cannot be undone.`}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            disabled={sendDisabled}
+                            onClick={() => call(async () => {
+                              setConfirmRefund(null);
+                              await apiClient.post(API_ENDPOINTS.RETURN_REFUND(request._id), {
+                                ...refundChoices(),
+                                ...(isOffline
+                                  ? { method: 'offline', offlineMethod: offlinePay.method, reference: offlinePay.reference.trim() }
+                                  : {}),
+                              });
+                            })}
+                            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                          >
+                            {isOffline ? `Yes, record ${inr(payout)}` : `Yes, send ${inr(payout)}`}
+                          </button>
+                          <button
+                            onClick={() => setConfirmRefund(null)}
+                            className="px-4 py-2 border rounded hover:bg-white"
+                          >
+                            Back
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {previewError && <p className="text-xs text-red-600">{previewError}</p>}
                     {missingReference && (
