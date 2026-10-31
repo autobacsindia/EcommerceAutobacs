@@ -210,7 +210,7 @@ export const TEAM_HELP: TeamHelpSection[] = [
       },
       {
         question: 'How do tasks work?',
-        answer: 'Press "New task" and pick a due date. Team heads and the admin can give jobs to other people; everyone can add jobs for themselves. Tick the circle when a job is done; open a task to comment, add steps or change it.',
+        answer: 'Press "New task", choose who should do it (yourself, or anyone in the staff panel — several people if you like) and pick a due date. They get a pop-up. Whoever gave the task, the team head or the admin can change it or give it to someone else. Tick the circle when a job is done; open a task to comment, add steps or change it.',
         links: [{ label: 'Tasks', href: '/team/tasks' }],
       },
     ],

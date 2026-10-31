@@ -2,16 +2,16 @@
  * Tasks in the staff panel — "do this, by then", given to one person.
  *
  * ── Who gives tasks to whom ─────────────────────────────────────────────────
- *   admin     → anyone in the panel (active staff, or an admin)
- *   team head → themselves, or an active member of their own team
- *   member    → themselves only (their own to-do list)
+ *   anyone in the panel (active staff, or an admin) → anyone in the panel,
+ *   themselves included. Never a customer, never someone whose access was removed.
  *
  * ── Who sees and changes a task ─────────────────────────────────────────────
  *   sees      the person doing it, whoever gave it, the head of its team, the admin
  *   edits     whoever gave it, the head of its team, the admin
  *             (title, notes, due day, priority, order link, archive)
  *   status    the same, plus the person doing it
- *   reassign  the head of its team (within that team) and the admin
+ *   reassign  whoever gave it, the head of its team and the admin — to anyone
+ *             in the panel (the person doing it cannot pass it on)
  *   comments  everyone who sees it
  * A task's team is the assignee's team when it was given, so a head keeps seeing
  * the work they handed out even after the member moves on.
@@ -86,18 +86,17 @@ export const todayIST = (now = new Date()) => formatIsoDateIST(now);
 
 // ── Rules ───────────────────────────────────────────────────────────────────
 
-/** May `actor` give a task to `target` (a loaded user)? */
+const inPanel = (u) => isAdmin(u) || isActiveStaff(u);
+
+/** May `actor` give a task to `target` (a loaded user)? Anyone in the panel, to anyone in it. */
 export function mayAssignTo(actor, target) {
-  if (!target || !(isAdmin(target) || isActiveStaff(target))) return false;
-  if (isAdmin(actor)) return true;
-  if (same(actor._id, target._id)) return isActiveStaff(actor);
-  return isHead(actor) && isActiveStaff(target) && target.staff.team === actor.staff.team;
+  return !!target && inPanel(actor) && inPanel(target);
 }
 
 export const canSee = (u, t) => isAdmin(u) || same(u?._id, t.assignee) || same(u?._id, t.createdBy) || headOf(u, t.team);
 export const canEdit = (u, t) => isAdmin(u) || same(u?._id, t.createdBy) || headOf(u, t.team);
 const canSetStatus = (u, t) => canEdit(u, t) || same(u?._id, t.assignee);
-const canReassign = (u, t) => isAdmin(u) || headOf(u, t.team);
+const canReassign = (u, t) => isAdmin(u) || same(u?._id, t.createdBy) || headOf(u, t.team);
 
 /** The bucket a task lives in, and its sort key inside it. */
 export function placeOf({ status, dueOn, completedAt, archivedAt }) {
@@ -160,9 +159,7 @@ async function loadAssignee(actor, id) {
   const [target] = await userRepository.findChatUsersByIds([id]);
   if (!target) throw fail('That person is no longer in the staff panel.', 400);
   if (!mayAssignTo(actor, target)) {
-    throw fail(isHead(actor)
-      ? 'You can give tasks only to people in your own team.'
-      : 'Only team heads and the admin give tasks to other people. You can add tasks for yourself.', 403);
+    throw fail('Tasks can be given only to people in the staff panel.', 403);
   }
   return target;
 }
@@ -178,9 +175,7 @@ async function loadAssignees(actor, rawIds) {
   const people = ids.map((id) => byId.get(id));
   if (people.some((u) => !u)) throw fail('Someone you picked is no longer in the staff panel.', 400);
   if (people.some((u) => !mayAssignTo(actor, u))) {
-    throw fail(isHead(actor)
-      ? 'You can give tasks only to people in your own team.'
-      : 'Only team heads and the admin give tasks to other people. You can add tasks for yourself.', 403);
+    throw fail('Tasks can be given only to people in the staff panel.', 403);
   }
   return people;
 }
@@ -391,10 +386,7 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
 
 /** Who `actor` may give a task to, for the form's picker. */
 export async function listAssignees(actor) {
-  let people;
-  if (isAdmin(actor)) people = await userRepository.findChatUsers();
-  else if (isHead(actor)) people = await userRepository.findActiveStaff(actor.staff.team);
-  else people = [actor];
+  const people = inPanel(actor) ? await userRepository.findChatUsers() : [];
   // You first, then team heads, then everyone else — each by name.
   const order = (p) => (same(p._id, actor._id) ? 0 : isHead(p) ? 1 : 2);
   return people
@@ -573,7 +565,7 @@ export async function updateTask(actor, id, input = {}, req) {
   }
   let newAssignee = null;
   if (has('assigneeId') && !same(input.assigneeId, t.assignee)) {
-    if (!canReassign(actor, t)) throw fail('Only the team head or the admin can give this task to someone else.', 403);
+    if (!canReassign(actor, t)) throw fail('Only whoever gave this task, the team head or the admin can give it to someone else.', 403);
     newAssignee = await loadAssignee(actor, input.assigneeId);
     Object.assign(set, { assignee: newAssignee._id, assigneeName: newAssignee.name || '', team: teamOf(newAssignee) });
     note('assignee', t.assigneeName, newAssignee.name || '');

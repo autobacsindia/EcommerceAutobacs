@@ -133,7 +133,7 @@ export function PeoplePicker({ people, selected, onChange }: {
   );
 }
 
-/** New task. Admin: anyone; team head: their team; member: themselves. */
+/** New task, for anyone in the panel (yourself included). */
 export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) => void; onCancel: () => void }) {
   const queryClient = useQueryClient();
   const people = useAssignees();
@@ -213,7 +213,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
         <PastDueWarning dueOn={form.dueOn} />
         {choices.length > 1 && <PeoplePicker people={choices} selected={chosen} onChange={setPicked} />}
         {choices.length === 1 && (
-          <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">This task is for you. Team heads and the admin give tasks to others.</p>
+          <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">This task is for you.</p>
         )}
         <label className="block text-xs font-medium text-gray-500">
           <span className="mb-1 flex items-center gap-1"><ListChecks aria-hidden className="h-3.5 w-3.5" /> Checklist (optional) — one step per line</span>
