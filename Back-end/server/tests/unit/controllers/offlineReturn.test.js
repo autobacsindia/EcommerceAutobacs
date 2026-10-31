@@ -24,6 +24,7 @@ const mockReturnRepo = {
   create: jest.fn(),
   save: jest.fn(),
   claimForRefund: jest.fn(),
+  releaseRefundClaim: jest.fn(),
   refundedServiceLineIds: jest.fn().mockResolvedValue([]),
   claimPaymentRecord: jest.fn(),
   find: jest.fn(),
@@ -33,6 +34,9 @@ const mockReturnRepo = {
   returnedQuantityByProduct: jest.fn(),
 };
 const mockOrderRepo = {
+  // The order's refund fence — uncontended (true) in the refund suite's beforeEach;
+  // the jest config resets implementations between tests.
+  advanceRefundSeq: jest.fn(),
   findByIdWithProducts: jest.fn(),
   findById: jest.fn(),
   setReturnRequestStatus: jest.fn(),
@@ -593,6 +597,7 @@ describe('initiateReturnRefund — recording money paid back outside the gateway
     mockPaymentRepo.findById.mockResolvedValue({ _id: 'payment-1', gatewayPaymentId: 'pay_123' });
     mockPaymentRepo.recordRefund.mockResolvedValue({});
     mockReturnRepo.claimPaymentRecord.mockResolvedValue({ _id: 'ret-1' });
+    mockOrderRepo.advanceRefundSeq.mockResolvedValue(true); // no other refund got in between
     mockReturnRepo.save.mockResolvedValue(true);
     mockReturnRepo.findById.mockResolvedValue(makeReturn());
     mockReturnRepo.claimForRefund.mockImplementation(async (_id, amounts) =>

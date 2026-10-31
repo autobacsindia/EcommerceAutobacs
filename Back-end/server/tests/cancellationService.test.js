@@ -16,6 +16,7 @@ import Order from '../models/Order.js';
 import Payment from '../models/Payment.js';
 import User from '../models/User.js';
 import cancellationService from '../services/cancellationService.js';
+import orderRepository from '../repositories/orderRepository.js';
 import razorpayService from '../services/razorpayService.js';
 import orderStatusService from '../services/orderStatusService.js';
 import { remainingToShip, isFullyDelivered } from '../utils/orderFulfilment.js';
@@ -418,6 +419,38 @@ describe('refundCancellation', () => {
     expect(res.message).toMatch(/nothing left to refund/i);
     const fresh = await reload(order);
     expect(fresh.cancellations[1].refund.status).toBe('not_applicable');
+  });
+
+  /*
+    THE REFUND FENCE (Order.refundSeq). Two refunds on one order each work out "what is
+    left" from a snapshot of the order; one computed before the other committed cannot
+    see it. Its claim matches on the counter it read, finds it moved, and claims nothing.
+  */
+  it('a refund computed before another refund on the order committed pays nothing, and can be sent again', async () => {
+    const order = await seedOrder();
+    await seedPayment(order);
+    const [wax, polish] = itemIds(order);
+    const first = await cancellationService.cancelLines(
+      order._id.toString(), { lines: [{ itemId: wax, quantity: 1 }] }, { userId: ADMIN });
+    const second = await cancellationService.cancelLines(
+      order._id.toString(), { lines: [{ itemId: polish, quantity: 1 }] }, { userId: ADMIN });
+    const stale = await reload(order); // what a slow second request read
+    const spy = mockRefund();
+    await cancellationService.refundCancellation(order._id.toString(), first.cancellation._id.toString());
+
+    const realFind = orderRepository.findById.bind(orderRepository);
+    const find = jest.spyOn(orderRepository, 'findById')
+      .mockImplementation(async (id, ...rest) => (String(id) === String(order._id) ? stale : realFind(id, ...rest)));
+    const res = await cancellationService.refundCancellation(order._id.toString(), second.cancellation._id.toString());
+    find.mockRestore();
+
+    expect(res).toMatchObject({ success: false, statusCode: 409 });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((await reload(order)).cancellations[1].refund.status).toBe('pending');
+
+    const retry = await cancellationService.refundCancellation(order._id.toString(), second.cancellation._id.toString());
+    expect(retry.success).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it('rolls the claim back to failed when the gateway throws, so it can be retried', async () => {

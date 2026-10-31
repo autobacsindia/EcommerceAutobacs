@@ -16,6 +16,7 @@ const mockReturnRepo = {
   create: jest.fn(),
   save: jest.fn(),
   claimForRefund: jest.fn(),
+  releaseRefundClaim: jest.fn(),
   // Once-only guard for the cumulative Payment.refundAmount $inc.
   claimPaymentRecord: jest.fn(),
   countDocuments: jest.fn(),
@@ -25,6 +26,9 @@ const mockReturnRepo = {
   returnedQuantityByProduct: jest.fn(),
 };
 const mockOrderRepo = {
+  // The order's refund fence — uncontended (true) in each refund suite's beforeEach;
+  // the jest config resets implementations between tests.
+  advanceRefundSeq: jest.fn(),
   findOwnedWithProducts: jest.fn(),
   setReturnRequestStatus: jest.fn(),
   findById: jest.fn(),
@@ -95,6 +99,7 @@ describe('initiateReturnRefund — deductions + gate', () => {
     mockPaymentRepo.findById.mockResolvedValue({ _id: 'payment-1', gatewayPaymentId: 'pay_123' });
     mockPaymentRepo.recordRefund.mockResolvedValue({});
     mockReturnRepo.claimPaymentRecord.mockResolvedValue({ _id: 'ret-1' }); // uncontended
+    mockOrderRepo.advanceRefundSeq.mockResolvedValue(true); // no other refund got in between
     mockRazorpay.refundPayment.mockResolvedValue({ refundId: 'rfnd_1', status: 'processed', amount: 90000 });
     mockReturnRepo.save.mockResolvedValue(true);
     // Default: pre-check passes, and the atomic claim succeeds returning the claimed doc.
@@ -151,6 +156,34 @@ describe('initiateReturnRefund — deductions + gate', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     // The settled refund must land on the Payment row, cumulatively.
     expect(mockPaymentRepo.recordRefund).toHaveBeenCalledWith('payment-1', 1000, 'return_refund');
+  });
+
+  it('pays nothing when another refund on the order got in first, and puts the return back', async () => {
+    const claimedAt = new Date('2026-10-31T10:00:00Z');
+    mockReturnRepo.claimForRefund.mockImplementation(async (_id, amounts) => makeReturn({
+      refund: { productValue: 1000, ...amounts, status: 'processing', initiatedAt: claimedAt },
+    }));
+    mockOrderRepo.advanceRefundSeq.mockResolvedValueOnce(false);
+    mockReturnRepo.releaseRefundClaim.mockResolvedValue({ _id: 'ret-1' });
+
+    const { status, error } = await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(status).toBe(409);
+    expect(error.message).toMatch(/another refund on this order/i);
+    expect(mockRazorpay.refundPayment).not.toHaveBeenCalled();
+    expect(mockPaymentRepo.recordRefund).not.toHaveBeenCalled();
+    // Back to the status it had before the claim, and only THIS claim.
+    expect(mockReturnRepo.releaseRefundClaim).toHaveBeenCalledWith('ret-1', claimedAt, 'pending');
+  });
+
+  it('fences on the counter read WITH the order it computed the cap from', async () => {
+    mockOrderRepo.findById.mockResolvedValue(makeRefundOrder({ refundSeq: 4 }));
+    await run(initiateReturnRefund, { params: { id: 'ret-1' }, body: {}, user: { _id: 'a1' } });
+    expect(mockOrderRepo.advanceRefundSeq).toHaveBeenCalledWith('order-1', 4);
+    // The claim comes first, so a reader of the new counter also sees it.
+    expect(mockReturnRepo.claimForRefund.mock.invocationCallOrder[0])
+      .toBeLessThan(mockOrderRepo.advanceRefundSeq.mock.invocationCallOrder[0]);
+    expect(mockOrderRepo.advanceRefundSeq.mock.invocationCallOrder[0])
+      .toBeLessThan(mockRazorpay.refundPayment.mock.invocationCallOrder[0]);
   });
 
   it('does NOT reverse LTV immediately for a normal-speed (processing) refund', async () => {

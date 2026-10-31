@@ -544,6 +544,38 @@ export async function initiateRefund(req, { authorize = null } = {}) {
     throw new AppError('This refund is already being processed.', 409);
   }
 
+  /*
+    MONEY: the order's refund fence (Order.refundSeq). The claim above serializes THIS
+    return; it cannot see a refund of ANOTHER return or a cancellation on the same order
+    that committed after our headroom was read, and both could pass a cap computed from
+    the same snapshot. So advance the order's counter from the value read with `order`:
+    the claim landed first, so any later reader of the new value also sees it. Losing
+    means another refund got in between — release the claim and pay nothing.
+  */
+  if (!(await orderRepository.advanceRefundSeq(order._id, order.refundSeq))) {
+    const released = await returnRequestRepository.releaseRefundClaim(
+      rr._id, rr.refund.initiatedAt, existing.refund?.status,
+    );
+    if (!released) {
+      // Nothing was paid, but the return is left in `processing` and counts against the
+      // cap until someone looks. Loud on purpose.
+      console.error(`[returnRefund] lost the refund fence and could not release return ${rr._id}`);
+      if (process.env.SENTRY_DSN) {
+        Sentry.withScope((scope) => {
+          scope.setContext('return_refund', { returnId: String(rr._id), orderId: String(order._id) });
+          scope.setTag('payment_action', 'return_refund');
+          scope.setTag('severity', 'high');
+          Sentry.captureMessage('Return refund claim could not be released after losing the refund fence');
+        });
+      }
+    }
+    throw new AppError(
+      'Another refund on this order went through at the same moment, so this one was stopped before any money moved. '
+      + 'Refresh and check the amount.',
+      409,
+    );
+  }
+
   if (isOffline) {
     return recordOfflineRefund(req, {
       rr, order, payment, finalAmount, offlineMethod, reference, paidAt,

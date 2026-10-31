@@ -157,6 +157,8 @@ describe('AdminReturnsPage (new flow)', () => {
     fireEvent.change(screen.getByPlaceholderText(/UTR/i), { target: { value: 'RCPT-8821' } });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
+    expect(screen.getByRole('group', { name: /confirm refund/i })).toHaveTextContent(/RCPT-8821/);
+    fireEvent.click(screen.getByRole('button', { name: /yes, record ₹1,000.00/i }));
 
     await waitFor(() => expect(mockApi.post).toHaveBeenCalledWith(
       API_ENDPOINTS.RETURN_REFUND('ret000001'),
@@ -205,6 +207,7 @@ describe('AdminReturnsPage (new flow)', () => {
     const submit = await screen.findByRole('button', { name: /refund ₹10,200.00/i });
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
+    fireEvent.click(screen.getByRole('button', { name: /yes, send ₹10,200.00/i }));
 
     await waitFor(() => expect(mockApi.post).toHaveBeenCalledWith(
       API_ENDPOINTS.RETURN_REFUND('ret000001'),
@@ -213,6 +216,61 @@ describe('AdminReturnsPage (new flow)', () => {
     const sent = mockApi.post.mock.calls.find(([e]) => e === API_ENDPOINTS.RETURN_REFUND('ret000001'))![1] as Record<string, unknown>;
     expect(sent).not.toHaveProperty('finalAmount');
     expect(sent).not.toHaveProperty('amount');
+  });
+
+  it('sends money only on the second click, once — and a changed amount goes back to step one', async () => {
+    const ready = {
+      ...listResponse.requests[0],
+      status: 'received',
+      inspection: { passed: true },
+      items: [{ product: { _id: 'p1', name: 'Dash cam', images: [] }, quantity: 1, unitPrice: 9000, reason: 'wrong_item', fault: { claimed: 'ours' } }],
+    };
+    const ourFault = (withFit: boolean) => previewOf({
+      productValue: 9000, orderTotal: 10200, maxRefundable: 10200,
+      hasOurFault: true, hasCustomerFault: false,
+      breakdown: { goodsGross: 9000, goodsNet: 9000, discountShare: 0, shippingShare: 200, service: withFit ? 1000 : 0, pickupDeduction: 0, restocking: 0, total: withFit ? 10200 : 9200 },
+      refundNow: withFit ? 10200 : 9200,
+      serviceLineOptions: [{ orderItemId: 'fit1', name: 'Installation', quantity: 1, netPaid: 1000, alreadyRefunded: false }],
+    });
+    mockApi.get.mockImplementation((endpoint: string) => {
+      if (endpoint.startsWith(API_ENDPOINTS.ADMIN_RETURNS)) return Promise.resolve({ ...listResponse, requests: [ready] } as never);
+      if (endpoint === API_ENDPOINTS.RETURN_REFUND_PREVIEW('ret000001')) return Promise.resolve({ preview: ourFault(false) } as never);
+      return Promise.resolve({ request: ready } as never);
+    });
+    mockApi.post.mockImplementation((endpoint: string, body?: unknown) => {
+      if (endpoint === API_ENDPOINTS.RETURN_REFUND_PREVIEW('ret000001')) {
+        const picked = ((body as { serviceLines?: unknown[] })?.serviceLines || []).length > 0;
+        return Promise.resolve({ preview: ourFault(picked) } as never);
+      }
+      return Promise.resolve({} as never);
+    });
+    const refundPosts = () => mockApi.post.mock.calls.filter(([e]) => e === API_ENDPOINTS.RETURN_REFUND('ret000001'));
+
+    render(<AdminReturnsPage />);
+    await screen.findByText('#AB-1001');
+    fireEvent.click(screen.getByTitle('View'));
+
+    const first = await screen.findByRole('button', { name: /refund ₹9,200.00/i });
+    await waitFor(() => expect(first).toBeEnabled());
+    fireEvent.click(first);
+    expect(screen.getByRole('group', { name: /confirm refund/i })).toHaveTextContent(/send ₹9,200.00 to the customer's original payment/i);
+    expect(refundPosts()).toHaveLength(0);
+
+    // Back: nothing sent, step one again.
+    fireEvent.click(screen.getByRole('button', { name: /^back$/i }));
+    expect(screen.queryByRole('group', { name: /confirm refund/i })).not.toBeInTheDocument();
+
+    // Confirm ₹9,200, then tick the installation: the amount changes, so the confirm goes.
+    fireEvent.click(screen.getByRole('button', { name: /refund ₹9,200.00/i }));
+    fireEvent.click(screen.getByLabelText(/Installation — paid/i));
+    const second = await screen.findByRole('button', { name: /refund ₹10,200.00/i });
+    expect(screen.queryByRole('group', { name: /confirm refund/i })).not.toBeInTheDocument();
+    expect(refundPosts()).toHaveLength(0);
+
+    await waitFor(() => expect(second).toBeEnabled());
+    fireEvent.click(second);
+    fireEvent.click(screen.getByRole('button', { name: /yes, send ₹10,200.00/i }));
+    await waitFor(() => expect(refundPosts()).toHaveLength(1));
   });
 
   it('blocks the refund button and shows the reason when the server refuses the choices', async () => {

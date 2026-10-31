@@ -209,11 +209,13 @@ export const markOrderRefundOffline = async (req, {
     paidAt: settledAt,
     userId: actorId(req),
     markRefunded: isFull,
+    // The refund fence, as read with the order the ceiling above was computed from.
+    refundSeq: order.refundSeq,
   });
   if (!claimed) {
     throw new AppError(
-      'This order\'s refund is already recorded or in progress — reload the order to see its '
-      + 'current state.',
+      'This order\'s refund is already recorded or in progress, or another refund on this '
+      + 'order just went through — reload the order to see its current state.',
       409,
     );
   }
@@ -424,11 +426,12 @@ export const markCancellationRefundOffline = async (req, {
     offlineReference: reference,
     paidAt: settledAt,
     userId: actorId(req),
+    refundSeq: order.refundSeq,
   });
   if (!claimed) {
     throw new AppError(
-      'This cancellation\'s refund is already recorded or in progress — reload the order to '
-      + 'see its current state.',
+      'This cancellation\'s refund is already recorded or in progress, or another refund on '
+      + 'this order just went through — reload the order to see its current state.',
       409,
     );
   }

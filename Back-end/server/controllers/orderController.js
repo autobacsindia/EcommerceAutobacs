@@ -1079,12 +1079,14 @@ export const processRefund = async (req, res) => {
     });
   }
 
-  // Race-safe claim: only the first caller transitions the order into processing and proceeds.
+  // Race-safe claim: only the first caller transitions the order into processing and
+  // proceeds. Fenced on order.refundSeq (read with this `order`), so a return refund
+  // committed since the headroom above was computed also refuses it.
   const claimed = await orderRepository.markRefundProcessing(order, req.user.id);
   if (!claimed) {
     return res.status(409).json({
       success: false,
-      message: 'A refund for this order is already being processed.'
+      message: 'A refund for this order is already being processed, or another refund on it just went through. Refresh and check.'
     });
   }
 

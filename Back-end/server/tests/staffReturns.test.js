@@ -61,6 +61,7 @@ const { default: Payment } = await import('../models/Payment.js');
 const { default: PaymentRequest } = await import('../models/PaymentRequest.js');
 const { default: ReturnRequest } = await import('../models/ReturnRequest.js');
 const { default: razorpayService } = await import('../services/razorpayService.js');
+const { default: orderRepository } = await import('../repositories/orderRepository.js');
 const svc = await import('../services/returnService.js');
 const { postBusinessUpdate, RETURN_CHAT_JOB } = await import('../services/chatBusinessUpdates.js');
 const { default: ChatChannel } = await import('../models/ChatChannel.js');
@@ -386,6 +387,61 @@ describe('the flow', () => {
     ]);
     expect(outcomes.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
     expect(razorpayService.refundPayment).toHaveBeenCalledTimes(1);
+  });
+
+  /*
+    Two returns on ONE order draw on one capture. Each computes "what is left" from a
+    snapshot of the order; before the order's refund fence, a second refund computed
+    from the same snapshot as the first could not see it and paid as if it were alone.
+    Here the customer paid ₹9,200 (₹12,200 less a ₹3,000 Razorpay offer); the dash cam
+    and the mats each fit alone, but not together.
+  */
+  async function offerOrderWithTwoReturns() {
+    const o = await deliveredOrder();
+    await Order.updateOne({ _id: o.order._id }, { $set: { gatewayOffer: { discount: 3000, amountPaid: 9200 } } });
+    const first = await passedReturn(o, { lines: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }] });
+    const second = await passedReturn(o, { lines: [{ itemId: o.mat, quantity: 2, reason: 'wrong_item' }] });
+    return { o, first, second };
+  }
+  const paidPaise = () => razorpayService.refundPayment.mock.calls.reduce((sum, c) => sum + c[1], 0);
+
+  it('a refund computed before another return on the order was refunded pays nothing, and can be sent again', async () => {
+    const { o, first, second } = await offerOrderWithTwoReturns();
+    const boss = await admin();
+    // What a slow second request read, before the first refund went out.
+    const stale = await Order.findById(o.order._id);
+    await svc.sendRefund(boss, first.id, req(boss, {}, { id: first.id }));
+
+    const realFind = orderRepository.findById.bind(orderRepository);
+    const spy = jest.spyOn(orderRepository, 'findById')
+      .mockImplementation(async (id, ...rest) => (String(id) === String(o.order._id) ? stale : realFind(id, ...rest)));
+    await expect(svc.sendRefund(boss, second.id, req(boss, {}, { id: second.id })))
+      .rejects.toMatchObject({ statusCode: 409 });
+    spy.mockRestore();
+
+    expect(razorpayService.refundPayment).toHaveBeenCalledTimes(1);
+    const parked = await ReturnRequest.findById(second.id).lean();
+    expect(parked.status).toBe('received');
+    expect(parked.refund.status).toBe('pending');
+
+    // Sent again with a fresh read, it pays only what is left — never past ₹9,200.
+    await Promise.allSettled([svc.sendRefund(boss, second.id, req(boss, {}, { id: second.id }))]);
+    expect(paidPaise()).toBe(920000);
+  });
+
+  it('two returns on one order refunded at the same moment never pay more than the customer paid', async () => {
+    const { first, second } = await offerOrderWithTwoReturns();
+    const accounts = await person('accounts', { isHead: true });
+    const boss = await admin();
+    const outcomes = await Promise.allSettled([
+      svc.sendRefund(accounts, first.id, req(accounts, {}, { id: first.id })),
+      svc.sendRefund(boss, second.id, req(boss, {}, { id: second.id })),
+    ]);
+    expect(outcomes.some((x) => x.status === 'fulfilled')).toBe(true);
+    expect(paidPaise()).toBeLessThanOrEqual(920000);
+    for (const x of outcomes.filter((r) => r.status === 'rejected')) {
+      expect([409, 422]).toContain(x.reason.statusCode);
+    }
   });
 
   it('direct to supplier: procurement books it and records the supplier check; operations confirms', async () => {
