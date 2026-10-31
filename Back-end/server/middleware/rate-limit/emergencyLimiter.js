@@ -1,3 +1,5 @@
+import { getClientIp } from './clientIp.js';
+
 const emergencyStore = new Map();
 const EMERGENCY_WINDOW_MS = 1000;
 const EMERGENCY_MAX_REQUESTS = 10;
@@ -28,7 +30,7 @@ export function isCriticalRoute(req) {
 }
 
 export function applyLocalEmergencyLimit(req, res, next) {
-  const key = req.headers['cf-connecting-ip'] || req.ip;
+  const key = getClientIp(req);
   const now = Date.now();
   const entry = emergencyStore.get(key) || { count: 0, reset: now + EMERGENCY_WINDOW_MS };
 

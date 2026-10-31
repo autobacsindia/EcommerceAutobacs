@@ -1,4 +1,5 @@
 import { rateLimit } from './core.js';
+import { getClientIp } from './clientIp.js';
 
 export const searchRateLimit = rateLimit({
   windowMs: 60 * 1000,
@@ -12,7 +13,7 @@ export const searchRateLimit = rateLimit({
   keyGenerator: (req) => {
     const userId = req.user?.id || req.user?._id;
     const guestSession = req.cookies?.guest_session;
-    const ip = req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
+    const ip = getClientIp(req);
     return `rate_limit:search:${userId || guestSession || ip}`;
   }
 });
@@ -29,7 +30,7 @@ export const searchBurstLimit = rateLimit({
   keyGenerator: (req) => {
     const userId = req.user?.id || req.user?._id;
     const guestSession = req.cookies?.guest_session;
-    const ip = req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
+    const ip = getClientIp(req);
     return `rate_limit:search_burst:${userId || guestSession || ip}`;
   }
 });

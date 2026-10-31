@@ -1,16 +1,17 @@
 import { rateLimit } from './core.js';
+import { getClientIp } from './clientIp.js';
 
 export const publicBrowsingRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: process.env.NODE_ENV === 'development' ? 1000 : 300,
   burst: process.env.NODE_ENV === 'development' ? 200 : 100,
   message: 'Too many requests. Please slow down.',
-  keyGenerator: (req) => `rate_limit:public:${req.ip || req.connection.remoteAddress}`
+  keyGenerator: (req) => `rate_limit:public:${getClientIp(req)}`
 });
 
 // GET /payment-config/razorpay — read once per storefront session (the client caches
 // it) and edge-cacheable, so real traffic barely reaches the origin. Keyed on
-// cf-connecting-ip: behind Cloudflare req.ip is the edge, which would put every
+// the real client IP (getClientIp): behind Cloudflare req.ip is the edge, which would put every
 // shopper in one bucket.
 export const paymentConfigRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000,
@@ -18,7 +19,7 @@ export const paymentConfigRateLimit = rateLimit({
   burst: 40,
   message: 'Too many requests. Please slow down.',
   keyGenerator: (req) =>
-    `rate_limit:payment-config:${req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress}`
+    `rate_limit:payment-config:${getClientIp(req)}`
 });
 
 export const authenticatedUserRateLimit = rateLimit({
@@ -26,7 +27,7 @@ export const authenticatedUserRateLimit = rateLimit({
   max: 600,
   burst: 200,
   message: 'Too many requests. Please slow down.',
-  keyGenerator: (req) => `rate_limit:user:${req.user?.id || req.ip}`
+  keyGenerator: (req) => `rate_limit:user:${req.user?.id || getClientIp(req)}`
 });
 
 export const checkoutRateLimit = rateLimit({
@@ -34,17 +35,17 @@ export const checkoutRateLimit = rateLimit({
   max: 60,
   burst: 20,
   message: 'Too many checkout requests. Please slow down to prevent duplicate orders.',
-  keyGenerator: (req) => `rate_limit:checkout:${req.user?.id || req.ip}`
+  keyGenerator: (req) => `rate_limit:checkout:${req.user?.id || getClientIp(req)}`
 });
 
 export const returnsRateLimit = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 15,
   message: 'Too many return requests. Please slow down.',
-  keyGenerator: (req) => `rate_limit:returns:${req.user?.id || req.ip}`,
+  keyGenerator: (req) => `rate_limit:returns:${req.user?.id || getClientIp(req)}`,
   handler: (req, res) => {
     console.warn(
-      `[RateLimit] /returns blocked | IP: ${req.ip} | user: ${req.user?.id || 'unauthenticated'} | ` +
+      `[RateLimit] /returns blocked | IP: ${getClientIp(req)} | user: ${req.user?.id || 'unauthenticated'} | ` +
       `UA: ${req.get('user-agent') || 'unknown'}`
     );
     res.status(429).json({
@@ -92,7 +93,7 @@ export const supportSubmitRateLimit = rateLimit({
 /**
  * Spin-to-Win: the wheel click.
  *
- * Deliberately keyed on the REAL client IP, not `req.ip`. Behind Cloudflare `req.ip` is
+ * Deliberately keyed on the REAL client IP (getClientIp), not `req.ip`. Behind Cloudflare `req.ip` is
  * the edge, so every customer in the country shares one bucket and the limiter silently
  * does nothing — a house landmine this repo has already documented. The user id comes
  * first when present; the IP is the fallback that actually has to work.
@@ -106,5 +107,5 @@ export const spinRateLimit = rateLimit({
   max: 20,
   message: 'Too many spin requests. Please slow down.',
   keyGenerator: (req) =>
-    `rate_limit:spin:${req.user?.id || req.headers['cf-connecting-ip'] || req.ip}`,
+    `rate_limit:spin:${req.user?.id || getClientIp(req)}`,
 });

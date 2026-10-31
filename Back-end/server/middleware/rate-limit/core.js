@@ -5,6 +5,7 @@ import { handleRedisUnavailable } from './emergencyLimiter.js';
 import { isValidIP } from './ipValidator.js';
 import { isTrustedInternalClient, getInternalRateMultiplier } from './trustedClient.js';
 import { normalizeEndpoint } from '../../config/rateLimitTelemetry.js';
+import { getClientIp } from './clientIp.js';
 
 // Atomic fixed-window counter in a SINGLE Redis round-trip.
 //   KEYS[1] = counter key, ARGV[1] = window seconds → returns {count, ttl}.
@@ -34,10 +35,10 @@ export const rateLimit = (options = {}) => {
     handler = null
   } = options;
 
-  return async (req, res, next) => {
+  const limiter = async (req, res, next) => {
     if (process.env.NODE_ENV === 'test') return next();
 
-    const clientIP = req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
+    const clientIP = getClientIp(req);
     if (!isValidIP(clientIP)) {
       console.warn(`[RateLimit] Invalid IP detected: ${clientIP}`);
       return res.status(400).json({ success: false, message: 'Invalid request' });
@@ -60,7 +61,7 @@ export const rateLimit = (options = {}) => {
 
     const rawKey = keyGenerator
       ? keyGenerator(req)
-      : req.user?.id || req.headers['cf-connecting-ip'] || req.ip || req.connection.remoteAddress;
+      : req.user?.id || clientIP;
     // Namespaced separately so internal traffic can never exhaust — or be
     // throttled by — a real visitor's counter, and stays visible in Redis.
     const baseKey = isInternal ? `internal:${rawKey}` : rawKey;
@@ -128,4 +129,9 @@ export const rateLimit = (options = {}) => {
       return handleRedisUnavailable(req, res, next);
     }
   };
+
+  // Exposed so tests can prove what a limiter keys on: the middleware itself
+  // returns early under NODE_ENV=test, so the key is otherwise unobservable.
+  limiter.keyGenerator = keyGenerator;
+  return limiter;
 };
