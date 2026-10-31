@@ -210,7 +210,7 @@ export const TEAM_HELP: TeamHelpSection[] = [
     items: [
       {
         question: 'I paid for fuel, a courier or a tool. How do I get it back?',
-        answer: 'Go to Payments, press "New expense", enter the amount and who was paid, and attach the bill. It goes to accounts to approve, then to the admin to pay. You can download the slip or receipt at any stage.',
+        answer: 'Go to Payments, press "New expense", choose what it was for (each team has its own list; "Others" needs a few words of details), enter the amount and who was paid, and attach the bill. Procurement can pick the bill’s currency (e.g. Thai baht) and enter the rate from the bank or forex quote — the rupee amount is worked out from them. It goes to accounts to approve, then to the admin to pay. You can download the slip or receipt at any stage.',
         links: [{ label: 'Payments', href: '/team/payments' }],
       },
       {

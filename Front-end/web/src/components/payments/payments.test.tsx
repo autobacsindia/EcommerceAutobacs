@@ -8,11 +8,40 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PaymentRequestForm from './PaymentRequestForm';
 import PaymentRequestDetail from './PaymentRequestDetail';
 import OrderSupplierPayments from './OrderSupplierPayments';
-import type { PaymentRequest } from './api';
+import EditPaymentRequest from './EditPaymentRequest';
+import type { ExpenseOptions, PaymentRequest } from './api';
 
 const get = jest.fn();
 const post = jest.fn();
-jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a) } }));
+const put = jest.fn();
+jest.mock('@/lib/api-client', () => ({
+  __esModule: true,
+  default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), put: (...a: unknown[]) => put(...a) },
+}));
+
+const INR_ONLY = [{ code: 'INR', label: 'Indian rupee (₹)' }];
+const OPS: ExpenseOptions = {
+  team: 'operations', baseCurrency: 'INR', currencies: INR_ONLY,
+  categories: [
+    { value: 'fuel', label: 'Fuel', noteRequired: false }, { value: 'food', label: 'Food', noteRequired: false },
+    { value: 'travel', label: 'Travel', noteRequired: false }, { value: 'other', label: 'Others', noteRequired: true },
+  ],
+};
+const PROCUREMENT: ExpenseOptions = {
+  team: 'procurement', baseCurrency: 'INR',
+  currencies: [...INR_ONLY, { code: 'THB', label: 'Thai baht' }, { code: 'USD', label: 'US dollar' }],
+  categories: [
+    { value: 'import_purchase', label: 'Import purchase', noteRequired: false },
+    { value: 'forwarder_cha', label: 'Freight forwarder / CHA (customs agent)', noteRequired: false },
+    { value: 'other', label: 'Others', noteRequired: true },
+  ],
+};
+/** The server's options for whoever is signed in. */
+const serveOptions = (options: ExpenseOptions) => get.mockImplementation(async (url: string) => {
+  if (url.startsWith('/payment-requests/expense-options')) return { options };
+  throw new Error(`unexpected GET ${url}`);
+});
+const optionsLoaded = () => screen.findByRole('combobox', { name: 'What for' });
 jest.mock('@/lib/http/tokenManager', () => ({
   tokenManager: { ensureCsrfToken: jest.fn().mockResolvedValue(undefined), getHeaders: () => ({ 'Content-Type': 'application/json', 'X-XSRF-TOKEN': 't' }) },
 }));
@@ -33,7 +62,8 @@ const base: PaymentRequest = {
 
 let fetchMock: jest.Mock;
 beforeEach(() => {
-  get.mockReset(); post.mockReset();
+  get.mockReset(); post.mockReset(); put.mockReset();
+  serveOptions(OPS);
   fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ request: { ...base, status: 'submitted' } }) });
   global.fetch = fetchMock as unknown as typeof fetch;
 });
@@ -41,7 +71,8 @@ beforeEach(() => {
 const shot = (name: string, type = 'image/jpeg', size = 10) => new File([new Uint8Array(size)], name, { type });
 
 describe('raising', () => {
-  const fillExpense = () => {
+  const fillExpense = async () => {
+    await optionsLoaded();
     fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '840' } });
     fireEvent.change(screen.getByLabelText('Pay to'), { target: { value: 'Kerala Taxi' } });
     fireEvent.change(screen.getByLabelText('UPI ID'), { target: { value: 'taxi@okicici' } });
@@ -52,7 +83,7 @@ describe('raising', () => {
   it('sends several bills, adding across picks, minus any removed', async () => {
     const onDone = jest.fn();
     wrap(<PaymentRequestForm onDone={onDone} />);
-    fillExpense();
+    await fillExpense();
     fireEvent.change(bills(), { target: { files: [shot('one.jpg'), shot('two.pdf', 'application/pdf')] } });
     fireEvent.change(bills(), { target: { files: [shot('three.jpg')] } });
     fireEvent.click(screen.getByRole('button', { name: 'Remove two.pdf' }));
@@ -64,8 +95,9 @@ describe('raising', () => {
     expect(form.getAll('qr').map((f) => (f as File).name)).toEqual(['qr.png']);
   });
 
-  it('takes up to twenty bills (photos or PDFs) and refuses a file over 10 MB, saying why', () => {
+  it('takes up to twenty bills (photos or PDFs) and refuses a file over 10 MB, saying why', async () => {
     wrap(<PaymentRequestForm onDone={() => {}} />);
+    await optionsLoaded();
     fireEvent.change(bills(), { target: { files: Array.from({ length: 19 }, (_, i) => shot(`b${i}.${i % 2 ? 'pdf' : 'jpg'}`, i % 2 ? 'application/pdf' : 'image/jpeg')) } });
     fireEvent.change(bills(), { target: { files: [shot('b19.jpg'), shot('b20.jpg')] } });
     expect(screen.getByRole('alert')).toHaveTextContent('up to 20 files');
@@ -80,7 +112,7 @@ describe('raising', () => {
   it('a screenshot pasted in the form is sent as a bill', async () => {
     const onDone = jest.fn();
     wrap(<PaymentRequestForm onDone={onDone} />);
-    fillExpense();
+    await fillExpense();
     const shotPng = shot('image.png', 'image/png');
     fireEvent.paste(screen.getByLabelText('Details'), { clipboardData: { files: [shotPng], items: [], types: ['Files'] } });
     fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
@@ -93,6 +125,7 @@ describe('raising', () => {
   it('sends an expense as multipart with the payee as JSON', async () => {
     const onDone = jest.fn();
     wrap(<PaymentRequestForm onDone={onDone} />);
+    await optionsLoaded();
     fireEvent.change(screen.getByLabelText('What for'), { target: { value: 'travel' } });
     fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '840' } });
     fireEvent.change(screen.getByLabelText('Pay to'), { target: { value: 'Kerala Taxi' } });
@@ -180,6 +213,119 @@ describe('detail', () => {
     fireEvent.change(within(panel).getByLabelText(/Why is it declined/), { target: { value: 'Duplicate bill' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'Decline' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/payment-requests/r1/decline', { note: 'Duplicate bill' }));
+  });
+});
+
+describe('each team’s own options', () => {
+  const options = () => screen.getAllByRole('option').map((o) => o.textContent);
+  const detailsBox = () => screen.getByLabelText('Details');
+
+  it('offers only what the server lists for the team, in rupees, with no currency picker', async () => {
+    wrap(<PaymentRequestForm onDone={() => {}} />);
+    await optionsLoaded();
+    expect(get).toHaveBeenCalledWith('/payment-requests/expense-options');
+    expect(options()).toEqual(['Fuel', 'Food', 'Travel', 'Others']);
+    expect(screen.queryByLabelText('Currency')).toBeNull();
+    expect(screen.getByLabelText('Amount (₹)')).toBeInTheDocument();
+  });
+
+  it('details are optional on a plain option and required on "Others"', async () => {
+    wrap(<PaymentRequestForm onDone={() => {}} />);
+    await optionsLoaded();
+    expect(detailsBox()).not.toBeRequired();
+    expect(screen.getByText('Optional')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('What for'), { target: { value: 'other' } });
+    expect(detailsBox()).toBeRequired();
+    expect(screen.getByText('Required')).toBeInTheDocument();
+    expect(detailsBox()).toHaveAttribute('placeholder', expect.stringMatching(/^Say what it was for/));
+  });
+
+  it('procurement: a baht bill sends the bill and the rate — never a rupee figure — and previews the rupees', async () => {
+    serveOptions(PROCUREMENT);
+    const onDone = jest.fn();
+    wrap(<PaymentRequestForm onDone={onDone} />);
+    await optionsLoaded();
+    expect(options()).toContain('Freight forwarder / CHA (customs agent)');
+    expect(options()).not.toContain('Fuel');
+    fireEvent.change(screen.getByLabelText('Currency'), { target: { value: 'THB' } });
+    expect(screen.queryByLabelText('Amount (₹)')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Bill amount (THB)'), { target: { value: '10000' } });
+    fireEvent.change(screen.getByLabelText('Rate (₹ for 1 THB)'), { target: { value: '2.45' } });
+    expect(screen.getByText('₹24,500')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Pay to'), { target: { value: 'Siam Parts' } });
+    fireEvent.change(screen.getByLabelText('UPI ID'), { target: { value: 'forex@okhdfc' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('category')).toBe('import_purchase');
+    expect(form.get('currency')).toBe('THB');
+    expect(form.get('foreignAmount')).toBe('10000');
+    expect(form.get('fxRate')).toBe('2.45');
+    expect(form.get('amount')).toBeNull();
+  });
+
+  it('shows the server’s refusal as it is', async () => {
+    fetchMock.mockResolvedValue({ ok: false, json: async () => ({ message: 'Add details — say what this “Others” expense was for.' }) });
+    wrap(<PaymentRequestForm onDone={() => {}} />);
+    await optionsLoaded();
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText('Pay to'), { target: { value: 'Shop' } });
+    fireEvent.change(screen.getByLabelText('UPI ID'), { target: { value: 'shop@okaxis' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Add details — say what this “Others” expense was for.');
+  });
+
+  it('if the options cannot load, says so and offers to try again — it does not guess a list', async () => {
+    get.mockRejectedValueOnce(Object.assign(new Error('down'), { rawData: { message: 'Server unavailable' } }));
+    wrap(<PaymentRequestForm onDone={() => {}} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Server unavailable');
+    expect(screen.queryByRole('combobox', { name: 'What for' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await optionsLoaded()).toBeInTheDocument();
+  });
+
+  it('an old expense keeps its old option when edited, marked as such', async () => {
+    serveOptions(PROCUREMENT);
+    const old: PaymentRequest = { ...base, status: 'submitted', team: 'procurement', category: 'fuel', categoryLabel: 'Fuel', currency: 'INR' };
+    put.mockResolvedValue({ request: old });
+    const onDone = jest.fn();
+    wrap(<EditPaymentRequest r={old} onDone={onDone} onCancel={() => {}} />);
+    expect(await screen.findByRole('option', { name: 'Fuel (old option)' })).toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith('/payment-requests/expense-options?team=procurement');
+    expect(screen.getByLabelText('What for')).toHaveValue('fuel');
+    fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '900' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(put).toHaveBeenCalledWith('/payment-requests/r1', expect.objectContaining({ category: 'fuel', currency: 'INR', amount: '900' }));
+  });
+
+  it('editing a baht bill changes the bill or the rate, not the rupees', async () => {
+    serveOptions(PROCUREMENT);
+    const thb: PaymentRequest = {
+      ...base, status: 'submitted', team: 'procurement', category: 'import_purchase', categoryLabel: 'Import purchase',
+      amount: 24500, currency: 'THB', foreignAmount: 10000, fxRate: 2.45,
+    };
+    put.mockResolvedValue({ request: thb });
+    const onDone = jest.fn();
+    wrap(<EditPaymentRequest r={thb} onDone={onDone} onCancel={() => {}} />);
+    await screen.findByRole('option', { name: 'Import purchase' });
+    expect(screen.queryByLabelText('Amount (₹)')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Rate (₹ for 1 THB)'), { target: { value: '2.5' } });
+    expect(screen.getByText('₹25,000')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    const body = put.mock.calls[0][1];
+    expect(body).toMatchObject({ currency: 'THB', foreignAmount: '10000', fxRate: '2.5' });
+    expect(body).not.toHaveProperty('amount');
+  });
+
+  it('the detail shows the readable name and the bill beside the rupees', async () => {
+    get.mockResolvedValue({ request: { ...base, team: 'procurement', category: 'import_purchase', categoryLabel: 'Import purchase', amount: 24500, currency: 'THB', foreignAmount: 10000, fxRate: 2.45 } });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    const panel = await screen.findByRole('complementary', { name: 'Payment request' });
+    expect(await within(panel).findByText(/Import purchase expense/)).toBeInTheDocument();
+    expect(within(panel).getByText('₹24,500')).toBeInTheDocument();
+    expect(within(panel).getByText('Bill: THB 10,000 @ ₹2.45')).toBeInTheDocument();
   });
 });
 

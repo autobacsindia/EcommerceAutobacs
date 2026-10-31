@@ -1,9 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
-import { EXPENSE_CATEGORIES, errorMessage, type PaymentRequest } from './api';
+import {
+  categoryName, errorMessage, getExpenseOptions, paymentKeys, previewRupees, rupees, type PaymentRequest,
+} from './api';
 import { SupplierSuggestions, payLine } from './SupplierPicker';
 import type { Supplier } from './suppliers';
 
@@ -15,6 +18,10 @@ const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gra
  * payment, a saved supplier can be picked by typing its name). The server
  * decides who may edit and until when, and says when an edit sends it back to
  * accounts.
+ *
+ * An expense offers its team's options; one raised with an option the team no
+ * longer has (from before per-team lists) keeps it, marked "old option", and
+ * the server only checks the list if it is changed.
  */
 export default function EditPaymentRequest({ r, onDone, onCancel }: {
   r: PaymentRequest;
@@ -24,6 +31,27 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   const [amount, setAmount] = useState(String(r.amount));
   const [description, setDescription] = useState(r.description || '');
   const [category, setCategory] = useState(r.category);
+  const [currency, setCurrency] = useState(r.currency || 'INR');
+  const [foreignAmount, setForeignAmount] = useState(r.foreignAmount != null ? String(r.foreignAmount) : '');
+  const [fxRate, setFxRate] = useState(r.fxRate != null ? String(r.fxRate) : '');
+  const isExpense = r.kind === 'expense';
+  const optionsQ = useQuery({
+    queryKey: paymentKeys.options(r.team),
+    queryFn: () => getExpenseOptions(r.team),
+    enabled: isExpense,
+    staleTime: 10 * 60 * 1000,
+  });
+  const options = optionsQ.data?.options;
+  const teamCategories = options?.categories ?? [];
+  const isOld = !teamCategories.some((c) => c.value === r.category);
+  // An option off the team's list was raised when details were required on every expense.
+  const noteRequired = isExpense && (teamCategories.find((c) => c.value === category)?.noteRequired ?? true);
+  const currencies = options?.currencies ?? [];
+  const currencyChoices = currencies.some((c) => c.code === (r.currency || 'INR'))
+    ? currencies
+    : [{ code: r.currency || 'INR', label: '' }, ...currencies];
+  const foreign = isExpense && currency !== 'INR';
+  const comesTo = foreign ? previewRupees(foreignAmount, fxRate) : null;
   const [method, setMethod] = useState<'upi' | 'bank'>(r.payee.method);
   const [payee, setPayee] = useState({
     name: r.payee.name, upiId: r.payee.upiId || '', accountName: r.payee.accountName || '',
@@ -39,8 +67,11 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    const body: Record<string, unknown> = { amount, description: description.trim() };
-    if (r.kind === 'expense') body.category = category;
+    const body: Record<string, unknown> = { description: description.trim() };
+    // A foreign bill sends what was billed and the rate; the server works out the rupees.
+    if (foreign) Object.assign(body, { currency, foreignAmount, fxRate });
+    else Object.assign(body, isExpense ? { currency, amount } : { amount });
+    if (isExpense) body.category = category;
     if (picked) body.supplierId = picked.id;
     else if (!(method === 'bank' && masked)) {
       body.payee = method === 'upi'
@@ -64,15 +95,38 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
         <p className="rounded-lg bg-amber-50 p-2 text-xs text-amber-900">Already approved: changing the amount or who is paid sends it back to accounts to approve again.</p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
-        <div><label className={label} htmlFor="ed-amount">Amount (₹)</label>
-          <input id="ed-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
-        {r.kind === 'expense' && (
+        {!foreign && (
+          <div><label className={label} htmlFor="ed-amount">Amount (₹)</label>
+            <input id="ed-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+        )}
+        {isExpense && (
           <div><label className={label} htmlFor="ed-cat">What for</label>
             <select id="ed-cat" className={input} value={category} onChange={(e) => setCategory(e.target.value)}>
-              {EXPENSE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              {isOld && <option value={r.category}>{categoryName(r)}{options ? ' (old option)' : ''}</option>}
+              {teamCategories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select></div>
+        )}
+        {isExpense && currencyChoices.length > 1 && (
+          <div><label className={label} htmlFor="ed-currency">Currency</label>
+            <select id="ed-currency" className={input} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {currencyChoices.map((c) => <option key={c.code} value={c.code}>{c.label ? `${c.code} — ${c.label}` : c.code}</option>)}
             </select></div>
         )}
       </div>
+
+      {foreign && (
+        <div className="rounded-lg bg-gray-50 p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div><label className={label} htmlFor="ed-foreign">Bill amount ({currency})</label>
+              <input id="ed-foreign" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={foreignAmount} onChange={(e) => setForeignAmount(e.target.value)} /></div>
+            <div><label className={label} htmlFor="ed-rate">Rate (₹ for 1 {currency})</label>
+              <input id="ed-rate" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,6})?" value={fxRate} onChange={(e) => setFxRate(e.target.value)} /></div>
+          </div>
+          <p className="mt-2 text-sm text-gray-700" aria-live="polite">
+            {comesTo != null ? <>Comes to about <strong>{rupees(comesTo)}</strong> — worked out from the bill and the rate.</> : 'Enter the bill amount and the rate.'}
+          </p>
+        </div>
+      )}
 
       {picked ? (
         <div className="flex items-start justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
@@ -106,7 +160,7 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
       )}
 
       <div><label className={label} htmlFor="ed-desc">Details</label>
-        <textarea id="ed-desc" className={input} rows={2} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+        <textarea id="ed-desc" className={input} rows={2} required={noteRequired} minLength={noteRequired ? 3 : 0} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">

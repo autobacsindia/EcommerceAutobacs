@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { formatDateIST } from '@/lib/datetime';
-import { errorMessage, listRequests, paymentKeys, rupees, STATUS_TONE } from './api';
+import { categoryName, errorMessage, foreignBill, listRequests, paymentKeys, rupees, STATUS_TONE } from './api';
 import PaymentRequestDetail from './PaymentRequestDetail';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 
@@ -69,14 +69,17 @@ export default function PaymentRequestList({
               <button type="button" onClick={() => setOpen(r.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50">
                 <div className="min-w-0 flex-1">
                   <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-900">
-                    <span className="truncate">{r.number} · {r.kind === 'supplier' ? `Supplier — ${r.payee.name}` : `${r.category} — ${r.payee.name}`}</span>
+                    <span className="truncate">{r.number} · {r.kind === 'supplier' ? `Supplier — ${r.payee.name}` : `${categoryName(r)} — ${r.payee.name}`}</span>
                     {r.kind === 'supplier' && <OrderTypeTag type="procurement" />}
                   </p>
                   <p className="truncate text-xs text-gray-500">
                     {r.teamLabel} · {r.requestedBy} · {formatDateIST(r.createdAt)}{r.order ? ` · ${r.order.number}` : ''}
                   </p>
                 </div>
-                <span className="shrink-0 text-sm font-semibold text-gray-900">{rupees(r.amount)}</span>
+                <span className="shrink-0 text-right text-sm font-semibold text-gray-900">
+                  {rupees(r.amount)}
+                  {foreignBill(r) && <span className="block text-xs font-normal text-gray-500">{foreignBill(r)}</span>}
+                </span>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
               </button>
             </li>

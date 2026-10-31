@@ -16,8 +16,15 @@ export type PaymentRequest = {
   team: string;
   teamLabel: string;
   requestedBy: string;
+  /** Rupees, always — what is approved, paid and totalled. */
   amount: number;
+  /** A foreign bill (procurement imports): its currency, amount and the quoted rate. 'INR' / null otherwise. */
+  currency?: string;
+  foreignAmount?: number | null;
+  fxRate?: number | null;
   category: string;
+  /** The readable name, for old values (fuel, purchase…) too. */
+  categoryLabel?: string;
   description: string;
   payee: {
     name: string; method: 'upi' | 'bank'; upiId?: string; accountName?: string;
@@ -49,13 +56,40 @@ export type OrderPayment = {
   itemIds: string[]; itemNames: string[]; payee: string; paidAt: string | null; createdAt: string;
 };
 
-export const EXPENSE_CATEGORIES = [
-  { value: 'fuel', label: 'Fuel' },
-  { value: 'travel', label: 'Travel' },
-  { value: 'food', label: 'Food' },
-  { value: 'purchase', label: 'Purchase for the company' },
-  { value: 'other', label: 'Other' },
-] as const;
+/**
+ * What a team may claim an expense for, and in which currencies. The server's
+ * own list (Back-end config/expenseCategories.js), fetched — never copied here —
+ * so the form cannot offer what the server would refuse.
+ */
+export type ExpenseOptions = {
+  team: string;
+  categories: { value: string; label: string; noteRequired: boolean }[];
+  currencies: { code: string; label: string }[];
+  baseCurrency: string;
+};
+
+export const getExpenseOptions = (team?: string) =>
+  apiClient.get<{ options: ExpenseOptions }>(`/payment-requests/expense-options${team ? `?team=${encodeURIComponent(team)}` : ''}`);
+
+/** "Import purchase", or the stored value for anything the server did not name. */
+export const categoryName = (r: Pick<PaymentRequest, 'category' | 'categoryLabel'>) => r.categoryLabel || r.category;
+
+/** "THB 10,000 @ ₹2.45" for a foreign bill; '' for rupees (and every older request). */
+export const foreignBill = (r: Pick<PaymentRequest, 'currency' | 'foreignAmount' | 'fxRate'>) =>
+  (r.currency && r.currency !== 'INR' && r.foreignAmount != null
+    ? `${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })} @ ₹${r.fxRate}`
+    : '');
+
+/**
+ * The rupees a foreign bill comes to, for the form's preview only — the server
+ * works it out again and its figure is the one saved. null until both are valid.
+ */
+export const previewRupees = (foreignAmount: string, fxRate: string) => {
+  const a = Number(foreignAmount);
+  const r = Number(fxRate);
+  if (!foreignAmount || !fxRate || !Number.isFinite(a) || !Number.isFinite(r) || a <= 0 || r <= 0) return null;
+  return Math.round(Math.round(a * 100) / 100 * (Math.round(r * 1e6) / 1e6) * 100) / 100;
+};
 
 export const STATUS_TONE: Record<PaymentStatus, string> = {
   submitted: 'bg-amber-100 text-amber-800',
@@ -71,6 +105,7 @@ export const paymentKeys = {
   list: (filters: Record<string, string>) => [...paymentKeys.all, 'list', filters] as const,
   one: (id: string) => [...paymentKeys.all, 'one', id] as const,
   forOrder: (orderId: string) => [...paymentKeys.all, 'order', orderId] as const,
+  options: (team: string) => [...paymentKeys.all, 'options', team] as const,
 };
 
 export const slipHref = (id: string) => `/api/v1/payment-requests/${encodeURIComponent(id)}/slip`;

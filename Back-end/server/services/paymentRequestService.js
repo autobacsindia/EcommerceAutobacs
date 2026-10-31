@@ -1,7 +1,7 @@
 /**
  * Payment requests — the company paying a supplier for an order's item, or a
- * team's expense (fuel, travel, food, a purchase). See models/PaymentRequest.js
- * for the states.
+ * team's expense (each team's own list: config/expenseCategories.js). See
+ * models/PaymentRequest.js for the states.
  *
  * ── WHO DOES WHAT (enforced here; the UI only reflects it) ──────────────────────
  *   raise a supplier request   procurement (and admin)
@@ -37,6 +37,10 @@ import { MAX_ATTACHMENT_BYTES } from '../config/attachments.js';
 import { postSystemMessage } from './chatService.js';
 import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
+import {
+  BASE_CURRENCY, MAX_FX_RATE, MIN_FX_RATE, categoriesFor, categoryLabel, expenseOptionsFor,
+  findCategory, isCurrencyAllowed, noteRequiredFor,
+} from '../config/expenseCategories.js';
 import { workflowView, STAGE } from '../utils/teamWorkflow.js';
 import { variantDisplayName } from '../utils/orderLines.js';
 import { cleanPayee, maskAccount, payKeyOf } from '../utils/payee.js';
@@ -48,7 +52,6 @@ const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 export const PAYMENT_FILES_FOLDER = 'payment-requests'; // a PRIVATE prefix (storage/assetScope.js)
 export const MAX_PAYMENT_FILE_BYTES = MAX_ATTACHMENT_BYTES;
 export const MAX_AMOUNT = 10000000; // ₹1 crore: a typo guard, not a business limit
-export const EXPENSE_CATEGORIES = Object.freeze(['fuel', 'travel', 'food', 'purchase', 'other']);
 /**
  * Which teams may raise an expense: every one of them.
  *
@@ -135,6 +138,62 @@ function cleanAmount(value) {
   if (n > MAX_AMOUNT) throw fail('That amount looks too large — check it.', 400);
   return n;
 }
+
+/** What a team may claim it for (config/expenseCategories.js); the stored value. */
+function checkCategory(team, value) {
+  const found = findCategory(team, String(value || ''));
+  if (!found) {
+    throw fail(`Choose what the expense is for. ${STAFF_TEAM_LABELS[team] || team} can claim: ${categoriesFor(team).map((x) => x.label).join(', ')}.`, 400);
+  }
+  return found.value;
+}
+
+function checkNote(team, category, description) {
+  if (noteRequiredFor(team, category) && description.length < 3) {
+    throw fail(`Add details — say what this “${categoryLabel(category)}” expense was for.`, 400);
+  }
+}
+
+const filled = (v) => v != null && v !== '';
+
+/**
+ * The money on an expense: always rupees in `amount`, plus — for a foreign bill —
+ * its currency, amount and the quoted rate. The rupees are worked out HERE from
+ * those two; a client-sent rupee figure that disagrees is refused rather than
+ * trusted or silently replaced.
+ *
+ * `current` (an edit): fields not sent keep their value, and the currency is
+ * checked against the team's list only when it changes — an old record keeps
+ * the currency it was raised in.
+ */
+function cleanMoney(team, input, current = null) {
+  const was = current ? (current.currency || BASE_CURRENCY) : null;
+  const currency = filled(input.currency) ? String(input.currency).trim().toUpperCase() : (was || BASE_CURRENCY);
+  if (currency !== was && !isCurrencyAllowed(team, currency)) {
+    throw fail(currency === BASE_CURRENCY ? 'Choose the currency.' : `${STAFF_TEAM_LABELS[team] || team} expenses are claimed in rupees (₹).`, 400);
+  }
+  if (currency === BASE_CURRENCY) {
+    const amount = filled(input.amount) || !current ? cleanAmount(input.amount) : current.amount;
+    return { amount, currency, foreignAmount: null, fxRate: null };
+  }
+  const foreignAmount = round2(filled(input.foreignAmount) ? input.foreignAmount : current?.foreignAmount);
+  if (!Number.isFinite(foreignAmount) || foreignAmount <= 0) throw fail(`Enter the bill amount in ${currency}.`, 400);
+  const rate = Number(filled(input.fxRate) ? input.fxRate : current?.fxRate);
+  const fxRate = Math.round(rate * 1e6) / 1e6;
+  if (!Number.isFinite(fxRate) || fxRate < MIN_FX_RATE || fxRate > MAX_FX_RATE) {
+    throw fail(`Enter the exchange rate from your bank or forex quote: rupees for 1 ${currency} (e.g. 2.45).`, 400);
+  }
+  const amount = cleanAmount(foreignAmount * fxRate);
+  if (filled(input.amount) && round2(input.amount) !== amount) {
+    throw fail(`The rupee amount is worked out from the ${currency} amount and the rate (${inr(amount)}). Change those instead.`, 400);
+  }
+  return { amount, currency, foreignAmount, fxRate };
+}
+
+/** "THB 10,000 @ ₹2.45" — for chat, the slip and the edit log; '' for a rupee request. */
+export const foreignLine = (r) => (r?.currency && r.currency !== BASE_CURRENCY && r.foreignAmount != null
+  ? `${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })} @ ₹${r.fxRate}`
+  : '');
 
 export { cleanPayee, maskAccount };
 
@@ -226,7 +285,7 @@ async function tellChat(req, action, text, { mentionAdmins = false, mentionReque
 
 const what = (r) => (r.kind === 'supplier'
   ? `supplier payment ${r.number} — ${inr(r.amount)} to ${r.payee.name}${r.orderNumber ? ` for ${r.orderNumber}` : ''}`
-  : `${r.category} expense ${r.number} — ${inr(r.amount)} to ${r.payee.name}`);
+  : `${categoryLabel(r.category)} expense ${r.number} — ${inr(r.amount)}${foreignLine(r) ? ` (${foreignLine(r)})` : ''} to ${r.payee.name}`);
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -246,8 +305,13 @@ export function shape(r, viewer) {
     team: r.team,
     teamLabel: STAFF_TEAM_LABELS[r.team] || r.team,
     requestedBy: r.requestedByName,
-    amount: r.amount,
+    amount: r.amount, // rupees, always
+    // Records from before currencies have none: they are rupees.
+    currency: r.currency || BASE_CURRENCY,
+    foreignAmount: r.foreignAmount ?? null,
+    fxRate: r.fxRate ?? null,
     category: r.category,
+    categoryLabel: categoryLabel(r.category),
     description: r.description,
     payee: {
       ...r.payee,
@@ -292,11 +356,11 @@ export async function createExpense(actor, input, uploaded, req) {
     throw fail('Only active staff raise expense requests.', 403);
   }
   if (!EXPENSE_TEAMS.includes(team)) throw fail('Choose the team the expense is for.', 400);
-  const category = String(input.category || '');
-  if (!EXPENSE_CATEGORIES.includes(category)) throw fail('Choose what the expense is for.', 400);
+  const category = checkCategory(team, input.category);
   const description = String(input.description || '').trim().slice(0, 2000);
-  if (description.length < 3) throw fail('Describe what this payment is for.', 400);
-  const amount = cleanAmount(input.amount);
+  checkNote(team, category, description);
+  const money = cleanMoney(team, input);
+  const { amount } = money;
   const payee = cleanPayee(input.payee);
 
   const { files, kinds } = filesFrom(uploaded);
@@ -309,11 +373,11 @@ export async function createExpense(actor, input, uploaded, req) {
     team,
     requestedBy: actor._id,
     requestedByName: actor.name || '',
-    amount, category, description, payee,
+    ...money, category, description, payee,
     files: stored,
     history: [entry(actor, 'submitted')],
   });
-  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'expense', amount, team });
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'expense', amount, team, currency: money.currency });
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} from ${doc.requestedByName} (${STAFF_TEAM_LABELS[team]}). Accounts: please approve or decline.`);
   return shape(doc, actor);
 }
@@ -555,13 +619,24 @@ export async function update(actor, id, input = {}, req) {
       ? 'A paid, declined or cancelled request cannot be edited.'
       : 'Only whoever raised it (or their team head) can edit it while it waits for accounts. Ask an admin to change it now.', 403);
   }
-  const amount = input.amount != null && input.amount !== '' ? cleanAmount(input.amount) : r0.amount;
+  const isExpense = r0.kind === 'expense';
+  const before = { currency: r0.currency || BASE_CURRENCY, foreignAmount: r0.foreignAmount ?? null, fxRate: r0.fxRate ?? null };
+  // A supplier payment is rupees; an expense may be a foreign bill (worked out in cleanMoney).
+  const money = isExpense
+    ? cleanMoney(r0.team, input, { amount: r0.amount, ...before })
+    : { amount: filled(input.amount) ? cleanAmount(input.amount) : r0.amount, ...before };
+  const { amount } = money;
   const description = input.description != null ? String(input.description).trim().slice(0, 2000) : r0.description || '';
   let { category } = r0;
-  if (r0.kind === 'expense' && input.category != null) {
-    category = String(input.category);
-    if (!EXPENSE_CATEGORIES.includes(category)) throw fail('Choose what the expense is for.', 400);
+  // The team's list is checked only when the category CHANGES: an old record
+  // (procurement "fuel", from the shared list) can still be corrected as it is.
+  if (isExpense && input.category != null && String(input.category) !== r0.category) {
+    category = checkCategory(r0.team, input.category);
   }
+  if (isExpense && (category !== r0.category || description !== (r0.description || ''))) {
+    checkNote(r0.team, category, description);
+  }
+  const fxChanged = money.currency !== before.currency || money.foreignAmount !== before.foreignAmount || money.fxRate !== before.fxRate;
 
   let payee = r0.payee;
   let supplier = r0.supplier ?? null;
@@ -578,17 +653,19 @@ export async function update(actor, id, input = {}, req) {
 
   const changes = [];
   if (amount !== r0.amount) changes.push(`amount ${inr(r0.amount)} → ${inr(amount)}`);
+  if (fxChanged) changes.push(`bill ${foreignLine(before) || 'in rupees'} → ${foreignLine(money) || 'in rupees'}`);
   if (payee.name !== r0.payee.name) changes.push(`payee ${r0.payee.name} → ${payee.name}`);
   if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) changes.push('payment details');
   if (description !== (r0.description || '')) changes.push('details');
-  if (category !== r0.category) changes.push(`for ${category}`);
+  if (category !== r0.category) changes.push(`for ${categoryLabel(r0.category)} → ${categoryLabel(category)}`);
   if (!changes.length) return shape(r0, actor);
 
-  const moneyChanged = amount !== r0.amount || payee.name !== r0.payee.name || payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x');
+  const moneyChanged = amount !== r0.amount || fxChanged || payee.name !== r0.payee.name || payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x');
   const backToAccounts = r0.status !== 'submitted' && moneyChanged;
   const note = changes.join(', ') + (backToAccounts ? ' — back to accounts to approve again' : '');
   const r = await paymentRequestRepository.transitionInSession(id, [r0.status], { updatedAt: r0.updatedAt }, {
-    amount, description, category, payee, supplier, bankNotice,
+    amount, currency: money.currency, foreignAmount: money.foreignAmount, fxRate: money.fxRate,
+    description, category, payee, supplier, bankNotice,
     ...(backToAccounts ? { status: 'submitted', approvedBy: null, approvedAt: null, decisionNote: '' } : {}),
   }, entry(actor, 'edited', note), {}, undefined);
   if (!r) throw fail(MOVED, 409);
@@ -696,6 +773,17 @@ export async function list(actor, { status, team, cursor } = {}) {
     requests: items.map((r) => shape(r, actor)),
     nextCursor: rows.length > PAGE_SIZE ? encodeCursor(items[items.length - 1]) : null,
   };
+}
+
+/**
+ * What the expense form offers this person: their team's options and currencies.
+ * An admin asks for a team (`team`), as when raising on its behalf.
+ */
+export function expenseOptions(actor, { team } = {}) {
+  const which = isAdmin(actor) ? String(team || '') : (isActiveStaff(actor) ? actor.staff.team : '');
+  if (!isAdmin(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
+  if (!EXPENSE_TEAMS.includes(which)) throw fail('Choose the team the expense is for.', 400);
+  return expenseOptionsFor(which);
 }
 
 export async function get(actor, id) {

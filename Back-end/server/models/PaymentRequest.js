@@ -73,9 +73,18 @@ const PaymentRequestSchema = new mongoose.Schema(
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     requestedByName: { type: String, required: true },
 
-    // Rupees, two decimals at most. Never derived from client totals elsewhere.
+    // Rupees, two decimals at most — ALWAYS, whatever the bill's currency: what is
+    // approved, paid and totalled. Never derived from client totals elsewhere.
     amount: { type: Number, required: true, min: 1 },
-    // Expenses: fuel | travel | food | purchase | other. Supplier requests: 'supplier'.
+    // A foreign-currency expense (procurement imports): what was billed, and the
+    // rupees-per-unit rate from the quote it was paid at. `amount` is worked out
+    // from them by the server. Absent / 'INR' on every rupee request, old ones too.
+    currency: { type: String, default: 'INR', maxlength: 3 },
+    foreignAmount: { type: Number, default: null },
+    fxRate: { type: Number, default: null },
+    // Expenses: the team's own list (config/expenseCategories.js); records from
+    // before per-team lists keep fuel | travel | food | purchase | other.
+    // Supplier requests: 'supplier'.
     category: { type: String, required: true },
     description: { type: String, default: '', maxlength: 2000 },
 

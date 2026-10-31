@@ -136,7 +136,7 @@ describe('Payment requests', () => {
       });
       expect(res.body.request.files).toEqual([expect.objectContaining({ kind: 'bill', contentType: 'image/jpeg' })]);
       expect([...stored.keys()][0]).toMatch(/^payment-requests\//);
-      expect((await expense(marketing.session, { category: 'purchase', description: 'Banner printing' })).status).toBe(201);
+      expect((await expense(marketing.session, { category: 'tools', description: 'Banner printing' })).status).toBe(201);
     });
 
     /*
@@ -148,10 +148,10 @@ describe('Payment requests', () => {
     */
     it('every team can raise an expense, including one added later', async () => {
       for (const who of [procurement, accounts, gtmLead]) {
-        expect((await expense(who.session)).status).toBe(201);
+        expect((await expense(who.session, { category: 'other', description: 'Courier charge' })).status).toBe(201);
       }
       const developer = await makeUser('Dev', 'staff', staff('developer'));
-      const raised = await expense(developer.session);
+      const raised = await expense(developer.session, { category: 'hosting' });
       expect(raised.status).toBe(201);
       expect(raised.body.request.team).toBe('developer');
     });
@@ -288,7 +288,7 @@ describe('Payment requests', () => {
     });
 
     it('a marketing expense takes the same path as every other team: accounts approves, admin pays', async () => {
-      const a = (await expense(marketing.session, { category: 'purchase', description: 'Banner printing' })).body.request.id;
+      const a = (await expense(marketing.session, { category: 'tools', description: 'Banner printing' })).body.request.id;
       const view = (await accounts.session.get(`/payment-requests/${a}`)).body.request;
       expect(view).toMatchObject({
         approver: 'accounts',
@@ -303,14 +303,14 @@ describe('Payment requests', () => {
       expect((await PaymentRequest.findById(a).lean()).history.map((h) => [h.action, h.byName])).toEqual([['submitted', 'Mira'], ['approved', 'Anu'], ['paid', 'Owner']]);
 
       // Paid straight from "waiting" by the admin: one step, recorded as approved by them.
-      const b = (await expense(marketing.session, { category: 'purchase', description: 'Flyers' })).body.request.id;
+      const b = (await expense(marketing.session, { category: 'tools', description: 'Flyers' })).body.request.id;
       const paid = await admin.session.form(`/payment-requests/${b}/pay`, { method: 'bank', reference: 'UTR11223344' });
       expect(paid.body.request.status).toBe('paid');
       expect(String((await PaymentRequest.findById(b).lean()).approvedBy)).toBe(String(admin.user._id));
       // …once: a second press finds it already paid.
       expect((await admin.session.form(`/payment-requests/${b}/pay`, { method: 'bank', reference: 'UTR11223355' })).status).toBe(409);
 
-      const c = (await expense(marketing.session, { category: 'purchase', description: 'Stickers' })).body.request.id;
+      const c = (await expense(marketing.session, { category: 'tools', description: 'Stickers' })).body.request.id;
       expect((await accounts.session.post(`/payment-requests/${c}/decline`, { note: 'Duplicate bill' })).body.request.status).toBe('declined');
     });
 
@@ -318,7 +318,7 @@ describe('Payment requests', () => {
       const waiting = await raise();
       const approved = await raise();
       await accounts.session.post(`/payment-requests/${approved}/approve`);
-      const mktWaiting = (await expense(marketing.session, { category: 'purchase', description: 'Banner printing' })).body.request.id;
+      const mktWaiting = (await expense(marketing.session, { category: 'tools', description: 'Banner printing' })).body.request.id;
 
       // Accounts' queue: everything still waiting for a decision, any team.
       const toApprove = (await accounts.session.get('/payment-requests?status=to_approve')).body.requests.map((r) => r.id);
@@ -365,7 +365,7 @@ describe('Payment requests', () => {
   describe('who sees what', () => {
     it('a team sees its own; admin and accounts see all; bank numbers masked outside the chain', async () => {
       const opsReq = (await expense(ops.session, { payee: BANK })).body.request.id;
-      await expense(marketing.session, { description: 'Stickers' });
+      await expense(marketing.session, { category: 'tools', description: 'Stickers' });
 
       expect((await ops.session.get('/payment-requests')).body.requests.map((r) => r.team)).toEqual(['operations']);
       expect((await marketing.session.get(`/payment-requests/${opsReq}`)).status).toBe(404);
@@ -522,7 +522,7 @@ describe('Payment requests', () => {
 
     it('shows accounts what it must approve, and never what it cannot pay', async () => {
       const waiting = (await expense(ops.session, { payee: BANK })).body.request.id;
-      const approved = (await expense(marketing.session, { category: 'purchase', description: 'Flyers' })).body.request.id;
+      const approved = (await expense(marketing.session, { category: 'tools', description: 'Flyers' })).body.request.id;
       await accounts.session.post(`/payment-requests/${approved}/approve`);
 
       const { body } = await bell(accounts);
@@ -535,7 +535,7 @@ describe('Payment requests', () => {
 
     it('shows the admin what is approved and waiting to be paid, not what accounts has yet to decide', async () => {
       await expense(ops.session, { payee: BANK });                       // still waiting on accounts
-      const b = (await expense(marketing.session, { category: 'purchase', description: 'Flyers' })).body.request.id;
+      const b = (await expense(marketing.session, { category: 'tools', description: 'Flyers' })).body.request.id;
       await accounts.session.post(`/payment-requests/${b}/approve`);
 
       const { body } = await bell(admin);
@@ -547,7 +547,7 @@ describe('Payment requests', () => {
 
     it('a team that only raises requests is told about nothing', async () => {
       // Marketing: operations is no longer such a team — it works the return queues.
-      await expense(marketing.session, { payee: BANK });
+      await expense(marketing.session, { category: 'meta_ads', payee: BANK });
       const { body } = await bell(marketing);
       // Its own request is not work waiting ON it — it is waiting on accounts.
       expect(body.items).toEqual([]);
@@ -555,7 +555,7 @@ describe('Payment requests', () => {
     });
 
     it('the total is the sum, and drops as the work is done', async () => {
-      const a = (await expense(marketing.session, { category: 'purchase', description: 'Flyers' })).body.request.id;
+      const a = (await expense(marketing.session, { category: 'tools', description: 'Flyers' })).body.request.id;
       expect((await bell(accounts)).body.total).toBe(1);
       await accounts.session.post(`/payment-requests/${a}/approve`);
       // Off accounts' list the moment it is approved, onto the admin's.
@@ -583,11 +583,11 @@ describe('Payment requests', () => {
       expect(String(msgs[0].threadOrder)).toBe(id);
       // Raised → accounts is asked. Approved → the admin is asked, and mentioned,
       // because nothing moves until they pay.
-      expect(msgs[0].text).toMatch(/New fuel expense PR-\d+ .*Accounts: please approve/);
+      expect(msgs[0].text).toMatch(/New Fuel expense PR-\d+ .*Accounts: please approve/);
       expect(msgs[1].text).toMatch(/Admin: please pay/);
       expect(msgs[1].mentions.map(String)).toContain(String(admin.user._id));
       expect(msgs.slice(1).every((m) => String(m.threadRoot) === String(msgs[0]._id))).toBe(true);
-      expect(msgs[2].text).toMatch(/Paid fuel expense .*UPI ref UPI12345678/);
+      expect(msgs[2].text).toMatch(/Paid Fuel expense .*UPI ref UPI12345678/);
 
       const opsSpace = await ChatChannel.findOne({ key: 'team:operations' }).lean();
       expect(await ChatMessage.countDocuments({ channel: opsSpace._id })).toBe(3);

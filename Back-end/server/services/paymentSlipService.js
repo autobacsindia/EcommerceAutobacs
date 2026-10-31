@@ -14,6 +14,7 @@ import { loadLogo, pdfFonts } from './invoiceService.js';
 import { formatLongDateIST, formatDateTimeIST } from '../utils/datetime.js';
 import { rupeesInWords } from '../utils/amountInWords.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
+import { BASE_CURRENCY, categoryLabel } from '../config/expenseCategories.js';
 import { STATUS_LABELS, maskAccount } from './paymentRequestService.js';
 
 const { HAS_UNICODE, FONT, FONT_BOLD, CURRENCY, unicodeFonts } = pdfFonts;
@@ -26,6 +27,10 @@ const ACTION_LABELS = {
 };
 const METHOD_LABELS = { razorpay: 'Razorpay', bank: 'Bank transfer', upi: 'UPI', other: 'Other' };
 const dateTime = (d) => formatDateTimeIST(d);
+/** A foreign bill: "THB 10,000.00 at Rs 2.45 per THB = Rs 24,500.00"; '' for rupees (and every older record). */
+const billLine = (r) => (r.currency && r.currency !== BASE_CURRENCY && r.foreignAmount != null
+  ? `${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} at ${CURRENCY} ${r.fxRate} per ${r.currency} = ${money(r.amount)}`
+  : '');
 
 export async function renderPaymentSlip(r) {
   const logo = await loadLogo();
@@ -72,7 +77,7 @@ export async function renderPaymentSlip(r) {
 
       // Amount block
       doc.roundedRect(L, y, R - L, 64, 8).fill(C.zebra);
-      doc.font(FONT).fontSize(9).fillColor(C.muted).text(r.kind === 'supplier' ? 'SUPPLIER PAYMENT' : `${String(r.category).toUpperCase()} EXPENSE`, L + 16, y + 12, { characterSpacing: 1 });
+      doc.font(FONT).fontSize(9).fillColor(C.muted).text(r.kind === 'supplier' ? 'SUPPLIER PAYMENT' : `${categoryLabel(r.category).toUpperCase()} EXPENSE`, L + 16, y + 12, { characterSpacing: 1 });
       doc.font(FONT_BOLD).fontSize(22).fillColor(C.ink).text(money(r.amount), L + 16, y + 26, { lineBreak: false });
       doc.font(FONT).fontSize(8.6).fillColor(C.body).text(rupeesInWords(r.amount), L + 200, y + 34, { width: R - L - 216, align: 'right' });
       y += 80;
@@ -94,7 +99,8 @@ export async function renderPaymentSlip(r) {
       const leftEnd = block(L, 'REQUEST', [
         ['Team', STAFF_TEAM_LABELS[r.team] || r.team],
         ['Raised by', r.requestedByName],
-        ['For', r.kind === 'supplier' ? (r.itemNames || []).join(', ') : r.category],
+        ['For', r.kind === 'supplier' ? (r.itemNames || []).join(', ') : categoryLabel(r.category)],
+        ['Bill', billLine(r)],
         ['Order', r.orderNumber],
         ['Customer', r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.city].filter(Boolean).join(' · ') : ''],
         ['Sale closed by', r.closedBy],

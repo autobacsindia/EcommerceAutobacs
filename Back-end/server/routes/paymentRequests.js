@@ -30,7 +30,13 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await pr.list(req.user, req.query)) });
 }));
 
-// POST /payment-requests/expenses — multipart: team?, category, amount, description, payee(JSON), bill, qr
+// GET /payment-requests/expense-options?team= — what this team's expense form offers (the server's own list)
+router.get('/expense-options', asyncHandler(async (req, res) => {
+  res.json({ success: true, options: pr.expenseOptions(req.user, req.query) });
+}));
+
+// POST /payment-requests/expenses — multipart: team?, category, description, payee(JSON), bill, qr,
+//   and amount (rupees) — or currency + foreignAmount + fxRate for a foreign bill
 router.post('/expenses', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError, asyncHandler(async (req, res) => {
   const request = await pr.createExpense(req.user, { ...req.body, payee: json(req.body.payee, {}) }, req.files || {}, req);
   res.status(201).json({ success: true, request });
