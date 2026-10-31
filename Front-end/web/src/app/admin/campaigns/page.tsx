@@ -40,9 +40,9 @@ interface CampaignRow {
 }
 
 const STATUS_STYLES: Record<CampaignStatus, string> = {
-  live: 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/30',
-  draft: 'bg-zinc-500/15 text-zinc-400 ring-zinc-500/30',
-  off: 'bg-red-500/15 text-red-400 ring-red-500/30',
+  live: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+  draft: 'bg-gray-100 text-gray-600 ring-gray-300',
+  off: 'bg-red-50 text-red-700 ring-red-200',
 };
 
 const STATUS_ICON: Record<CampaignStatus, typeof Power> = {
@@ -70,11 +70,11 @@ export default function AdminCampaignsPage() {
 
   const campaigns = data?.campaigns ?? [];
 
-  if (isLoading) return <div className="p-8 text-zinc-400">Loading campaigns…</div>;
+  if (isLoading) return <div className="p-8 text-gray-600">Loading campaigns…</div>;
   if (error) {
     return (
       <div className="p-8">
-        <p className="text-red-400">Could not load campaigns: {(error as Error).message}</p>
+        <p className="text-red-700">Could not load campaigns: {(error as Error).message}</p>
       </div>
     );
   }
@@ -82,15 +82,15 @@ export default function AdminCampaignsPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">Campaigns</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <h1 className="text-2xl font-bold text-gray-900">Campaigns</h1>
+        <p className="mt-1 text-sm text-gray-600">
           Occasion-based offers. A campaign decides who qualifies and how much they get;
           changing it here takes effect immediately, and never alters an order already placed.
         </p>
       </div>
 
       {campaigns.length === 0 ? (
-        <p className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-8 text-center text-zinc-400">
+        <p className="rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-600">
           No campaigns yet.
         </p>
       ) : (
@@ -102,11 +102,11 @@ export default function AdminCampaignsPage() {
               && c.redeemedCount >= c.maxRedemptions * 0.8;
 
             return (
-              <div key={c._id} className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
+              <div key={c._id} className="rounded-lg border border-gray-200 bg-white p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
-                      <Link href={`${base}/campaigns/${c.slug}`} className="text-lg font-semibold text-white hover:text-gold">
+                      <Link href={`${base}/campaigns/${c.slug}`} className="text-lg font-semibold text-gray-900 hover:text-gold">
                         {c.name}
                       </Link>
                       <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${STATUS_STYLES[c.status]}`}>
@@ -114,9 +114,9 @@ export default function AdminCampaignsPage() {
                         {c.status}
                       </span>
                     </div>
-                    <p className="mt-1 text-sm text-zinc-500">
+                    <p className="mt-1 text-sm text-gray-500">
                       {c.audience === 'list' ? 'Invited customers only' : 'Everyone'}
-                      {c.couponCode && <> · code <span className="font-mono text-zinc-400">{c.couponCode}</span></>}
+                      {c.couponCode && <> · code <span className="font-mono text-gray-600">{c.couponCode}</span></>}
                       <> · {day(c.startsAt)} → {day(c.endsAt)}</>
                     </p>
                   </div>
@@ -130,8 +130,8 @@ export default function AdminCampaignsPage() {
                         disabled={setStatus.isPending || c.status === s}
                         className={`rounded px-3 py-1.5 text-xs font-medium transition disabled:opacity-40 ${
                           c.status === s
-                            ? 'bg-zinc-700 text-white'
-                            : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                            ? 'bg-gray-200 text-gray-900'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
                       >
                         {s === 'off' ? 'Turn off' : 'Go live'}
@@ -140,21 +140,21 @@ export default function AdminCampaignsPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-6 border-t border-zinc-800 pt-4 text-sm">
-                  <span className="flex items-center gap-2 text-zinc-400">
+                <div className="mt-4 flex flex-wrap gap-6 border-t border-gray-200 pt-4 text-sm">
+                  <span className="flex items-center gap-2 text-gray-600">
                     <Users size={14} />
-                    <span className="text-white">{c.redeemedCount}</span>
+                    <span className="text-gray-900">{c.redeemedCount}</span>
                     {c.maxRedemptions != null && <span>/ {c.maxRedemptions}</span>} redeemed
                   </span>
-                  <span className="flex items-center gap-2 text-zinc-400">
+                  <span className="flex items-center gap-2 text-gray-600">
                     <IndianRupee size={14} />
-                    <span className="text-white">{inr(c.discountGivenRupees)}</span> given away
+                    <span className="text-gray-900">{inr(c.discountGivenRupees)}</span> given away
                   </span>
                   {capReached && (
-                    <span className="text-red-400">Cap reached — the offer has closed itself</span>
+                    <span className="text-red-700">Cap reached — the offer has closed itself</span>
                   )}
                   {nearCap && (
-                    <span className="text-amber-400">Approaching the redemption cap</span>
+                    <span className="text-amber-800">Approaching the redemption cap</span>
                   )}
                 </div>
               </div>
@@ -164,7 +164,7 @@ export default function AdminCampaignsPage() {
       )}
 
       {setStatus.isError && (
-        <p className="mt-4 text-sm text-red-400">
+        <p className="mt-4 text-sm text-red-700">
           {(setStatus.error as Error).message}
         </p>
       )}

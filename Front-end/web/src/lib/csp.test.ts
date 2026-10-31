@@ -250,7 +250,17 @@ describe('strict policy (dynamically rendered routes)', () => {
     const src = directive(await buildStrictCsp('n0nc3'), 'script-src');
     const { INLINE_ANALYTICS_SNIPPETS } = await import('./analyticsSnippets');
     expect(INLINE_ANALYTICS_SNIPPETS.length).toBeGreaterThan(0);
-    expect((src.match(/'sha256-/g) ?? []).length).toBe(INLINE_ANALYTICS_SNIPPETS.length);
+    // + 1: the theme script (light/dark before first paint).
+    expect((src.match(/'sha256-/g) ?? []).length).toBe(INLINE_ANALYTICS_SNIPPETS.length + 1);
+  });
+
+  test('allows the theme script, so /team and /admin open in the saved theme with no white flash', async () => {
+    // Before this hash the strict policy refused it: on the staff panel a dark
+    // choice painted light first and only turned dark after React hydrated.
+    const { THEME_SCRIPT } = await import('@/components/theme/themeChoice');
+    const src = directive(await buildStrictCsp('n0nc3'), 'script-src');
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(THEME_SCRIPT));
+    expect(src).toContain(`'sha256-${Buffer.from(new Uint8Array(digest)).toString('base64')}'`);
   });
 
   test('each hash matches the snippet byte for byte', async () => {

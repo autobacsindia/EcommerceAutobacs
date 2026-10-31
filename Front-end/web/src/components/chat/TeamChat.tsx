@@ -430,7 +430,7 @@ export default function TeamChat() {
               {c.unread > 99 ? '99+' : c.unread}
             </span>
           ) : (
-            c.lastMessageAt && <span className="shrink-0 text-[11px] font-normal text-gray-400">{shortWhen(c.lastMessageAt)}</span>
+            c.lastMessageAt && <span className="shrink-0 text-[11px] font-normal text-gray-500">{shortWhen(c.lastMessageAt)}</span>
           )}
         </button>
       </li>

@@ -102,6 +102,13 @@
   /* A step above the (dark) cards, so the conversation card still reads as one. */
   --pn-chat: #1a2020;
 
+  /* Black stays black in the panel. globals.css turns it near-white for the
+     storefront's `text-black`, which made every `bg-black/50` dialog backdrop a
+     white haze over the dark page. In the panel `black` is only ever a backdrop
+     or an image overlay (text uses the gray ramp; panelDarkInk.test.ts holds
+     that), so here it keeps its meaning. */
+  --color-black: #000;
+
   /* The site's inverted ramp (globals.css), in the store's hue. */
   --color-gray-50:  oklch(19% 0.006 165);
   --color-gray-100: oklch(23% 0.007 165);
@@ -260,4 +267,21 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .pn-drawer, .pn-drawer[data-open='true'] { transition: none; }
+}
+
+/* Paper: a document that is printed or shown as a sheet (the packing slip).
+   Always black on white, whatever the panel's theme — a dark slip prints as
+   light text on white paper, since browsers drop backgrounds when printing. */
+.pn-paper {
+  color-scheme: light;
+  --color-white: #fff;
+  --color-black: #000;
+  --color-gray-300: oklch(87.1% 0.008 165);
+  --color-gray-400: oklch(70.7% 0.012 165);
+  --color-gray-500: oklch(52% 0.014 165);
+  --color-gray-600: oklch(44.6% 0.014 165);
+  --color-blue-600: #0b7d41;
+  --color-blue-700: #096a36;
+  background: #fff;
+  color: #000;
 }

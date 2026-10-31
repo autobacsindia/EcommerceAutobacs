@@ -1,4 +1,12 @@
 import { INLINE_ANALYTICS_SNIPPETS } from './analyticsSnippets';
+import { THEME_SCRIPT } from '@/components/theme/themeChoice';
+
+/**
+ * Every inline <script> the root layout renders: the analytics snippets and the
+ * theme script (it sets light/dark before first paint). Each is allowed on the
+ * strict routes by its hash; one missing here is silently blocked there.
+ */
+export const HASHED_INLINE_SCRIPTS = [...INLINE_ANALYTICS_SNIPPETS, THEME_SCRIPT];
 /**
  * Content-Security-Policy for every HTML response.
  *
@@ -49,7 +57,7 @@ let hashesPromise: Promise<string[]> | null = null;
 async function snippetHashes(): Promise<string[]> {
   if (!hashesPromise) {
     hashesPromise = Promise.all(
-      INLINE_ANALYTICS_SNIPPETS.map(async (snippet) => {
+      HASHED_INLINE_SCRIPTS.map(async (snippet) => {
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(snippet));
         // btoa over the raw bytes — the encoding CSP expects.
         const bytes = new Uint8Array(digest);
