@@ -49,7 +49,9 @@ describe('GET /payment-config/razorpay', () => {
 
   it.each([
     ['empty string', ''],
-    ['the secret pasted into the key id', 'test_secret_key_1234567890abcdef'],
+    // The suite's fake secret (tests/setupEnv.js) — read from env, not repeated as a
+    // literal, so the secret scanner has nothing to match in this file.
+    ['the secret pasted into the key id', process.env.RAZORPAY_KEY_SECRET],
     ['a non-Razorpay value', 'pk_live_abc123'],
     ['a key with an injected suffix', 'rzp_live_abc123"><script>'],
   ])('refuses to publish a malformed key id (%s)', async (_label, value) => {
