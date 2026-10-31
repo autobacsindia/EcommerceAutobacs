@@ -140,7 +140,7 @@ function PackingSlipPageInner() {
   }
 
   return (
-    <div className="mx-auto max-w-[800px] bg-white p-8 text-black print:p-0">
+    <div className="pn-paper mx-auto max-w-[800px] bg-white p-8 text-black print:p-0">
       <style>{`
         @media print {
           /* Chrome prints backgrounds off by default; the reward box relies on its

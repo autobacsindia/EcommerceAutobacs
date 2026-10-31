@@ -14,8 +14,8 @@ import { campaignKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST, formatIsoDateTimeIST } from '@/lib/datetime';
 
 const inr = (n: number | null | undefined) => `₹${(n ?? 0).toLocaleString('en-IN')}`;
-const field = 'w-full rounded border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:border-gold focus:outline-none';
-const card = 'rounded-lg border border-zinc-800 bg-zinc-900/40 p-6';
+const field = 'w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-gold focus:outline-none';
+const card = 'rounded-lg border border-gray-200 bg-white p-6';
 
 /**
  * The roster — who is actually on the list, and where each person got to.
@@ -54,9 +54,9 @@ interface MembersPage {
 }
 
 const STATUS_CHIP: Record<MemberStatus, string> = {
-  invited: 'bg-zinc-500/15 text-zinc-300 ring-zinc-500/30',
-  claimed: 'bg-sky-500/15 text-sky-300 ring-sky-500/30',
-  redeemed: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+  invited: 'bg-gray-100 text-gray-700 ring-gray-300',
+  claimed: 'bg-sky-50 text-sky-800 ring-sky-200',
+  redeemed: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
 };
 
 /**
@@ -195,14 +195,14 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
   return (
     <div className={`${card} mb-6`}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-zinc-400">
+        <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-600">
           <Users size={14} /> The list
-          {counts && <span className="text-zinc-500">· {counts.total} people</span>}
+          {counts && <span className="text-gray-500">· {counts.total} people</span>}
         </h2>
         <button
           onClick={downloadCsv}
           disabled={exporting}
-          className="flex items-center gap-1.5 rounded bg-zinc-800 px-3 py-1.5 text-xs text-white hover:bg-zinc-700 disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded bg-gray-100 px-3 py-1.5 text-xs text-gray-900 hover:bg-gray-200 disabled:opacity-40"
         >
           <Download size={13} /> {exporting ? 'Preparing…' : 'Download CSV'}
         </button>
@@ -210,7 +210,7 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
 
       <div className="mb-4 flex flex-wrap gap-2">
         <div className="relative min-w-[220px] flex-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input
             className={`${field} pl-9`}
             placeholder="Search by name or email…"
@@ -226,7 +226,7 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
               key={v}
               onClick={() => applyStatus(v as '' | MemberStatus)}
               className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-                status === v ? 'bg-gold text-black' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                status === v ? 'bg-gold text-black' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               {label}
@@ -237,19 +237,19 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
       </div>
 
       {pages.isError && (
-        <p className="text-sm text-red-400">Could not load the list: {(pages.error as Error).message}</p>
+        <p className="text-sm text-red-700">Could not load the list: {(pages.error as Error).message}</p>
       )}
 
       {pages.isLoading && rows.length === 0 ? (
-        <p className="py-6 text-center text-sm text-zinc-500">Loading…</p>
+        <p className="py-6 text-center text-sm text-gray-500">Loading…</p>
       ) : rows.length === 0 ? (
-        <p className="rounded border border-zinc-800 bg-zinc-900/40 py-8 text-center text-sm text-zinc-400">
+        <p className="rounded border border-gray-200 bg-white py-8 text-center text-sm text-gray-600">
           {search || status ? 'Nobody matches that.' : 'Nobody has been imported yet — use the box below.'}
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="border-b border-zinc-800 text-xs uppercase tracking-wide text-zinc-500">
+            <thead className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="pb-2 pr-4 font-medium">Name</th>
                 <th className="pb-2 pr-4 font-medium">Email</th>
@@ -259,11 +259,11 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
                 <th className="pb-2 font-medium text-right">Saved</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800/70">
+            <tbody className="divide-y divide-gray-200">
               {rows.map((m) => (
-                <tr key={m._id} className="text-zinc-300">
+                <tr key={m._id} className="text-gray-700">
                   <td className="py-2 pr-4">
-                    {m.name || <span className="text-zinc-600">—</span>}
+                    {m.name || <span className="text-gray-400">—</span>}
                     {/*
                       The note is printed, not hidden behind a hover tooltip. It was a
                       bare ⚑ with a `title`, which meant the one thing an operator has
@@ -273,14 +273,14 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
                       means, the icon is the wrong control.
                     */}
                     {m.reviewNote && (
-                      <span className="mt-0.5 flex items-start gap-1 text-xs text-amber-400/90">
+                      <span className="mt-0.5 flex items-start gap-1 text-xs text-amber-800">
                         <Flag size={11} className="mt-0.5 shrink-0" />
                         <span>{m.reviewNote}</span>
                       </span>
                     )}
                   </td>
-                  <td className="py-2 pr-4 font-mono text-xs text-zinc-400">{m.email}</td>
-                  <td className="py-2 pr-4 text-xs text-zinc-400">
+                  <td className="py-2 pr-4 font-mono text-xs text-gray-600">{m.email}</td>
+                  <td className="py-2 pr-4 text-xs text-gray-600">
                     {m.address ? (
                       <>
                         {/* Clamped rather than truncated with a tooltip: a real Indian
@@ -289,16 +289,16 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
                             CSV, which is what a print run is addressed from. */}
                         <span className="line-clamp-2 max-w-[22rem]">{m.address}</span>
                         {(m.pincode || m.state) && (
-                          <span className="mt-0.5 block text-zinc-500">
+                          <span className="mt-0.5 block text-gray-500">
                             {[m.pincode, m.state].filter(Boolean).join(' · ')}
                           </span>
                         )}
-                        {m.phone && <span className="block font-mono text-zinc-500">{m.phone}</span>}
+                        {m.phone && <span className="block font-mono text-gray-500">{m.phone}</span>}
                       </>
                     ) : (
                       // Said plainly, because "no address" is the one thing that stops a
                       // card being posted and it must not look like an empty cell.
-                      <span className="text-amber-400/80">No address on file</span>
+                      <span className="text-amber-800">No address on file</span>
                     )}
                   </td>
                   <td className="py-2 pr-4">
@@ -309,13 +309,13 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
                       {STATUS_LABEL[m.status]}
                     </span>
                   </td>
-                  <td className="py-2 pr-4 text-xs text-zinc-500">
+                  <td className="py-2 pr-4 text-xs text-gray-500">
                     {m.claimedAt ? formatDateTimeIST(m.claimedAt) : '—'}
                   </td>
                   <td className="py-2 text-right text-xs">
                     {m.discountRupees > 0
-                      ? <span className="text-emerald-400">{inr(m.discountRupees)}</span>
-                      : <span className="text-zinc-600">—</span>}
+                      ? <span className="text-emerald-800">{inr(m.discountRupees)}</span>
+                      : <span className="text-gray-400">—</span>}
                   </td>
                 </tr>
               ))}
@@ -328,7 +328,7 @@ export default function MemberRosterPanel({ campaignId }: { campaignId: string }
         <button
           onClick={() => setCursors((c) => [...c, nextCursor])}
           disabled={pages.isFetching}
-          className="mt-4 w-full rounded border border-zinc-800 py-2 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+          className="mt-4 w-full rounded border border-gray-200 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40"
         >
           {pages.isFetching ? 'Loading…' : 'Show more'}
         </button>

@@ -100,7 +100,8 @@ describe('Staff task routes', () => {
   });
 
   it('refuses what the rules refuse, with the right codes', async () => {
-    expect((await member.session.post('/staff/tasks', { title: 'x', assigneeId: String(head.user._id) })).status).toBe(403);
+    // A member may give a task to their head (anyone in the panel)…
+    expect((await member.session.post('/staff/tasks', { title: 'x', assigneeId: String(head.user._id) })).status).toBe(201);
     expect((await member.session.get('/staff/tasks?view=team')).status).toBe(403);
     const own = await member.session.post('/staff/tasks', { title: 'My own' });
     expect(own.status).toBe(201);

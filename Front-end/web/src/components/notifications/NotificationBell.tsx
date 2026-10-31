@@ -26,14 +26,23 @@
  * It plays when the total goes UP, never on the first load and never when work
  * is cleared. Chiming on mount would mean a chime on every page navigation, and
  * chiming on a falling count would congratulate you for finishing something.
+ *
+ * ── Why a rise is not always a sound ────────────────────────────────────────
+ * The chat chime rang over and over: once per open tab, once per message in a
+ * burst, for every automatic order update, for the chat being read, and on top
+ * of the computer's own pop-up sound. lib/chatSound.ts holds the rules that stop
+ * that (once per message across tabs, a cool-down, updates silent unless chosen,
+ * not the open conversation, not when a pop-up already rang).
  */
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Bell, Volume2, VolumeX } from 'lucide-react';
 import { useWaitingWork } from '@/hooks/queries/useNotifications';
-import { useChatUnreadSplit } from '@/hooks/queries/useTeamChat';
+import { useChatChannels, useChatUnreadSplit } from '@/hooks/queries/useTeamChat';
 import PushToggle from './PushToggle';
 import { alert, arm, chime, muted as isMuted, setMuted } from '@/lib/notificationChime';
+import { claimAlert, claimChime, openConversation, setUpdatesSound, soundWorthy, updatesSoundOn } from '@/lib/chatSound';
+import { pushIsOn } from '@/lib/push';
 
 export default function NotificationBell({
   chatHref,
@@ -46,10 +55,12 @@ export default function NotificationBell({
 }) {
   const { data } = useWaitingWork();
   const unreadSplit = useChatUnreadSplit();
-  // Both kinds of chat unread still play the chat chime, as before the split.
+  const { data: channels } = useChatChannels({ poll: true });
+  // The badge counts both kinds; the sound is filtered (see below).
   const chatUnread = unreadSplit.chat + unreadSplit.updates;
   const [open, setOpen] = useState(false);
   const [quiet, setQuiet] = useState(false);
+  const [updatesSound, setUpdatesSoundState] = useState(false);
 
   const approvals = data?.total ?? 0;
   const total = approvals + chatUnread;
@@ -58,7 +69,7 @@ export default function NotificationBell({
   // read as a rise from zero.
   const previous = useRef<number | undefined>(undefined);
 
-  useEffect(() => { setQuiet(isMuted()); }, []);
+  useEffect(() => { setQuiet(isMuted()); setUpdatesSoundState(updatesSoundOn()); }, []);
 
   /*
     Audio needs a real user gesture before it will ever play. Arming on the
@@ -82,16 +93,30 @@ export default function NotificationBell({
     the chat chime. If both rise at once, the work alert wins — it is the one
     that usually needs action.
   */
-  const previousChat = useRef<number | undefined>(undefined);
+  const alertedAt = useRef(0);
   useEffect(() => {
+    if (!data) return;
     const before = previous.current;
-    const beforeChat = previousChat.current;
     previous.current = approvals;
-    previousChat.current = chatUnread;
-    if (before === undefined || beforeChat === undefined) return;
-    if (approvals > before) alert();
-    else if (chatUnread > beforeChat) chime();
-  }, [approvals, chatUnread]);
+    if (before === undefined || approvals <= before) return;
+    alertedAt.current = Date.now();
+    void claimAlert(approvals).then((mine) => { if (mine) alert(); });
+  }, [data, approvals]);
+
+  const previousSound = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!channels) return;
+    const visible = document.visibilityState === 'visible';
+    const { count, newestAt } = soundWorthy({ channels, openId: visible ? openConversation() : null, updatesSound });
+    const before = previousSound.current;
+    previousSound.current = count;
+    if (before === undefined || count <= before) return;
+    // The work alert just rang for the same change: it is the one that needs action.
+    const workRang = Date.now() - alertedAt.current < 2000;
+    // In the background with pop-ups on, the computer's pop-up is the sound.
+    const popUpRang = !visible && pushIsOn();
+    void claimChime(newestAt).then((mine) => { if (mine && !workRang && !popUpRang) chime(); });
+  }, [channels, updatesSound]);
 
   // Click-away. Pointerdown rather than click, so the panel is gone before the
   // thing underneath reacts.
@@ -178,10 +203,21 @@ export default function NotificationBell({
             </button>
           </div>
           {!quiet && (
-            <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-1.5 text-xs text-gray-500">
-              <span>Hear the sounds:</span>
-              <button type="button" onClick={() => { arm(); chime(); }} className="rounded px-1.5 py-0.5 font-medium text-gray-700 hover:bg-gray-100">Chat</button>
-              <button type="button" onClick={() => { arm(); alert(); }} className="rounded px-1.5 py-0.5 font-medium text-gray-700 hover:bg-gray-100">New work</button>
+            <div className="space-y-1 border-b border-gray-100 px-3 py-1.5 text-xs text-gray-500">
+              <div className="flex items-center gap-2">
+                <span>Hear the sounds:</span>
+                <button type="button" onClick={() => { arm(); chime(); }} className="rounded px-1.5 py-0.5 font-medium text-gray-700 hover:bg-gray-100">Chat</button>
+                <button type="button" onClick={() => { arm(); alert(); }} className="rounded px-1.5 py-0.5 font-medium text-gray-700 hover:bg-gray-100">New work</button>
+              </div>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={updatesSound}
+                  onChange={(e) => { setUpdatesSound(e.target.checked); setUpdatesSoundState(e.target.checked); }}
+                  className="h-3.5 w-3.5"
+                />
+                <span>Sound for automatic order updates too</span>
+              </label>
             </div>
           )}
 

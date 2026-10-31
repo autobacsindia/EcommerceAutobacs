@@ -30,7 +30,7 @@ const DUES: { value: TaskDue | ''; label: string }[] = [
 ];
 
 /** Plain-words explanation, shown until the person hides it (remembered on this device). */
-function HowItWorks({ canGive }: { canGive: boolean }) {
+function HowItWorks() {
   const [hidden, setHidden] = useState(true);
   useEffect(() => { setHidden(read(HELP_KEY) === '1'); }, []);
   if (hidden) return null;
@@ -40,9 +40,8 @@ function HowItWorks({ canGive }: { canGive: boolean }) {
       <div>
         <p className="font-semibold">How tasks work</p>
         <p className="mt-0.5">
-          Press <strong>New task</strong> (or the N key){canGive ? ', choose who should do it' : ''} and pick a due date.
-          {canGive ? ' They get a pop-up and find it under For me.' : ''} Tick the circle when a job is done; open a task to comment, add steps or change it.
-          {!canGive && ' Team heads and the admin can give jobs to other people; you can add jobs for yourself.'}
+          Press <strong>New task</strong> (or the N key), choose who should do it — yourself or anyone in the panel — and pick a due date.
+          They get a pop-up and find it under For me. Tick the circle when a job is done; open a task to comment, add steps or change it.
         </p>
       </div>
       <button onClick={() => { setHidden(true); write(HELP_KEY, '1'); }} aria-label="Hide how tasks work" className="absolute right-2 top-2 rounded p-1 hover:bg-sky-100">
@@ -194,7 +193,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
         </div>
       </header>
 
-      <HowItWorks canGive={canSeeTeam} />
+      <HowItWorks />
 
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-gray-200">
         <div className="flex gap-1" role="tablist" aria-label="Show as">

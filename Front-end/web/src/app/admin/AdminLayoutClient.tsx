@@ -112,6 +112,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/staff', label: 'Staff & Teams', icon: IdCard },
       { href: '/admin/team-activity', label: 'Team activity', icon: Timer },
+      { href: '/admin/pop-ups', label: 'Pop-up check', icon: BellRing },
       { href: '/admin/payments', label: 'Payments', icon: CreditCard },
       { href: '/admin/suppliers', label: 'Suppliers', icon: Factory },
       { href: '/admin/bank-transfers', label: 'Bank transfers', icon: Landmark },

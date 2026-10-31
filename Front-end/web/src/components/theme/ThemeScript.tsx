@@ -13,16 +13,13 @@
  * theme was bolted on.
  *
  * Default is light: that is the premium look the brand already has, and a
- * first-time visitor should see what the business designed.
+ * first-time visitor should see what the business designed. The staff panel
+ * has its own choice (light / dark / match the computer) — the rule and the
+ * script itself live in themeChoice.ts, because lib/csp.ts hashes the same
+ * string to allow it on the strict-CSP routes (/team, /admin, /cart…).
  */
+import { THEME_SCRIPT } from './themeChoice';
+
 export default function ThemeScript() {
-  const script = `(function(){try{
-var s=localStorage.getItem('roavion-theme');
-var t=(s==='dark'||s==='light')?s:'light';
-document.documentElement.setAttribute('data-theme',t);
-document.documentElement.style.colorScheme=t;
-}catch(e){
-document.documentElement.setAttribute('data-theme','light');
-}})();`;
-  return <script dangerouslySetInnerHTML={{ __html: script }} />;
+  return <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />;
 }

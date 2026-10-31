@@ -62,7 +62,7 @@ export function AddTrackingModal({ isOpen, onClose, orderId, onSuccess }: AddTra
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-obsidian-deep bg-opacity-50 transition-opacity"
+        className="fixed inset-0 bg-[rgb(0_0_0/0.5)] transition-opacity"
         onClick={handleClose}
       />
 

@@ -3,11 +3,12 @@
  * that records what would have popped up.
  *
  * What must hold:
- *   - who gives to whom: admin → anyone; head → own team; member → only themselves
+ *   - who gives to whom: anyone in the panel → anyone in the panel (never a
+ *     customer, never someone who has left)
  *   - who sees: assignee, giver, head of the task's team, admin — nobody else
  *     (a hidden task is "not found", not "forbidden")
- *   - the assignee moves status but cannot rewrite the task; only the head or the
- *     admin reassigns
+ *   - the assignee moves status but cannot rewrite or pass on the task; the giver,
+ *     the head or the admin reassigns — to anyone in the panel
  *   - a double-click / retried create or comment lands once (clientId), even
  *     when both arrive at the same moment
  *   - two people editing at once: the second, stale edit is refused (409)
@@ -84,29 +85,42 @@ describe('who gives tasks to whom', () => {
     expect(t).toMatchObject({ assignee: { name: 'Sam' }, team: 'sales', teamLabel: 'GTM', createdBy: { name: 'Owner' }, status: 'todo', priority: 'normal' });
   });
 
-  it('a head gives to people in their own team, never another team', async () => {
-    const t = await make(procHead, { assigneeId: String(procA._id) });
-    expect(t.team).toBe('procurement');
-    await status(403, () => make(procHead, { assigneeId: String(salesA._id) }));
+  it('a head gives to their own team and to other teams; the task sits in the doer\'s team', async () => {
+    expect((await make(procHead, { assigneeId: String(procA._id) })).team).toBe('procurement');
+    expect((await make(procHead, { assigneeId: String(salesA._id) })).team).toBe('sales');
   });
 
-  it('a member adds tasks only for themselves', async () => {
-    const own = await make(procA);
-    expect(own.assignee.id).toBe(String(procA._id));
-    await status(403, () => make(procA, { assigneeId: String(procB._id) }));
+  it('a member gives to themselves, a teammate, another team\'s member, a head and the admin', async () => {
+    expect((await make(procA)).assignee.id).toBe(String(procA._id));
+    for (const to of [procB, salesA, salesHead, admin]) {
+      const t = await make(procA, { assigneeId: String(to._id) });
+      expect(t.assignee.id).toBe(String(to._id));
+      expect(t.createdBy.name).toBe('Arun');
+    }
+    await settle();
+    // Each of them gets the "new task" pop-up (the admin's opens the admin panel).
+    expect(pushes.map((p) => p.recipients[0].userId).sort()).toEqual([procB, salesA, salesHead, admin].map((u) => String(u._id)).sort());
+    expect(pushes.find((p) => p.recipients[0].userId === String(admin._id)).recipients[0].url).toMatch(/^\/admin\/tasks\//);
   });
 
-  it('nobody can give a task to someone who has left', async () => {
-    await status(400, () => make(admin, { assigneeId: String(gone._id) }));
-    await status(400, () => make(admin, { assigneeId: String(new mongoose.Types.ObjectId()) }));
+  it('nobody can give a task to someone who has left, a customer, or nobody', async () => {
+    const customer = await person('customer', null, 'Shopper');
+    for (const actor of [admin, procA]) {
+      await status(400, () => make(actor, { assigneeId: String(gone._id) }));
+      await status(400, () => make(actor, { assigneeId: String(customer._id) }));
+      await status(400, () => make(actor, { assigneeId: String(new mongoose.Types.ObjectId()) }));
+    }
   });
 
-  it('the picker lists exactly who you may give to', async () => {
+  it('someone whose access was removed cannot give tasks at all', async () => {
+    await status(403, () => make(gone, { assigneeId: String(procA._id) }));
+    expect(await tasks.listAssignees(gone)).toEqual([]);
+  });
+
+  it('the picker lists everyone in the panel — the same for a member, a head and the admin', async () => {
     const names = async (u) => (await tasks.listAssignees(u)).map((p) => p.name).sort();
-    expect(await names(procHead)).toEqual(['Arun', 'Bala', 'Priya']);
-    expect(await names(procA)).toEqual(['Arun']);
-    expect(await names(admin)).toEqual(expect.arrayContaining(['Owner', 'Priya', 'Arun', 'Bala', 'Hari', 'Sam']));
-    expect(await names(admin)).not.toContain('Left');
+    const all = ['Arun', 'Bala', 'Hari', 'Owner', 'Priya', 'Sam'];
+    for (const u of [procA, procHead, salesA, admin]) expect(await names(u)).toEqual(all);
   });
 
   it('numbers tasks T-1, T-2… and checks the input', async () => {
@@ -155,7 +169,7 @@ describe('who sees a task', () => {
 });
 
 describe('changing a task', () => {
-  it('the assignee moves the status but cannot rewrite or reassign it', async () => {
+  it('the assignee moves the status but cannot rewrite or pass it on', async () => {
     const t = await make(procHead, { assigneeId: String(procA._id) });
     const moved = await tasks.updateTask(procA, t.id, { rev: t.rev, status: 'in_progress' }, req);
     expect(moved).toMatchObject({ status: 'in_progress', statusLabel: 'In progress', rev: t.rev + 1 });
@@ -175,7 +189,7 @@ describe('changing a task', () => {
     expect(row.rank).toBe(day(2));
   });
 
-  it('the head reassigns within the team: the team follows the person, and they get a pop-up', async () => {
+  it('the head reassigns, even to another team: the team follows the person, and they get a pop-up', async () => {
     const t = await make(procHead, { assigneeId: String(procA._id) });
     await settle();
     pushes.length = 0;
@@ -184,7 +198,30 @@ describe('changing a task', () => {
     await settle();
     expect(pushes).toHaveLength(1);
     expect(pushes[0].recipients).toEqual([{ userId: String(procB._id), url: `/team/tasks/${t.id}` }]);
-    await status(403, () => tasks.updateTask(procHead, t.id, { rev: r.rev, assigneeId: String(salesA._id) }, req));
+    const away = await tasks.updateTask(procHead, t.id, { rev: r.rev, assigneeId: String(salesA._id) }, req);
+    expect(away).toMatchObject({ team: 'sales', assignee: { name: 'Sam' } });
+    // The giver still sees it; the new team's head now does too; the old doer does not.
+    expect((await tasks.getTask(procHead, t.id)).id).toBe(t.id);
+    expect((await tasks.getTask(salesHead, t.id)).id).toBe(t.id);
+    await status(404, () => tasks.getTask(procB, t.id));
+  });
+
+  it('a member who gave a task hands it to someone else; the doer and outsiders cannot', async () => {
+    const t = await make(procA, { assigneeId: String(salesA._id) });
+    expect(t.can.reassign).toBe(true);
+    expect((await tasks.getTask(salesA, t.id)).can.reassign).toBe(false);
+    await status(403, () => tasks.updateTask(salesA, t.id, { rev: t.rev, assigneeId: String(procB._id) }, req));
+    await status(404, () => tasks.updateTask(procB, t.id, { rev: t.rev, assigneeId: String(procB._id) }, req));
+    await settle();
+    pushes.length = 0;
+    const r = await tasks.updateTask(procA, t.id, { rev: t.rev, assigneeId: String(salesHead._id) }, req);
+    expect(r.assignee.name).toBe('Hari');
+    await settle();
+    expect(pushes.map((p) => p.recipients[0].userId)).toEqual([String(salesHead._id)]);
+    // Never to a customer or someone who has left.
+    const customer = await person('customer', null, 'Shopper');
+    await status(400, () => tasks.updateTask(procA, t.id, { rev: r.rev, assigneeId: String(customer._id) }, req));
+    await status(400, () => tasks.updateTask(procA, t.id, { rev: r.rev, assigneeId: String(gone._id) }, req));
   });
 
   it('two people editing at once: the stale edit is refused, nothing is overwritten', async () => {
@@ -448,13 +485,15 @@ describe('one task for several people', () => {
     expect(r.task.group).toBeNull();
   });
 
-  it('a head picks several from their own team; one outsider and nothing is made', async () => {
-    const ok = await tasks.createTask(procHead, { title: 'Pack', assigneeIds: ids(procA, procB) }, req);
-    expect(ok.tasks).toHaveLength(2);
-    await status(403, () => tasks.createTask(procHead, { title: 'Mixed', assigneeIds: ids(procA, salesA) }, req));
-    await status(403, () => tasks.createTask(procA, { title: 'Me and Bala', assigneeIds: ids(procA, procB) }, req));
+  it('anyone picks several people across teams; one who has left and nothing is made', async () => {
+    const mixed = await tasks.createTask(procHead, { title: 'Mixed', assigneeIds: ids(procA, salesA) }, req);
+    expect(mixed.tasks.map((t) => t.team).sort()).toEqual(['procurement', 'sales']);
+    const mine = await tasks.createTask(procA, { title: 'Me and Bala', assigneeIds: ids(procA, procB, salesHead) }, req);
+    expect(mine.tasks).toHaveLength(3);
+    const customer = await person('customer', null, 'Shopper');
     await status(400, () => tasks.createTask(admin, { title: 'Gone', assigneeIds: ids(procA, gone) }, req));
-    expect(await StaffTask.countDocuments({ title: { $in: ['Mixed', 'Me and Bala', 'Gone'] } })).toBe(0);
+    await status(400, () => tasks.createTask(procA, { title: 'Shop', assigneeIds: ids(procB, customer) }, req));
+    expect(await StaffTask.countDocuments({ title: { $in: ['Gone', 'Shop'] } })).toBe(0);
   });
 
   it('the same person picked twice gets one copy; more than the limit is refused', async () => {
