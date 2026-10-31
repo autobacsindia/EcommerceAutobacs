@@ -202,6 +202,9 @@ describe('the Tasks page', () => {
     serve();
     const { unmount } = workspace();
     expect(await screen.findByText('How tasks work')).toBeInTheDocument();
+    // A member (no team view) is told they can give tasks to anyone, too.
+    expect(screen.getByText(/yourself or anyone in the panel/)).toBeInTheDocument();
+    expect(screen.queryByText(/Team heads and the admin can give/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Hide how tasks work' }));
     expect(screen.queryByText('How tasks work')).toBeNull();
     unmount();
@@ -315,7 +318,17 @@ describe('new task', () => {
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('3 tasks created'));
   });
 
-  it('a member adds only for themselves; nobody ticked cannot be created; steps go one per line', async () => {
+  it('a member picks people from other teams like anyone else', async () => {
+    serve({ list: [] });
+    post.mockResolvedValue({ task: task(), tasks: [task()] });
+    const dialog = await openForm();
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Quote for 4512' } });
+    fireEvent.click(await within(dialog).findByRole('checkbox', { name: /Bala/ }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Create/ }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: expect.arrayContaining(['u3']) })));
+  });
+
+  it('only one person in the panel: the task is for you; nobody ticked cannot be created; steps go one per line', async () => {
     serve({ list: [], assignees: { people: [{ ...people.people[1], me: true }] } });
     post.mockResolvedValue({ task: task(), tasks: [task()] });
     const dialog = await openForm();
