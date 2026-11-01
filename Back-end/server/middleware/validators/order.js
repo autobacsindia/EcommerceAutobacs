@@ -2,6 +2,32 @@ import { body, param, query } from 'express-validator';
 import { validateRequest } from '../validateRequest.js';
 import mongoose from 'mongoose';
 import { OTHER_CARRIER_CODE, MAX_CUSTOM_CARRIER_NAME } from '../../services/orderTrackingService.js';
+import { CANCELLATION_REASON_CODES } from '../../config/cancellationReasons.js';
+
+// The customer pop-up's limit; the same bound for the admin forms.
+export const MAX_CANCELLATION_NOTES = 500;
+
+/*
+  Reason + notes on any cancel request. Checked here, at the door, so a reason the
+  service would refuse comes back as a plain 400 BEFORE anything is written — on the
+  per-line path the lines used to cancel first and only the roll-up to `cancelled`
+  failed, leaving the order with a stale status.
+*/
+const cancellationReasonRules = [
+  body('reason')
+    .optional({ values: 'falsy' })
+    .isString()
+    .trim()
+    .isIn(CANCELLATION_REASON_CODES)
+    .withMessage('Please choose one of the listed cancellation reasons'),
+  body('notes')
+    .optional({ values: 'null' })
+    .isString()
+    .withMessage('Notes must be text')
+    .trim()
+    .isLength({ max: MAX_CANCELLATION_NOTES })
+    .withMessage(`Notes cannot exceed ${MAX_CANCELLATION_NOTES} characters`),
+];
 
 export const validateOrder = [
   body('items')
@@ -98,12 +124,13 @@ export const validateOrderCancellation = [
   param('id')
     .custom((value) => mongoose.Types.ObjectId.isValid(value))
     .withMessage('Invalid Order ID'),
-  body('reason')
-    .optional()
-    .trim(),
-  body('notes')
-    .optional()
-    .trim(),
+  ...cancellationReasonRules,
+  validateRequest
+];
+
+// POST /orders/:id/cancellations — the admin per-line cancel.
+export const validateLineCancellation = [
+  ...cancellationReasonRules,
   validateRequest
 ];
 

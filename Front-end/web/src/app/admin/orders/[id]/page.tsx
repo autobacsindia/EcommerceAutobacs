@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import OfflineRefundDialog, { type OfflineRefundSubmission } from '@/components/admin/OfflineRefundDialog';
 import { offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
 import { ArrowLeft, Package, MapPin, CreditCard, Truck, Download, Building2, FileText } from 'lucide-react';
-import { CUSTOMER_NOTIFIED_STATUSES, API_ENDPOINTS } from '@/lib/constants';
+import { CUSTOMER_NOTIFIED_STATUSES, API_ENDPOINTS, cancellationReasonLabel } from '@/lib/constants';
 import ConfirmStatusChangeModal, { ConfirmStatusPayload } from '@/components/orders/ConfirmStatusChangeModal';
 import { updateOrderStatus } from '@/lib/orderStatusUpdate';
 import { formatLongDateIST, formatLongDateTimeIST } from '@/lib/datetime';
@@ -994,7 +994,7 @@ function AdminOrderDetailPageInner() {
                     Cancelled{order.cancelledBy ? ` by ${order.cancelledBy === 'customer' ? 'Customer' : order.cancelledBy === 'admin' ? 'Admin' : 'System'}` : ''}
                   </p>
                   {order.cancellationReason && (
-                    <p className="text-sm text-red-700 mt-1">Reason: {order.cancellationReason}</p>
+                    <p className="text-sm text-red-700 mt-1">Reason: {cancellationReasonLabel(order.cancellationReason)}</p>
                   )}
                 </div>
               )}

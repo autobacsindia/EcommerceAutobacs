@@ -255,7 +255,8 @@ describe('emailAdminOrderCancelledAlert', () => {
     expect(arg.subject).toContain('12,499.50');
     expect(arg.subject).toContain('#00FF01AB');
     expect(arg.text).toContain('REFUND DUE: ₹12,499.50');
-    expect(arg.text).toContain('customer_request');
+    // The stored code is shown as its label (config/cancellationReasons.js), not raw.
+    expect(arg.text).toContain('Reason     : Customer asked for it');
     expect(arg.html).toContain('Process refund');
   });
 

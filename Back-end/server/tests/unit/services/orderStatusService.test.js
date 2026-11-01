@@ -57,13 +57,17 @@ describe('OrderStatusService Unit Tests', () => {
     });
 
     it('should enforce admin-only transitions', () => {
-      // processing -> cancelled requires admin
-      const resultUser = service.validateTransition('processing', 'cancelled', false);
+      // delivered -> returned requires admin
+      const resultUser = service.validateTransition('delivered', 'returned', false);
       expect(resultUser.valid).toBe(false);
       expect(resultUser.message).toContain('Admin permission required');
 
-      const resultAdmin = service.validateTransition('processing', 'cancelled', true);
+      const resultAdmin = service.validateTransition('delivered', 'returned', true);
       expect(resultAdmin.valid).toBe(true);
+    });
+
+    it('lets a customer cancel a paid order that has not shipped', () => {
+      expect(service.validateTransition('processing', 'cancelled', false).valid).toBe(true);
     });
 
     it('should allow admins to bypass transition rules', () => {
@@ -84,10 +88,9 @@ describe('OrderStatusService Unit Tests', () => {
     });
 
     it('should filter out admin-only transitions for regular users', () => {
-      // processing -> cancelled is admin only
-      const statuses = service.getValidNextStatuses('processing', false);
-      expect(statuses).not.toContain('cancelled');
-      expect(statuses).toContain('shipped');
+      // delivered -> returned is admin only
+      const statuses = service.getValidNextStatuses('delivered', false);
+      expect(statuses).not.toContain('returned');
     });
 
     it('should include admin-only transitions for admins', () => {

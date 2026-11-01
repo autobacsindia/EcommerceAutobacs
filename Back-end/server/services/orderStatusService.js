@@ -3,10 +3,12 @@
  * Handles order status transitions with validation and tracking
  */
 
+import mongoose from 'mongoose';
 import { initialWorkflow } from '../utils/teamWorkflow.js';
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { remainingCancellable } from '../utils/orderCancellation.js';
+import { CANCELLATION_REASON_CODES } from '../config/cancellationReasons.js';
 import leadSyncService from './leadSyncService.js';
 import spinService from './spinService.js';
 import { getOrderQueue, getNotificationsQueue } from '../queue/queues.js';
@@ -55,9 +57,19 @@ const STATUS_TRANSITIONS = {
  * Define which transitions require admin approval
  */
 const ADMIN_ONLY_TRANSITIONS = {
-  'processing': ['cancelled'], // Only admin can cancel after processing starts
+  /*
+    `processing` → `cancelled` is NOT here (owner decision, 2026-11-01): a customer may
+    cancel a paid order until it ships. It used to be admin-only, while canCustomerCancel
+    and the order page both said yes — so the customer picked a reason, confirmed, and
+    got "Admin permission required". The refund is still only RECORDED as pending (see
+    the `cancelled` case below); an admin sends it. Who may cancel what is decided by
+    canCustomerCancel + the validateCancellation middleware (non-cancellable items).
+  */
   'delivered': ['returned']    // Only admin marks a delivered order returned
 };
+
+// Reasons the admin panel sends on its own when the admin picked none.
+const ADMIN_DEFAULT_REASONS = ['admin_update', 'bulk_admin_update'];
 
 /**
  * Define status transition reasons/categories
@@ -66,7 +78,8 @@ const TRANSITION_REASONS = {
   'processing': ['payment_verified', 'warehouse_assigned', 'items_picked', 'packing_started', 'manual_confirmation'],
   'shipped': ['handed_to_carrier', 'label_created', 'in_transit'],
   'delivered': ['customer_received', 'left_at_door', 'signed_for'],
-  'cancelled': ['customer_request', 'out_of_stock', 'fraud_suspected', 'duplicate_order'],
+  // Owned by config/cancellationReasons.js so the cancel screens and this check agree.
+  'cancelled': CANCELLATION_REASON_CODES,
   'returned': ['return_completed', 'damaged_item', 'quality_issue', 'order_cancelled']
 };
 
@@ -210,9 +223,10 @@ class OrderStatusService {
       if (reason) {
         const validReasons = this.getValidReasons(newStatus);
         
-        // Allow 'admin_update' reason for admins, even if not in the strict validation list
-        // This supports manual overrides from the admin panel
-        const isAllowedAdminUpdate = isAdmin && reason === 'admin_update';
+        // Allow the admin panel's default reasons, even if not in the strict validation
+        // list: 'admin_update' (manual overrides) and 'bulk_admin_update' (what the bulk
+        // bar sends when no reason was picked — refusing it failed every such order).
+        const isAllowedAdminUpdate = isAdmin && ADMIN_DEFAULT_REASONS.includes(reason);
         
         if (!isAllowedAdminUpdate && validReasons.length > 0 && !validReasons.includes(reason)) {
           throw new Error(`Invalid reason '${reason}' for status '${newStatus}'. Valid reasons: ${validReasons.join(', ')}`);
@@ -314,7 +328,27 @@ class OrderStatusService {
           break;
       }
 
-      await orderRepository.save(order, session);
+      /*
+        Compare-and-set on the status we validated against. Two requests that both
+        read `awaiting_payment` (a double-clicked "Cancel Order", an admin and the
+        customer at once) used to BOTH save: two `cancelled` history entries and every
+        side effect below — emails, admin alert, karma/coupon reversal — queued twice.
+        Now the second save matches no document and is refused; the order is left
+        exactly as the first request wrote it.
+      */
+      order.$where = { ...(order.$where || {}), status: currentStatus };
+      try {
+        await orderRepository.save(order, session);
+      } catch (error) {
+        if (error instanceof mongoose.Error.DocumentNotFoundError) {
+          return {
+            success: false,
+            conflict: true,
+            message: 'This order was just updated by someone else. Refresh the page to see its current status.'
+          };
+        }
+        throw error;
+      }
 
       // Loyalty side-effects run in the background (idempotent, gated on order state):
       //   delivered → award earned karma; cancelled/refunded → reverse redeemed karma,

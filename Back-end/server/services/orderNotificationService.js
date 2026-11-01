@@ -6,6 +6,7 @@
 import emailHandler from './emailHandler.js';
 import smsHandler from './smsHandler.js';
 import notificationLogger from './notificationLogger.js';
+import { cancellationReasonLabel } from '../config/cancellationReasons.js';
 
 class OrderNotificationService {
   log(message) {
@@ -408,7 +409,7 @@ Your order has been cancelled as requested.
 
 Order Number: ${order._id}
 Cancellation Date: ${this._formatDate(order.cancelledAt || new Date())}
-Reason: ${order.cancellationReason || 'Customer request'}
+Reason: ${cancellationReasonLabel(order.cancellationReason) || 'Customer request'}
 ${refundText}
 If you have any questions about this cancellation, please contact our support team.
 

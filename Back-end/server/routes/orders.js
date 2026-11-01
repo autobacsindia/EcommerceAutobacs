@@ -6,6 +6,7 @@ import {
   validateShipmentParams,
   validateOrderStatusUpdate, 
   validateOrderCancellation, 
+  validateLineCancellation,
   validateBulkStatusUpdate, 
   validateBulkDelete,
   validateTrackingInfo,
@@ -227,7 +228,7 @@ router.get("/:id/cancellations", protect, validateIdParam, asyncHandler(getCance
 // @desc    Cancel a subset of the live lines and price the refund (Admin only).
 //          Does NOT send the refund — see the route below.
 // @access  Private/Admin
-router.post("/:id/cancellations", protect, admin, validateIdParam, asyncHandler(createCancellation));
+router.post("/:id/cancellations", protect, admin, validateIdParam, validateLineCancellation, asyncHandler(createCancellation));
 
 // @route   POST /orders/:id/cancellations/:cancellationId/refund
 // @desc    Send that cancellation's refund to Razorpay (Admin only). Idempotent —

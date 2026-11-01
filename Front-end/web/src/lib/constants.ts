@@ -433,14 +433,44 @@ export const AUTH_ERROR_MESSAGES = {
   GENERIC_AUTH_ERROR: 'Authentication failed. Please try again.',
 };
 
-// Cancellation Reasons
+// Cancellation reasons. Mirrors Back-end/server/config/cancellationReasons.js, which
+// is also the list the server ACCEPTS — keep both in sync. Every `value` is unique:
+// the customer pop-up renders this as a radio group, and options that share a value
+// light up together (three used to share `customer_request`, so picking "Changed my
+// mind" showed "Other" as selected and the real reason was never recorded).
 export const CANCELLATION_REASONS = [
-  { value: 'customer_request', label: 'Changed my mind' },
-  { value: 'customer_request', label: 'Found better price elsewhere' },
-  { value: 'duplicate_order', label: 'Ordered by mistake' },
-  { value: 'payment_failed', label: 'Payment issues' },
-  { value: 'customer_request', label: 'Other' },
+  { value: 'changed_mind', label: 'Changed my mind' },
+  { value: 'better_price', label: 'Found a better price elsewhere' },
+  { value: 'ordered_by_mistake', label: 'Ordered by mistake' },
+  { value: 'payment_issue', label: 'Payment issues' },
+  { value: 'other', label: 'Other' },
 ] as const;
+
+// What staff pick when cancelling (per-line panel on the order page, bulk bar).
+export const ADMIN_CANCELLATION_REASONS = [
+  { value: 'out_of_stock', label: 'Out of stock' },
+  { value: 'customer_request', label: 'Customer asked for it' },
+  { value: 'duplicate_order', label: 'Duplicate order' },
+  { value: 'fraud_suspected', label: 'Fraud suspected' },
+  { value: 'payment_issue', label: 'Payment issue' },
+  { value: 'quality_issue', label: 'Quality issue' },
+  { value: 'other', label: 'Other' },
+] as const;
+
+const CANCELLATION_REASON_LABELS: Record<string, string> = Object.fromEntries(
+  [{ value: 'payment_failed', label: 'Payment issues' }, ...ADMIN_CANCELLATION_REASONS, ...CANCELLATION_REASONS]
+    .map((r) => [r.value, r.label]),
+);
+
+/** Readable label for a stored cancellation (or other status-change) reason code. */
+export const cancellationReasonLabel = (reason?: string | null): string => {
+  if (!reason) return '';
+  const known = CANCELLATION_REASON_LABELS[reason];
+  if (known) return known;
+  // Other status codes (`payment_verified`, `admin_update`…) or older free text.
+  const words = reason.replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
 
 // What a customer can pick on the website: every reason except the staff-only ones,
 // each with the fault it claims (which sets the window and what comes back). Mirrors

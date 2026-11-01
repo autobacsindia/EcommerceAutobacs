@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import { ChevronDown, Download, Trash2, CheckCircle, XCircle, AlertCircle, Package } from 'lucide-react';
+import { ADMIN_CANCELLATION_REASONS } from '@/lib/constants';
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -33,7 +34,9 @@ export default function BulkActionsBar({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (status) {
-      await onBulkStatusUpdate(status, reason, notes);
+      // A reason only means something for a cancel; the server has no list for the
+      // other statuses and refused every code this picker used to offer for them.
+      await onBulkStatusUpdate(status, status === 'cancelled' ? reason : '', notes);
       setStatus('');
       setReason('');
       setNotes('');
@@ -127,21 +130,22 @@ export default function BulkActionsBar({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                <select
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select reason</option>
-                  <option value="customer_request">Customer Request</option>
-                  <option value="out_of_stock">Out of Stock</option>
-                  <option value="payment_issue">Payment Issue</option>
-                  <option value="quality_issue">Quality Issue</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
+              {status === 'cancelled' && (
+                <div>
+                  <label htmlFor="bulk-cancel-reason" className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                  <select
+                    id="bulk-cancel-reason"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select reason</option>
+                    {ADMIN_CANCELLATION_REASONS.map((r) => (
+                      <option key={r.value} value={r.value}>{r.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
