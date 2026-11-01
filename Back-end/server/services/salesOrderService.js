@@ -15,12 +15,14 @@
  *   - accounts / procurement (any member) → read-only list of PAID sales orders
  */
 
+import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
 import razorpayService from './razorpayService.js';
 import orderStatusService from './orderStatusService.js';
 import pricingService from './pricingService.js';
 import orderRepository from '../repositories/orderRepository.js';
+import userRepository from '../repositories/userRepository.js';
 import salesQuotationRepository from '../repositories/salesQuotationRepository.js';
 import salesRepRepository from '../repositories/salesRepRepository.js';
 import { createOfflineOrderRecord, PAYMENT_LINK_TTL_MS } from './offlineOrderService.js';
@@ -32,6 +34,7 @@ import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { buildHold, shapeHold, heldFilter } from '../utils/salesHold.js';
 import { workflowView } from '../utils/teamWorkflow.js';
 import { readListFilters, orderQueryFor } from '../utils/orderListFilters.js';
+import { and, isObjectId, keysetPage, plainQuery } from '../utils/listQuery.js';
 import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
 import { paymentSummary, retireAllParts } from './salesPaymentService.js';
 import { shapePayDetails } from '../utils/salesPayDetails.js';
@@ -52,44 +55,41 @@ const toRupees = (v) => {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN;
 };
 
-// ── Cursor pagination (keyset on createdAt desc, _id desc) ───────────────────
-const encodeCursor = (o) => Buffer.from(`${new Date(o.createdAt).toISOString()}|${o._id}`).toString('base64url');
-function decodeCursor(cursor) {
-  if (!cursor) return null;
-  try {
-    const [iso, id] = Buffer.from(String(cursor), 'base64url').toString().split('|');
-    const createdAt = new Date(iso);
-    if (Number.isNaN(createdAt.getTime()) || !/^[a-f0-9]{24}$/i.test(id || '')) return null;
-    return { createdAt, id };
-  } catch {
-    return null;
-  }
-}
+/*
+  Keyset pages for the sales and paid-order lists. The cursor names its sort
+  (utils/listQuery.js), so a cursor from another sort starts the list over.
+  The first page also says how many match and what they add up to.
+*/
+export const ORDER_LIST_SORTS = Object.freeze({
+  newest: { field: 'createdAt', dir: -1, type: 'date' },
+  oldest: { field: 'createdAt', dir: 1, type: 'date' },
+  amount_desc: { field: 'totalAmount', dir: -1, type: 'number' },
+  amount_asc: { field: 'totalAmount', dir: 1, type: 'number' },
+});
+const SUMMARY_CAP = 1000;
 
-async function page(baseQuery, cursor, { includePayment = false, oldestFirst = false } = {}) {
-  const c = decodeCursor(cursor);
-  const past = oldestFirst ? '$gt' : '$lt';
-  // $and, not a spread: the base query may carry its own $or, which a spread would
-  // silently replace with the cursor's — page 2 would then ignore the filter.
-  const query = c
-    ? { $and: [baseQuery, { $or: [{ createdAt: { [past]: c.createdAt } }, { createdAt: c.createdAt, _id: { [past]: c.id } }] }] }
-    : baseQuery;
+async function page(query, { cursor, sortName = 'newest', includePayment = false }) {
   const populate = [
     { path: 'user', select: 'name email phone' },
     { path: 'salesUser', select: 'name' },
   ];
   if (includePayment) populate.push({ path: 'payment', select: 'gatewayPaymentId method status amount createdAt' });
-  const rows = await orderRepository.find(query, {
-    limit: PAGE_SIZE + 1,
-    sort: oldestFirst ? { createdAt: 1, _id: 1 } : { createdAt: -1, _id: -1 },
-    select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
-      + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
-      + 'bankTransferPendingAt offlinePayment salesHold subtotal salesDiscount',
-    populate,
+  return keysetPage({
+    query,
+    sorts: ORDER_LIST_SORTS,
+    sortName: ORDER_LIST_SORTS[sortName] ? sortName : 'newest',
+    cursor,
+    pageSize: PAGE_SIZE,
+    find: (q, { sort, limit }) => orderRepository.find(q, {
+      limit,
+      sort,
+      select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
+        + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
+        + 'bankTransferPendingAt offlinePayment salesHold subtotal salesDiscount',
+      populate,
+    }),
+    count: (q) => orderRepository.listSummary(q, SUMMARY_CAP),
   });
-  const hasMore = rows.length > PAGE_SIZE;
-  const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
-  return { items, nextCursor: hasMore ? encodeCursor(items[items.length - 1]) : null };
 }
 
 const linkState = (o, now = Date.now()) => {
@@ -324,26 +324,46 @@ const UNPAID = { status: 'awaiting_payment', paymentStatus: 'pending' };
  * `view`: 'active' (default) leaves out unpaid orders parked "On hold — customer
  * thinking" until their follow-up date; 'on_hold' lists only those.
  */
-export async function listSalesOrders(actor, { cursor, view = 'active' } = {}) {
+export async function listSalesOrders(actor, params = {}) {
   if (!canSell(actor)) throw fail('Not authorized.', 403);
+  const { cursor, view = 'active', seller, paid, ...filters } = plainQuery(params);
   const owner = isSalesHead(actor)
-    ? { salesUser: { $type: 'objectId' } }
+    ? { salesUser: isObjectId(seller) ? new mongoose.Types.ObjectId(seller) : { $type: 'objectId' } }
     : { salesUser: actor._id };
   const now = new Date();
-  const base = view === 'on_hold'
-    ? { ...owner, ...UNPAID, ...heldFilter('salesHold', now) }
-    : {
-      ...owner,
+  const f = readListFilters(filters);
+  const query = and(
+    owner,
+    view === 'on_hold'
+      ? { ...UNPAID, ...heldFilter('salesHold', now) }
       // Anything not unpaid-and-held: never held, follow-up due, or paid / closed.
-      $or: [
-        { salesHold: null },
-        { 'salesHold.until': { $lte: now } },
-        { status: { $ne: 'awaiting_payment' } },
-        { paymentStatus: { $ne: 'pending' } },
-      ],
-    };
-  const { items, nextCursor } = await page(base, cursor);
-  return { orders: items.map(shape), nextCursor, scope: isSalesHead(actor) ? 'team' : 'mine' };
+      : {
+        $or: [
+          { salesHold: null },
+          { 'salesHold.until': { $lte: now } },
+          { status: { $ne: 'awaiting_payment' } },
+          { paymentStatus: { $ne: 'pending' } },
+        ],
+      },
+    PAID_FILTER[paid] ?? null,
+    orderQueryFor(f),
+  );
+  const { items, ...rest } = await page(query, { cursor, sortName: f.sort });
+  return { ...rest, orders: items.map(shape), scope: isSalesHead(actor) ? 'team' : 'mine' };
+}
+
+/** "Paid" / "Not paid yet" on a seller's list. Cancelled and refunded orders are in neither. */
+const PAID_FILTER = Object.freeze({
+  paid: { paymentStatus: 'paid' },
+  unpaid: { paymentStatus: { $in: ['pending', 'failed', 'expired'] } },
+});
+
+/** The sales lists' "Salesman" choices: the head (and admin) only; a seller gets none. */
+export async function salesListFilterOptions(actor) {
+  if (!canSell(actor) && actor?.role !== 'admin') throw fail('Not authorized.', 403);
+  if (!isSalesHead(actor) && actor?.role !== 'admin') return { sellers: [] };
+  const team = await userRepository.findActiveStaff(STAFF_TEAMS.SALES);
+  return { sellers: team.filter(canSell).map((u) => ({ id: String(u._id), name: u.name || '' })) };
 }
 
 /**
@@ -367,7 +387,8 @@ export const PAID_ORDER_STAGES = Object.freeze({
   delivered: ['delivered'],
 });
 
-export async function listPaidSalesOrders(actor, { cursor, stage, ...filters } = {}) {
+export async function listPaidSalesOrders(actor, params = {}) {
+  const { cursor, stage, ...filters } = plainQuery(params);
   const allowed = actor?.role === 'admin'
     || onTeam(actor, STAFF_TEAMS.ACCOUNTS)
     || onTeam(actor, STAFF_TEAMS.PROCUREMENT)
@@ -378,7 +399,7 @@ export async function listPaidSalesOrders(actor, { cursor, stage, ...filters } =
   const stageStatuses = PAID_ORDER_STAGES[stage];
   const f = readListFilters(filters);
   const narrow = orderQueryFor(f);
-  const { items, nextCursor } = await page(
+  const { items, ...rest } = await page(
     {
       ...(narrow.$and ? { $and: narrow.$and } : {}),
       // `refunded` stays listed so Accounts can still see an order after its refund.
@@ -389,10 +410,9 @@ export async function listPaidSalesOrders(actor, { cursor, stage, ...filters } =
         { 'workflow.enteredAt': { $type: 'date' } },       // team_workflow_paid
       ],
     },
-    cursor,
-    { includePayment: true, oldestFirst: f.sort === 'oldest' },
+    { cursor, sortName: f.sort, includePayment: true },
   );
-  return { orders: items.map(shape), nextCursor };
+  return { ...rest, orders: items.map(shape) };
 }
 
 /**

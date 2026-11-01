@@ -45,6 +45,7 @@ import { orderNumber } from './invoiceService.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { TASK_STATUSES, TASK_PRIORITIES } from '../models/StaffTask.js';
+import { keysetPage } from '../utils/listQuery.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -334,7 +335,18 @@ const addDays = (ymd, days) => {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 };
 
-export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, priority, q, cursor } = {}) {
+/*
+  The open list's order: by due date (the default — overdue first, no date
+  last), or by when the task was given out. Done and archived lists keep their
+  own order (most recently finished first), so `sort` only applies to open tasks.
+*/
+export const TASK_SORTS = Object.freeze({
+  newest: { field: 'createdAt', dir: -1, type: 'date' },
+  oldest: { field: 'createdAt', dir: 1, type: 'date' },
+});
+const TASK_COUNT_CAP = 1000;
+
+export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, priority, q, sort, cursor } = {}) {
   const query = { bucket: state };
   if (view === 'mine') {
     query.assignee = actor._id;
@@ -375,12 +387,35 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
     else if (due === 'week') range = { $gte: today, $lte: addDays(today, 6) };
   }
 
+  // How many match: the open list's first page only (the done list is folded away).
+  const first = !cursor && state === 'open';
+  const counted = first ? staffTaskRepository.countUpTo({ ...query, ...(range ? { rank: range } : {}) }, TASK_COUNT_CAP) : null;
+
+  if (state === 'open' && TASK_SORTS[sort]) {
+    const { items, nextCursor } = await keysetPage({
+      query: { ...query, ...(range ? { rank: range } : {}) },
+      sorts: TASK_SORTS,
+      sortName: sort,
+      cursor,
+      pageSize: TASK_PAGE_SIZE,
+      find: staffTaskRepository.pageSorted,
+    });
+    return {
+      tasks: items.map((t) => shape(t, actor, { today })),
+      nextCursor,
+      sort,
+      ...(counted ? { summary: await counted } : {}),
+    };
+  }
+
   const rows = await staffTaskRepository.page(query, { after: decodeCursor(cursor), limit: TASK_PAGE_SIZE + 1, range });
   const more = rows.length > TASK_PAGE_SIZE;
   const tasks = more ? rows.slice(0, TASK_PAGE_SIZE) : rows;
   return {
     tasks: tasks.map((t) => shape(t, actor, { today })),
     nextCursor: more ? encodeCursor(tasks[tasks.length - 1]) : null,
+    sort: 'due',
+    ...(counted ? { summary: await counted } : {}),
   };
 }
 

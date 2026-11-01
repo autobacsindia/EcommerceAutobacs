@@ -5,14 +5,17 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { AlarmClock, CalendarClock, Columns3, Flag, Inbox, Info, Keyboard, List, ListTodo, Plus, Search, Send, User, Users, X } from 'lucide-react';
 import { Kbd, ShortcutsDialog, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
+import { ListResultLine } from '@/components/panel/ListControls';
+import { useListParams } from '@/lib/hooks/useListParams';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import TaskListView from './TaskList';
+import { useTaskPages } from './hooks';
 import TaskBoard from './TaskBoard';
 import TaskDetail from './TaskDetail';
 import TaskForm, { useAssignees } from './TaskForm';
 import { Dialog, SidePanel } from './Overlays';
-import { TASK_PRIORITIES, personLabel, type TaskDue, type TaskFilters, type TaskPriority, type TaskView } from './types';
+import { TASK_PRIORITIES, personLabel, type TaskDue, type TaskFilters, type TaskPriority, type TaskSort, type TaskView } from './types';
 
 type Layout = 'list' | 'board';
 const LAYOUT_KEY = 'tasks-view-mode';
@@ -22,6 +25,14 @@ const read = (key: string) => { try { return localStorage.getItem(key); } catch 
 const write = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch { /* storage blocked: this visit only */ } };
 
 const asDue = (v: string | null): TaskDue | '' => (v === 'late' || v === 'overdue' || v === 'today' || v === 'week' ? v : '');
+const asPriority = (v: string): TaskPriority | '' => (TASK_PRIORITIES.some((p) => p.value === v) ? v as TaskPriority : '');
+
+const SORTS: { value: TaskSort; label: string }[] = [
+  { value: 'due', label: 'Due date (soonest)' },
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+];
+const asSort = (v: string): TaskSort => (SORTS.some((s) => s.value === v) ? v as TaskSort : 'due');
 
 const DUES: { value: TaskDue | ''; label: string }[] = [
   { value: '', label: 'Any date' },
@@ -89,7 +100,9 @@ function EmptyState({ view, narrowed, onNew }: { view: TaskView; narrowed: boole
  * The Tasks page (team panel and admin panel): counters, search, list or board,
  * filters, and a task opening in a side panel. `base` is where full task pages
  * live (/team/tasks or /admin/tasks); `?task=<id>` opens one in the panel and
- * `?due=late` (from the bell) starts on what is due now.
+ * `?due=late` (from the bell) starts on what is due now. Whose tasks, the
+ * search, filters and sort live in the page address too, so Back, a refresh or
+ * a shared link reopens the same view. The page must wrap this in <Suspense>.
  */
 export default function TasksWorkspace({ base, canSeeTeam }: { base: string; canSeeTeam: boolean }) {
   const isAdmin = base.startsWith('/admin');
@@ -102,14 +115,32 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
   useEffect(() => { if (read(LAYOUT_KEY) === 'board') setLayoutState('board'); }, []);
   const setLayout = (l: Layout) => { setLayoutState(l); write(LAYOUT_KEY, l); };
 
-  const [view, setView] = useState<TaskView>('mine');
+  const { values: lp, set: setList, clear: clearList } = useListParams({
+    view: 'mine', due: '', priority: '', assignee: '', q: '', sort: 'due',
+  });
+  // A view this person cannot see (an old or shared link) falls back to "For me".
+  const view: TaskView = lp.view === 'created' || (lp.view === 'team' && canSeeTeam) ? lp.view : 'mine';
   // The bell's ?due=late means "late or due today".
-  const [due, setDue] = useState<TaskDue | ''>(asDue(params.get('due')));
-  const [priority, setPriority] = useState<TaskPriority | ''>('');
-  const [assignee, setAssignee] = useState('');
-  const [search, setSearch] = useState('');
-  const [q, setQ] = useState('');
-  useEffect(() => { const t = setTimeout(() => setQ(search), 250); return () => clearTimeout(t); }, [search]);
+  const due = asDue(lp.due);
+  const priority = asPriority(lp.priority);
+  const assignee = view === 'team' ? lp.assignee : '';
+  const sort = asSort(lp.sort);
+  const q = lp.q;
+  const setView = (v: TaskView) => setList({ view: v });
+  const setDue = (d: TaskDue | '') => setList({ due: d });
+
+  // Typing is local; the address (and the list) follow once the person pauses.
+  const [search, setSearch] = useState(q);
+  const written = useRef(q);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const next = search.trim();
+      if (next !== written.current) { written.current = next; setList({ q: next }); }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [search, setList]);
+  // A change from outside (Clear, Back, a link) replaces what is in the box.
+  useEffect(() => { if (q !== written.current) { written.current = q; setSearch(q); } }, [q]);
   const [creating, setCreating] = useState(false);
 
   const openId = params.get('task');
@@ -143,12 +174,14 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
     { value: 'created', label: 'I gave out' },
     ...(canSeeTeam ? [{ value: 'team' as const, label: isAdmin ? 'All teams' : 'My team' }] : []),
   ];
-  const filters: TaskFilters = { view, due, priority, q, assignee: view === 'team' ? assignee : '' };
-  const narrowed = !!(due || priority || q || (view === 'team' && assignee));
+  const filters: TaskFilters = { view, due, priority, q, assignee, sort };
+  const narrowed = !!(due || priority || q || assignee);
+  // The same request (and cache entry) as the list's own open tasks: no extra call.
+  const counted = useTaskPages(filters, 'open').data?.pages[0]?.summary;
   // Quick add in the team list with one person picked gives it to them; otherwise to me.
   const quickAddFor = view === 'team' && assignee ? assignee : undefined;
-  const clear = () => { setDue(''); setPriority(''); setAssignee(''); setSearch(''); setQ(''); };
-  const showMine = (d: TaskDue) => { setView('mine'); setDue(due === d && view === 'mine' ? '' : d); };
+  const clear = () => { clearList(['view', 'sort']); setSearch(''); };
+  const showMine = (d: TaskDue) => setList({ view: 'mine', due: due === d && view === 'mine' ? '' : d });
 
   const control = 'h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-700 hover:border-gray-300';
   const current = views.find((v) => v.value === view) ?? views[0];
@@ -263,7 +296,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
           {view === 'team' && (
             <label className="inline-flex items-center gap-1">
               <User aria-hidden className="h-4 w-4 text-gray-400" />
-              <select value={assignee} onChange={(e) => setAssignee(e.target.value)} aria-label="Person" className={control}>
+              <select value={assignee} onChange={(e) => setList({ assignee: e.target.value })} aria-label="Person" className={control}>
                 <option value="">Everyone</option>
                 {(people.data?.people ?? []).map((p) => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
               </select>
@@ -271,7 +304,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
           )}
           <label className="inline-flex items-center gap-1">
             <Flag aria-hidden className="h-4 w-4 text-gray-400" />
-            <select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority | '')} aria-label="Priority filter" className={control}>
+            <select value={priority} onChange={(e) => setList({ priority: e.target.value })} aria-label="Priority filter" className={control}>
               <option value="">Any priority</option>
               {TASK_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
@@ -291,9 +324,13 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
               );
             })}
           </div>
+          <select value={sort} onChange={(e) => setList({ sort: e.target.value })} aria-label="Sort" className={control}>
+            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
           {due === 'late' && <span className="text-xs text-gray-500">(late or due today)</span>}
-          {narrowed && <button onClick={clear} className="text-sm font-medium text-blue-700 hover:underline">Clear filters</button>}
+          {narrowed && <button onClick={clear} className="text-sm font-medium text-blue-700 hover:underline">Clear all</button>}
         </div>
+        {counted && <ListResultLine count={counted.count} capped={counted.capped} noun={['open task', 'open tasks']} />}
 
         {layout === 'board' ? (
           <TaskBoard filters={filters} onOpen={setOpenId} quickAddFor={quickAddFor} />

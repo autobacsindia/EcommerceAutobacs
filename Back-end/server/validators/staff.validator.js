@@ -115,8 +115,10 @@ const listFilterQueries = [
   query('q').optional().isString().isLength({ max: 60 }).withMessage('Search is too long'),
   query('step').optional().isString().isLength({ max: 40 }).withMessage('Invalid stage'),
   query('source').optional().isIn(['website', 'sales']).withMessage('Invalid source'),
-  query('sort').optional().isIn(['newest', 'oldest']).withMessage('Invalid sort'),
+  query('sort').optional().isIn(['newest', 'oldest', 'amount_desc', 'amount_asc']).withMessage('Invalid sort'),
   query('eta').optional().isIn(['due_today', 'overdue', 'none']).withMessage('Invalid delivery date filter'),
+  // Dates and amounts: a malformed value is ignored (utils/listQuery.js), so only the length is checked.
+  ...['from', 'to', 'min', 'max'].map((n) => query(n).optional().isString().isLength({ max: 12 }).withMessage(`Invalid ${n}`)),
 ];
 
 export const validatePaidOrdersQuery = [
@@ -194,9 +196,23 @@ export const validateQuotationIdParam = [
   param('id').custom(isObjectId).withMessage('Invalid quotation id'),
 ];
 
+/*
+  Search / filter / sort on the sales lists (quotations, sales orders). An
+  unknown sort or a malformed date is ignored by the service rather than
+  refused, so an old or hand-edited link still opens; only the shape is checked.
+*/
+const salesListQueries = [
+  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+  query('q').optional().isString().isLength({ max: 60 }).withMessage('Search is too long'),
+  query('seller').optional().isString().isLength({ max: 40 }).withMessage('Invalid salesman'),
+  query('from').optional().isString().isLength({ max: 10 }).withMessage('Invalid date'),
+  query('to').optional().isString().isLength({ max: 10 }).withMessage('Invalid date'),
+  query('sort').optional().isString().isLength({ max: 40 }).withMessage('Invalid sort'),
+];
+
 export const validateQuotationList = [
-  query('cursor').optional().custom(isObjectId).withMessage('Invalid page cursor'),
   query('status').optional().isIn(['open', 'on_hold', 'accepted', 'cancelled']).withMessage('Unknown status'),
+  ...salesListQueries,
 ];
 
 /** "On hold — customer thinking" body: follow-up date (YYYY-MM-DD, optional) and a note. */
@@ -209,8 +225,10 @@ export const validateOrderHold = [param('id').custom(isObjectId).withMessage('In
 
 /** Sales order list: page cursor and which view (active / on hold). */
 export const validateSalesOrderList = [
-  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
   query('view').optional().isIn(['active', 'on_hold']).withMessage('Unknown view'),
+  query('paid').optional().isIn(['', 'paid', 'unpaid']).withMessage('Unknown payment filter'),
+  ...salesListQueries,
+  ...['min', 'max'].map((n) => query(n).optional().isString().isLength({ max: 12 }).withMessage(`Invalid ${n}`)),
 ];
 
 /** Request payment on an order in one or more parts (rupees). */

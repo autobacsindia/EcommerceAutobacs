@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import TeamMembersPanel, { STAFF_TEAM_LABELS, type StaffTeam } from '@/components/staff/TeamMembersPanel';
 
 const TEAMS = Object.keys(STAFF_TEAM_LABELS) as StaffTeam[];
@@ -37,7 +37,9 @@ export default function AdminStaffPage() {
       </div>
 
       {/* key: remount per team so the invite form and notices reset cleanly. */}
-      <TeamMembersPanel key={team} team={team} allowHeadInvite />
+      <Suspense fallback={null}>
+        <TeamMembersPanel key={team} team={team} allowHeadInvite />
+      </Suspense>
     </div>
   );
 }

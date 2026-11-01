@@ -8,11 +8,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import HoldControl, { dayFromToday } from './HoldControl';
 import SalesOrdersList from './SalesOrdersList';
 import QuotationsList from './QuotationsList';
+import { addressBar } from '@/test-utils/addressBarMock';
 
 const get = jest.fn();
 const post = jest.fn();
 jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a) } }));
-jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => <a href={href} className={className}>{children}</a> }));
 jest.mock('qrcode.react', () => ({ QRCodeCanvas: () => <canvas /> }));
 jest.mock('@/components/staff/work/WorkOrderPanel', () => ({ __esModule: true, default: () => null }));
@@ -21,7 +22,7 @@ const wrap = (ui: React.ReactNode) => render(
   <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>,
 );
 
-beforeEach(() => { get.mockReset(); post.mockReset(); });
+beforeEach(() => { get.mockReset(); post.mockReset(); addressBar.reset('/team/sales'); });
 
 describe('HoldControl', () => {
   it('puts a record on hold with a follow-up date (3 days ahead by default) and a note', async () => {
