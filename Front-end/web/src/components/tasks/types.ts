@@ -11,8 +11,10 @@ export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskBucket = 'open' | 'done' | 'archived';
 export type TaskView = 'mine' | 'created' | 'team';
 export type TaskDue = 'late' | 'overdue' | 'today' | 'week';
-/** The open list's order: due date (soonest; the default) or when the task was given out. */
-export type TaskSort = 'due' | 'newest' | 'oldest';
+/** How a list is ordered (server-side, keyset-paged). Open tasks only; done and archived keep "most recently finished first". */
+export type TaskSort = 'due' | 'newest' | 'oldest' | 'updated';
+/** How the list view groups the rows it has loaded. */
+export type TaskGroupBy = 'status' | 'assignee' | 'priority' | 'due' | 'none';
 
 /** What the Tasks page is showing: whose tasks, and the filters on top. */
 export type TaskFilters = {
@@ -22,7 +24,10 @@ export type TaskFilters = {
   q?: string;
   /** The team list only: one person's tasks. */
   assignee?: string;
-  /** Open tasks only; done and archived keep "most recently finished first". */
+  /** The admin's team list only: one team ('admin' = the admin's own). */
+  team?: string;
+  /** Only tasks with this tag. */
+  tag?: string;
   sort?: TaskSort;
 };
 
@@ -40,6 +45,10 @@ export type Task = {
   priorityLabel: string;
   /** IST calendar day, YYYY-MM-DD. */
   dueOn: string | null;
+  /** When work should start (never after dueOn), YYYY-MM-DD. */
+  startOn: string | null;
+  /** Lower-case labels, at most TAGS_MAX. */
+  tags: string[];
   overdue: boolean;
   dueToday: boolean;
   assignee: { id: string; name: string };
@@ -85,6 +94,39 @@ export type Assignee = { id: string; name: string; team: string | null; teamLabe
 /** "Amarnath · Marketing head", "Akash CT · Operations", "AutoBacs India (me) · Admin". */
 export const personLabel = (p: Assignee) =>
   `${p.name}${p.me ? ' (me)' : ''}${p.teamLabel ? ` · ${p.teamLabel}${p.isHead ? ' head' : ''}` : ''}`;
+
+/** The server's limits (services/staffTaskService.js). */
+export const TAGS_MAX = 10;
+export const TAG_MAX = 24;
+export const BULK_MAX = 50;
+
+/** What the server does to a tag, so the screen shows what will be saved. */
+export const cleanTag = (raw: string) => raw.replace(/\s+/g, ' ').trim().replace(/^#+/, '').trim().toLowerCase().slice(0, TAG_MAX);
+
+export const TASK_SORTS: { value: TaskSort; label: string }[] = [
+  { value: 'due', label: 'Due date' },
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'updated', label: 'Recently changed' },
+];
+
+export const TASK_GROUPINGS: { value: TaskGroupBy; label: string }[] = [
+  { value: 'status', label: 'Status' },
+  { value: 'assignee', label: 'Person' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'due', label: 'Due date' },
+  { value: 'none', label: 'No groups' },
+];
+
+/** One bulk change, as POST /staff/tasks/bulk takes it. */
+export type BulkChange = Partial<{
+  status: TaskStatus; priority: TaskPriority; dueOn: string | null; assigneeId: string; archived: boolean;
+  addTags: string[]; removeTags: string[];
+}>;
+export type BulkResult = {
+  results: { id: string; ok: boolean; changed?: boolean; status?: number; error?: string }[];
+  changed: number; unchanged: number; failed: number;
+};
 
 export const TASK_STATUSES: { value: TaskStatus; label: string }[] = [
   { value: 'todo', label: 'To do' },

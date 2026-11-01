@@ -6,15 +6,16 @@ import toast from 'react-hot-toast';
 import apiClient from '@/lib/api-client';
 import { errorMessage } from '@/components/staff/sales/types';
 import { useRefreshTasks, useTaskPages } from './hooks';
-import { CompleteButton, QuickAdd, TaskMeta } from './TaskList';
-import { Avatar, DuePill, PriorityFlag, STATUS_STYLE, SkeletonRows, StatusDot } from './ui';
+import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
+import { Avatar, DuePill, GroupPill, PriorityFlag, SkeletonRows } from './ui';
 import { TASK_STATUSES, isConflict, type Task, type TaskFilters, type TaskStatus } from './types';
 
 /** How many finished cards the Done column shows; the rest are in the list view. */
 const DONE_SHOWN = 20;
 
-function BoardCard({ t, onOpen, onMove, moving }: {
+function BoardCard({ t, onOpen, onMove, moving, onTag, activeTag }: {
   t: Task; onOpen: (id: string) => void; onMove: (t: Task, s: TaskStatus) => void; moving: boolean;
+  onTag?: (tag: string) => void; activeTag?: string;
 }) {
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); onOpen(t.id); } };
   return (
@@ -30,6 +31,7 @@ function BoardCard({ t, onOpen, onMove, moving }: {
         t.can.status ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
       } ${moving ? 'opacity-50' : ''}`}
     >
+      {t.tags?.length > 0 && <div className="mb-2"><TagList tags={t.tags} onTag={onTag} activeTag={activeTag} max={3} /></div>}
       <div className="flex items-start gap-2">
         <span className="mt-0.5"><CompleteButton t={t} busy={moving} onToggle={() => onMove(t, t.status === 'done' ? 'todo' : 'done')} /></span>
         <p className={`flex-1 text-sm font-medium leading-snug ${t.status === 'done' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</p>
@@ -67,8 +69,8 @@ function BoardCard({ t, onOpen, onMove, moving }: {
  * (someone changed the task first, no permission) the card goes back and a
  * message says why.
  */
-export default function TaskBoard({ filters, onOpen, quickAddFor }: {
-  filters: TaskFilters; onOpen: (id: string) => void; quickAddFor?: string | null;
+export default function TaskBoard({ filters, onOpen, quickAddFor, onTag }: {
+  filters: TaskFilters; onOpen: (id: string) => void; quickAddFor?: string | null; onTag?: (tag: string) => void;
 }) {
   const refresh = useRefreshTasks();
   const open = useTaskPages(filters, 'open');
@@ -121,17 +123,17 @@ export default function TaskBoard({ filters, onOpen, quickAddFor }: {
                 const t = byId.get(e.dataTransfer.getData('text/plain'));
                 if (t?.can.status) onMove(t, col.value);
               }}
-              className={`flex w-72 shrink-0 flex-col rounded-2xl border-t-4 bg-gray-100/80 p-2 transition md:w-auto md:min-w-0 md:flex-1 ${STATUS_STYLE[col.value].bar} ${
+              className={`flex w-72 shrink-0 flex-col rounded-2xl border border-gray-200 bg-gray-50 p-2 transition md:w-auto md:min-w-0 md:flex-1 ${
                 over === col.value ? 'bg-blue-50 ring-2 ring-blue-300' : ''
               }`}
             >
-              <h3 className="mb-2 flex items-center gap-2 px-1.5 pt-1 text-xs font-bold uppercase tracking-wide text-gray-700">
-                <StatusDot status={col.value} />{col.label}
-                <span className="rounded-full bg-white px-1.5 text-[11px] font-semibold text-gray-600">{cards.length}</span>
+              <h3 className="mb-2 flex items-center gap-2 px-1 pt-0.5">
+                <GroupPill status={col.value}>{col.label}</GroupPill>
+                <span className="text-xs font-semibold text-gray-500">{cards.length}</span>
               </h3>
               <ul className="min-h-24 space-y-2">
                 {cards.map((t) => (
-                  <BoardCard key={t.id} t={t} onOpen={onOpen} onMove={onMove} moving={move.isPending && move.variables?.t.id === t.id} />
+                  <BoardCard key={t.id} t={t} onOpen={onOpen} onMove={onMove} moving={move.isPending && move.variables?.t.id === t.id} onTag={onTag} activeTag={filters.tag} />
                 ))}
               </ul>
               {col.value === 'done' && (done.data?.pages[0]?.tasks.length ?? 0) > DONE_SHOWN && (

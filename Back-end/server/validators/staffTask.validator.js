@@ -25,8 +25,9 @@ export const validateTaskList = [
   query('q').optional().isString().isLength({ max: 100 }).withMessage('Search is too long'),
   query('assignee').optional().custom(isObjectId).withMessage('Invalid person'),
   query('team').optional().isIn([...STAFF_TEAM_VALUES, 'admin']).withMessage('Invalid team'),
+  query('tag').optional().isString().isLength({ max: 60 }).withMessage('Invalid tag'),
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
-  // due (default) | newest | oldest; anything else reads as due, so an old link still opens.
+  // due (default) | newest | oldest | updated; anything else reads as due, so an old link still opens.
   query('sort').optional().isString().isLength({ max: 20 }).withMessage('Invalid sort'),
 ];
 
@@ -36,6 +37,9 @@ export const validateTaskCreate = [
   body('priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
   body('status').optional().isIn(['todo', 'in_progress', 'waiting']).withMessage('Invalid status'),
   body('dueOn').optional({ values: 'null' }).isString(),
+  body('startOn').optional({ values: 'null' }).isString(),
+  body('tags').optional().isArray({ max: 10 }).withMessage('A task can have at most 10 tags'),
+  body('tags.*').isString().withMessage('Invalid tag'),
   optionalId('assigneeId'),
   body('assigneeIds').optional().isArray({ max: 30 }).withMessage('Pick at most 30 people'),
   body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
@@ -53,9 +57,28 @@ export const validateTaskUpdate = [
   body('priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
   body('status').optional().isIn(TASK_STATUSES).withMessage('Invalid status'),
   body('dueOn').optional({ values: 'null' }).isString(),
+  body('startOn').optional({ values: 'null' }).isString(),
+  body('tags').optional().isArray({ max: 10 }).withMessage('A task can have at most 10 tags'),
+  body('tags.*').isString().withMessage('Invalid tag'),
   body('archived').optional().isBoolean().withMessage('Invalid archive flag'),
   optionalId('assigneeId'),
   optionalId('orderId'),
+];
+
+export const validateTaskBulk = [
+  body('items').isArray({ min: 1, max: 50 }).withMessage('Pick between 1 and 50 tasks'),
+  body('items.*.id').custom(isObjectId).withMessage('Invalid task id'),
+  body('items.*.rev').isInt({ min: 1 }).withMessage('Reload the tasks and try again'),
+  body('changes').isObject().withMessage('Pick what to change'),
+  body('changes.status').optional().isIn(TASK_STATUSES).withMessage('Invalid status'),
+  body('changes.priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
+  body('changes.dueOn').optional({ values: 'null' }).isString(),
+  body('changes.assigneeId').optional().custom(isObjectId).withMessage('Invalid person'),
+  body('changes.archived').optional().isBoolean().withMessage('Invalid archive flag'),
+  body('changes.addTags').optional().isArray({ max: 10 }).withMessage('At most 10 tags'),
+  body('changes.addTags.*').isString().withMessage('Invalid tag'),
+  body('changes.removeTags').optional().isArray({ max: 10 }).withMessage('At most 10 tags'),
+  body('changes.removeTags.*').isString().withMessage('Invalid tag'),
 ];
 
 export const validateCommentList = [

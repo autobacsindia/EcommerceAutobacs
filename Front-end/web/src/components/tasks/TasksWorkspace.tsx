@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { AlarmClock, CalendarClock, Columns3, Flag, Inbox, Info, Keyboard, List, ListTodo, Plus, Search, Send, User, Users, X } from 'lucide-react';
+import { AlarmClock, ArrowDownUp, CalendarClock, Columns3, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Plus, Search, Send, Tag, User, Users, X } from 'lucide-react';
 import { Kbd, ShortcutsDialog, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import { ListResultLine } from '@/components/panel/ListControls';
 import { useListParams } from '@/lib/hooks/useListParams';
@@ -15,24 +15,28 @@ import TaskBoard from './TaskBoard';
 import TaskDetail from './TaskDetail';
 import TaskForm, { useAssignees } from './TaskForm';
 import { Dialog, SidePanel } from './Overlays';
-import { TASK_PRIORITIES, personLabel, type TaskDue, type TaskFilters, type TaskPriority, type TaskSort, type TaskView } from './types';
+import { teamColour } from '@/components/chat/chatUi';
+import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
+import {
+  TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, personLabel,
+  type TaskDue, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskSort, type TaskView,
+} from './types';
 
 type Layout = 'list' | 'board';
 const LAYOUT_KEY = 'tasks-view-mode';
 const HELP_KEY = 'tasks-help-hidden';
+const GROUP_KEY = 'tasks-group-by';
 
 const read = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
 const write = (key: string, value: string) => { try { localStorage.setItem(key, value); } catch { /* storage blocked: this visit only */ } };
 
+const asGroup = (v: string | null): TaskGroupBy => (TASK_GROUPINGS.some((g) => g.value === v) ? v as TaskGroupBy : 'status');
+const asSort = (v: string): TaskSort => (TASK_SORTS.some((g) => g.value === v) ? v as TaskSort : 'due');
+/** The admin's team "spaces": every team, plus the admin's own tasks. */
+const SPACES = [...STAFF_TEAM_OPTIONS, { value: 'admin', label: 'Admin' }] as const;
+
 const asDue = (v: string | null): TaskDue | '' => (v === 'late' || v === 'overdue' || v === 'today' || v === 'week' ? v : '');
 const asPriority = (v: string): TaskPriority | '' => (TASK_PRIORITIES.some((p) => p.value === v) ? v as TaskPriority : '');
-
-const SORTS: { value: TaskSort; label: string }[] = [
-  { value: 'due', label: 'Due date (soonest)' },
-  { value: 'newest', label: 'Newest first' },
-  { value: 'oldest', label: 'Oldest first' },
-];
-const asSort = (v: string): TaskSort => (SORTS.some((s) => s.value === v) ? v as TaskSort : 'due');
 
 const DUES: { value: TaskDue | ''; label: string }[] = [
   { value: '', label: 'Any date' },
@@ -111,22 +115,31 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
   const params = useSearchParams();
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // Remembered on this device: list or board, and how the list groups.
   const [layout, setLayoutState] = useState<Layout>('list');
-  useEffect(() => { if (read(LAYOUT_KEY) === 'board') setLayoutState('board'); }, []);
+  const [groupBy, setGroupByState] = useState<TaskGroupBy>('status');
+  useEffect(() => {
+    if (read(LAYOUT_KEY) === 'board') setLayoutState('board');
+    setGroupByState(asGroup(read(GROUP_KEY)));
+  }, []);
   const setLayout = (l: Layout) => { setLayoutState(l); write(LAYOUT_KEY, l); };
+  const setGroupBy = (g: TaskGroupBy) => { setGroupByState(g); write(GROUP_KEY, g); };
 
   const { values: lp, set: setList, clear: clearList } = useListParams({
-    view: 'mine', due: '', priority: '', assignee: '', q: '', sort: 'due',
+    view: 'mine', team: '', due: '', priority: '', assignee: '', tag: '', q: '', sort: 'due',
   });
   // A view this person cannot see (an old or shared link) falls back to "For me".
   const view: TaskView = lp.view === 'created' || (lp.view === 'team' && canSeeTeam) ? lp.view : 'mine';
+  // The admin's team view: one team, or '' for all of them.
+  const team = view === 'team' && isAdmin && SPACES.some((sp) => sp.value === lp.team) ? lp.team : '';
   // The bell's ?due=late means "late or due today".
   const due = asDue(lp.due);
   const priority = asPriority(lp.priority);
   const assignee = view === 'team' ? lp.assignee : '';
+  const tag = lp.tag;
   const sort = asSort(lp.sort);
   const q = lp.q;
-  const setView = (v: TaskView) => setList({ view: v });
+  const setView = (v: TaskView, nextTeam = '') => setList({ view: v, team: v === 'team' ? nextTeam : '' });
   const setDue = (d: TaskDue | '') => setList({ due: d });
 
   // Typing is local; the address (and the list) follow once the person pauses.
@@ -174,17 +187,20 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
     { value: 'created', label: 'I gave out' },
     ...(canSeeTeam ? [{ value: 'team' as const, label: isAdmin ? 'All teams' : 'My team' }] : []),
   ];
-  const filters: TaskFilters = { view, due, priority, q, assignee, sort };
-  const narrowed = !!(due || priority || q || assignee);
+  const filters: TaskFilters = { view, due, priority, q, tag, sort, assignee, team };
+  const narrowed = !!(due || priority || q || tag || assignee);
   // The same request (and cache entry) as the list's own open tasks: no extra call.
   const counted = useTaskPages(filters, 'open').data?.pages[0]?.summary;
   // Quick add in the team list with one person picked gives it to them; otherwise to me.
   const quickAddFor = view === 'team' && assignee ? assignee : undefined;
-  const clear = () => { clearList(['view', 'sort']); setSearch(''); };
-  const showMine = (d: TaskDue) => setList({ view: 'mine', due: due === d && view === 'mine' ? '' : d });
+  // Whose tasks (and which team), and the order, are where you are — not filters.
+  const clear = () => { clearList(['view', 'team', 'sort']); setSearch(''); };
+  const showMine = (d: TaskDue) => setList({ view: 'mine', team: '', due: due === d && view === 'mine' ? '' : d });
+  const filterTag = (t: string) => setList({ tag: tag === t ? '' : t });
 
   const control = 'h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-sm text-gray-700 hover:border-gray-300';
-  const current = views.find((v) => v.value === view) ?? views[0];
+  const space = SPACES.find((sp) => sp.value === team);
+  const title = view === 'team' && space ? `${space.label} tasks` : view === 'mine' ? 'Tasks for me' : (views.find((v) => v.value === view) ?? views[0]).label;
   const late = summary.data?.late ?? 0;
   const today = summary.data?.today ?? 0;
   const VIEW_ICONS: Record<TaskView, typeof Inbox> = { mine: Inbox, created: Send, team: Users };
@@ -194,32 +210,33 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
       { keys: ['/'], label: 'Search tasks' },
       { keys: ['L'], label: 'Show as a list' },
       { keys: ['B'], label: 'Show as a board' },
+      { keys: ['Space'], label: 'Tick the task in focus (to change several at once)' },
       { keys: ['Esc'], label: 'Close a task or a pop-up' },
       { keys: ['?'], label: 'Show these shortcuts' },
     ] },
   ];
+  const navItem = (active: boolean) => `inline-flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors lg:rounded-lg lg:px-2.5 lg:py-[7px] ${
+    active ? 'bg-gray-900 text-white lg:bg-blue-50 lg:font-semibold lg:text-blue-800' : 'text-gray-700 hover:bg-gray-100 max-lg:bg-white max-lg:shadow-sm'
+  }`;
+  const sectionLabel = 'hidden px-2.5 pb-1.5 pt-5 text-[11px] font-bold uppercase tracking-[0.1em] text-gray-500 lg:block';
 
   return (
     <div className="lg:flex lg:items-start lg:gap-6">
       {/* Which tasks: a column on a wide screen, a row of chips on a phone. */}
       <nav
         aria-label="Task lists"
-        className="-mx-1 mb-4 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] lg:sticky lg:top-4 lg:mx-0 lg:mb-0 lg:w-52 lg:shrink-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:rounded-2xl lg:bg-white lg:p-3 lg:shadow-sm"
+        className="-mx-1 mb-4 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] lg:sticky lg:top-4 lg:mx-0 lg:mb-0 lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-visible lg:rounded-2xl lg:border lg:border-gray-200 lg:bg-white lg:p-2.5 lg:shadow-sm"
       >
-        <p className="hidden px-2 pb-2 pt-1 text-[11px] font-bold uppercase tracking-[0.1em] text-gray-500 lg:block">Tasks</p>
+        <p className="hidden items-center gap-2 px-2 pb-2 pt-1 lg:flex">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-white"><ListTodo aria-hidden className="h-4 w-4" /></span>
+          <span className="text-sm font-bold text-gray-900">Tasks</span>
+        </p>
         <div className="flex gap-1.5 lg:flex-col lg:gap-0.5" role="group" aria-label="Whose tasks">
           {views.map((v) => {
             const Icon = VIEW_ICONS[v.value];
-            const active = view === v.value;
+            const active = view === v.value && !team;
             return (
-              <button
-                key={v.value}
-                aria-pressed={active}
-                onClick={() => setView(v.value)}
-                className={`inline-flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors lg:rounded-xl lg:px-2.5 lg:py-2 ${
-                  active ? 'bg-gray-900 text-white lg:bg-blue-50 lg:font-semibold lg:text-blue-800' : 'bg-white text-gray-700 shadow-sm hover:bg-gray-100 lg:bg-transparent lg:shadow-none'
-                }`}
-              >
+              <button key={v.value} aria-pressed={active} onClick={() => setView(v.value)} className={navItem(active)}>
                 <Icon aria-hidden className="hidden h-4 w-4 lg:block" />{v.label}
               </button>
             );
@@ -227,17 +244,33 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
         </div>
         {(late > 0 || today > 0) && (
           <>
-            <p className="hidden px-2 pb-1 pt-4 text-[11px] font-bold uppercase tracking-[0.1em] text-gray-500 lg:block">Needs attention</p>
+            <p className={sectionLabel}>Needs attention</p>
             <div className="flex gap-1.5 lg:flex-col lg:gap-1 lg:px-1">
               {late > 0 && <Counter n={late} label="late" tone="bg-red-100 text-red-800" active={view === 'mine' && due === 'overdue'} onClick={() => showMine('overdue')} />}
               {today > 0 && <Counter n={today} label="today" tone="bg-amber-100 text-amber-800" active={view === 'mine' && due === 'today'} onClick={() => showMine('today')} />}
             </div>
           </>
         )}
+        {isAdmin && (
+          <>
+            <p className={sectionLabel}>Teams</p>
+            <div className="flex gap-1.5 lg:flex-col lg:gap-0.5" role="group" aria-label="Teams">
+              {SPACES.map((sp) => {
+                const active = view === 'team' && team === sp.value;
+                return (
+                  <button key={sp.value} aria-pressed={active} onClick={() => setView('team', sp.value)} className={navItem(active)}>
+                    <span aria-hidden className={`hidden h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold lg:flex ${teamColour(sp.value)}`}>{sp.label[0]}</span>
+                    {sp.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
         <button
           onClick={() => setShortcuts(true)}
           aria-label="Keyboard shortcuts"
-          className="mt-4 hidden items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800 lg:flex"
+          className="mt-4 hidden items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800 lg:flex"
         >
           <Keyboard aria-hidden className="h-4 w-4" /> Shortcuts <Kbd className="ml-auto">?</Kbd>
         </button>
@@ -246,13 +279,16 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
       <div className="min-w-0 flex-1 space-y-4">
         <header className="flex flex-wrap items-center gap-3">
           <div className="min-w-0 flex-1 basis-full sm:basis-auto">
-            <h1 className="pn-title text-2xl text-gray-900">{current.label === 'For me' ? 'Tasks for me' : current.label}</h1>
+            <h1 className="pn-title flex flex-wrap items-center gap-2 text-2xl text-gray-900">
+              {space && <span aria-hidden className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold ${teamColour(space.value)}`}>{space.label[0]}</span>}
+              {title}
+              {view === 'mine' && late > 0 && <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">{late} late</span>}
+              {view === 'mine' && today > 0 && <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{today} due today</span>}
+            </h1>
             <p className="mt-0.5 text-sm text-gray-500">
-              {view === 'mine' && (late || today)
-                ? <>{late > 0 && <span className="font-semibold text-red-700">{late} late</span>}{late > 0 && today > 0 && ' · '}{today > 0 && <span className="font-semibold text-amber-800">{today} due today</span>}</>
-                : view === 'created' ? 'Jobs you gave to others, and how far they have got.'
-                  : view === 'team' ? (isAdmin ? 'Every team’s open work.' : 'Everything your team is working on.')
-                    : 'Who has to do what, and by when.'}
+              {view === 'created' ? 'Jobs you gave to others, and how far they have got.'
+                : view === 'team' ? (space ? `Open work in ${space.label}.` : isAdmin ? 'Every team’s open work.' : 'Everything your team is working on.')
+                  : 'Who has to do what, and by when.'}
             </p>
           </div>
           <div className="flex rounded-xl bg-gray-100 p-1" role="tablist" aria-label="Show as">
@@ -278,8 +314,8 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
 
         <HowItWorks />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="relative flex min-w-0 flex-1 basis-56 items-center sm:max-w-xs">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
+          <label className="relative flex min-w-0 flex-1 basis-48 items-center sm:max-w-xs">
             <Search aria-hidden className="pointer-events-none absolute left-2.5 h-4 w-4 text-gray-400" />
             <input
               ref={searchRef}
@@ -292,6 +328,20 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
               className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-8 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
             <span className="pointer-events-none absolute right-2 hidden sm:block"><Kbd>/</Kbd></span>
+          </label>
+          {layout === 'list' && (
+            <label className="inline-flex items-center gap-1" title="Group by">
+              <Layers aria-hidden className="h-4 w-4 text-gray-400" />
+              <select value={groupBy} onChange={(e) => setGroupBy(asGroup(e.target.value))} aria-label="Group by" className={control}>
+                {TASK_GROUPINGS.map((g) => <option key={g.value} value={g.value}>Group: {g.label}</option>)}
+              </select>
+            </label>
+          )}
+          <label className="inline-flex items-center gap-1" title="Order">
+            <ArrowDownUp aria-hidden className="h-4 w-4 text-gray-400" />
+            <select value={sort} onChange={(e) => setList({ sort: e.target.value })} aria-label="Sort" className={control}>
+              {TASK_SORTS.map((o) => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
+            </select>
           </label>
           {view === 'team' && (
             <label className="inline-flex items-center gap-1">
@@ -324,21 +374,28 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
               );
             })}
           </div>
-          <select value={sort} onChange={(e) => setList({ sort: e.target.value })} aria-label="Sort" className={control}>
-            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
           {due === 'late' && <span className="text-xs text-gray-500">(late or due today)</span>}
+          {tag && (
+            <span className="inline-flex h-8 items-center gap-1 rounded-lg bg-blue-50 pl-2 pr-1 text-sm font-medium text-blue-800">
+              <Tag aria-hidden className="h-3.5 w-3.5" /> {tag}
+              <button onClick={() => setList({ tag: '' })} aria-label={`Stop filtering by ${tag}`} className="rounded p-0.5 hover:bg-blue-100"><X className="h-3.5 w-3.5" /></button>
+            </span>
+          )}
           {narrowed && <button onClick={clear} className="text-sm font-medium text-blue-700 hover:underline">Clear all</button>}
         </div>
         {counted && <ListResultLine count={counted.count} capped={counted.capped} noun={['open task', 'open tasks']} />}
 
         {layout === 'board' ? (
-          <TaskBoard filters={filters} onOpen={setOpenId} quickAddFor={quickAddFor} />
+          <TaskBoard filters={filters} onOpen={setOpenId} quickAddFor={quickAddFor} onTag={filterTag} />
         ) : (
           <TaskListView
+            // A new list is a new selection: ticks never carry over to tasks no longer shown.
+            key={JSON.stringify(filters)}
             filters={filters}
             onOpen={setOpenId}
             quickAddFor={quickAddFor}
+            groupBy={groupBy}
+            onTag={filterTag}
             empty={<EmptyState view={view} narrowed={narrowed} onNew={() => setCreating(true)} />}
           />
         )}

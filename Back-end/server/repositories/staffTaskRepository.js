@@ -14,7 +14,7 @@ const HISTORY_CAP = 100;
   one being forgotten.
 */
 export const LIST_PROJECTION = Object.freeze({
-  number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1,
+  number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, startOn: 1, tags: 1,
   assignee: 1, assigneeName: 1, team: 1, createdBy: 1, createdByName: 1,
   order: 1, group: 1, groupSize: 1, bucket: 1, rank: 1, rev: 1,
   completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
@@ -84,7 +84,7 @@ const staffTaskRepository = {
       .lean();
   },
 
-  /** Keyset page in another order (newest / oldest): `query` already carries the "after the cursor" clause. */
+  /** Keyset page in another order (newest / oldest / recently changed): `query` already carries the "after the cursor" clause. */
   pageSorted: (query, { sort, limit }) => StaffTask.find(query, LIST_PROJECTION).sort(sort).limit(limit).lean(),
 
   /** How many tasks match, counted over at most `cap` of them. */

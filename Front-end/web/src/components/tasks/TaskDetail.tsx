@@ -12,6 +12,8 @@ import { taskKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage } from '@/components/staff/sales/types';
 import { OrderPicker, useAssignees } from './TaskForm';
+import TagInput from './TagInput';
+import { TagList } from './TaskList';
 import { Avatar, DuePill, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import {
   TASK_PRIORITIES, TASK_STATUSES, formatDueDay, isConflict, isPastDay, newClientId, orderHrefFor, personLabel,
@@ -19,7 +21,7 @@ import {
 } from './types';
 
 type Patch = Partial<{
-  title: string; description: string; priority: TaskPriority; dueOn: string | null;
+  title: string; description: string; priority: TaskPriority; dueOn: string | null; startOn: string | null; tags: string[];
   orderId: string | null; status: TaskStatus; assigneeId: string; archived: boolean;
 }>;
 
@@ -29,6 +31,8 @@ const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => 
   assignee: (h) => `gave it to ${h.to} (was ${h.from})`,
   priority: (h) => `changed priority from ${h.from} to ${h.to}`,
   due: (h) => `changed the due date from ${h.from === 'none' ? 'none' : formatDueDay(h.from)} to ${h.to === 'none' ? 'none' : formatDueDay(h.to)}`,
+  start: (h) => `changed the start date from ${h.from === 'none' ? 'none' : formatDueDay(h.from)} to ${h.to === 'none' ? 'none' : formatDueDay(h.to)}`,
+  tags: (h) => (h.to === 'none' ? 'removed the tags' : `set the tags to ${h.to}`),
   order: (h) => `changed the order from ${h.from} to ${h.to}`,
   edited: (h) => `edited the ${h.from}`,
   check_added: (h) => `added the step "${h.to}"`,
@@ -458,10 +462,22 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
         <Field label="Due date">
           {task.can.edit ? (
             <span className="flex flex-wrap items-center gap-2">
-              <input type="date" value={task.dueOn || ''} onChange={(e) => setDue(e.target.value)} aria-label="Due date" className={quietSelect} />
+              <input type="date" value={task.dueOn || ''} min={task.startOn || undefined} onChange={(e) => setDue(e.target.value)} aria-label="Due date" className={quietSelect} />
               <DuePill t={task} />
             </span>
           ) : <DuePill t={task} empty={<span className="text-gray-400">No due date</span>} />}
+        </Field>
+        <Field label="Start date">
+          {task.can.edit ? (
+            <input
+              type="date"
+              value={task.startOn || ''}
+              max={task.dueOn || undefined}
+              onChange={(e) => save.mutate({ startOn: e.target.value || null })}
+              aria-label="Start date"
+              className={quietSelect}
+            />
+          ) : task.startOn ? <span>{formatDueDay(task.startOn)}</span> : <span className="text-gray-400">None</span>}
         </Field>
         <Field label="Priority">
           {task.can.edit ? (
@@ -472,6 +488,11 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
               </select>
             </span>
           ) : <PriorityFlag priority={task.priority} withLabel />}
+        </Field>
+        <Field label="Tags">
+          {task.can.edit
+            ? <TagInput value={task.tags} onChange={(tags) => save.mutate({ tags })} disabled={save.isPending} />
+            : task.tags.length ? <TagList tags={task.tags} max={10} /> : <span className="text-gray-400">None</span>}
         </Field>
         <Field label="Order">
           {task.can.edit && task.order ? (
