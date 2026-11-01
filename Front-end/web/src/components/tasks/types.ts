@@ -11,6 +11,8 @@ export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskBucket = 'open' | 'done' | 'archived';
 export type TaskView = 'mine' | 'created' | 'team';
 export type TaskDue = 'late' | 'overdue' | 'today' | 'week';
+/** The open list's order: due date (soonest; the default) or when the task was given out. */
+export type TaskSort = 'due' | 'newest' | 'oldest';
 
 /** What the Tasks page is showing: whose tasks, and the filters on top. */
 export type TaskFilters = {
@@ -20,6 +22,8 @@ export type TaskFilters = {
   q?: string;
   /** The team list only: one person's tasks. */
   assignee?: string;
+  /** Open tasks only; done and archived keep "most recently finished first". */
+  sort?: TaskSort;
 };
 
 export type Task = {
@@ -70,7 +74,8 @@ export type TaskSibling = {
   id: string; code: string; assignee: { id: string; name: string }; status: TaskStatus; statusLabel: string; bucket: TaskBucket;
 };
 
-export type TaskPage = { tasks: Task[]; nextCursor: string | null };
+/** `summary`: how many open tasks match (the open list's first page only; counting stops at 1,000). */
+export type TaskPage = { tasks: Task[]; nextCursor: string | null; summary?: { count: number; capped: boolean } };
 
 export type TaskComment = { id: string; by: { id: string; name: string }; text: string; createdAt: string };
 export type CommentPage = { comments: TaskComment[]; nextBefore: string | null };

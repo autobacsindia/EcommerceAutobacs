@@ -31,6 +31,9 @@ import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { phoneOnlyEmailFor } from '../utils/customerContact.js';
 import { buildHold, shapeHold, heldFilter, notHeldFilter } from '../utils/salesHold.js';
 import { cleanDiscountInput, priceWithDiscount } from '../utils/quoteDiscount.js';
+import {
+  and, amountOf, isObjectId, istRange, keysetPage, plainQuery, searchClauses, searchWords,
+} from '../utils/listQuery.js';
 import { toPaise } from '../utils/money.js';
 import orderRepository from '../repositories/orderRepository.js';
 import orderStatusService from './orderStatusService.js';
@@ -505,29 +508,78 @@ export async function getQuotation(actor, id) {
   return shaped;
 }
 
-/** "My quotations" (seller) or every quotation (GTM head), newest first, keyset. */
-export async function listQuotations(actor, { cursor, status } = {}) {
+/*
+  The quotations list's search, filters and sort. Status tabs as before; `q`
+  finds the quotation number, customer name / phone / email / city, product
+  names and an exact amount; `seller` (head and admin only) narrows to one
+  salesman; `from` / `to` is when it was created. "Follow-up date" sorts only
+  the On hold tab — the only one where every row has one — and is ignored on
+  the others rather than refused, so a stale link still opens.
+*/
+// Newest / oldest go by _id, which MongoDB stamps with the moment the quotation
+// was created (nothing back-dates one): the same order as createdAt, but served by
+// the existing { salesUser, _id } / { status, _id } / _id indexes rather than
+// sorted in memory.
+export const QUOTATION_SORTS = Object.freeze({
+  newest: { field: '_id', dir: -1, type: 'objectId', unique: true },
+  oldest: { field: '_id', dir: 1, type: 'objectId', unique: true },
+  amount_desc: { field: 'totalAmount', dir: -1, type: 'number' },
+  amount_asc: { field: 'totalAmount', dir: 1, type: 'number' },
+  follow_up: { field: 'hold.until', dir: 1, type: 'date' },
+});
+const QUOTATION_SEARCH_FIELDS = Object.freeze([
+  'number', 'customer.name', 'customer.phone', 'customer.email', 'shippingAddress.city', 'items.name',
+]);
+const SUMMARY_CAP = 1000;
+const seesTeam = (actor) => isSalesHead(actor) || isAdmin(actor);
+
+/** The Mongo query for a viewer and a set of list filters (exported for tests). */
+export function quotationListQuery(actor, f = {}, now = new Date()) {
+  const visible = seesTeam(actor)
+    ? (isObjectId(f.seller) ? { salesUser: new mongoose.Types.ObjectId(f.seller) } : {})
+    : { salesUser: actor._id };
+  const range = istRange(f.from, f.to);
+  // "Q-0042-v2" is how a revised quotation is printed; the number is stored without the version.
+  const words = searchWords(String(f.q ?? '').replace(/^#/, '').replace(/-v\d+\b/gi, ''));
+  return and(
+    visible,
+    ['open', 'accepted', 'cancelled'].includes(f.status) ? { status: f.status } : null,
+    // "Open" is the active list: on-hold quotations leave it until their follow-up
+    // date, then come back (marked due). "On hold" lists the parked ones.
+    f.status === 'open' ? notHeldFilter('hold', now) : null,
+    f.status === 'on_hold' ? { status: 'open', ...heldFilter('hold', now) } : null,
+    range ? { createdAt: range } : null,
+    searchClauses(words, QUOTATION_SEARCH_FIELDS, (w) => {
+      const n = amountOf(w);
+      return n ? [{ totalAmount: n }] : [];
+    }),
+  );
+}
+
+/** The sort a list asks for; "follow-up date" only on the On hold tab. */
+export function quotationListSort(f = {}) {
+  const ok = QUOTATION_SORTS[f.sort] && (f.sort !== 'follow_up' || f.status === 'on_hold');
+  return ok ? f.sort : 'newest';
+}
+
+/**
+ * "My quotations" (seller) or every quotation (GTM head, admin), keyset pages.
+ * Search, filters and sort as in quotationListQuery / quotationListSort; the
+ * first page also says how many match and what they add up to.
+ */
+export async function listQuotations(actor, params = {}) {
   if (!canSell(actor) && !isAdmin(actor)) throw fail('Not authorized.', 403);
-  const filter = isSalesHead(actor) || isAdmin(actor) ? {} : { salesUser: actor._id };
-  if (['open', 'accepted', 'cancelled'].includes(status)) filter.status = status;
-  // "Open" is the active list: on-hold quotations leave it until their follow-up
-  // date, then come back (marked due). "On hold" lists the parked ones.
-  if (status === 'open') Object.assign(filter, notHeldFilter('hold'));
-  if (status === 'on_hold') Object.assign(filter, { status: 'open' }, heldFilter('hold'));
-  const before = cursor && mongoose.isValidObjectId(cursor) ? new mongoose.Types.ObjectId(cursor) : null;
-  const rows = await salesQuotationRepository.model
-    .find({ ...filter, ...(before ? { _id: { $lt: before } } : {}) })
-    .sort({ _id: -1 })
-    .limit(PAGE_SIZE + 1)
-    .populate('salesUser', 'name')
-    .lean();
-  const hasMore = rows.length > PAGE_SIZE;
-  const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
-  return {
-    quotations: items.map((q) => shapeQuotation(q)),
-    nextCursor: hasMore ? idOf(items[items.length - 1]._id) : null,
-    scope: isSalesHead(actor) || isAdmin(actor) ? 'team' : 'mine',
-  };
+  const f = plainQuery(params);
+  const { items, ...page } = await keysetPage({
+    query: quotationListQuery(actor, f),
+    sorts: QUOTATION_SORTS,
+    sortName: quotationListSort(f),
+    cursor: f.cursor,
+    pageSize: PAGE_SIZE,
+    find: (q, o) => salesQuotationRepository.page(q, o),
+    count: (q) => salesQuotationRepository.summary(q, SUMMARY_CAP),
+  });
+  return { ...page, quotations: items.map((q) => shapeQuotation(q)), scope: seesTeam(actor) ? 'team' : 'mine' };
 }
 
 /** The quotation PDF — same layout as before; never carries a payment link. */

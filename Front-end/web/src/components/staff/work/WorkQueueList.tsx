@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import OrderListFilters, { NO_FILTERS, filterQuery, isFiltered, type ListFilters } from '@/components/staff/OrderListFilters';
+import { Suspense, useState } from 'react';
+import OrderListFilters, { useOrderListParams } from '@/components/staff/OrderListFilters';
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { ChevronDown, Loader2, RefreshCw } from 'lucide-react';
 import apiClient from '@/lib/api-client';
@@ -54,13 +54,23 @@ function Row({ order }: { order: WorkRow }) {
   );
 }
 
-/** One team's work list, newest first. */
+/**
+ * One team's work list, newest first. The search, filters and sort live in the
+ * page address (read with useSearchParams, hence the Suspense).
+ */
 export default function WorkQueueList({ queue }: { queue: WorkQueue }) {
-  const [filters, setFilters] = useState<ListFilters>(NO_FILTERS);
+  return <Suspense fallback={null}><QueueList queue={queue} /></Suspense>;
+}
+
+function QueueList({ queue }: { queue: WorkQueue }) {
+  const list = useOrderListParams('work', { showEta: queue === 'deliveries' });
+  const { params, filtered } = list;
   const q = useInfiniteQuery({
-    queryKey: staffKeys.workQueue(queue, filters),
-    queryFn: ({ pageParam }) =>
-      apiClient.get<Page>(`/staff/work?queue=${queue}${filterQuery(filters)}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`),
+    queryKey: staffKeys.workQueue(queue, params),
+    queryFn: ({ pageParam }) => {
+      const qs = new URLSearchParams({ queue, ...params, ...(pageParam ? { cursor: pageParam } : {}) });
+      return apiClient.get<Page>(`/staff/work?${qs}`);
+    },
     // Keep the old list on screen while a new search loads (no flash of "Loading…").
     placeholderData: keepPreviousData,
     initialPageParam: '' as string,
@@ -69,26 +79,26 @@ export default function WorkQueueList({ queue }: { queue: WorkQueue }) {
   });
   const orders = q.data?.pages.flatMap((p) => p.orders) ?? [];
 
-  const bar = <OrderListFilters value={filters} onChange={setFilters} showStage showEta={queue === 'deliveries'} />;
+  const bar = (
+    <OrderListFilters list={list} shown={q.isSuccess ? { count: orders.length, more: q.hasNextPage } : undefined}>
+      <button type="button" onClick={() => q.refetch()} disabled={q.isFetching}
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50">
+        <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? 'animate-spin' : ''}`} /> Refresh
+      </button>
+    </OrderListFilters>
+  );
   if (q.isPending) return <div className="space-y-3">{bar}<p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p></div>;
   if (q.isError) return <div className="space-y-3">{bar}<p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load the list.')}</p></div>;
 
   return (
     <div className="space-y-3">
       {bar}
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">{orders.length ? `${orders.length}${q.hasNextPage ? '+' : ''} waiting · ${filters.sort === 'oldest' ? 'oldest' : 'newest'} first` : ''}</p>
-        <button type="button" onClick={() => q.refetch()} disabled={q.isFetching}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50">
-          <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? 'animate-spin' : ''}`} /> Refresh
-        </button>
-      </div>
       {orders.length === 0 ? (
         <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-          {isFiltered(filters) ? 'No orders match these filters.' : EMPTY[queue]}
+          {filtered ? 'No orders match — try fewer words or clear the filters.' : EMPTY[queue]}
         </p>
       ) : (
-        <ul className="space-y-3">{orders.map((o) => <Row key={o.id} order={o} />)}</ul>
+        <ul className={`space-y-3 ${q.isPlaceholderData ? 'opacity-60' : ''}`}>{orders.map((o) => <Row key={o.id} order={o} />)}</ul>
       )}
       {q.hasNextPage && (
         <button type="button" onClick={() => q.fetchNextPage()} disabled={q.isFetchingNextPage}

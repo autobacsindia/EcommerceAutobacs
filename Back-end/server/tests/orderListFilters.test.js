@@ -54,9 +54,37 @@ const ids = (o) => o.items.map((i) => String(i._id));
 describe('reading the filters', () => {
   it('ignores anything it does not know, and trims / lower-cases the search', () => {
     expect(readListFilters({ q: '  #AB12CD34 ', step: 'nonsense', source: 'x', sort: 'y', eta: 'someday' }))
-      .toEqual({ q: 'ab12cd34', stage: null, source: null, sort: 'newest', eta: null });
+      .toEqual({ q: 'ab12cd34', stage: null, source: null, sort: 'newest', eta: null, placed: null, amount: null });
     expect(readListFilters({ step: 'to_ship', source: 'sales', sort: 'oldest', eta: 'overdue' }))
       .toMatchObject({ stage: 'to_ship', source: 'sales', sort: 'oldest', eta: 'overdue' });
+  });
+
+  it('reads the amount sorts, an India-time placed-on range and an amount range; junk is ignored', () => {
+    expect(readListFilters({ sort: 'amount_desc' }).sort).toBe('amount_desc');
+    expect(readListFilters({ sort: 'amount_asc' }).sort).toBe('amount_asc');
+    const f = readListFilters({ from: '2026-10-01', to: '2026-10-01', min: '500', max: '2000' });
+    // 1 Oct India time = 30 Sep 18:30 UTC, up to (not including) the next India midnight.
+    expect(f.placed).toEqual({ $gte: new Date('2026-09-30T18:30:00.000Z'), $lt: new Date('2026-10-01T18:30:00.000Z') });
+    expect(f.amount).toEqual({ $gte: 500, $lte: 2000 });
+    expect(readListFilters({ from: '2026-02-31', to: 'soon', min: 'lots', max: '-5' })).toMatchObject({ placed: null, amount: null });
+  });
+
+  it('a work-list row is kept only inside the placed-on and amount ranges', () => {
+    const row = { orderNumber: 'AB12CD34', createdAt: '2026-10-01T05:00:00.000Z', totalAmount: 1500, lines: [] };
+    expect(rowMatches(row, readListFilters({ from: '2026-10-01', to: '2026-10-01' }))).toBe(true);
+    expect(rowMatches(row, readListFilters({ from: '2026-10-02' }))).toBe(false);
+    expect(rowMatches(row, readListFilters({ to: '2026-09-30' }))).toBe(false);
+    expect(rowMatches(row, readListFilters({ min: '1500', max: '1500' }))).toBe(true);
+    expect(rowMatches(row, readListFilters({ min: '1501' }))).toBe(false);
+    expect(rowMatches(row, readListFilters({ max: '1499' }))).toBe(false);
+  });
+
+  it('the Mongo query carries the placed-on and amount ranges', () => {
+    const q = orderQueryFor(readListFilters({ from: '2026-10-01', min: '100' }));
+    expect(q.$and).toEqual(expect.arrayContaining([
+      { createdAt: { $gte: new Date('2026-09-30T18:30:00.000Z') } },
+      { totalAmount: { $gte: 100 } },
+    ]));
   });
 
   it('a row matches only when every word is somewhere in it', () => {
@@ -118,6 +146,61 @@ describe('search, filter and sort on the team lists', () => {
     expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', sort: 'oldest' }))).toEqual([a, b, c]);
     // A regex character typed into search is just a character.
     expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', q: '.*' }))).toEqual([]);
+  });
+
+  // createdAt is immutable through Mongoose, so the tests move orders in time with the driver.
+  const setRaw = (id, set) => Order.collection.updateOne({ _id: new mongoose.Types.ObjectId(id) }, { $set: set });
+  const IST_1_OCT = new Date('2026-10-01T06:00:00.000Z'); // 11:30 on 1 Oct, India time
+  const IST_2_OCT = new Date('2026-10-02T06:00:00.000Z');
+
+  it('work list: ordered-on dates (India time) and the order total narrow it', async () => {
+    const p = await staff('procurement');
+    const { a, b, c } = await three();
+    await setRaw(a, { createdAt: IST_1_OCT });
+    await setRaw(b, { createdAt: IST_2_OCT, totalAmount: 4000 });
+    expect(idsOf(await wf.listQueue(p, 'procurement', { from: '2026-10-01', to: '2026-10-01' }))).toEqual([a]);
+    expect(idsOf(await wf.listQueue(p, 'procurement', { from: '2026-10-01', to: '2026-10-02' }))).toEqual([b, a]);
+    expect(idsOf(await wf.listQueue(p, 'procurement', { min: '4000', max: '4000' }))).toEqual([b]);
+    // Search and a date range together: both must hold.
+    expect(idsOf(await wf.listQueue(p, 'procurement', { q: 'hilux', from: '2026-10-02' }))).toEqual([]);
+    // A malformed date is ignored, not an error.
+    expect(idsOf(await wf.listQueue(p, 'procurement', { from: '2026-02-31' }))).toEqual([c, b, a]);
+  });
+
+  it('paid list: dates, total range, amount sorts, and a count with the total on the first page', async () => {
+    const acc = await staff('accounts');
+    const { a, b, c } = await three();
+    await setRaw(a, { totalAmount: 9000, createdAt: IST_1_OCT });
+    await setRaw(b, { totalAmount: 4000, createdAt: IST_2_OCT });
+    const all = await listPaidSalesOrders(acc, { stage: 'processing' });
+    expect(all.summary).toEqual({ count: 3, capped: false, total: 20000 });
+    expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', sort: 'amount_desc' }))).toEqual([a, c, b]);
+    expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', sort: 'amount_asc' }))).toEqual([b, c, a]);
+    const big = await listPaidSalesOrders(acc, { stage: 'processing', min: '5000' });
+    expect(idsOf(big)).toEqual([c, a]);
+    expect(big.summary).toEqual({ count: 2, capped: false, total: 16000 });
+    expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', from: '2026-10-02', to: '2026-10-02' }))).toEqual([b]);
+    // Delivered is a different list: none of these are delivered.
+    expect((await listPaidSalesOrders(acc, { stage: 'delivered', min: '1' })).summary.count).toBe(0);
+  });
+
+  it('paid list: amount-sorted paging with equal totals has no repeats or gaps and keeps the filter', async () => {
+    const acc = await staff('accounts');
+    const seller = await staff('sales');
+    for (let i = 0; i < 27; i += 1) await paidOrder();
+    await paidOrder({ salesUser: seller._id }); // a salesman's order: filtered out below
+    const p1 = await listPaidSalesOrders(acc, { sort: 'amount_desc', source: 'website' });
+    expect(p1.orders).toHaveLength(25);
+    expect(p1.summary.count).toBe(27);
+    const p2 = await listPaidSalesOrders(acc, { sort: 'amount_desc', source: 'website', cursor: p1.nextCursor });
+    expect(p2.summary).toBeUndefined(); // counted once, on the first page
+    expect(p2.nextCursor).toBeNull();
+    const seen = [...p1.orders, ...p2.orders].map((o) => o.id);
+    expect(new Set(seen).size).toBe(27);
+    // A cursor made under another sort starts the list over instead of skipping rows.
+    const restarted = await listPaidSalesOrders(acc, { sort: 'newest', source: 'website', cursor: p1.nextCursor });
+    expect(restarted.orders).toHaveLength(25);
+    expect(restarted.summary.count).toBe(27);
   });
 
   it('paid list: oldest-first paging has no repeats or gaps', async () => {

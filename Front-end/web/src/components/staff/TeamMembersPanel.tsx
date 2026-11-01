@@ -5,6 +5,8 @@ import { RefreshCw, UserPlus, UserMinus, X, Mail, KeyRound, Copy, Building2, Pen
 import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
 import { formatDateIST } from '@/lib/datetime';
+import { useListParams } from '@/lib/hooks/useListParams';
+import { ListClear, ListResultLine, ListSearch, ListSelect } from '@/components/panel/ListControls';
 
 // The team list lives in lib/staffTeams.ts. Imported for this file's own use and
 // re-exported, because several screens already import it from this module.
@@ -58,6 +60,30 @@ type TeamResponse = {
   members: Member[];
   invites: Invite[];
 };
+
+const MEMBER_SORTS = [
+  { value: 'name', label: 'Name A–Z' },
+  { value: 'recent', label: 'Recently added' },
+  { value: 'oldest', label: 'Added longest ago' },
+] as const;
+
+/**
+ * One team's members, searched, filtered and sorted here: a team is a few dozen
+ * people at most and arrives whole, so there is no server round trip to make.
+ * Every word must appear in the name, login, email or mobile.
+ */
+export function filterMembers(members: Member[], { q, role, sort }: { q: string; role: string; sort: string }): Member[] {
+  const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = members.filter((m) => {
+    if (role && (m.roleLabel || 'Member') !== role) return false;
+    const hay = [m.name, m.username, m.email, m.phone].filter(Boolean).join(' ').toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
+  const added = (m: Member) => new Date(m.addedAt).getTime() || 0;
+  if (sort === 'recent') return shown.sort((a, b) => added(b) - added(a));
+  if (sort === 'oldest') return shown.sort((a, b) => added(a) - added(b));
+  return shown.sort((a, b) => a.name.localeCompare(b.name));
+}
 
 const errorMessage = (e: unknown, fallback: string) =>
   (e as { rawData?: { message?: string } })?.rawData?.message || fallback;
@@ -235,6 +261,14 @@ export default function TeamMembersPanel({
       setBusy(false);
     }
   }
+
+  // The member list's search, role filter and sort, kept in the page address.
+  const { values: lv, set: setList, clear: clearList } = useListParams({ q: '', role: '', sort: 'name' });
+  const memberSort = MEMBER_SORTS.some((x) => x.value === lv.sort) ? lv.sort : 'name';
+  const roles = [...new Set((data?.members ?? []).map((m) => m.roleLabel || 'Member'))].sort();
+  const memberRole = roles.includes(lv.role) ? lv.role : '';
+  const members = filterMembers(data?.members ?? [], { q: lv.q, role: memberRole, sort: memberSort });
+  const membersFiltered = !!(lv.q || memberRole);
 
   const isAdminView = user?.role === 'admin';
   const isGtm = (data?.team ?? team) === 'sales';
@@ -530,6 +564,24 @@ export default function TeamMembersPanel({
         </form>
       )}
 
+      {!!data?.members.length && (
+        <div role="search" aria-label="Search and filter team members" className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <ListSearch value={lv.q} onChange={(text) => setList({ q: text.trim() })} label="Search team members"
+              placeholder="Search name, login, email or mobile" />
+            {roles.length > 1 && (
+              <ListSelect label="Role" value={memberRole} onChange={(x) => setList({ role: x })} allLabel="Every role"
+                options={roles.map((r) => ({ value: r, label: r }))} />
+            )}
+            <ListSelect label="Sort" value={memberSort} onChange={(x) => setList({ sort: x })} options={MEMBER_SORTS} />
+          </div>
+          <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
+            <ListResultLine count={members.length} capped={false} noun={['member', 'members']} />
+            {membersFiltered && <ListClear onClear={() => clearList(['sort'])} />}
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="w-full text-sm">
           <thead className="border-b bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
@@ -546,7 +598,7 @@ export default function TeamMembersPanel({
           <tbody className="divide-y">
             {loading && !data ? (
               <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">Loading…</td></tr>
-            ) : data?.members.length ? data.members.map((m) => (
+            ) : members.length ? members.map((m) => (
               <tr key={m.id}>
                 <td className="px-4 py-3 font-medium text-gray-900">{m.name}</td>
                 <td className="px-4 py-3 text-gray-700">
@@ -606,7 +658,9 @@ export default function TeamMembersPanel({
                 </td>
               </tr>
             )) : (
-              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">No one on this team yet.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                {membersFiltered ? 'No one matches — try fewer words or clear the filters.' : 'No one on this team yet.'}
+              </td></tr>
             )}
           </tbody>
         </table>

@@ -83,7 +83,8 @@ export const isObjectId = (v) => typeof v === 'string' && /^[a-f0-9]{24}$/i.test
 /*
   Keyset pages for any single-field sort, with _id as the tie-breaker.
 
-  A sort is { field, dir, type } — type 'date' | 'number' — and the cursor is
+  A sort is { field, dir, type } — type 'date' | 'number' | 'string' | 'objectId'
+  (the last for a sort on _id itself, with `unique: true`) — and the cursor is
   the sort name plus the last row's value and id, so a cursor made under one
   sort is never read under another (it is ignored and the list starts again
   from the top, which is the honest answer).
@@ -93,7 +94,8 @@ const get = (row, path) => path.split('.').reduce((v, k) => (v == null ? v : v[k
 
 export function encodeCursor(sortName, sort, row) {
   const v = get(row, sort.field);
-  const value = sort.type === 'date' ? new Date(v).toISOString() : sort.type === 'string' ? String(v ?? '') : Number(v);
+  const value = sort.type === 'date' ? new Date(v).toISOString()
+    : sort.type === 'string' || sort.type === 'objectId' ? String(v ?? '') : Number(v);
   return Buffer.from(JSON.stringify([sortName, value, String(row._id)])).toString('base64url');
 }
 
@@ -103,6 +105,7 @@ export function decodeCursor(sortName, sort, cursor) {
     const [name, raw, id] = JSON.parse(Buffer.from(String(cursor), 'base64url').toString());
     if (name !== sortName || !isObjectId(id)) return null;
     if (sort.type === 'string') return typeof raw === 'string' ? { value: raw, id: new mongoose.Types.ObjectId(id) } : null;
+    if (sort.type === 'objectId') return isObjectId(raw) ? { value: new mongoose.Types.ObjectId(raw), id: new mongoose.Types.ObjectId(id) } : null;
     const value = sort.type === 'date' ? new Date(raw) : Number(raw);
     if (sort.type === 'date' ? Number.isNaN(value.getTime()) : !Number.isFinite(value)) return null;
     return { value, id: new mongoose.Types.ObjectId(id) };
@@ -116,16 +119,89 @@ export function decodeCursor(sortName, sort, cursor) {
   [..., field] serves it (with the tie-breaker the planner sorts in memory).
 */
 
-/** The clause that starts the page after `after`, in `sort` order. */
+/**
+  The clause that starts the page after `after`, in `sort` order (newest first:
+  older than the last row, or as old and with a smaller _id).
+
+  Written as `field ≤ value, but not (field = value and _id ≥ id)` rather than the
+  textbook `field < value or (field = value and _id < id)`: the same rows, but
+  MongoDB 7.0 splits that $or into separate index scans and sorts every row they
+  find in memory (16,000 orders read for page 2 of Order processing, measured),
+  whereas a $nor is only ever a filter, so the plan stays an ordered walk of the
+  index from `value` on. A row missing the field is outside both forms.
+*/
 export function afterClause(sort, after) {
   if (!after) return null;
-  const op = sort.dir < 0 ? '$lt' : '$gt';
-  if (sort.unique) return { [sort.field]: { [op]: after.value } };
-  return { $or: [{ [sort.field]: { [op]: after.value } }, { [sort.field]: after.value, _id: { [op]: after.id } }] };
+  const desc = sort.dir < 0;
+  if (sort.unique) return { [sort.field]: { [desc ? '$lt' : '$gt']: after.value } };
+  return {
+    [sort.field]: { [desc ? '$lte' : '$gte']: after.value },
+    $nor: [{ [sort.field]: after.value, _id: { [desc ? '$gte' : '$lte']: after.id } }],
+  };
 }
 
 /** The Mongo sort object for a sort. */
 export const sortSpec = (sort) => (sort.unique ? { [sort.field]: sort.dir } : { [sort.field]: sort.dir, _id: sort.dir });
+
+/**
+  (A or B) and X  →  (A and X) or (B and X): the same rows, but with the $or at
+  the top, where MongoDB can serve each branch from its own (partial) index and
+  merge them in sort order. Inside an $and it cannot, and falls back to whatever
+  index the other conditions offer, sorting in memory.
+
+  `query` is what keysetPage was given ({ $or: [...] }); `q` is what it asks the
+  repository for — `query` itself on page 1, { $and: [query, cursor] } after.
+*/
+export function orPerBranch(q, query) {
+  if (!Array.isArray(query?.$or)) return q;
+  if (q === query) return q;
+  if (!Array.isArray(q?.$and) || q.$and[0] !== query) return q;
+  const rest = q.$and.slice(1);
+  return { $or: query.$or.map((branch) => and(branch, ...rest)) };
+}
+
+/** Compares two rows by a Mongo sort object ({ createdAt: -1, _id: -1 }); missing values first, as in MongoDB. */
+export function compareBySort(sort) {
+  const keyOf = (v) => (v instanceof Date ? v.getTime() : v instanceof mongoose.Types.ObjectId ? String(v) : v);
+  return (a, b) => {
+    for (const [path, dir] of Object.entries(sort)) {
+      const x = keyOf(get(a, path));
+      const y = keyOf(get(b, path));
+      if (x === y) continue;
+      if (x == null) return -dir;
+      if (y == null) return dir;
+      return (x < y ? -1 : 1) * dir;
+    }
+    return 0;
+  };
+}
+
+/**
+  One page of an $or list, read branch by branch: each branch is its own find with
+  the sort and the limit, and the rows are merged in sort order, a row matched by
+  two branches kept once. For keysetPage's `find`, given `query` (keysetPage's) and
+  `q` (what keysetPage asks for).
+
+  Why not one find of the $or: MongoDB plans each branch of an $or without the sort,
+  so it may give a branch an index that does not keep the rows in order — and then
+  sort every matching row in memory. Measured on 7.0 with Order processing's
+  sales-panel branch: whether it did depended on the data. A branch planned with
+  the sort and a limit picks the index that is already in order every time (that
+  plan returns rows at once; one that must sort first returns none until it has
+  read everything). The page holds at most `limit` rows from each branch, which is
+  all the merged page can need.
+*/
+export async function findEachBranch(q, query, { sort, limit }, find) {
+  if (!Array.isArray(query?.$or)) return find(q, { sort, limit });
+  const lists = await Promise.all(orPerBranch(q, query).$or.map((branch) => find(branch, { sort, limit })));
+  const seen = new Set();
+  return lists.flat().sort(compareBySort(sort)).filter((row) => {
+    const id = String(row._id);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }).slice(0, limit);
+}
 
 /** Ands the non-empty clauses; {} when there are none. */
 export function and(...clauses) {

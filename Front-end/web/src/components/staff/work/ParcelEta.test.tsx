@@ -3,7 +3,6 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ParcelEta, { EtaBadge, EtaRowBadge, formatEtaDay, istDay } from './ParcelEta';
 import WorkOrderPanel from './WorkOrderPanel';
-import { filterQuery, NO_FILTERS, isFiltered } from '@/components/staff/OrderListFilters';
 import type { WorkOrder } from './types';
 
 const get = jest.fn();
@@ -93,13 +92,7 @@ describe('badges', () => {
   });
 });
 
-describe('deliveries filter', () => {
-  it('sends ?eta= and counts as a filter', () => {
-    expect(filterQuery({ ...NO_FILTERS, eta: 'overdue' })).toBe('&eta=overdue');
-    expect(isFiltered({ ...NO_FILTERS, eta: 'due_today' })).toBe(true);
-    expect(filterQuery(NO_FILTERS)).toBe('');
-  });
-});
+// The Deliveries list's ?eta= filter is tested with the other list filters (staff/orderListFilters.test.tsx).
 
 describe('in the order panel', () => {
   const order = {

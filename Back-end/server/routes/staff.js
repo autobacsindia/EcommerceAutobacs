@@ -103,6 +103,7 @@ import {
 import {
   searchSalesProducts,
   listSalesOrders,
+  salesListFilterOptions,
   holdSalesOrder,
   resumeSalesOrder,
   listPaidSalesOrders,
@@ -261,7 +262,12 @@ router.post('/sales/quotations', validateSalesOrder, validateRequest, asyncHandl
   res.status(201).json({ success: true, quotation: await createQuotation(req.user, req.body, req) });
 }));
 
-// @route  GET /staff/sales/quotations?cursor=&status= — own (lead) / all (head)
+// @route  GET /staff/sales/filter-options — the sales lists' "Salesman" choices (head / admin; none for a seller)
+router.get('/sales/filter-options', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await salesListFilterOptions(req.user)) });
+}));
+
+// @route  GET /staff/sales/quotations?status=&q=&seller=&from=&to=&sort=&cursor= — own (lead) / all (head)
 router.get('/sales/quotations', validateQuotationList, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listQuotations(req.user, req.query)) });
 }));
@@ -315,9 +321,10 @@ router.get('/sales/orders/:id/payment-request', validateOrderIdParam, validateRe
   sendPdf(res, await getPaymentRequestPdf(req.user, req.params.id));
 }));
 
-// @route  GET /staff/sales/orders?cursor=&view=active|on_hold — own orders (member) / all (head)
+// @route  GET /staff/sales/orders?view=active|on_hold&q=&paid=&seller=&from=&to=&min=&max=&sort=&cursor=
+// — own orders (member) / all (head)
 router.get('/sales/orders', validateSalesOrderList, validateRequest, asyncHandler(async (req, res) => {
-  res.json({ success: true, ...(await listSalesOrders(req.user, { cursor: req.query.cursor, view: req.query.view || 'active' })) });
+  res.json({ success: true, ...(await listSalesOrders(req.user, req.query)) });
 }));
 
 // @route  POST /staff/sales/orders/:id/hold { until?, note? } — "On hold — customer thinking"
@@ -361,8 +368,7 @@ router.post('/sales/orders/:id/cancel', validateOrderIdParam, validateRequest, a
 // @route  GET /staff/orders/paid?cursor=&stage=processing|delivered — paid sales
 //         orders (accounts, procurement, operations, sales head). No stage = all.
 router.get('/orders/paid', validatePaidOrdersQuery, validateRequest, asyncHandler(async (req, res) => {
-  const { cursor, stage, q, source, sort } = req.query;
-  res.json({ success: true, ...(await listPaidSalesOrders(req.user, { cursor, stage, q, source, sort })) });
+  res.json({ success: true, ...(await listPaidSalesOrders(req.user, req.query)) });
 }));
 
 // ── Crediting a website order to a salesman (admin, marketing) ──────────────
@@ -461,8 +467,8 @@ router.post('/bank-transfers/:id/reject', validateBankTransferReject, validateRe
 
 // @route  GET /staff/work?queue=procurement|decisions|refunds|deliveries&cursor=
 router.get('/work', validateWorkQueue, validateRequest, asyncHandler(async (req, res) => {
-  const { queue, cursor, q, step, source, sort, eta } = req.query;
-  res.json({ success: true, ...(await listQueue(req.user, queue, { cursor, q, step, source, sort, eta })) });
+  const { queue, cursor, q, step, source, sort, eta, from, to, min, max } = req.query;
+  res.json({ success: true, ...(await listQueue(req.user, queue, { cursor, q, step, source, sort, eta, from, to, min, max })) });
 }));
 
 // @route  GET /staff/work/orders/:id — one order, with the actions this person may take

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Suspense, useState } from 'react';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ChevronDown, FileText, Loader2, RefreshCw, UserPlus } from 'lucide-react';
 import apiClient from '@/lib/api-client';
@@ -12,8 +12,8 @@ import ProductLink from '@/components/staff/ProductLink';
 import PaymentLinkCard from './PaymentLinkCard';
 import WorkOrderPanel from '@/components/staff/work/WorkOrderPanel';
 import { STAGE_TONE } from '@/components/staff/work/types';
-import OrderListFilters, { NO_FILTERS, filterQuery, isFiltered, type ListFilters } from '@/components/staff/OrderListFilters';
-import { errorMessage, quotationHref, rupees, type SalesOrder, type SalesOrderPage } from './types';
+import OrderListFilters, { useOrderListParams } from '@/components/staff/OrderListFilters';
+import { errorMessage, quotationHref, rupees, type SalesFilterOptions, type SalesOrder, type SalesOrderPage } from './types';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 
 type Mode = 'sales' | 'paid';
@@ -233,59 +233,72 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
 
 /**
  * Sales-panel orders. `sales`: the member's own (or, for the head, the team's).
- * `paid`: every paid sales order, for Accounts / Procurement.
+ * `paid`: every paid sales order, for Accounts / Procurement. The tab, search,
+ * filters and sort live in the page address (read with useSearchParams, hence
+ * the Suspense).
  */
 export default function SalesOrdersList({ mode, stage }: { mode: Mode; stage?: Stage }) {
+  return <Suspense fallback={null}><OrdersList mode={mode} stage={stage} /></Suspense>;
+}
+
+function OrdersList({ mode, stage }: { mode: Mode; stage?: Stage }) {
+  const list = useOrderListParams(mode);
+  const { v, set, params, filtered } = list;
   // The seller's list is split into active orders and those "On hold — customer thinking".
-  const [view, setView] = useState<'active' | 'on_hold'>('active');
-  // Search / filter / sort: the paid lists (Order processing, Delivered).
-  const [filters, setFilters] = useState<ListFilters>(NO_FILTERS);
-  const base = mode === 'paid' ? '/staff/orders/paid' : '/staff/sales/orders';
-  const endpoint = mode === 'paid'
-    ? `${base}?${stage ? `stage=${stage}` : ''}${filterQuery(filters)}`.replace('?&', '?').replace(/\?$/, '')
-    : `${base}?view=${view}`;
+  const view = v.view as 'active' | 'on_hold';
+  const query: Record<string, string> = mode === 'paid' ? { ...(stage ? { stage } : {}), ...params } : params;
   const q = useInfiniteQuery({
-    queryKey: mode === 'paid' ? staffKeys.paidOrders(stage, filters) : staffKeys.salesOrderList(view),
+    queryKey: mode === 'paid' ? staffKeys.paidOrders(stage, params) : staffKeys.salesOrderList(params),
     placeholderData: keepPreviousData,
     queryFn: ({ pageParam }) => {
-      // The endpoint may already carry ?stage, so the cursor joins with & not ?.
-      const url = pageParam
-        ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}cursor=${encodeURIComponent(pageParam)}`
-        : endpoint;
-      return apiClient.get<SalesOrderPage>(url);
+      const qs = new URLSearchParams({ ...query, ...(pageParam ? { cursor: pageParam } : {}) });
+      return apiClient.get<SalesOrderPage>(`${mode === 'paid' ? '/staff/orders/paid' : '/staff/sales/orders'}${qs.toString() ? `?${qs}` : ''}`);
     },
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor || undefined,
     // Payments land from the customer's phone — keep the list fresh while open.
     refetchInterval: 30_000,
   });
+  // The "Salesman" choices: the GTM head's own list only (the server sends none to a seller).
+  const choices = useQuery({
+    queryKey: staffKeys.salesFilterOptions(),
+    queryFn: () => apiClient.get<SalesFilterOptions>('/staff/sales/filter-options'),
+    staleTime: 5 * 60_000,
+    enabled: mode === 'sales',
+  });
 
   const orders = q.data?.pages.flatMap((p) => p.orders) ?? [];
+  const summary = q.data?.pages[0]?.summary;
   const showSeller = mode === 'paid' || q.data?.pages[0]?.scope === 'team';
 
-  const bar = mode === 'paid' ? <OrderListFilters value={filters} onChange={setFilters} /> : null;
   const tabs = mode !== 'paid' && (
     <div className="flex flex-wrap gap-2" role="tablist" aria-label="Which orders">
       {([['active', 'Active'], ['on_hold', 'On hold']] as const).map(([key, label]) => (
-        <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => setView(key)}
+        <button key={key} type="button" role="tab" aria-selected={view === key} onClick={() => set({ view: key })}
           className={`rounded-full px-3 py-1 text-sm font-medium ${view === key ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>
           {label}
         </button>
       ))}
     </div>
   );
+  const bar = (
+    <OrderListFilters list={list} summary={summary} sellers={choices.data?.sellers}>
+      <button type="button" onClick={() => q.refetch()} disabled={q.isFetching}
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50">
+        <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? 'animate-spin' : ''}`} /> Refresh
+      </button>
+    </OrderListFilters>
+  );
 
+  let body;
   if (q.isPending) {
-    return <div className="space-y-3">{tabs}{bar}<p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading orders…</p></div>;
-  }
-  if (q.isError) {
-    return <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load orders.')}</p>;
-  }
-  if (orders.length === 0) {
-    return (
-      <div className="space-y-3">{tabs}{bar}
+    body = <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading orders…</p>;
+  } else if (q.isError) {
+    body = <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load orders.')}</p>;
+  } else if (orders.length === 0) {
+    body = (
       <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-        {mode === 'paid' && isFiltered(filters) ? 'No orders match these filters.' : mode !== 'paid'
+        {filtered ? 'No orders match — try fewer words or clear the filters.' : mode !== 'paid'
           ? (view === 'on_hold'
             ? 'Nothing on hold. Use “On hold – customer thinking” on an unpaid order when a customer needs time.'
             : 'No orders yet. Orders appear here when a client accepts a quotation.')
@@ -295,29 +308,22 @@ export default function SalesOrdersList({ mode, stage }: { mode: Mode; stage?: S
               ? 'Nothing in progress. Paid orders appear here until they are delivered.'
               : 'No paid orders yet.'}
       </p>
-      </div>
+    );
+  } else {
+    body = (
+      <>
+        <ul className={`space-y-3 ${q.isPlaceholderData ? 'opacity-60' : ''}`}>
+          {orders.map((o) => <OrderRow key={o.id} order={o} mode={mode} showSeller={showSeller} />)}
+        </ul>
+        {q.hasNextPage && (
+          <button type="button" onClick={() => q.fetchNextPage()} disabled={q.isFetchingNextPage}
+            className="w-full rounded-lg border border-gray-300 bg-white py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            {q.isFetchingNextPage ? 'Loading…' : 'Show more'}
+          </button>
+        )}
+      </>
     );
   }
 
-  return (
-    <div className="space-y-3">
-      {bar}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        {tabs || <span />}
-        <button type="button" onClick={() => q.refetch()} disabled={q.isFetching}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50">
-          <RefreshCw className={`h-3.5 w-3.5 ${q.isFetching ? 'animate-spin' : ''}`} /> Refresh
-        </button>
-      </div>
-      <ul className="space-y-3">
-        {orders.map((o) => <OrderRow key={o.id} order={o} mode={mode} showSeller={showSeller} />)}
-      </ul>
-      {q.hasNextPage && (
-        <button type="button" onClick={() => q.fetchNextPage()} disabled={q.isFetchingNextPage}
-          className="w-full rounded-lg border border-gray-300 bg-white py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-          {q.isFetchingNextPage ? 'Loading…' : 'Show more'}
-        </button>
-      )}
-    </div>
-  );
+  return <div className="space-y-3">{tabs}{bar}{body}</div>;
 }

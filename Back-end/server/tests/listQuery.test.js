@@ -2,10 +2,11 @@
  * utils/listQuery.js — the search / filter / sort pieces every staff list reads.
  * Pure functions: what a query string turns into.
  */
+import { jest } from '@jest/globals';
 import mongoose from 'mongoose';
 import {
-  afterClause, amountOf, amountRange, and, decodeCursor, encodeCursor, escapeRegex,
-  istDayStart, istRange, plainQuery, searchClauses, searchWords, sortSpec,
+  afterClause, amountOf, amountRange, and, compareBySort, decodeCursor, encodeCursor, escapeRegex,
+  findEachBranch, orPerBranch, istDayStart, istRange, plainQuery, searchClauses, searchWords, sortSpec,
 } from '../utils/listQuery.js';
 
 describe('searchWords', () => {
@@ -105,7 +106,11 @@ describe('keyset cursors', () => {
     expect(decodeCursor('a', byAmount, Buffer.from('["a",1,"zzz"]').toString('base64url'))).toBeNull();
   });
   it('afterClause and sortSpec follow the direction', () => {
-    expect(afterClause(byAmount, { value: 5, id })).toEqual({ $or: [{ amount: { $lt: 5 } }, { amount: 5, _id: { $lt: id } }] });
+    // amount < 5, or amount 5 with a smaller id — as a range plus a $nor (an $or
+    // here is split into index scans and sorted in memory by MongoDB 7.0).
+    expect(afterClause(byAmount, { value: 5, id })).toEqual({ amount: { $lte: 5 }, $nor: [{ amount: 5, _id: { $gte: id } }] });
+    const at = new Date('2026-10-02T05:00:00Z');
+    expect(afterClause(byDate, { value: at, id })).toEqual({ 'payment.paidAt': { $gte: at }, $nor: [{ 'payment.paidAt': at, _id: { $lte: id } }] });
     expect(afterClause(byDate, null)).toBeNull();
     expect(sortSpec(byDate)).toEqual({ 'payment.paidAt': 1, _id: 1 });
   });
@@ -115,6 +120,70 @@ describe('keyset cursors', () => {
     expect(decodeCursor('n', byName, Buffer.from(JSON.stringify(['n', 5, String(id)])).toString('base64url'))).toBeNull();
     expect(sortSpec(byName)).toEqual({ nameKey: 1 });
     expect(afterClause(byName, { value: 'bosch', id })).toEqual({ nameKey: { $gt: 'bosch' } });
+  });
+  it('a sort on _id itself round-trips as an id; anything else in its place is ignored', () => {
+    const byId = { field: '_id', dir: -1, type: 'objectId', unique: true };
+    const back = decodeCursor('newest', byId, encodeCursor('newest', byId, { _id: id }));
+    expect(back.value).toBeInstanceOf(mongoose.Types.ObjectId);
+    expect(String(back.value)).toBe(String(id));
+    expect(afterClause(byId, back)).toEqual({ _id: { $lt: back.value } });
+    expect(sortSpec(byId)).toEqual({ _id: -1 });
+    expect(decodeCursor('newest', byId, Buffer.from(JSON.stringify(['newest', '2026-10-01', String(id)])).toString('base64url'))).toBeNull();
+  });
+});
+
+describe('orPerBranch', () => {
+  const query = { $or: [{ a: 1 }, { b: 1 }] };
+  const after = { t: { $lte: 5 } };
+  it('carries the cursor into each branch, keeping the $or at the top', () => {
+    expect(orPerBranch(and(query, after), query)).toEqual({ $or: [{ $and: [{ a: 1 }, after] }, { $and: [{ b: 1 }, after] }] });
+  });
+  it('page 1, or a query that is not an $or, is left alone', () => {
+    expect(orPerBranch(query, query)).toBe(query);
+    const plain = { a: 1 };
+    const q = and(plain, after);
+    expect(orPerBranch(q, plain)).toBe(q);
+  });
+});
+
+describe('findEachBranch', () => {
+  const ids = Array.from({ length: 6 }, () => new mongoose.Types.ObjectId());
+  const at = (h) => new Date(Date.UTC(2026, 9, 1, h));
+  const row = (i, h) => ({ _id: ids[i], createdAt: at(h) });
+  const sort = { createdAt: -1, _id: -1 };
+  const query = { $or: [{ a: 1 }, { b: 1 }] };
+
+  it('one find per branch, merged newest first; a row in both branches once; cut to the limit', async () => {
+    const seen = [];
+    const find = async (q, opts) => {
+      seen.push([q, opts]);
+      return q.a ? [row(0, 9), row(2, 5), row(3, 5)] : [row(1, 7), row(2, 5), row(4, 1)];
+    };
+    const rows = await findEachBranch(query, query, { sort, limit: 4 }, find);
+    // ids[2] and ids[3] share an hour: the larger id comes first (newest first).
+    const tied = [ids[2], ids[3]].sort((x, y) => (String(x) < String(y) ? 1 : -1));
+    expect(rows.map((r) => r._id)).toEqual([ids[0], ids[1], ...tied]);
+    expect(seen).toEqual([[{ a: 1 }, { sort, limit: 4 }], [{ b: 1 }, { sort, limit: 4 }]]);
+  });
+
+  it('page 2 carries the cursor into each branch', async () => {
+    const cursor = { createdAt: { $lte: at(5) } };
+    const seen = [];
+    await findEachBranch(and(query, cursor), query, { sort, limit: 2 }, async (q) => { seen.push(q); return []; });
+    expect(seen).toEqual([{ $and: [{ a: 1 }, cursor] }, { $and: [{ b: 1 }, cursor] }]);
+  });
+
+  it('a query that is not an $or is one find, as asked', async () => {
+    const q = { a: 1 };
+    const find = jest.fn(async () => [row(0, 1)]);
+    expect(await findEachBranch(q, q, { sort, limit: 2 }, find)).toEqual([row(0, 1)]);
+    expect(find).toHaveBeenCalledWith(q, { sort, limit: 2 });
+  });
+
+  it('compareBySort: oldest first, numbers, and a missing value sorts lowest', () => {
+    const asc = compareBySort({ amount: 1, _id: 1 });
+    const rows = [{ _id: ids[1], amount: 5 }, { _id: ids[0] }, { _id: ids[2], amount: 2 }];
+    expect(rows.sort(asc).map((r) => r.amount)).toEqual([undefined, 2, 5]);
   });
 });
 
