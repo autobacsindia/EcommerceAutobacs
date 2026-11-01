@@ -19,6 +19,7 @@ import returnRequestRepository from '../repositories/returnRequestRepository.js'
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { RETURN_REASON_LABELS } from '../config/returnPolicy.js';
+import { cancellationReasonLabel } from '../config/cancellationReasons.js';
 import emailHandler from './emailHandler.js';
 import companyInfo from '../config/company.js';
 import { MAIL_PURPOSE, careersAlertRecipients, isCareersMailbox } from '../utils/careersMailbox.js';
@@ -431,7 +432,7 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
     customer.phone ? `Phone      : ${customer.phone}` : null,
     `Cancelled by: ${actor}`,
     `Cancelled  : ${formatDateTimeIST(cancelledAt)}`,
-    order.cancellationReason ? `Reason     : ${order.cancellationReason}` : null,
+    order.cancellationReason ? `Reason     : ${cancellationReasonLabel(order.cancellationReason)}` : null,
     '',
     'Items:',
     ...items.map((l) => `  - ${l}`),
@@ -459,7 +460,7 @@ export const emailAdminOrderCancelledAlert = async (orderId) => {
       ['Phone', escapeHtml(customer.phone)],
       ['Cancelled by', escapeHtml(actor)],
       ['Cancelled', escapeHtml(formatDateTimeIST(cancelledAt))],
-      ['Reason', escapeHtml(order.cancellationReason || '')],
+      ['Reason', escapeHtml(cancellationReasonLabel(order.cancellationReason))],
       ['Items', items.map((l) => escapeHtml(l)).join('<br>')],
     ],
     refund ? 'Process refund' : 'Open order',

@@ -9,7 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useCart } from '@/context/CartContext';
 import apiClient from '@/lib/api';
 import orderService from '@/lib/services/orderService';
-import { API_ENDPOINTS, PAYMENT_METHOD_LABELS, RETURN_WINDOW_DAYS_OURS } from '@/lib/constants';
+import { API_ENDPOINTS, PAYMENT_METHOD_LABELS, RETURN_WINDOW_DAYS_OURS, cancellationReasonLabel } from '@/lib/constants';
 import {
   ArrowLeft, MapPin, CreditCard, Package, Truck, CheckCircle,
   XCircle, Clock, AlertCircle, Download, RotateCcw, X, Trash2, RefreshCcw, ShoppingCart, Star, HelpCircle, ChevronDown, Building2
@@ -1112,7 +1112,7 @@ export default function OrderDetailPage() {
                     <p className="text-xs text-ink-muted font-display mt-0.5">
                       {formatLongDateTimeIST(history.timestamp)}
                     </p>
-                    {history.reason && <p className="text-xs text-ink/70 font-display mt-1">Reason: {history.reason}</p>}
+                    {history.reason && <p className="text-xs text-ink/70 font-display mt-1">Reason: {cancellationReasonLabel(history.reason)}</p>}
                     {history.notes && <p className="text-xs text-ink/70 font-display mt-1">Notes: {history.notes}</p>}
                   </div>
                 </div>
@@ -1126,7 +1126,9 @@ export default function OrderDetailPage() {
             orderId={order._id}
             orderNumber={order._id.slice(-8).toUpperCase()}
             totalAmount={order.totalAmount}
-            hasPayment={!!order.payment}
+            /* `order.payment` exists as soon as checkout opened Razorpay, paid or not;
+               only a captured payment is refunded. */
+            hasPayment={order.paymentStatus === 'paid'}
             /* On a part-shipped order the modal must promise only what will happen:
                the un-shipped items go, the parcel in transit still arrives. */
             scope={cancelScope === 'partial' ? 'partial' : 'full'}

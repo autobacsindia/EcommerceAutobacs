@@ -123,11 +123,10 @@ describe('validateTransition — terminal states allow no transitions', () => {
 // ── 4. Admin-only transitions ─────────────────────────────────────────────────
 
 describe('validateTransition — admin-only gating', () => {
-  test('customer cannot cancel a processing order', () => {
-    // processing → cancelled is admin-only
+  test('customer CAN cancel a paid (processing) order', () => {
+    // Owner decision 2026-11-01: a customer may cancel a paid order until it ships.
     const result = svc.validateTransition('processing', 'cancelled', false);
-    expect(result.valid).toBe(false);
-    expect(result.message).toMatch(/Admin permission required/i);
+    expect(result.valid).toBe(true);
   });
 
   test('admin CAN cancel a processing order', () => {
@@ -156,9 +155,9 @@ describe('getValidNextStatuses', () => {
     expect(statuses).toEqual(expect.arrayContaining(['processing', 'cancelled']));
   });
 
-  test('processing — customer does NOT see cancelled (admin-only)', () => {
+  test('processing — customer sees cancelled (may cancel a paid order until it ships)', () => {
     const statuses = svc.getValidNextStatuses('processing', false);
-    expect(statuses).not.toContain('cancelled');
+    expect(statuses).toContain('cancelled');
   });
 
   test('processing — admin sees cancelled', () => {

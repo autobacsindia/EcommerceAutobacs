@@ -6,7 +6,7 @@ import OfflineRefundDialog, { type OfflineRefundSubmission } from './OfflineRefu
 import { offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
 import { AlertTriangle, IndianRupee, PackageX, RotateCcw } from 'lucide-react';
 import apiClient from '@/lib/api';
-import { API_ENDPOINTS } from '@/lib/constants';
+import { ADMIN_CANCELLATION_REASONS, API_ENDPOINTS, cancellationReasonLabel } from '@/lib/constants';
 import { formatLongDateIST } from '@/lib/datetime';
 import { usePanel } from '@/lib/usePanel';
 
@@ -347,10 +347,9 @@ export default function OrderCancellations({ orderId, itemNames, onChanged, refr
                 onChange={(e) => setReason(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               >
-                <option value="out_of_stock">Out of stock</option>
-                <option value="customer_request">Customer asked for it</option>
-                <option value="duplicate_order">Duplicate order</option>
-                <option value="fraud_suspected">Fraud suspected</option>
+                {ADMIN_CANCELLATION_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -458,7 +457,7 @@ export default function OrderCancellations({ orderId, itemNames, onChanged, refr
                 {cancellation.cancelledAt && (
                   <span>Cancelled {formatLongDateIST(cancellation.cancelledAt)}</span>
                 )}
-                {cancellation.reason && <span>Reason: {cancellation.reason.replace(/_/g, ' ')}</span>}
+                {cancellation.reason && <span>Reason: {cancellationReasonLabel(cancellation.reason)}</span>}
                 {cancellation.notes && <span>{cancellation.notes}</span>}
                 {refund?.razorpayRefundId && (
                   <span className="font-mono">{refund.razorpayRefundId}</span>

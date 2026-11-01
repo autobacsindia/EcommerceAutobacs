@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { X, AlertCircle, CheckCircle } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, CANCELLATION_REASONS } from '@/lib/constants';
@@ -9,6 +9,7 @@ interface CancelOrderModalProps {
   orderId: string;
   orderNumber: string;
   totalAmount: number;
+  /** True only when money was actually captured — that is when a refund follows. */
   hasPayment: boolean;
   /*
     `partial` when a parcel has already left and only the un-shipped items can go.
@@ -40,6 +41,10 @@ export default function CancelOrderModal({
   const [confirmationChecked, setConfirmationChecked] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `isSubmitting` only disables the button after a re-render, so two quick clicks
+  // could both get here. The ref closes that gap; the server refuses a second cancel
+  // anyway, but the customer should never see its error after a successful cancel.
+  const inFlight = useRef(false);
   const [success, setSuccess] = useState<{
     refundInitiated: boolean;
     refundAmount: number;
@@ -52,6 +57,7 @@ export default function CancelOrderModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (inFlight.current) return;
     setError(null);
 
     // Validation
@@ -71,8 +77,9 @@ export default function CancelOrderModal({
     }
 
     try {
+      inFlight.current = true;
       setIsSubmitting(true);
-      
+
       const response = await apiClient.put(API_ENDPOINTS.ORDER_CANCEL(orderId), {
         reason: selectedReason,
         notes: notes.trim() || undefined,
@@ -88,6 +95,7 @@ export default function CancelOrderModal({
     } catch (err: any) {
       setError(err.message || 'Failed to cancel order. Please try again.');
     } finally {
+      inFlight.current = false;
       setIsSubmitting(false);
     }
   };
@@ -215,9 +223,9 @@ export default function CancelOrderModal({
               Reason for cancellation <span className="text-red-500">*</span>
             </label>
             <div className="space-y-2">
-              {CANCELLATION_REASONS.map((reason, index) => (
+              {CANCELLATION_REASONS.map((reason) => (
                 <label
-                  key={index}
+                  key={reason.value}
                   className={`flex items-center p-4 border rounded-lg cursor-pointer transition ${
                     selectedReason === reason.value
                       ? 'border-gold bg-gold/10'
@@ -268,7 +276,12 @@ export default function CancelOrderModal({
             <div className="bg-gold/10 border border-gold/40 rounded-lg p-4 mb-6">
               <p className="text-sm font-medium text-gold mb-2">Refund Information</p>
               <div className="space-y-1 text-sm text-gold">
-                <p>• Refund amount: ₹{totalAmount.toFixed(2)}</p>
+                {/* A partial cancel refunds only the cancelled items, priced by the
+                    server — the order total would promise money that is not coming. */}
+                <p>
+                  • Refund amount:{' '}
+                  {isPartial ? 'the price of the cancelled items' : `₹${totalAmount.toFixed(2)}`}
+                </p>
                 <p>• Refund method: Original payment method</p>
                 <p>• Estimated timeline: 3-5 business days</p>
               </div>
