@@ -7,8 +7,8 @@
  *     each once, at most TAGS_MAX, and only whoever may edit the task sets them
  *   - a start date is never after the due date — on create, on edit, and when a
  *     bulk change moves the due date
- *   - every order (due day, newest, recently changed) pages with no gaps or
- *     repeats, and a cursor from one order is refused by another
+ *   - "newest" and "recently changed" page with no gaps or repeats and keep the
+ *     filters (the shared keyset paging itself is tests/taskListSort.test.js)
  *   - a bulk change applies the task's own rules to each task: one refusal never
  *     stops the others, a malformed change touches nothing, and a retried bulk
  *     change is "unchanged", not a conflict — and sends no second pop-up
@@ -141,7 +141,8 @@ describe('list order', () => {
     number: 200000 + i, title: `t${i}`, assignee: procA._id, assigneeName: 'Arun', team: 'procurement',
     createdBy: procHead._id, createdByName: 'Priya', status: 'todo', priority: 'normal',
     dueOn: day(i % 5), bucket: 'open', rank: day(i % 5),
-    // Several tasks share an updatedAt, so the _id tie-break is exercised.
+    // Several tasks share a createdAt / updatedAt, so the _id tie-break is exercised.
+    createdAt: new Date(Date.UTC(2025, 0, 1, 0, 0, Math.floor(i / 3))),
     updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, Math.floor(i / 4))),
   })), { timestamps: false });
 
@@ -160,8 +161,8 @@ describe('list order', () => {
     await seed(120);
     const seen = await all(procA, { sort: 'newest' });
     expect(new Set(seen.map((t) => t.id)).size).toBe(120);
-    const ids = seen.map((t) => t.id);
-    expect(ids).toEqual([...ids].sort().reverse());
+    const keys = seen.map((t) => `${new Date(t.createdAt).toISOString()}|${t.id}`);
+    expect(keys).toEqual([...keys].sort().reverse());
   });
 
   it('recently changed first: every task once, ties broken by id, across pages', async () => {
@@ -187,13 +188,11 @@ describe('list order', () => {
     expect((await tasks.listTasks(procA, { view: 'mine', sort: 'newest', due: 'overdue' })).tasks.map((t) => t.title)).toEqual(['late']);
   });
 
-  it('a cursor belongs to its order; an unknown order is refused', async () => {
+  it('an unknown order reads as due day, so an old link still opens', async () => {
     await seed(60);
-    const newest = await tasks.listTasks(procA, { view: 'mine', sort: 'newest' });
     const due = await tasks.listTasks(procA, { view: 'mine' });
-    await status(400, () => tasks.listTasks(procA, { view: 'mine', sort: 'due', cursor: newest.nextCursor }));
-    await status(400, () => tasks.listTasks(procA, { view: 'mine', sort: 'updated', cursor: due.nextCursor }));
-    await status(400, () => tasks.listTasks(procA, { view: 'mine', sort: 'priority' }));
+    const odd = await tasks.listTasks(procA, { view: 'mine', sort: 'priority' });
+    expect(odd.tasks.map((t) => t.id)).toEqual(due.tasks.map((t) => t.id));
     // A due-day cursor from before there was a choice of order still works.
     const legacy = Buffer.from(JSON.stringify({ r: due.tasks.at(-1).dueOn, i: due.tasks.at(-1).id })).toString('base64url');
     expect((await tasks.listTasks(procA, { view: 'mine', cursor: legacy })).tasks).toHaveLength(10);

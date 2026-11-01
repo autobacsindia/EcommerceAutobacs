@@ -36,7 +36,7 @@ import {
  */
 const router = express.Router();
 
-// @route  GET /staff/tasks?view=mine|created|team&state=open|done|archived&due=&priority=&tag=&q=&assignee=&team=&sort=due|newest|updated&cursor=
+// @route  GET /staff/tasks?view=mine|created|team&state=open|done|archived&due=&priority=&tag=&q=&assignee=&team=&sort=due|newest|oldest|updated&cursor=
 router.get('/', validateTaskList, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listTasks(req.user, req.query)) });
 }));

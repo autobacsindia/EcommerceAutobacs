@@ -231,7 +231,11 @@ export function previewDiscount(subtotal: number, percent: number): { amount: nu
   return { amount: amountRupees, total: (subtotalPaise - amountRupees * 100) / 100 };
 }
 
-export type QuotationPage = { quotations: Quotation[]; nextCursor: string | null; scope: 'mine' | 'team' };
+/** How many rows a list's search matches and what they add up to (first page only; counting stops at 1,000). */
+export type ListSummary = { count: number; total: number | null; capped: boolean };
+export type QuotationPage = { quotations: Quotation[]; nextCursor: string | null; scope: 'mine' | 'team'; summary?: ListSummary };
+/** The sales lists' "Salesman" choices: the head and admin get the team, a seller none. */
+export type SalesFilterOptions = { sellers: { id: string; name: string }[] };
 
 /** The quotation PDF (opened in a new tab to view, download or share). */
 export const quotationPdfHref = (quotationId: string) =>
@@ -241,7 +245,7 @@ export const quotationPdfHref = (quotationId: string) =>
 export const paymentRequestHref = (orderId: string) =>
   `/api/v1/staff/sales/orders/${encodeURIComponent(orderId)}/payment-request`;
 
-export type SalesOrderPage = { success: boolean; orders: SalesOrder[]; nextCursor: string | null; scope?: 'mine' | 'team' };
+export type SalesOrderPage = { success: boolean; orders: SalesOrder[]; nextCursor: string | null; scope?: 'mine' | 'team'; summary?: ListSummary };
 
 export type SalesProduct = {
   id: string;

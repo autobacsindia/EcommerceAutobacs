@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import BaseRepository from './baseRepository.js';
 import SalesQuotation from '../models/SalesQuotation.js';
+import { readSummary, summaryPipeline } from '../utils/listQuery.js';
 
 /** GTM quotations (models/SalesQuotation.js). Access rules live in salesQuotationService. */
 /** `{ order: id }` in the shape the partial index quotation_order can serve. */
@@ -11,10 +12,15 @@ class SalesQuotationRepository extends BaseRepository {
     super(SalesQuotation);
   }
 
-  /** Newest first, keyset on _id (index quotation_seller_recent / quotation_status_recent). */
-  async page(filter, { before = null, limit = 25 } = {}) {
-    const q = { ...filter, ...(before ? { _id: { $lt: before } } : {}) };
-    return SalesQuotation.find(q).sort({ _id: -1 }).limit(limit).lean();
+  /** Keyset page: `query` already carries the "after the cursor" clause; `sort` is a Mongo sort. */
+  async page(query, { sort, limit }) {
+    return SalesQuotation.find(query).sort(sort).limit(limit).populate('salesUser', 'name').lean();
+  }
+
+  /** How many match and their total, counted over at most `cap` rows. */
+  async summary(query, cap) {
+    const [row] = await SalesQuotation.aggregate(summaryPipeline(query, cap, 'totalAmount')).option({ maxTimeMS: 5000 });
+    return readSummary(row, cap, true);
   }
 
   /**

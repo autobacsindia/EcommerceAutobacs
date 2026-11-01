@@ -2,13 +2,17 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { Loader2, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
+import { useListParams } from '@/lib/hooks/useListParams';
+import {
+  ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect, listField,
+} from '@/components/panel/ListControls';
 import { QUOTATION_STATUS } from './QuotationDetail';
-import { errorMessage, percentText, rupees, type QuotationPage } from './types';
+import { errorMessage, percentText, rupees, type QuotationPage, type SalesFilterOptions } from './types';
 
 const FILTERS = [
   { key: 'open', label: 'Open' },
@@ -18,29 +22,67 @@ const FILTERS = [
   { key: '', label: 'All' },
 ] as const;
 
-/** GTM quotations, newest first: the seller's own, or the whole team's for the head. */
+const SORTS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'amount_desc', label: 'Amount: high to low' },
+  { value: 'amount_asc', label: 'Amount: low to high' },
+] as const;
+// Only on the On hold tab, where every quotation has a follow-up date.
+const FOLLOW_UP = { value: 'follow_up', label: 'Follow-up date (soonest)' } as const;
+
+const FILTER_KEYS = ['q', 'seller', 'from', 'to'] as const;
+
+/**
+ * GTM quotations: the seller's own, or the whole team's for the head. The
+ * server does the searching and filtering, so every page honours them; the tab,
+ * search, filters and sort live in the page address (Back, refresh and a shared
+ * link keep them). The page must wrap this in <Suspense>.
+ */
 export default function QuotationsList() {
-  const [status, setStatus] = useState<string>('open');
+  const { values: v, set, clear } = useListParams({ status: 'open', sort: 'newest', q: '', seller: '', from: '', to: '' });
+  const [showFilters, setShowFilters] = useState(false);
+  // A tab the page does not offer (an old link) falls back to Open.
+  const status = FILTERS.some((f) => f.key === v.status) ? v.status : 'open';
+  const sorts = status === 'on_hold' ? [...SORTS, FOLLOW_UP] : SORTS;
+  const sort = sorts.some((x) => x.value === v.sort) ? v.sort : 'newest';
+  const params: Record<string, string> = {
+    ...(status ? { status } : {}),
+    ...(sort !== 'newest' ? { sort } : {}),
+    ...Object.fromEntries(FILTER_KEYS.filter((k) => v[k]).map((k) => [k, v[k]])),
+  };
+  const filtered = FILTER_KEYS.some((k) => v[k]);
+  const filtersOn = [v.seller, v.from || v.to].filter(Boolean).length;
+
   const q = useInfiniteQuery({
-    queryKey: staffKeys.quotationList(status),
+    queryKey: staffKeys.quotationList(params),
     queryFn: ({ pageParam }) => {
-      const qs = new URLSearchParams();
-      if (status) qs.set('status', status);
-      if (pageParam) qs.set('cursor', pageParam);
+      const qs = new URLSearchParams({ ...params, ...(pageParam ? { cursor: pageParam } : {}) });
       return apiClient.get<QuotationPage>(`/staff/sales/quotations${qs.toString() ? `?${qs}` : ''}`);
     },
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor || undefined,
+    // Keep the old list on screen while a new search loads (no flash of "Loading…").
+    placeholderData: keepPreviousData,
   });
+  const choices = useQuery({
+    queryKey: staffKeys.salesFilterOptions(),
+    queryFn: () => apiClient.get<SalesFilterOptions>('/staff/sales/filter-options'),
+    staleTime: 5 * 60_000,
+  });
+  const sellers = choices.data?.sellers ?? [];
   const rows = q.data?.pages.flatMap((p) => p.quotations) ?? [];
   const team = q.data?.pages[0]?.scope === 'team';
+  const summary = q.data?.pages[0]?.summary;
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2" role="tablist" aria-label="Quotation status">
           {FILTERS.map((f) => (
-            <button key={f.key} type="button" role="tab" aria-selected={status === f.key} onClick={() => setStatus(f.key)}
+            <button key={f.key} type="button" role="tab" aria-selected={status === f.key}
+              // Leaving On hold drops its follow-up sort (the other tabs have no follow-up dates).
+              onClick={() => set({ status: f.key, ...(f.key !== 'on_hold' && sort === 'follow_up' ? { sort: 'newest' } : {}) })}
               className={`rounded-full px-3 py-1 text-sm font-medium ${status === f.key ? 'bg-blue-600 text-white' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>
               {f.label}
             </button>
@@ -52,15 +94,42 @@ export default function QuotationsList() {
         </button>
       </div>
 
+      <div role="search" aria-label="Search and filter quotations" className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ListSearch value={v.q} onChange={(text) => set({ q: text.trim() })} label="Search quotations"
+            placeholder="Search quotation no., customer, phone, city, product, amount" />
+          <ListSelect label="Sort" value={sort} onChange={(x) => set({ sort: x })} options={sorts} />
+          <button type="button" onClick={() => setShowFilters((x) => !x)} aria-expanded={showFilters} aria-controls="quotation-filters"
+            className={`${listField} inline-flex items-center gap-1.5 sm:hidden`}>
+            <SlidersHorizontal className="h-4 w-4" aria-hidden /> Filters{filtersOn ? ` · ${filtersOn} on` : ''}
+          </button>
+        </div>
+        <div id="quotation-filters" className={`${showFilters ? 'flex' : 'hidden'} flex-wrap items-center gap-2 sm:flex`}>
+          {sellers.length > 0 && (
+            <ListSelect label="Salesman" value={v.seller} onChange={(x) => set({ seller: x })} allLabel="Any salesman"
+              options={sellers.map((p) => ({ value: p.id, label: p.name }))} />
+          )}
+          <ListDateRange label="Created on" from={v.from} to={v.to} onChange={(from, to) => set({ from, to })}>
+            <span>Created</span>
+          </ListDateRange>
+        </div>
+        <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
+          {summary
+            ? <ListResultLine count={summary.count} capped={summary.capped} total={summary.total} noun={['quotation', 'quotations']} formatTotal={rupees} />
+            : <span />}
+          {filtered && <ListClear onClear={() => clear(['status', 'sort'])} />}
+        </div>
+      </div>
+
       {q.isPending && <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading quotations…</p>}
       {q.isError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load quotations.')}</p>}
       {!q.isPending && !q.isError && rows.length === 0 && (
         <p className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-          {status === 'on_hold' ? 'Nothing on hold. Use “On hold – customer thinking” on a quotation when a customer needs time.' : 'No quotations here. Create one from “New quotation”.'}
+          {filtered ? 'No quotations match — try fewer words or clear the filters.' : status === 'on_hold' ? 'Nothing on hold. Use “On hold – customer thinking” on a quotation when a customer needs time.' : 'No quotations here. Create one from “New quotation”.'}
         </p>
       )}
 
-      <ul className="space-y-2">
+      <ul className={`space-y-2 ${q.isPlaceholderData ? 'opacity-60' : ''}`}>
         {rows.map((r) => (
           <li key={r.id}>
             <Link href={`/team/sales/quotations/${r.id}`}

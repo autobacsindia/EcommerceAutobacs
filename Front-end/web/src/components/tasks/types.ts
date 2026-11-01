@@ -11,8 +11,8 @@ export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskBucket = 'open' | 'done' | 'archived';
 export type TaskView = 'mine' | 'created' | 'team';
 export type TaskDue = 'late' | 'overdue' | 'today' | 'week';
-/** How a list is ordered (server-side, keyset-paged). */
-export type TaskSort = 'due' | 'newest' | 'updated';
+/** How a list is ordered (server-side, keyset-paged). Open tasks only; done and archived keep "most recently finished first". */
+export type TaskSort = 'due' | 'newest' | 'oldest' | 'updated';
 /** How the list view groups the rows it has loaded. */
 export type TaskGroupBy = 'status' | 'assignee' | 'priority' | 'due' | 'none';
 
@@ -83,7 +83,8 @@ export type TaskSibling = {
   id: string; code: string; assignee: { id: string; name: string }; status: TaskStatus; statusLabel: string; bucket: TaskBucket;
 };
 
-export type TaskPage = { tasks: Task[]; nextCursor: string | null };
+/** `summary`: how many open tasks match (the open list's first page only; counting stops at 1,000). */
+export type TaskPage = { tasks: Task[]; nextCursor: string | null; summary?: { count: number; capped: boolean } };
 
 export type TaskComment = { id: string; by: { id: string; name: string }; text: string; createdAt: string };
 export type CommentPage = { comments: TaskComment[]; nextBefore: string | null };
@@ -105,6 +106,7 @@ export const cleanTag = (raw: string) => raw.replace(/\s+/g, ' ').trim().replace
 export const TASK_SORTS: { value: TaskSort; label: string }[] = [
   { value: 'due', label: 'Due date' },
   { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
   { value: 'updated', label: 'Recently changed' },
 ];
 

@@ -26,8 +26,9 @@ export const validateTaskList = [
   query('assignee').optional().custom(isObjectId).withMessage('Invalid person'),
   query('team').optional().isIn([...STAFF_TEAM_VALUES, 'admin']).withMessage('Invalid team'),
   query('tag').optional().isString().isLength({ max: 60 }).withMessage('Invalid tag'),
-  query('sort').optional().isIn(['due', 'newest', 'updated']).withMessage('Invalid order'),
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+  // due (default) | newest | oldest | updated; anything else reads as due, so an old link still opens.
+  query('sort').optional().isString().isLength({ max: 20 }).withMessage('Invalid sort'),
 ];
 
 export const validateTaskCreate = [

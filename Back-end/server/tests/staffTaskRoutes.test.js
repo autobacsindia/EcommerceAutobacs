@@ -165,7 +165,7 @@ describe('Staff task routes', () => {
     expect((await head.session.post('/staff/tasks', { title: 'x', startOn: '2030-01-16', dueOn: '2030-01-15' })).status).toBe(400);
     expect((await member.session.get('/staff/tasks?tag=KOCHI')).body.tasks.map((t) => t.id)).toEqual([a.id]);
     expect((await member.session.get('/staff/tasks?sort=newest')).body.tasks.map((t) => t.id)).toEqual([b.id, a.id]);
-    expect((await member.session.get('/staff/tasks?sort=priority')).status).toBe(400);
+    expect((await member.session.get('/staff/tasks?sort=updated')).body.sort).toBe('updated');
 
     const res = await head.session.post('/staff/tasks/bulk', {
       items: [{ id: a.id, rev: a.rev }, { id: b.id, rev: b.rev }], changes: { status: 'waiting', priority: 'high' },

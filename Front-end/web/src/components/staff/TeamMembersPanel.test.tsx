@@ -4,6 +4,7 @@
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import TeamMembersPanel, { generateTempPassword } from './TeamMembersPanel';
+import { addressBar } from '@/test-utils/addressBarMock';
 
 const get = jest.fn();
 const post = jest.fn();
@@ -13,6 +14,8 @@ jest.mock('@/lib/api-client', () => ({
   default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), put: (...a: unknown[]) => put(...a), delete: jest.fn() },
 }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { _id: 'admin', role: 'admin' } }) }));
+// The member list's search, role filter and sort live in the page address.
+jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
 
 const team = (members: unknown[] = []) => ({
   success: true, team: 'sales', teamLabel: 'Sales', canManage: true, members, invites: [],
@@ -29,6 +32,7 @@ const ravi = {
 beforeEach(() => {
   get.mockReset();
   post.mockReset();
+  addressBar.reset('/admin/staff');
   jest.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
@@ -79,7 +83,8 @@ describe('company logins', () => {
     fireEvent.click(within(form).getByRole('button', { name: 'Save password' }));
 
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/members/u1/password', { password: 'AdminChose#2026' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('AdminChose#2026');
+    // Two status lines now: the new password box and the member count — the box is the one with the password.
+    expect(await screen.findByText('AdminChose#2026')).toBeInTheDocument();
     expect(screen.queryByRole('form', { name: /Change password for/ })).toBeNull();
   });
 
@@ -229,5 +234,62 @@ describe('GTM roles', () => {
     fireEvent.click(within(row).getByRole('button', { name: /Delete/ }));
     expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/past work .* stays/));
     expect(post).not.toHaveBeenCalledWith('/staff/members/u1/deactivate', {});
+  });
+});
+
+describe('finding someone in the list', () => {
+  const head = { ...ravi, id: 'u3', name: 'Anil Head', email: 'anil@autobacs.in', isHead: true, roleLabel: 'GTM head', phone: '9000000003', addedAt: '2026-09-01T00:00:00Z' };
+  /** The member count line (the page has other status lines, e.g. a new password). */
+  const counted = (text: string) => waitFor(() => expect(screen.getAllByRole('status').map((e) => e.textContent)).toContain(text));
+  const lead = { ...sam, roleLabel: 'GTM lead', addedAt: '2026-10-20T00:00:00Z' };
+  const names = () => screen.getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[0].textContent);
+
+  it('searches name, login, email and mobile — every word must match — and keeps it in the address', async () => {
+    get.mockResolvedValue(team([lead, ravi, head]));
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    await counted('3 members found');
+    expect(names()).toEqual(['Anil Head', 'Ravi', 'Sam Kumar']); // name A–Z by default
+
+    fireEvent.change(screen.getByLabelText('Search team members'), { target: { value: 'sam.sales' } });
+    await waitFor(() => expect(names()).toEqual(['Sam Kumar']));
+    expect(addressBar.search).toBe('q=sam.sales');
+    await counted('1 member found');
+
+    fireEvent.change(screen.getByLabelText('Search team members'), { target: { value: 'ravi 3211' } });
+    await waitFor(() => expect(names()).toEqual(['Ravi']));
+    fireEvent.change(screen.getByLabelText('Search team members'), { target: { value: 'ravi 0003' } });
+    await waitFor(() => expect(screen.getByText('No one matches — try fewer words or clear the filters.')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /Clear all/ }));
+    await waitFor(() => expect(names()).toHaveLength(3));
+    expect(addressBar.search).toBe('');
+  });
+
+  it('filters by role and sorts by when they were added', async () => {
+    get.mockResolvedValue(team([lead, ravi, head]));
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    await counted('3 members found');
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'GTM head' } });
+    await waitFor(() => expect(names()).toEqual(['Anil Head']));
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'recent' } });
+    await waitFor(() => expect(names()).toEqual(['Sam Kumar', 'Ravi', 'Anil Head']));
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'oldest' } });
+    await waitFor(() => expect(names()).toEqual(['Anil Head', 'Ravi', 'Sam Kumar']));
+  });
+
+  it('opens from a link with the search already applied; a role nobody has is ignored', async () => {
+    addressBar.search = 'q=ravi&role=Wizard';
+    get.mockResolvedValue(team([lead, ravi, head]));
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    await waitFor(() => expect(names()).toEqual(['Ravi']));
+    expect(screen.getByLabelText('Search team members')).toHaveValue('ravi');
+  });
+
+  it('an empty team shows no search bar', async () => {
+    get.mockResolvedValue(team([]));
+    render(<TeamMembersPanel team="sales" allowHeadInvite />);
+    expect(await screen.findByText('No one on this team yet.')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Search team members')).toBeNull();
   });
 });

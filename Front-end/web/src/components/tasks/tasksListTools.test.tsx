@@ -11,6 +11,7 @@ import TasksWorkspace from './TasksWorkspace';
 import TaskDetail from './TaskDetail';
 import { dueBucket, groupTasks } from './grouping';
 import { cleanTag, type Task } from './types';
+import { addressBar } from '@/test-utils/addressBarMock';
 
 const get = jest.fn();
 const post = jest.fn();
@@ -22,11 +23,7 @@ jest.mock('@/lib/api-client', () => ({
 const toastSuccess = jest.fn();
 const toastError = jest.fn();
 jest.mock('react-hot-toast', () => ({ __esModule: true, default: { success: (...a: unknown[]) => toastSuccess(...a), error: (...a: unknown[]) => toastError(...a) } }));
-jest.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams(''),
-  useRouter: () => ({ replace: jest.fn() }),
-  usePathname: () => '/team/tasks',
-}));
+jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
 jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
@@ -68,6 +65,7 @@ const workspace = (props: Partial<{ base: string; canSeeTeam: boolean }> = {}) =
 beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('tasks-help-hidden', '1');
+  addressBar.reset('/team/tasks');
   [get, post, patch, toastSuccess, toastError].forEach((f) => f.mockReset());
   jest.spyOn(window, 'confirm').mockReturnValue(true);
 });
@@ -119,19 +117,20 @@ describe('the list', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Stop filtering by supplier' })).toBeNull());
   });
 
-  it('group and order are chosen, remembered, and the order is asked of the server', async () => {
+  it('the grouping is remembered on this device; the order is in the address and asked of the server', async () => {
     serve({ list: [task(), task({ id: 't2', code: 'T-8', title: 'Pack', assignee: { id: 'u3', name: 'Bala' } })] });
     const { unmount } = workspace();
     await screen.findByText('Pack');
     fireEvent.change(screen.getByLabelText('Group by'), { target: { value: 'assignee' } });
     expect(await screen.findByRole('region', { name: 'Arun Kumar' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Bala' })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Order'), { target: { value: 'newest' } });
-    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open&sort=newest'));
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'updated' } });
+    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open&sort=updated'));
+    expect(addressBar.search).toBe('sort=updated');
     unmount();
     workspace();
     expect(await screen.findByRole('region', { name: 'Bala' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Order')).toHaveValue('newest');
+    expect(screen.getByLabelText('Sort')).toHaveValue('updated');
   });
 
   it('the admin picks a team from the side list; a head has no team list of their own', async () => {

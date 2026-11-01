@@ -84,20 +84,13 @@ const staffTaskRepository = {
       .lean();
   },
 
-  /**
-   * Keyset page in another order: 'newest' (_id descending) or 'updated'
-   * (updatedAt, then _id, descending). `after` is the decoded cursor.
-   */
-  pageBy: (sort, filter, { after = null, limit }) => {
-    let keyset = null;
-    if (after && sort === 'newest') keyset = { _id: { $lt: after.id } };
-    if (after && sort === 'updated') {
-      keyset = { $or: [{ updatedAt: { $lt: after.updatedAt } }, { updatedAt: after.updatedAt, _id: { $lt: after.id } }] };
-    }
-    return StaffTask.find(keyset ? { $and: [filter, keyset] } : filter, LIST_PROJECTION)
-      .sort(sort === 'updated' ? { updatedAt: -1, _id: -1 } : { _id: -1 })
-      .limit(limit)
-      .lean();
+  /** Keyset page in another order (newest / oldest / recently changed): `query` already carries the "after the cursor" clause. */
+  pageSorted: (query, { sort, limit }) => StaffTask.find(query, LIST_PROJECTION).sort(sort).limit(limit).lean(),
+
+  /** How many tasks match, counted over at most `cap` of them. */
+  countUpTo: async (query, cap) => {
+    const count = await StaffTask.countDocuments(query, { limit: cap + 1 });
+    return count > cap ? { count: cap, capped: true } : { count, capped: false };
   },
 
   /** Open tasks given to `userId` whose due day is in `range` (the page header). */

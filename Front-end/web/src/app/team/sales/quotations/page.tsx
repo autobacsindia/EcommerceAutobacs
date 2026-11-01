@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import QuotationsList from '@/components/staff/sales/QuotationsList';
@@ -17,7 +18,9 @@ export default function QuotationsPage() {
           <Plus className="h-4 w-4" /> New quotation
         </Link>
       </div>
-      <QuotationsList />
+      <Suspense fallback={null}>
+        <QuotationsList />
+      </Suspense>
     </div>
   );
 }

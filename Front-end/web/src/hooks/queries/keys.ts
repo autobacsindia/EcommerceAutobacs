@@ -185,8 +185,10 @@ export const staffKeys = {
   /** Every sales-order list (own / team / paid) — invalidate after create, re-link or cancel. */
   orders: () => [...staffKeys.all, 'orders'] as const,
   salesOrders: () => [...staffKeys.orders(), 'sales'] as const,
-  /** The seller's list: 'active' or the orders parked "On hold — customer thinking". */
-  salesOrderList: (view: 'active' | 'on_hold') => [...staffKeys.salesOrders(), view] as const,
+  /** The seller's list (view 'active' or the orders parked "On hold"), with its search / filters / sort. */
+  salesOrderList: (params: Record<string, string>) => [...staffKeys.salesOrders(), params] as const,
+  /** The sales lists' "Salesman" choices (the head / admin; empty for a seller). */
+  salesFilterOptions: () => [...staffKeys.all, 'sales-filter-options'] as const,
   /**
    * The paid-order lists. `stage` keeps "Order processing" and "Delivered" in
    * separate cache entries — they are different server queries, and an action
@@ -207,7 +209,7 @@ export const staffKeys = {
   salesOrder: (id: string) => [...staffKeys.orders(), 'sales-order', id] as const,
   /** GTM quotations — invalidate after create, edit, cancel or accept. */
   quotations: () => [...staffKeys.all, 'quotations'] as const,
-  quotationList: (status: string) => [...staffKeys.quotations(), 'list', status] as const,
+  quotationList: (params: Record<string, string>) => [...staffKeys.quotations(), 'list', params] as const,
   quotation: (id: string) => [...staffKeys.quotations(), 'one', id] as const,
   /** Team workflow — invalidate `orders()` after any action, since one action moves an order between lists. */
   workQueue: (queue: string, filters: object = {}) => [...staffKeys.orders(), 'work', queue, filters] as const,

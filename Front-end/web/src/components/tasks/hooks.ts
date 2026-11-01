@@ -18,7 +18,7 @@ export function listParams(filters: TaskFilters, state: TaskBucket): Record<stri
   if (filters.view === 'team' && filters.assignee) p.assignee = filters.assignee;
   if (filters.view === 'team' && filters.team) p.team = filters.team;
   if (filters.tag) p.tag = filters.tag;
-  if (filters.sort && filters.sort !== 'due') p.sort = filters.sort;
+  if (state === 'open' && filters.sort && filters.sort !== 'due') p.sort = filters.sort;
   return p;
 }
 

@@ -45,6 +45,7 @@ import { orderNumber } from './invoiceService.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { TASK_STATUSES, TASK_PRIORITIES } from '../models/StaffTask.js';
+import { keysetPage } from '../utils/listQuery.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -63,8 +64,6 @@ export const TAGS_MAX = 10;
 export const TAG_MAX = 24;
 /** Tasks one bulk change may touch. */
 export const BULK_MAX = 50;
-/** How a list may be ordered: due day (soonest first), newest first, most recently changed first. */
-export const TASK_SORTS = Object.freeze(['due', 'newest', 'updated']);
 const SUMMARY_MAX = 160;
 const COUNTER = 'staffTask';
 /** Open tasks with no due day sort after every dated one. */
@@ -338,24 +337,13 @@ export async function getTask(actor, id) {
   return { ...shape(t, actor, { full: true }), siblings: await siblingsOf(actor, t) };
 }
 
-/*
-  A cursor is the last row's sort key, and names the order it belongs to: a page
-  of "newest first" cannot continue a "due day" list. Cursors without a sort
-  (issued before there was a choice) are due-day cursors.
-*/
-function encodeCursor(t, sort) {
-  const key = sort === 'newest' ? { s: sort } : sort === 'updated' ? { s: sort, u: new Date(t.updatedAt).getTime() } : { r: t.rank };
-  return Buffer.from(JSON.stringify({ ...key, i: idOf(t._id) })).toString('base64url');
-}
-function decodeCursor(cursor, sort) {
+const encodeCursor = (t) => Buffer.from(JSON.stringify({ r: t.rank, i: idOf(t._id) })).toString('base64url');
+function decodeCursor(cursor) {
   if (!cursor) return null;
   try {
-    const { s = 'due', r, u, i } = JSON.parse(Buffer.from(String(cursor), 'base64url').toString('utf8'));
-    if (s !== sort || !mongoose.isValidObjectId(i)) throw new Error('bad');
-    const id = new mongoose.Types.ObjectId(i);
-    if (s === 'due') { if (typeof r !== 'string') throw new Error('bad'); return { rank: r, id }; }
-    if (s === 'updated') { if (!Number.isSafeInteger(u)) throw new Error('bad'); return { updatedAt: new Date(u), id }; }
-    return { id };
+    const { r, i } = JSON.parse(Buffer.from(String(cursor), 'base64url').toString('utf8'));
+    if (typeof r !== 'string' || !mongoose.isValidObjectId(i)) throw new Error('bad');
+    return { rank: r, id: new mongoose.Types.ObjectId(i) };
   } catch {
     throw fail('Invalid page cursor.', 400);
   }
@@ -381,8 +369,19 @@ const addDays = (ymd, days) => {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 };
 
-export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, priority, tag, q, sort = 'due', cursor } = {}) {
-  const order = cleanEnum(sort, TASK_SORTS, 'order');
+/*
+  The open list's order: by due date (the default — overdue first, no date
+  last), by when the task was given out, or by when it last changed. Done and archived lists keep their
+  own order (most recently finished first), so `sort` only applies to open tasks.
+*/
+export const TASK_SORTS = Object.freeze({
+  newest: { field: 'createdAt', dir: -1, type: 'date' },
+  oldest: { field: 'createdAt', dir: 1, type: 'date' },
+  updated: { field: 'updatedAt', dir: -1, type: 'date' },
+});
+const TASK_COUNT_CAP = 1000;
+
+export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, priority, tag, q, sort, cursor } = {}) {
   const query = { bucket: state };
   if (view === 'mine') {
     query.assignee = actor._id;
@@ -424,15 +423,35 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
     else if (due === 'week') range = { $gte: today, $lte: addDays(today, 6) };
   }
 
-  const after = decodeCursor(cursor, order);
-  const rows = order === 'due'
-    ? await staffTaskRepository.page(query, { after, limit: TASK_PAGE_SIZE + 1, range })
-    : await staffTaskRepository.pageBy(order, { ...query, ...(range ? { rank: range } : {}) }, { after, limit: TASK_PAGE_SIZE + 1 });
+  // How many match: the open list's first page only (the done list is folded away).
+  const first = !cursor && state === 'open';
+  const counted = first ? staffTaskRepository.countUpTo({ ...query, ...(range ? { rank: range } : {}) }, TASK_COUNT_CAP) : null;
+
+  if (state === 'open' && TASK_SORTS[sort]) {
+    const { items, nextCursor } = await keysetPage({
+      query: { ...query, ...(range ? { rank: range } : {}) },
+      sorts: TASK_SORTS,
+      sortName: sort,
+      cursor,
+      pageSize: TASK_PAGE_SIZE,
+      find: staffTaskRepository.pageSorted,
+    });
+    return {
+      tasks: items.map((t) => shape(t, actor, { today })),
+      nextCursor,
+      sort,
+      ...(counted ? { summary: await counted } : {}),
+    };
+  }
+
+  const rows = await staffTaskRepository.page(query, { after: decodeCursor(cursor), limit: TASK_PAGE_SIZE + 1, range });
   const more = rows.length > TASK_PAGE_SIZE;
   const tasks = more ? rows.slice(0, TASK_PAGE_SIZE) : rows;
   return {
     tasks: tasks.map((t) => shape(t, actor, { today })),
-    nextCursor: more ? encodeCursor(tasks[tasks.length - 1], order) : null,
+    nextCursor: more ? encodeCursor(tasks[tasks.length - 1]) : null,
+    sort: 'due',
+    ...(counted ? { summary: await counted } : {}),
   };
 }
 

@@ -10,6 +10,7 @@ import TasksWorkspace from './TasksWorkspace';
 import TaskDetail, { timeAgo } from './TaskDetail';
 import { initialsOf, toneFor } from './ui';
 import { formatDueDay, isPastDay, todayIST, type Task } from './types';
+import { addressBar } from '@/test-utils/addressBarMock';
 
 const get = jest.fn();
 const post = jest.fn();
@@ -25,13 +26,9 @@ jest.mock('@/lib/api-client', () => ({
 const toastSuccess = jest.fn();
 const toastError = jest.fn();
 jest.mock('react-hot-toast', () => ({ __esModule: true, default: { success: (...a: unknown[]) => toastSuccess(...a), error: (...a: unknown[]) => toastError(...a) } }));
-let search = '';
-const replace = jest.fn((url: string) => { search = url.split('?')[1] ?? ''; });
-jest.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams(search),
-  useRouter: () => ({ replace }),
-  usePathname: () => '/team/tasks',
-}));
+// The page keeps whose tasks, the search, filters, sort and the open task in the address.
+jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
+const { replace } = addressBar;
 jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => <a href={href} className={className}>{children}</a>,
@@ -77,9 +74,9 @@ const listCalls = () => get.mock.calls.map((c) => c[0] as string).filter((u) => 
 
 beforeEach(() => {
   localStorage.clear();
-  [get, post, patch, remove, toastSuccess, toastError, replace].forEach((f) => f.mockClear());
+  [get, post, patch, remove, toastSuccess, toastError].forEach((f) => f.mockClear());
   get.mockReset(); post.mockReset(); patch.mockReset(); remove.mockReset();
-  search = '';
+  addressBar.reset('/team/tasks');
   jest.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
@@ -139,7 +136,7 @@ describe('the Tasks page', () => {
   });
 
   it('opens on what is due now when the bell sends ?due=late', async () => {
-    search = 'due=late';
+    addressBar.search = 'due=late';
     serve();
     workspace();
     await screen.findByText('Call Bosch');
@@ -243,6 +240,50 @@ describe('the Tasks page', () => {
     workspace();
     await screen.findByText('Call Bosch');
     expect(screen.queryByText('How tasks work')).toBeNull();
+  });
+});
+
+describe('search, filters and sort in the address', () => {
+  it('a sort reaches the open list only; done keeps its own order', async () => {
+    serve({ done: [task({ id: 't3', code: 'T-9', title: 'Old job', status: 'done', bucket: 'done' })] });
+    workspace();
+    await screen.findByText('Call Bosch');
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'newest' } });
+    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open&sort=newest'));
+    expect(addressBar.search).toBe('sort=newest');
+    fireEvent.click(within(await screen.findByRole('region', { name: 'Done' })).getByRole('button', { name: /Done/ }));
+    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=done'));
+    expect(listCalls().filter((u) => u.includes('state=done') && u.includes('sort='))).toEqual([]);
+  });
+
+  it('opens from a link with whose tasks, the search, priority and sort; Clear all keeps whose and the sort', async () => {
+    addressBar.search = 'view=created&priority=high&q=bosch&sort=oldest';
+    serve();
+    workspace();
+    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=created&state=open&priority=high&q=bosch&sort=oldest'));
+    expect(screen.getByLabelText('Search tasks')).toHaveValue('bosch');
+    expect(screen.getByRole('button', { name: 'I gave out' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
+    await waitFor(() => expect(addressBar.search).toBe('view=created&sort=oldest'));
+    expect(screen.getByLabelText('Search tasks')).toHaveValue('');
+  });
+
+  it('a team list in a link, for someone without one, opens on "For me"', async () => {
+    addressBar.search = 'view=team&assignee=u3';
+    serve();
+    workspace({ canSeeTeam: false });
+    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open'));
+    expect(listCalls().some((u) => u.includes('view=team'))).toBe(false);
+  });
+
+  it('says how many open tasks match', async () => {
+    serve();
+    const base = get.getMockImplementation()!;
+    get.mockImplementation((url: string) => (url.startsWith('/staff/tasks?') && url.includes('state=open')
+      ? Promise.resolve({ tasks: [task()], nextCursor: null, summary: { count: 1, capped: false } })
+      : base(url)));
+    workspace();
+    expect(await screen.findByRole('status')).toHaveTextContent('1 open task found');
   });
 });
 

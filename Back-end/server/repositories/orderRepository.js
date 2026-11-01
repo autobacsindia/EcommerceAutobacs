@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import BaseRepository from './baseRepository.js';
 import Order from '../models/Order.js';
 import userRepository from './userRepository.js';
-import { istRange } from '../utils/listQuery.js';
+import { istRange, readSummary, summaryPipeline } from '../utils/listQuery.js';
 
 /**
  * "This array is still exactly N long" — as a compare-and-set condition that also works
@@ -86,6 +86,12 @@ class OrderRepository extends BaseRepository {
     let q = Order.countDocuments({ user: userId });
     if (session) q = q.session(session);
     return q;
+  }
+
+  /** How many orders match a team list's query and their total, counted over at most `cap` rows. */
+  async listSummary(query, cap) {
+    const [row] = await Order.aggregate(summaryPipeline(query, cap, 'totalAmount')).option({ maxTimeMS: 5000 });
+    return readSummary(row, cap, true);
   }
 
   // Full populate for getOrderById — returns lean object (read-only)
