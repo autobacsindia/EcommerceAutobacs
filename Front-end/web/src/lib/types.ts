@@ -337,6 +337,17 @@ export interface PaginatedReturnRequests {
   count: number;
 }
 
+/** Admin → Returns: one "Show more" page of GET /returns/admin/all. */
+export interface AdminReturnRequestsPage {
+  requests: ReturnRequest[];
+  nextCursor: string | null;
+  sort: 'newest' | 'oldest';
+  /** First page only; `capped` means "this many or more". */
+  summary?: { count: number; capped: boolean };
+  /** The search looked through the newest returns only — add a date to go further back. */
+  searchCapped?: boolean;
+}
+
 export interface OrderItem {
   /** The order line's own subdocument id — the unambiguous handle for one line. */
   _id?: string;

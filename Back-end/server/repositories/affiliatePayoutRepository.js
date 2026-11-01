@@ -1,5 +1,6 @@
 import BaseRepository from './baseRepository.js';
 import AffiliatePayout from '../models/AffiliatePayout.js';
+import { summaryPipeline, readSummary } from '../utils/listQuery.js';
 
 /**
  * AffiliatePayout data access.
@@ -42,17 +43,19 @@ class AffiliatePayoutRepository extends BaseRepository {
   }
 
   /** Admin queue / affiliate statement — keyset-paginated, newest first, bounded. */
-  async findPage({ affiliate = null, status = null, limit = 50, before = null } = {}) {
-    const query = {};
-    if (affiliate) query.affiliate = affiliate;
-    if (status) query.status = status;
-    if (before) query.createdAt = { $lt: before };
-
+  /** One keyset page; `query` carries the filters and page position, `sort` the order (utils/listQuery.js). */
+  page(query, { sort, limit }) {
     return AffiliatePayout.find(query)
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .limit(limit)
       .populate('affiliate', 'code name email')
       .lean();
+  }
+
+  /** How many match and their net amount in paise (capped): the "N found · total" line. */
+  async summary(query, cap) {
+    const [row] = await AffiliatePayout.aggregate(summaryPipeline(query, cap, 'netPaise')).option({ maxTimeMS: 5000 });
+    return readSummary(row, cap, true);
   }
 
   /**

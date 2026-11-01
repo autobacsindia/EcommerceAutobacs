@@ -1,4 +1,5 @@
 import BankTransfer from '../models/BankTransfer.js';
+import { readSummary, summaryPipeline } from '../utils/listQuery.js';
 
 /**
  * Bank transfers (models/BankTransfer.js). Data access only — who may do what
@@ -18,16 +19,18 @@ const bankTransferRepository = {
     { new: true },
   ).lean(),
 
-  /** Keyset page, newest first. */
-  page: (query, { before = null, limit }) => BankTransfer.find(
-    before
-      ? { $and: [query, { $or: [{ createdAt: { $lt: before.createdAt } }, { createdAt: before.createdAt, _id: { $lt: before.id } }] }] }
-      : query,
-  )
-    .sort({ createdAt: -1, _id: -1 })
+  /** Keyset page: `query` already carries the "after the cursor" clause; `sort` is a Mongo sort. */
+  page: (query, { sort, limit }) => BankTransfer.find(query)
+    .sort(sort)
     .limit(limit)
     .select('-files.publicId -files.provider')
     .lean(),
+
+  /** How many match and their total, counted over at most `cap` rows. */
+  summary: async (query, cap) => {
+    const [row] = await BankTransfer.aggregate(summaryPipeline(query, cap, 'amount')).option({ maxTimeMS: 5000 });
+    return readSummary(row, cap, true);
+  },
 };
 
 export default bankTransferRepository;

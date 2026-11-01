@@ -1,12 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, FileText, Loader2, Pencil, X } from 'lucide-react';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, FileText, Loader2, Pencil, SlidersHorizontal, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
+import { useListParams } from '@/lib/hooks/useListParams';
+import {
+  ListAmountRange, ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect, listField,
+} from '@/components/panel/ListControls';
 
 export type BankTransferStatus = 'pending' | 'confirmed' | 'rejected' | 'withdrawn';
 
@@ -33,14 +37,35 @@ export type BankTransfer = {
   editableUntil?: string | null;
 };
 
-type Page = { transfers: BankTransfer[]; nextCursor: string | null };
+type Page = {
+  transfers: BankTransfer[];
+  nextCursor: string | null;
+  /** First page only: how many match and what they add up to (capped at 1,000). */
+  summary?: { count: number; total: number | null; capped: boolean };
+};
+type FilterOptions = { sellers: { id: string; name: string }[] };
 
 const TABS: { value: BankTransferStatus | 'all'; label: string }[] = [
   { value: 'pending', label: 'To check' },
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'rejected', label: 'Rejected' },
+  { value: 'withdrawn', label: 'Withdrawn' },
   { value: 'all', label: 'All' },
 ];
+
+const SORTS = [
+  { value: 'newest', label: 'Newest recorded first' },
+  { value: 'oldest', label: 'Oldest recorded first' },
+  { value: 'paid_recent', label: 'Latest paid date first' },
+  { value: 'amount_desc', label: 'Amount: high to low' },
+  { value: 'amount_asc', label: 'Amount: low to high' },
+];
+const DATE_OF = [
+  { value: 'paid', label: 'Paid on' },
+  { value: 'recorded', label: 'Recorded on' },
+];
+// The filters (not the tab, sort or which-date choice); any of them on → "Clear all".
+const FILTER_KEYS = ['q', 'seller', 'from', 'to', 'min', 'max'] as const;
 
 const BADGE: Record<BankTransferStatus, string> = {
   pending: 'bg-amber-100 text-amber-800',
@@ -206,42 +231,106 @@ function TransferCard({ t }: { t: BankTransfer }) {
 /**
  * Bank transfers a salesman recorded for a sales order. Accounts and the admin
  * confirm (the order becomes paid) or reject; the GTM head sees all of them, a
- * GTM lead sees their own. The server decides who sees and may do what.
+ * GTM lead sees their own. The server decides who sees and may do what — and
+ * does the searching and filtering, so every page honours them. The tab, search
+ * and filters live in the page address (Back, refresh and a shared link keep
+ * them); the page must wrap this in <Suspense>.
  */
 export default function BankTransfersList() {
-  const [status, setStatus] = useState<BankTransferStatus | 'all'>('pending');
+  const { values: v, set, clear } = useListParams({
+    status: 'pending', sort: 'newest', dateOf: 'paid', q: '', seller: '', from: '', to: '', min: '', max: '',
+  });
+  // Phones: the filters fold away behind a button so the list is not pushed off screen.
+  const [showFilters, setShowFilters] = useState(false);
+  // A tab the page does not offer (an old link) falls back to "To check".
+  const status = TABS.some((t) => t.value === v.status) ? v.status : 'pending';
+  const sort = SORTS.some((x) => x.value === v.sort) ? v.sort : 'newest';
+  const params: Record<string, string> = {
+    status,
+    ...(sort !== 'newest' ? { sort } : {}),
+    ...Object.fromEntries(FILTER_KEYS.filter((k) => v[k]).map((k) => [k, v[k]])),
+    ...((v.from || v.to) && v.dateOf !== 'paid' ? { dateOf: v.dateOf } : {}),
+  };
+  const filtered = FILTER_KEYS.some((k) => v[k]);
+  const filtersOn = [v.seller, v.from || v.to, v.min || v.max].filter(Boolean).length;
+
   const q = useInfiniteQuery({
-    queryKey: staffKeys.bankTransfers(status),
+    queryKey: staffKeys.bankTransfers(params),
     queryFn: ({ pageParam }) => {
-      const params = new URLSearchParams({ status, ...(pageParam ? { cursor: pageParam } : {}) });
-      return apiClient.get<Page>(`/staff/bank-transfers?${params}`);
+      const qs = new URLSearchParams({ ...params, ...(pageParam ? { cursor: pageParam } : {}) });
+      return apiClient.get<Page>(`/staff/bank-transfers?${qs}`);
     },
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor || undefined,
+    placeholderData: keepPreviousData,
     refetchInterval: 60_000,
   });
+  // The "Salesman" choices: only for those who see everyone's (the server sends none to a GTM lead).
+  const choices = useQuery({
+    queryKey: staffKeys.bankTransferFilterOptions(),
+    queryFn: () => apiClient.get<FilterOptions>('/staff/bank-transfers/filter-options'),
+    staleTime: 5 * 60_000,
+  });
+  const sellers = choices.data?.sellers ?? [];
   const rows = q.data?.pages.flatMap((p) => p.transfers) ?? [];
+  const summary = q.data?.pages[0]?.summary;
 
   return (
     <div className="space-y-4">
       <div role="tablist" aria-label="Bank transfer status" className="flex flex-wrap gap-2">
         {TABS.map((tab) => (
-          <button key={tab.value} type="button" role="tab" aria-selected={status === tab.value} onClick={() => setStatus(tab.value)}
+          <button key={tab.value} type="button" role="tab" aria-selected={status === tab.value} onClick={() => set({ status: tab.value })}
             className={`rounded-full px-3 py-1.5 text-sm font-medium ${status === tab.value ? 'bg-gray-900 text-white' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>
             {tab.label}
           </button>
         ))}
       </div>
 
+      <div role="search" aria-label="Search and filter bank transfers" className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ListSearch
+            value={v.q}
+            onChange={(text) => set({ q: text.trim() })}
+            label="Search bank transfers"
+            placeholder="Search order no., customer, city, UTR, amount, salesman, note"
+          />
+          <ListSelect label="Sort" value={sort} onChange={(x) => set({ sort: x })} options={SORTS} />
+          <button type="button" onClick={() => setShowFilters((x) => !x)} aria-expanded={showFilters} aria-controls="bank-transfer-filters"
+            className={`${listField} inline-flex items-center gap-1.5 sm:hidden`}>
+            <SlidersHorizontal className="h-4 w-4" aria-hidden /> Filters{filtersOn ? ` · ${filtersOn} on` : ''}
+          </button>
+        </div>
+        <div id="bank-transfer-filters" className={`${showFilters ? 'flex' : 'hidden'} flex-wrap items-center gap-2 sm:flex`}>
+          {sellers.length > 0 && (
+            <ListSelect label="Salesman" value={v.seller} onChange={(x) => set({ seller: x })} allLabel="Any salesman"
+              options={sellers.map((p) => ({ value: p.id, label: p.name }))} />
+          )}
+          <ListDateRange label="Dates" from={v.from} to={v.to} onChange={(from, to) => set({ from, to })}>
+            <select aria-label="Which date" value={v.dateOf} onChange={(e) => set({ dateOf: e.target.value })} className={listField}>
+              {DATE_OF.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+            </select>
+          </ListDateRange>
+          <ListAmountRange min={v.min} max={v.max} onChange={(min, max) => set({ min, max })} />
+        </div>
+        <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
+          {summary
+            ? <ListResultLine count={summary.count} capped={summary.capped} total={summary.total} noun={['bank transfer', 'bank transfers']} formatTotal={rupees} />
+            : <span />}
+          {filtered && <ListClear onClear={() => clear(['status', 'sort', 'dateOf'])} />}
+        </div>
+      </div>
+
       {q.isPending && <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>}
       {q.isError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load bank transfers.')}</p>}
       {q.isSuccess && rows.length === 0 && (
         <p className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
-          {status === 'pending' ? 'Nothing to check. New bank transfers appear here.' : 'No bank transfers here yet.'}
+          {filtered
+            ? 'No bank transfers match — try fewer words or clear the filters.'
+            : status === 'pending' ? 'Nothing to check. New bank transfers appear here.' : 'No bank transfers here yet.'}
         </p>
       )}
 
-      <ul className="space-y-3">
+      <ul className={`space-y-3 ${q.isPlaceholderData ? 'opacity-60' : ''}`}>
         {rows.map((t) => <TransferCard key={t.id} t={t} />)}
       </ul>
 

@@ -161,7 +161,7 @@ export const affiliateKeys = {
    * Under `affiliate` rather than `adminKeys` so building a batch — which changes who is
    * owed what — can invalidate this and the affiliate's own view with one prefix.
    */
-  payoutQueue: () => [...affiliateKeys.all, 'payout-queue'] as const,
+  payoutQueue: (params: Record<string, string> = {}) => [...affiliateKeys.all, 'payout-queue', params] as const,
 };
 
 export const adminKeys = {
@@ -201,7 +201,8 @@ export const staffKeys = {
    * Bank transfers waiting for / checked by accounts. Under orders(): confirming one
    * pays its order, so the order lists must refresh with it (and the other way round).
    */
-  bankTransfers: (status: string) => [...staffKeys.orders(), 'bank-transfers', status] as const,
+  bankTransfers: (params: Record<string, string>) => [...staffKeys.orders(), 'bank-transfers', params] as const,
+  bankTransferFilterOptions: () => [...staffKeys.orders(), 'bank-transfers', 'filter-options'] as const,
   /** One sales order (its payment requests). Under orders(), so list invalidation refreshes it too. */
   salesOrder: (id: string) => [...staffKeys.orders(), 'sales-order', id] as const,
   /** GTM quotations — invalidate after create, edit, cancel or accept. */
@@ -213,10 +214,10 @@ export const staffKeys = {
   workOrder: (id: string) => [...staffKeys.orders(), 'work-order', id] as const,
   /** Returns in the team panel — invalidate `returns()` after any return action. */
   returns: () => [...staffKeys.all, 'returns'] as const,
-  returnList: (queue: string) => [...staffKeys.returns(), 'list', queue] as const,
+  returnList: (queue: string, params: Record<string, string> = {}) => [...staffKeys.returns(), 'list', queue, params] as const,
   returnOne: (id: string) => [...staffKeys.returns(), 'one', id] as const,
   returnPreview: (id: string, choices: object = {}) => [...staffKeys.returns(), 'preview', id, choices] as const,
-  suppliersOwe: () => [...staffKeys.returns(), 'owed'] as const,
+  suppliersOwe: (params: Record<string, string> = {}) => [...staffKeys.returns(), 'owed', params] as const,
   returnOptions: (orderId: string) => [...staffKeys.returns(), 'options', orderId] as const,
   /** A customer's saved bank account, as seen from one quotation / order (masked). */
   customerBanks: () => [...staffKeys.all, 'customer-bank'] as const,

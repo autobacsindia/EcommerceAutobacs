@@ -140,7 +140,9 @@ export const validateSetSeller = [
 
 export const validateBankTransferList = [
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
-  query('status').optional().isIn(['pending', 'confirmed', 'rejected', 'all']).withMessage('Invalid status'),
+  query('status').optional().isIn(['pending', 'confirmed', 'rejected', 'withdrawn', 'all']).withMessage('Invalid status'),
+  // The rest are read leniently by the service (an unknown sort or a bad date is ignored); only size is checked here.
+  query(['q', 'seller', 'dateOf', 'from', 'to', 'min', 'max', 'sort']).optional().isString().isLength({ max: 100 }).withMessage('Invalid filter'),
 ];
 
 export const validateBankTransferId = [

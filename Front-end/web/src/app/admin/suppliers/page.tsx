@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import SupplierDirectory from '@/components/payments/SupplierDirectory';
 
 /** Admin: the supplier directory procurement keeps — add, edit, deactivate. */
@@ -10,7 +11,10 @@ export default function AdminSuppliersPage() {
         <h1 className="text-2xl font-bold text-gray-900">Suppliers</h1>
         <p className="text-sm text-gray-600">The suppliers procurement picks from when raising a supplier payment. Bank details are copied onto each payment when it is raised.</p>
       </div>
-      <SupplierDirectory canEdit />
+      {/* The directory's search and filters live in the address (useSearchParams). */}
+      <Suspense fallback={null}>
+        <SupplierDirectory canEdit />
+      </Suspense>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,6 +10,8 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { formatDateIST } from '@/lib/datetime';
 import { usePayoutQueue, type PayoutQueueRow } from '@/hooks/queries/useAffiliate';
 import { affiliateKeys } from '@/hooks/queries/keys';
+import { useListParams } from '@/lib/hooks/useListParams';
+import { ListClear, ListSearch, ListSelect } from '@/components/panel/ListControls';
 
 /**
  * Who is owed money right now.
@@ -30,7 +32,17 @@ import { affiliateKeys } from '@/hooks/queries/keys';
  * display and never sums anything itself — in particular `totalPayablePaise` covers EVERY
  * due affiliate, not the visible page, so a browser-side sum of the rows would quietly
  * understate the liability the moment the list is truncated.
+ *
+ * The search (name or code) and the order are the server's, and live in the page
+ * address; the totals above the table are always EVERY due affiliate, whatever is
+ * searched. The page renders inside <Suspense> (useSearchParams).
  */
+
+const SORTS = [
+  { value: 'priority', label: 'Asked to be paid first' },
+  { value: 'amount_desc', label: 'Most owed first' },
+  { value: 'oldest', label: 'Waiting longest first' },
+];
 
 const rupees = (paise: number) =>
   `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -42,9 +54,21 @@ const waitingDays = (iso: string | null) => {
 };
 
 export default function AdminAffiliatePayoutQueuePage() {
+  return (
+    <Suspense>
+      <AdminAffiliatePayoutQueue />
+    </Suspense>
+  );
+}
+
+function AdminAffiliatePayoutQueue() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { data, isPending, isError, error, refetch } = usePayoutQueue();
+  const { values: v, set, clear } = useListParams({ q: '', sort: 'priority' });
+  const sort = SORTS.some((x) => x.value === v.sort) ? v.sort : 'priority';
+  const { data, isPending, isError, error, refetch } = usePayoutQueue({
+    ...(v.q ? { q: v.q } : {}), ...(sort !== 'priority' ? { sort } : {}),
+  });
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -104,7 +128,7 @@ export default function AdminAffiliatePayoutQueuePage() {
         </p>
       )}
 
-      {!isPending && data && queue.length > 0 && (
+      {!isPending && data && data.dueCount > 0 && (
         <p className="text-sm font-medium text-gray-900">
           {data.dueCount} affiliate{data.dueCount === 1 ? '' : 's'} due ·{' '}
           {rupees(data.totalPayablePaise)} total
@@ -116,6 +140,17 @@ export default function AdminAffiliatePayoutQueuePage() {
           )}
         </p>
       )}
+
+      <div role="search" aria-label="Search and sort the payout queue" className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <ListSearch value={v.q} onChange={(text) => set({ q: text.trim() })} label="Search the payout queue" placeholder="Search affiliate name or code" />
+        <ListSelect label="Sort" value={sort} onChange={(x) => set({ sort: x })} options={SORTS} />
+        {v.q && data && (
+          <p role="status" className="text-sm text-gray-600">
+            {data.found.toLocaleString('en-IN')} of {data.dueCount.toLocaleString('en-IN')} due affiliate{data.dueCount === 1 ? '' : 's'} match
+          </p>
+        )}
+        {v.q && <ListClear onClear={() => clear(['sort'])} />}
+      </div>
 
       {/*
         Money owed to affiliates who are not active. Deliberately NOT in the worklist —
@@ -154,7 +189,7 @@ export default function AdminAffiliatePayoutQueuePage() {
 
             {!isPending && queue.length === 0 && (
               <tr><td colSpan={7} className="py-10 text-center text-gray-500">
-                Nobody is due a payout right now.
+                {v.q ? 'Nobody due matches — try fewer letters or clear the search.' : 'Nobody is due a payout right now.'}
               </td></tr>
             )}
 

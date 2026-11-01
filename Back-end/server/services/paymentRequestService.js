@@ -24,6 +24,7 @@
  * changes it once; the other is told it already moved.
  */
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
 import paymentRequestRepository from '../repositories/paymentRequestRepository.js';
@@ -38,12 +39,15 @@ import { postSystemMessage } from './chatService.js';
 import { orderNumber } from './invoiceService.js';
 import { STAFF_TEAMS, STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import {
-  BASE_CURRENCY, MAX_FX_RATE, MIN_FX_RATE, categoriesFor, categoryLabel, expenseOptionsFor,
-  findCategory, isCurrencyAllowed, noteRequiredFor,
+  BASE_CURRENCY, MAX_FX_RATE, MIN_FX_RATE, categoriesFor, categoriesNamed, categoryLabel, expenseOptionsFor,
+  filterCategories, findCategory, isCurrencyAllowed, noteRequiredFor,
 } from '../config/expenseCategories.js';
 import { workflowView, STAGE } from '../utils/teamWorkflow.js';
 import { variantDisplayName } from '../utils/orderLines.js';
 import { cleanPayee, maskAccount, payKeyOf } from '../utils/payee.js';
+import {
+  and, amountOf, amountRange, isObjectId, istRange, keysetPage, plainQuery, searchClauses, searchWords,
+} from '../utils/listQuery.js';
 import * as suppliers from './supplierService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
@@ -743,36 +747,86 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
 
 // ── Read ─────────────────────────────────────────────────────────────────────
 
-const decodeCursor = (c) => {
-  try {
-    const [iso, id] = Buffer.from(String(c), 'base64url').toString().split('|');
-    const createdAt = new Date(iso);
-    return Number.isNaN(createdAt.getTime()) || !/^[a-f0-9]{24}$/i.test(id || '') ? null : { createdAt, id };
-  } catch { return null; }
-};
-const encodeCursor = (r) => Buffer.from(`${new Date(r.createdAt).toISOString()}|${idOf(r._id)}`).toString('base64url');
+/*
+  The list's search / filter / sort (utils/listQuery.js does the reading).
+
+  Every filter is ANDed onto the visibility rule (a team sees only its own), so
+  no combination can widen what someone sees. Unknown values are ignored rather
+  than refused — a stale link still opens, just unfiltered.
+*/
+const STATUS_QUERY = Object.freeze({
+  open: { $in: OPEN_STATUSES },
+  to_approve: 'submitted',
+  to_pay: { $in: ['approved', 'on_hold'] },
+});
+export const LIST_SORTS = Object.freeze({
+  newest: { field: 'createdAt', dir: -1, type: 'date' },
+  oldest: { field: 'createdAt', dir: 1, type: 'date' },
+  amount_desc: { field: 'amount', dir: -1, type: 'number' },
+  amount_asc: { field: 'amount', dir: 1, type: 'number' },
+  // Only meaningful for paid requests (the only ones with a paidAt): ignored otherwise.
+  paid_recent: { field: 'payment.paidAt', dir: -1, type: 'date' },
+});
+export const PAID_METHODS = Object.freeze(['razorpay', 'bank', 'upi', 'other']);
+const SEARCH_FIELDS = Object.freeze([
+  'number', 'payee.name', 'payee.upiId', 'orderNumber', 'requestedByName', 'description', 'category',
+  'payment.reference', 'itemNames', 'customer.name', 'customer.phone', 'customer.city',
+]);
+const SUMMARY_CAP = 1000;
+
+/** The Mongo query for a viewer and a set of list filters (exported for tests). */
+export function listQuery(actor, f = {}) {
+  const visible = seesAll(actor)
+    ? (f.team && STAFF_TEAM_VALUES.includes(String(f.team)) ? { team: String(f.team) } : {})
+    : { team: actor.staff.team };
+  const status = STATUS_QUERY[f.status] ?? (STATUS_LABELS[f.status] ? f.status : null);
+  const range = istRange(f.from, f.to);
+  const amount = amountRange(f.min, f.max);
+  const words = searchWords(String(f.q ?? '').replace(/^#/, ''));
+  return and(
+    visible,
+    status ? { status } : null,
+    ['supplier', 'expense'].includes(f.kind) ? { kind: f.kind } : null,
+    // An equality match on a stored value, so any well-formed one is safe — old values included.
+    /^[a-z][a-z0-9_]{1,39}$/.test(f.category || '') ? { category: f.category } : null,
+    isObjectId(f.by) ? { requestedBy: new mongoose.Types.ObjectId(f.by) } : null,
+    PAID_METHODS.includes(f.method) ? { 'payment.method': f.method } : null,
+    amount ? { amount } : null,
+    range && f.dateOf === 'paid'
+      // When the money went; older records only know when it was recorded.
+      ? { $or: [{ 'payment.transactionAt': range }, { 'payment.transactionAt': null, 'payment.paidAt': range }] }
+      : range ? { createdAt: range } : null,
+    searchClauses(words, SEARCH_FIELDS, (w) => {
+      const n = amountOf(w);
+      // "meta ads" finds a meta_ads expense: categories are stored as codes, shown by name.
+      const named = w.length >= 3 ? categoriesNamed(w) : [];
+      return [...(n ? [{ amount: n }] : []), ...(named.length ? [{ category: { $in: named } }] : [])];
+    }),
+  );
+}
+
+/** The sort a list asks for; "recently paid" only on the paid list. */
+export function listSort(f = {}) {
+  const name = LIST_SORTS[f.sort] && (f.sort !== 'paid_recent' || f.status === 'paid') ? f.sort : 'newest';
+  return { name, sort: LIST_SORTS[name] };
+}
 
 /**
  * A page of requests. Admin and accounts see every team (filter by `team`);
  * anyone else sees their own team's. `status` narrows to one state, 'open'
  * (not finished), 'to_approve' (accounts' queue) or 'to_pay' (approved or on
- * hold — the admin's queue).
+ * hold — the admin's queue). Search, filters and sort as in listQuery/listSort.
+ * The first page also says how many match and what they add up to.
  */
-export async function list(actor, { status, team, cursor } = {}) {
+export async function list(actor, params = {}) {
   if (!seesAll(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
-  const query = {};
-  if (seesAll(actor)) { if (team) query.team = String(team); } else query.team = actor.staff.team;
-  if (status === 'open') query.status = { $in: OPEN_STATUSES };
-  else if (status === 'to_approve') query.status = 'submitted';
-  else if (status === 'to_pay') query.status = { $in: ['approved', 'on_hold'] };
-  else if (status && STATUS_LABELS[status]) query.status = status;
-  const before = cursor ? decodeCursor(cursor) : null;
-  const rows = await paymentRequestRepository.page(query, { before, limit: PAGE_SIZE + 1 });
-  const items = rows.slice(0, PAGE_SIZE);
-  return {
-    requests: items.map((r) => shape(r, actor)),
-    nextCursor: rows.length > PAGE_SIZE ? encodeCursor(items[items.length - 1]) : null,
-  };
+  const filters = plainQuery(params);
+  const { name } = listSort(filters);
+  const { items, ...page } = await keysetPage({
+    query: listQuery(actor, filters), sorts: LIST_SORTS, sortName: name, cursor: filters.cursor, pageSize: PAGE_SIZE,
+    find: paymentRequestRepository.page, count: (q) => paymentRequestRepository.summary(q, SUMMARY_CAP),
+  });
+  return { ...page, requests: items.map((r) => shape(r, actor)) };
 }
 
 /**
@@ -784,6 +838,25 @@ export function expenseOptions(actor, { team } = {}) {
   if (!isAdmin(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
   if (!EXPENSE_TEAMS.includes(which)) throw fail('Choose the team the expense is for.', 400);
   return expenseOptionsFor(which);
+}
+
+/**
+ * What the list's filters offer this viewer: the "What for" choices (their
+ * team's, or every team's for admin / accounts) and, for admin / accounts only,
+ * the "Raised by" people.
+ */
+export async function listFilterOptions(actor) {
+  if (!seesAll(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
+  if (!seesAll(actor)) return { categories: filterCategories(actor.staff.team), people: [] };
+  const users = await userRepository.findChatUsers();
+  return {
+    categories: filterCategories(null),
+    people: users.map((u) => ({
+      id: idOf(u._id),
+      name: u.name || '',
+      team: u.role === 'admin' ? 'admin' : u.staff?.team || '',
+    })),
+  };
 }
 
 export async function get(actor, id) {
@@ -856,14 +929,31 @@ const groupIdOf = (r) => crypto.createHash('sha256').update(payKeyOf(r.payee, id
 
 const destinationLabel = (p = {}) => (p.method === 'upi' ? (p.upiId ? `UPI ${p.upiId}` : 'UPI by QR (see the request)') : `${p.bankName || 'Bank'} ${maskAccount(p.accountNumber)} · ${p.ifsc}`);
 
+/** The "to pay, by supplier" sorts: longest waiting first unless asked. */
+const GROUP_SORTS = Object.freeze({
+  oldest: (a, b) => new Date(a.oldestAt) - new Date(b.oldestAt),
+  total_desc: (a, b) => b.total - a.total,
+  count_desc: (a, b) => b.count - a.count,
+  name: (a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }),
+});
+
 /**
  * Approved supplier payments, one row per place the money goes (same bank account
  * or UPI ID): how many, and the total. Admin and accounts.
+ *
+ * Search / filter / sort work on the groups, after grouping: the open queue is
+ * one bounded read (TO_PAY_CAP), so this adds no query. A group matches when every
+ * typed word is in its supplier name, UPI ID, bank, IFSC, or one of its payments'
+ * PR number, order number or customer — or is its total or one payment's amount.
+ * A match shows the whole group (its count and total stay what is to pay).
  */
-export async function supplierPayGroups(actor) {
+export async function supplierPayGroups(actor, params = {}) {
   if (!seesAll(actor)) throw fail('Not authorized.', 403);
+  const f = plainQuery(params);
   const rows = await paymentRequestRepository.findSupplierToPay(TO_PAY_CAP);
   const groups = new Map();
+  const text = new Map();
+  const amounts = new Map();
   for (const r of rows) {
     const id = groupIdOf(r);
     const g = groups.get(id) || {
@@ -876,9 +966,19 @@ export async function supplierPayGroups(actor) {
     if (r.status === 'on_hold') g.onHold += 1;
     if (r.bankNotice?.at) g.bankNotice = true;
     groups.set(id, g);
+    const p = r.payee || {};
+    text.set(id, `${text.get(id) || ''} ${[p.name, p.upiId, p.bankName, p.ifsc, g.destination, r.number, r.orderNumber, r.customer?.name].filter(Boolean).join(' ')}`.toLowerCase());
+    amounts.set(id, [...(amounts.get(id) || []), r.amount]);
   }
+  const words = searchWords(f.q);
+  const matches = (g) => (!['bank', 'upi'].includes(f.method) || g.method === f.method)
+    && words.every((w) => text.get(g.id).includes(w) || (amountOf(w) !== null && (g.total === amountOf(w) || amounts.get(g.id).includes(amountOf(w)))));
+  const sortName = GROUP_SORTS[f.sort] ? f.sort : 'oldest';
+  const shown = [...groups.values()].filter(matches).sort(GROUP_SORTS[sortName]);
   return {
-    groups: [...groups.values()].sort((a, b) => new Date(a.oldestAt) - new Date(b.oldestAt)),
+    groups: shown,
+    sort: sortName,
+    summary: { count: shown.length, total: round2(shown.reduce((n, g) => n + g.total, 0)), capped: false },
     truncated: rows.length >= TO_PAY_CAP,
   };
 }

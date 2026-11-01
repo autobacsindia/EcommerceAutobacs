@@ -25,9 +25,14 @@ const json = (v, fallback) => {
   try { return JSON.parse(v); } catch { return fallback; }
 };
 
-// GET /payment-requests?status=open|submitted|…&team=&cursor=
+// GET /payment-requests?status=&team=&kind=&category=&by=&method=&from=&to=&dateOf=&min=&max=&q=&sort=&cursor=
 router.get('/', asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await pr.list(req.user, req.query)) });
+}));
+
+// GET /payment-requests/filter-options — the list's "What for" and (admin / accounts) "Raised by" choices
+router.get('/filter-options', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await pr.listFilterOptions(req.user)) });
 }));
 
 // GET /payment-requests/expense-options?team= — what this team's expense form offers (the server's own list)
@@ -55,9 +60,9 @@ router.get('/order/:orderId', asyncHandler(async (req, res) => {
   res.json({ success: true, requests: await pr.forOrder(req.user, req.params.orderId) });
 }));
 
-// GET /payment-requests/to-pay/suppliers — approved supplier payments, one row per account
+// GET /payment-requests/to-pay/suppliers?q=&method=bank|upi&sort=oldest|total_desc|count_desc|name — one row per account
 router.get('/to-pay/suppliers', asyncHandler(async (req, res) => {
-  res.json({ success: true, ...(await pr.supplierPayGroups(req.user)) });
+  res.json({ success: true, ...(await pr.supplierPayGroups(req.user, req.query)) });
 }));
 
 // GET /payment-requests/to-pay/suppliers/:groupId — that account's payments

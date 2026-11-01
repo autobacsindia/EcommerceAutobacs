@@ -173,6 +173,19 @@ describe('GET /orders/refunds — one row per cancelled item group', () => {
     expect(rows).toHaveLength(2);
   });
 
+  it('takes an order-date range and oldest-first; refuses a malformed date or an unknown sort', async () => {
+    const order = await paidOrder();
+    await cancellationService.cancelLines(
+      String(order._id), { lines: [{ itemId: String(order.items[0]._id), quantity: 1 }] }, {});
+    const admin = await tokenFor('admin');
+    const get = (qs) => request(app).get(`${BASE}/orders/refunds?${qs}`).set('Authorization', `Bearer ${admin}`);
+    const today = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+    expect(forOrder((await get(`status=pending&from=${today}&to=${today}&sort=oldest`).expect(200)).body.refunds, order)).toHaveLength(1);
+    expect(forOrder((await get('status=pending&to=2020-01-01').expect(200)).body.refunds, order)).toHaveLength(0);
+    expect((await get('from=01-09-2026')).status).toBe(400);
+    expect((await get('sort=amount')).status).toBe(400);
+  });
+
   it('shows a repair row for an order the old admin cancel left unrecorded, until it is refunded', async () => {
     const order = await Order.create({
       user: new mongoose.Types.ObjectId(),

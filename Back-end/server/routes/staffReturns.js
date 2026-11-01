@@ -36,12 +36,14 @@ const ok = (res, ret) => res.json({ success: true, return: ret });
 
 // ── Lists ─────────────────────────────────────────────────────────────────────
 
-// @route  GET /staff/returns?queue=review|pickup|inspect|supplier_pickup|refund|supplier|mine|all&cursor=
+// @route  GET /staff/returns?queue=review|pickup|inspect|supplier_pickup|refund|supplier|mine|all
+//          &q=&reason=&origin=website|staff|recorded&from=&to=&sort=newest|oldest&cursor=
 router.get('/', validateReturnList, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await returnService.listReturns(req.user, req.query)) });
 }));
 
-// @route  GET /staff/returns/suppliers-owe-us?cursor= — promised, not yet received (accounts, procurement)
+// @route  GET /staff/returns/suppliers-owe-us?q=&supplier=&kind=&sort=oldest|newest|amount_desc|amount_asc&cursor=
+//          — promised, not yet received (accounts, procurement)
 router.get('/suppliers-owe-us', validateOwedList, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await returnService.suppliersOweUs(req.user, req.query)) });
 }));

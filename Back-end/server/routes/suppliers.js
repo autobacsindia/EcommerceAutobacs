@@ -13,7 +13,7 @@ router.use(authenticatedUserRateLimit, protect, staffOrAdmin);
 // Bank details: never cached by a browser or proxy.
 router.use((req, res, next) => { res.set('Cache-Control', 'private, no-store'); next(); });
 
-// GET /suppliers?q=&status=active|inactive|all&after=
+// GET /suppliers?q=&prefix=&status=active|inactive|all&method=bank|upi&changed=recent&sort=name|newest|updated&after=
 router.get('/', asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await suppliers.list(req.user, req.query)) });
 }));

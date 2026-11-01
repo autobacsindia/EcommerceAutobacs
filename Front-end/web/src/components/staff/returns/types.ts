@@ -3,6 +3,8 @@
  * always the server's: these screens display amounts, they never work one out.
  */
 
+import { RETURN_REASON_OPTIONS } from '@/lib/constants';
+
 export type ReturnFault = 'ours' | 'customer';
 
 export type ReturnQueue = 'review' | 'pickup' | 'inspect' | 'supplier_pickup' | 'refund' | 'supplier' | 'mine' | 'all';
@@ -113,6 +115,15 @@ export const DISPOSITION_OPTIONS = [
   { value: 'return_to_supplier', label: 'Send back to supplier' },
   { value: 'scrap', label: 'Scrap' },
 ] as const;
+/** The reasons a return line can carry — the Reason filter. One list: lib/constants.ts. */
+export const REASON_OPTIONS = RETURN_REASON_OPTIONS.map(({ value, label }) => ({ value, label }));
+/** The "Came from" filter: where a return was raised (the server maps each to ReturnRequest.origin). */
+export const ORIGIN_OPTIONS = [
+  { value: 'website', label: 'Website' },
+  { value: 'staff', label: 'Raised by the team' },
+  { value: 'recorded', label: 'Recorded by admin' },
+] as const;
+
 export const SETTLEMENT_LABEL: Record<string, string> = {
   credit_note: 'Credit note', refund: 'Refund to us', free_replacement: 'Free replacement',
 };

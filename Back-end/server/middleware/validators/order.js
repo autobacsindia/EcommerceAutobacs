@@ -282,6 +282,13 @@ export const validateRefundsQuery = [
   query('limit')
     .optional()
     .isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+  // Order-placed date range (YYYY-MM-DD, India time) and newest / oldest first.
+  query(['from', 'to'])
+    .optional({ values: 'falsy' })
+    .matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Dates must be YYYY-MM-DD'),
+  query('sort')
+    .optional({ values: 'falsy' })
+    .isIn(['newest', 'oldest']).withMessage('Unknown sort'),
   // The keyset cursor, echoed back from the previous page. Both halves or neither — a
   // half-supplied cursor is a client bug, and ignoring it would silently restart
   // pagination at page one and re-serve rows the admin has already worked through.

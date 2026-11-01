@@ -1,18 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Search } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { formatDateIST } from '@/lib/datetime';
+import { useListParams } from '@/lib/hooks/useListParams';
+import { ListClear, ListResultLine, ListSearch, ListSelect } from '@/components/panel/ListControls';
 
 /**
  * Admin affiliate list.
  *
- * Cursor-paginated (never skip/offset — the house rule), so "next" carries the last
- * row's createdAt rather than a page number. Going back is handled by keeping the
- * stack of cursors we have seen, because a keyset cursor only walks forwards.
+ * Cursor-paginated (never skip/offset — the house rule), so "next" carries the
+ * server's opaque position rather than a page number. Going back is handled by keeping
+ * the stack of cursors we have seen, because a keyset cursor only walks forwards.
+ * Status, search and sort live in the page address (Back, refresh and a shared link
+ * keep them), so the page renders inside <Suspense>.
  */
 
 const rupees = (paise: number) =>
@@ -35,6 +39,8 @@ interface ListResponse {
   success: boolean;
   affiliates: Affiliate[];
   nextCursor: string | null;
+  /** First page only: how many match (capped at 1,000). */
+  summary?: { count: number; capped: boolean };
 }
 
 const STATUS_STYLES: Record<Affiliate['status'], string> = {
@@ -45,49 +51,68 @@ const STATUS_STYLES: Record<Affiliate['status'], string> = {
 };
 
 const FILTERS = ['', 'pending', 'active', 'suspended', 'rejected'] as const;
+const SORTS = [
+  { value: 'newest', label: 'Newest applications first' },
+  { value: 'oldest', label: 'Oldest applications first' },
+  { value: 'name', label: 'Name A–Z' },
+];
 
 export default function AdminAffiliatesPage() {
+  return (
+    <Suspense>
+      <AdminAffiliates />
+    </Suspense>
+  );
+}
+
+function AdminAffiliates() {
   const [rows, setRows] = useState<Affiliate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string>('');
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const { values: v, set, clear } = useListParams({ status: '', search: '', sort: 'newest' });
+  const status = (FILTERS as readonly string[]).includes(v.status) ? v.status : '';
+  const debouncedSearch = v.search;
+  const sort = SORTS.some((x) => x.value === v.sort) ? v.sort : 'newest';
+  const [summary, setSummary] = useState<ListResponse['summary']>();
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   // Keyset cursors only walk forwards, so "previous" means replaying the trail.
   const [cursorStack, setCursorStack] = useState<string[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [staleCount, setStaleCount] = useState(0);
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 400);
-    return () => clearTimeout(t);
-  }, [search]);
-
+  // Only the latest request may paint: a filter change fires a load with the old cursor
+  // and then one from the first page, and the first may answer last.
+  const latestLoad = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++latestLoad.current;
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({ limit: '25' });
       if (status) params.set('status', status);
       if (debouncedSearch) params.set('search', debouncedSearch);
-      if (cursor) params.set('before', cursor);
+      if (sort !== 'newest') params.set('sort', sort);
+      if (cursor) params.set('cursor', cursor);
 
       const res = await apiClient.get<ListResponse>(`${API_ENDPOINTS.AFFILIATES_ADMIN}?${params}`);
+      if (mine !== latestLoad.current) return;
       setRows(res.affiliates || []);
       setNextCursor(res.nextCursor);
+      // The count comes with the first page only; keep it while paging.
+      if (!cursor) setSummary(res.summary);
     } catch (err) {
+      if (mine !== latestLoad.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load affiliates');
     } finally {
-      setLoading(false);
+      if (mine === latestLoad.current) setLoading(false);
     }
-  }, [status, debouncedSearch, cursor]);
+  }, [status, debouncedSearch, sort, cursor]);
 
   useEffect(() => { load(); }, [load]);
 
   // A filter or search change invalidates the cursor trail — otherwise "previous"
   // would replay cursors from a different result set.
-  useEffect(() => { setCursor(null); setCursorStack([]); }, [status, debouncedSearch]);
+  useEffect(() => { setCursor(null); setCursorStack([]); }, [status, debouncedSearch, sort]);
 
   /*
     Commissions that will never mature: the order was paid but never marked delivered.
@@ -104,22 +129,16 @@ export default function AdminAffiliatesPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 justify-between">
-        <div className="relative flex-1 min-w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" aria-hidden />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search code, email or name"
-            className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2"
-            aria-label="Search affiliates"
-          />
-        </div>
+        <ListSearch value={debouncedSearch} onChange={(text) => set({ search: text.trim() })}
+          label="Search affiliates" placeholder="Search the start of a code, email or name" />
+        <ListSelect label="Sort" value={sort} onChange={(x) => set({ sort: x })} options={SORTS} />
 
         <div className="flex gap-1" role="group" aria-label="Filter by status">
           {FILTERS.map((f) => (
             <button
               key={f || 'all'}
-              onClick={() => setStatus(f)}
+              onClick={() => set({ status: f })}
+              aria-pressed={status === f}
               className={`px-3 py-2 rounded-lg text-sm capitalize ${
                 status === f ? 'bg-gray-900 text-white' : 'bg-white border border-gray-300 hover:bg-gray-50'
               }`}
@@ -128,6 +147,11 @@ export default function AdminAffiliatesPage() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
+        {summary ? <ListResultLine count={summary.count} capped={summary.capped} noun={['affiliate', 'affiliates']} /> : <span />}
+        {(status || debouncedSearch) && <ListClear onClear={() => clear(['sort'])} />}
       </div>
 
       {staleCount > 0 && (
@@ -168,7 +192,7 @@ export default function AdminAffiliatesPage() {
               <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">Loading…</td></tr>
             )}
             {!loading && rows.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">No affiliates yet.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-500">{status || debouncedSearch ? 'No affiliates match — try fewer letters or clear the filters.' : 'No affiliates yet.'}</td></tr>
             )}
             {!loading && rows.map((a) => (
               /*

@@ -10,6 +10,10 @@ import PastSaleUpload from './PastSaleUpload';
 import PastSalesPage from './PastSalesPage';
 import CustomerPastSales from './CustomerPastSales';
 import { viewerOf, type PastSale, type UploadResult } from './types';
+import { addressBar } from '@/test-utils/addressBarMock';
+
+// The list's search, filters and sort live in the page address.
+jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
 
 const get = jest.fn();
 const post = jest.fn();
@@ -51,6 +55,7 @@ beforeEach(() => {
   window.confirm = jest.fn(() => true);
   window.scrollTo = jest.fn();
   mockUser = { role: 'staff', staff: { team: 'sales', isHead: false } };
+  addressBar.reset('/team/past-sales');
 });
 
 describe('viewerOf', () => {
@@ -211,8 +216,39 @@ describe('the page', () => {
     get.mockImplementation(route([]));
     wrap(<PastSalesPage />);
     expect(await screen.findByText('No past sales yet. Add one, or upload a sheet.')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Search'), { target: { value: '98765 43210' } });
+    fireEvent.change(screen.getByLabelText('Search past sales'), { target: { value: '98765 43210' } });
     await waitFor(() => expect(get.mock.calls.some(([u]) => String(u).includes('q=98765+43210'))).toBe(true));
+  });
+
+  const lastList = () => {
+    const urls = get.mock.calls.map(([u]) => String(u)).filter((u) => /^\/staff\/past-sales\?|^\/staff\/past-sales$/.test(u));
+    const url = urls[urls.length - 1];
+    return Object.fromEntries(new URLSearchParams(url.split('?')[1] || ''));
+  };
+
+  it('sort, amount, how sold and paid by go to the server and into the address; the count shows', async () => {
+    get.mockImplementation((url: string) => (url.startsWith('/staff/past-sales?') || url === '/staff/past-sales'
+      ? Promise.resolve({ sales: [SALE()], nextCursor: null, sort: 'newest', summary: { count: 1, total: 6500, capped: false } })
+      : route([SALE()])(url)));
+    wrap(<PastSalesPage />);
+    expect(await screen.findByRole('status')).toHaveTextContent('1 sale found · total ₹6,500');
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'amount_desc' } });
+    fireEvent.change(screen.getByLabelText('How sold'), { target: { value: 'whatsapp' } });
+    fireEvent.change(screen.getByLabelText('Paid by'), { target: { value: 'cash' } });
+    fireEvent.change(screen.getByLabelText('Amount: from'), { target: { value: '5000' } });
+    fireEvent.blur(screen.getByLabelText('Amount: from'));
+    await waitFor(() => expect(lastList()).toEqual({ min: '5000', channel: 'whatsapp', payment: 'cash', sort: 'amount_desc' }));
+    expect(addressBar.replace).toHaveBeenLastCalledWith('/team/past-sales?sort=amount_desc&channel=whatsapp&payment=cash&min=5000', { scroll: false });
+  });
+
+  it('a shared link opens filtered; a lead cannot turn on another salesman or deleted sales; Clear all keeps the sort', async () => {
+    addressBar.search = 'q=arun&seller=u9&deleted=1&from=2024-03-01&sort=oldest';
+    get.mockImplementation(route([]));
+    wrap(<PastSalesPage />);
+    expect(await screen.findByText(/No sales match/)).toBeInTheDocument();
+    expect(lastList()).toEqual({ from: '2024-03-01', q: 'arun', sort: 'oldest' });
+    fireEvent.click(screen.getByRole('button', { name: /Clear all/ }));
+    expect(addressBar.replace).toHaveBeenLastCalledWith('/team/past-sales?sort=oldest', { scroll: false });
   });
 });
 

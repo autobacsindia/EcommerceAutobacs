@@ -1,16 +1,26 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronLeft, Loader2, Paperclip } from 'lucide-react';
 import { errorMessage, paymentKeys, postForm, rupees, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import { getPayGroup, listPayGroups, payQueueKeys, sumRupees } from './suppliers';
 import { formatDateIST } from '@/lib/datetime';
+import { useListParams } from '@/lib/hooks/useListParams';
+import { ListClear, ListResultLine, ListSearch, ListSelect } from '@/components/panel/ListControls';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
+
+const SORTS = [
+  { value: 'oldest', label: 'Waiting longest first' },
+  { value: 'total_desc', label: 'Most to pay first' },
+  { value: 'count_desc', label: 'Most payments first' },
+  { value: 'name', label: 'Supplier name A–Z' },
+];
+const PAID_TO = [{ value: 'bank', label: 'Bank account' }, { value: 'upi', label: 'UPI' }];
 
 /** One supplier's approved payments: tick some, pay them in one transfer. */
 function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBack: () => void }) {
@@ -123,19 +133,53 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
 /**
  * Approved supplier payments, one row per supplier account with the total to
  * pay. The admin opens one, ticks what to pay now, and records one transfer.
+ * Search / "Paid to" / sort are done by the server and kept in the page address
+ * (the page wraps this in <Suspense>); a found supplier shows ALL it is owed.
  */
 export default function SupplierPayQueue({ canPay }: { canPay: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
-  const q = useQuery({ queryKey: payQueueKeys.groups(), queryFn: listPayGroups, refetchInterval: 60_000 });
+  const { values: v, set, clear } = useListParams({ q: '', method: '', sort: 'oldest' });
+  const sort = SORTS.some((x) => x.value === v.sort) ? v.sort : 'oldest';
+  const params: Record<string, string> = {
+    ...(v.q ? { q: v.q } : {}),
+    ...(v.method ? { method: v.method } : {}),
+    ...(sort !== 'oldest' ? { sort } : {}),
+  };
+  const filtered = !!(v.q || v.method);
+  const q = useQuery({
+    queryKey: payQueueKeys.groups(params),
+    queryFn: () => listPayGroups(params),
+    refetchInterval: 60_000,
+    placeholderData: keepPreviousData,
+  });
   if (open) return <GroupDetail id={open} canPay={canPay} onBack={() => setOpen(null)} />;
   const groups = q.data?.groups ?? [];
+  const summary = q.data?.summary;
   return (
     <div className="space-y-3">
+      <div role="search" aria-label="Search supplier payments" className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ListSearch value={v.q} onChange={(text) => set({ q: text.trim() })} label="Search suppliers to pay"
+            placeholder="Search supplier, UPI ID, bank, account digits, PR or order no., amount" />
+          <ListSelect label="Paid to" value={v.method} onChange={(m) => set({ method: m })} options={PAID_TO} allLabel="Bank or UPI" />
+          <ListSelect label="Sort" value={sort} onChange={(x) => set({ sort: x })} options={SORTS} />
+        </div>
+        <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
+          {summary
+            ? <ListResultLine count={summary.count} capped={false} total={summary.total} noun={['supplier', 'suppliers']} formatTotal={rupees} />
+            : <span />}
+          {filtered && <ListClear onClear={() => clear(['sort'])} />}
+        </div>
+      </div>
       {q.isPending && <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>}
       {q.isError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(q.error, 'Could not load supplier payments.')}</p>}
-      {q.isSuccess && groups.length === 0 && <p className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">No approved supplier payments to pay.</p>}
+      {q.isSuccess && groups.length === 0 && (
+        <p className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+          {filtered ? 'No supplier to pay matches — try fewer words or clear the search.' : 'No approved supplier payments to pay.'}
+        </p>
+      )}
       {q.data?.truncated && <p className="text-xs text-amber-700">Showing the oldest 500 supplier payments — pay some to see the rest.</p>}
-      <ul className="space-y-2">
+      <ul className={`space-y-2 ${q.isPlaceholderData ? 'opacity-60' : ''}`}>
         {groups.map((g) => (
           <li key={g.id}>
             <button type="button" onClick={() => setOpen(g.id)} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white p-4 text-left hover:border-blue-300 hover:bg-blue-50/40">

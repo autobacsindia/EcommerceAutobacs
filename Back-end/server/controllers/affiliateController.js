@@ -13,6 +13,7 @@ import affiliateRepository from '../repositories/affiliateRepository.js';
 import affiliatePayoutService from '../services/affiliatePayoutService.js';
 import affiliatePayoutRepository from '../repositories/affiliatePayoutRepository.js';
 import AppError from '../utils/AppError.js';
+import { escapeRegex } from '../utils/listQuery.js';
 import crypto from 'crypto';
 import {
   STALE_PENDING_DAYS,
@@ -69,12 +70,7 @@ export const applyAsAffiliate = asyncHandler(async (req, res) => {
  * @access  Admin
  */
 export const listAffiliates = asyncHandler(async (req, res) => {
-  const { affiliates, nextCursor } = await affiliateService.listAdmin({
-    limit: boundedLimit(req.query.limit),
-    before: cursorFrom(req.query.before),
-    status: req.query.status || null,
-    search: req.query.search || null,
-  });
+  const { affiliates, ...page } = await affiliateService.listAdmin({ ...req.query, limit: String(boundedLimit(req.query.limit)) });
 
   /*
     Attach what each affiliate is owed, so the list answers "who needs paying" at a
@@ -94,7 +90,7 @@ export const listAffiliates = asyncHandler(async (req, res) => {
       ...a,
       payableBalancePaise: balances.get(String(a._id))?.netPaise ?? 0,
     })),
-    nextCursor,
+    ...page,
     minPayoutPaise: MIN_PAYOUT_RUPEES * 100,
   });
 });
@@ -371,8 +367,12 @@ export const listPayoutQueue = asyncHandler(async (req, res) => {
   const minPaise = MIN_PAYOUT_RUPEES * 100;
   const limit = boundedLimit(req.query.limit, 50, 200);
 
-  const { rows, totalPayablePaise, dueCount, suspendedHeld } =
-    await affiliateCommissionRepository.payableQueue({ minPaise, limit });
+  // Search the affiliate's name or code (escaped, any case); sort by priority, amount or waiting time.
+  const term = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
+  const sort = ['amount_desc', 'oldest'].includes(req.query.sort) ? req.query.sort : 'priority';
+  const { rows, totalPayablePaise, dueCount, suspendedHeld, found } = await affiliateCommissionRepository.payableQueue({
+    minPaise, limit, sort, search: term ? new RegExp(escapeRegex(term), 'i') : null,
+  });
 
   const queue = rows.map((r) => ({
     _id: r.affiliate._id,
@@ -398,9 +398,13 @@ export const listPayoutQueue = asyncHandler(async (req, res) => {
     */
     totalPayablePaise,
     dueCount,
+    // How many due affiliates the search matched, and the order used.
+    found,
+    sort,
     // True when the worklist is truncated, so the screen can say so instead of implying
     // it is showing everyone.
-    hasMore: dueCount > queue.length,
+    // More matched than fit on the list (without a search, `found` is every due affiliate).
+    hasMore: found > queue.length,
     /*
       Money owed to non-active affiliates. Deliberately NOT in the worklist — suspension
       does not void earned commission, but an admin working down a list must not pay
@@ -430,13 +434,8 @@ export const buildAffiliatePayout = asyncHandler(async (req, res) => {
  * @access  Admin
  */
 export const listAffiliatePayouts = asyncHandler(async (req, res) => {
-  const { payouts, nextCursor } = await affiliatePayoutService.listAdmin({
-    limit: boundedLimit(req.query.limit),
-    before: cursorFrom(req.query.before),
-    status: req.query.status || null,
-    affiliate: req.query.affiliate || null,
-  });
-  res.json({ success: true, payouts, nextCursor });
+  const page = await affiliatePayoutService.listAdmin({ ...req.query, limit: String(boundedLimit(req.query.limit)) });
+  res.json({ success: true, ...page });
 });
 
 /**

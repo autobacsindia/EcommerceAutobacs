@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { affiliateKeys } from './keys';
@@ -140,6 +140,9 @@ export interface PayoutQueueResponse {
   /** Across EVERY due affiliate, not just this page. */
   totalPayablePaise: number;
   dueCount: number;
+  /** How many due affiliates the search matched (every due one when not searching). */
+  found: number;
+  sort: string;
   hasMore: boolean;
   /** Owed to non-active affiliates: visible, deliberately not in the worklist. */
   suspendedHeld: { heldPaise: number; count: number };
@@ -153,10 +156,13 @@ export interface PayoutQueueResponse {
  * invalidation silently does nothing, which is how a screen ends up showing an affiliate
  * who was paid five minutes ago.
  */
-export function usePayoutQueue() {
+export function usePayoutQueue(params: Record<string, string> = {}) {
+  const qs = new URLSearchParams(params).toString();
   return useQuery({
-    queryKey: affiliateKeys.payoutQueue(),
-    queryFn: () => apiClient.get<PayoutQueueResponse>(API_ENDPOINTS.AFFILIATE_PAYOUT_QUEUE),
+    queryKey: affiliateKeys.payoutQueue(params),
+    queryFn: () => apiClient.get<PayoutQueueResponse>(`${API_ENDPOINTS.AFFILIATE_PAYOUT_QUEUE}${qs ? `?${qs}` : ''}`),
+    // Typing a search keeps the last list on screen instead of flashing "Loading…".
+    placeholderData: keepPreviousData,
     // Money state: never serve a stale worklist from cache on revisit.
     staleTime: 0,
   });

@@ -13,6 +13,7 @@ import SupplierPayQueue from './SupplierPayQueue';
 import EditPaymentRequest from './EditPaymentRequest';
 import { sumRupees, type Supplier } from './suppliers';
 import type { PaymentRequest } from './api';
+import { addressBar } from '@/test-utils/addressBarMock';
 
 const get = jest.fn();
 const post = jest.fn();
@@ -21,6 +22,7 @@ jest.mock('@/lib/api-client', () => ({
   __esModule: true,
   default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), put: (...a: unknown[]) => put(...a) },
 }));
+jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
 jest.mock('@/lib/http/tokenManager', () => ({
   tokenManager: { ensureCsrfToken: jest.fn().mockResolvedValue(undefined), getHeaders: () => ({ 'Content-Type': 'application/json', 'X-XSRF-TOKEN': 't' }) },
 }));
@@ -46,6 +48,7 @@ const request = (id: string, amount: number): PaymentRequest => ({
 
 let fetchMock: jest.Mock;
 beforeEach(() => {
+  addressBar.reset('/team/suppliers');
   get.mockReset(); post.mockReset(); put.mockReset();
   fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ request: request('1', 1) }) });
   global.fetch = fetchMock as unknown as typeof fetch;
@@ -58,7 +61,7 @@ describe('raising a supplier payment', () => {
     wrap(<PaymentRequestForm supplier={SUPPLIER_CTX} onDone={jest.fn()} />);
     // Typing in the name box IS the search: saved suppliers appear right under it.
     fireEvent.change(screen.getByLabelText('Supplier'), { target: { value: 'ar' } });
-    await waitFor(() => expect(get).toHaveBeenCalledWith('/suppliers?status=active&q=ar'));
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/suppliers?status=active&prefix=ar'));
     fireEvent.click(await screen.findByRole('option', { name: /ARB Supplies/ }));
     expect(screen.queryByLabelText('Account number')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Amount (₹)'), { target: { value: '1000' } });

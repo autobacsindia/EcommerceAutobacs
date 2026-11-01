@@ -28,11 +28,29 @@ import AppError from '../utils/AppError.js';
 import { enqueueNotification } from '../queue/queues.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import {
+  amountOf, and, escapeRegex, isObjectId, istRange, keysetPage, plainQuery, searchWords,
+} from '../utils/listQuery.js';
+import {
   AFFILIATE_STATUS,
   MIN_PAYOUT_RUPEES,
   PAYOUT_STATUS,
+  PAYOUT_STATUSES,
   isAffiliateEnabled,
 } from '../config/affiliate.js';
+
+/*
+  Admin payouts list: newest batch first (default), oldest, or by the amount sent.
+  Keyset pages on [field, _id] (utils/listQuery.js) — a batch creates several payouts
+  in the same millisecond, so a createdAt-only cursor could skip one at a page edge.
+*/
+export const PAYOUT_SORTS = Object.freeze({
+  newest: { field: 'createdAt', dir: -1, type: 'date' },
+  oldest: { field: 'createdAt', dir: 1, type: 'date' },
+  amount_desc: { field: 'netPaise', dir: -1, type: 'number' },
+  amount_asc: { field: 'netPaise', dir: 1, type: 'number' },
+});
+const PAYOUT_SEARCH = ['reference', 'bankSnapshot.accountHolderName', 'bankSnapshot.accountLast4', 'bankSnapshot.upiId', 'bankSnapshot.ifsc'];
+const SUMMARY_CAP = 1000;
 
 class AffiliatePayoutService {
   /**
@@ -283,18 +301,47 @@ class AffiliatePayoutService {
     return affiliatePayoutRepository.findById(payoutId);
   }
 
-  /** Admin list — cursor-paginated, bounded. */
-  async listAdmin({ limit = 50, before = null, status = null, affiliate = null } = {}) {
-    const capped = Math.min(Math.max(1, Number(limit) || 50), 100);
-    const rows = await affiliatePayoutRepository.findPage({
-      limit: capped + 1,
-      before,
-      status,
-      affiliate,
+  /**
+   * The admin filter for payouts. Every search word must match one of: the affiliate's
+   * name / code / email (looked up on the Affiliate first — a small collection), the
+   * UTR, the bank snapshot (holder, last 4 digits, UPI ID, IFSC) or the amount sent.
+   */
+  async payoutQuery(f) {
+    const words = searchWords(f.q).map((w) => w.replace(/^#+/, '')).filter(Boolean);
+    const wordClauses = await Promise.all(words.map(async (w) => {
+      const re = new RegExp(escapeRegex(w), 'i');
+      const ids = await affiliateRepository.idsMatching(re);
+      const n = amountOf(w);
+      return { $or: [
+        ...(ids.length ? [{ affiliate: { $in: ids } }] : []),
+        ...PAYOUT_SEARCH.map((field) => ({ [field]: re })),
+        ...(n ? [{ netPaise: toPaise(n) }, { grossPaise: toPaise(n) }] : []),
+      ] };
+    }));
+    const created = istRange(f.from, f.to);
+    return and(
+      PAYOUT_STATUSES.includes(f.status) ? { status: f.status } : null,
+      isObjectId(f.affiliate) ? { affiliate: new mongoose.Types.ObjectId(f.affiliate) } : null,
+      created ? { createdAt: created } : null,
+      wordClauses,
+    );
+  }
+
+  /**
+   * Admin list — keyset-paged, bounded: `status`, `affiliate`, `q`, `from` / `to` (the
+   * day the batch was made, India time), `sort`, `cursor`, `limit`. The first page also
+   * says how many match and the net amount they add up to (paise, capped).
+   */
+  async listAdmin(params = {}) {
+    const f = plainQuery(params);
+    const pageSize = Math.min(Math.max(1, Number(f.limit) || 50), 100);
+    const sortName = PAYOUT_SORTS[f.sort] ? f.sort : 'newest';
+    const { items, ...page } = await keysetPage({
+      query: await this.payoutQuery(f), sorts: PAYOUT_SORTS, sortName, cursor: f.cursor, pageSize,
+      find: (q, o) => affiliatePayoutRepository.page(q, o),
+      count: (q) => affiliatePayoutRepository.summary(q, SUMMARY_CAP),
     });
-    const hasMore = rows.length > capped;
-    const payouts = hasMore ? rows.slice(0, capped) : rows;
-    return { payouts, nextCursor: hasMore ? payouts.at(-1).createdAt : null };
+    return { ...page, payouts: items };
   }
 
   /**

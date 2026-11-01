@@ -1,16 +1,13 @@
 import PastSale from '../models/PastSale.js';
 import Product from '../models/Product.js';
 import { PAST_SALE_HISTORY_CAP } from '../config/pastSale.js';
+import { summaryPipeline, readSummary } from '../utils/listQuery.js';
 
 /**
  * Past (offline) sales (models/PastSale.js). Data access only — who may do what
  * lives in services/pastSaleService.js.
  */
 const LIST_FIELDS = '-history';
-
-const keysetBefore = (before) => (before
-  ? { $or: [{ saleDate: { $lt: before.saleDate } }, { saleDate: before.saleDate, _id: { $lt: before.id } }] }
-  : null);
 
 const pastSaleRepository = {
   model: PastSale,
@@ -72,14 +69,17 @@ const pastSaleRepository = {
     },
   ),
 
-  /** Keyset page, newest sale first. */
-  page: (query, { before = null, limit }) => {
-    const after = keysetBefore(before);
-    return PastSale.find(after ? { $and: [query, after] } : query)
-      .sort({ saleDate: -1, _id: -1 })
-      .limit(limit)
-      .select(LIST_FIELDS)
-      .lean();
+  /** Keyset page; `query` carries the page position and `sort` the order (utils/listQuery.js). */
+  page: (query, { sort, limit }) => PastSale.find(query)
+    .sort(sort)
+    .limit(limit)
+    .select(LIST_FIELDS)
+    .lean(),
+
+  /** How many match and their bill total (capped): the "N found · total ₹…" line. */
+  summary: async (query, cap) => {
+    const [row] = await PastSale.aggregate(summaryPipeline(query, cap, 'totalAmount')).option({ maxTimeMS: 5000 });
+    return readSummary(row, cap, true);
   },
 
   /** Count and value per salesman for active sales matching `match`. */

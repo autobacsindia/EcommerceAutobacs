@@ -101,6 +101,19 @@ it('validates the shape before anything runs', async () => {
   expect(badReason.status).toBe(400);
 });
 
+it('the lists take search, filters and sort; an oversized search is refused', async () => {
+  const ops = await login('staff', { team: 'operations' });
+  const accounts = await login('staff', { team: 'accounts' });
+  const list = (qs) => request(app).get(`${BASE}/staff/returns?${qs}`).set(as(ops));
+  const none = await list('queue=all&q=ravi&reason=wrong_item&origin=staff&from=2026-10-01&to=2026-10-31&sort=oldest');
+  expect(none.status).toBe(200);
+  expect(none.body).toMatchObject({ success: true, returns: [], sort: 'oldest', summary: { count: 0 } });
+  expect((await list(`q=${'x'.repeat(101)}`)).status).toBe(400);
+  const owed = await request(app).get(`${BASE}/staff/returns/suppliers-owe-us?q=ram&kind=refund&sort=amount_desc`).set(as(accounts));
+  expect(owed.status).toBe(200);
+  expect(owed.body).toMatchObject({ items: [], sort: 'amount_desc', summary: { count: 0, total: 0 } });
+});
+
 it('runs one return from raise to refund, with the inspection photo uploaded and served privately', async () => {
   jest.spyOn(razorpayService, 'refundPayment').mockResolvedValue({ refundId: 'rfnd_1', status: 'processed', amount: 500000 });
   const { orderId, itemId } = await deliveredOrder();

@@ -128,6 +128,9 @@ PastSaleSchema.index(
 // Lists, newest sale first (keyset on saleDate/_id): everyone's, and one salesman's.
 PastSaleSchema.index({ active: 1, saleDate: -1, _id: -1 }, { name: 'past_sale_recent' });
 PastSaleSchema.index({ active: 1, salesUser: 1, saleDate: -1, _id: -1 }, { name: 'past_sale_by_seller' });
+// The list's "Bill amount" sorts (high → low and, walked backwards, low → high). Without
+// it every page read and sorted every active sale (19,000 of 20,000 in measure-pr3).
+PastSaleSchema.index({ active: 1, totalAmount: -1, _id: -1 }, { name: 'past_sale_amount' });
 // A customer's past purchases, by phone.
 PastSaleSchema.index(
   { 'customer.phoneKey': 1, saleDate: -1 },

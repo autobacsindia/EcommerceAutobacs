@@ -166,6 +166,9 @@ export const getRefunds = async (req, res) => {
   const { orders, nextCursor } = await orderRepository.findWithRefunds(req.query.status, {
     search: String(req.query.search || '').trim(),
     limit: req.query.limit,
+    // Order placed on (India-time days) and newest / oldest first: narrow and order the
+    // queue, never change which lane a row is in.
+    from: req.query.from, to: req.query.to, sort: req.query.sort,
     // The cursor is opaque to the client, which only ever echoes back what it was given.
     cursor: req.query.cursorCreatedAt && req.query.cursorId
       ? { createdAt: req.query.cursorCreatedAt, id: req.query.cursorId }

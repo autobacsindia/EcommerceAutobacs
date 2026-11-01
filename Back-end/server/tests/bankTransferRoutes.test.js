@@ -234,6 +234,21 @@ describe('Bank transfer routes', () => {
     expect((await accounts.session.post(`/staff/bank-transfers/${id}/reject`, { note: 'Not in statement' })).body.transfer.status).toBe('rejected');
   });
 
+  it('the list takes search, filters and sort over HTTP; the salesman choices load; a huge search is refused', async () => {
+    await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields, [shot()]);
+    const hit = await accounts.session.get('/staff/bank-transfers?q=ravi&min=50000&sort=amount_desc&dateOf=recorded');
+    expect(hit.status).toBe(200);
+    expect(hit.body).toMatchObject({ sort: 'amount_desc', summary: { count: 1, total: 52000, capped: false } });
+    expect(hit.body.transfers).toHaveLength(1);
+    expect((await accounts.session.get('/staff/bank-transfers?q=nobody')).body.transfers).toEqual([]);
+    expect((await accounts.session.get('/staff/bank-transfers?status=withdrawn')).status).toBe(200);
+    expect((await accounts.session.get(`/staff/bank-transfers?q=${'x'.repeat(101)}`)).status).toBe(400);
+    const options = await accounts.session.get('/staff/bank-transfers/filter-options');
+    expect(options.status).toBe(200);
+    expect(options.body.sellers.map((s) => s.name)).toEqual(['Sam']);
+    expect((await lead.session.get('/staff/bank-transfers/filter-options')).body.sellers).toEqual([]);
+  });
+
   it('needs a signed-in staff member', async () => {
     expect((await request(app).get(`${BASE}/staff/bank-transfers`)).status).toBe(401);
   });

@@ -10,6 +10,8 @@ import * as dbHandler from './db-handler.js';
 import Supplier from '../models/Supplier.js';
 import PaymentRequest from '../models/PaymentRequest.js';
 import supplierRepository from '../repositories/supplierRepository.js';
+import { SUPPLIER_SORTS, supplierQuery } from '../services/supplierService.js';
+import { sortSpec } from '../utils/listQuery.js';
 
 const plan = (explain) => JSON.stringify(explain.queryPlanner.winningPlan);
 const indexOf = (explain) => (plan(explain).includes('COLLSCAN') ? 'COLLSCAN' : (plan(explain).match(/"indexName":"([^"]+)"/) || [])[1]);
@@ -26,7 +28,8 @@ it('the supplier picker searches by name prefix on an index', async () => {
     payment: { method: 'upi', upiId: `s${i}@okaxis` },
   })));
   await Supplier.create({ name: 'Bosch Parts', nameKey: 'bosch parts', payment: { method: 'upi', upiId: 'bosch@okaxis' } });
-  const explain = await supplierRepository.page({ prefix: 'bosch', active: true, limit: 51 }).explain('executionStats');
+  const explain = await supplierRepository.page(supplierQuery({ prefix: 'Bosch' }), { sort: sortSpec(SUPPLIER_SORTS.name), limit: 51 })
+    .explain('executionStats');
   expect(indexOf(explain)).toBe('supplier_active_name');
   expect(explain.executionStats.totalDocsExamined).toBe(1);
 });

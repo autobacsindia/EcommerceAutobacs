@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Loader2, Pencil, Plus, Search } from 'lucide-react';
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Loader2, Pencil, Plus } from 'lucide-react';
+import { useListParams } from '@/lib/hooks/useListParams';
+import { ListClear, ListResultLine, ListSearch, ListSelect } from '@/components/panel/ListControls';
 import { errorMessage } from './api';
 import {
   createSupplier, listSuppliers, setSupplierActive, supplierKeys, updateSupplier,
@@ -153,19 +155,42 @@ function SupplierCard({ s, onEdit }: { s: Supplier; onEdit: () => void }) {
   );
 }
 
-/** Procurement and the admin keep the list; accounts reads it. */
+const SORTS = [
+  { value: 'name', label: 'Name A–Z' },
+  { value: 'newest', label: 'Recently added' },
+  { value: 'updated', label: 'Recently edited' },
+];
+const PAID_BY = [{ value: 'bank', label: 'Bank account' }, { value: 'upi', label: 'UPI' }];
+const STATUSES = ['active', 'inactive', 'all'] as const;
+
+/**
+ * Procurement and the admin keep the list; accounts reads it. The server does the
+ * searching and filtering, so every page honours them.
+ */
 export default function SupplierDirectory({ canEdit }: { canEdit: boolean }) {
   const qc = useQueryClient();
-  const [q, setQ] = useState('');
-  const [status, setStatus] = useState<'active' | 'inactive'>('active');
+  // Search, tab and filters live in the page address (the page wraps this in <Suspense>).
+  const { values: v, set, clear } = useListParams({ q: '', status: 'active', method: '', changed: '', sort: 'name' });
   const [editing, setEditing] = useState<Supplier | 'new' | null>(null);
+  const status = (STATUSES as readonly string[]).includes(v.status) ? v.status : 'active';
+  const sort = SORTS.some((x) => x.value === v.sort) ? v.sort : 'name';
+  const params: Record<string, string> = {
+    status,
+    ...(v.q ? { q: v.q } : {}),
+    ...(v.method ? { method: v.method } : {}),
+    ...(v.changed === 'recent' ? { changed: 'recent' } : {}),
+    ...(sort !== 'name' ? { sort } : {}),
+  };
+  const filtered = !!(v.q || v.method || v.changed);
   const query = useInfiniteQuery({
-    queryKey: supplierKeys.list(q.trim().toLowerCase(), status),
-    queryFn: ({ pageParam }) => listSuppliers(q.trim(), status, pageParam),
+    queryKey: supplierKeys.list(params),
+    queryFn: ({ pageParam }) => listSuppliers(params, pageParam),
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextAfter || undefined,
+    placeholderData: keepPreviousData,
   });
   const rows = query.data?.pages.flatMap((p) => p.suppliers) ?? [];
+  const summary = query.data?.pages[0]?.summary;
   const done = async () => { setEditing(null); await qc.invalidateQueries({ queryKey: supplierKeys.all }); };
 
   if (editing) {
@@ -175,34 +200,44 @@ export default function SupplierDirectory({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="relative min-w-[220px] flex-1">
-          <span className="sr-only">Search suppliers</span>
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input className={`${input} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name" />
-        </label>
         <div role="tablist" aria-label="Supplier status" className="flex gap-2">
-          {(['active', 'inactive'] as const).map((t) => (
-            <button key={t} type="button" role="tab" aria-selected={status === t} onClick={() => setStatus(t)}
+          {STATUSES.map((t) => (
+            <button key={t} type="button" role="tab" aria-selected={status === t} onClick={() => set({ status: t })}
               className={`rounded-full px-3 py-1.5 text-sm font-medium ${status === t ? 'bg-gray-900 text-white' : 'border border-gray-300 bg-white text-gray-700'}`}>
-              {t === 'active' ? 'Active' : 'Inactive'}
+              {t === 'active' ? 'Active' : t === 'inactive' ? 'Inactive' : 'All'}
             </button>
           ))}
         </div>
         {canEdit && (
-          <button type="button" onClick={() => setEditing('new')} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+          <button type="button" onClick={() => setEditing('new')} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
             <Plus className="h-4 w-4" /> Add supplier
           </button>
         )}
+      </div>
+
+      <div role="search" aria-label="Search and filter suppliers" className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ListSearch value={v.q} onChange={(text) => set({ q: text.trim() })} label="Search suppliers"
+            placeholder="Search name, contact, phone, GSTIN, UPI ID, IFSC, bank, last 4 account digits" />
+          <ListSelect label="Paid by" value={v.method} onChange={(m) => set({ method: m })} options={PAID_BY} allLabel="Bank or UPI" />
+          <ListSelect label="Bank details" value={v.changed} onChange={(c) => set({ changed: c })}
+            options={[{ value: 'recent', label: 'Changed in the last 30 days' }]} allLabel="Any bank details" />
+          <ListSelect label="Sort" value={sort} onChange={(x) => set({ sort: x })} options={SORTS} />
+        </div>
+        <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
+          {summary ? <ListResultLine count={summary.count} capped={summary.capped} noun={['supplier', 'suppliers']} /> : <span />}
+          {filtered && <ListClear onClear={() => clear(['status', 'sort'])} />}
+        </div>
       </div>
 
       {query.isPending && <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>}
       {query.isError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(query.error, 'Could not load suppliers.')}</p>}
       {query.isSuccess && rows.length === 0 && (
         <p className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
-          {q ? 'No supplier with that name.' : status === 'active' ? 'No suppliers saved yet.' : 'No inactive suppliers.'}
+          {filtered ? 'No supplier matches — try fewer words or clear the filters.' : status === 'inactive' ? 'No inactive suppliers.' : 'No suppliers saved yet.'}
         </p>
       )}
-      <ul className="space-y-3">{rows.map((s) => <SupplierCard key={s.id} s={s} onEdit={() => setEditing(s)} />)}</ul>
+      <ul className={`space-y-3 ${query.isPlaceholderData ? 'opacity-60' : ''}`}>{rows.map((s) => <SupplierCard key={s.id} s={s} onEdit={() => setEditing(s)} />)}</ul>
       {query.hasNextPage && (
         <button type="button" disabled={query.isFetchingNextPage} onClick={() => query.fetchNextPage()}
           className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">

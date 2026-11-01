@@ -143,3 +143,23 @@ export const expenseOptionsFor = (team) => ({
   currencies: currenciesFor(team).map((x) => ({ ...x })),
   baseCurrency: BASE_CURRENCY,
 });
+
+/**
+ * For the Payments list's "What for" filter: every category a viewer can meet on
+ * the list, with its name. A team sees its own options plus the old shared ones
+ * (its old records carry them); `null` (admin / accounts) means every team's.
+ * 'supplier' is the supplier-payment kind, filtered by type instead.
+ */
+export function filterCategories(team = null) {
+  const lists = team ? [categoriesFor(team)] : Object.values(TEAM_EXPENSE_CATEGORIES);
+  const seen = new Map();
+  for (const list of lists) for (const x of list) if (!seen.has(x.value)) seen.set(x.value, x.label);
+  for (const [value, label] of Object.entries(LEGACY_LABELS)) if (!seen.has(value)) seen.set(value, label);
+  return [...seen].map(([value, label]) => ({ value, label }));
+}
+
+/** Category values whose name contains `word` (case-insensitive), for the list's search. */
+export const categoriesNamed = (word) => {
+  const w = String(word).toLowerCase();
+  return Object.entries(ALL_LABELS).filter(([v, label]) => v !== 'supplier' && label.toLowerCase().includes(w)).map(([v]) => v);
+};

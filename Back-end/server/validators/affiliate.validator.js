@@ -115,9 +115,10 @@ export const validateAffiliateId = [
 
 export const validateAffiliateList = [
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1–100'),
-  query('before').optional().isISO8601().withMessage('before must be a date cursor'),
+  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
   query('status').optional().isIn(AFFILIATE_STATUSES).withMessage('Invalid status'),
   query('search').optional().trim().isLength({ max: 100 }),
+  query('sort').optional().isIn(['newest', 'oldest', 'name']).withMessage('Unknown sort'),
 ];
 
 /**
@@ -211,7 +212,10 @@ export const validatePayoutMarkFailed = [
 
 export const validatePayoutList = [
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1–100'),
-  query('before').optional().isISO8601().withMessage('before must be a date cursor'),
+  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
   query('status').optional().trim().isLength({ max: 30 }),
   query('affiliate').optional().custom(isObjectId).withMessage('Invalid affiliate id'),
+  // Search, dates and sort: shape only — an unknown sort or a bad date is ignored by the service.
+  query('q').optional().isString().isLength({ max: 100 }).withMessage('Search is too long'),
+  ...['from', 'to', 'sort'].map((n) => query(n).optional().isString().isLength({ max: 40 }).withMessage(`Invalid ${n}`)),
 ];

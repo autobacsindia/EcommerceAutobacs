@@ -33,7 +33,9 @@ import { reverseRefundSideEffects } from '../services/refundReversalService.js';
 import auditLogger from '../services/auditLogger.js';
 import { refundableForLines, matchOrderLine } from '../services/refundMathService.js';
 import { previewRefund, initiateRefund, money, transition } from '../services/returnRefundService.js';
-import { syncOrderReturnedStatus, phoneKey, createCustomerReturn, estimateForCustomer } from '../services/returnService.js';
+import {
+  syncOrderReturnedStatus, phoneKey, createCustomerReturn, estimateForCustomer, adminReturnsPage,
+} from '../services/returnService.js';
 import { toPaise } from '../utils/money.js';
 import { enqueueNotification } from '../queue/queues.js';
 import {
@@ -206,34 +208,26 @@ export const cancelMyReturn = asyncHandler(async (req, res) => {
 // @route   GET /returns/admin/all
 // @access  Private/Admin
 export const getAllReturns = asyncHandler(async (req, res) => {
-  const page = Math.max(1, Number(req.query.page) || 1);
+  /*
+    Keyset pages ("Show more"), never skip: this was `skip((page - 1) * limit)` — cost
+    growing with every page on a collection that only grows — and the screen searched
+    only the 20 rows it had loaded. Search (return / order number, customer, phone,
+    product, supplier), reason, came-from, raised-on and the sort are the team lists'
+    (services/returnService.js), so one return is found the same way on both.
+  */
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
-  const skip = (page - 1) * limit;
-
-  const query = {};
-  if (req.query.status && req.query.status !== 'all') query.status = req.query.status;
-
-  const total = await returnRequestRepository.countDocuments(query);
-  const returns = await returnRequestRepository.find(query)
-    .populate('user', 'name email')
-    .populate('order', 'orderNumber')
-    .populate('items.product', 'name images')
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
-
-  res.json({
-    success: true,
-    count: total,
-    requests: returns,
-    pagination: {
-      currentPage: page,
-      totalPages: Math.ceil(total / limit),
-      totalReturns: total,
-      hasNext: page < Math.ceil(total / limit),
-      hasPrev: page > 1,
-    },
+  const { items, ...page } = await adminReturnsPage(req.query, {
+    pageSize: limit,
+    find: (query, { sort, limit: n }) => returnRequestRepository.find(query)
+      .populate('user', 'name email')
+      .populate('order', 'orderNumber wpId shippingAddress.fullName')
+      .populate('items.product', 'name images')
+      .select('-video -proofOfPurchase -staffFiles -emailsSent')
+      .sort(sort)
+      .limit(n)
+      .lean(),
   });
+  res.json({ success: true, requests: items, ...page });
 });
 
 // @desc    Get one return with signed evidence URLs (Admin)

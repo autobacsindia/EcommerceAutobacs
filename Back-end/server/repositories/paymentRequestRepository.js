@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import PaymentRequest from '../models/PaymentRequest.js';
+import { readSummary, summaryPipeline } from '../utils/listQuery.js';
 
 /**
  * Payment requests (models/PaymentRequest.js). Data access only — who may do
@@ -20,16 +21,21 @@ const paymentRequestRepository = {
     { new: true },
   ).lean(),
 
-  /** Keyset page, newest first. */
-  page: (query, { before = null, limit }) => PaymentRequest.find(
-    before
-      ? { $and: [query, { $or: [{ createdAt: { $lt: before.createdAt } }, { createdAt: before.createdAt, _id: { $lt: before.id } }] }] }
-      : query,
-  )
-    .sort({ createdAt: -1, _id: -1 })
+  /** Keyset page: `query` already carries the "after the cursor" clause; `sort` is a Mongo sort. */
+  page: (query, { sort, limit }) => PaymentRequest.find(query)
+    .sort(sort)
     .limit(limit)
     .select('-history -files.publicId -files.provider')
     .lean(),
+
+  /**
+   * How many match and what they add up to — counted over at most `cap` rows,
+   * so a huge match costs a bounded read. `capped` says the real count is higher.
+   */
+  summary: async (query, cap) => {
+    const [row] = await PaymentRequest.aggregate(summaryPipeline(query, cap, 'amount')).option({ maxTimeMS: 5000 });
+    return readSummary(row, cap, true);
+  },
 
   /** Supplier requests for an order that are not finished (served by payment_request_order). */
   findOpenForOrder: (orderId) => PaymentRequest.find({

@@ -356,7 +356,7 @@ describe('Affiliate — financial PII never rides along on an ordinary read', ()
   it('omits them from the admin list', async () => {
     await makeAffiliate(withBank);
 
-    const [row] = await affiliateRepository.findPage({ limit: 10 });
+    const [row] = await affiliateRepository.page({}, { sort: { createdAt: -1, _id: -1 }, limit: 10 });
     expect(row.payoutDetails.accountNumber).toBeUndefined();
     expect(row.payoutDetails.panNumber).toBeUndefined();
   });

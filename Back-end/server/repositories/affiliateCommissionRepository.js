@@ -138,12 +138,25 @@ class AffiliateCommissionRepository extends BaseRepository {
    * suspended for fraud. They are therefore kept off the list and reported separately in
    * `suspendedHeld`, so the liability stays visible without being actionable by reflex.
    *
-   * Returns `{ rows, totalPayablePaise, dueCount, suspendedHeld }` — the totals come from
-   * a `$facet` branch with NO `$limit`, because a total computed over one page of results
-   * understates what we owe the moment there are more affiliates than fit on it.
+   * Returns `{ rows, totalPayablePaise, dueCount, suspendedHeld, found }` — the totals
+   * come from a `$facet` branch with NO `$limit`, because a total computed over one page
+   * of results understates what we owe the moment there are more affiliates than fit on
+   * it. They are always every due affiliate; `found` is how many the search matched.
+   *
+   * ── SEARCH AND SORT ─────────────────────────────────────────────────────────────
+   * `search` (a regex, already escaped) narrows the worklist to affiliates whose name or
+   * code matches — before the limit, so a match is never cut off. `sort`:
+   *   priority (default) — asked to be paid first, then the largest balance
+   *   amount_desc        — largest balance first
+   *   oldest             — the longest-waiting approved commission first
    */
-  async payableQueue({ minPaise = 0, limit = 50 } = {}) {
+  async payableQueue({ minPaise = 0, limit = 50, search = null, sort = 'priority' } = {}) {
     const capped = Math.min(Math.max(1, limit), 200);
+    const order = {
+      amount_desc: { netPaise: -1, _id: 1 },
+      oldest: { oldest: 1, _id: 1 },
+    }[sort] || { requested: -1, netPaise: -1, _id: 1 };
+    const matching = search ? [{ $match: { $or: [{ 'affiliate.name': search }, { 'affiliate.code': search }] } }] : [];
 
     const [out] = await AffiliateCommission.aggregate([
       { $match: { status: COMMISSION_STATUS.APPROVED, payout: null } },
@@ -184,6 +197,7 @@ class AffiliateCommissionRepository extends BaseRepository {
           // The worklist: active only, priority-ordered, then limited.
           rows: [
             { $match: { 'affiliate.status': AFFILIATE_STATUS.ACTIVE } },
+            ...matching,
             {
               $addFields: {
                 // Sorts before balance. Someone who has actively chased their money is
@@ -192,8 +206,14 @@ class AffiliateCommissionRepository extends BaseRepository {
                 requested: { $cond: [{ $ifNull: ['$affiliate.payoutRequestedAt', false] }, 1, 0] },
               },
             },
-            { $sort: { requested: -1, netPaise: -1 } },
+            { $sort: order },
             { $limit: capped },
+          ],
+          // How many due affiliates the search matched (all of them when not searching).
+          found: [
+            { $match: { 'affiliate.status': AFFILIATE_STATUS.ACTIVE } },
+            ...matching,
+            { $count: 'n' },
           ],
           // The true outstanding total across EVERY due active affiliate, unlimited.
           totals: [
@@ -217,6 +237,7 @@ class AffiliateCommissionRepository extends BaseRepository {
         heldPaise: out?.suspendedHeld?.[0]?.heldPaise ?? 0,
         count: out?.suspendedHeld?.[0]?.count ?? 0,
       },
+      found: out?.found?.[0]?.n ?? 0,
     };
   }
 

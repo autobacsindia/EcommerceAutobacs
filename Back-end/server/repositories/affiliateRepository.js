@@ -1,5 +1,6 @@
 import BaseRepository from './baseRepository.js';
 import Affiliate from '../models/Affiliate.js';
+import { summaryPipeline, readSummary } from '../utils/listQuery.js';
 import Coupon from '../models/Coupon.js';
 import { decryptField } from '../utils/fieldEncryption.js';
 import { AFFILIATE_STATUS, CODE_MAX_LENGTH, CODE_REGEX } from '../config/affiliate.js';
@@ -107,28 +108,25 @@ class AffiliateRepository extends BaseRepository {
     return q;
   }
 
-  /**
-   * Admin list — keyset-paginated on createdAt, newest first, bounded.
-   *
-   * No skip/offset: the house rule admits no exceptions, and offset would in any case
-   * duplicate and skip rows while applications are arriving. Fetching one extra row is
-   * how the caller learns there is a next page without a second count query.
-   */
-  async findPage({ limit = 50, before = null, status = null, search = null } = {}) {
-    const query = {};
-    if (before) query.createdAt = { $lt: before };
-    if (status) query.status = status;
-    if (search) {
-      // Anchored, escaped prefix match: unanchored user input in a regex is a CPU
-      // denial-of-service against a growing collection.
-      const safe = String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      if (safe) {
-        const rx = new RegExp(`^${safe}`, 'i');
-        query.$or = [{ code: rx }, { email: rx }, { name: rx }];
-      }
-    }
+  /** Affiliates whose name, code or email matches `re` — the payouts search. Bounded. */
+  async idsMatching(re) {
+    const rows = await Affiliate.find({ $or: [{ name: re }, { code: re }, { email: re }] }).select('_id').limit(500).lean();
+    return rows.map((r) => r._id);
+  }
 
-    return Affiliate.find(query).sort({ createdAt: -1 }).limit(limit).lean();
+  /**
+   * One keyset page of the admin list; `query` carries the filters and page position,
+   * `sort` the order (utils/listQuery.js). No skip/offset: offset would duplicate and
+   * skip rows while applications are arriving.
+   */
+  page(query, { sort, limit }) {
+    return Affiliate.find(query).sort(sort).limit(limit).lean();
+  }
+
+  /** How many affiliates match (capped). */
+  async summary(query, cap) {
+    const [row] = await Affiliate.aggregate(summaryPipeline(query, cap)).option({ maxTimeMS: 5000 });
+    return readSummary(row, cap, false);
   }
 
   /**

@@ -34,6 +34,8 @@ export const validatePastSaleList = [
   query('q').optional().isString().isLength({ max: 100 }).withMessage('Search is too long'),
   query('deleted').optional().isIn(['0', '1']).withMessage('Invalid filter'),
   query('batch').optional().matches(/^[a-f0-9]{16,40}$/).withMessage('Invalid upload id'),
+  // Shape only — an unknown sort / channel / payment is ignored by the service.
+  ...['min', 'max', 'channel', 'payment', 'sort'].map((n) => query(n).optional().isString().isLength({ max: 40 }).withMessage(`Invalid ${n}`)),
 ];
 
 export const validatePastSaleBody = [

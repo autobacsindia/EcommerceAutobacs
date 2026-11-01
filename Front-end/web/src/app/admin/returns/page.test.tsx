@@ -3,8 +3,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import AdminReturnsPage from './page';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { addressBar } from '@/test-utils/addressBarMock';
 
 jest.mock('@/lib/api');
+jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
 
 // Generic lucide-react mock — every icon renders a stub span, so the test never
 // needs updating when the page's icon set changes.
@@ -45,13 +47,15 @@ const listResponse = {
       updatedAt: new Date().toISOString(),
     },
   ],
-  pagination: { currentPage: 1, totalPages: 1 },
-  count: 1,
+  nextCursor: null,
+  sort: 'newest',
+  summary: { count: 1, capped: false },
 };
 
 describe('AdminReturnsPage (new flow)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    addressBar.reset('/admin/returns');
     mockApi.get.mockImplementation((endpoint: string) => {
       if (endpoint.startsWith(API_ENDPOINTS.ADMIN_RETURNS)) return Promise.resolve(listResponse as never);
       return Promise.resolve({ request: { ...listResponse.requests[0], problemDescription: 'rattles' } } as never);
@@ -301,6 +305,65 @@ describe('AdminReturnsPage (new flow)', () => {
     fireEvent.click(screen.getByRole('button', { name: /record offline return/i }));
     expect(await screen.findByText(/Record an offline return/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Order number, customer name/i)).toBeInTheDocument();
+  });
+
+  describe('search, filters, sort and Show more', () => {
+    const listCalls = () => mockApi.get.mock.calls.map((c) => String(c[0])).filter((u) => u.startsWith(`${API_ENDPOINTS.ADMIN_RETURNS}?`));
+    const lastQuery = () => {
+      const urls = listCalls();
+      return Object.fromEntries(new URLSearchParams(urls[urls.length - 1].split('?')[1]));
+    };
+
+    it('says how many; search, each filter and the sort go to the server and into the address', async () => {
+      render(<AdminReturnsPage />);
+      expect(await screen.findByRole('status')).toHaveTextContent('1 return found');
+      expect(lastQuery()).toEqual({ limit: '20' });
+      fireEvent.change(screen.getByLabelText('Search returns'), { target: { value: 'asha wiper' } });
+      await waitFor(() => expect(lastQuery().q).toBe('asha wiper'));
+      fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'approved' } });
+      fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'transit_damage' } });
+      fireEvent.change(screen.getByLabelText('Came from'), { target: { value: 'recorded' } });
+      fireEvent.change(screen.getByLabelText('Raised on: from'), { target: { value: '2026-10-01' } });
+      fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'oldest' } });
+      await waitFor(() => expect(lastQuery()).toEqual({
+        q: 'asha wiper', status: 'approved', reason: 'transit_damage', origin: 'recorded', from: '2026-10-01', sort: 'oldest', limit: '20',
+      }));
+      expect(addressBar.replace).toHaveBeenLastCalledWith(
+        '/admin/returns?q=asha+wiper&status=approved&reason=transit_damage&origin=recorded&from=2026-10-01&sort=oldest', { scroll: false },
+      );
+    });
+
+    it('never filters on the screen: what the server sends is what shows', async () => {
+      addressBar.search = 'q=nobody';
+      render(<AdminReturnsPage />);
+      // The server matched the row (say, by phone); the screen must not hide it.
+      expect(await screen.findByText('#AB-1001')).toBeInTheDocument();
+    });
+
+    it('a shared link opens filtered; a miss says so; Clear all keeps the sort', async () => {
+      addressBar.search = 'status=refunded&q=zzz&sort=oldest';
+      mockApi.get.mockResolvedValue({ requests: [], nextCursor: null, sort: 'oldest', summary: { count: 0, capped: false } } as never);
+      render(<AdminReturnsPage />);
+      expect(await screen.findByText(/No returns match/)).toBeInTheDocument();
+      expect(lastQuery()).toEqual({ status: 'refunded', q: 'zzz', sort: 'oldest', limit: '20' });
+      fireEvent.click(screen.getByRole('button', { name: /Clear all/ }));
+      expect(addressBar.replace).toHaveBeenLastCalledWith('/admin/returns?sort=oldest', { scroll: false });
+    });
+
+    it('Show more adds the next page with the same filters, and keeps the count', async () => {
+      addressBar.search = 'status=pending';
+      const second = { ...listResponse.requests[0], _id: 'ret000002', order: { _id: 'ord2', orderNumber: 'AB-1002' } };
+      mockApi.get.mockImplementation((endpoint: string) => Promise.resolve((endpoint.includes('cursor=')
+        ? { requests: [second], nextCursor: null, sort: 'newest' }
+        : { ...listResponse, nextCursor: 'NEXT', summary: { count: 2, capped: false } }) as never));
+      render(<AdminReturnsPage />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Show more' }));
+      expect(await screen.findByText('#AB-1002')).toBeInTheDocument();
+      expect(screen.getByText('#AB-1001')).toBeInTheDocument();
+      expect(lastQuery()).toEqual({ status: 'pending', limit: '20', cursor: 'NEXT' });
+      expect(screen.getByRole('status')).toHaveTextContent('2 returns found');
+      expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+    });
   });
 
   describe('offline return — picking order lines', () => {
