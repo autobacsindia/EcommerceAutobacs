@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import SupplierDirectory from '@/components/payments/SupplierDirectory';
 
@@ -19,7 +20,10 @@ export default function TeamSuppliersPage() {
         <h1 className="text-2xl font-bold text-gray-900">Suppliers</h1>
         <p className="text-sm text-gray-500">Save a supplier once, then pick them from the list when you request a supplier payment.</p>
       </div>
-      <SupplierDirectory canEdit={team === 'procurement'} />
+      {/* The directory's search and filters live in the address (useSearchParams). */}
+      <Suspense fallback={null}>
+        <SupplierDirectory canEdit={team === 'procurement'} />
+      </Suspense>
     </div>
   );
 }

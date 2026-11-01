@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
-import { Search, DollarSign, Eye } from 'lucide-react';
+import { DollarSign, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import { formatDateIST } from '@/lib/datetime';
 import OfflineRefundDialog, { type OfflineRefundSubmission } from '@/components/admin/OfflineRefundDialog';
 import { offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
+import { useListParams } from '@/lib/hooks/useListParams';
+import { ListClear, ListDateRange, ListSearch, ListSelect } from '@/components/panel/ListControls';
 
 interface Refund {
   _id: string;
@@ -52,11 +54,39 @@ interface Cursor {
 
 const PAGE_SIZE = 50;
 
+const STATUSES = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'processing', label: 'Processing' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'failed', label: 'Failed' },
+];
+const SORTS = [
+  { value: 'newest', label: 'Newest orders first' },
+  { value: 'oldest', label: 'Oldest orders first' },
+];
+
+/** The page reads its filters from the address (useSearchParams), so it renders inside <Suspense>. */
 export default function AdminRefundsPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading refunds...</div>}>
+      <AdminRefunds />
+    </Suspense>
+  );
+}
+
+function AdminRefunds() {
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  /*
+    Status, search, the order-date range and the sort live in the page address, so Back,
+    a refresh or a shared link reopens the same queue. The server does all of it — this
+    screen never filters rows itself (see the note above `filteredRefunds`).
+  */
+  const { values: v, set, clear } = useListParams({ status: 'all', q: '', from: '', to: '', sort: 'newest' });
+  const statusFilter = STATUSES.some((x) => x.value === v.status) ? v.status : 'all';
+  const searchTerm = v.q;
+  const sort = v.sort === 'oldest' ? 'oldest' : 'newest';
+  const filtered = statusFilter !== 'all' || Boolean(v.q || v.from || v.to);
   const [processingId, setProcessingId] = useState<string | null>(null);
   // Which row's offline dialog is open. Rendered conditionally so it remounts per row
   // and seeds its amount from that refund rather than the previous one.
@@ -68,15 +98,15 @@ export default function AdminRefundsPage() {
   const loadedOnce = useRef(false);
 
   /*
-    Debounced so typing does not fire a request per keystroke. The term is sent to the
-    SERVER — the screen used to filter a fully-loaded list in the browser, which stopped
-    being possible when the query was bounded to a page. See orderRepository.findWithRefunds.
+    The search box waits for a pause in typing before it changes the address (ListSearch),
+    so this does not fire a request per keystroke. Everything is sent to the SERVER — the
+    screen used to filter a fully-loaded list in the browser, which stopped being possible
+    when the query was bounded to a page. See orderRepository.findWithRefunds.
   */
   useEffect(() => {
-    const id = setTimeout(() => fetchRefunds(), searchTerm ? 300 : 0);
-    return () => clearTimeout(id);
+    fetchRefunds();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, searchTerm]);
+  }, [statusFilter, searchTerm, v.from, v.to, sort]);
 
   // Each row kind has its own server endpoint — see `Refund.kind`. Every one of them
   // claims atomically on the server, so a double-click cannot pay twice.
@@ -176,6 +206,9 @@ export default function AdminRefundsPage() {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (searchTerm.trim()) params.append('search', searchTerm.trim());
+      if (v.from) params.append('from', v.from);
+      if (v.to) params.append('to', v.to);
+      if (sort !== 'newest') params.append('sort', sort);
       params.append('limit', String(PAGE_SIZE));
       if (cursor) {
         params.append('cursorCreatedAt', cursor.createdAt);
@@ -225,28 +258,30 @@ export default function AdminRefundsPage() {
     <div className="p-8">
       <h1 className="text-3xl font-bold mb-8">Refunds Management</h1>
 
-      <div className="mb-6 flex gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by order or customer..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-lg"
-          />
+      <div role="search" aria-label="Search and filter refunds" className="mb-6 space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ListSearch value={searchTerm} onChange={(text) => set({ q: text.trim() })} label="Search refunds"
+            placeholder="Search by order or customer..." />
+          <ListSelect label="Status" value={statusFilter === 'all' ? '' : statusFilter}
+            onChange={(x) => set({ status: x || 'all' })} allLabel="All Status" options={STATUSES} />
+          <ListSelect label="Sort" value={sort} onChange={(x) => set({ sort: x })} options={SORTS} />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="border rounded-lg px-4 py-2"
-        >
-          <option value="all">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="processing">Processing</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <ListDateRange label="Order placed" from={v.from} to={v.to} onChange={(from, to) => set({ from, to })}>
+            <span>Order placed</span>
+          </ListDateRange>
+        </div>
+        <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
+          {/*
+            One order can give several rows (one per cancelled item group), so the server
+            counts orders, not rows — this says what is on screen, and whether more follow.
+          */}
+          <p role="status" className="text-sm text-gray-600">
+            {refunds.length.toLocaleString('en-IN')} refund{refunds.length === 1 ? '' : 's'}
+            {nextCursor ? ' shown — more below' : filtered ? ' found' : ''}
+          </p>
+          {filtered && <ListClear onClear={() => clear(['sort'])} />}
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-x-auto">

@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 import ReturnRequest from '../models/ReturnRequest.js';
 import { RETURN_QUANTITY_CONSUMING_STATUSES } from '../config/returnPolicy.js';
+import { summaryPipeline, readSummary } from '../utils/listQuery.js';
+
+// A search looks at no more than this many returns of one list, newest first (all of
+// them, today: the whole collection is a few thousand).
+const SEARCH_SCAN_CAP = 20000;
 
 /**
  * ReturnRequest data access. Passthrough to the model so query chaining and
@@ -68,15 +73,13 @@ class ReturnRequestRepository {
   }
 
   /**
-   * One keyset page of returns, newest first: `(createdAt, _id)` strictly before the
-   * cursor. Bounded by `limit`; never skip/offset (the collection only grows).
+   * One keyset page of returns. `query` already carries the page position and
+   * `sort` the order (utils/listQuery.js keysetPage). Bounded by `limit`; never
+   * skip/offset (the collection only grows).
    */
-  page(query, { before = null, limit }) {
-    const filter = before
-      ? { $and: [query, { $or: [{ createdAt: { $lt: before.createdAt } }, { createdAt: before.createdAt, _id: { $lt: before.id } }] }] }
-      : query;
-    return ReturnRequest.find(filter)
-      .sort({ createdAt: -1, _id: -1 })
+  page(query, { sort, limit }) {
+    return ReturnRequest.find(query)
+      .sort(sort)
       .limit(limit)
       .populate('order', 'orderNumber wpId shippingAddress.fullName salesUser totalAmount')
       .populate('items.product', 'name')
@@ -84,28 +87,72 @@ class ReturnRequestRepository {
       .lean();
   }
 
+  /** How many returns match (capped): the "N found" line. */
+  async summary(query, cap) {
+    const [row] = await ReturnRequest.aggregate(summaryPipeline(query, cap)).option({ maxTimeMS: 5000 });
+    return readSummary(row, cap, false);
+  }
+
   /**
-   * Supplier settlements promised but not yet received — the "Suppliers owe us" list.
-   * Oldest promise first (what is most overdue), keyset on (promisedAt, claim _id).
+   * What the team can search a return by that lives on OTHER documents — the order's
+   * number and customer, the product names — one row per return in `query`:
+   * { _id, order: { _id, wpId, orderNumber, name, phone }, products: [name] }.
+   * The caller matches the words; only the fields named here leave the database.
    */
-  owedPage({ after = null, limit }) {
-    const pipeline = [
+  async searchRows(query) {
+    const rows = await ReturnRequest.aggregate([
+      { $match: query },
+      // Newest first, so if a list ever outgrows the cap it is the oldest that drop out.
+      { $sort: { createdAt: -1, _id: -1 } },
+      { $limit: SEARCH_SCAN_CAP },
+      { $project: { order: 1, customerPhone: 1, products: '$items.product', destination: '$destination.supplierName', claims: '$supplierClaims.supplierName' } },
+      { $lookup: {
+        from: mongoose.model('Order').collection.name, localField: 'order', foreignField: '_id', as: 'order',
+        pipeline: [{ $project: { wpId: 1, orderNumber: 1, name: '$shippingAddress.fullName', phone: '$shippingAddress.phone' } }],
+      } },
+      { $lookup: {
+        from: mongoose.model('Product').collection.name, localField: 'products', foreignField: '_id', as: 'products',
+        pipeline: [{ $project: { name: 1 } }],
+      } },
+    ]).option({ maxTimeMS: 5000 });
+    return { rows, capped: rows.length >= SEARCH_SCAN_CAP };
+  }
+
+  /**
+   * Supplier settlements promised but not yet received — the "Suppliers owe us" list —
+   * one row per settlement, flattened so a list can filter and keyset on top-level
+   * fields: { _id: claim id, returnId, order, claim, supplierName, promisedAt, sortAt,
+   * amountPaise, ref (the return's short number) }.
+   */
+  owedStages() {
+    return [
       { $match: { 'supplierClaims.status': 'promised' } },
       { $unwind: '$supplierClaims' },
       { $match: { 'supplierClaims.status': 'promised' } },
+      { $project: {
+        _id: '$supplierClaims._id', returnId: '$_id', order: 1, claim: '$supplierClaims',
+        supplierName: '$supplierClaims.supplierName',
+        promisedAt: '$supplierClaims.settlement.promisedAt',
+        // What the date sorts page on. Never null: a null cannot sit in a keyset cursor,
+        // and `$lt <date>` never matches one, so an undated promise would drop out of
+        // every page after the first. Falls back to the return's own date.
+        sortAt: { $ifNull: ['$supplierClaims.settlement.promisedAt', '$createdAt'] },
+        amountPaise: { $ifNull: ['$supplierClaims.settlement.amountPaise', 0] },
+        ref: { $toUpper: { $substrCP: [{ $toString: '$_id' }, 16, 8] } },
+      } },
     ];
-    if (after) {
-      pipeline.push({ $match: { $or: [
-        { 'supplierClaims.settlement.promisedAt': { $gt: after.at } },
-        { 'supplierClaims.settlement.promisedAt': after.at, 'supplierClaims._id': { $gt: after.id } },
-      ] } });
-    }
-    pipeline.push(
-      { $sort: { 'supplierClaims.settlement.promisedAt': 1, 'supplierClaims._id': 1 } },
-      { $limit: limit },
-      { $project: { order: 1, claim: '$supplierClaims' } },
-    );
-    return ReturnRequest.aggregate(pipeline);
+  }
+
+  /** One keyset page of owed settlements; `query` carries the filters and the page position. */
+  owedPage(query, { sort, limit }) {
+    return ReturnRequest.aggregate([...this.owedStages(), { $match: query }, { $sort: sort }, { $limit: limit }]);
+  }
+
+  /** How many owed settlements match, and their total in paise (capped). */
+  async owedSummary(query, cap) {
+    const [row] = await ReturnRequest.aggregate([...this.owedStages(), ...summaryPipeline(query, cap, 'amountPaise')])
+      .option({ maxTimeMS: 5000 });
+    return readSummary(row, cap, true);
   }
 
   /** Totals still owed, per supplier (the summary above the list). Small: one row per supplier. */

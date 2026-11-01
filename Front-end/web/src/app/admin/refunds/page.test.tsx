@@ -4,8 +4,14 @@ import AdminRefundsPage from './page';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 
+import { addressBar } from '@/test-utils/addressBarMock';
+
 // Mock apiClient
 jest.mock('@/lib/api');
+// The filters live in the page address.
+jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
+// Every test starts on a clean address (a shared-link test must not leak into the next).
+beforeEach(() => addressBar.reset('/admin/refunds'));
 
 // Mock icons
 jest.mock('lucide-react', () => ({
@@ -70,7 +76,7 @@ describe('AdminRefundsPage', () => {
       expect(screen.getByText('Refunds Management')).toBeInTheDocument();
     });
 
-    const filterSelect = screen.getByRole('combobox');
+    const filterSelect = screen.getByLabelText('Status');
     fireEvent.change(filterSelect, { target: { value: 'pending' } });
 
     await waitFor(() => {
@@ -107,6 +113,28 @@ describe('AdminRefundsPage', () => {
     // Both rows are still shown: what comes back is the server's answer, and this screen
     // no longer second-guesses it.
     expect(screen.getByText('#ORD-001')).toBeInTheDocument();
+  });
+
+  it('sends the order dates and oldest-first to the server, and keeps them in the address', async () => {
+    render(<AdminRefundsPage />);
+    await screen.findByText('#ORD-001');
+    fireEvent.change(screen.getByLabelText('Order placed: from'), { target: { value: '2026-09-01' } });
+    fireEvent.change(screen.getByLabelText('Order placed: to'), { target: { value: '2026-09-30' } });
+    fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'oldest' } });
+    await waitFor(() => expect(apiClient.get).toHaveBeenLastCalledWith(
+      expect.stringContaining('from=2026-09-01&to=2026-09-30&sort=oldest&limit=50'),
+    ));
+    expect(addressBar.replace).toHaveBeenLastCalledWith('/admin/refunds?from=2026-09-01&to=2026-09-30&sort=oldest', { scroll: false });
+  });
+
+  it('a shared link opens filtered; Clear all keeps the sort', async () => {
+    addressBar.search = 'status=failed&q=Priya&from=2026-09-01&sort=oldest';
+    render(<AdminRefundsPage />);
+    await screen.findByText('#ORD-001');
+    expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('status=failed&search=Priya&from=2026-09-01&sort=oldest'));
+    expect(screen.getByRole('status')).toHaveTextContent('2 refunds found');
+    fireEvent.click(screen.getByRole('button', { name: /Clear all/ }));
+    expect(addressBar.replace).toHaveBeenLastCalledWith('/admin/refunds?sort=oldest', { scroll: false });
   });
 
   it('requests a bounded page', async () => {

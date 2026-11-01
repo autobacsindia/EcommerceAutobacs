@@ -27,6 +27,7 @@ import userRepository from '../repositories/userRepository.js';
 import { enqueueNotification } from '../queue/queues.js';
 import { CURRENT_AFFILIATE_TERMS_VERSION } from '../config/legalDocuments.js';
 import AppError from '../utils/AppError.js';
+import { and, escapeRegex, keysetPage, plainQuery } from '../utils/listQuery.js';
 import {
   AFFILIATE_STATUS,
   CODE_REGEX,
@@ -34,7 +35,15 @@ import {
   DEFAULT_REPEAT_COMMISSION_PERCENT,
   DEFAULT_DISCOUNT_PERCENT,
   MIN_PAYOUT_RUPEES,
+  AFFILIATE_STATUSES,
 } from '../config/affiliate.js';
+
+/** Admin list order — keyset on [field, _id] (utils/listQuery.js). */
+const AFFILIATE_SORTS = Object.freeze({
+  newest: { field: 'createdAt', dir: -1, type: 'date' },
+  oldest: { field: 'createdAt', dir: 1, type: 'date' },
+  name: { field: 'name', dir: 1, type: 'string' },
+});
 
 /** Fields an applicant may set on themselves. Everything else is admin-only. */
 const APPLICATION_FIELDS = ['name', 'email', 'phone', 'website', 'pitch', 'gstin'];
@@ -657,21 +666,28 @@ class AffiliateService {
     return affiliateRepository.findById(affiliateId);
   }
 
-  /** Admin list — cursor-paginated, bounded, PII-free (see the repository). */
-  async listAdmin({ limit = 50, before = null, status = null, search = null } = {}) {
-    const capped = Math.min(Math.max(1, Number(limit) || 50), 100);
-    const rows = await affiliateRepository.findPage({
-      limit: capped + 1, // one extra reveals a next page without a count query
-      before,
-      status,
-      search,
+  /**
+   * Admin list — keyset-paged, bounded, PII-free (see the repository): `status`,
+   * `search` (the start of the code, email or name — anchored on purpose: an unanchored
+   * user regex over a growing collection is a CPU cost for nothing), `sort` (newest /
+   * oldest joined, name A–Z), `cursor`, `limit`. The first page also says how many match.
+   */
+  async listAdmin(params = {}) {
+    const f = plainQuery(params);
+    const pageSize = Math.min(Math.max(1, Number(f.limit) || 50), 100);
+    const safe = escapeRegex(String(f.search || '').trim().slice(0, 100));
+    const rx = safe ? new RegExp(`^${safe}`, 'i') : null;
+    const query = and(
+      AFFILIATE_STATUSES.includes(f.status) ? { status: f.status } : null,
+      rx ? { $or: [{ code: rx }, { email: rx }, { name: rx }] } : null,
+    );
+    const sortName = AFFILIATE_SORTS[f.sort] ? f.sort : 'newest';
+    const { items, ...page } = await keysetPage({
+      query, sorts: AFFILIATE_SORTS, sortName, cursor: f.cursor, pageSize,
+      find: (q, o) => affiliateRepository.page(q, o),
+      count: (q) => affiliateRepository.summary(q, 1000),
     });
-    const hasMore = rows.length > capped;
-    const affiliates = hasMore ? rows.slice(0, capped) : rows;
-    return {
-      affiliates,
-      nextCursor: hasMore ? affiliates.at(-1).createdAt : null,
-    };
+    return { ...page, affiliates: items };
   }
 
   /**

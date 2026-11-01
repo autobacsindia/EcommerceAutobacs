@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import BaseRepository from './baseRepository.js';
 import Order from '../models/Order.js';
 import userRepository from './userRepository.js';
+import { istRange } from '../utils/listQuery.js';
 
 /**
  * "This array is still exactly N long" — as a compare-and-set condition that also works
@@ -660,10 +661,14 @@ class OrderRepository extends BaseRepository {
    * @param {string} [opts.search]  - order-id fragment or buyer name/email/phone
    * @param {number} [opts.limit]   - page size, clamped to 1..100
    * @param {object} [opts.cursor]  - { createdAt, id } from the previous page
+   * @param {string} [opts.from]    - YYYY-MM-DD, India time: orders placed on or after
+   * @param {string} [opts.to]      - YYYY-MM-DD, India time: orders placed on or before
+   * @param {string} [opts.sort]    - 'oldest' (waiting longest first); anything else newest
    * @returns {Promise<{orders: object[], nextCursor: object|null}>}
    */
   async findWithRefunds(statusFilter, opts = {}) {
-    const { search = '', limit: rawLimit = 50, cursor = null, session = null } = opts;
+    const { search = '', limit: rawLimit = 50, cursor = null, session = null, from = '', to = '', sort = 'newest' } = opts;
+    const dir = sort === 'oldest' ? 1 : -1;
     const limit = Math.min(Math.max(Number(rawLimit) || 50, 1), 100);
 
     // Legacy / WooCommerce-imported orders cancelled while paid never got a refundDetails
@@ -721,17 +726,23 @@ class OrderRepository extends BaseRepository {
       clauses.push({ $or: await this._refundSearchLanes(search) });
     }
 
+    // The day the order was placed — a narrowing only; it never changes which lane a row is in.
+    const placed = istRange(from, to);
+    if (placed) clauses.push({ createdAt: placed });
+
     /*
-      Keyset page predicate for a DESCENDING (createdAt, _id) sort: strictly older, or
-      the same instant with a smaller id. No `skip`, so cost does not grow with depth.
+      Keyset page predicate for the (createdAt, _id) sort: strictly past the cursor, or
+      the same instant with a further id — older for newest-first, newer for oldest-first.
+      No `skip`, so cost does not grow with depth.
     */
     if (cursor?.createdAt && cursor?.id) {
       const at = new Date(cursor.createdAt);
       const id = new mongoose.Types.ObjectId(String(cursor.id));
+      const op = dir < 0 ? '$lt' : '$gt';
       clauses.push({
         $or: [
-          { createdAt: { $lt: at } },
-          { createdAt: at, _id: { $lt: id } },
+          { createdAt: { [op]: at } },
+          { createdAt: at, _id: { [op]: id } },
         ],
       });
     }
@@ -751,7 +762,7 @@ class OrderRepository extends BaseRepository {
       .select('totalAmount createdAt updatedAt refundDetails user status paymentStatus '
         + 'items._id items.name items.variantLabel items.quantity cancellations shipments.status shipments.lines')
       .populate('user', 'name email')
-      .sort({ createdAt: -1, _id: -1 })
+      .sort({ createdAt: dir, _id: dir })
       // One extra row is the "is there another page?" probe — cheaper and race-free
       // compared with a separate countDocuments.
       .limit(limit + 1)

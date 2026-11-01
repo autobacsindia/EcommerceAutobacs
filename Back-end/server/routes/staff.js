@@ -121,7 +121,7 @@ import { setPayDetails, readPayDetailsQr } from '../services/salesPayDetailsServ
 import { canSell } from '../config/staff.js';
 import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller } from '../services/orderAttributionService.js';
 import {
-  recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, getBankTransfer,
+  recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, transferFilterOptions, getBankTransfer,
   editBankTransfer, withdrawBankTransfer, getTransferFile,
 } from '../services/bankTransferService.js';
 
@@ -410,9 +410,14 @@ router.post('/sales/orders/:id/bank-transfer', concurrentUploadGuard, attachment
     res.status(201).json({ success: true, transfer: await recordBankTransfer(req.user, req.params.id, req.body, req.files || [], req) });
   }));
 
-// @route  GET /staff/bank-transfers?status=pending|confirmed|rejected|all&cursor=
+// @route  GET /staff/bank-transfers?status=pending|confirmed|rejected|withdrawn|all&q=&seller=&dateOf=paid|recorded&from=&to=&min=&max=&sort=&cursor=
 router.get('/bank-transfers', validateBankTransferList, validateRequest, asyncHandler(async (req, res) => {
-  res.json({ success: true, ...(await listBankTransfers(req.user, { status: req.query.status || 'pending', cursor: req.query.cursor })) });
+  res.json({ success: true, ...(await listBankTransfers(req.user, req.query)) });
+}));
+
+// @route  GET /staff/bank-transfers/filter-options — the list's "Salesman" choices (before /:id)
+router.get('/bank-transfers/filter-options', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await transferFilterOptions(req.user)) });
 }));
 
 // @route  PUT /staff/bank-transfers/:id { reference?, paidOn?, note? } — correct a pending one

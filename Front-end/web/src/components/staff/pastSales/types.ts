@@ -56,7 +56,13 @@ export type PastSale = {
   history?: { at: string; by: string; action: 'created' | 'edited' | 'deleted' | 'restored'; changes: { field: string; from: string; to: string }[] }[];
 };
 
-export type PastSalePage = { sales: PastSale[]; nextCursor: string | null };
+export type PastSalePage = {
+  sales: PastSale[];
+  nextCursor: string | null;
+  sort?: string;
+  /** First page only: how many match and their bill total (capped at 1,000). */
+  summary?: { count: number; total: number | null; capped: boolean };
+};
 export type PastSaleTotals = {
   sellers: { id: string | null; name: string; sales: number; value: number }[];
   total: { sales: number; value: number };

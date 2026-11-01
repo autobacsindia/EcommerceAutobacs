@@ -1,14 +1,17 @@
 'use client';
 
 import ProductLink from '@/components/staff/ProductLink';
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, RETURN_REASON_OPTIONS, RETURN_FAULT_LABELS, returnReasonLabel } from '@/lib/constants';
-import { Search, Eye, Package, Video, FileText, ExternalLink, X, Truck, ClipboardCheck, Store, Plus } from 'lucide-react';
+import { Eye, RefreshCw, Package, Video, FileText, ExternalLink, X, Truck, ClipboardCheck, Store, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { ReturnRequest, ReturnRequestItem, PaginatedReturnRequests, ReturnRefundPreview, Order, OrderItem, OfflineRefundMethod } from '@/lib/types';
+import { ReturnRequest, ReturnRequestItem, AdminReturnRequestsPage, ReturnRefundPreview, Order, OrderItem, OfflineRefundMethod } from '@/lib/types';
 import { OFFLINE_REFUND_METHODS, offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
+import { useListParams } from '@/lib/hooks/useListParams';
+import { ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect } from '@/components/panel/ListControls';
+import { ORIGIN_OPTIONS, REASON_OPTIONS } from '@/components/staff/returns/types';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -38,57 +41,106 @@ const lineFault = (item: ReturnRequestItem) =>
 // Shared with the order and cancellation refund screens — see src/lib/offlineRefund.ts.
 const OFFLINE_METHODS = OFFLINE_REFUND_METHODS;
 
+const STATUS_OPTIONS = ['pending', 'approved', 'courier_booked', 'received', 'refunded', 'rejected', 'cancelled']
+  .map((s) => ({ value: s, label: label(s) }));
+const SORTS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+];
+// Everything the list can be narrowed by, in the page address. The sort is not a filter.
+const LIST_DEFAULTS = { status: '', q: '', reason: '', origin: '', from: '', to: '', sort: 'newest' };
+const FILTERS = ['status', 'q', 'reason', 'origin', 'from', 'to'] as const;
+const PAGE_SIZE = 20;
+
+/** The page reads its filters from the address (useSearchParams), so it renders inside <Suspense>. */
 export default function AdminReturnsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-400">Loading returns…</div>}>
+      <AdminReturns />
+    </Suspense>
+  );
+}
+
+function AdminReturns() {
+  /*
+    Search, filters and the sort live in the page address, so Back, a refresh or a shared
+    link reopens the same list. The SERVER does all of it, over every return: this screen
+    used to search only the 20 rows it had loaded, so an older return could not be found.
+  */
+  const { values: v, set, clear } = useListParams(LIST_DEFAULTS);
+  const filtered = FILTERS.some((k) => v[k]);
   const [returns, setReturns] = useState<ReturnRequest[]>([]);
+  const [summary, setSummary] = useState<AdminReturnRequestsPage['summary'] | null>(null);
+  const [searchCapped, setSearchCapped] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [detail, setDetail] = useState<ReturnRequest | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 1, total: 0 });
   const [recording, setRecording] = useState(false);
+  // Only the newest request may paint: a slow answer for an old search must never
+  // replace the list for the current one.
+  const latestLoad = useRef(0);
 
-  const fetchReturns = useCallback(async (page: number) => {
+  const query = useMemo(() => {
+    const p = new URLSearchParams();
+    for (const k of FILTERS) if (v[k]) p.set(k, v[k]);
+    if (v.sort !== 'newest') p.set('sort', v.sort);
+    p.set('limit', String(PAGE_SIZE));
+    return p.toString();
+  }, [v]);
+
+  const fetchReturns = useCallback(async (cursor: string | null = null) => {
+    const load = ++latestLoad.current;
+    if (cursor) setLoadingMore(true); else setLoading(true);
+    setLoadError('');
     try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (statusFilter !== 'all') params.append('status', statusFilter);
-      params.append('page', String(page));
-      params.append('limit', '20');
-      const res = await apiClient.get<PaginatedReturnRequests>(`${API_ENDPOINTS.ADMIN_RETURNS}?${params}`);
-      setReturns(res.requests || []);
-      setPagination({ currentPage: res.pagination.currentPage || 1, totalPages: res.pagination.totalPages || 1, total: res.count || 0 });
+      const res = await apiClient.get<AdminReturnRequestsPage>(
+        `${API_ENDPOINTS.ADMIN_RETURNS}?${query}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      );
+      if (load !== latestLoad.current) return;
+      setReturns((prev) => (cursor ? [...prev, ...(res.requests || [])] : (res.requests || [])));
+      setNextCursor(res.nextCursor ?? null);
+      // The count comes with the first page only; later pages keep it.
+      if (!cursor) {
+        setSummary(res.summary ?? null);
+        setSearchCapped(Boolean(res.searchCapped));
+      }
     } catch (err) {
-      console.error('Failed to fetch returns:', err);
+      if (load === latestLoad.current) setLoadError((err as Error).message || 'Could not load the returns.');
     } finally {
-      setLoading(false);
+      if (load === latestLoad.current) { setLoading(false); setLoadingMore(false); }
     }
-  }, [statusFilter]);
+  }, [query]);
 
-  useEffect(() => { fetchReturns(1); }, [fetchReturns]);
+  useEffect(() => { fetchReturns(); }, [fetchReturns]);
 
-  const openDetail = async (id: string) => {
+  const openDetail = async (id: string): Promise<ReturnRequest | null> => {
     setDetailLoading(true);
     setDetail(null);
     try {
       const res = await apiClient.get<{ request: ReturnRequest }>(API_ENDPOINTS.ADMIN_RETURN_DETAIL(id));
       setDetail(res.request);
+      return res.request;
     } catch (err) {
       alert((err as Error).message || 'Failed to load request');
+      return null;
     } finally {
       setDetailLoading(false);
     }
   };
 
+  /*
+    After an action, the row is updated where it stands rather than the list reloaded:
+    a reload would throw away every "Show more" page the admin had opened. A row that no
+    longer matches the filters stays until Refresh, so it never vanishes mid-task.
+  */
   const afterAction = async (id: string) => {
-    await fetchReturns(pagination.currentPage);
-    await openDetail(id);
+    const fresh = await openDetail(id);
+    if (!fresh) return;
+    setReturns((rows) => rows.map((r) => (r._id === id ? { ...r, ...fresh, order: { ...r.order, ...fresh.order }, user: r.user } : r)));
   };
-
-  const filtered = returns.filter((r) => {
-    const q = searchTerm.toLowerCase();
-    return !q || r.order._id.toLowerCase().includes(q) || (r.order.orderNumber || '').toLowerCase().includes(q) || userName(r.user).toLowerCase().includes(q);
-  });
 
   return (
     <div className="p-8">
@@ -102,18 +154,34 @@ export default function AdminReturnsPage() {
         </button>
       </div>
 
-      <div className="mb-6 flex gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-          <input type="text" placeholder="Search order # or customer…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border rounded-lg" />
+      <div role="search" aria-label="Search and filter returns" className="mb-6 space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ListSearch value={v.q} onChange={(text) => set({ q: text.trim() })} label="Search returns"
+            placeholder="Search order no., return no., customer, phone, product, supplier" />
+          <ListSelect label="Status" value={v.status} onChange={(x) => set({ status: x })} allLabel="All Status" options={STATUS_OPTIONS} />
+          <ListSelect label="Sort" value={v.sort === 'oldest' ? 'oldest' : 'newest'} onChange={(x) => set({ sort: x })} options={SORTS} />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border rounded-lg px-4 py-2">
-          {['all', 'pending', 'approved', 'courier_booked', 'received', 'refunded', 'rejected', 'cancelled'].map((s) => (
-            <option key={s} value={s}>{s === 'all' ? 'All Status' : label(s)}</option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <ListSelect label="Reason" value={v.reason} onChange={(x) => set({ reason: x })} allLabel="Any reason" options={REASON_OPTIONS} />
+          <ListSelect label="Came from" value={v.origin} onChange={(x) => set({ origin: x })} allLabel="Raised anywhere" options={ORIGIN_OPTIONS} />
+          <ListDateRange label="Raised on" from={v.from} to={v.to} onChange={(from, to) => set({ from, to })}>
+            <span>Raised</span>
+          </ListDateRange>
+        </div>
+        <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
+          {summary ? <ListResultLine count={summary.count} capped={summary.capped} noun={['return', 'returns']} /> : <span />}
+          <div className="flex items-center gap-2">
+            {filtered && <ListClear onClear={() => clear(['sort'])} />}
+            <button type="button" onClick={() => fetchReturns()} disabled={loading}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50">
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
+        </div>
+        {searchCapped && <p className="text-xs text-amber-700">Searched the newest 20,000 returns — add a date to look further back.</p>}
       </div>
+
+      {loadError && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{loadError}</p>}
 
       <div className="bg-white rounded-lg shadow overflow-x-auto">
         <table className="w-full">
@@ -125,12 +193,14 @@ export default function AdminReturnsPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
+            {loading && returns.length === 0 ? (
               <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-400">Loading…</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-400">No return requests.</td></tr>
-            ) : filtered.map((req) => (
-              <tr key={req._id} className="hover:bg-gray-50">
+            ) : returns.length === 0 ? (
+              <tr><td colSpan={6} className="px-6 py-10 text-center text-gray-400">
+                {filtered ? 'No returns match — try fewer words or clear the filters.' : 'No return requests.'}
+              </td></tr>
+            ) : returns.map((req) => (
+              <tr key={req._id} className={`hover:bg-gray-50 ${loading ? 'opacity-60' : ''}`}>
                 <td className="px-6 py-4">
                   <Link href={`/admin/orders/${req.order._id}`} className="text-sm text-blue-600 hover:underline flex items-center">
                     #{req.order.orderNumber || req.order._id.slice(-8).toUpperCase()}<ExternalLink className="h-3 w-3 ml-1" />
@@ -157,13 +227,11 @@ export default function AdminReturnsPage() {
         </table>
       </div>
 
-      {pagination.totalPages > 1 && (
-        <div className="mt-6 flex justify-between items-center">
-          <div className="text-sm text-gray-700">Page {pagination.currentPage} of {pagination.totalPages}</div>
-          <div className="flex gap-2">
-            <button disabled={pagination.currentPage === 1} onClick={() => fetchReturns(pagination.currentPage - 1)} className="px-4 py-2 border rounded disabled:opacity-50">Previous</button>
-            <button disabled={pagination.currentPage === pagination.totalPages} onClick={() => fetchReturns(pagination.currentPage + 1)} className="px-4 py-2 border rounded disabled:opacity-50">Next</button>
-          </div>
+      {nextCursor && (
+        <div className="mt-6 flex justify-center">
+          <button type="button" disabled={loadingMore} onClick={() => fetchReturns(nextCursor)} className="px-4 py-2 border rounded disabled:opacity-50">
+            {loadingMore ? 'Loading…' : 'Show more'}
+          </button>
         </div>
       )}
 
@@ -174,7 +242,7 @@ export default function AdminReturnsPage() {
       {recording && (
         <OfflineReturnModal
           onClose={() => setRecording(false)}
-          onCreated={async (id) => { setRecording(false); await fetchReturns(1); await openDetail(id); }}
+          onCreated={async (id) => { setRecording(false); await fetchReturns(); await openDetail(id); }}
         />
       )}
     </div>

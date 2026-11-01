@@ -21,8 +21,9 @@ export function SupplierSuggestions({ query, onPick, label = 'Saved suppliers' }
 }) {
   const q = query.trim();
   const results = useQuery({
-    queryKey: supplierKeys.list(q.toLowerCase(), 'active'),
-    queryFn: () => listSuppliers(q, 'active'),
+    // `prefix`, not `q`: a name-start range the index answers on every keystroke.
+    queryKey: supplierKeys.list({ prefix: q.toLowerCase(), status: 'active' }),
+    queryFn: () => listSuppliers({ prefix: q, status: 'active' }),
     enabled: q.length >= 1,
     staleTime: 30_000,
   });

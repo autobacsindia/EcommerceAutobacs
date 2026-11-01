@@ -7,6 +7,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SalesOrderPayment from './SalesOrderPayment';
 import BankTransfersList, { type BankTransfer } from '@/components/payments/BankTransfersList';
+import { addressBar } from '@/test-utils/addressBarMock';
 
 const get = jest.fn();
 const post = jest.fn();
@@ -16,7 +17,7 @@ jest.mock('@/components/payments/api', () => ({
   ...jest.requireActual('@/components/payments/api'),
   postForm: (...a: unknown[]) => postForm(...a),
 }));
-jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
 jest.mock('next/link', () => ({ __esModule: true, default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => <a href={href} className={className}>{children}</a> }));
 jest.mock('qrcode.react', () => ({ QRCodeCanvas: () => <canvas /> }));
 
@@ -48,6 +49,7 @@ const shot = (name = 'shot.jpg') => new File(['x'], name, { type: 'image/jpeg' }
 const receiptPdf = (name = 'gpay-receipt.pdf', type = 'application/pdf') => new File(['%PDF-1.4'], name, { type });
 
 beforeEach(() => {
+  addressBar.reset('/team/bank-transfers');
   get.mockReset(); post.mockReset(); postForm.mockReset();
   window.confirm = jest.fn(() => true);
 });

@@ -43,6 +43,9 @@ import { storeAll } from './storage/storeAll.js';
 import { MAX_ATTACHMENTS } from '../config/attachments.js';
 import { postSystemMessage } from './chatService.js';
 import { orderNumber } from './invoiceService.js';
+import {
+  and, amountOf, amountRange, isObjectId, istRange, keysetPage, plainQuery, searchClauses, searchWords,
+} from '../utils/listQuery.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
@@ -485,33 +488,72 @@ export async function rejectBankTransfer(actor, id, { note } = {}, req) {
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
-const encodeCursor = (t) => Buffer.from(`${new Date(t.createdAt).toISOString()}|${t._id}`).toString('base64url');
-function decodeCursor(cursor) {
-  if (!cursor) return null;
-  try {
-    const [iso, cid] = Buffer.from(String(cursor), 'base64url').toString().split('|');
-    const createdAt = new Date(iso);
-    if (Number.isNaN(createdAt.getTime()) || !/^[a-f0-9]{24}$/i.test(cid || '')) return null;
-    return { createdAt, id: new mongoose.Types.ObjectId(cid) };
-  } catch {
-    return null;
-  }
-}
-
 function scopeFor(actor) {
   if (seesAll(actor)) return {};
   if (canSell(actor)) return { salesUser: actor._id };
   throw fail('Not authorized.', 403);
 }
 
-/** @param {{ status?: 'pending'|'confirmed'|'rejected'|'all', cursor?: string }} q */
-export async function listBankTransfers(actor, { status = 'pending', cursor } = {}) {
+/*
+  The list's search / filter / sort (utils/listQuery.js does the reading).
+  Every filter is ANDed onto scopeFor — a GTM lead still sees only their own,
+  whatever they send. Unknown values are ignored (a stale link still opens).
+*/
+const TRANSFER_STATUSES = Object.freeze(['pending', 'confirmed', 'rejected', 'withdrawn']);
+export const TRANSFER_SORTS = Object.freeze({
+  newest: { field: 'createdAt', dir: -1, type: 'date' },
+  oldest: { field: 'createdAt', dir: 1, type: 'date' },
+  amount_desc: { field: 'amount', dir: -1, type: 'number' },
+  amount_asc: { field: 'amount', dir: 1, type: 'number' },
+  // The day the customer says they paid (on the receipt), latest first.
+  paid_recent: { field: 'paidOn', dir: -1, type: 'date' },
+});
+const TRANSFER_SEARCH = Object.freeze([
+  'orderNumber', 'customer.name', 'customer.city', 'reference', 'salesUserName', 'recordedByName', 'note',
+]);
+const SUMMARY_CAP = 1000;
+
+/** The Mongo query for a viewer and the list's filters (exported for tests). */
+export function transferQuery(actor, f = {}) {
   const scope = scopeFor(actor);
-  const query = { ...scope, ...(status && status !== 'all' ? { status } : {}) };
-  const rows = await bankTransferRepository.page(query, { before: decodeCursor(cursor), limit: PAGE_SIZE + 1 });
-  const hasMore = rows.length > PAGE_SIZE;
-  const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
-  return { transfers: items.map((t) => shape(t, actor)), nextCursor: hasMore ? encodeCursor(items[items.length - 1]) : null };
+  const status = f.status || 'pending'; // the list opens on what needs checking; 'all' = every status
+  const range = istRange(f.from, f.to);
+  const amount = amountRange(f.min, f.max);
+  return and(
+    scope,
+    TRANSFER_STATUSES.includes(status) ? { status } : null,
+    seesAll(actor) && isObjectId(f.seller) ? { salesUser: new mongoose.Types.ObjectId(f.seller) } : null,
+    amount ? { amount } : null,
+    range ? { [f.dateOf === 'recorded' ? 'createdAt' : 'paidOn']: range } : null,
+    searchClauses(searchWords(String(f.q ?? '').replace(/^#/, '')), TRANSFER_SEARCH, (w) => {
+      const n = amountOf(w);
+      return n ? [{ amount: n }] : [];
+    }),
+  );
+}
+
+/**
+ * A page of bank transfers: status (default 'pending'), search, seller (GTM
+ * head / accounts / admin), paid-on or recorded-on dates, amount range, sort.
+ * The first page also says how many match and what they add up to.
+ */
+export async function listBankTransfers(actor, params = {}) {
+  const f = plainQuery(params);
+  const query = transferQuery(actor, f);
+  const sortName = TRANSFER_SORTS[f.sort] ? f.sort : 'newest';
+  const { items, ...page } = await keysetPage({
+    query, sorts: TRANSFER_SORTS, sortName, cursor: f.cursor, pageSize: PAGE_SIZE,
+    find: bankTransferRepository.page, count: (q) => bankTransferRepository.summary(q, SUMMARY_CAP),
+  });
+  return { ...page, transfers: items.map((t) => shape(t, actor)) };
+}
+
+/** For the "Salesman" filter: who sells (GTM head / accounts / admin only; a lead sees only their own). */
+export async function transferFilterOptions(actor) {
+  scopeFor(actor);
+  if (!seesAll(actor)) return { sellers: [] };
+  const sellers = await userRepository.findActiveStaff(STAFF_TEAMS.SALES);
+  return { sellers: sellers.map((u) => ({ id: idOf(u._id), name: u.name || '' })) };
 }
 
 async function loadVisible(actor, id) {
@@ -543,5 +585,5 @@ export async function getTransferFile(actor, id, fileId) {
 export const countPending = () => bankTransferRepository.countPending();
 
 export default {
-  recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, getBankTransfer, getTransferFile, countPending, mayVerify,
+  recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, transferFilterOptions, getBankTransfer, getTransferFile, countPending, mayVerify,
 };

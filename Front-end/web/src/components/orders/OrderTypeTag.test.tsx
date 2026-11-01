@@ -10,6 +10,11 @@ import PaymentRequestDetail from '@/components/payments/PaymentRequestDetail';
 import type { PaymentRequest } from '@/components/payments/api';
 
 const get = jest.fn();
+jest.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(''),
+  useRouter: () => ({ replace: jest.fn() }),
+  usePathname: () => '/team/payments',
+}));
 jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a), post: jest.fn() } }));
 
 const wrap = (ui: React.ReactElement) => render(

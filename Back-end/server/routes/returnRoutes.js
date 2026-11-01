@@ -18,11 +18,12 @@ import {
   markReturnedOffline,
 } from "../controllers/returnController.js";
 import { protect, admin } from "../middleware/authMiddleware.js";
+import { validateRequest } from "../middleware/validateRequest.js";
+import { validateAdminReturnList } from "../validators/staffReturns.validator.js";
 import {
   validateReturnRequest,
   validateReturnEstimate,
   validateReturnReview,
-  validateRefundsQuery,
   validateIdParam,
   validateOfflineReturnCreate,
   validateOfflineReceived,
@@ -42,7 +43,7 @@ router.patch("/:id/cancel", protect, validateIdParam, cancelMyReturn);
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 // Static /admin/all must precede the /admin/:id param route.
-router.get("/admin/all", protect, admin, validateRefundsQuery, getAllReturns);
+router.get("/admin/all", protect, admin, validateAdminReturnList, validateRequest, getAllReturns);
 // Record a return handled off-platform. Static path, so it must precede /admin/:id.
 router.post("/admin", protect, admin, validateOfflineReturnCreate, createOfflineReturn);
 router.get("/admin/:id", protect, admin, validateIdParam, getReturnById);

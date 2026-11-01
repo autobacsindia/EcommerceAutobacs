@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -62,15 +62,22 @@ export default function TeamPaymentsPage() {
         />
       )}
 
-      <PaymentRequestList
-        initial={isAccounts ? 'to_approve' : 'open'}
-        teams={isAccounts ? STAFF_TEAM_OPTIONS : undefined}
-        /* Accounts opens on its own job — the requests waiting for a decision.
-           "With admin to pay" is the handover it can watch but not act on. */
-        filters={isAccounts
-          ? [{ value: 'to_approve', label: 'To approve' }, { value: 'to_pay', label: 'With admin to pay' }, { value: 'paid', label: 'Paid' }, { value: 'all', label: 'All' }]
-          : [{ value: 'open', label: 'In progress' }, { value: 'paid', label: 'Paid' }, { value: 'all', label: 'All' }]}
-      />
+      {/* The list keeps its search and filters in the address (useSearchParams). */}
+      <Suspense fallback={null}>
+        <PaymentRequestList
+          initial={isAccounts ? 'to_approve' : 'open'}
+          teams={isAccounts ? STAFF_TEAM_OPTIONS : undefined}
+          /* Accounts opens on its own job — the requests waiting for a decision.
+             "With admin to pay" is the handover it can watch but not act on. */
+          filters={isAccounts
+            ? [
+              { value: 'to_approve', label: 'To approve' }, { value: 'to_pay', label: 'With admin to pay' },
+              { value: 'on_hold', label: 'On hold' }, { value: 'paid', label: 'Paid' },
+              { value: 'declined', label: 'Declined' }, { value: 'all', label: 'All' },
+            ]
+            : [{ value: 'open', label: 'In progress' }, { value: 'paid', label: 'Paid' }, { value: 'declined', label: 'Declined' }, { value: 'all', label: 'All' }]}
+        />
+      </Suspense>
     </div>
   );
 }

@@ -950,6 +950,16 @@ describe('Affiliate API', () => {
       expect(res.body.minPayoutPaise).toBeGreaterThan(0);
     });
 
+    it('the queue and the payouts list take search and sort; a regex is plain text', async () => {
+      const queue = await get('/affiliates/admin/payout-queue?q=.*&sort=amount_desc');
+      expect(queue.status).toBe(200);
+      expect(queue.body).toMatchObject({ queue: [], found: 0, sort: 'amount_desc' });
+      const payouts = await get('/affiliates/admin/payouts?q=rahul&status=paid&from=2026-09-01&to=2026-09-30&sort=oldest');
+      expect(payouts.status).toBe(200);
+      expect(payouts.body).toMatchObject({ payouts: [], sort: 'oldest', summary: { count: 0, total: 0 } });
+      expect((await get(`/affiliates/admin/payouts?q=${'x'.repeat(101)}`)).status).toBe(400);
+    });
+
     it('never carries bank details or PAN in the queue', async () => {
       const created = await createActiveAffiliate();
       await put(`/affiliates/admin/${created._id}/payout-details`, {
@@ -1054,7 +1064,7 @@ describe('Affiliate API', () => {
       expect(first.body.affiliates).toHaveLength(2);
       expect(first.body.nextCursor).toBeTruthy();
 
-      const second = await get(`/affiliates/admin?limit=2&before=${encodeURIComponent(first.body.nextCursor)}`);
+      const second = await get(`/affiliates/admin?limit=2&cursor=${encodeURIComponent(first.body.nextCursor)}`);
       expect(second.body.affiliates).toHaveLength(1);
       expect(second.body.nextCursor).toBeNull();
 
@@ -1066,6 +1076,21 @@ describe('Affiliate API', () => {
     it('rejects an over-large limit rather than silently serving it', async () => {
       const res = await get('/affiliates/admin?limit=5000');
       expect(res.status).toBe(400);
+    });
+
+    it('sorts by name or oldest, says how many match, and refuses an unknown sort', async () => {
+      for (const name of ['Zara', 'Anil', 'Meera']) {
+        await (await anonymous()).apply({ ...APPLICATION, name, email: `${name.toLowerCase()}@example.com` });
+      }
+      const byName = await get('/affiliates/admin?sort=name');
+      expect(byName.body.affiliates.map((a) => a.name)).toEqual(['Anil', 'Meera', 'Zara']);
+      expect(byName.body).toMatchObject({ sort: 'name', summary: { count: 3, capped: false } });
+      const oldest = await get('/affiliates/admin?sort=oldest&limit=1');
+      expect(oldest.body.affiliates.map((a) => a.name)).toEqual(['Zara']);
+      expect((await get(`/affiliates/admin?sort=oldest&limit=5&cursor=${encodeURIComponent(oldest.body.nextCursor)}`)).body.affiliates
+        .map((a) => a.name)).toEqual(['Anil', 'Meera']);
+      expect((await get('/affiliates/admin?search=me')).body.summary).toEqual({ count: 1, capped: false });
+      expect((await get('/affiliates/admin?sort=random')).status).toBe(400);
     });
 
     it('filters by status', async () => {

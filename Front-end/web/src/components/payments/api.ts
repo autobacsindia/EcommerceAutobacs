@@ -106,6 +106,7 @@ export const paymentKeys = {
   one: (id: string) => [...paymentKeys.all, 'one', id] as const,
   forOrder: (orderId: string) => [...paymentKeys.all, 'order', orderId] as const,
   options: (team: string) => [...paymentKeys.all, 'options', team] as const,
+  filterOptions: () => [...paymentKeys.all, 'filter-options'] as const,
 };
 
 export const slipHref = (id: string) => `/api/v1/payment-requests/${encodeURIComponent(id)}/slip`;
@@ -139,10 +140,18 @@ export async function postForm<T>(endpoint: string, form: FormData, method: 'POS
   return body as T;
 }
 
+/** How many match the filters and what they add up to (first page only; `total` is null when capped). */
+export type ListSummary = { count: number; total: number | null; capped: boolean };
+export type RequestPage = { requests: PaymentRequest[]; nextCursor: string | null; sort?: string; summary?: ListSummary };
 export const listRequests = (filters: Record<string, string>, cursor?: string) => {
   const q = new URLSearchParams({ ...filters, ...(cursor ? { cursor } : {}) });
-  return apiClient.get<{ requests: PaymentRequest[]; nextCursor: string | null }>(`/payment-requests?${q}`);
+  return apiClient.get<RequestPage>(`/payment-requests?${q}`);
 };
+/** For the "Raised by" filter (admin / accounts). */
+/** The list's filter choices: "What for" (the viewer's team's, or every team's) and, for admin / accounts, "Raised by". */
+export type PaymentPerson = { id: string; name: string; team: string };
+export type ListFilterOptions = { categories: { value: string; label: string }[]; people: PaymentPerson[] };
+export const getListFilterOptions = () => apiClient.get<ListFilterOptions>('/payment-requests/filter-options');
 export const getRequest = (id: string) => apiClient.get<{ request: PaymentRequest }>(`/payment-requests/${id}`);
 export const actOn = (id: string, action: 'approve' | 'decline' | 'hold' | 'cancel', note = '') =>
   apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${id}/${action}`, { note });

@@ -1,31 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronUp, Loader2, Pencil, Plus, RotateCcw, Trash2, Upload } from 'lucide-react';
+import { Suspense, useState } from 'react';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronDown, ChevronUp, Loader2, Pencil, Plus, RotateCcw, SlidersHorizontal, Trash2, Upload } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
 import { pastSaleKeys } from '@/hooks/queries/keys';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
+import { useListParams } from '@/lib/hooks/useListParams';
+import {
+  ListAmountRange, ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect, listField,
+} from '@/components/panel/ListControls';
 import PastSaleForm from './PastSaleForm';
 import PastSaleUpload from './PastSaleUpload';
 import {
-  channelLabel, paymentLabel, viewerOf,
+  CHANNELS, PAYMENT_METHODS, channelLabel, paymentLabel, viewerOf,
   type PastSale, type PastSalePage, type PastSaleSeller, type PastSaleTotals, type Viewer,
 } from './types';
 
 const input = 'rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const ACTION_LABEL = { created: 'Entered', edited: 'Edited', deleted: 'Deleted', restored: 'Restored' } as const;
 
-function useDebounced<T>(value: T, ms: number): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
-}
+const SORTS = [
+  { value: 'newest', label: 'Newest sale first' },
+  { value: 'oldest', label: 'Oldest sale first' },
+  { value: 'amount_desc', label: 'Amount: high to low' },
+  { value: 'amount_asc', label: 'Amount: low to high' },
+];
+// The filters (not the sort); any of them on → "Clear all".
+const FILTER_KEYS = ['q', 'from', 'to', 'seller', 'min', 'max', 'channel', 'payment', 'deleted'] as const;
 
 function History({ id }: { id: string }) {
   const q = useQuery({
@@ -171,22 +175,42 @@ function Totals({ filters, viewer }: { filters: Record<string, string>; viewer: 
  * A salesman enters and corrects their own; accounts and the admin see all, and
  * can delete and restore. They count in the salesman totals here and show in a
  * customer's history on the lead page. They never reach orders, emails or queues.
+ * The search, filters and sort live in the page address (Back, refresh and a shared
+ * link keep them), so it renders inside <Suspense>.
  */
 export default function PastSalesPage() {
+  return (
+    <Suspense>
+      <PastSales />
+    </Suspense>
+  );
+}
+
+function PastSales() {
   const { user } = useAuth();
   const viewer = viewerOf(user);
   const [mode, setMode] = useState<'list' | 'add' | 'upload'>('list');
   const [editing, setEditing] = useState<PastSale | null>(null);
   const [notice, setNotice] = useState<string[]>([]);
-  const [q, setQ] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [seller, setSeller] = useState('');
-  const [showDeleted, setShowDeleted] = useState(false);
-  const term = useDebounced(q.trim(), 300);
+  const [showFilters, setShowFilters] = useState(false);
+  const { values: v, set, clear } = useListParams({
+    q: '', from: '', to: '', seller: '', min: '', max: '', channel: '', payment: '', deleted: '', sort: 'newest',
+  });
+  // Salesman and "show deleted" are only for accounts / admin; an old link cannot turn them on for a lead.
+  const seller = viewer.manage ? v.seller : '';
+  const showDeleted = viewer.manage && v.deleted === '1';
+  const sort = SORTS.some((x) => x.value === v.sort) ? v.sort : 'newest';
 
-  const range = { ...(from ? { from } : {}), ...(to ? { to } : {}), ...(seller ? { seller } : {}) };
-  const listFilters = { ...range, ...(term ? { q: term } : {}), ...(showDeleted ? { deleted: '1' } : {}) };
+  // The salesman totals follow the dates and salesman only (what each sold, not what is searched).
+  const range = { ...(v.from ? { from: v.from } : {}), ...(v.to ? { to: v.to } : {}), ...(seller ? { seller } : {}) };
+  const listFilters: Record<string, string> = {
+    ...range,
+    ...Object.fromEntries((['q', 'min', 'max', 'channel', 'payment'] as const).filter((k) => v[k]).map((k) => [k, v[k]])),
+    ...(showDeleted ? { deleted: '1' } : {}),
+    ...(sort !== 'newest' ? { sort } : {}),
+  };
+  const filtered = FILTER_KEYS.some((k) => v[k]);
+  const filtersOn = [v.from || v.to, seller, v.min || v.max, v.channel, v.payment, showDeleted].filter(Boolean).length;
 
   const sellers = useQuery({
     queryKey: pastSaleKeys.sellers(),
@@ -199,8 +223,10 @@ export default function PastSalesPage() {
     queryFn: ({ pageParam }) => apiClient.get<PastSalePage>(`/staff/past-sales?${new URLSearchParams({ ...listFilters, ...(pageParam ? { cursor: pageParam } : {}) })}`),
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor || undefined,
+    placeholderData: keepPreviousData,
   });
   const rows = list.data?.pages.flatMap((p) => p.sales) ?? [];
+  const summary = list.data?.pages[0]?.summary;
 
   const finish = (warnings: string[], message: string) => {
     setMode('list');
@@ -241,41 +267,50 @@ export default function PastSalesPage() {
 
       <Totals filters={range} viewer={viewer} />
 
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="text-sm"><span className="mb-1 block text-xs font-medium text-gray-700">Search</span>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Phone, bill no. or name" maxLength={100} className={`${input} w-56`} />
-        </label>
-        <label className="text-sm"><span className="mb-1 block text-xs font-medium text-gray-700">From</span>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={input} />
-        </label>
-        <label className="text-sm"><span className="mb-1 block text-xs font-medium text-gray-700">To</span>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={input} />
-        </label>
-        {viewer.manage && (
-          <label className="text-sm"><span className="mb-1 block text-xs font-medium text-gray-700">Salesman</span>
-            <select value={seller} onChange={(e) => setSeller(e.target.value)} className={input}>
-              <option value="">Everyone</option>
-              <option value="none">No salesman</option>
-              {(sellers.data?.sellers ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}{s.current ? '' : ' (former)'}</option>)}
-            </select>
-          </label>
-        )}
-        {viewer.manage && (
-          <label className="flex items-center gap-2 pb-2 text-sm text-gray-700">
-            <input type="checkbox" checked={showDeleted} onChange={(e) => setShowDeleted(e.target.checked)} /> Show deleted
-          </label>
-        )}
+      <div role="search" aria-label="Search and filter past sales" className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ListSearch value={v.q} onChange={(text) => set({ q: text.trim() })} label="Search past sales"
+            placeholder="Search phone, bill no. or customer name" />
+          <ListSelect label="Sort" value={sort} onChange={(x) => set({ sort: x })} options={SORTS} />
+          <button type="button" onClick={() => setShowFilters((x) => !x)} aria-expanded={showFilters} aria-controls="past-sale-filters"
+            className={`${listField} inline-flex items-center gap-1.5 sm:hidden`}>
+            <SlidersHorizontal className="h-4 w-4" aria-hidden /> Filters{filtersOn ? ` · ${filtersOn} on` : ''}
+          </button>
+        </div>
+        <div id="past-sale-filters" className={`${showFilters ? 'flex' : 'hidden'} flex-wrap items-center gap-2 sm:flex`}>
+          <ListDateRange label="Sale date" from={v.from} to={v.to} onChange={(from, to) => set({ from, to })}>
+            <span>Sold</span>
+          </ListDateRange>
+          {viewer.manage && (
+            <ListSelect label="Salesman" value={seller} onChange={(x) => set({ seller: x })} allLabel="Everyone"
+              options={[{ value: 'none', label: 'No salesman' }, ...(sellers.data?.sellers ?? []).map((s) => ({ value: s.id, label: `${s.name}${s.current ? '' : ' (former)'}` }))]} />
+          )}
+          <ListSelect label="How sold" value={v.channel} onChange={(x) => set({ channel: x })} allLabel="Sold any way" options={CHANNELS} />
+          <ListSelect label="Paid by" value={v.payment} onChange={(x) => set({ payment: x })} allLabel="Paid any way" options={PAYMENT_METHODS} />
+          <ListAmountRange min={v.min} max={v.max} onChange={(min, max) => set({ min, max })} />
+          {viewer.manage && (
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={showDeleted} onChange={(e) => set({ deleted: e.target.checked ? '1' : '' })} /> Show deleted
+            </label>
+          )}
+        </div>
+        <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
+          {summary
+            ? <ListResultLine count={summary.count} capped={summary.capped} total={summary.total} noun={['sale', 'sales']} formatTotal={rupees} />
+            : <span />}
+          {filtered && <ListClear onClear={() => clear(['sort'])} />}
+        </div>
       </div>
 
       {list.isPending && <p className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Loading…</p>}
       {list.isError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{errorMessage(list.error, 'Could not load past sales.')}</p>}
       {list.isSuccess && rows.length === 0 && (
         <p className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
-          {showDeleted ? 'No deleted sales.' : term || from || to || seller ? 'No sales match.' : 'No past sales yet. Add one, or upload a sheet.'}
+          {showDeleted ? 'No deleted sales.' : filtered ? 'No sales match — try fewer words or clear the filters.' : 'No past sales yet. Add one, or upload a sheet.'}
         </p>
       )}
 
-      <ul className="space-y-3">
+      <ul className={`space-y-3 ${list.isPlaceholderData ? 'opacity-60' : ''}`}>
         {rows.map((s) => <SaleRow key={s.id} s={s} viewer={viewer} onEdit={(sale) => { setEditing(sale); setMode('list'); setNotice([]); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />)}
       </ul>
 

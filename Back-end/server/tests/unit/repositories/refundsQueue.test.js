@@ -269,3 +269,49 @@ describe('findWithRefunds — server-side search', () => {
     expect([...first.orders, ...second.orders].map((o) => o.totalAmount)).toEqual([203, 202, 201, 200]);
   });
 });
+
+describe('findWithRefunds — order date and oldest-first', () => {
+  // India time: 2026-09-01 00:30 IST is still 31 Aug in UTC.
+  const ist = (s) => new Date(`${s}+05:30`);
+
+  it('narrows to orders placed on India-time days, both ends included', async () => {
+    await makeOrder({ totalAmount: 100 }, ist('2026-08-31T23:50:00'));
+    await makeOrder({ totalAmount: 200 }, ist('2026-09-01T00:30:00'));
+    await makeOrder({ totalAmount: 300 }, ist('2026-09-02T23:59:00'));
+    await makeOrder({ totalAmount: 400 }, ist('2026-09-03T00:01:00'));
+    const amounts = async (opts) => (await orderRepository.findWithRefunds('all', opts)).orders.map((o) => o.totalAmount);
+
+    expect(await amounts({ from: '2026-09-01', to: '2026-09-02' })).toEqual([300, 200]);
+    expect(await amounts({ from: '2026-09-03' })).toEqual([400]);
+    expect(await amounts({ to: '2026-08-31' })).toEqual([100]);
+    expect(await amounts({ from: 'yesterday' })).toEqual([400, 300, 200, 100]);
+  });
+
+  it('a date never widens a status filter', async () => {
+    await makeOrder({ refundDetails: { status: 'completed', amount: 1500, requestedAt: new Date() } }, ist('2026-09-01T12:00:00'));
+    const { orders } = await orderRepository.findWithRefunds('pending', { from: '2026-09-01', to: '2026-09-01' });
+    expect(orders).toHaveLength(0);
+  });
+
+  it('oldest first walks every row exactly once, with the _id tiebreak, alongside search and dates', async () => {
+    const same = new Date('2026-09-05T06:00:00.000Z');
+    for (let i = 0; i < 7; i += 1) {
+      // eslint-disable-next-line no-await-in-loop -- deterministic ordering needs sequence
+      await makeOrder({ totalAmount: 500 + i }, i < 3 ? same : new Date(same.getTime() + i * 60_000));
+    }
+    await makeOrder({ totalAmount: 1 }, new Date('2026-10-20T06:00:00.000Z')); // outside the dates
+    const seen = [];
+    let cursor = null;
+    for (let i = 0; i < 10; i += 1) {
+      // eslint-disable-next-line no-await-in-loop -- pages are sequential by nature
+      const page = await orderRepository.findWithRefunds('all', { search: 'Priya', from: '2026-09-01', to: '2026-09-30', sort: 'oldest', limit: 2, cursor });
+      seen.push(...page.orders);
+      cursor = page.nextCursor;
+      if (!cursor) break;
+    }
+    expect(seen.map((o) => o.totalAmount).sort()).toEqual([500, 501, 502, 503, 504, 505, 506]);
+    expect(new Set(seen.map((o) => String(o._id))).size).toBe(7);
+    const keys = seen.map((o) => [new Date(o.createdAt).getTime(), String(o._id)]);
+    expect(keys).toEqual([...keys].sort((a, b) => a[0] - b[0] || (a[1] < b[1] ? -1 : 1)));
+  });
+});

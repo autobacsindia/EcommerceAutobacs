@@ -1,4 +1,5 @@
 import Supplier from '../models/Supplier.js';
+import { readSummary, summaryPipeline } from '../utils/listQuery.js';
 
 /**
  * Suppliers (models/Supplier.js). Data access only — who may do what lives in
@@ -20,19 +21,13 @@ const supplierRepository = {
     return doc.toObject();
   },
 
-  /** Keyset page by name (index supplier_active_name / supplier_name). */
-  page: ({ prefix = '', active = null, after = '', limit }) => {
-    const query = {};
-    if (active != null) query.active = active;
-    const range = {};
-    if (prefix) {
-      // Prefix range on nameKey — an index scan, never a collection scan.
-      range.$gte = prefix;
-      range.$lt = `${prefix}￿`;
-    }
-    if (after) range.$gt = after;
-    if (Object.keys(range).length) query.nameKey = range;
-    return Supplier.find(query).sort({ nameKey: 1 }).limit(limit).lean();
+  /** Keyset page: `query` already carries the "after the cursor" clause; `sort` is a Mongo sort. */
+  page: (query, { sort, limit }) => Supplier.find(query).sort(sort).limit(limit).lean(),
+
+  /** How many match, counted over at most `cap` rows. */
+  summary: async (query, cap) => {
+    const [row] = await Supplier.aggregate(summaryPipeline(query, cap)).option({ maxTimeMS: 5000 });
+    return readSummary(row, cap, false);
   },
 };
 

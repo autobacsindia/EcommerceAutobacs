@@ -31,6 +31,8 @@ import userRepository from '../repositories/userRepository.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { normalizePhone, escapeRegex } from '../utils/identity.js';
 import { cleanSale, fingerprintOf, parseSheet, groupRows, parseSaleDate, invoiceKeyOf } from './pastSaleInput.js';
+import { PAST_SALE_CHANNELS, PAST_SALE_PAYMENT_METHODS } from '../config/pastSale.js';
+import { amountRange, and, keysetPage } from '../utils/listQuery.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -319,20 +321,18 @@ export async function getPastSale(actor, id) {
   return shape(await loadVisible(actor, id), actor, { withHistory: true });
 }
 
-const encodeCursor = (s) => Buffer.from(`${new Date(s.saleDate).toISOString()}|${s._id}`).toString('base64url');
-function decodeCursor(cursor) {
-  if (!cursor) return null;
-  try {
-    const [iso, cid] = Buffer.from(String(cursor), 'base64url').toString().split('|');
-    const saleDate = new Date(iso);
-    if (Number.isNaN(saleDate.getTime()) || !/^[a-f0-9]{24}$/i.test(cid || '')) return null;
-    return { saleDate, id: new mongoose.Types.ObjectId(cid) };
-  } catch {
-    return null;
-  }
-}
+/*
+  List order: the sale date (the default, newest first) or the bill amount. Keyset
+  pages on [field, _id] (utils/listQuery.js), never skip.
+*/
+export const PAST_SALE_SORTS = Object.freeze({
+  newest: { field: 'saleDate', dir: -1, type: 'date' },
+  oldest: { field: 'saleDate', dir: 1, type: 'date' },
+  amount_desc: { field: 'totalAmount', dir: -1, type: 'number' },
+  amount_asc: { field: 'totalAmount', dir: 1, type: 'number' },
+});
+const SUMMARY_CAP = 1000;
 
-/** Shared by the list and the totals: who + when, scoped to what the viewer may see. */
 function filterFor(actor, { from, to, seller } = {}) {
   if (!mayUse(actor)) throw fail('Not authorized.', 403);
   const query = {};
@@ -352,8 +352,11 @@ function filterFor(actor, { from, to, seller } = {}) {
 }
 
 /**
- * @param {{ cursor?, from?, to?, seller?, q?, deleted?, batch? }} params
+ * @param {{ cursor?, from?, to?, seller?, q?, deleted?, batch?, min?, max?, channel?, payment?, sort? }} params
  *   q: a phone number (any format), a bill number, or part of the customer's name.
+ *   min / max: the bill total, rupees. channel / payment: how it was sold / paid.
+ *   sort: newest (default) / oldest sale date, or amount_desc / amount_asc.
+ * The first page also says how many match and what they add up to (capped).
  */
 export async function listPastSales(actor, params = {}) {
   const query = filterFor(actor, params);
@@ -361,19 +364,26 @@ export async function listPastSales(actor, params = {}) {
   if (showDeleted && !mayManage(actor)) throw fail('Not authorized.', 403);
   query.active = !showDeleted;
   if (params.batch) query.batchId = String(params.batch);
+  if (PAST_SALE_CHANNELS.includes(params.channel)) query.channel = params.channel;
+  if (PAST_SALE_PAYMENT_METHODS.includes(params.payment)) query.paymentMethod = params.payment;
+  const amount = amountRange(params.min, params.max);
+  if (amount) query.totalAmount = amount;
 
+  const clauses = [query];
   const q = String(params.q || '').trim().slice(0, 100);
   if (q) {
     const phoneKey = /\d{7,}/.test(q.replace(/\D/g, '')) && !/[a-z]/i.test(q) ? normalizePhone(q) : null;
     const or = [{ invoiceKey: invoiceKeyOf(q) }, { 'customer.name': { $regex: escapeRegex(q), $options: 'i' } }];
     if (phoneKey) or.unshift({ 'customer.phoneKey': phoneKey });
-    query.$or = or;
+    clauses.push({ $or: or });
   }
 
-  const rows = await pastSaleRepository.page(query, { before: decodeCursor(params.cursor), limit: PAGE_SIZE + 1 });
-  const hasMore = rows.length > PAGE_SIZE;
-  const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
-  return { sales: items.map((s) => shape(s, actor)), nextCursor: hasMore ? encodeCursor(items[items.length - 1]) : null };
+  const sortName = PAST_SALE_SORTS[params.sort] ? params.sort : 'newest';
+  const { items, ...page } = await keysetPage({
+    query: and(clauses), sorts: PAST_SALE_SORTS, sortName, cursor: params.cursor, pageSize: PAGE_SIZE,
+    find: pastSaleRepository.page, count: (match) => pastSaleRepository.summary(match, SUMMARY_CAP),
+  });
+  return { ...page, sales: items.map((s) => shape(s, actor)) };
 }
 
 /** Number and value of sales per salesman over the chosen dates (deleted ones never count). */

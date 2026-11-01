@@ -73,6 +73,7 @@ import { variantDisplayName } from '../utils/orderLines.js';
 import { toPaise, fromPaise } from '../utils/money.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
 import { checkAttachments } from './storage/attachmentCheck.js';
+import { and, amountOf, istRange, keysetPage, plainQuery, searchClauses, searchWords } from '../utils/listQuery.js';
 import { storeAll } from './storage/storeAll.js';
 
 const PAGE_SIZE = 25;
@@ -1229,52 +1230,72 @@ export async function confirmSupplierMoney(actor, id, claimId, input = {}, req =
   return getReturn(actor, id);
 }
 
+/*
+  "Suppliers owe us" search / filter / sort. Rows are one promised settlement each
+  (returnRequestRepository.owedStages flattens them), so these fields are top-level.
+*/
+export const OWED_SORTS = Object.freeze({
+  oldest: { field: 'sortAt', dir: 1, type: 'date' },
+  newest: { field: 'sortAt', dir: -1, type: 'date' },
+  amount_desc: { field: 'amountPaise', dir: -1, type: 'number' },
+  amount_asc: { field: 'amountPaise', dir: 1, type: 'number' },
+});
+const OWED_SEARCH = ['supplierName', 'ref', 'claim.settlement.reference', 'claim.paymentRequestRef'];
+const LIST_SUMMARY_CAP = 1000;
+
+/** The "Suppliers owe us" filter: search words, one supplier, one kind of settlement. */
+export function owedQuery(f) {
+  const words = searchWords(f.q).map((w) => w.replace(/^#+/, '')).filter(Boolean);
+  return and(
+    typeof f.supplier === 'string' && f.supplier ? { supplierName: f.supplier } : null,
+    SUPPLIER_SETTLEMENT_KINDS.includes(f.kind) ? { 'claim.settlement.kind': f.kind } : null,
+    searchClauses(words, OWED_SEARCH, (w) => {
+      const n = amountOf(w);
+      return n ? [{ amountPaise: toPaise(n) }] : [];
+    }),
+  );
+}
+
 /**
  * "Suppliers owe us": every settlement promised and not yet received, oldest first,
- * with a total per supplier. Keyset-paged.
+ * with a total per supplier. Keyset-paged. The per-supplier totals are always the
+ * whole picture (click one to see only that supplier); the summary is what matches.
  */
-export async function suppliersOweUs(actor, { cursor } = {}) {
+export async function suppliersOweUs(actor, params = {}) {
   if (!(can.accounts(actor) || can.procurement(actor))) throw fail('Not authorized.', 403);
-  const after = decodeOwedCursor(cursor);
-  const [rows, totals] = await Promise.all([
-    returnRequestRepository.owedPage({ after, limit: PAGE_SIZE }),
-    after ? Promise.resolve(null) : returnRequestRepository.owedTotals(),
+  const f = plainQuery(params);
+  const sortName = OWED_SORTS[f.sort] ? f.sort : 'oldest';
+  const [page, totals] = await Promise.all([
+    keysetPage({
+      query: owedQuery(f), sorts: OWED_SORTS, sortName, cursor: f.cursor, pageSize: PAGE_SIZE,
+      find: (q, o) => returnRequestRepository.owedPage(q, o),
+      count: (q) => returnRequestRepository.owedSummary(q, LIST_SUMMARY_CAP),
+    }),
+    f.cursor ? Promise.resolve(null) : returnRequestRepository.owedTotals(),
   ]);
   const now = Date.now();
-  const items = rows.map((r) => ({
-    returnId: idOf(r._id),
-    returnRef: returnRef(r),
+  const items = page.items.map((r) => ({
+    returnId: idOf(r.returnId),
+    returnRef: r.ref,
     orderId: idOf(r.order),
-    claimId: idOf(r.claim._id),
-    supplierName: r.claim.supplierName,
+    claimId: idOf(r._id),
+    supplierName: r.supplierName,
     kind: r.claim.settlement?.kind || null,
-    amount: fromPaise(r.claim.settlement?.amountPaise || 0),
+    amount: fromPaise(r.amountPaise),
     reference: r.claim.settlement?.reference || null,
     paymentRequestRef: r.claim.paymentRequestRef || null,
-    promisedAt: r.claim.settlement?.promisedAt || null,
-    ageDays: r.claim.settlement?.promisedAt ? Math.floor((now - new Date(r.claim.settlement.promisedAt).getTime()) / DAY_MS) : null,
+    promisedAt: r.promisedAt || null,
+    ageDays: r.promisedAt ? Math.floor((now - new Date(r.promisedAt).getTime()) / DAY_MS) : null,
   }));
-  const last = rows[rows.length - 1];
   return {
     items,
+    sort: page.sort,
+    ...(page.summary ? { summary: { ...page.summary, total: page.summary.total == null ? null : fromPaise(page.summary.total) } } : {}),
     totals: totals && totals.map((t) => ({
       supplierName: t._id, amount: fromPaise(t.amountPaise), claims: t.claims, oldestPromisedAt: t.oldestPromisedAt,
     })),
-    nextCursor: rows.length === PAGE_SIZE && last
-      ? Buffer.from(JSON.stringify({ at: last.claim.settlement?.promisedAt, id: idOf(last.claim._id) })).toString('base64url')
-      : null,
+    nextCursor: page.nextCursor,
   };
-}
-
-function decodeOwedCursor(cursor) {
-  if (!cursor) return null;
-  try {
-    const { at, id } = JSON.parse(Buffer.from(String(cursor), 'base64url').toString());
-    if (!at || !mongoose.isValidObjectId(id)) return null;
-    return { at: new Date(at), id: new mongoose.Types.ObjectId(id) };
-  } catch {
-    return null;
-  }
 }
 
 // ── Lists and detail ────────────────────────────────────────────────────────────
@@ -1370,28 +1391,91 @@ function rowOf(rr) {
   };
 }
 
-const encodeCursor = (rr) => Buffer.from(JSON.stringify({ at: rr.createdAt, id: idOf(rr._id) })).toString('base64url');
-function decodeCursor(cursor) {
-  if (!cursor) return null;
-  try {
-    const { at, id } = JSON.parse(Buffer.from(String(cursor), 'base64url').toString());
-    if (!at || !mongoose.isValidObjectId(id)) return null;
-    return { createdAt: new Date(at), id: new mongoose.Types.ObjectId(id) };
-  } catch {
-    return null;
-  }
+/*
+  Team list search / filter / sort, the same on every queue. The queue's own rule
+  (QUEUES above — what the bell counts) is ANDed with these, never replaced.
+*/
+export const RETURN_SORTS = Object.freeze({
+  newest: { field: 'createdAt', dir: -1, type: 'date' },
+  oldest: { field: 'createdAt', dir: 1, type: 'date' },
+});
+// The "Came from" filter → ReturnRequest.origin.
+const ORIGIN_OF = Object.freeze({ website: 'customer', staff: 'staff', recorded: 'admin_offline' });
+
+/** Reason on any line, where it came from, the day it was raised (India time). */
+export function returnFilters(f) {
+  const raised = istRange(f.from, f.to);
+  return and(
+    RETURN_REASONS.includes(f.reason) ? { 'items.reason': f.reason } : null,
+    ORIGIN_OF[f.origin] ? { origin: ORIGIN_OF[f.origin] } : null,
+    raised ? { createdAt: raised } : null,
+  );
 }
 
-/** One team queue, newest first, keyset-paged (PAGE_SIZE). */
-export async function listReturns(actor, { queue = 'all', cursor } = {}) {
-  const q = QUEUES[queue];
+/** Everything a return can be found by, lower-case: its number, the order's, customer, phone, products, suppliers. */
+function searchTextOf(row) {
+  const o = row.order?.[0] || {};
+  return [
+    returnRef(row), o._id ? orderRef(o) : '', o._id ? idOf(o._id).slice(-8) : '', o.wpId ? String(o.wpId) : '',
+    o.name, o.phone, row.customerPhone, ...(row.products || []).map((p) => p.name), row.destination, ...(row.claims || []),
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+/**
+ * Those of `base` whose every word appears in searchTextOf. The order number, customer
+ * and product names live on other documents, so this reads one small row per return in
+ * the list (returnRequestRepository.searchRows) — the whole collection is a few thousand.
+ */
+async function searchedIds(base, words) {
+  const { rows, capped } = await returnRequestRepository.searchRows(base);
+  const ids = rows.filter((r) => {
+    const text = searchTextOf(r);
+    return words.every((w) => text.includes(w));
+  }).map((r) => r._id);
+  return { ids, capped };
+}
+
+/**
+ * One team queue, keyset-paged (PAGE_SIZE): newest (default) or oldest first, with
+ * search (`q`), `reason`, `origin` (website / staff / recorded) and `from` / `to`.
+ */
+export async function listReturns(actor, params = {}) {
+  const f = plainQuery(params);
+  const q = QUEUES[f.queue || 'all'];
   if (!q) throw fail('Unknown list.', 400);
   if (!q.allowed(actor)) throw fail('Not authorized.', 403);
-  const rows = await returnRequestRepository.page(q.query(actor), { before: decodeCursor(cursor), limit: PAGE_SIZE });
-  return {
-    returns: rows.map(rowOf),
-    nextCursor: rows.length === PAGE_SIZE ? encodeCursor(rows[rows.length - 1]) : null,
-  };
+  const sortName = RETURN_SORTS[f.sort] ? f.sort : 'newest';
+  const base = and(q.query(actor), returnFilters(f));
+  const words = searchWords(f.q).map((w) => w.replace(/^#+/, '')).filter(Boolean);
+  const found = words.length ? await searchedIds(base, words) : null;
+  const { items, ...page } = await keysetPage({
+    query: found ? and(base, { _id: { $in: found.ids } }) : base,
+    sorts: RETURN_SORTS, sortName, cursor: f.cursor, pageSize: PAGE_SIZE,
+    find: (query, o) => returnRequestRepository.page(query, o),
+    count: (query) => returnRequestRepository.summary(query, LIST_SUMMARY_CAP),
+  });
+  return { ...page, returns: items.map(rowOf), ...(found?.capped ? { searchCapped: true } : {}) };
+}
+
+const RETURN_STATUSES = ['pending', 'approved', 'courier_booked', 'received', 'refunded', 'rejected', 'cancelled'];
+
+/**
+ * The admin Returns list (GET /returns/admin/all): the same search, filters and sorts as
+ * the team lists, over every return, with an optional `status`. Keyset-paged; the page
+ * read (`find`) is the controller's, which shapes rows for that screen.
+ */
+export async function adminReturnsPage(params, { pageSize, find }) {
+  const f = plainQuery(params);
+  const sortName = RETURN_SORTS[f.sort] ? f.sort : 'newest';
+  const base = and(RETURN_STATUSES.includes(f.status) ? { status: f.status } : null, returnFilters(f));
+  const words = searchWords(f.q).map((w) => w.replace(/^#+/, '')).filter(Boolean);
+  const found = words.length ? await searchedIds(base, words) : null;
+  const page = await keysetPage({
+    query: found ? and(base, { _id: { $in: found.ids } }) : base,
+    sorts: RETURN_SORTS, sortName, cursor: f.cursor, pageSize, find,
+    count: (query) => returnRequestRepository.summary(query, LIST_SUMMARY_CAP),
+  });
+  return { ...page, ...(found?.capped ? { searchCapped: true } : {}) };
 }
 
 /** The bell: how many returns wait on this person, per queue they work. Same queries as the lists. */

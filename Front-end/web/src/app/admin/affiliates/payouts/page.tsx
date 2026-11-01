@@ -1,11 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Download } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { formatDateTimeIST } from '@/lib/datetime';
+import { useListParams } from '@/lib/hooks/useListParams';
+import { ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect } from '@/components/panel/ListControls';
 
 /**
  * Affiliate payout batches.
@@ -15,6 +17,10 @@ import { formatDateTimeIST } from '@/lib/datetime';
  * that moves funds. Two terminal outcomes only: paid (with a reference) or failed
  * (which releases the rows back into the payable pool). There is deliberately no
  * partial state — a manual NEFT lands or it does not.
+ *
+ * The server searches, filters and sorts; the status, search, dates and sort live in
+ * the page address (Back, refresh and a shared link keep them), so the page renders
+ * inside <Suspense>.
  */
 
 interface Payout {
@@ -37,7 +43,24 @@ interface ListResponse {
   success: boolean;
   payouts: Payout[];
   nextCursor: string | null;
+  /** First page only: how many match and their net total in paise (capped at 1,000). */
+  summary?: { count: number; total: number | null; capped: boolean };
 }
+
+const TABS = [
+  { value: '', label: 'All' },
+  { value: 'draft', label: 'To pay' },
+  { value: 'processing', label: 'Processing' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+const SORTS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'amount_desc', label: 'Net amount: high to low' },
+  { value: 'amount_asc', label: 'Net amount: low to high' },
+];
 
 const STATUS_STYLES: Record<Payout['status'], string> = {
   draft: 'bg-amber-100 text-amber-800',
@@ -51,6 +74,19 @@ const rupees = (paise: number) =>
   `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function AdminAffiliatePayoutsPage() {
+  return (
+    <Suspense>
+      <AdminAffiliatePayouts />
+    </Suspense>
+  );
+}
+
+function AdminAffiliatePayouts() {
+  const { values: v, set, clear } = useListParams({ status: '', q: '', from: '', to: '', sort: 'newest' });
+  const status = TABS.some((t) => t.value === v.status) ? v.status : '';
+  const sort = SORTS.some((x) => x.value === v.sort) ? v.sort : 'newest';
+  const filtered = Boolean(status || v.q || v.from || v.to);
+  const [summary, setSummary] = useState<ListResponse['summary']>();
   const [rows, setRows] = useState<Payout[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -59,23 +95,38 @@ export default function AdminAffiliatePayoutsPage() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [cursorStack, setCursorStack] = useState<string[]>([]);
 
+  // Only the latest request may paint: a filter change fires a load with the old cursor
+  // and then one from the first page, and the first may answer last.
+  const latestLoad = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++latestLoad.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: '25' });
-      if (cursor) params.set('before', cursor);
+      if (status) params.set('status', status);
+      if (v.q) params.set('q', v.q);
+      if (v.from) params.set('from', v.from);
+      if (v.to) params.set('to', v.to);
+      if (sort !== 'newest') params.set('sort', sort);
+      if (cursor) params.set('cursor', cursor);
       const res = await apiClient.get<ListResponse>(`${API_ENDPOINTS.AFFILIATE_PAYOUTS_ADMIN}?${params}`);
+      if (mine !== latestLoad.current) return;
       setRows(res.payouts || []);
       setNextCursor(res.nextCursor);
+      // The count comes with the first page only; keep it while paging.
+      if (!cursor) setSummary(res.summary);
       setError(null);
     } catch (err) {
+      if (mine !== latestLoad.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load payouts');
     } finally {
-      setLoading(false);
+      if (mine === latestLoad.current) setLoading(false);
     }
-  }, [cursor]);
+  }, [cursor, status, v.q, v.from, v.to, sort]);
 
   useEffect(() => { load(); }, [load]);
+  // A filter, search or sort change starts again from the first page.
+  useEffect(() => { setCursor(null); setCursorStack([]); }, [status, v.q, v.from, v.to, sort]);
 
   /*
     Every mutation reloads afterwards, including on failure. A 409 here means another
@@ -127,6 +178,32 @@ export default function AdminAffiliatePayoutsPage() {
         </a>
       </div>
 
+      <div role="tablist" aria-label="Payout status" className="flex flex-wrap gap-2">
+        {TABS.map((t) => (
+          <button key={t.value || 'all'} type="button" role="tab" aria-selected={status === t.value} onClick={() => set({ status: t.value })}
+            className={`rounded-full px-3 py-1.5 text-sm font-medium ${status === t.value ? 'bg-gray-900 text-white' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div role="search" aria-label="Search and filter payouts" className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <ListSearch value={v.q} onChange={(text) => set({ q: text.trim() })} label="Search payouts"
+            placeholder="Search affiliate, code, UTR, account digits, UPI ID, amount" />
+          <ListSelect label="Sort" value={sort} onChange={(x) => set({ sort: x })} options={SORTS} />
+        </div>
+        <ListDateRange label="Made on" from={v.from} to={v.to} onChange={(from, to) => set({ from, to })}>
+          <span>Made</span>
+        </ListDateRange>
+        <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
+          {summary
+            ? <ListResultLine count={summary.count} capped={summary.capped} total={summary.total} noun={['payout', 'payouts']} formatTotal={rupees} />
+            : <span />}
+          {filtered && <ListClear onClear={() => clear(['sort'])} />}
+        </div>
+      </div>
+
       {error && (
         <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -152,7 +229,9 @@ export default function AdminAffiliatePayoutsPage() {
             {loading && <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">Loading…</td></tr>}
             {!loading && rows.length === 0 && (
               <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-500">
-                No payouts yet. Build one from an affiliate&apos;s page once they have a payable balance.
+                {filtered
+                  ? 'No payouts match — try fewer words or clear the filters.'
+                  : <>No payouts yet. Build one from an affiliate&apos;s page once they have a payable balance.</>}
               </td></tr>
             )}
             {!loading && rows.map((p) => (

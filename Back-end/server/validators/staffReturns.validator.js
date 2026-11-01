@@ -20,13 +20,27 @@ const fromJson = (v) => {
 
 const QUEUE_KEYS = ['review', 'pickup', 'inspect', 'supplier_pickup', 'refund', 'supplier', 'mine', 'all'];
 
+// Search, filters and sort: shape only — an unknown value is ignored by the service.
+const listParams = (...names) => names.map((n) => query(n).optional().isString().isLength({ max: 100 }).withMessage(`Invalid ${n}`));
+
 export const validateReturnList = [
   query('queue').optional().isIn(QUEUE_KEYS).withMessage('Unknown list'),
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+  ...listParams('q', 'reason', 'origin', 'from', 'to', 'sort'),
+];
+
+// Admin → Returns (/returns/admin/all): the same search, filters and sort as the team
+// lists, plus a status and a page size.
+export const validateAdminReturnList = [
+  query('status').optional().isString().isLength({ max: 40 }).withMessage('Invalid status'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+  query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+  ...listParams('q', 'reason', 'origin', 'from', 'to', 'sort'),
 ];
 
 export const validateOwedList = [
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
+  ...listParams('q', 'supplier', 'kind', 'sort'),
 ];
 
 export const validateReturnId = [

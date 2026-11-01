@@ -17,6 +17,7 @@ import supplierRepository from '../repositories/supplierRepository.js';
 import { decryptField } from '../utils/fieldEncryption.js';
 import { cleanPayee, maskAccount } from '../utils/payee.js';
 import { STAFF_TEAMS } from '../config/staff.js';
+import { and, keysetPage, plainQuery, searchClauses, searchWords } from '../utils/listQuery.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
@@ -153,21 +154,57 @@ export async function get(actor, id) {
   return shape(await load(id, { account: mayEditSuppliers(actor) }), actor);
 }
 
+export const SUPPLIER_SORTS = Object.freeze({
+  // nameKey is unique (index supplier_name), so the name order needs no _id
+  // tie-breaker and rides supplier_active_name (measured: 51 rows read, not every
+  // active supplier sorted in memory).
+  name: { field: 'nameKey', dir: 1, type: 'string', unique: true },
+  newest: { field: 'createdAt', dir: -1, type: 'date' },
+  updated: { field: 'updatedAt', dir: -1, type: 'date' },
+});
+// What a typed word is looked for in. The account number itself is encrypted, so
+// only its last four digits can be found.
+const SUPPLIER_SEARCH = Object.freeze([
+  'nameKey', 'contactPerson', 'phone', 'email', 'gstin', 'address', 'notes',
+  'payment.upiId', 'payment.accountName', 'payment.accountLast4', 'payment.ifsc', 'payment.bankName',
+]);
+const SUMMARY_CAP = 1000;
+
 /**
- * A page of suppliers by name. `q` is a name prefix (the picker types into it);
- * `status` = active (default) | inactive | all.
+ * The Mongo query for the list's filters (exported for tests). Unknown values are ignored.
+ * `prefix` (the payment form's picker, on every keystroke): the name starts with it —
+ * a range on supplier_active_name, so it reads only the matching rows.
  */
-export async function list(actor, { q = '', status = 'active', after = '' } = {}) {
+export function supplierQuery(f = {}, now = Date.now()) {
+  const active = f.status === 'all' ? null : f.status !== 'inactive';
+  const prefix = nameKeyOf(f.prefix).slice(0, 120);
+  return and(
+    active == null ? null : { active },
+    prefix ? { nameKey: { $gte: prefix, $lt: `${prefix}\uffff` } } : null,
+    ['bank', 'upi'].includes(f.method) ? { 'payment.method': f.method } : null,
+    f.changed === 'recent' ? { bankChangedAt: { $gte: new Date(now - BANK_CHANGE_WARN_DAYS * 86400000) } } : null,
+    searchClauses(searchWords(f.q), SUPPLIER_SEARCH),
+  );
+}
+
+/**
+ * The directory and the payment form's picker. `prefix` (picker): the name starts
+ * with it. `q` (directory): every word must be in the
+ * name, contact, phone, email, GSTIN, address, notes, UPI ID, account name,
+ * last four account digits, IFSC or bank. `status` active (default) | inactive |
+ * all; `method` bank | upi; `changed=recent` (bank details changed in the last
+ * BANK_CHANGE_WARN_DAYS); `sort` name (default) | newest | updated; `after` the
+ * cursor from the last page. The first page says how many match.
+ */
+export async function list(actor, params = {}) {
   if (!maySeeSuppliers(actor)) throw fail('Not authorized.', 403);
-  const active = status === 'all' ? null : status !== 'inactive';
-  const rows = await supplierRepository.page({
-    prefix: nameKeyOf(q).slice(0, 120), active, after: nameKeyOf(after).slice(0, 120), limit: PAGE_SIZE + 1,
+  const f = plainQuery(params);
+  const sortName = SUPPLIER_SORTS[f.sort] ? f.sort : 'name';
+  const { items, nextCursor, ...page } = await keysetPage({
+    query: supplierQuery(f), sorts: SUPPLIER_SORTS, sortName, cursor: f.after, pageSize: PAGE_SIZE,
+    find: supplierRepository.page, count: (q) => supplierRepository.summary(q, SUMMARY_CAP),
   });
-  const items = rows.slice(0, PAGE_SIZE);
-  return {
-    suppliers: items.map((s) => shape(s, actor)),
-    nextAfter: rows.length > PAGE_SIZE ? items[items.length - 1].nameKey : null,
-  };
+  return { ...page, suppliers: items.map((s) => shape(s, actor)), nextAfter: nextCursor };
 }
 
 /**
