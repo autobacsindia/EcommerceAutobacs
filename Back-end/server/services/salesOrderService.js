@@ -34,7 +34,7 @@ import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { buildHold, shapeHold, heldFilter } from '../utils/salesHold.js';
 import { workflowView } from '../utils/teamWorkflow.js';
 import { readListFilters, orderQueryFor } from '../utils/orderListFilters.js';
-import { and, isObjectId, keysetPage, plainQuery } from '../utils/listQuery.js';
+import { and, findEachBranch, isObjectId, keysetPage, plainQuery } from '../utils/listQuery.js';
 import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
 import { paymentSummary, retireAllParts } from './salesPaymentService.js';
 import { shapePayDetails } from '../utils/salesPayDetails.js';
@@ -80,14 +80,16 @@ async function page(query, { cursor, sortName = 'newest', includePayment = false
     sortName: ORDER_LIST_SORTS[sortName] ? sortName : 'newest',
     cursor,
     pageSize: PAGE_SIZE,
-    find: (q, { sort, limit }) => orderRepository.find(q, {
+    // A list whose query is an $or of index-backed branches (the paid list, date
+    // sorts) reads each branch on its own, in order, and merges the two.
+    find: (q, opts) => findEachBranch(q, query, opts, (one, { sort, limit }) => orderRepository.find(one, {
       limit,
       sort,
       select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
         + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
         + 'bankTransferPendingAt offlinePayment salesHold subtotal salesDiscount',
       populate,
-    }),
+    })),
     count: (q) => orderRepository.listSummary(q, SUMMARY_CAP),
   });
 }
@@ -327,9 +329,13 @@ const UNPAID = { status: 'awaiting_payment', paymentStatus: 'pending' };
 export async function listSalesOrders(actor, params = {}) {
   if (!canSell(actor)) throw fail('Not authorized.', 403);
   const { cursor, view = 'active', seller, paid, ...filters } = plainQuery(params);
+  // `$type` alongside the id is what lets MongoDB use the partial index on
+  // salesUser — `{ salesUser: id }` alone does not imply the index's filter, so
+  // the planner would scan every order instead.
+  const ownId = (id) => ({ salesUser: { $eq: id, $type: 'objectId' } });
   const owner = isSalesHead(actor)
-    ? { salesUser: isObjectId(seller) ? new mongoose.Types.ObjectId(seller) : { $type: 'objectId' } }
-    : { salesUser: actor._id };
+    ? (isObjectId(seller) ? ownId(new mongoose.Types.ObjectId(seller)) : { salesUser: { $type: 'objectId' } })
+    : ownId(actor._id);
   const now = new Date();
   const f = readListFilters(filters);
   const query = and(
@@ -398,18 +404,25 @@ export async function listPaidSalesOrders(actor, params = {}) {
   // No stage (or an unknown one) keeps the old behaviour: every paid order.
   const stageStatuses = PAID_ORDER_STAGES[stage];
   const f = readListFilters(filters);
-  const narrow = orderQueryFor(f);
+  const common = and(
+    // `refunded` stays listed so Accounts can still see an order after its refund.
+    { paymentStatus: { $in: ['paid', 'refunded'] } },
+    stageStatuses ? { status: { $in: stageStatuses } } : null,
+    orderQueryFor(f),
+  );
+  // Date sorts put the $or at the top, each branch carrying every condition, and
+  // page() reads each branch on its own partial index, in date order, merging the
+  // two. With the $or nested under the other conditions MongoDB can use neither,
+  // and sorts every paid order in memory.
+  const branches = [
+    { salesUser: { $type: 'objectId' } },              // staff_sales_by_payment
+    { 'workflow.enteredAt': { $type: 'date' } },       // team_workflow_paid
+  ];
+  // Amount sorts have no index either way and sort in memory; for them the nested
+  // shape measured about twice as fast (one index read, no merging of branches).
+  const byAmount = ORDER_LIST_SORTS[f.sort]?.field === 'totalAmount';
   const { items, ...rest } = await page(
-    {
-      ...(narrow.$and ? { $and: narrow.$and } : {}),
-      // `refunded` stays listed so Accounts can still see an order after its refund.
-      paymentStatus: { $in: ['paid', 'refunded'] },
-      ...(stageStatuses ? { status: { $in: stageStatuses } } : {}),
-      $or: [
-        { salesUser: { $type: 'objectId' } },              // staff_sales_by_payment
-        { 'workflow.enteredAt': { $type: 'date' } },       // team_workflow_paid
-      ],
-    },
+    byAmount ? and(common, { $or: branches }) : { $or: branches.map((b) => and(b, common)) },
     { cursor, sortName: f.sort, includePayment: true },
   );
   return { ...rest, orders: items.map(shape) };

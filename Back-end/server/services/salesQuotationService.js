@@ -516,9 +516,13 @@ export async function getQuotation(actor, id) {
   the On hold tab — the only one where every row has one — and is ignored on
   the others rather than refused, so a stale link still opens.
 */
+// Newest / oldest go by _id, which MongoDB stamps with the moment the quotation
+// was created (nothing back-dates one): the same order as createdAt, but served by
+// the existing { salesUser, _id } / { status, _id } / _id indexes rather than
+// sorted in memory.
 export const QUOTATION_SORTS = Object.freeze({
-  newest: { field: 'createdAt', dir: -1, type: 'date' },
-  oldest: { field: 'createdAt', dir: 1, type: 'date' },
+  newest: { field: '_id', dir: -1, type: 'objectId', unique: true },
+  oldest: { field: '_id', dir: 1, type: 'objectId', unique: true },
   amount_desc: { field: 'totalAmount', dir: -1, type: 'number' },
   amount_asc: { field: 'totalAmount', dir: 1, type: 'number' },
   follow_up: { field: 'hold.until', dir: 1, type: 'date' },

@@ -49,7 +49,8 @@ function quote(salesUser, over = {}) {
   const { ageDays = seq, ...rest } = over;
   const createdAt = new Date(NOW - ageDays * DAY);
   return {
-    _id: oid(),
+    // As in real data, the id carries the moment of creation (newest/oldest sort by it).
+    _id: new mongoose.Types.ObjectId(mongoose.mongo.ObjectId.generate(Math.floor(createdAt.getTime() / 1000))),
     number: `Q-${String(seq).padStart(4, '0')}`,
     version: 1,
     status: 'open',
