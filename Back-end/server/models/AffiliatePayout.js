@@ -113,6 +113,14 @@ AffiliatePayoutSchema.index({ affiliate: 1, createdAt: -1 });
 // Admin queue: everything awaiting transfer, newest first.
 AffiliatePayoutSchema.index({ status: 1, createdAt: -1 });
 
+// Admin → Payouts list sorts (newest / oldest, amount high / low), with and without a
+// status tab. Keyset pages sort on _id too, which the two indexes above lack, so without
+// these every page read and sorted the whole collection (or the whole tab) in memory.
+AffiliatePayoutSchema.index({ createdAt: -1, _id: -1 }, { name: 'payout_newest' });
+AffiliatePayoutSchema.index({ netPaise: -1, _id: -1 }, { name: 'payout_amount' });
+AffiliatePayoutSchema.index({ status: 1, createdAt: -1, _id: -1 }, { name: 'payout_status_newest' });
+AffiliatePayoutSchema.index({ status: 1, netPaise: -1, _id: -1 }, { name: 'payout_status_amount' });
+
 /*
   The `reference` partial-unique guard is in config/db.js — see the note on that field.
 

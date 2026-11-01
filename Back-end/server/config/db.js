@@ -585,6 +585,15 @@ export async function ensureCriticalIndexes() {
       { order: 1, createdAt: -1 },
       { name: 'bank_transfer_order', background: true }
     );
+    // The list's amount / paid-date sorts (models/BankTransfer.js has the measurement).
+    await db.collection('banktransfers').createIndex(
+      { status: 1, amount: -1, _id: -1 },
+      { name: 'bank_transfer_status_amount', background: true }
+    );
+    await db.collection('banktransfers').createIndex(
+      { status: 1, paidOn: -1, _id: -1 },
+      { name: 'bank_transfer_status_paid_on', background: true }
+    );
     console.log('✓ BankTransfer indexes confirmed');
 
     // Past (offline) sales (models/PastSale.js) — same names and options as the
@@ -601,6 +610,7 @@ export async function ensureCriticalIndexes() {
     );
     await db.collection('pastsales').createIndex({ active: 1, saleDate: -1, _id: -1 }, { name: 'past_sale_recent', background: true });
     await db.collection('pastsales').createIndex({ active: 1, salesUser: 1, saleDate: -1, _id: -1 }, { name: 'past_sale_by_seller', background: true });
+    await db.collection('pastsales').createIndex({ active: 1, totalAmount: -1, _id: -1 }, { name: 'past_sale_amount', background: true });
     await db.collection('pastsales').createIndex(
       { 'customer.phoneKey': 1, saleDate: -1 },
       { partialFilterExpression: { 'customer.phoneKey': { $type: 'string' } }, name: 'past_sale_customer_phone', background: true }
@@ -721,6 +731,11 @@ export async function ensureCriticalIndexes() {
       { status: 1, createdAt: -1 },
       { background: true }
     );
+    // The admin Payouts list's sorts — see models/AffiliatePayout.js.
+    await db.collection('affiliatepayouts').createIndex({ createdAt: -1, _id: -1 }, { name: 'payout_newest', background: true });
+    await db.collection('affiliatepayouts').createIndex({ netPaise: -1, _id: -1 }, { name: 'payout_amount', background: true });
+    await db.collection('affiliatepayouts').createIndex({ status: 1, createdAt: -1, _id: -1 }, { name: 'payout_status_newest', background: true });
+    await db.collection('affiliatepayouts').createIndex({ status: 1, netPaise: -1, _id: -1 }, { name: 'payout_status_amount', background: true });
     console.log('✓ AffiliatePayout indexes confirmed');
 
     // Affiliate: the code is the lookup key for BOTH the coupon path and the `?ref=`

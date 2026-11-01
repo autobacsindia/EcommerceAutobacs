@@ -82,6 +82,12 @@ BankTransferSchema.index(
 );
 // The lists: newest first, by status (keyset on createdAt/_id).
 BankTransferSchema.index({ status: 1, createdAt: -1, _id: -1 }, { name: 'bank_transfer_status_recent' });
+// The list's "Amount" and "Latest paid date" sorts (TRANSFER_SORTS). Measured on
+// 100,000 transfers: without these, a page of the confirmed tab read all 82,225
+// confirmed rows and sorted them in memory (~50 ms); with them it reads 26.
+// Also built at startup by config/db.js ensureCriticalIndexes.
+BankTransferSchema.index({ status: 1, amount: -1, _id: -1 }, { name: 'bank_transfer_status_amount' });
+BankTransferSchema.index({ status: 1, paidOn: -1, _id: -1 }, { name: 'bank_transfer_status_paid_on' });
 BankTransferSchema.index({ order: 1, createdAt: -1 }, { name: 'bank_transfer_order' });
 
 export default mongoose.models.BankTransfer || mongoose.model('BankTransfer', BankTransferSchema);

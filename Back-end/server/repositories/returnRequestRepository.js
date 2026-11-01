@@ -106,16 +106,31 @@ class ReturnRequestRepository {
       { $sort: { createdAt: -1, _id: -1 } },
       { $limit: SEARCH_SCAN_CAP },
       { $project: { order: 1, customerPhone: 1, products: '$items.product', destination: '$destination.supplierName', claims: '$supplierClaims.supplierName' } },
-      { $lookup: {
-        from: mongoose.model('Order').collection.name, localField: 'order', foreignField: '_id', as: 'order',
-        pipeline: [{ $project: { wpId: 1, orderNumber: 1, name: '$shippingAddress.fullName', phone: '$shippingAddress.phone' } }],
-      } },
-      { $lookup: {
-        from: mongoose.model('Product').collection.name, localField: 'products', foreignField: '_id', as: 'products',
-        pipeline: [{ $project: { name: 1 } }],
-      } },
     ]).option({ maxTimeMS: 5000 });
-    return { rows, capped: rows.length >= SEARCH_SCAN_CAP };
+    /*
+      The orders and product names in two batched reads, not a $lookup per row: measured
+      on 20,000 returns, 1.3 s with $lookup → 0.15 s batched (scratchpad measure-pr3.mjs).
+      Products repeat across returns, so they are read once each.
+    */
+    const productIds = [...new Set(rows.flatMap((r) => (r.products || []).map(String)))];
+    const [orders, products] = await Promise.all([
+      mongoose.model('Order').find({ _id: { $in: rows.map((r) => r.order) } },
+        { wpId: 1, orderNumber: 1, 'shippingAddress.fullName': 1, 'shippingAddress.phone': 1 }).maxTimeMS(5000).lean(),
+      mongoose.model('Product').find({ _id: { $in: productIds } }, { name: 1 }).maxTimeMS(5000).lean(),
+    ]);
+    const orderById = new Map(orders.map((o) => [String(o._id), {
+      _id: o._id, wpId: o.wpId, orderNumber: o.orderNumber, name: o.shippingAddress?.fullName, phone: o.shippingAddress?.phone,
+    }]));
+    const productById = new Map(products.map((p) => [String(p._id), p]));
+    // The shape the search reads (returnService searchTextOf): `order` is a one-element array.
+    return {
+      rows: rows.map((r) => ({
+        ...r,
+        order: orderById.has(String(r.order)) ? [orderById.get(String(r.order))] : [],
+        products: (r.products || []).map((id) => productById.get(String(id))).filter(Boolean),
+      })),
+      capped: rows.length >= SEARCH_SCAN_CAP,
+    };
   }
 
   /**

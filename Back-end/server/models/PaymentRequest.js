@@ -153,6 +153,14 @@ PaymentRequestSchema.index({ number: 1 }, { unique: true, name: 'payment_request
 // Lists: by status (admin, accounts) and by requester's team, newest first (keyset on createdAt, _id).
 PaymentRequestSchema.index({ status: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_status' });
 PaymentRequestSchema.index({ team: 1, createdAt: -1, _id: -1 }, { name: 'payment_request_team' });
+/*
+  The list's other sorts, within a status tab (keyset on the sort field, _id).
+  Measured on 100,000 requests: "Paid, amount high → low" read all 84,012 paid
+  rows and sorted them in memory (66 ms); "Paid, recently paid" the same (92 ms).
+  With these: 26 rows read, 1 ms each. Both directions ride one index.
+*/
+PaymentRequestSchema.index({ status: 1, amount: -1, _id: -1 }, { name: 'payment_request_status_amount' });
+PaymentRequestSchema.index({ status: 1, 'payment.paidAt': -1, _id: -1 }, { name: 'payment_request_status_paid' });
 // The admin activity feed: most recently changed first.
 PaymentRequestSchema.index({ updatedAt: -1 }, { name: 'payment_request_updated' });
 // "Is there a supplier request in flight for this order?" (shipping guard, order panel).
