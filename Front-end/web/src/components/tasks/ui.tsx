@@ -9,7 +9,7 @@
  * 100 background + 800 text steps, which the panel's dark theme re-maps; dots
  * and flags use mid steps that read on either theme.
  */
-import { CalendarClock, Flag } from 'lucide-react';
+import { CalendarClock, Flag, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { formatDueDay, type Task, type TaskPriority, type TaskStatus } from './types';
 
@@ -116,6 +116,51 @@ export function DuePill({ t, empty = null }: { t: Pick<Task, 'dueOn' | 'overdue'
     <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${t.bucket === 'done' ? 'border border-gray-200 text-gray-400' : tone}`}>
       <CalendarClock aria-hidden className="h-3 w-3" />
       {t.bucket !== 'done' && t.overdue ? 'Late · ' : ''}{t.bucket !== 'done' && t.dueToday ? 'Today' : formatDueDay(t.dueOn)}
+    </span>
+  );
+}
+
+// ── Tags ─────────────────────────────────────────────────────────────────────
+
+// Families the panel's dark theme re-maps (100 tint, 800 ink).
+const TAG_TONES = [
+  'bg-sky-100 text-sky-800', 'bg-violet-100 text-violet-800', 'bg-teal-100 text-teal-800', 'bg-rose-100 text-rose-800',
+  'bg-amber-100 text-amber-800', 'bg-indigo-100 text-indigo-800', 'bg-emerald-100 text-emerald-800', 'bg-orange-100 text-orange-800',
+  'bg-pink-100 text-pink-800', 'bg-purple-100 text-purple-800',
+];
+/** The same tag is the same colour everywhere, for everyone. */
+export const tagTone = (tag: string) => {
+  let h = 7;
+  for (const ch of tag) h = (h * 33 + ch.charCodeAt(0)) >>> 0;
+  return TAG_TONES[h % TAG_TONES.length];
+};
+
+/** A tag. `onClick` makes it a filter; `onRemove` shows a ×. */
+export function TagChip({ tag, onClick, onRemove, active = false }: {
+  tag: string; onClick?: () => void; onRemove?: () => void; active?: boolean;
+}) {
+  const cls = `inline-flex max-w-[11rem] items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${tagTone(tag)} ${active ? 'ring-2 ring-current' : ''}`;
+  const text = <span className="truncate">{tag}</span>;
+  return (
+    <span className={cls}>
+      {onClick ? (
+        <button type="button" onClick={(e) => { e.stopPropagation(); onClick(); }} title={`Show only “${tag}”`} className="truncate hover:underline">{text}</button>
+      ) : text}
+      {onRemove && (
+        <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(); }} aria-label={`Remove tag ${tag}`} className="-mr-0.5 rounded opacity-70 hover:opacity-100">
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** A group heading as a coloured pill: the status' colour, otherwise neutral. */
+export function GroupPill({ status, children }: { status?: TaskStatus; children: ReactNode }) {
+  const tone = status ? STATUS_STYLE[status].pill : 'bg-gray-100 text-gray-800';
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-wide ${tone}`}>
+      {status && <StatusDot status={status} />}{children}
     </span>
   );
 }

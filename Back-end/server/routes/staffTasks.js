@@ -6,6 +6,7 @@ import {
   validateTaskList,
   validateTaskCreate,
   validateTaskUpdate,
+  validateTaskBulk,
   validateCommentList,
   validateCommentCreate,
   validateChecklistAdd,
@@ -19,6 +20,7 @@ import {
   getTask,
   createTask,
   updateTask,
+  bulkUpdate,
   listComments,
   addComment,
   addChecklistItem,
@@ -34,7 +36,7 @@ import {
  */
 const router = express.Router();
 
-// @route  GET /staff/tasks?view=mine|created|team&state=open|done|archived&due=&priority=&q=&assignee=&team=&cursor=
+// @route  GET /staff/tasks?view=mine|created|team&state=open|done|archived&due=&priority=&tag=&q=&assignee=&team=&sort=due|newest|updated&cursor=
 router.get('/', validateTaskList, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listTasks(req.user, req.query)) });
 }));
@@ -54,6 +56,12 @@ router.get('/assignees', asyncHandler(async (req, res) => {
 router.post('/', validateTaskCreate, validateRequest, asyncHandler(async (req, res) => {
   const { task, tasks, duplicate } = await createTask(req.user, req.body, req);
   res.status(duplicate ? 200 : 201).json({ success: true, task, tasks, duplicate });
+}));
+
+// @route  POST /staff/tasks/bulk { items: [{ id, rev }], changes: { status? | priority? | dueOn? | assigneeId? | archived? | addTags? | removeTags? } }
+// 200 with a result per task: some may be refused while the rest change.
+router.post('/bulk', validateTaskBulk, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await bulkUpdate(req.user, req.body, req)) });
 }));
 
 // @route  GET /staff/tasks/:id

@@ -58,6 +58,13 @@ export const CHECKLIST_MAX = 30;
 export const CHECK_TEXT_MAX = 200;
 /** One task can go to this many people at once (each gets their own copy). */
 export const MAX_ASSIGNEES = 30;
+/** Tags on one task, and how long one tag may be. */
+export const TAGS_MAX = 10;
+export const TAG_MAX = 24;
+/** Tasks one bulk change may touch. */
+export const BULK_MAX = 50;
+/** How a list may be ordered: due day (soonest first), newest first, most recently changed first. */
+export const TASK_SORTS = Object.freeze(['due', 'newest', 'updated']);
 const SUMMARY_MAX = 160;
 const COUNTER = 'staffTask';
 /** Open tasks with no due day sort after every dated one. */
@@ -121,15 +128,42 @@ function cleanDescription(raw) {
 }
 
 /** 'YYYY-MM-DD' (a real calendar day), or null to clear. */
-export function cleanDueOn(raw) {
+function cleanDay(raw, what) {
   if (raw == null || raw === '') return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(raw));
   const d = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
-  if (!d || d.getUTCDate() !== Number(m[3]) || d.getUTCFullYear() < 2020 || d.getUTCFullYear() > 2100) {
-    throw fail('Pick a valid due date.', 400);
+  // A month or day out of range rolls over in Date.UTC ('2026-13-01' → 1 Jan 2027), so both are compared back.
+  if (!d || d.getUTCMonth() !== Number(m[2]) - 1 || d.getUTCDate() !== Number(m[3]) || d.getUTCFullYear() < 2020 || d.getUTCFullYear() > 2100) {
+    throw fail(`Pick a valid ${what} date.`, 400);
   }
   return m[0];
 }
+export const cleanDueOn = (raw) => cleanDay(raw, 'due');
+export const cleanStartOn = (raw) => cleanDay(raw, 'start');
+
+/** A task may start on its due day, never after it. */
+function checkDates(startOn, dueOn) {
+  if (startOn && dueOn && startOn > dueOn) throw fail('The start date can’t be after the due date.', 400);
+}
+
+/** One tag: lower-case, single-spaced, no leading '#'. */
+export function cleanTag(raw) {
+  // eslint-disable-next-line no-control-regex
+  const tag = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().replace(/^#+/, '').trim().toLowerCase();
+  if (!tag) throw fail('Write the tag first.', 400);
+  if (tag.length > TAG_MAX) throw fail(`Keep a tag under ${TAG_MAX} characters.`, 400);
+  return tag;
+}
+
+/** A task's whole set of tags: cleaned, each once, at most TAGS_MAX. */
+export function cleanTags(raw) {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) throw fail('Tags must be a list.', 400);
+  const tags = [...new Set(raw.map(cleanTag))];
+  if (tags.length > TAGS_MAX) throw fail(`A task can have at most ${TAGS_MAX} tags.`, 400);
+  return tags;
+}
+const sameTags = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 function cleanEnum(raw, values, what) {
   if (!values.includes(raw)) throw fail(`Pick a valid ${what}.`, 400);
@@ -207,6 +241,8 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
     priority: t.priority,
     priorityLabel: PRIORITY_LABELS[t.priority],
     dueOn: t.dueOn || null,
+    startOn: t.startOn || null,
+    tags: t.tags || [],
     overdue: open && !!t.dueOn && t.dueOn < today,
     dueToday: open && t.dueOn === today,
     assignee: { id: idOf(t.assignee), name: t.assigneeName || '' },
@@ -302,13 +338,24 @@ export async function getTask(actor, id) {
   return { ...shape(t, actor, { full: true }), siblings: await siblingsOf(actor, t) };
 }
 
-const encodeCursor = (t) => Buffer.from(JSON.stringify({ r: t.rank, i: idOf(t._id) })).toString('base64url');
-function decodeCursor(cursor) {
+/*
+  A cursor is the last row's sort key, and names the order it belongs to: a page
+  of "newest first" cannot continue a "due day" list. Cursors without a sort
+  (issued before there was a choice) are due-day cursors.
+*/
+function encodeCursor(t, sort) {
+  const key = sort === 'newest' ? { s: sort } : sort === 'updated' ? { s: sort, u: new Date(t.updatedAt).getTime() } : { r: t.rank };
+  return Buffer.from(JSON.stringify({ ...key, i: idOf(t._id) })).toString('base64url');
+}
+function decodeCursor(cursor, sort) {
   if (!cursor) return null;
   try {
-    const { r, i } = JSON.parse(Buffer.from(String(cursor), 'base64url').toString('utf8'));
-    if (typeof r !== 'string' || !mongoose.isValidObjectId(i)) throw new Error('bad');
-    return { rank: r, id: new mongoose.Types.ObjectId(i) };
+    const { s = 'due', r, u, i } = JSON.parse(Buffer.from(String(cursor), 'base64url').toString('utf8'));
+    if (s !== sort || !mongoose.isValidObjectId(i)) throw new Error('bad');
+    const id = new mongoose.Types.ObjectId(i);
+    if (s === 'due') { if (typeof r !== 'string') throw new Error('bad'); return { rank: r, id }; }
+    if (s === 'updated') { if (!Number.isSafeInteger(u)) throw new Error('bad'); return { updatedAt: new Date(u), id }; }
+    return { id };
   } catch {
     throw fail('Invalid page cursor.', 400);
   }
@@ -334,7 +381,8 @@ const addDays = (ymd, days) => {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 };
 
-export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, priority, q, cursor } = {}) {
+export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, priority, tag, q, sort = 'due', cursor } = {}) {
+  const order = cleanEnum(sort, TASK_SORTS, 'order');
   const query = { bucket: state };
   if (view === 'mine') {
     query.assignee = actor._id;
@@ -357,6 +405,7 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
   }
 
   if (priority) query.priority = cleanEnum(priority, TASK_PRIORITIES, 'priority');
+  if (tag) query.tags = cleanTag(tag);
   // Search stays inside the list being shown (the same person / team / bucket),
   // so it never reads other people's tasks: a T-number, or words in the title.
   const term = String(q ?? '').trim().slice(0, 100);
@@ -375,12 +424,15 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
     else if (due === 'week') range = { $gte: today, $lte: addDays(today, 6) };
   }
 
-  const rows = await staffTaskRepository.page(query, { after: decodeCursor(cursor), limit: TASK_PAGE_SIZE + 1, range });
+  const after = decodeCursor(cursor, order);
+  const rows = order === 'due'
+    ? await staffTaskRepository.page(query, { after, limit: TASK_PAGE_SIZE + 1, range })
+    : await staffTaskRepository.pageBy(order, { ...query, ...(range ? { rank: range } : {}) }, { after, limit: TASK_PAGE_SIZE + 1 });
   const more = rows.length > TASK_PAGE_SIZE;
   const tasks = more ? rows.slice(0, TASK_PAGE_SIZE) : rows;
   return {
     tasks: tasks.map((t) => shape(t, actor, { today })),
-    nextCursor: more ? encodeCursor(tasks[tasks.length - 1]) : null,
+    nextCursor: more ? encodeCursor(tasks[tasks.length - 1], order) : null,
   };
 }
 
@@ -427,7 +479,7 @@ export async function countDueForBell(user) {
  * a half-finished create finds the copies already made, makes only the missing
  * ones, and keeps them in the same group.
  *
- * @param {{ title, description?, priority?, dueOn?, assigneeId?, assigneeIds?, orderId?, clientId? }} input
+ * @param {{ title, description?, priority?, dueOn?, startOn?, tags?, assigneeId?, assigneeIds?, orderId?, clientId? }} input
  * @returns {Promise<{ task: object, tasks: object[], duplicate: boolean }>}
  */
 export async function createTask(actor, input = {}, req) {
@@ -436,6 +488,9 @@ export async function createTask(actor, input = {}, req) {
   const description = cleanDescription(input.description);
   const priority = input.priority == null || input.priority === '' ? 'normal' : cleanEnum(input.priority, TASK_PRIORITIES, 'priority');
   const dueOn = cleanDueOn(input.dueOn);
+  const startOn = cleanStartOn(input.startOn);
+  checkDates(startOn, dueOn);
+  const tags = cleanTags(input.tags);
   const checklist = cleanChecklist(input.checklist);
   // "+ Add task" inside a status group starts the task in that group (never Done).
   const status = input.status == null || input.status === '' ? 'todo' : cleanEnum(input.status, ['todo', 'in_progress', 'waiting'], 'status');
@@ -465,6 +520,8 @@ export async function createTask(actor, input = {}, req) {
         priority,
         status,
         dueOn,
+        startOn,
+        ...(tags.length ? { tags } : {}),
         assignee: person._id,
         assigneeName: person.name || '',
         team: teamOf(person),
@@ -503,10 +560,14 @@ export async function createTask(actor, input = {}, req) {
 /**
  * Change a task. Only the fields present in `input` change; `rev` is required.
  *
- * @param {{ rev: number, title?, description?, priority?, dueOn?, orderId?, status?, assigneeId?, archived? }} input
+ * @param {{ rev: number, title?, description?, priority?, dueOn?, startOn?, tags?, orderId?, status?, assigneeId?, archived? }} input
  */
 export async function updateTask(actor, id, input = {}, req) {
-  const t = await loadVisible(actor, id);
+  return applyUpdate(actor, await loadVisible(actor, id), input, req);
+}
+
+/** updateTask on a task already loaded (and visible to `actor`). */
+async function applyUpdate(actor, t, input, req) {
   const rev = Number(input.rev);
   if (!Number.isInteger(rev)) throw fail('Reload the task and try again.', 400);
   if (rev !== t.rev) throw fail('Someone changed this task just now. It has been reloaded — check it and try again.', 409);
@@ -528,7 +589,7 @@ export async function updateTask(actor, id, input = {}, req) {
     }
   }
   const willBeArchived = set.archivedAt !== undefined ? !!set.archivedAt : archived;
-  const editing = ['title', 'description', 'priority', 'dueOn', 'orderId', 'status', 'assigneeId'].some(has);
+  const editing = ['title', 'description', 'priority', 'dueOn', 'startOn', 'tags', 'orderId', 'status', 'assigneeId'].some(has);
   if (editing && willBeArchived) throw fail('This task is archived. Restore it first.', 409);
 
   const editable = canEdit(actor, t);
@@ -549,6 +610,18 @@ export async function updateTask(actor, id, input = {}, req) {
   if (has('dueOn')) {
     const dueOn = cleanDueOn(input.dueOn);
     if (dueOn !== (t.dueOn || null)) { needEdit(); set.dueOn = dueOn; note('due', t.dueOn || 'none', dueOn || 'none'); }
+  }
+  if (has('startOn')) {
+    const startOn = cleanStartOn(input.startOn);
+    if (startOn !== (t.startOn || null)) { needEdit(); set.startOn = startOn; note('start', t.startOn || 'none', startOn || 'none'); }
+  }
+  if (set.dueOn !== undefined || set.startOn !== undefined) {
+    checkDates(set.startOn !== undefined ? set.startOn : t.startOn, set.dueOn !== undefined ? set.dueOn : t.dueOn);
+  }
+  if (has('tags')) {
+    const tags = cleanTags(input.tags);
+    const before = t.tags || [];
+    if (!sameTags(tags, before)) { needEdit(); set.tags = tags; note('tags', before.join(', ') || 'none', tags.join(', ') || 'none'); }
   }
   if (has('orderId')) {
     const order = await loadOrderRef(input.orderId);
@@ -588,6 +661,86 @@ export async function updateTask(actor, id, input = {}, req) {
   });
   if (newAssignee && !same(newAssignee._id, actor._id)) void notifyAssigned(next, actor);
   return shape(next, actor, { full: true });
+}
+
+// ── Many at once ────────────────────────────────────────────────────────────
+
+const BULK_FIELDS = ['status', 'priority', 'dueOn', 'assigneeId', 'archived', 'addTags', 'removeTags'];
+
+/** The tags a task ends up with after a bulk add / remove, in a stable order. */
+function bulkTags(t, add, remove) {
+  const drop = new Set(remove);
+  return [...new Set([...(t.tags || []), ...add])].filter((x) => !drop.has(x));
+}
+
+/** Would `input` change nothing on `t`? Then a retried bulk change is a success, not a conflict. */
+function changesNothing(t, input) {
+  const has = (k) => input[k] !== undefined;
+  return (!has('status') || input.status === t.status)
+    && (!has('priority') || input.priority === t.priority)
+    && (!has('dueOn') || input.dueOn === (t.dueOn || null))
+    && (!has('assigneeId') || same(input.assigneeId, t.assignee))
+    && (!has('archived') || input.archived === (t.bucket === 'archived'))
+    && (!has('tags') || sameTags(input.tags, t.tags || []));
+}
+
+/**
+ * The same change on several tasks (the list's "selected" bar). Each task goes
+ * through updateTask's rules on its own: one refusal (no permission, archived,
+ * changed by someone else) never stops the others, and the answer says per task
+ * what happened. The change itself is checked first, so a malformed one touches
+ * nothing.
+ *
+ * Retries are safe: a task that already looks the way the change wants it is
+ * reported unchanged, even though its `rev` has moved on.
+ *
+ * @param {{ items: { id: string, rev: number }[], changes: object }} input
+ * @returns {Promise<{ results: { id, ok, changed?, status?, error? }[], changed: number, unchanged: number, failed: number }>}
+ *   No task bodies: the screen reloads its lists after a bulk change anyway.
+ */
+export async function bulkUpdate(actor, { items, changes } = {}, req) {
+  if (!Array.isArray(items) || !items.length) throw fail('Pick at least one task.', 400);
+  if (items.length > BULK_MAX) throw fail(`Change at most ${BULK_MAX} tasks at once.`, 400);
+  const ids = items.map((i) => String(i?.id ?? ''));
+  if (new Set(ids).size !== ids.length) throw fail('A task was picked twice.', 400);
+
+  const c = changes && typeof changes === 'object' ? changes : {};
+  const given = BULK_FIELDS.filter((k) => c[k] !== undefined);
+  if (!given.length) throw fail('Pick what to change.', 400);
+  if (given.includes('archived') && given.length > 1) throw fail('Archive or restore on its own, not with other changes.', 400);
+  const base = {};
+  if (c.status !== undefined) base.status = cleanEnum(c.status, TASK_STATUSES, 'status');
+  if (c.priority !== undefined) base.priority = cleanEnum(c.priority, TASK_PRIORITIES, 'priority');
+  if (c.dueOn !== undefined) base.dueOn = cleanDueOn(c.dueOn);
+  if (c.assigneeId !== undefined) base.assigneeId = (await loadAssignee(actor, c.assigneeId))._id;
+  if (c.archived !== undefined) base.archived = c.archived === true || c.archived === 'true';
+  const add = c.addTags !== undefined ? cleanTags(c.addTags) : [];
+  const remove = c.removeTags !== undefined ? cleanTags(c.removeTags) : [];
+
+  const results = [];
+  for (const [n, item] of items.entries()) {
+    const id = ids[n];
+    try {
+      const t = await loadVisible(actor, id);
+      const input = { ...base, ...(add.length || remove.length ? { tags: bulkTags(t, add, remove) } : {}) };
+      if (changesNothing(t, input)) {
+        results.push({ id, ok: true, changed: false });
+        continue;
+      }
+      await applyUpdate(actor, t, { ...input, rev: item?.rev }, req);
+      results.push({ id, ok: true, changed: true });
+    } catch (err) {
+      if (!(err instanceof AppError)) throw err;
+      results.push({ id, ok: false, status: err.statusCode, error: err.message });
+    }
+  }
+  const count = (f) => results.filter(f).length;
+  return {
+    results,
+    changed: count((r) => r.ok && r.changed),
+    unchanged: count((r) => r.ok && !r.changed),
+    failed: count((r) => !r.ok),
+  };
 }
 
 // ── Checklist ───────────────────────────────────────────────────────────────

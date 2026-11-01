@@ -5,7 +5,9 @@ import toast from 'react-hot-toast';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
-import { isConflict, newClientId, type Task, type TaskBucket, type TaskFilters, type TaskPage, type TaskStatus } from './types';
+import {
+  isConflict, newClientId, type BulkChange, type BulkResult, type Task, type TaskBucket, type TaskFilters, type TaskPage, type TaskStatus,
+} from './types';
 
 /** The query string for one list: only the filters that are set. */
 export function listParams(filters: TaskFilters, state: TaskBucket): Record<string, string> {
@@ -14,6 +16,9 @@ export function listParams(filters: TaskFilters, state: TaskBucket): Record<stri
   if (filters.priority) p.priority = filters.priority;
   if (filters.q?.trim()) p.q = filters.q.trim();
   if (filters.view === 'team' && filters.assignee) p.assignee = filters.assignee;
+  if (filters.view === 'team' && filters.team) p.team = filters.team;
+  if (filters.tag) p.tag = filters.tag;
+  if (filters.sort && filters.sort !== 'due') p.sort = filters.sort;
   return p;
 }
 
@@ -77,4 +82,42 @@ export function useQuickAdd() {
     onSuccess: () => refresh(),
     onError: (e) => { toast.error(errorMessage(e, 'Could not add the task.')); },
   });
+}
+
+/**
+ * The same change on the selected tasks. Each task is checked on its own by the
+ * server; the toast says how many changed and, by code, which were refused.
+ */
+export function useBulkUpdate() {
+  const refresh = useRefreshTasks();
+  return useMutation({
+    mutationFn: ({ tasks, changes }: { tasks: Task[]; changes: BulkChange }) =>
+      apiClient.post<BulkResult>('/staff/tasks/bulk', { items: tasks.map((t) => ({ id: t.id, rev: t.rev })), changes }),
+    onSuccess: (res, { tasks }) => {
+      const code = new Map(tasks.map((t) => [t.id, t.code]));
+      const done = res.changed + res.unchanged;
+      if (res.failed === 0) {
+        toast.success(`${done} task${done === 1 ? '' : 's'} updated`, { id: 'tasks-bulk' });
+        return;
+      }
+      const refused = res.results.filter((r) => !r.ok);
+      const why = refused.slice(0, 3).map((r) => `${code.get(r.id) ?? 'A task'}: ${r.error}`).join('\n');
+      toast.error(`${done} updated, ${res.failed} not changed.\n${why}${refused.length > 3 ? '\n…' : ''}`, { id: 'tasks-bulk', duration: 8000 });
+    },
+    onError: (e) => { toast.error(errorMessage(e, 'Could not change those tasks.')); },
+    onSettled: () => refresh(),
+  });
+}
+
+/**
+ * Tags already used on the tasks this screen has loaded — the suggestions when
+ * typing a tag. No extra request: read from the lists in the query cache.
+ */
+export function useKnownTags(): string[] {
+  const queryClient = useQueryClient();
+  const seen = new Set<string>();
+  for (const [, data] of queryClient.getQueriesData<{ pages: TaskPage[] }>({ queryKey: taskKeys.lists() })) {
+    for (const page of data?.pages ?? []) for (const t of page.tasks) for (const tag of t.tags ?? []) seen.add(tag);
+  }
+  return [...seen].sort();
 }

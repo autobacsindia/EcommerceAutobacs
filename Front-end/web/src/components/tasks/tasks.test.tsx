@@ -44,7 +44,7 @@ const can = { edit: true, status: true, reassign: true, archive: true, restore: 
 const task = (over: Partial<Task> = {}): Task => ({
   id: 't1', number: 7, code: 'T-7', title: 'Call Bosch', summary: '', description: 'Ask about the lift kit',
   status: 'todo', statusLabel: 'To do', priority: 'high', priorityLabel: 'High',
-  dueOn: '2026-10-27', overdue: false, dueToday: true,
+  dueOn: '2026-10-27', startOn: null, tags: [], overdue: false, dueToday: true,
   assignee: { id: 'u2', name: 'Arun' }, team: 'procurement', teamLabel: 'Procurement',
   createdBy: { id: 'u1', name: 'Priya' }, order: null, group: null, checklist: { done: 0, total: 0 }, bucket: 'open',
   completedAt: null, archivedAt: null, commentCount: 0, lastCommentAt: null,

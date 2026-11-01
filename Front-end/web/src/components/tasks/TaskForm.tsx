@@ -3,7 +3,8 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { CalendarDays, Flag, ListChecks, Loader2, X } from 'lucide-react';
+import { CalendarDays, CalendarRange, Flag, ListChecks, Loader2, Tag, X } from 'lucide-react';
+import TagInput from './TagInput';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
@@ -141,13 +142,14 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
   const me = choices.find((p) => p.me);
   // One id for this form: pressing Create twice (or a retried request) makes one task.
   const clientId = useRef(newClientId());
-  const [form, setForm] = useState({ title: '', description: '', steps: '', priority: 'normal' as TaskPriority, dueOn: '' });
+  const [form, setForm] = useState({ title: '', description: '', steps: '', priority: 'normal' as TaskPriority, dueOn: '', startOn: '', tags: [] as string[] });
   // null until the person touches the list: it then starts with just "me" ticked.
   const [picked, setPicked] = useState<string[] | null>(null);
   const chosen = picked ?? (me ? [me.id] : []);
   const [order, setOrder] = useState<PickedOrder | null>(null);
   const [error, setError] = useState('');
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
+  const datesBackwards = !!form.startOn && !!form.dueOn && form.startOn > form.dueOn;
 
   const create = useMutation({
     mutationFn: () => apiClient.post<{ task: Task; tasks: Task[] }>('/staff/tasks', {
@@ -157,6 +159,8 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
       checklist: form.steps.split('\n').map((l) => l.trim()).filter(Boolean),
       priority: form.priority,
       dueOn: form.dueOn || null,
+      startOn: form.startOn || null,
+      tags: form.tags,
       orderId: order?.id || null,
       clientId: clientId.current,
     }),
@@ -171,7 +175,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); setError(''); if (form.title.trim() && chosen.length) create.mutate(); }}
+      onSubmit={(e) => { e.preventDefault(); setError(''); if (form.title.trim() && chosen.length && !datesBackwards) create.mutate(); }}
       className="flex max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
     >
       <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
@@ -198,7 +202,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
           aria-label="Notes"
           className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm"
         />
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <label className="text-xs font-medium text-gray-500">
             <span className="mb-1 flex items-center gap-1"><Flag aria-hidden className="h-3.5 w-3.5" /> Priority</span>
             <select value={form.priority} onChange={(e) => set({ priority: e.target.value as TaskPriority })} className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm">
@@ -207,10 +211,19 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
           </label>
           <label className="text-xs font-medium text-gray-500">
             <span className="mb-1 flex items-center gap-1"><CalendarDays aria-hidden className="h-3.5 w-3.5" /> Due date</span>
-            <input type="date" aria-label="Due date" value={form.dueOn} onChange={(e) => set({ dueOn: e.target.value })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+            <input type="date" aria-label="Due date" value={form.dueOn} min={form.startOn || undefined} onChange={(e) => set({ dueOn: e.target.value })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+          </label>
+          <label className="text-xs font-medium text-gray-500">
+            <span className="mb-1 flex items-center gap-1"><CalendarRange aria-hidden className="h-3.5 w-3.5" /> Start date</span>
+            <input type="date" aria-label="Start date" value={form.startOn} max={form.dueOn || undefined} onChange={(e) => set({ startOn: e.target.value })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
           </label>
         </div>
         <PastDueWarning dueOn={form.dueOn} />
+        {datesBackwards && <p role="alert" className="text-xs font-medium text-red-700">The start date is after the due date.</p>}
+        <label className="block text-xs font-medium text-gray-500">
+          <span className="mb-1 flex items-center gap-1"><Tag aria-hidden className="h-3.5 w-3.5" /> Tags (optional)</span>
+          <TagInput value={form.tags} onChange={(tags) => set({ tags })} />
+        </label>
         {choices.length > 1 && <PeoplePicker people={choices} selected={chosen} onChange={setPicked} />}
         {choices.length === 1 && (
           <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">This task is for you.</p>
@@ -233,7 +246,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
         <button type="button" onClick={onCancel} className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancel</button>
         <button
           type="submit"
-          disabled={create.isPending || !form.title.trim() || chosen.length === 0}
+          disabled={create.isPending || !form.title.trim() || chosen.length === 0 || datesBackwards}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
         >
           {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}

@@ -155,6 +155,34 @@ describe('Staff task routes', () => {
     expect((await member.session.post('/staff/tasks', { title: 'x', status: 'done' })).status).toBe(400);
   });
 
+  it('tags, start dates, order and bulk changes over HTTP', async () => {
+    const a = (await head.session.post('/staff/tasks', {
+      title: 'Count Kochi', assigneeId: String(member.user._id), tags: ['Kochi'], startOn: '2030-01-10', dueOn: '2030-01-15',
+    })).body.task;
+    expect(a).toMatchObject({ tags: ['kochi'], startOn: '2030-01-10' });
+    const b = (await head.session.post('/staff/tasks', { title: 'Count Kochi 2', assigneeId: String(member.user._id) })).body.task;
+    expect((await head.session.post('/staff/tasks', { title: 'x', tags: 'kochi' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { title: 'x', startOn: '2030-01-16', dueOn: '2030-01-15' })).status).toBe(400);
+    expect((await member.session.get('/staff/tasks?tag=KOCHI')).body.tasks.map((t) => t.id)).toEqual([a.id]);
+    expect((await member.session.get('/staff/tasks?sort=newest')).body.tasks.map((t) => t.id)).toEqual([b.id, a.id]);
+    expect((await member.session.get('/staff/tasks?sort=priority')).status).toBe(400);
+
+    const res = await head.session.post('/staff/tasks/bulk', {
+      items: [{ id: a.id, rev: a.rev }, { id: b.id, rev: b.rev }], changes: { status: 'waiting', priority: 'high' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ changed: 2, failed: 0 });
+    // The doer may move the status but not the priority: per-task refusals, still a 200.
+    const mixed = await member.session.post('/staff/tasks/bulk', { items: [{ id: a.id, rev: a.rev + 1 }], changes: { priority: 'low' } });
+    expect(mixed.status).toBe(200);
+    expect(mixed.body.results[0]).toMatchObject({ ok: false, status: 403 });
+    expect((await head.session.post('/staff/tasks/bulk', { items: [], changes: { priority: 'low' } })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks/bulk', { items: [{ id: 'nope', rev: 1 }], changes: { priority: 'low' } })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks/bulk', { items: [{ id: a.id, rev: 1 }], changes: { status: 'finished' } })).status).toBe(400);
+    expect((await head.session.postNoCsrf('/staff/tasks/bulk', { items: [{ id: a.id, rev: 1 }], changes: { priority: 'low' } })).status).toBe(403);
+    expect((await request(app).post(`${BASE}/staff/tasks/bulk`).send({})).status).toBe(403);
+  });
+
   it('lists who you may give to', async () => {
     const res = await head.session.get('/staff/tasks/assignees');
     expect(res.status).toBe(200);

@@ -35,7 +35,7 @@ const HistorySchema = new mongoose.Schema(
     at: { type: Date, required: true },
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     byName: { type: String, default: '' },
-    action: { type: String, required: true }, // created, status, assignee, due, priority, edited, archived, restored
+    action: { type: String, required: true }, // created, status, assignee, due, start, tags, priority, edited, archived, restored
     from: { type: String, default: '' },
     to: { type: String, default: '' },
   },
@@ -71,6 +71,13 @@ const StaffTaskSchema = new mongoose.Schema(
     priority: { type: String, enum: TASK_PRIORITIES, default: 'normal', required: true },
     /** IST calendar day, 'YYYY-MM-DD' — a day, not an instant, so "due today" means the same thing to everyone. */
     dueOn: { type: String, default: null },
+    /** When work should start, same 'YYYY-MM-DD' form. Never after `dueOn` (the service refuses it). */
+    startOn: { type: String, default: null },
+    /**
+     * Short labels ("supplier", "diwali"), stored lower-case so one word is one tag
+     * whoever typed it. At most TAGS_MAX (services/staffTaskService.js).
+     */
+    tags: { type: [String], default: undefined },
     assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     assigneeName: { type: String, default: '' },
     /** The assignee's team when it was given (null for the admin's own tasks) — whose head sees it. */

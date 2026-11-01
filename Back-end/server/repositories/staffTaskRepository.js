@@ -14,7 +14,7 @@ const HISTORY_CAP = 100;
   one being forgotten.
 */
 export const LIST_PROJECTION = Object.freeze({
-  number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1,
+  number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, startOn: 1, tags: 1,
   assignee: 1, assigneeName: 1, team: 1, createdBy: 1, createdByName: 1,
   order: 1, group: 1, groupSize: 1, bucket: 1, rank: 1, rev: 1,
   completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
@@ -80,6 +80,22 @@ const staffTaskRepository = {
       : null;
     return StaffTask.find(keyset ? { $and: [filter, keyset] } : filter, LIST_PROJECTION)
       .sort({ rank: 1, _id: 1 })
+      .limit(limit)
+      .lean();
+  },
+
+  /**
+   * Keyset page in another order: 'newest' (_id descending) or 'updated'
+   * (updatedAt, then _id, descending). `after` is the decoded cursor.
+   */
+  pageBy: (sort, filter, { after = null, limit }) => {
+    let keyset = null;
+    if (after && sort === 'newest') keyset = { _id: { $lt: after.id } };
+    if (after && sort === 'updated') {
+      keyset = { $or: [{ updatedAt: { $lt: after.updatedAt } }, { updatedAt: after.updatedAt, _id: { $lt: after.id } }] };
+    }
+    return StaffTask.find(keyset ? { $and: [filter, keyset] } : filter, LIST_PROJECTION)
+      .sort(sort === 'updated' ? { updatedAt: -1, _id: -1 } : { _id: -1 })
       .limit(limit)
       .lean();
   },
