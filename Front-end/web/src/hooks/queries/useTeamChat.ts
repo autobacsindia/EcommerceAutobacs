@@ -732,6 +732,37 @@ export function useMentions(enabled: boolean) {
   });
 }
 
+/** One row of the Threads list. `unread`: replies I have not seen (opening the thread clears it). */
+export interface MyThread {
+  root: ChatMessage;
+  channel: string;
+  channelName: string;
+  channelKind: 'space' | 'dm';
+  lastActivityAt: string;
+  unread: number;
+}
+
+/**
+ * Threads I started or replied to, newest activity first. Always refetched
+ * when shown (staleTime 0): opening a thread marks it read on the server, and
+ * the list should say so the next time it opens.
+ */
+export function useMyThreads(enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.myThreads(),
+    queryFn: async ({ pageParam }) => {
+      const q = new URLSearchParams({ limit: '25' });
+      if (pageParam) q.set('before', pageParam);
+      const res = await apiClient.get<{ threads?: MyThread[]; nextBefore?: string | null }>(`/chat/threads?${q}`);
+      return { threads: res.threads ?? [], nextBefore: res.nextBefore ?? null };
+    },
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextBefore ?? undefined,
+    enabled,
+    staleTime: 0,
+  });
+}
+
 /**
  * Forward a message into a conversation I am in. The copy is a normal new
  * message there; the target's timeline (if loaded) and the channel list refresh.

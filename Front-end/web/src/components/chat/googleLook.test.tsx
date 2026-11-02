@@ -46,6 +46,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
   notifyOf: () => 'all',
   liveStatus: () => null,
   useOpenDm: () => ({ mutate: jest.fn(), isPending: false }),
+  useMyThreads: () => ({ data: { pages: [], pageParams: [''] }, isLoading: false, isError: false, refetch: jest.fn(), hasNextPage: false, fetchNextPage: jest.fn(), isFetchingNextPage: false }),
   useMentions: () => ({ data: { pages: [], pageParams: [''] }, isLoading: false, isError: false, refetch: jest.fn(), hasNextPage: false, fetchNextPage: jest.fn(), isFetchingNextPage: false }),
 }));
 
@@ -192,6 +193,13 @@ describe('left list shortcuts', () => {
     render(<TeamChat />);
     fireEvent.click(screen.getByRole('button', { name: 'Mentions' }));
     expect(screen.getByRole('dialog', { name: 'Mentions' })).toBeInTheDocument();
+  });
+
+  it('a Threads entry opens the Threads list', () => {
+    setWidth(1440);
+    render(<TeamChat />);
+    fireEvent.click(screen.getByRole('button', { name: 'Threads' }));
+    expect(screen.getByRole('dialog', { name: 'Threads' })).toBeInTheDocument();
   });
 });
 

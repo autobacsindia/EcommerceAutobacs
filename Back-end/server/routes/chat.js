@@ -21,6 +21,7 @@ import {
   validateStar,
   validateStarredPage,
   validateMentionsPage,
+  validateThreadsPage,
   validateForward,
   validatePin,
   validateStatus,
@@ -48,6 +49,7 @@ import {
   starMessage,
   listStarred,
   listMentions,
+  listThreads,
   forwardMessage,
   pinMessage,
   listPins,
@@ -218,6 +220,11 @@ router.get('/starred', validateStarredPage, validateRequest, asyncHandler(async 
 // GET /chat/mentions?before=&limit= — messages that @mention me, my team or @all, newest first
 router.get('/mentions', validateMentionsPage, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listMentions(req.user, req.query)) });
+}));
+
+// GET /chat/threads?before=&limit= — threads I started or replied to, newest activity first, with my unread
+router.get('/threads', validateThreadsPage, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listThreads(req.user, req.query)) });
 }));
 
 // PUT /chat/messages/:id/star { on? } — star (default) or un-star a message, for me

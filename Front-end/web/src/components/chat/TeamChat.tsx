@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { AtSign, ChevronDown, Keyboard, MessageSquarePlus, Plus, Search, Star } from 'lucide-react';
+import { AtSign, ChevronDown, Keyboard, MessageSquarePlus, MessagesSquare, Plus, Search, Star } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from '@/hooks/queries/keys';
@@ -36,6 +36,7 @@ import { NotifyIcon } from './NotifyMenu';
 import MessageSearch from './MessageSearch';
 import StarredPanel from './StarredPanel';
 import MentionsPanel from './MentionsPanel';
+import ThreadsListPanel from './ThreadsListPanel';
 import StatusDialog from './StatusDialog';
 import { ONE_PANE_BELOW, useFitToViewport } from './useFitToViewport';
 import { setOpenConversation } from '@/lib/chatSound';
@@ -256,6 +257,7 @@ export default function TeamChat() {
   const [searching, setSearching] = useState<string | null>(null);
   const [showStarred, setShowStarred] = useState(false);
   const [showMentions, setShowMentions] = useState(false);
+  const [showThreads, setShowThreads] = useState(false);
   // A thread to open in the conversation (picked from Mentions); `n` makes a repeat pick reopen it.
   const [threadRequest, setThreadRequest] = useState<{ channelId: string; id: string; n: number } | null>(null);
   // Desktop: the open conversation fills the chat area; the lists hide.
@@ -330,6 +332,7 @@ export default function TeamChat() {
           // A reply: into its thread if open, and its root moves to the bottom.
           qc.setQueryData<ThreadData>(chatKeys.thread(e.message.threadRoot), (d) => upsertReply(d, e.message!));
           if (e.thread) qc.setQueryData<Pages>(chatKeys.messages(e.channelId), (d) => applyThreadUpdate(d, e.thread!));
+          qc.invalidateQueries({ queryKey: chatKeys.myThreads() });
         } else {
           qc.setQueryData<Pages>(chatKeys.messages(e.channelId), (d) => upsertMessage(d, e.message!));
         }
@@ -702,6 +705,16 @@ export default function TeamChat() {
                 <span className="min-w-0 flex-1 truncate">Mentions</span>
               </button>
             </li>
+            <li>
+              <button
+                type="button"
+                onClick={() => setShowThreads(true)}
+                className="gc-row flex w-full items-center gap-3 rounded-full px-3 py-1.5 text-left text-sm text-gray-800"
+              >
+                <span className="grid h-7 w-7 place-items-center"><MessagesSquare className="h-[18px] w-[18px] text-gray-700" aria-hidden="true" /></span>
+                <span className="min-w-0 flex-1 truncate">Threads</span>
+              </button>
+            </li>
           </ul>
 
           {(show === 'all' || spaces.length > 0) && section('spaces', 'Spaces', spaces, 'No spaces',
@@ -847,6 +860,18 @@ export default function TeamChat() {
             select(id);
           }}
           onClose={() => setShowMentions(false)}
+        />
+      )}
+
+      {showThreads && (
+        <ThreadsListPanel
+          channels={channels}
+          onPick={(id, rootId) => {
+            setShowThreads(false);
+            setThreadRequest({ channelId: id, id: rootId, n: Date.now() });
+            select(id);
+          }}
+          onClose={() => setShowThreads(false)}
         />
       )}
 
