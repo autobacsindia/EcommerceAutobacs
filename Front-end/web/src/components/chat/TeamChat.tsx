@@ -28,7 +28,7 @@ import {
   useOpenDm,
 } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel, ChatMessage, ChatPerson, ChatReaction, MessagePage, ThreadData } from '@/hooks/queries/useTeamChat';
-import { Avatar, ChannelIcon, Dialog, GREEN, OnlineDot, shortWhen } from './chatUi';
+import { Avatar, ChannelIcon, Dialog, OnlineDot, shortWhen } from './chatUi';
 import QuickSwitcher, { channelTitle } from './QuickSwitcher';
 import { Kbd, ShortcutsDialog, modKeyLabel, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import Conversation from './Conversation';
@@ -38,6 +38,8 @@ import StarredPanel from './StarredPanel';
 import StatusDialog from './StatusDialog';
 import { ONE_PANE_BELOW, useFitToViewport } from './useFitToViewport';
 import { setOpenConversation } from '@/lib/chatSound';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import './chat.css';
 
 type Pages = InfiniteData<MessagePage, number>;
 
@@ -65,7 +67,7 @@ function PeoplePicker({
         onChange={(e) => setQ(e.target.value)}
         placeholder="Search people"
         aria-label="Search people"
-        className="mb-2 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-emerald-600"
+        className="mb-2 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-600"
       />
       <ul className="max-h-64 overflow-y-auto rounded-lg border border-gray-200">
         {shown.length === 0 && <li className="p-3 text-sm text-gray-500">No one found</li>}
@@ -75,7 +77,7 @@ function PeoplePicker({
               type="button"
               onClick={() => onToggle(p.id)}
               aria-pressed={selected.has(p.id)}
-              className={`flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 ${selected.has(p.id) ? 'bg-emerald-50' : ''}`}
+              className={`flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 ${selected.has(p.id) ? 'bg-blue-50' : ''}`}
             >
               <Avatar person={p} online={online.has(p.id)} />
               <span className="min-w-0 flex-1">
@@ -84,7 +86,7 @@ function PeoplePicker({
                   {p.teamLabel}{p.isHead ? ' · Head' : ''}{liveStatus(p.status) ? ` · ${liveStatus(p.status)!.text}` : ''}
                 </span>
               </span>
-              {!single && selected.has(p.id) && <span className="text-xs font-semibold text-emerald-700">Added</span>}
+              {!single && selected.has(p.id) && <span className="text-xs font-semibold text-blue-700">Added</span>}
             </button>
           </li>
         ))}
@@ -122,7 +124,7 @@ export function NewMessageDialog({ meId, onClose, onOpened }: { meId: string; on
           type="button"
           onClick={() => void start().catch(() => {})}
           disabled={!picked.length || openDm.isPending}
-          className="shrink-0 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+          className="shrink-0 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
         >
           {openDm.isPending ? 'Opening…' : picked.length > 1 ? `Start group (${picked.length + 1})` : 'Start chat'}
         </button>
@@ -164,7 +166,7 @@ function NewSpaceDialog({ meId, onClose, onCreated }: { meId: string; onClose: (
             minLength={2}
             maxLength={60}
             placeholder="e.g. diwali-sale"
-            className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-emerald-600"
+            className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-600"
           />
         </label>
         <label className="block">
@@ -173,7 +175,7 @@ function NewSpaceDialog({ meId, onClose, onCreated }: { meId: string; onClose: (
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={240}
-            className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-emerald-600"
+            className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-600"
           />
         </label>
         <div>
@@ -196,8 +198,7 @@ function NewSpaceDialog({ meId, onClose, onCreated }: { meId: string; onClose: (
         <button
           type="submit"
           disabled={create.isPending || name.trim().length < 2}
-          className="h-11 w-full rounded-full text-sm font-semibold text-[#fff] disabled:opacity-50"
-          style={{ background: GREEN }}
+          className="h-11 w-full rounded-full bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {create.isPending ? 'Creating…' : 'Create space'}
         </button>
@@ -237,6 +238,11 @@ export default function TeamChat() {
   // null = closed. 'all' = every channel I can see; otherwise one channel id.
   const [searching, setSearching] = useState<string | null>(null);
   const [showStarred, setShowStarred] = useState(false);
+  // Desktop: the open conversation fills the chat area; the lists hide.
+  const [wide, setWide] = useState(false);
+  // The Home column is an extra view of the same conversations (the left list has
+  // them all), so it is only built where it shows: one copy in the DOM, not two.
+  const threeColumns = useMediaQuery('(min-width: 1280px)');
 
   const meId = me?.userId ?? '';
   const meName = user?.name ?? 'You';
@@ -398,6 +404,14 @@ export default function TeamChat() {
     };
   }, [channels, show, selectedId]);
 
+  // The Home column (xl): every conversation in one list, the one that moved last first.
+  const home = useMemo(
+    () => channels
+      .filter((c) => show === 'all' || c.unread > 0 || c.id === selectedId)
+      .sort((x, y) => new Date(y.lastMessageAt || 0).getTime() - new Date(x.lastMessageAt || 0).getTime()),
+    [channels, show, selectedId],
+  );
+
   const openPerson = useCallback(async (personId: string) => {
     setSwitcher(false);
     try {
@@ -447,9 +461,9 @@ export default function TeamChat() {
           onClick={() => select(c.id)}
           aria-current={active ? 'true' : undefined}
           title={c.description || c.name}
-          className={`flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left text-sm transition-colors ${
-            active ? 'bg-blue-50 text-blue-900' : 'text-gray-700 hover:bg-gray-100'
-          } ${counted > 0 ? 'font-semibold text-gray-900' : ''}`}
+          className={`gc-row flex w-full items-center gap-3 rounded-full px-3 py-1.5 text-left text-sm transition-colors ${
+            active ? 'font-medium' : 'text-gray-800'
+          } ${counted > 0 ? 'font-bold text-gray-900' : ''}`}
         >
           <span className="relative inline-flex shrink-0">
             <ChannelIcon channel={c} />
@@ -497,10 +511,10 @@ export default function TeamChat() {
               if (next.has(key)) next.delete(key); else next.add(key);
               return next;
             })}
-            className="flex items-center gap-1 rounded-lg px-1 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-gray-500 hover:text-gray-800"
+            className="flex items-center gap-1.5 rounded-full px-2 py-1.5 text-sm font-medium text-gray-900 hover:bg-[var(--gc-hover)]"
             aria-expanded={open}
           >
-            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden="true" />
+            <ChevronDown className={`h-4 w-4 text-gray-600 transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden="true" />
             {label}
             {!open && unread > 0 && <span className="ml-1 h-2 w-2 rounded-full bg-blue-600" aria-label={`${unread} unread`} />}
           </button>
@@ -534,27 +548,57 @@ export default function TeamChat() {
     ] },
   ];
 
+  const unreadSwitch = (extra = '') => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={show === 'unread'}
+      onClick={() => setShow(show === 'unread' ? 'all' : 'unread')}
+      className={`inline-flex shrink-0 items-center gap-2 rounded-full px-2 py-1 text-sm font-medium text-gray-800 hover:bg-[var(--gc-hover)] ${extra}`}
+    >
+      Unread{totalUnread ? ` · ${totalUnread > 99 ? '99+' : totalUnread}` : ''}
+      <span
+        aria-hidden="true"
+        className={`relative h-5 w-9 rounded-full border-2 transition-colors ${show === 'unread' ? 'border-blue-600 bg-blue-600' : 'border-gray-500'}`}
+      >
+        <span className={`absolute top-1/2 -translate-y-1/2 rounded-full transition-all ${show === 'unread' ? 'right-0.5 h-3.5 w-3.5 bg-white' : 'left-1 h-2.5 w-2.5 bg-gray-500'}`} />
+      </span>
+    </button>
+  );
+
   return (
     // Below lg: edge to edge (cancelling the panel's padding), one pane at a time,
-    // height fitted to the visible screen by useFitToViewport. From lg: list beside
-    // the conversation, as before.
+    // height fitted to the visible screen by useFitToViewport. From lg: the list
+    // beside the conversation; from xl a "Home" list of every conversation, newest
+    // first, sits between them (three columns, as in Google Chat).
     <div
       ref={box}
-      className="relative -mx-4 -mb-4 flex h-[calc(100dvh-4.5rem)] gap-0 overflow-hidden bg-[var(--pn-chat,#f2f6fc)] p-0 md:-mx-6 md:-mb-6 lg:mx-0 lg:mb-0 lg:h-[calc(100dvh-140px)] lg:min-h-[480px] lg:gap-2 lg:rounded-2xl lg:p-2"
+      className="gc-theme relative -mx-4 -mb-4 flex h-[calc(100dvh-4.5rem)] gap-0 overflow-hidden p-0 md:-mx-6 md:-mb-6 lg:mx-0 lg:mb-0 lg:h-[calc(100dvh-140px)] lg:min-h-[480px] lg:gap-3 lg:rounded-3xl lg:p-3"
     >
       <aside
-        className={`w-full min-w-0 shrink-0 flex-col bg-white lg:flex lg:w-80 lg:rounded-2xl lg:shadow-sm ${selected ? 'hidden' : 'flex'}`}
+        className={`gc-card w-full min-w-0 shrink-0 flex-col lg:w-72 lg:bg-transparent ${selected ? 'hidden' : 'flex'} ${wide && selected ? '' : 'lg:flex'}`}
         aria-label="Chat channels"
       >
-        <div className="space-y-3 px-3 pb-2 pt-3">
+        <div className="space-y-3 px-3 pb-2 pt-3 lg:px-1 lg:pt-1">
           <div className="flex items-center gap-1">
-            <h1 className="pn-title min-w-0 flex-1 truncate text-xl text-gray-900">
+            <h1 className="pn-title min-w-0 flex-1 truncate text-xl text-gray-900 lg:sr-only">
               Team chat
             </h1>
             <button
               type="button"
+              onClick={() => setDialog('dm')}
+              className="gc-card gc-shadow inline-flex h-11 items-center gap-2.5 rounded-2xl px-4 text-sm font-medium text-gray-900 transition-shadow hover:shadow-md lg:h-14 lg:px-5"
+              aria-label="New chat"
+              title="New chat"
+            >
+              <MessageSquarePlus className="h-5 w-5 text-gray-700" aria-hidden="true" />
+              <span className="hidden sm:inline">New chat</span>
+            </button>
+            <span className="hidden flex-1 lg:block" />
+            <button
+              type="button"
               onClick={() => setShowStarred(true)}
-              className="grid h-9 w-9 place-items-center rounded-lg text-gray-600 hover:bg-gray-100"
+              className="grid h-10 w-10 place-items-center rounded-full text-gray-700 hover:bg-[var(--gc-hover)]"
               aria-label="Starred messages"
               title="Starred messages"
             >
@@ -562,59 +606,39 @@ export default function TeamChat() {
             </button>
             <button
               type="button"
-              onClick={() => setSearching('all')}
-              className="grid h-9 w-9 place-items-center rounded-lg text-gray-600 hover:bg-gray-100"
-              aria-label="Search all messages"
-              title="Search all messages"
-            >
-              <Search className="h-[18px] w-[18px]" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setDialog('dm')}
-              className="grid h-9 w-9 place-items-center rounded-lg bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-              aria-label="New chat"
-              title="New chat"
-            >
-              <MessageSquarePlus className="h-[18px] w-[18px]" />
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSwitcher(true)}
-            className="flex h-10 w-full items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 text-left text-sm text-gray-500 transition-colors hover:border-gray-300 hover:bg-white"
-          >
-            <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate">Jump to…</span>
-            <span className="hidden shrink-0 items-center gap-0.5 sm:flex"><Kbd>{mod}</Kbd><Kbd>K</Kbd></span>
-          </button>
-          <div className="flex items-center gap-1.5" role="group" aria-label="Show">
-            {(['all', 'unread'] as const).map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setShow(key)}
-                aria-pressed={show === key}
-                className={`h-7 rounded-full px-3 text-xs font-semibold transition-colors ${
-                  show === key ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                {key === 'all' ? 'All' : `Unread${totalUnread ? ` · ${totalUnread > 99 ? '99+' : totalUnread}` : ''}`}
-              </button>
-            ))}
-            <button
-              type="button"
               onClick={() => setShortcuts(true)}
-              className="ml-auto hidden h-7 w-7 place-items-center rounded-lg text-gray-500 hover:bg-gray-100 sm:grid"
+              className="hidden h-10 w-10 place-items-center rounded-full text-gray-700 hover:bg-[var(--gc-hover)] sm:grid"
               aria-label="Keyboard shortcuts"
               title="Keyboard shortcuts (?)"
             >
-              <Keyboard className="h-4 w-4" />
+              <Keyboard className="h-[18px] w-[18px]" />
             </button>
           </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setSearching('all')}
+              className="gc-field flex h-11 min-w-0 flex-1 items-center gap-3 rounded-full px-4 text-left text-sm text-gray-600 transition-colors hover:text-gray-900"
+              aria-label="Search all messages"
+              title="Search all messages"
+            >
+              <Search className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate">Search chat</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSwitcher(true)}
+              className="inline-flex h-11 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-medium text-gray-700 hover:bg-[var(--gc-hover)]"
+              aria-label="Jump to a conversation"
+              title={`Jump to a conversation (${mod} K)`}
+            >
+              Jump <span className="hidden items-center gap-0.5 sm:flex"><Kbd>{mod}</Kbd><Kbd>K</Kbd></span>
+            </button>
+          </div>
+          {unreadSwitch('xl:hidden')}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 lg:px-0">
           {isLoading && (
             <ul className="space-y-2 px-1 py-2" aria-label="Loading conversations">
               {[0, 1, 2, 3, 4].map((i) => (
@@ -654,7 +678,7 @@ export default function TeamChat() {
             </button>)}
         </div>
 
-        <div className="flex items-center gap-2.5 border-t border-gray-100 px-3 py-2.5">
+        <div className="flex items-center gap-2.5 border-t border-gray-100 px-3 py-2.5 lg:rounded-2xl lg:border-0 lg:px-2">
           <Avatar person={peopleById.get(meId) ?? { id: meId, name: meName, role: isAdmin ? 'admin' : 'staff', team: null, teamLabel: null, isHead: false }} size="sm" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold text-gray-900">{meName}</span>
@@ -663,13 +687,58 @@ export default function TeamChat() {
           <button
             type="button"
             onClick={() => setEditingStatus(true)}
-            className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+            className="shrink-0 rounded-full border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-[var(--gc-hover)]"
             title="Set a status everyone in chat can see"
           >
             {myStatus ? 'Change status' : 'Set a status'}
           </button>
         </div>
       </aside>
+
+      {threeColumns && <section className={`gc-card hidden min-w-0 shrink-0 flex-col overflow-hidden rounded-2xl xl:w-[22rem] 2xl:w-96 ${wide && selected ? '' : 'xl:flex'}`} aria-label="Home: every conversation, newest first">
+        <div className="flex items-center gap-2 px-5 pb-2 pt-4">
+          <h2 className="min-w-0 flex-1 truncate text-[22px] font-normal text-gray-900">Home</h2>
+          {unreadSwitch()}
+        </div>
+        <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          {!isLoading && home.length === 0 && (
+            <li className="px-4 py-10 text-center text-sm text-gray-500">{show === 'unread' ? 'You’re all caught up.' : 'No conversations yet.'}</li>
+          )}
+          {home.map((c) => {
+            const counted = loud(c);
+            const partnerOnline = c.kind === 'dm' && !c.group && !!c.partner && online.has(c.partner.id);
+            const status = c.kind === 'dm' && !c.group && c.partner ? liveStatus(peopleById.get(c.partner.id)?.status) : null;
+            const line = status?.text || (c.kind === 'dm' ? (c.group ? 'Group conversation' : c.partner?.teamLabel ?? 'Direct message') : c.description || 'Space');
+            return (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => select(c.id)}
+                  aria-current={c.id === selectedId ? 'true' : undefined}
+                  className="gc-row flex w-full items-center gap-3.5 rounded-2xl px-3 py-2.5 text-left"
+                >
+                  <span className="relative inline-flex shrink-0">
+                    <ChannelIcon channel={c} size="lg" />
+                    {partnerOnline && <OnlineDot />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className={`block truncate text-[15px] ${counted > 0 ? 'font-bold text-gray-900' : 'font-medium text-gray-900'}`}>{channelTitle(c)}</span>
+                    <span className={`block truncate text-sm ${counted > 0 ? 'font-semibold text-gray-800' : 'text-gray-600'}`}>{line}</span>
+                  </span>
+                  <span className="flex shrink-0 flex-col items-end gap-1">
+                    {c.lastMessageAt && <span className={`text-xs ${counted > 0 ? 'font-bold text-gray-900' : 'text-gray-600'}`}>{shortWhen(c.lastMessageAt)}</span>}
+                    {counted > 0 && (
+                      <span className="min-w-[20px] rounded-full bg-blue-600 px-1.5 text-center text-[11px] font-bold leading-[18px] text-white" aria-label={`${counted} unread`}>
+                        {counted > 99 ? '99+' : counted}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>}
 
       {selected ? (
         <Conversation
@@ -685,9 +754,11 @@ export default function TeamChat() {
           online={online}
           onSearch={() => setSearching(selected.id)}
           initialTab={initialTab}
+          expanded={wide}
+          onToggleExpand={() => setWide((v) => !v)}
         />
       ) : (
-        <div className="hidden flex-1 flex-col items-center justify-center gap-3 rounded-2xl bg-white px-6 text-center lg:flex">
+        <div className="gc-card hidden flex-1 flex-col items-center justify-center gap-3 rounded-2xl px-6 text-center lg:flex">
           <span className="grid h-14 w-14 place-items-center rounded-2xl bg-blue-50 text-blue-700">
             <MessageSquarePlus className="h-7 w-7" aria-hidden="true" />
           </span>

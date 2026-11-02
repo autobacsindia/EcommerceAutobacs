@@ -64,7 +64,7 @@ describe('inline formatting', () => {
 
   it('keeps mentions and their highlight', () => {
     show('*@Anu* and @all please', { mentionNames: ['Anu', 'all'], meName: 'Sam' });
-    expect(screen.getByText('@Anu')).toHaveClass('bg-emerald-100');
+    expect(screen.getByText('@Anu')).toHaveClass('bg-blue-100');
     expect(screen.getByText('@all')).toHaveClass('bg-amber-200');
   });
 });

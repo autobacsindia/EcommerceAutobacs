@@ -26,8 +26,8 @@ export function useOpenUpwardIfCut(ref: RefObject<HTMLElement | null>) {
   }, [ref]);
 }
 
-/** The store green, so the panels match the rest of the brand. */
-export const GREEN = '#0a5c33';
+/** The chat's primary fill (a solid blue badge / button); `text-white` reads dark on it in dark mode. */
+export const PRIMARY_FILL = 'bg-blue-600 text-white';
 
 export const newClientId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -41,13 +41,14 @@ export const initials = (name: string) =>
  * A stable colour per person, so the same face is the same colour everywhere.
  * Derived from the name, not from list position, which would shuffle on reorder.
  */
+// Solid circles with white initials. Fixed hex, so dark mode keeps them; white on each is ≥4.6:1.
 const AVATAR_COLOURS = [
-  'bg-emerald-100 text-emerald-900',
-  'bg-sky-100 text-sky-900',
-  'bg-amber-100 text-amber-900',
-  'bg-violet-100 text-violet-900',
-  'bg-rose-100 text-rose-900',
-  'bg-teal-100 text-teal-900',
+  'bg-[#1967d2] text-[#fff]',
+  'bg-[#137333] text-[#fff]',
+  'bg-[#b06000] text-[#fff]',
+  'bg-[#8430ce] text-[#fff]',
+  'bg-[#c5221f] text-[#fff]',
+  'bg-[#00796b] text-[#fff]',
 ];
 export function colourFor(name: string) {
   let hash = 0;
@@ -104,7 +105,7 @@ export function Avatar({
   const box = size === 'sm' ? 'h-7 w-7 text-[11px]' : 'h-9 w-9 text-sm';
   if (system) {
     return (
-      <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold text-[#fff]`} style={{ background: GREEN }} aria-hidden="true">
+      <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold ${PRIMARY_FILL}`} aria-hidden="true">
         R
       </span>
     );
@@ -146,8 +147,8 @@ export function TeamBadge({ person }: { person: ChatPerson | null }) {
 }
 
 /** The square icon a conversation shows in the list and its header. */
-export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; size?: 'sm' | 'md' }) {
-  const box = size === 'md' ? 'h-9 w-9 text-sm' : 'h-7 w-7 text-[11px]';
+export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; size?: 'sm' | 'md' | 'lg' }) {
+  const box = size === 'lg' ? 'h-10 w-10 text-sm' : size === 'md' ? 'h-9 w-9 text-sm' : 'h-7 w-7 text-[11px]';
   if (channel.kind === 'dm' && channel.group) {
     return (
       <span className={`grid ${box} shrink-0 place-items-center rounded-full bg-sky-100 text-sky-800`} aria-hidden="true">
@@ -171,7 +172,7 @@ export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; si
   }
   const Icon = channel.audience === 'members' ? Lock : Hash;
   return (
-    <span className={`grid ${box} shrink-0 place-items-center rounded-xl ${channel.audience === 'team' ? teamColour(channel.team) : 'bg-emerald-100 text-emerald-800'}`} aria-hidden="true">
+    <span className={`grid ${box} shrink-0 place-items-center rounded-xl ${channel.audience === 'team' ? teamColour(channel.team) : 'bg-blue-100 text-blue-800'}`} aria-hidden="true">
       <Icon className="h-3.5 w-3.5" />
     </span>
   );
@@ -213,7 +214,7 @@ export function Dialog({
 export function OnlineDot({ className = '' }: { className?: string }) {
   return (
     <span
-      className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500 ${className}`}
+      className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[var(--gc-card,#fff)] bg-green-600 ${className}`}
       role="img"
       aria-label="Online"
       title="Has team chat open"

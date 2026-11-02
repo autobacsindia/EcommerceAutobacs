@@ -152,7 +152,7 @@ export default function ThreadPanel({
         {isError && (
           <p className="py-10 text-center text-sm text-gray-600">
             Couldn&apos;t load this thread.{' '}
-            <button type="button" className="font-semibold text-emerald-700 underline" onClick={() => refetch()}>
+            <button type="button" className="font-semibold text-blue-700 underline" onClick={() => refetch()}>
               Try again
             </button>
           </p>
