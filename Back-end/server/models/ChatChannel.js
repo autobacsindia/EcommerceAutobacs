@@ -45,6 +45,28 @@ const ChatChannelSchema = new mongoose.Schema(
     // here, which gives gap-free ordering, cheap cursors and unread = last - read.
     lastMessageSeq: { type: Number, default: 0 },
     lastMessageAt: { type: Date, default: null },
+    /*
+      The newest message, as the "Home" list shows it ("Ravi: order shipped").
+      Written in the same update that takes the seq (chatRepository.nextSeq), so
+      it can never disagree with lastMessageSeq. Lives on the channel, so it only
+      ever reaches people who can read the channel — a DM's words never leave it.
+      An edit rewrites `text`; a delete blanks it and sets `deleted`, so the
+      deleted words do not live on here. Unset on channels with no message since
+      the field was added.
+    */
+    lastPreview: {
+      type: new mongoose.Schema(
+        {
+          message: { type: mongoose.Schema.Types.ObjectId, required: true },
+          sender: { type: mongoose.Schema.Types.ObjectId, default: null }, // null for system posts
+          by: { type: String, default: '', maxlength: 80 },
+          text: { type: String, default: '', maxlength: 200 },
+          deleted: { type: Boolean, default: undefined },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
   },
   { timestamps: true }
 );

@@ -38,14 +38,33 @@ const chatRepository = {
     { $pull: { members: userId } },
     { new: true },
   ).lean(),
-  /** Atomically take the next message number in a channel. */
-  nextSeq: async (channelId, at) => {
+  /**
+   * Atomically take the next message number in a channel. The Home-list
+   * preview of the message about to be written rides in the same update, so
+   * whichever of two racing sends takes the higher seq also leaves its preview.
+   */
+  nextSeq: async (channelId, at, lastPreview) => {
     const updated = await ChatChannel.findOneAndUpdate(
       { _id: channelId },
-      { $inc: { lastMessageSeq: 1 }, $set: { lastMessageAt: at } },
+      { $inc: { lastMessageSeq: 1 }, $set: { lastMessageAt: at, ...(lastPreview ? { lastPreview } : {}) } },
       { new: true, projection: { lastMessageSeq: 1 } }
     ).lean();
     return updated?.lastMessageSeq ?? null;
+  },
+  /**
+   * Change the preview only while it still shows `messageId` — an edit or a
+   * delete of an older message must not overwrite a newer one's preview.
+   * Returns true when the preview changed.
+   */
+  setPreviewIfLatest: async (channelId, messageId, fields) => {
+    const set = Object.fromEntries(Object.entries(fields).map(([k, v]) => [`lastPreview.${k}`, v]));
+    const res = await ChatChannel.updateOne({ _id: channelId, 'lastPreview.message': messageId }, { $set: set });
+    return res.modifiedCount > 0;
+  },
+  /** Point the preview at `lastPreview` only while it still shows `ghostId` (see insertMessage). */
+  repointPreview: async (channelId, ghostId, lastPreview) => {
+    const res = await ChatChannel.updateOne({ _id: channelId, 'lastPreview.message': ghostId }, { $set: { lastPreview } });
+    return res.modifiedCount > 0;
   },
 
   // ── messages ──

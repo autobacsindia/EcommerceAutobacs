@@ -313,7 +313,7 @@ export async function listChannels(user) {
   await ensureDefaultSpaces();
   const channels = await chatRepository.findChannels(
     accessFilter(user),
-    'kind key name description audience team teams members system lastMessageSeq lastMessageAt createdBy meetUrl'
+    'kind key name description audience team teams members system lastMessageSeq lastMessageAt lastPreview createdBy meetUrl'
   );
 
   const ids = channels.map((c) => c._id);
@@ -389,6 +389,16 @@ export async function listChannels(user) {
         canSetMeet: maySetMeet(user, c),
         lastMessageSeq: c.lastMessageSeq,
         lastMessageAt: c.lastMessageAt,
+        // The newest message for the Home list. Never the message id: nothing
+        // needs it, and the row is the same for everyone who can read the channel.
+        lastPreview: c.lastPreview
+          ? {
+            by: c.lastPreview.by || '',
+            mine: !!c.lastPreview.sender && idOf(c.lastPreview.sender) === uid,
+            text: c.lastPreview.deleted ? '' : c.lastPreview.text || '',
+            deleted: !!c.lastPreview.deleted,
+          }
+          : null,
         lastReadSeq: read.chat,
         lastReadUpdatesSeq: read.updates,
         unreadChat: unread.chat,
@@ -794,7 +804,11 @@ async function insertMessage(channel, {
   threadRoot = null, threadOrder, quote = null, forwardedFrom = null,
 }) {
   const at = new Date();
-  const seq = await chatRepository.nextSeq(channel._id, at);
+  // The id is chosen here so the channel's Home preview can name the message
+  // in the same write that takes its seq.
+  const _id = new mongoose.Types.ObjectId();
+  const lastPreview = homePreviewOf({ _id, kind, sender, text, attachments });
+  const seq = await chatRepository.nextSeq(channel._id, at, lastPreview);
   if (seq == null) throw fail('Channel not found', 404);
   // Shown in the Order updates tab: an automatic post, or a reply in its thread.
   const updates = kind === 'system' || threadRoot?.kind === 'system' || threadRoot?.lane === 'updates';
@@ -802,6 +816,7 @@ async function insertMessage(channel, {
   let doc;
   try {
     doc = await chatRepository.createMessage({
+      _id,
       channel: channel._id,
       seq,
       kind,
@@ -824,7 +839,12 @@ async function insertMessage(channel, {
     // we took stays unused — harmless, readers never assume seqs are contiguous.
     if (err?.code === 11000 && clientId) {
       const existing = await chatRepository.findByClientId(channel._id, sender?._id ?? null, clientId);
-      if (existing) return { message: shapeMessage(existing), duplicate: true };
+      if (existing) {
+        // Our preview now names a message that was never written. Point it at
+        // the winner, unless a newer message has already moved it on.
+        await chatRepository.repointPreview(channel._id, _id, homePreviewOf(existing));
+        return { message: shapeMessage(existing), duplicate: true };
+      }
     }
     throw err;
   }
@@ -1027,6 +1047,27 @@ export async function markChannelRead(user, channelId, seq, part = 'all') {
 
 const windowStart = (now = Date.now()) => new Date(now - CHAT_EDIT_WINDOW_MS);
 const previewOf = (m) => (m.text || ((m.attachments || []).length ? 'Shared a file' : '')).slice(0, 200);
+
+/** The channel's Home-list preview of message `m` (ChatChannel.lastPreview). */
+export const HOME_PREVIEW_LENGTH = 140;
+function homePreviewOf(m) {
+  const files = m.attachments || [];
+  const text = (m.text || '').replace(/\s+/g, ' ').trim()
+    || (files.length === 1 ? `📎 ${files[0].name}` : files.length ? `📎 ${files.length} files` : '');
+  return {
+    message: m._id,
+    sender: m.kind === 'system' ? null : m.sender?._id ?? m.sender ?? null,
+    by: m.kind === 'system' ? 'Roavion updates' : (m.sender?.name || '').slice(0, 80),
+    text: text.slice(0, HOME_PREVIEW_LENGTH),
+  };
+}
+
+/** Rewrite the channel's preview if it shows `m`, and tell its readers' lists to refresh. */
+async function refreshHomePreview(channel, m, fields) {
+  if (await chatRepository.setPreviewIfLatest(channel._id, m._id, fields)) {
+    await publishChatEvent({ type: 'channel', channelId: idOf(channel), route: audienceOf(channel) });
+  }
+}
 const EDIT_WINDOW_MINUTES = Math.round(CHAT_EDIT_WINDOW_MS / 60000);
 
 /**
@@ -1108,6 +1149,7 @@ export async function editMessage(user, messageId, { text } = {}) {
     void attachPreview(channel, updated);
   }
   const thread = await refreshThreadSummaryFor(updated);
+  await refreshHomePreview(channel, updated, { text: homePreviewOf(updated).text });
   await publishChatEvent({
     type: 'message_edited',
     channelId: idOf(channel),
@@ -1138,6 +1180,8 @@ export async function deleteMessage(user, messageId) {
 
   await chatRepository.markQuotesDeleted(channel._id, updated._id);
   const thread = await refreshThreadSummaryFor(updated);
+  // The deleted words must not live on in the Home list.
+  await refreshHomePreview(channel, updated, { text: '', deleted: true });
   // Only the id goes out. The words stay in the database for admins, and the
   // live stream reaches everyone in the channel.
   await publishChatEvent({
