@@ -11,7 +11,7 @@ import TasksWorkspace from '@/components/tasks/TasksWorkspace';
 export default function TeamTasksPage() {
   const { user } = useAuth();
   return (
-    <div className="max-w-[1440px]">
+    <div>
       <Suspense fallback={null}>
         <TasksWorkspace base="/team/tasks" canSeeTeam={user?.staff?.isHead === true} />
       </Suspense>

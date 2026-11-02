@@ -1,0 +1,159 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   TASKS THEME — the staff Tasks module only (/team/tasks, /admin/tasks and a
+   task's own page). A violet accent on a light grey board with white cards,
+   solid status pills, and a dark mode. The rest of the panel keeps its
+   emerald theme: everything here is scoped to `.tk-theme`, the root of each
+   Tasks page.
+
+   Same trick as panel.css: Tailwind v4 compiles every colour utility to a
+   variable, so redefining the ramps on `.tk-theme` re-colours every Tasks
+   screen without touching its class names.
+     • blue-*  → violet. Inside the panel `blue-*` is the primary colour
+                 (buttons, links, focus, selection), so primary turns violet.
+                 "In progress" uses `sky-*` and stays blue.
+     • gray-*  → the same lightness steps with a cool, neutral hue.
+   Status families (red, amber, emerald, sky…) keep panel.css's values.
+
+   CONTRAST. #7b68ee is the accent, but white on it is only 4.2:1 — under the
+   4.5:1 small text needs. Buttons (blue-600) are a step deeper, #6a57e3 at
+   5.1:1; #7b68ee (blue-500) is for rings, borders and highlights, where 3:1
+   is the rule. Every text pair below was measured.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.tk-theme {
+  --tk-accent: #7b68ee;
+  /* The page behind the lists, a board column, and the cards on it. */
+  --tk-page: #f7f8fa;
+  --tk-col: #eef0f4;
+  --tk-col-over: #e6e2fc;
+  --tk-card-line: #e3e6ec;
+  --tk-card-shadow: 0 1px 2px rgba(20, 22, 40, 0.06), 0 0 0 1px rgba(20, 22, 40, 0.04);
+  --tk-card-lift: 0 6px 18px -6px rgba(40, 30, 110, 0.22), 0 0 0 1px rgba(123, 104, 238, 0.35);
+  --tk-menu-active-bg: #ebe8fd;
+  --tk-menu-active-ink: #45379f;   /* 7.6:1 on it */
+
+  /* Solid status pills: white text on each is ≥5:1. */
+  --tk-st-todo: #656f7d;           /* 5.1:1 */
+  --tk-st-in_progress: #0369a1;    /* 5.9:1 */
+  --tk-st-waiting: #b45309;        /* 5.0:1 */
+  --tk-st-done: #047857;           /* 5.5:1 */
+  --tk-st-ink: #fff;
+
+  --pn-focus: #6a57e3;
+
+  --color-gray-50:  oklch(98.5% 0.002 265);
+  --color-gray-100: oklch(96.7% 0.004 265);
+  --color-gray-200: oklch(92.8% 0.006 265);
+  --color-gray-300: oklch(87.2% 0.009 265);
+  --color-gray-400: oklch(70.7% 0.014 265);
+  --color-gray-500: oklch(52% 0.016 265);   /* 4.8:1 on white, AA on --tk-page */
+  --color-gray-600: oklch(44.6% 0.016 265);
+  --color-gray-700: oklch(37.3% 0.015 265);
+  --color-gray-800: oklch(27.8% 0.013 265);
+  --color-gray-900: oklch(21% 0.011 265);
+  --color-gray-950: oklch(13% 0.009 265);
+
+  --color-blue-50:  #f4f2fe;
+  --color-blue-100: #ebe8fd;
+  --color-blue-200: #d8d2fb;
+  --color-blue-300: #bcb2f7;
+  --color-blue-400: #9a8cf2;
+  --color-blue-500: #7b68ee;   /* rings, borders, highlights: 4.2:1 on white */
+  --color-blue-600: #6a57e3;   /* buttons: white text 5.1:1; links 5.1:1 on white */
+  --color-blue-700: #5443c7;   /* hover, darker links: 7.0:1 */
+  --color-blue-800: #45379f;   /* text on a 100 tint: 7.6:1 */
+  --color-blue-900: #352a78;
+  --color-blue-950: #221a4d;
+
+  color: var(--color-gray-900);
+}
+
+[data-theme='dark'] .tk-theme {
+  --tk-page: #121318;
+  --tk-col: #191a21;
+  --tk-col-over: #221d3d;
+  --tk-card-line: #2a2c36;
+  --tk-card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --tk-card-lift: 0 0 0 1px rgba(160, 147, 245, 0.55), 0 8px 22px -8px rgba(0, 0, 0, 0.6);
+  --tk-menu-active-bg: #262046;
+  --tk-menu-active-ink: #cfc8fb;   /* 10.4:1 */
+  --pn-focus: #a093f5;
+
+  /* The inverted ramp (globals.css / panel.css), in the cool hue. */
+  --color-gray-50:  oklch(19% 0.006 265);
+  --color-gray-100: oklch(23% 0.008 265);
+  --color-gray-200: oklch(28% 0.010 265);
+  --color-gray-300: oklch(36% 0.011 265);
+  --color-gray-400: oklch(52% 0.013 265);
+  --color-gray-500: oklch(64% 0.014 265);
+  --color-gray-600: oklch(74% 0.013 265);
+  --color-gray-700: oklch(83% 0.011 265);
+  --color-gray-800: oklch(90% 0.008 265);
+  --color-gray-900: oklch(96% 0.004 265);
+  --color-gray-950: oklch(99% 0.002 265);
+
+  /* Tints dark, ink light: 600 carries the (dark) `text-white` at 7.1:1. */
+  --color-blue-50:  #1a1730;
+  --color-blue-100: #1f1b3a;
+  --color-blue-200: #2b2552;
+  --color-blue-300: #3a3270;
+  --color-blue-400: #5a4dbb;
+  --color-blue-500: #8b7cf2;
+  --color-blue-600: #a093f5;
+  --color-blue-700: #b7adf8;
+  --color-blue-800: #cfc8fb;
+  --color-blue-900: #e2ddfd;
+  --color-blue-950: #f2f0fe;
+}
+
+/* The whole content area takes the Tasks page colour, not just the sheet. */
+.panel-theme:has(.tk-theme) { --pn-bg: #f7f8fa; }
+[data-theme='dark'] .panel-theme:has(.tk-theme) { --pn-bg: #121318; }
+
+/* ── Status pills: solid colour, white uppercase label, a count beside ──── */
+.tk-theme .tk-pill {
+  background: var(--tk-st-todo);
+  color: var(--tk-st-ink);
+}
+.tk-theme .tk-pill[data-status='in_progress'] { background: var(--tk-st-in_progress); }
+.tk-theme .tk-pill[data-status='waiting'] { background: var(--tk-st-waiting); }
+.tk-theme .tk-pill[data-status='done'] { background: var(--tk-st-done); }
+
+/* ── Board ────────────────────────────────────────────────────────────── */
+.tk-theme .tk-col { background: var(--tk-col); }
+.tk-theme .tk-col[data-over='true'] { background: var(--tk-col-over); box-shadow: inset 0 0 0 2px var(--tk-accent); }
+/* The column's status colour, as a thin line across its top. */
+.tk-theme .tk-col::before {
+  content: '';
+  display: block;
+  height: 3px;
+  margin: -0.5rem -0.5rem 0.5rem;
+  border-radius: 0.75rem 0.75rem 0 0;
+  background: var(--tk-st-todo);
+}
+.tk-theme .tk-col[data-status='in_progress']::before { background: var(--tk-st-in_progress); }
+.tk-theme .tk-col[data-status='waiting']::before { background: var(--tk-st-waiting); }
+.tk-theme .tk-col[data-status='done']::before { background: var(--tk-st-done); }
+
+.tk-theme .tk-card {
+  border: 1px solid var(--tk-card-line);
+  box-shadow: var(--tk-card-shadow);
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+.tk-theme .tk-card:hover { box-shadow: var(--tk-card-lift); border-color: transparent; }
+.tk-theme .tk-card:focus-visible { outline: 2px solid var(--pn-focus); outline-offset: 1px; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .tk-theme .tk-card:hover { transform: translateY(-1px); }
+}
+
+/* Avatars in a stack overlap, each ringed in the card colour so they read apart. */
+.tk-theme .tk-stack > * + * { margin-left: -6px; }
+.tk-theme .tk-stack > * { box-shadow: 0 0 0 2px var(--color-white); }
+
+/* ── Inner menu ───────────────────────────────────────────────────────── */
+.tk-theme .tk-menu-item[aria-pressed='true'] {
+  background: var(--tk-menu-active-bg);
+  color: var(--tk-menu-active-ink);
+  font-weight: 600;
+}
+.tk-theme .tk-menu-item[aria-pressed='true'] svg { color: var(--tk-accent); }

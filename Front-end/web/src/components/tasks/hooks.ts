@@ -54,7 +54,7 @@ export function useSetStatus() {
     mutationFn: ({ t, status }: { t: Task; status: TaskStatus }) =>
       apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(t.id)}`, { rev: t.rev, status }),
     onSuccess: (_r, { t, status }) => {
-      if (status === 'done') toast.success(`${t.code} done`, { id: `done-${t.id}` });
+      if (status === 'done') toast.success(`${t.code} complete`, { id: `done-${t.id}` });
     },
     onError: (e, { t }) => {
       toast.error(isConflict(e)

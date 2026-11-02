@@ -20,7 +20,7 @@ export type TaskGroup = {
 
 /** Active work first, waiting next, not started last. Done is its own, folded list. */
 export const STATUS_ORDER: Exclude<TaskStatus, 'done'>[] = ['in_progress', 'waiting', 'todo'];
-const STATUS_LABEL: Record<TaskStatus, string> = { todo: 'To do', in_progress: 'In progress', waiting: 'Waiting', done: 'Done' };
+const STATUS_LABEL: Record<TaskStatus, string> = { todo: 'To do', in_progress: 'In progress', waiting: 'Waiting', done: 'Complete' };
 const PRIORITY_ORDER: TaskPriority[] = ['urgent', 'high', 'normal', 'low'];
 const PRIORITY_LABEL: Record<TaskPriority, string> = { urgent: 'Urgent', high: 'High', normal: 'Normal', low: 'Low' };
 

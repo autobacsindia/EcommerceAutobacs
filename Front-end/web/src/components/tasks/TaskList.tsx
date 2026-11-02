@@ -6,7 +6,7 @@ import { errorMessage } from '@/components/staff/sales/types';
 import { useQuickAdd, useSetStatus, useTaskPages } from './hooks';
 import { groupTasks, type TaskGroup } from './grouping';
 import BulkBar from './BulkBar';
-import { Avatar, Chip, DuePill, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
+import { Avatar, AvatarStack, Chip, DuePill, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
 import { formatDueDay, type Task, type TaskFilters, type TaskGroupBy, type TaskStatus } from './types';
 
 /** The round tick at the start of a row: one click marks the task done (or opens it again). */
@@ -21,8 +21,8 @@ export function CompleteButton({ t, onToggle, busy }: { t: Task; onToggle: () =>
       onClick={(e) => { e.stopPropagation(); onToggle(); }}
       onKeyDown={(e) => e.stopPropagation()}
       disabled={busy}
-      aria-label={done ? `Open ${t.code} again` : `Mark ${t.code} done`}
-      title={done ? 'Open again' : 'Mark done'}
+      aria-label={done ? `Open ${t.code} again` : `Mark ${t.code} complete`}
+      title={done ? 'Open again' : 'Mark complete'}
       className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
         done ? 'border-emerald-500 bg-emerald-500 text-white' : `${STATUS_RING[t.status]} text-transparent hover:border-emerald-500 hover:text-emerald-500`
       }`}
@@ -37,7 +37,7 @@ const STATUS_RING: Record<TaskStatus, string> = {
 };
 
 /** Small facts beside a title: shared, checklist, comments, start date (and, on cards, the order). */
-export function TaskMeta({ t, withOrder = true }: { t: Task; withOrder?: boolean }) {
+export function TaskMeta({ t, withOrder = true, withComments = true }: { t: Task; withOrder?: boolean; withComments?: boolean }) {
   return (
     <>
       {t.group && <Chip tone="bg-purple-100 text-purple-800" title={`Given to ${t.group.size} people`}><Users aria-hidden className="h-3 w-3" />{t.group.size}</Chip>}
@@ -46,7 +46,7 @@ export function TaskMeta({ t, withOrder = true }: { t: Task; withOrder?: boolean
           <ListChecks aria-hidden className="h-3 w-3" />{t.checklist.done}/{t.checklist.total}
         </Chip>
       )}
-      {t.commentCount > 0 && <Chip title={`${t.commentCount} comments`}><MessageSquare aria-hidden className="h-3 w-3" />{t.commentCount}</Chip>}
+      {withComments && t.commentCount > 0 && <Chip title={`${t.commentCount} comments`}><MessageSquare aria-hidden className="h-3 w-3" />{t.commentCount}</Chip>}
       {t.startOn && t.bucket === 'open' && (
         <Chip title={`Starts ${formatDueDay(t.startOn)}`}><CalendarRange aria-hidden className="h-3 w-3" />{formatDueDay(t.startOn)}</Chip>
       )}
@@ -107,9 +107,9 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
       onClick={open}
       onKeyDown={onKey}
       aria-label={`Open ${t.code}: ${t.title}`}
-      className={`group flex cursor-pointer items-start gap-3 border-t border-gray-100 px-3 py-2.5 transition-colors first:border-t-0 lg:py-2 ${COLUMNS} ${
+      className={`group flex cursor-pointer items-start gap-3 border-t border-gray-100 px-3 py-2.5 transition-colors first:border-t-0 lg:min-h-10 lg:py-1.5 ${COLUMNS} ${
         selected ? 'bg-blue-50' : 'hover:bg-gray-50'
-      } focus:bg-blue-50 focus:outline-none`}
+      } focus-visible:bg-blue-50 focus:outline-none`}
     >
       <span className={`mt-0.5 lg:mt-0 ${selected ? '' : 'lg:opacity-40 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100'}`}>
         <SelectBox checked={selected} onChange={onSelect} label={`Select ${t.code}`} />
@@ -128,7 +128,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
           </div>
           {/* Phones and tablets: the columns, folded into one line. */}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 lg:hidden">
-            <Avatar name={t.assignee.name} id={t.assignee.id} size="xs" />
+            <AvatarStack people={[t.assignee]} />
             <DuePill t={t} />
             {t.priority !== 'normal' && <PriorityFlag priority={t.priority} withLabel />}
             <TagList tags={t.tags} onTag={onTag} activeTag={activeTag} />
@@ -137,7 +137,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
         </div>
       </div>
       <span className="hidden min-w-0 items-center gap-2 lg:flex" title={t.assignee.name}>
-        <Avatar name={t.assignee.name} id={t.assignee.id} />
+        <AvatarStack people={[t.assignee]} size="sm" />
         <span className="truncate text-xs text-gray-700">{t.assignee.name.split(' ')[0]}</span>
       </span>
       <span className="hidden lg:block"><DuePill t={t} empty={<span className="text-xs text-gray-300">—</span>} /></span>
@@ -151,13 +151,21 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
 }
 
 /** "+ Add task" at the foot of a group or column: type, Enter, keep typing; Escape to stop. */
-export function QuickAdd({ status, assigneeId, label = 'Add task' }: { status: TaskStatus; assigneeId?: string; label?: string }) {
+export function QuickAdd({ status, assigneeId, label = 'Add task', variant = 'list' }: {
+  status: TaskStatus; assigneeId?: string; label?: string; variant?: 'list' | 'board';
+}) {
   const add = useQuickAdd();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center gap-2 rounded-b-xl border-t border-gray-100 px-3 py-2 text-left text-sm text-gray-400 hover:bg-gray-50 hover:text-gray-700 lg:pl-[52px]">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={variant === 'board'
+          ? 'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] font-medium text-gray-500 hover:bg-white hover:text-gray-800'
+          : 'flex w-full items-center gap-2 border-t border-gray-100 px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-800 lg:pl-[52px]'}
+      >
         <Plus aria-hidden className="h-4 w-4" /> {label}
       </button>
     );
@@ -170,7 +178,9 @@ export function QuickAdd({ status, assigneeId, label = 'Add task' }: { status: T
         if (!text) return;
         add.mutate({ title: text, status, assigneeId }, { onSuccess: () => setTitle('') });
       }}
-      className="flex items-center gap-2 border-t border-gray-100 px-3 py-1.5 lg:pl-[52px]"
+      className={variant === 'board'
+        ? 'tk-card flex items-center gap-2 rounded-lg bg-white p-1.5'
+        : 'flex items-center gap-2 border-t border-gray-100 px-3 py-1.5 lg:pl-[52px]'}
     >
       <input
         value={title}
@@ -208,7 +218,7 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, footer, selected, 
   const picked = g.tasks.filter((t) => selected.has(t.id)).length;
   return (
     <section aria-label={g.label}>
-      <div className="mb-1.5 flex items-center gap-2 px-1">
+      <div className="mb-1 flex items-center gap-2 px-1">
         <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? 'Show' : 'Hide'} ${g.label}`} className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
           <Chevron aria-hidden className="h-4 w-4" />
         </button>
@@ -221,10 +231,10 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, footer, selected, 
         )}
       </div>
       {!collapsed && (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
           {g.tasks.length > 0 && (
-            <div aria-hidden className={`hidden border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500 ${COLUMNS}`}>
-              <span /><span className="pl-7">Name</span><span>Person</span><span>Due</span><span>Priority</span>
+            <div aria-hidden className={`hidden border-b border-gray-100 px-3 py-1.5 text-[11px] font-semibold text-gray-500 ${COLUMNS}`}>
+              <span /><span className="pl-7">Name</span><span>Assignee</span><span>Due</span><span>Priority</span>
               <span className={WIDE}>Tags</span><span className={WIDE}>Order</span>
             </div>
           )}
@@ -276,7 +286,7 @@ export default function TaskListView({ filters, onOpen, quickAddFor, empty, grou
   const loaded = new Map([...rows, ...doneRows].map((t) => [t.id, t]));
   const picked = [...selected].map((id) => loaded.get(id)).filter((t): t is Task => !!t);
 
-  const doneGroup: TaskGroup = { key: 'done', label: 'Done', kind: 'status', value: 'done', tasks: doneRows };
+  const doneGroup: TaskGroup = { key: 'done', label: 'Complete', kind: 'status', value: 'done', tasks: doneRows };
   return (
     <div className="space-y-5 pb-20">
       {rows.length === 0 && empty}
@@ -314,7 +324,7 @@ export default function TaskListView({ filters, onOpen, quickAddFor, empty, grou
           footer={
             done.isLoading ? <div className="px-3 py-2"><SkeletonRows rows={2} /></div>
               : doneRows.length === 0 ? <p className="px-3 py-3 text-sm text-gray-400">Nothing finished yet.</p>
-                : done.hasNextPage ? <button onClick={() => done.fetchNextPage()} className="w-full border-t border-gray-100 py-2 text-sm font-medium text-blue-700 hover:bg-gray-50">Show more done</button> : null
+                : done.hasNextPage ? <button onClick={() => done.fetchNextPage()} className="w-full border-t border-gray-100 py-2 text-sm font-medium text-blue-700 hover:bg-gray-50">Show more complete</button> : null
           }
         />
       )}

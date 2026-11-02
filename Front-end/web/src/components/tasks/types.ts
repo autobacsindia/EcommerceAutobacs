@@ -151,7 +151,7 @@ export const TASK_STATUSES: { value: TaskStatus; label: string }[] = [
   { value: 'todo', label: 'To do' },
   { value: 'in_progress', label: 'In progress' },
   { value: 'waiting', label: 'Waiting' },
-  { value: 'done', label: 'Done' },
+  { value: 'done', label: 'Complete' },
 ];
 
 export const TASK_PRIORITIES: { value: TaskPriority; label: string }[] = [

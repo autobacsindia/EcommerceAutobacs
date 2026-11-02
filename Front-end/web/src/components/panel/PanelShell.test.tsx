@@ -102,3 +102,91 @@ it('Log out calls the panel’s logout', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
   expect(onLogout).toHaveBeenCalledTimes(1);
 });
+
+describe('hover rail (the Tasks pages)', () => {
+  beforeEach(() => { jest.useFakeTimers(); localStorage.clear(); });
+  afterEach(() => { jest.useRealTimers(); });
+  const menu = () => document.getElementById('panel-menu')!;
+  const page = () => screen.getByText('page content').closest('div.flex.min-h-screen')!;
+
+  it('is off unless asked: other pages keep the full sidebar, with no pin', () => {
+    shell();
+    expect(menu()).not.toHaveAttribute('data-rail');
+    expect(menu().className).toContain('md:w-64');
+    expect(page().className).toContain('md:ml-64');
+    expect(screen.queryByRole('button', { name: 'Keep menu open' })).toBeNull();
+  });
+
+  it('starts as icons, every link still named; the page sits beside the rail', () => {
+    shell({ hoverRail: true });
+    expect(menu()).toHaveAttribute('data-rail', 'rail');
+    expect(menu().className).toContain('md:w-[60px]');
+    expect(page().className).toContain('md:ml-[60px]');
+    expect(screen.getByRole('link', { name: /Brands/ })).toBeInTheDocument();
+  });
+
+  it('hover opens it over the page after a moment; leaving closes it; the page never moves', () => {
+    shell({ hoverRail: true });
+    fireEvent.mouseEnter(menu());
+    expect(menu()).toHaveAttribute('data-rail', 'rail');
+    act(() => { jest.advanceTimersByTime(150); });
+    expect(menu()).toHaveAttribute('data-rail', 'peek');
+    expect(menu().className).toContain('md:w-64');
+    expect(page().className).toContain('md:ml-[60px]');
+    fireEvent.mouseLeave(menu());
+    act(() => { jest.advanceTimersByTime(250); });
+    expect(menu()).toHaveAttribute('data-rail', 'rail');
+  });
+
+  it('a mouse just crossing it does not open it', () => {
+    shell({ hoverRail: true });
+    fireEvent.mouseEnter(menu());
+    act(() => { jest.advanceTimersByTime(50); });
+    fireEvent.mouseLeave(menu());
+    act(() => { jest.advanceTimersByTime(500); });
+    expect(menu()).toHaveAttribute('data-rail', 'rail');
+  });
+
+  it('keyboard focus opens it at once; Escape closes it; tabbing out closes it', () => {
+    shell({ hoverRail: true });
+    const link = screen.getByRole('link', { name: /Orders/ });
+    fireEvent.focus(link);
+    expect(menu()).toHaveAttribute('data-rail', 'peek');
+    fireEvent.keyDown(link, { key: 'Escape' });
+    expect(menu()).toHaveAttribute('data-rail', 'rail');
+    fireEvent.focus(link);
+    fireEvent.blur(link, { relatedTarget: document.body });
+    act(() => { jest.advanceTimersByTime(250); });
+    expect(menu()).toHaveAttribute('data-rail', 'rail');
+  });
+
+  it('the pin keeps it open beside the page, and this device remembers it', () => {
+    const { unmount } = shell({ hoverRail: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Keep menu open' }));
+    expect(menu()).toHaveAttribute('data-rail', 'pinned');
+    expect(page().className).toContain('md:ml-64');
+    expect(localStorage.getItem('panel-rail-pinned')).toBe('1');
+    unmount();
+    shell({ hoverRail: true });
+    expect(menu()).toHaveAttribute('data-rail', 'pinned');
+    fireEvent.click(screen.getByRole('button', { name: 'Unpin menu' }));
+    expect(menu()).toHaveAttribute('data-rail', 'rail');
+    expect(localStorage.getItem('panel-rail-pinned')).toBe('0');
+  });
+
+  it('still works when the browser blocks storage', () => {
+    const get = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    const set = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    shell({ hoverRail: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Keep menu open' }));
+    expect(menu()).toHaveAttribute('data-rail', 'pinned');
+    get.mockRestore(); set.mockRestore();
+  });
+
+  it('phones keep the drawer: the menu button opens it with full labels', () => {
+    shell({ hoverRail: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    expect(menu()).toHaveAttribute('data-open', 'true');
+    expect(menu().className).toContain('md:w-64');
+  });
+});

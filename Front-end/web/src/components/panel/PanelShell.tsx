@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronRight, LogOut, Menu, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import { ChevronRight, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Pin, PinOff, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PushPrompt from '@/components/notifications/PushPrompt';
 import PanelThemeSwitch from './PanelThemeSwitch';
@@ -26,6 +26,14 @@ export type PanelNavSection = {
   onToggle?: () => void;
 };
 
+/** This device remembers whether the hover rail is pinned open. */
+export const RAIL_PIN_KEY = 'panel-rail-pinned';
+const readPinned = () => { try { return localStorage.getItem(RAIL_PIN_KEY) === '1'; } catch { return false; } };
+const writePinned = (on: boolean) => { try { localStorage.setItem(RAIL_PIN_KEY, on ? '1' : '0'); } catch { /* storage blocked: this visit only */ } };
+// Hover intent: a mouse crossing the rail on its way somewhere does not open it.
+const PEEK_OPEN_MS = 120;
+const PEEK_CLOSE_MS = 220;
+
 /**
  * The frame shared by the admin and team panels: a deep emerald sidebar with
  * the white Roavion logo, a white top bar, and on phones a menu
@@ -43,6 +51,7 @@ export default function PanelShell({
   onLogout,
   collapsed = false,
   onToggleCollapsed,
+  hoverRail = false,
   children,
 }: {
   homeHref: string;
@@ -60,14 +69,40 @@ export default function PanelShell({
   /** Desktop icon-only rail (admin). */
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  /**
+   * Desktop: an icon rail that opens OVER the page on hover or keyboard focus
+   * (the page never shifts), with a pin to keep it open. For screens that want
+   * the room (Tasks). Replaces `collapsed`; phones keep the drawer.
+   */
+  hoverRail?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  const rail = collapsed && !menuOpen;
+  const [pinned, setPinned] = useState(false);
+  const [peek, setPeek] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Read after mount: the server cannot know this browser's choice.
+  useEffect(() => { if (hoverRail) setPinned(readPinned()); }, [hoverRail]);
+  const peekLater = useCallback((on: boolean) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setPeek(on), on ? PEEK_OPEN_MS : PEEK_CLOSE_MS);
+  }, []);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const togglePin = () => {
+    const next = !pinned;
+    setPinned(next);
+    writePinned(next);
+    if (!next) setPeek(false);
+  };
+
+  const isRail = hoverRail ? !pinned : collapsed;
+  // Open over the page: the rail is peeking, not pinned.
+  const overlay = hoverRail && !pinned && peek && !menuOpen;
+  const rail = isRail && !menuOpen && !overlay;
 
   // A tap on a link navigates; the drawer must not stay over the new page.
-  useEffect(() => { setMenuOpen(false); }, [pathname]);
+  useEffect(() => { setMenuOpen(false); setPeek(false); }, [pathname]);
   useEffect(() => {
     if (!menuOpen) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
@@ -75,8 +110,16 @@ export default function PanelShell({
     return () => window.removeEventListener('keydown', onKey);
   }, [menuOpen]);
 
-  const width = rail ? 'md:w-[76px]' : 'md:w-64';
-  const offset = collapsed ? 'md:ml-[76px]' : 'md:ml-64';
+  const railWidth = hoverRail ? 'md:w-[60px]' : 'md:w-[76px]';
+  const width = rail ? railWidth : 'md:w-64';
+  const offset = !isRail ? 'md:ml-64' : hoverRail ? 'md:ml-[60px]' : 'md:ml-[76px]';
+  const railEvents = hoverRail && !pinned ? {
+    onMouseEnter: () => peekLater(true),
+    onMouseLeave: () => peekLater(false),
+    onFocus: () => { if (timer.current) clearTimeout(timer.current); setPeek(true); },
+    onBlur: (e: FocusEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) peekLater(false); },
+    onKeyDown: (e: ReactKeyboardEvent) => { if (e.key === 'Escape' && peek) { e.stopPropagation(); setPeek(false); } },
+  } : {};
 
   return (
     <div className="panel-theme admin-panel min-h-screen">
@@ -92,7 +135,9 @@ export default function PanelShell({
       <aside
         id="panel-menu"
         data-open={menuOpen}
-        className={`pn-side pn-drawer fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] flex-col transition-[width] duration-200 ${width}`}
+        data-rail={hoverRail ? (pinned ? 'pinned' : overlay ? 'peek' : 'rail') : undefined}
+        className={`pn-side pn-drawer fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] flex-col transition-[width] duration-200 ${width}${hoverRail ? ' md:overflow-x-hidden' : ''}${overlay ? ' pn-rail-peek' : ''}`}
+        {...railEvents}
       >
         <div className={`pn-brand flex items-center gap-2 px-5 py-5 ${rail ? 'md:justify-center md:px-2' : ''}`}>
           <Link href={homeHref} className={`min-w-0 flex-1 ${rail ? 'md:hidden' : ''}`}>
@@ -100,7 +145,18 @@ export default function PanelShell({
             <img src="/images/roavion-logo.png" alt="Roavion" width={960} height={255} className="pn-logo h-7 w-auto" />
             <span className="pn-brand-sub mt-2 block truncate">{subtitle}</span>
           </Link>
-          {onToggleCollapsed && (
+          {hoverRail ? (
+            <button
+              type="button"
+              onClick={togglePin}
+              aria-pressed={pinned}
+              aria-label={pinned ? 'Unpin menu' : 'Keep menu open'}
+              title={pinned ? 'Unpin menu' : 'Keep menu open'}
+              className="pn-brand-btn hidden p-2 md:block"
+            >
+              {pinned ? <PinOff className="h-4 w-4" /> : rail ? <PanelLeftOpen className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+            </button>
+          ) : onToggleCollapsed && (
             <button
               type="button"
               onClick={onToggleCollapsed}
@@ -200,7 +256,7 @@ export default function PanelShell({
             {actions}
           </div>
         </header>
-        <main className="min-w-0 flex-1 p-4 md:p-6 lg:p-8">
+        <main className={`min-w-0 flex-1 ${hoverRail ? 'p-3 md:p-5' : 'p-4 md:p-6 lg:p-8'}`}>
           <PushPrompt />
           {children}
         </main>
