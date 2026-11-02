@@ -159,7 +159,7 @@ describe('search', () => {
   it('a miss is an empty list with a zero count', async () => {
     const res = await pr.list(admin, { q: 'nobody-has-this' });
     expect(res.requests).toEqual([]);
-    expect(res.summary).toEqual({ count: 0, total: 0, capped: false });
+    expect(res.summary).toEqual({ count: 0, total: 0, capped: false, pending: 0 });
   });
 
   it('a regex attack is plain text', async () => {
@@ -232,8 +232,8 @@ describe('filters', () => {
   });
 
   it('the count and total follow the filters', async () => {
-    expect((await pr.list(admin, { status: 'paid' })).summary).toEqual({ count: 2, total: 5500, capped: false });
-    expect((await pr.list(marketing, {})).summary).toEqual({ count: 6, total: 9000, capped: false });
+    expect((await pr.list(admin, { status: 'paid' })).summary).toEqual({ count: 2, total: 5500, capped: false, pending: 0 });
+    expect((await pr.list(marketing, {})).summary).toEqual({ count: 6, total: 9000, capped: false, pending: 0 });
   });
 });
 
@@ -328,7 +328,7 @@ describe('the count is capped', () => {
   it('over 1,000 matches: "1,000+", no total', async () => {
     await seed(...Array.from({ length: 1001 }, () => doc({ amount: 10 })));
     const res = await pr.list(admin, {});
-    expect(res.summary).toEqual({ count: 1000, total: null, capped: true });
+    expect(res.summary).toEqual({ count: 1000, total: null, capped: true, pending: null });
     expect((await pr.list(admin, { q: 'PR-0001' })).summary.capped).toBe(false);
   });
 });

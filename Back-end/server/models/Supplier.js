@@ -9,7 +9,7 @@ import { encryptField } from '../utils/fieldEncryption.js';
  *     never selected by default; `payment.accountLast4` is what lists show.
  *   • A payment request COPIES these details when it is raised, so editing a
  *     supplier never rewrites what was already paid.
- *   • Changing where the money goes (method, UPI, account, IFSC) stamps
+ *   • Changing where the money goes (method, UPI, account, IFSC / SWIFT) stamps
  *     `bankChangedAt` / `bankChangedByName`; payments raised soon after carry a
  *     warning to accounts and the admin — the usual shape of supplier fraud.
  *   • Never deleted (payments point here); `active: false` hides it from the picker.
@@ -33,6 +33,8 @@ const SupplierSchema = new mongoose.Schema(
       accountNumber: { type: String, default: '', select: false, set: encryptField },
       accountLast4: { type: String, default: '', maxlength: 4 },
       ifsc: { type: String, default: '', maxlength: 11 },
+      // A foreign bank: SWIFT / BIC instead of an IFSC (exactly one is set).
+      swift: { type: String, default: '', maxlength: 11 },
       bankName: { type: String, default: '', maxlength: 120 },
     },
 

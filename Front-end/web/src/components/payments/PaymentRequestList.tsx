@@ -9,7 +9,7 @@ import {
   ListAmountRange, ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect, listField,
 } from '@/components/panel/ListControls';
 import {
-  categoryName, errorMessage, foreignBill, getListFilterOptions, listRequests, paymentKeys, rupees, STATUS_TONE,
+  amountText, categoryName, errorMessage, foreignBill, getListFilterOptions, listRequests, paymentKeys, rupees, STATUS_TONE,
 } from './api';
 import PaymentRequestDetail from './PaymentRequestDetail';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
@@ -146,7 +146,15 @@ export default function PaymentRequestList({
         </div>
         <div className="flex min-h-[1.75rem] flex-wrap items-center justify-between gap-2">
           {summary
-            ? <ListResultLine count={summary.count} capped={summary.capped} total={summary.total} noun={['payment', 'payments']} formatTotal={rupees} />
+            ? (
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <ListResultLine count={summary.count} capped={summary.capped} total={summary.total} noun={['payment', 'payments']} formatTotal={rupees} />
+                {/* Foreign bills not yet paid have no rupees: counted, left out of the total, and said so. */}
+                {!summary.capped && summary.pending ? (
+                  <span className="text-xs text-gray-500">+ {summary.pending} foreign bill{summary.pending === 1 ? '' : 's'} not in the total (rupees known when paid)</span>
+                ) : null}
+              </div>
+            )
             : <span />}
           {filtered && <ListClear onClear={() => clear(['status', 'sort', 'dateOf'])} />}
         </div>
@@ -175,8 +183,10 @@ export default function PaymentRequestList({
                   </p>
                 </div>
                 <span className="shrink-0 text-right text-sm font-semibold text-gray-900">
-                  {rupees(r.amount)}
-                  {foreignBill(r) && <span className="block text-xs font-normal text-gray-500">{foreignBill(r)}</span>}
+                  {amountText(r)}
+                  {r.rupeesPending
+                    ? <span className="block text-xs font-normal text-gray-500">₹ when paid</span>
+                    : foreignBill(r) && <span className="block text-xs font-normal text-gray-500">{foreignBill(r)}</span>}
                 </span>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
               </button>

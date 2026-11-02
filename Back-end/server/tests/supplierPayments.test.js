@@ -117,6 +117,11 @@ const ARB = {
   payment: { method: 'bank', accountName: 'ARB Supplies Pvt Ltd', accountNumber: '123456789012', ifsc: 'HDFC0001234', bankName: 'HDFC' },
 };
 const OTHER_BANK = { name: 'Tyre World', method: 'bank', accountName: 'Tyre World', accountNumber: '998877665544', ifsc: 'ICIC0004321', bankName: 'ICICI' };
+// A Thai supplier: a foreign bank, found by its SWIFT code — no IFSC.
+const THAI = {
+  name: 'Open N', phone: '6681000000',
+  payment: { method: 'bank', accountName: 'Nikom Amranan', accountNumber: '8582102601', swift: 'kasithbk', bankName: 'KASIKORNBANK' },
+};
 
 describe('Supplier directory and one-transfer payments', () => {
   beforeAll(async () => { await dbHandler.connect(); });
@@ -203,6 +208,60 @@ describe('Supplier directory and one-transfer payments', () => {
     });
   });
 
+  describe('a foreign bank (SWIFT instead of IFSC)', () => {
+    it('saves a supplier with a SWIFT code, and copies it onto a payment raised from it', async () => {
+      const saved = await procurement.session.post('/suppliers', THAI);
+      expect(saved.status).toBe(201);
+      expect(saved.body.supplier.payment).toMatchObject({ method: 'bank', swift: 'KASITHBK', ifsc: '', accountNumber: '8582102601' });
+      const r = await approvedPayment({ amount: 56227, supplierId: saved.body.supplier.id });
+      expect(r.payee).toMatchObject({ name: 'Open N', swift: 'KASITHBK', ifsc: '', bankName: 'KASIKORNBANK' });
+      // Found by its SWIFT code in the directory and in the "to pay, by supplier" view.
+      expect((await procurement.session.get('/suppliers?q=kasithbk')).body.suppliers.map((x) => x.name)).toEqual(['Open N']);
+      const groups = (await admin.session.get('/payment-requests/to-pay/suppliers?q=KASITHBK')).body.groups;
+      expect(groups).toHaveLength(1);
+      expect(groups[0].destination).toMatch(/SWIFT KASITHBK$/);
+    });
+
+    it('checks the SWIFT format, and takes one of IFSC or SWIFT, not both', async () => {
+      for (const swift of ['KASI', 'KASITH', 'KASITHBKX', '1ASITHBK', 'KASI-THBK']) {
+        const res = await procurement.session.post('/suppliers', { ...THAI, payment: { ...THAI.payment, swift } });
+        expect([swift, res.status]).toEqual([swift, 400]);
+      }
+      // 11 characters (with a branch code) is fine; spaces are ignored.
+      expect((await procurement.session.post('/suppliers', { ...THAI, name: 'Branch Co', payment: { ...THAI.payment, swift: 'KASI TH BK 001' } })).body.supplier.payment.swift).toBe('KASITHBK001');
+      const both = await procurement.session.post('/suppliers', { ...THAI, name: 'Both Co', payment: { ...THAI.payment, ifsc: 'HDFC0001234' } });
+      expect(both.status).toBe(400);
+      expect(both.body.message).toMatch(/not both/);
+      // Neither: an Indian bank's IFSC is still required.
+      const neither = await procurement.session.post('/suppliers', { ...THAI, name: 'None Co', payment: { ...THAI.payment, swift: '' } });
+      expect(neither.status).toBe(400);
+      expect(neither.body.message).toMatch(/IFSC/);
+    });
+
+    it('a foreign account may be an IBAN (letters and digits); an Indian one stays digits only', async () => {
+      const iban = await procurement.session.post('/suppliers', { ...THAI, name: 'Euro Parts', payment: { ...THAI.payment, swift: 'DEUTDEFF', accountNumber: 'de89 3704 0044 0532 0130 00' } });
+      expect(iban.status).toBe(201);
+      expect(iban.body.supplier.payment.accountNumber).toBe('DE89370400440532013000');
+      expect((await procurement.session.post('/suppliers', { ...ARB, name: 'Letters Co', payment: { ...ARB.payment, accountNumber: 'DE8937040044' } })).status).toBe(400);
+    });
+
+    it('switching an Indian bank to a foreign one is a bank change: stamped, and later payments are warned', async () => {
+      const s = await addSupplier();
+      const res = await procurement.session.put(`/suppliers/${s.id}`, { ...ARB, payment: { ...ARB.payment, ifsc: '', swift: 'HDFCINBB' } });
+      expect(res.status).toBe(200);
+      expect(res.body.supplier.bankChangedAt).toBeTruthy();
+      expect(res.body.supplier.payment).toMatchObject({ ifsc: '', swift: 'HDFCINBB' });
+    });
+
+    it('prints the SWIFT code on the slip', async () => {
+      const saved = (await procurement.session.post('/suppliers', THAI)).body.supplier;
+      const r = await approvedPayment({ amount: 56227, supplierId: saved.id });
+      const slip = await procurement.session.get(`/payment-requests/${r.id}/slip`);
+      expect(slip.status).toBe(200);
+      expect(slip.headers['content-type']).toMatch(/pdf/);
+    });
+  });
+
   describe('raising a payment from a saved supplier', () => {
     it('copies the saved details, ignoring what the client sent; a later edit does not rewrite it', async () => {
       const s = await addSupplier();
@@ -255,7 +314,7 @@ describe('Supplier directory and one-transfer payments', () => {
 
       const groups = await groupsOf(admin.session);
       expect(groups.map((g) => [g.count, g.total])).toEqual([[3, 3800.5], [1, 999]]);
-      expect(groups[0].destination).toMatch(/HDFC XXXXXXXX9012 · HDFC0001234/);
+      expect(groups[0].destination).toMatch(/HDFC XXXXXXXX9012 · IFSC HDFC0001234/);
       expect(JSON.stringify(groups)).not.toContain('123456789012');
       expect((await accounts.session.get('/payment-requests/to-pay/suppliers')).status).toBe(200);
       expect((await procurement.session.get('/payment-requests/to-pay/suppliers')).status).toBe(403);

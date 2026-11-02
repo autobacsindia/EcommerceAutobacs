@@ -14,6 +14,8 @@ export type SupplierPayment = {
   accountNumber: string;
   accountMasked: string;
   ifsc: string;
+  /** A foreign bank's SWIFT code — set instead of `ifsc` ('' on older suppliers). */
+  swift: string;
   bankName: string;
 };
 

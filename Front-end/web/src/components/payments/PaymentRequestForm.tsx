@@ -5,9 +5,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import {
-  errorMessage, getExpenseOptions, getRequest, paymentKeys, postForm, previewRupees, rupees, type PaymentRequest,
+  errorMessage, getExpenseOptions, getRequest, paymentKeys, postForm, type PaymentRequest,
 } from './api';
 import FilePicker from './FilePicker';
+import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
 import { MAX_ATTACHMENTS, PHOTO_ONLY, PHOTO_OR_PDF } from '@/lib/attachments';
 import SupplierPicker, { SupplierSuggestions } from './SupplierPicker';
 import type { Supplier } from './suppliers';
@@ -48,12 +49,13 @@ export default function PaymentRequestForm({
   const [category, setCategory] = useState('');
   const [currency, setCurrency] = useState('INR');
   const [foreignAmount, setForeignAmount] = useState('');
-  const [fxRate, setFxRate] = useState('');
   const [itemIds, setItemIds] = useState<string[]>(supplier ? supplier.lines.map((l) => l.itemId) : []);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [method, setMethod] = useState<'upi' | 'bank'>('upi');
-  const [payee, setPayee] = useState({ name: '', upiId: '', accountName: '', accountNumber: '', ifsc: '', bankName: '', phone: '' });
+  const [payee, setPayee] = useState({ name: '', upiId: '', accountName: '', accountNumber: '', ifsc: '', swift: '', bankName: '', phone: '' });
+  // IFSC or SWIFT: whatever the person picked, else SWIFT for a foreign-currency bill.
+  const [codeChoice, setCodeChoice] = useState<BankCodeKind | null>(null);
   const [bills, setBills] = useState<File[]>([]);
   const [qr, setQr] = useState<File[]>([]);
   const [picked, setPicked] = useState<Supplier | null>(null);
@@ -73,7 +75,7 @@ export default function PaymentRequestForm({
   const chosen = options?.categories.find((c) => c.value === category) ?? options?.categories[0];
   const noteRequired = !supplier && (chosen?.noteRequired ?? true);
   const foreign = !supplier && currency !== (options?.baseCurrency ?? 'INR');
-  const comesTo = foreign ? previewRupees(foreignAmount, fxRate) : null;
+  const codeKind: BankCodeKind = codeChoice ?? (foreign ? 'swift' : 'ifsc');
 
   /** Refill from the previous payment: its saved supplier, or the details typed then. */
   async function fillSame() {
@@ -91,9 +93,10 @@ export default function PaymentRequestForm({
       const p = prev.payee;
       setPicked(null);
       setMethod(p.method);
+      setCodeChoice(kindOf(p));
       setPayee({
-        name: p.name, upiId: p.upiId || '', accountName: p.accountName || '', accountNumber: /X/.test(p.accountNumber || '') ? '' : p.accountNumber || '',
-        ifsc: p.ifsc || '', bankName: p.bankName || '', phone: p.phone || '',
+        name: p.name, upiId: p.upiId || '', accountName: p.accountName || '', accountNumber: /^X+\d{4}$/.test(p.accountNumber || '') ? '' : p.accountNumber || '',
+        ifsc: p.ifsc || '', swift: p.swift || '', bankName: p.bankName || '', phone: p.phone || '',
       });
     } catch (err) {
       setError(errorMessage(err, 'Could not load the previous supplier.'));
@@ -108,12 +111,13 @@ export default function PaymentRequestForm({
     if (supplier && itemIds.length === 0) { setError('Choose the item(s) this payment is for.'); return; }
     if (!picked && method === 'upi' && !payee.upiId.trim() && qr.length === 0) { setError('Enter their UPI ID, or attach their payment QR.'); return; }
     if (!supplier && !chosen) { setError('The options are still loading — try again in a moment.'); return; }
+    const codeProblem = !picked && method === 'bank' ? bankCodeProblem(codeKind, payee[codeKind]) : '';
+    if (codeProblem) { setError(codeProblem); return; }
     const form = new FormData();
-    // A foreign bill sends what was billed and the rate; the server works out the rupees.
+    // A foreign bill sends only what was billed: the rupees are recorded when it is paid.
     if (foreign) {
       form.append('currency', currency);
       form.append('foreignAmount', foreignAmount);
-      form.append('fxRate', fxRate);
     } else {
       form.append('amount', amount);
     }
@@ -122,7 +126,7 @@ export default function PaymentRequestForm({
     if (picked) form.append('supplierId', picked.id);
     else form.append('payee', JSON.stringify(method === 'upi'
       ? { name: payee.name.trim(), method, upiId: payee.upiId.trim(), phone: payee.phone.trim() }
-      : { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ifsc: payee.ifsc.trim().toUpperCase(), bankName: payee.bankName.trim(), phone: payee.phone.trim() }));
+      : { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ...bankCodePayload(codeKind, payee[codeKind]), bankName: payee.bankName.trim(), phone: payee.phone.trim() }));
     if (supplier) {
       form.append('orderId', supplier.orderId);
       form.append('itemIds', JSON.stringify(itemIds));
@@ -196,20 +200,12 @@ export default function PaymentRequestForm({
 
       {foreign && (
         <div className="rounded-lg bg-gray-50 p-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className={label} htmlFor="pr-foreign">Bill amount ({currency})</label>
-              <input id="pr-foreign" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={foreignAmount} onChange={(e) => setForeignAmount(e.target.value)} placeholder="e.g. 10000" />
-            </div>
-            <div>
-              <label className={label} htmlFor="pr-rate">Rate (₹ for 1 {currency})</label>
-              <input id="pr-rate" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,6})?" value={fxRate} onChange={(e) => setFxRate(e.target.value)} placeholder="From your bank / forex quote, e.g. 2.45" />
-            </div>
+          <div className="sm:w-1/2 sm:pr-1.5">
+            <label className={label} htmlFor="pr-foreign">Bill amount ({currency})</label>
+            <input id="pr-foreign" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={foreignAmount} onChange={(e) => setForeignAmount(e.target.value)} placeholder="e.g. 22950" />
           </div>
-          <p className="mt-2 text-sm text-gray-700" aria-live="polite">
-            {comesTo != null
-              ? <>Comes to about <strong>{rupees(comesTo)}</strong>. Accounts approves the rupee amount; the website works it out from the bill and the rate.</>
-              : 'Enter the bill amount and the rate from your quote — the rupee amount is worked out from them.'}
+          <p className="mt-2 text-sm text-gray-700">
+            Accounts approves it in {currency}. The rupee amount is what the bank actually debits — the admin records it when paying.
           </p>
         </div>
       )}
@@ -263,9 +259,9 @@ export default function PaymentRequestForm({
         ) : (
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <input aria-label="Account holder" className={input} required value={payee.accountName} onChange={set('accountName')} placeholder="Account holder name" />
-            <input aria-label="Account number" className={input} required inputMode="numeric" value={payee.accountNumber} onChange={set('accountNumber')} placeholder="Account number" />
-            <input aria-label="IFSC" className={input} required value={payee.ifsc} onChange={set('ifsc')} placeholder="IFSC, e.g. HDFC0001234" autoCapitalize="characters" />
-            <input aria-label="Bank name" className={input} value={payee.bankName} onChange={set('bankName')} placeholder="Bank (optional)" />
+            <input aria-label="Account number" className={input} required inputMode={codeKind === 'swift' ? 'text' : 'numeric'} value={payee.accountNumber} onChange={set('accountNumber')} placeholder="Account number" />
+            <BankCodeField kind={codeKind} value={payee[codeKind]} onKind={setCodeChoice} onChange={(v) => setPayee({ ...payee, [codeKind]: v })} inputClass={input} />
+            <input aria-label="Bank name" className={`${input} sm:self-end`} value={payee.bankName} onChange={set('bankName')} placeholder="Bank (optional)" />
           </div>
         )}
         {supplier && (

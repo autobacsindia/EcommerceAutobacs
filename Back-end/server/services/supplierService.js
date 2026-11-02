@@ -46,10 +46,10 @@ function cleanSupplier(input = {}) {
   if (email && !EMAIL.test(email)) throw fail('Enter a valid email address, or leave it empty.', 400);
   const payee = cleanPayee({ ...(input.payment || {}), name });
   const payment = payee.method === 'upi'
-    ? { method: 'upi', upiId: payee.upiId, accountName: '', accountNumber: '', accountLast4: '', ifsc: '', bankName: '' }
+    ? { method: 'upi', upiId: payee.upiId, accountName: '', accountNumber: '', accountLast4: '', ifsc: '', swift: '', bankName: '' }
     : {
       method: 'bank', upiId: '', accountName: payee.accountName, accountNumber: payee.accountNumber,
-      accountLast4: payee.accountNumber.slice(-4), ifsc: payee.ifsc, bankName: payee.bankName,
+      accountLast4: payee.accountNumber.slice(-4), ifsc: payee.ifsc, swift: payee.swift, bankName: payee.bankName,
     };
   return {
     name,
@@ -65,7 +65,7 @@ function cleanSupplier(input = {}) {
 }
 
 /** Where the money goes — the fields whose change is worth a warning. */
-const destination = (p = {}) => [p.method, p.upiId, p.accountNumber, p.ifsc].map((v) => String(v || '')).join('|');
+const destination = (p = {}) => [p.method, p.upiId, p.accountNumber, p.ifsc, p.swift].map((v) => String(v || '')).join('|');
 
 const plainAccount = (s) => (s?.payment?.accountNumber ? decryptField(s.payment.accountNumber) : '');
 
@@ -89,6 +89,7 @@ export function shape(s, viewer) {
       accountNumber: full ? account : '',
       accountMasked: s.payment?.accountLast4 ? maskAccount(`XXXXXXXX${s.payment.accountLast4}`) : '',
       ifsc: s.payment?.ifsc || '',
+      swift: s.payment?.swift || '',
       bankName: s.payment?.bankName || '',
     },
     active: s.active !== false,
@@ -166,7 +167,7 @@ export const SUPPLIER_SORTS = Object.freeze({
 // only its last four digits can be found.
 const SUPPLIER_SEARCH = Object.freeze([
   'nameKey', 'contactPerson', 'phone', 'email', 'gstin', 'address', 'notes',
-  'payment.upiId', 'payment.accountName', 'payment.accountLast4', 'payment.ifsc', 'payment.bankName',
+  'payment.upiId', 'payment.accountName', 'payment.accountLast4', 'payment.ifsc', 'payment.swift', 'payment.bankName',
 ]);
 const SUMMARY_CAP = 1000;
 
@@ -191,7 +192,7 @@ export function supplierQuery(f = {}, now = Date.now()) {
  * The directory and the payment form's picker. `prefix` (picker): the name starts
  * with it. `q` (directory): every word must be in the
  * name, contact, phone, email, GSTIN, address, notes, UPI ID, account name,
- * last four account digits, IFSC or bank. `status` active (default) | inactive |
+ * last four account digits, IFSC, SWIFT or bank. `status` active (default) | inactive |
  * all; `method` bank | upi; `changed=recent` (bank details changed in the last
  * BANK_CHANGE_WARN_DAYS); `sort` name (default) | newest | updated; `after` the
  * cursor from the last page. The first page says how many match.
@@ -219,7 +220,7 @@ export async function payeeFor(id, now = Date.now()) {
     ? { name: s.name, method: 'upi', upiId: p.upiId, phone: s.phone || '' }
     : {
       name: s.name, method: 'bank', accountName: p.accountName, accountNumber: plainAccount(s),
-      ifsc: p.ifsc, bankName: p.bankName, phone: s.phone || '',
+      ifsc: p.ifsc, swift: p.swift, bankName: p.bankName, phone: s.phone || '',
     };
   const recent = s.bankChangedAt && now - new Date(s.bankChangedAt).getTime() < BANK_CHANGE_WARN_DAYS * 86400000;
   return {

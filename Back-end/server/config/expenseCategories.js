@@ -15,12 +15,13 @@
  * procurement "fuel" expense can still be corrected as it is.
  *
  * ── CURRENCY ────────────────────────────────────────────────────────────────────
- * `amount` on a request is ALWAYS rupees: what accounts approves, what the admin
- * pays, what every total adds up. A foreign-currency expense also keeps what was
- * billed (`currency`, `foreignAmount`) and the rate from the bank's / forex
- * agent's quote (`fxRate`), entered by the person raising it. The rupee amount
- * is worked out here from those two — never from a live rate, never from the
- * client's own sum.
+ * `amount` on a request is ALWAYS rupees: what the admin pays and what every
+ * total adds up. A foreign-currency expense is raised and approved in its own
+ * currency (`currency`, `foreignAmount`) — "THB 22,950" — with `amount` 0: the
+ * rupees are not known until the bank debits them, and the admin records that
+ * debit when paying (`fxRate` is then worked out from it). Never a live rate,
+ * never the client's own sum. Older requests were raised with a quoted rate
+ * typed in, and keep it.
  */
 
 export const OTHER = 'other';
@@ -104,7 +105,7 @@ export const BASE_CURRENCY = 'INR';
 /** Teams that pay in foreign currency (imports). Everyone else claims in rupees. */
 const FOREIGN_CURRENCY_TEAMS = Object.freeze(['procurement']);
 
-/** Rate guard: rupees for ONE unit. A won is ~₹0.06, a pound ~₹110; outside this is a typo. */
+/** Rate guard: rupees for ONE unit. A won is ~₹0.06, a pound ~₹110; a bank debit implying a rate outside this is a typo. */
 export const MIN_FX_RATE = 0.0001;
 export const MAX_FX_RATE = 1000;
 

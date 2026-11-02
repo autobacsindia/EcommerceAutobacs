@@ -9,9 +9,13 @@
  *   - old records (one shared list: fuel, travel, food, purchase, other) still
  *     read, list, total and print — and can be edited without being forced
  *     onto the new list, unless the edit changes the category
- *   - `amount` is ALWAYS rupees: a THB bill stores THB + the quoted rate, and
- *     the server works out the rupees. A client-sent rupee figure that
- *     disagrees is refused; totals never add baht to rupees
+ *   - `amount` is ALWAYS rupees. A THB bill is raised and approved in THB, with
+ *     no rate and no rupees (amount 0); the admin records the rupees the bank
+ *     debited when paying, and the rate is worked out from that. Paying it
+ *     without the rupees is refused; a rupee figure on raising is refused;
+ *     totals never add baht to rupees and say how many bills they left out
+ *   - older THB requests, raised with a quoted rate, still read, total, print
+ *     and edit as they were
  */
 
 import bcrypt from 'bcryptjs';
@@ -267,84 +271,184 @@ describe('Expense options per team, and foreign-currency bills', () => {
 
   describe('foreign currency (procurement)', () => {
     const thb = (over = {}) => expense(procurement.session, {
-      category: 'import_purchase', amount: undefined, currency: 'THB', foreignAmount: 10000, fxRate: 2.45, ...over,
+      category: 'import_purchase', amount: undefined, currency: 'THB', foreignAmount: 22950, ...over,
     });
+    /** A THB request raised the old way: with a quoted rate, rupees worked out. */
+    const rated = (over = {}) => oldRecord(procurement, {
+      category: 'import_purchase', currency: 'THB', foreignAmount: 10000, fxRate: 2.45, amount: 24500, ...over,
+    });
+    const pay = (id, fields = {}) => admin.session.pay(`/payment-requests/${id}/pay`, { method: 'bank', reference: 'UTR1', ...fields });
 
-    it('keeps the bill in baht and works out the rupees itself', async () => {
+    it('keeps the bill in baht, with no rate and no rupees until it is paid', async () => {
       const res = await thb();
       expect(res.status).toBe(201);
-      expect(res.body.request).toMatchObject({ amount: 24500, currency: 'THB', foreignAmount: 10000, fxRate: 2.45 });
+      expect(res.body.request).toMatchObject({ amount: 0, currency: 'THB', foreignAmount: 22950, fxRate: null, rupeesPending: true });
       const saved = await PaymentRequest.findById(res.body.request.id).lean();
-      expect(saved).toMatchObject({ amount: 24500, currency: 'THB', foreignAmount: 10000, fxRate: 2.45 });
-      // Lower case is the same code; a matching rupee figure is accepted.
-      expect((await thb({ currency: 'usd', foreignAmount: 100, fxRate: 83.5, amount: 8350 })).body.request).toMatchObject({ currency: 'USD', amount: 8350 });
-      // Rounded to paise, as every rupee amount is.
-      expect((await thb({ foreignAmount: 333.33, fxRate: 2.4567 })).body.request.amount).toBe(818.89);
+      expect(saved).toMatchObject({ amount: 0, currency: 'THB', foreignAmount: 22950, fxRate: null });
+      // Lower case is the same code; a retired rate from a stale tab is ignored.
+      expect((await thb({ currency: 'usd', foreignAmount: 100, fxRate: 83.5 })).body.request)
+        .toMatchObject({ currency: 'USD', foreignAmount: 100, amount: 0, fxRate: null });
+      // A rupee request is unchanged: its rupees are known from the start.
+      expect((await expense(procurement.session, { category: 'forwarder_cha', amount: 1000 })).body.request)
+        .toMatchObject({ amount: 1000, currency: 'INR', rupeesPending: false });
     });
 
-    it('chat shows both, the rupees first', async () => {
+    it('chat shows the bill and says the rupees come when it is paid', async () => {
       await thb();
       const raised = await ChatMessage.findOne({ text: /New Import purchase expense/ }).lean();
-      expect(raised.text).toMatch(/₹24,500 \(THB 10,000 @ ₹2\.45\)/);
+      expect(raised.text).toMatch(/THB 22,950 \(rupees when paid\)/);
+      expect(raised.text).not.toMatch(/₹0/);
     });
 
-    it('refuses a rupee figure that disagrees with the bill and the rate', async () => {
-      const res = await thb({ amount: 1 });
+    it('refuses a rupee figure on a foreign bill — the bank debit is recorded at payment', async () => {
+      const res = await thb({ amount: 56227 });
       expect(res.status).toBe(400);
-      expect(res.body.message).toMatch(/worked out from the THB amount and the rate \(₹24,500\)/);
+      expect(res.body.message).toMatch(/approved in THB; the rupees are recorded when it is paid/);
     });
 
-    it('refuses a missing or silly rate or bill amount, and an unknown currency', async () => {
-      for (const over of [{ fxRate: undefined }, { fxRate: 0 }, { fxRate: -2 }, { fxRate: 5000 }, { fxRate: 'abc' },
-        { foreignAmount: undefined }, { foreignAmount: 0 }, { foreignAmount: -10 }, { currency: 'XYZ' },
-        { foreignAmount: 1e9, fxRate: 900 }]) {
+    it('refuses a missing or silly bill amount, and an unknown currency', async () => {
+      for (const over of [{ foreignAmount: undefined }, { foreignAmount: 0 }, { foreignAmount: -10 }, { foreignAmount: 'abc' },
+        { foreignAmount: 2e9 }, { currency: 'XYZ' }]) {
         const res = await thb(over);
         expect([over, res.status]).toEqual([over, 400]);
       }
     });
 
     it('other teams claim in rupees only', async () => {
-      const res = await expense(ops.session, { category: 'fuel', amount: undefined, currency: 'THB', foreignAmount: 100, fxRate: 2.45 });
+      const res = await expense(ops.session, { category: 'fuel', amount: undefined, currency: 'THB', foreignAmount: 100 });
       expect(res.status).toBe(400);
       expect(res.body.message).toMatch(/claimed in rupees/);
       expect((await expense(ops.session, { category: 'fuel', currency: 'INR' })).status).toBe(201);
     });
 
-    it('totals add rupees only — a baht bill counts as its rupee amount', async () => {
-      const inrId = (await expense(procurement.session, { category: 'forwarder_cha', amount: 1000 })).body.request.id;
-      const thbId = (await thb()).body.request.id;
-      await oldRecord(ops, { status: 'submitted', amount: 800 });
-      const byStatus = await paymentRequestRepository.countByStatus();
-      expect(byStatus.find((r) => r._id === 'submitted')).toMatchObject({ n: 3, amount: 1000 + 24500 + 800 });
-
-      for (const id of [inrId, thbId]) {
-        await accounts.session.post(`/payment-requests/${id}/approve`);
-        expect((await admin.session.pay(`/payment-requests/${id}/pay`, { method: 'bank', reference: 'UTR1' })).status).toBe(200);
-      }
-      const paid = await paymentRequestRepository.paidSinceByTeam(new Date(Date.now() - 60000));
-      expect(paid).toEqual([{ _id: 'procurement', n: 2, amount: 25500 }]);
-    });
-
-    it('editing the rate works the rupees out again, and sends an approved one back to accounts', async () => {
+    it('paying it needs the rupees the bank debited; the rate is worked out from them', async () => {
       const id = (await thb()).body.request.id;
       await accounts.session.post(`/payment-requests/${id}/approve`);
-      const res = await admin.session.put(`/payment-requests/${id}`, { fxRate: 2.5 });
+
+      const without = await pay(id);
+      expect(without.status).toBe(400);
+      expect(without.body.message).toMatch(/Enter the rupees the bank debited for this THB 22,950 bill/);
+      expect((await PaymentRequest.findById(id).lean()).status).toBe('approved');
+
+      // A figure off by a few zeros implies a rate no currency has: refused, not recorded.
+      for (const rupees of ['0', '-5', 'abc', '99999999', '1']) {
+        expect([rupees, (await pay(id, { rupees })).status]).toEqual([rupees, 400]);
+      }
+
+      const res = await pay(id, { rupees: '56227' });
       expect(res.status).toBe(200);
-      expect(res.body.request).toMatchObject({ amount: 25000, currency: 'THB', foreignAmount: 10000, fxRate: 2.5, status: 'submitted' });
-      expect(res.body.request.history.at(-1).note).toMatch(/bill THB 10,000 @ ₹2\.45 → THB 10,000 @ ₹2\.5.*back to accounts/);
+      expect(res.body.request).toMatchObject({ status: 'paid', amount: 56227, fxRate: 2.449978, rupeesPending: false, currency: 'THB', foreignAmount: 22950 });
+      expect(res.body.request.history.at(-1).note).toMatch(/₹56,227 debited for THB 22,950 \(₹2\.45 per THB\)/);
+      const paidMsg = await ChatMessage.findOne({ text: /^💸 Paid/ }).lean();
+      expect(paidMsg.text).toMatch(/₹56,227 \(THB 22,950 @ ₹2\.45\)/);
+
+      // Once: a second click is a lost race, and does not re-price it.
+      expect((await pay(id, { rupees: '60000' })).status).toBe(409);
+      expect((await PaymentRequest.findById(id).lean()).amount).toBe(56227);
+    });
+
+    it('the admin can correct a typo in the rupees afterwards — logged — but never a rupee payment\'s amount', async () => {
+      const id = (await thb()).body.request.id;
+      await pay(id, { rupees: '56227' });
+      const fixed = await admin.session.put(`/payment-requests/${id}/payment`, { rupees: '56272' });
+      expect(fixed.status).toBe(200);
+      expect(fixed.body.request).toMatchObject({ amount: 56272, fxRate: 2.451939 });
+      expect(fixed.body.request.history.at(-1).note).toMatch(/rupees debited ₹56,227 → ₹56,272/);
+      expect((await admin.session.put(`/payment-requests/${id}/payment`, { rupees: '1' })).status).toBe(400);
+
+      const inrId = (await expense(procurement.session, { category: 'forwarder_cha', amount: 1000 })).body.request.id;
+      await pay(inrId);
+      const refused = await admin.session.put(`/payment-requests/${inrId}/payment`, { rupees: '900' });
+      expect(refused.status).toBe(400);
+      expect((await PaymentRequest.findById(inrId).lean()).amount).toBe(1000);
+    });
+
+    it('a rupee request is paid at what accounts approved — a different figure is refused', async () => {
+      const id = (await expense(procurement.session, { category: 'forwarder_cha', amount: 1000 })).body.request.id;
+      expect((await pay(id, { rupees: '900' })).status).toBe(400);
+      expect((await pay(id, { rupees: '1000' })).status).toBe(200);
+    });
+
+    it('an older request raised with a rate pays at its estimate, or at the real debit', async () => {
+      const asQuoted = await rated();
+      const shown = (await procurement.session.get(`/payment-requests/${asQuoted}`)).body.request;
+      expect(shown).toMatchObject({ amount: 24500, fxRate: 2.45, rupeesPending: false });
+      expect((await pay(asQuoted)).body.request).toMatchObject({ status: 'paid', amount: 24500, fxRate: 2.45 });
+
+      const debited = await rated();
+      expect((await pay(debited, { rupees: '24610' })).body.request).toMatchObject({ amount: 24610, fxRate: 2.461 });
+    });
+
+    it('totals add rupees only, and say how many foreign bills they left out', async () => {
+      const inrId = (await expense(procurement.session, { category: 'forwarder_cha', amount: 1000 })).body.request.id;
+      const thbId = (await thb()).body.request.id;
+      await rated();
+      await oldRecord(ops, { status: 'submitted', amount: 800 });
+      const byStatus = await paymentRequestRepository.countByStatus();
+      expect(byStatus.find((r) => r._id === 'submitted')).toMatchObject({ n: 4, amount: 1000 + 24500 + 800, pending: 1 });
+
+      const list = await admin.session.get('/payment-requests?status=to_approve');
+      expect(list.body.summary).toMatchObject({ count: 4, total: 26300, pending: 1 });
+
+      expect((await pay(inrId)).status).toBe(200);
+      expect((await pay(thbId, { rupees: '56227' })).status).toBe(200);
+      const paid = await paymentRequestRepository.paidSinceByTeam(new Date(Date.now() - 60000));
+      expect(paid).toEqual([{ _id: 'procurement', n: 2, amount: 57227 }]);
+    });
+
+    it('the list: an unpriced bill pages under the amount sort, is skipped by amount filters, and is found by its bill amount', async () => {
+      const thbId = (await thb()).body.request.id;
+      for (const amount of [500, 1500]) await expense(procurement.session, { category: 'forwarder_cha', amount });
+      const seen = [];
+      let cursor = '';
+      do {
+        const page = await admin.session.get(`/payment-requests?sort=amount_desc${cursor ? `&cursor=${cursor}` : ''}`);
+        seen.push(...page.body.requests.map((r) => r.id));
+        cursor = page.body.nextCursor || '';
+      } while (cursor);
+      expect(seen).toHaveLength(3);
+      expect(seen.at(-1)).toBe(thbId);
+      expect((await admin.session.get('/payment-requests?max=1000')).body.requests.map((r) => r.amount)).toEqual([500]);
+      expect((await admin.session.get('/payment-requests?q=22950')).body.requests.map((r) => r.id)).toEqual([thbId]);
+    });
+
+    it('editing the bill amount keeps it in baht, and sends an approved one back to accounts', async () => {
+      const id = (await thb()).body.request.id;
+      await accounts.session.post(`/payment-requests/${id}/approve`);
+      const res = await admin.session.put(`/payment-requests/${id}`, { foreignAmount: 23000 });
+      expect(res.status).toBe(200);
+      expect(res.body.request).toMatchObject({ amount: 0, foreignAmount: 23000, status: 'submitted' });
+      expect(res.body.request.history.at(-1).note).toMatch(/bill THB 22,950 → THB 23,000.*back to accounts/);
+      expect(res.body.request.history.at(-1).note).not.toMatch(/amount ₹/);
 
       // A rupee figure alone cannot override a foreign bill...
       expect((await procurement.session.put(`/payment-requests/${id}`, { amount: 100 })).status).toBe(400);
       // ...but the bill can be switched to rupees, with the rupees given.
       const inr = await procurement.session.put(`/payment-requests/${id}`, { currency: 'INR', amount: 24800 });
-      expect(inr.body.request).toMatchObject({ amount: 24800, currency: 'INR', foreignAmount: null, fxRate: null });
+      expect(inr.body.request).toMatchObject({ amount: 24800, currency: 'INR', foreignAmount: null, fxRate: null, rupeesPending: false });
     });
 
-    it('prints the bill line on the slip', async () => {
+    it('an older rated request keeps its rate through an edit that leaves the bill alone', async () => {
+      const id = await rated();
+      const same = await procurement.session.put(`/payment-requests/${id}`, { currency: 'THB', foreignAmount: 10000, fxRate: 9, description: 'Bumpers, invoice 77' });
+      expect(same.status).toBe(200);
+      expect(same.body.request).toMatchObject({ amount: 24500, fxRate: 2.45, description: 'Bumpers, invoice 77' });
+      // Changing the bill drops the quote: the rupees now come from the bank at payment.
+      const changed = await procurement.session.put(`/payment-requests/${id}`, { foreignAmount: 12000 });
+      expect(changed.body.request).toMatchObject({ amount: 0, fxRate: null, foreignAmount: 12000, rupeesPending: true });
+      expect(changed.body.request.history.at(-1).note).toMatch(/bill THB 10,000 @ ₹2\.45 → THB 12,000/);
+    });
+
+    it('prints the slip before and after payment, and an older rated request too', async () => {
       const id = (await thb()).body.request.id;
-      const slip = await procurement.session.get(`/payment-requests/${id}/slip`);
-      expect(slip.status).toBe(200);
-      expect(slip.headers['content-type']).toMatch(/pdf/);
+      for (const which of [id, await rated()]) {
+        const slip = await procurement.session.get(`/payment-requests/${which}/slip`);
+        expect(slip.status).toBe(200);
+        expect(slip.headers['content-type']).toMatch(/pdf/);
+      }
+      await pay(id, { rupees: '56227' });
+      const receipt = await procurement.session.get(`/payment-requests/${id}/slip`);
+      expect(receipt.status).toBe(200);
     });
   });
 });

@@ -5,8 +5,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import {
-  categoryName, errorMessage, getExpenseOptions, paymentKeys, previewRupees, rupees, type PaymentRequest,
+  categoryName, errorMessage, getExpenseOptions, paymentKeys, type PaymentRequest,
 } from './api';
+import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
 import { SupplierSuggestions, payLine } from './SupplierPicker';
 import type { Supplier } from './suppliers';
 
@@ -28,12 +29,12 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   onDone: (r: PaymentRequest) => void;
   onCancel: () => void;
 }) {
-  const [amount, setAmount] = useState(String(r.amount));
+  // A foreign bill not yet paid has no rupee amount: empty, should it be switched to rupees.
+  const [amount, setAmount] = useState(r.rupeesPending ? '' : String(r.amount));
   const [description, setDescription] = useState(r.description || '');
   const [category, setCategory] = useState(r.category);
   const [currency, setCurrency] = useState(r.currency || 'INR');
   const [foreignAmount, setForeignAmount] = useState(r.foreignAmount != null ? String(r.foreignAmount) : '');
-  const [fxRate, setFxRate] = useState(r.fxRate != null ? String(r.fxRate) : '');
   const isExpense = r.kind === 'expense';
   const optionsQ = useQuery({
     queryKey: paymentKeys.options(r.team),
@@ -51,32 +52,34 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     ? currencies
     : [{ code: r.currency || 'INR', label: '' }, ...currencies];
   const foreign = isExpense && currency !== 'INR';
-  const comesTo = foreign ? previewRupees(foreignAmount, fxRate) : null;
   const [method, setMethod] = useState<'upi' | 'bank'>(r.payee.method);
   const [payee, setPayee] = useState({
     name: r.payee.name, upiId: r.payee.upiId || '', accountName: r.payee.accountName || '',
-    accountNumber: r.payee.accountNumber || '', ifsc: r.payee.ifsc || '', bankName: r.payee.bankName || '', phone: r.payee.phone || '',
+    accountNumber: r.payee.accountNumber || '', ifsc: r.payee.ifsc || '', swift: r.payee.swift || '', bankName: r.payee.bankName || '', phone: r.payee.phone || '',
   });
+  const [codeKind, setCodeKind] = useState<BankCodeKind>(kindOf(r.payee));
   const [picked, setPicked] = useState<Supplier | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k: keyof typeof payee) => (e: React.ChangeEvent<HTMLInputElement>) => setPayee({ ...payee, [k]: e.target.value });
   // A masked number (someone who may not see it in full) cannot be resent as is.
-  const masked = /X/.test(payee.accountNumber);
+  const masked = /^X+\d{4}$/.test(payee.accountNumber);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    const codeProblem = !picked && method === 'bank' && !masked ? bankCodeProblem(codeKind, payee[codeKind]) : '';
+    if (codeProblem) { setError(codeProblem); return; }
     const body: Record<string, unknown> = { description: description.trim() };
-    // A foreign bill sends what was billed and the rate; the server works out the rupees.
-    if (foreign) Object.assign(body, { currency, foreignAmount, fxRate });
+    // A foreign bill sends only what was billed: its rupees are recorded when it is paid.
+    if (foreign) Object.assign(body, { currency, foreignAmount });
     else Object.assign(body, isExpense ? { currency, amount } : { amount });
     if (isExpense) body.category = category;
     if (picked) body.supplierId = picked.id;
     else if (!(method === 'bank' && masked)) {
       body.payee = method === 'upi'
         ? { name: payee.name.trim(), method, upiId: payee.upiId.trim(), phone: payee.phone.trim() }
-        : { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ifsc: payee.ifsc.trim().toUpperCase(), bankName: payee.bankName.trim(), phone: payee.phone.trim() };
+        : { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ...bankCodePayload(codeKind, payee[codeKind]), bankName: payee.bankName.trim(), phone: payee.phone.trim() };
     }
     setBusy(true);
     try {
@@ -116,15 +119,9 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
 
       {foreign && (
         <div className="rounded-lg bg-gray-50 p-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div><label className={label} htmlFor="ed-foreign">Bill amount ({currency})</label>
-              <input id="ed-foreign" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={foreignAmount} onChange={(e) => setForeignAmount(e.target.value)} /></div>
-            <div><label className={label} htmlFor="ed-rate">Rate (₹ for 1 {currency})</label>
-              <input id="ed-rate" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,6})?" value={fxRate} onChange={(e) => setFxRate(e.target.value)} /></div>
-          </div>
-          <p className="mt-2 text-sm text-gray-700" aria-live="polite">
-            {comesTo != null ? <>Comes to about <strong>{rupees(comesTo)}</strong> — worked out from the bill and the rate.</> : 'Enter the bill amount and the rate.'}
-          </p>
+          <div className="sm:w-1/2 sm:pr-1.5"><label className={label} htmlFor="ed-foreign">Bill amount ({currency})</label>
+            <input id="ed-foreign" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={foreignAmount} onChange={(e) => setForeignAmount(e.target.value)} /></div>
+          <p className="mt-2 text-sm text-gray-700">The rupee amount is what the bank debits — the admin records it when paying.</p>
         </div>
       )}
 
@@ -151,9 +148,13 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               <input aria-label="Account holder" className={input} required value={payee.accountName} onChange={set('accountName')} placeholder="Account holder name" />
-              <input aria-label="Account number" className={input} required inputMode="numeric" value={payee.accountNumber} onChange={set('accountNumber')} placeholder="Account number" />
-              <input aria-label="IFSC" className={input} required value={payee.ifsc} onChange={set('ifsc')} placeholder="IFSC" autoCapitalize="characters" />
-              <input aria-label="Bank name" className={input} value={payee.bankName} onChange={set('bankName')} placeholder="Bank (optional)" />
+              <input aria-label="Account number" className={input} required inputMode={codeKind === 'swift' ? 'text' : 'numeric'} value={payee.accountNumber} onChange={set('accountNumber')} placeholder="Account number" />
+              {masked ? (
+                <p className="self-center text-sm text-gray-600">{payee.swift ? `SWIFT ${payee.swift}` : `IFSC ${payee.ifsc}`}</p>
+              ) : (
+                <BankCodeField kind={codeKind} value={payee[codeKind]} onKind={setCodeKind} onChange={(v) => setPayee({ ...payee, [codeKind]: v })} inputClass={input} />
+              )}
+              <input aria-label="Bank name" className={`${input} sm:self-end`} value={payee.bankName} onChange={set('bankName')} placeholder="Bank (optional)" />
             </div>
           )}
         </>

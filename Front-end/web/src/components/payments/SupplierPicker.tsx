@@ -2,11 +2,12 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
+import { bankCode } from './api';
 import { listSuppliers, supplierKeys, type Supplier } from './suppliers';
 
 export const payLine = (s: Supplier) => (s.payment.method === 'upi'
   ? `UPI · ${s.payment.upiId}`
-  : `${s.payment.bankName || 'Bank'} · ${s.payment.accountName} · A/c ${s.payment.accountNumber || s.payment.accountMasked} · ${s.payment.ifsc}`);
+  : `${s.payment.bankName || 'Bank'} · ${s.payment.accountName} · A/c ${s.payment.accountNumber || s.payment.accountMasked} · ${bankCode(s.payment)}`);
 
 /**
  * Saved suppliers whose name starts with what is being typed, shown right under

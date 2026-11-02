@@ -168,12 +168,29 @@ describe('Payment requests', () => {
       expect((await expense(ops.session, { amount: 20000000 })).status).toBe(400);
       expect((await expense(ops.session, { payee: { ...UPI, upiId: 'not-a-upi' } })).status).toBe(400);
       expect((await expense(ops.session, { payee: { ...BANK, ifsc: 'HDFC1234' } })).status).toBe(400);
+      // A foreign bank: a SWIFT code instead of the IFSC, 8 or 11 characters.
+      expect((await expense(ops.session, { payee: { ...BANK, ifsc: '', swift: 'KASITH' } })).status).toBe(400);
+      expect((await expense(ops.session, { payee: { ...BANK, swift: 'KASITHBK' } })).status).toBe(400); // both
       expect((await expense(ops.session, { category: 'party' })).status).toBe(400);
       // A file whose bytes are not a photo or a PDF, whatever its name says.
       expect((await expense(ops.session, {}, [{ field: 'bill', buffer: Buffer.from('hello world, not an image'), name: 'bill.jpg', type: 'image/jpeg' }])).status).toBe(400);
       expect(stored.size).toBe(0);
       // A PDF bill is fine.
       expect((await expense(ops.session, {}, [{ field: 'bill', buffer: PDF, name: 'bill.pdf', type: 'application/pdf' }])).status).toBe(201);
+    });
+
+    it('a foreign bank is saved with its SWIFT code; an old bank payee (IFSC only) reads as before', async () => {
+      const res = await expense(ops.session, { payee: { ...BANK, ifsc: '', swift: 'kasithbk', accountNumber: '8582102601' } });
+      expect(res.status).toBe(201);
+      expect(res.body.request.payee).toMatchObject({ method: 'bank', swift: 'KASITHBK', ifsc: '' });
+      const indian = await expense(ops.session, { payee: BANK });
+      expect(indian.body.request.payee).toMatchObject({ ifsc: 'HDFC0001234', swift: '' });
+      // A record from before SWIFT has no such field at all.
+      await PaymentRequest.collection.updateOne({ _id: new mongoose.Types.ObjectId(indian.body.request.id) }, { $unset: { 'payee.swift': '' } });
+      const old = await ops.session.get(`/payment-requests/${indian.body.request.id}`);
+      expect(old.status).toBe(200);
+      expect(old.body.request.payee.ifsc).toBe('HDFC0001234');
+      expect((await ops.session.get(`/payment-requests/${indian.body.request.id}/slip`)).status).toBe(200);
     });
 
     const bills = (count) => Array.from({ length: count }, (_, i) => ({ field: 'bill', buffer: i % 2 ? PDF : JPEG, name: `bill-${i}.${i % 2 ? 'pdf' : 'jpg'}`, type: i % 2 ? 'application/pdf' : 'image/jpeg' }));

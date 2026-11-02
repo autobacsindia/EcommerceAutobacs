@@ -240,7 +240,7 @@ describe('each team’s own options', () => {
     expect(detailsBox()).toHaveAttribute('placeholder', expect.stringMatching(/^Say what it was for/));
   });
 
-  it('procurement: a baht bill sends the bill and the rate — never a rupee figure — and previews the rupees', async () => {
+  it('procurement: a baht bill sends only the bill — no rate, no rupee figure', async () => {
     serveOptions(PROCUREMENT);
     const onDone = jest.fn();
     wrap(<PaymentRequestForm onDone={onDone} />);
@@ -249,9 +249,9 @@ describe('each team’s own options', () => {
     expect(options()).not.toContain('Fuel');
     fireEvent.change(screen.getByLabelText('Currency'), { target: { value: 'THB' } });
     expect(screen.queryByLabelText('Amount (₹)')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Bill amount (THB)'), { target: { value: '10000' } });
-    fireEvent.change(screen.getByLabelText('Rate (₹ for 1 THB)'), { target: { value: '2.45' } });
-    expect(screen.getByText('₹24,500')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Rate/)).toBeNull();
+    expect(screen.getByText(/the admin records it when paying/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Bill amount (THB)'), { target: { value: '22950' } });
     fireEvent.change(screen.getByLabelText('Pay to'), { target: { value: 'Siam Parts' } });
     fireEvent.change(screen.getByLabelText('UPI ID'), { target: { value: 'forex@okhdfc' } });
     fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
@@ -259,9 +259,47 @@ describe('each team’s own options', () => {
     const form = fetchMock.mock.calls[0][1].body as FormData;
     expect(form.get('category')).toBe('import_purchase');
     expect(form.get('currency')).toBe('THB');
-    expect(form.get('foreignAmount')).toBe('10000');
-    expect(form.get('fxRate')).toBe('2.45');
+    expect(form.get('foreignAmount')).toBe('22950');
+    expect(form.get('fxRate')).toBeNull();
     expect(form.get('amount')).toBeNull();
+  });
+
+  it('a foreign bill by bank transfer starts on SWIFT and sends it instead of an IFSC', async () => {
+    serveOptions(PROCUREMENT);
+    const onDone = jest.fn();
+    wrap(<PaymentRequestForm onDone={onDone} />);
+    await optionsLoaded();
+    fireEvent.change(screen.getByLabelText('Currency'), { target: { value: 'THB' } });
+    fireEvent.change(screen.getByLabelText('Bill amount (THB)'), { target: { value: '22950' } });
+    fireEvent.change(screen.getByLabelText('Pay to'), { target: { value: 'Open N' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Bank transfer' }));
+    expect(screen.getByRole('radio', { name: 'SWIFT (foreign bank)' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.change(screen.getByLabelText('Account holder'), { target: { value: 'Nikom Amranan' } });
+    fireEvent.change(screen.getByLabelText('Account number'), { target: { value: '8582102601' } });
+    // A wrong shape is caught here, with an example, before anything is sent.
+    fireEvent.change(screen.getByLabelText('SWIFT code'), { target: { value: 'KASITH' } });
+    expect(screen.getByText(/8 or 11 letters and digits, like KASITHBK/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/SWIFT code/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('SWIFT code'), { target: { value: 'kasithbk' } });
+    fireEvent.change(screen.getByLabelText('Bank name'), { target: { value: 'KASIKORNBANK' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    const payee = JSON.parse((fetchMock.mock.calls[0][1].body as FormData).get('payee') as string);
+    expect(payee).toMatchObject({ method: 'bank', swift: 'KASITHBK', ifsc: '', accountNumber: '8582102601', bankName: 'KASIKORNBANK' });
+  });
+
+  it('a rupee bill by bank transfer starts on IFSC, and can be switched to SWIFT', async () => {
+    const onDone = jest.fn();
+    wrap(<PaymentRequestForm onDone={onDone} />);
+    await optionsLoaded();
+    fireEvent.click(screen.getByRole('radio', { name: 'Bank transfer' }));
+    expect(screen.getByRole('radio', { name: 'IFSC (Indian bank)' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.change(screen.getByLabelText('IFSC'), { target: { value: 'HDFC1234' } });
+    expect(screen.getByText(/11 characters, like HDFC0001234/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'SWIFT (foreign bank)' }));
+    expect(screen.getByLabelText('SWIFT code')).toHaveValue('');
   });
 
   it('shows the server’s refusal as it is', async () => {
@@ -299,24 +337,39 @@ describe('each team’s own options', () => {
     expect(put).toHaveBeenCalledWith('/payment-requests/r1', expect.objectContaining({ category: 'fuel', currency: 'INR', amount: '900' }));
   });
 
-  it('editing a baht bill changes the bill or the rate, not the rupees', async () => {
+  it('editing a baht bill changes the bill, never a rate or rupees', async () => {
     serveOptions(PROCUREMENT);
     const thb: PaymentRequest = {
       ...base, status: 'submitted', team: 'procurement', category: 'import_purchase', categoryLabel: 'Import purchase',
-      amount: 24500, currency: 'THB', foreignAmount: 10000, fxRate: 2.45,
+      amount: 0, currency: 'THB', foreignAmount: 22950, fxRate: null, rupeesPending: true,
     };
     put.mockResolvedValue({ request: thb });
     const onDone = jest.fn();
     wrap(<EditPaymentRequest r={thb} onDone={onDone} onCancel={() => {}} />);
     await screen.findByRole('option', { name: 'Import purchase' });
     expect(screen.queryByLabelText('Amount (₹)')).toBeNull();
-    fireEvent.change(screen.getByLabelText('Rate (₹ for 1 THB)'), { target: { value: '2.5' } });
-    expect(screen.getByText('₹25,000')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Rate/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Bill amount (THB)'), { target: { value: '23000' } });
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
     const body = put.mock.calls[0][1];
-    expect(body).toMatchObject({ currency: 'THB', foreignAmount: '10000', fxRate: '2.5' });
+    expect(body).toMatchObject({ currency: 'THB', foreignAmount: '23000' });
     expect(body).not.toHaveProperty('amount');
+    expect(body).not.toHaveProperty('fxRate');
+  });
+
+  it('editing a foreign-bank payee keeps it on SWIFT', async () => {
+    const swiftPayee: PaymentRequest = {
+      ...base, status: 'submitted',
+      payee: { name: 'Open N', method: 'bank', accountName: 'Nikom Amranan', accountNumber: '8582102601', swift: 'KASITHBK', ifsc: '', bankName: 'KASIKORNBANK' },
+    };
+    put.mockResolvedValue({ request: swiftPayee });
+    const onDone = jest.fn();
+    wrap(<EditPaymentRequest r={swiftPayee} onDone={onDone} onCancel={() => {}} />);
+    expect(screen.getByLabelText('SWIFT code')).toHaveValue('KASITHBK');
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(put.mock.calls[0][1].payee).toMatchObject({ swift: 'KASITHBK', ifsc: '' });
   });
 
   it('the detail shows the readable name and the bill beside the rupees', async () => {
@@ -326,6 +379,37 @@ describe('each team’s own options', () => {
     expect(await within(panel).findByText(/Import purchase expense/)).toBeInTheDocument();
     expect(within(panel).getByText('₹24,500')).toBeInTheDocument();
     expect(within(panel).getByText('Bill: THB 10,000 @ ₹2.45')).toBeInTheDocument();
+  });
+
+  it('a baht bill not yet paid shows the bill, and paying it asks for the rupees the bank debited', async () => {
+    const thb = {
+      ...base, team: 'procurement', category: 'import_purchase', categoryLabel: 'Import purchase', amount: 0, currency: 'THB',
+      foreignAmount: 22950, fxRate: null, rupeesPending: true,
+      payee: { name: 'Open N', method: 'bank' as const, accountName: 'Nikom Amranan', accountNumber: '8582102601', swift: 'KASITHBK', ifsc: '', bankName: 'KASIKORNBANK' },
+    };
+    get.mockResolvedValue({ request: thb });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    const panel = await screen.findByRole('complementary', { name: 'Payment request' });
+    expect(await within(panel).findByText('THB 22,950')).toBeInTheDocument();
+    expect(within(panel).queryByText('₹0')).toBeNull();
+    expect(within(panel).getByText(/Bank · Nikom Amranan, A\/c 8582102601, SWIFT KASITHBK \(KASIKORNBANK\)/)).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Record payment' }));
+    const debit = within(panel).getByLabelText('Rupees debited');
+    expect(debit).toBeRequired();
+    fireEvent.change(debit, { target: { value: '56227' } });
+    fireEvent.click(within(panel).getByRole('button', { name: /Mark as paid/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/payment-requests/r1/pay');
+    expect(form.get('rupees')).toBe('56227');
+  });
+
+  it('a rupee request pays as before — no rupees box', async () => {
+    get.mockResolvedValue({ request: base });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    const panel = await screen.findByRole('complementary', { name: 'Payment request' });
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Record payment' }));
+    expect(within(panel).queryByLabelText('Rupees debited')).toBeNull();
   });
 });
 

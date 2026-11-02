@@ -15,7 +15,7 @@ import { formatLongDateIST, formatDateTimeIST } from '../utils/datetime.js';
 import { rupeesInWords } from '../utils/amountInWords.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { BASE_CURRENCY, categoryLabel } from '../config/expenseCategories.js';
-import { STATUS_LABELS, maskAccount } from './paymentRequestService.js';
+import { STATUS_LABELS, maskAccount, rupeesPending } from './paymentRequestService.js';
 
 const { HAS_UNICODE, FONT, FONT_BOLD, CURRENCY, unicodeFonts } = pdfFonts;
 const C = { ink: '#111a16', body: '#3b4641', muted: '#6b7671', line: '#dfe5e2', zebra: '#f5f8f6', brand: '#0a5c33', band: '#0d1612', red: '#b42318', amber: '#b54708' };
@@ -27,10 +27,18 @@ const ACTION_LABELS = {
 };
 const METHOD_LABELS = { razorpay: 'Razorpay', bank: 'Bank transfer', upi: 'UPI', other: 'Other' };
 const dateTime = (d) => formatDateTimeIST(d);
-/** A foreign bill: "THB 10,000.00 at Rs 2.45 per THB = Rs 24,500.00"; '' for rupees (and every older record). */
-const billLine = (r) => (r.currency && r.currency !== BASE_CURRENCY && r.foreignAmount != null
-  ? `${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} at ${CURRENCY} ${r.fxRate} per ${r.currency} = ${money(r.amount)}`
-  : '');
+const foreignMoney = (r) => `${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/**
+ * A foreign bill: "THB 10,000.00 at Rs 2.45 per THB = Rs 24,500.00" once its rupees
+ * are known (paid, or an older request raised with a rate); "THB 22,950.00 —
+ * rupees recorded when paid" before. '' for rupees (and every older record).
+ */
+const billLine = (r) => {
+  if (!(r.currency && r.currency !== BASE_CURRENCY && r.foreignAmount != null)) return '';
+  if (rupeesPending(r)) return `${foreignMoney(r)} — rupees recorded when paid`;
+  const rate = Number(r.fxRate).toLocaleString('en-IN', { maximumFractionDigits: 4 });
+  return `${foreignMoney(r)} at ${CURRENCY} ${rate} per ${r.currency} = ${money(r.amount)}`;
+};
 
 export async function renderPaymentSlip(r) {
   const logo = await loadLogo();
@@ -78,8 +86,10 @@ export async function renderPaymentSlip(r) {
       // Amount block
       doc.roundedRect(L, y, R - L, 64, 8).fill(C.zebra);
       doc.font(FONT).fontSize(9).fillColor(C.muted).text(r.kind === 'supplier' ? 'SUPPLIER PAYMENT' : `${categoryLabel(r.category).toUpperCase()} EXPENSE`, L + 16, y + 12, { characterSpacing: 1 });
-      doc.font(FONT_BOLD).fontSize(22).fillColor(C.ink).text(money(r.amount), L + 16, y + 26, { lineBreak: false });
-      doc.font(FONT).fontSize(8.6).fillColor(C.body).text(rupeesInWords(r.amount), L + 200, y + 34, { width: R - L - 216, align: 'right' });
+      // A foreign bill not yet paid has no rupee figure: the bill is the amount.
+      const pending = rupeesPending(r);
+      doc.font(FONT_BOLD).fontSize(22).fillColor(C.ink).text(pending ? foreignMoney(r) : money(r.amount), L + 16, y + 26, { lineBreak: false });
+      doc.font(FONT).fontSize(8.6).fillColor(C.body).text(pending ? 'Rupee amount: what the bank debits, recorded when paid' : rupeesInWords(r.amount), L + 200, y + 34, { width: R - L - 216, align: 'right' });
       y += 80;
 
       // Two columns: request / payee
@@ -113,6 +123,7 @@ export async function renderPaymentSlip(r) {
         ['Account name', payee.accountName],
         ['Account no.', maskAccount(payee.accountNumber)],
         ['IFSC', payee.ifsc],
+        ['SWIFT', payee.swift],
         ['Bank', payee.bankName],
         ['Phone', payee.phone],
       ]);
