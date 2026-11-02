@@ -317,6 +317,8 @@ export interface ReturnRequest {
   // On the admin DETAIL response these are signed { url } objects; on the list
   // response the private refs are omitted.
   video?: ReturnSignedAsset | null;
+  /** A Google Drive / YouTube link, when the unboxing video was too big to upload. */
+  videoLink?: string | null;
   proofOfPurchase?: ReturnSignedAsset | null;
   images?: ReturnSignedAsset[];
   shippingBorneBy?: 'roavion' | 'customer';

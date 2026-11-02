@@ -6,8 +6,8 @@
  *   - reasons claim a fault: 7 days for ours, 4 for the customer's own reason
  *   - customer reasons need the unused-in-box declaration and a returnable product;
  *     a fault on our side is always accepted (Consumer Protection (E-Commerce) Rules 2020)
- *   - evidence: a photo always; a video for transit damage or a line over ₹10,000;
- *     proof of purchase optional
+ *   - evidence: a photo and the unboxing video (an upload, or a Drive/YouTube link) on
+ *     EVERY return, whatever the reason or price (2026-11-02); proof of purchase optional
  *   - per-line windows on split parcels; never more units than were DELIVERED and are
  *     unclaimed; one in-flight return per product; a rejected product goes to support
  *   - debit-card EMI is all-or-nothing
@@ -71,7 +71,7 @@ async function order(user, over = {}) {
 }
 const customer = () => ({ _id: oid() });
 const raise = (user, o, items, extra = {}) => svc.createCustomerReturn(user, {
-  orderId: String(o._id), items, problemDescription: 'It rattles', images: PHOTOS, ...extra,
+  orderId: String(o._id), items, problemDescription: 'It rattles', images: PHOTOS, video: VIDEO, ...extra,
 }, null);
 
 describe('reasons, windows and the non-returnable list', () => {
@@ -127,20 +127,52 @@ describe('reasons, windows and the non-returnable list', () => {
 });
 
 describe('evidence', () => {
-  it('a photo always; a video for transit damage or a line over ₹10,000; proof optional; a description', async () => {
+  it('a photo always; proof optional; a description', async () => {
     const u = customer();
     const { o, a } = await order(u._id);
     await expect(raise(u, o, [{ itemId: a, quantity: 1, reason: 'wrong_item' }], { images: [] }))
       .rejects.toMatchObject({ message: expect.stringMatching(/photo/i) });
-    await expect(raise(u, o, [{ itemId: a, quantity: 1, reason: 'transit_damage' }]))
-      .rejects.toMatchObject({ message: expect.stringMatching(/video/i) });
     await expect(raise(u, o, [{ itemId: a, quantity: 1, reason: 'wrong_item' }], { problemDescription: ' ' }))
       .rejects.toMatchObject({ message: expect.stringMatching(/description/i) });
-    await expect(raise(u, o, [{ itemId: a, quantity: 1, reason: 'transit_damage' }], { video: VIDEO })).resolves.toBeTruthy();
+    await expect(raise(u, o, [{ itemId: a, quantity: 1, reason: 'wrong_item' }])).resolves.toBeTruthy();
+  });
 
-    const big = await order(u._id, { items: [{ _id: oid(), product: oid(), name: 'Dash cam', price: 12000, quantity: 1 }], subtotal: 12000, totalAmount: 12000 });
-    await expect(raise(u, big.o, [{ itemId: String(big.o.items[0]._id), quantity: 1, reason: 'wrong_item' }]))
-      .rejects.toMatchObject({ message: expect.stringMatching(/video/i) });
+  it('the unboxing video is required on every return — every reason, every price', async () => {
+    const u = customer();
+    for (const reason of ['wrong_item', 'transit_damage', 'manufacturing_defect', 'missing_part', 'wrong_fitment_info', 'ordered_wrong', 'changed_mind']) {
+      const { o, a } = await order(u._id);
+      await expect(raise(u, o, [{ itemId: a, quantity: 1, reason }], { video: undefined, unusedDeclared: true }))
+        .rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/unboxing video is required/i) });
+      expect(await ReturnRequest.countDocuments({ order: o._id })).toBe(0);
+    }
+    // A ₹250 polish — under the old ₹10,000 line — still needs it.
+    const { o, b } = await order(u._id);
+    await expect(raise(u, o, [{ itemId: b, quantity: 1, reason: 'wrong_item' }], { video: null, videoLink: '  ' }))
+      .rejects.toMatchObject({ message: expect.stringMatching(/unboxing video is required/i) });
+  });
+
+  it('a Google Drive or YouTube link stands in for a video too big to upload', async () => {
+    const u = customer();
+    const { o, a, b } = await order(u._id);
+    const link = 'https://drive.google.com/file/d/abc123/view?usp=sharing';
+    const rr = await raise(u, o, [{ itemId: a, quantity: 1, reason: 'transit_damage' }], { video: undefined, videoLink: ` ${link} ` });
+    const saved = await ReturnRequest.findById(rr._id).lean();
+    expect(saved.videoLink).toBe(link);
+    expect(saved.video).toBeNull();
+
+    for (const bad of ['http://drive.google.com/file/d/x', 'https://drive.google.com.evil.example/x', 'https://dropbox.com/s/x', 'javascript:alert(1)', 'not a link']) {
+      await expect(raise(u, o, [{ itemId: b, quantity: 1, reason: 'wrong_item' }], { video: undefined, videoLink: bad }))
+        .rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/google drive or youtube/i) });
+    }
+  });
+
+  it('an uploaded video wins over a link — only one is kept', async () => {
+    const u = customer();
+    const { o, a } = await order(u._id);
+    const rr = await raise(u, o, [{ itemId: a, quantity: 1, reason: 'wrong_item' }], { videoLink: 'https://youtu.be/abc' });
+    const saved = await ReturnRequest.findById(rr._id).lean();
+    expect(saved.video).toMatchObject({ publicId: VIDEO.publicId });
+    expect(saved.videoLink).toBeNull();
   });
 
   it('creates the request, snapshots the value, tells the customer, support and both teams', async () => {
@@ -318,7 +350,10 @@ describe('the order page tracker (GET /returns/my-returns?orderId=)', () => {
     const { requests } = res.json.mock.calls[0][0];
     expect(requests).toHaveLength(2);
     const view = requests.find((r) => String(r._id) === String(rr._id));
-    expect(view).toMatchObject({ status: 'pending', hasVideo: false, photoCount: 1, refund: { finalAmount: null } });
+    expect(view).toMatchObject({ status: 'pending', hasVideo: true, photoCount: 1, refund: { finalAmount: null } });
+    // The customer is told a video is on file — never handed the private reference.
+    expect(view.video).toBeUndefined();
+    expect(view.videoLink).toBeUndefined();
     // The order line id lets the page work out which units are already coming back.
     expect(view.items[0]).toMatchObject({ reason: 'wrong_item', fault: 'ours' });
     expect(String(view.items[0].orderItemId)).toBe(a);

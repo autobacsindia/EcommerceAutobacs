@@ -82,6 +82,7 @@ const JPEG = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), Buffer.alloc(
 const photo = () => ({ buffer: JPEG, mimetype: 'image/jpeg', originalname: 'item.jpg' });
 const req = (user, body = {}, params = {}) => ({ headers: {}, ip: '127.0.0.1', connection: {}, get: () => '', user, body, params });
 const PHOTOS = [{ publicId: 'autobacs/returns/n1/photo-1.jpg' }];
+const VIDEO = { publicId: 'autobacs/returns/n1/video.mp4' };
 
 let n = 0;
 async function person(team, { isHead = false, subRole } = {}) {
@@ -148,7 +149,7 @@ async function passedReturn(o, { lines, destination = { kind: 'warehouse' } } = 
   const seller = await person('sales', { isHead: true });
   const raised = await svc.raiseReturn(seller, {
     orderId: String(o.order._id), items: lines || [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }],
-    description: 'Wrong model sent', images: PHOTOS, video: { publicId: 'autobacs/returns/n1/video.mp4' },
+    description: 'Wrong model sent', images: PHOTOS, video: VIDEO,
   }, req(seller));
   await svc.reviewReturn(ops, raised.id, { decision: 'approve', destination }, req(ops));
   if (destination.kind === 'supplier') {
@@ -180,7 +181,7 @@ describe('raising a return (staff, for the customer)', () => {
     const lead = await person('sales');
     const r = await svc.raiseReturn(lead, {
       orderId: String(o.order._id), items: [{ itemId: o.cam, quantity: 1, reason: 'manufacturing_defect' }],
-      description: 'Does not power on', images: PHOTOS,
+      description: 'Does not power on', images: PHOTOS, video: VIDEO,
     }, req(lead));
     expect(r).toMatchObject({ status: 'pending', origin: 'staff', stage: 'Check 1 — evidence' });
     const saved = await ReturnRequest.findById(r.id).lean();
@@ -191,25 +192,55 @@ describe('raising a return (staff, for the customer)', () => {
     expect(enqueued.find((j) => j.name === 'post-return-update').data.event).toBe('raised_ops');
   });
 
-  it('needs at least one photo, and a video for transit damage or a line over ₹10,000', async () => {
+  it('needs at least one photo and the unboxing video — every reason, every price', async () => {
     const o = await deliveredOrder({ camPrice: 12000 });
     const ops = await person('operations');
     const base = { orderId: String(o.order._id), description: 'x' };
-    await expect(svc.raiseReturn(ops, { ...base, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops)))
+    await expect(svc.raiseReturn(ops, { ...base, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops)))
       .rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/at least one photo/i) });
-    await expect(svc.raiseReturn(ops, { ...base, images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'transit_damage' }] }, req(ops)))
-      .rejects.toMatchObject({ message: expect.stringMatching(/video/i) });
-    await expect(svc.raiseReturn(ops, { ...base, images: PHOTOS, items: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }] }, req(ops)))
-      .rejects.toMatchObject({ message: expect.stringMatching(/video/i) });
+    for (const reason of ['wrong_item', 'manufacturing_defect', 'installer_damage', 'changed_mind']) {
+      await expect(svc.raiseReturn(ops, { ...base, images: PHOTOS, unusedDeclared: true, items: [{ itemId: o.mat, quantity: 1, reason }] }, req(ops)))
+        .rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/unboxing video is required/i) });
+    }
+    expect(await ReturnRequest.countDocuments({ order: o.order._id })).toBe(0);
     await expect(svc.raiseReturn(ops, {
-      ...base, images: PHOTOS, video: { publicId: 'autobacs/returns/n1/video.mp4' }, items: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }],
+      ...base, images: PHOTOS, video: VIDEO, items: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }],
     }, req(ops))).resolves.toMatchObject({ status: 'pending' });
+  });
+
+  it('takes a YouTube link the customer sent on WhatsApp, and shows it to staff', async () => {
+    const o = await deliveredOrder();
+    const ops = await person('operations');
+    const r = await svc.raiseReturn(ops, {
+      orderId: String(o.order._id), description: 'Cracked on arrival', images: PHOTOS,
+      videoLink: 'https://www.youtube.com/watch?v=abc123', items: [{ itemId: o.mat, quantity: 1, reason: 'transit_damage' }],
+    }, req(ops));
+    expect(r.evidence.videoLink).toBe('https://www.youtube.com/watch?v=abc123');
+    await expect(svc.raiseReturn(ops, {
+      orderId: String(o.order._id), description: 'x', images: PHOTOS,
+      videoLink: 'https://vimeo.com/123', items: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }],
+    }, req(ops))).rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/google drive or youtube/i) });
+  });
+
+  it('a return raised before the video rule (no video, no link) still moves through the steps', async () => {
+    const o = await deliveredOrder();
+    const ops = await person('operations');
+    const r = await svc.raiseReturn(ops, {
+      orderId: String(o.order._id), description: 'Old one', images: PHOTOS, video: VIDEO,
+      items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }],
+    }, req(ops));
+    // As it would look in the database from before 2026-11-02.
+    await ReturnRequest.collection.updateOne({ _id: new mongoose.Types.ObjectId(r.id) }, { $set: { video: null }, $unset: { videoLink: '' } });
+    const view = await svc.getReturn(ops, r.id);
+    expect(view.evidence.videoLink).toBeNull();
+    await expect(svc.reviewReturn(ops, r.id, { decision: 'approve', destination: { kind: 'warehouse' } }, req(ops)))
+      .resolves.toMatchObject({ status: 'approved' });
   });
 
   it('gives our-fault reasons 7 days and customer reasons 4', async () => {
     const o = await deliveredOrder({ deliveredDaysAgo: 5 });
     const ops = await person('operations');
-    const base = { orderId: String(o.order._id), description: 'x', images: PHOTOS, unusedDeclared: true };
+    const base = { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, unusedDeclared: true };
     await expect(svc.raiseReturn(ops, { ...base, items: [{ itemId: o.mat, quantity: 1, reason: 'changed_mind' }] }, req(ops)))
       .rejects.toMatchObject({ statusCode: 400, message: expect.stringMatching(/window .* closed/i) });
     await expect(svc.raiseReturn(ops, { ...base, items: [{ itemId: o.mat, quantity: 1, reason: 'missing_part' }] }, req(ops)))
@@ -222,7 +253,7 @@ describe('raising a return (staff, for the customer)', () => {
   it("customer's reason: needs the unused-in-box declaration and a returnable product; our fault never does", async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const base = { orderId: String(o.order._id), description: 'x', images: PHOTOS };
+    const base = { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO };
     await expect(svc.raiseReturn(ops, { ...base, items: [{ itemId: o.mat, quantity: 1, reason: 'ordered_wrong' }] }, req(ops)))
       .rejects.toMatchObject({ message: expect.stringMatching(/unused/i) });
 
@@ -238,7 +269,7 @@ describe('raising a return (staff, for the customer)', () => {
   it('never returns more units than were delivered, nor an installation line on its own', async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const base = { orderId: String(o.order._id), description: 'x', images: PHOTOS };
+    const base = { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO };
     await expect(svc.raiseReturn(ops, { ...base, items: [{ itemId: o.mat, quantity: 3, reason: 'wrong_item' }] }, req(ops)))
       .rejects.toMatchObject({ statusCode: 409 });
     await expect(svc.raiseReturn(ops, { ...base, items: [{ itemId: o.fit, quantity: 1, reason: 'wrong_item' }] }, req(ops)))
@@ -249,7 +280,7 @@ describe('raising a return (staff, for the customer)', () => {
 describe('the permission matrix', () => {
   it('raise: GTM head/lead, operations, admin — never an executive, procurement or accounts', async () => {
     const o = await deliveredOrder();
-    const input = { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] };
+    const input = { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] };
     await forbidden(svc.raiseReturn(await person('sales', { subRole: 'executive' }), input, req()));
     await forbidden(svc.raiseReturn(await person('procurement'), input, req()));
     await forbidden(svc.raiseReturn(await person('accounts'), input, req()));
@@ -259,7 +290,7 @@ describe('the permission matrix', () => {
   it('review: operations and admin — never sales, procurement or accounts', async () => {
     const o = await deliveredOrder();
     const head = await person('sales', { isHead: true });
-    const r = await svc.raiseReturn(head, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(head));
+    const r = await svc.raiseReturn(head, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(head));
     for (const who of [head, await person('procurement'), await person('accounts')]) {
       await forbidden(svc.reviewReturn(who, r.id, { decision: 'approve' }, req(who)));
     }
@@ -269,7 +300,7 @@ describe('the permission matrix', () => {
   it('installer damage is approved by admin only', async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'Scratched dash', images: PHOTOS, items: [{ itemId: o.cam, quantity: 1, reason: 'installer_damage' }] }, req(ops));
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'Scratched dash', images: PHOTOS, video: VIDEO, items: [{ itemId: o.cam, quantity: 1, reason: 'installer_damage' }] }, req(ops));
     await forbidden(svc.reviewReturn(ops, r.id, { decision: 'approve' }, req(ops)));
     await expect(svc.reviewReturn(await admin(), r.id, { decision: 'approve' }, req())).resolves.toMatchObject({ status: 'approved' });
   });
@@ -277,7 +308,7 @@ describe('the permission matrix', () => {
   it('inspection: operations only; the supplier check: procurement only', async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
     await svc.reviewReturn(ops, r.id, { decision: 'approve' }, req(ops));
     await forbidden(svc.bookPickup(await person('procurement'), r.id, { provider: 'X', trackingNumber: '1' }, req()));
     await svc.markDroppedAtStore(ops, r.id, { note: 'Walk-in' }, req(ops));
@@ -325,14 +356,14 @@ describe('the flow', () => {
     }, req(ops));
     expect(both.destinationOptions).toEqual({ default: 'warehouse', suppliers: ['Ram Traders'] });
     const o2 = await deliveredOrder();
-    const own = await svc.raiseReturn(ops, { orderId: String(o2.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o2.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    const own = await svc.raiseReturn(ops, { orderId: String(o2.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o2.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
     expect(own.destinationOptions.suppliers).toEqual([]);
   });
 
   it('a fault change at review needs a note, and decides the money', async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'manufacturing_defect' }] }, req(ops));
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'manufacturing_defect' }] }, req(ops));
     await expect(svc.reviewReturn(ops, r.id, { decision: 'approve', faults: { [o.mat]: { confirmed: 'customer' } } }, req(ops)))
       .rejects.toMatchObject({ message: expect.stringMatching(/note/i) });
     const done = await svc.reviewReturn(ops, r.id, { decision: 'approve', faults: { [o.mat]: { confirmed: 'customer', note: 'Fitted wrongly by the customer' } } }, req(ops));
@@ -447,7 +478,7 @@ describe('the flow', () => {
   it('direct to supplier: procurement books it and records the supplier check; operations confirms', async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }] }, req(ops));
     await svc.reviewReturn(ops, r.id, { decision: 'approve', destination: { kind: 'supplier', supplierName: 'Ram Traders' } }, req(ops));
     await forbidden(svc.bookPickup(ops, r.id, { provider: 'X', trackingNumber: '1' }, req(ops)));
     const proc = await person('procurement');
@@ -465,7 +496,7 @@ describe('the flow', () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
     const r = await svc.raiseReturn(ops, {
-      orderId: String(o.order._id), description: 'Ordered for the wrong car', images: PHOTOS, unusedDeclared: true,
+      orderId: String(o.order._id), description: 'Ordered for the wrong car', images: PHOTOS, video: VIDEO, unusedDeclared: true,
       items: [{ itemId: o.mat, quantity: 2, reason: 'ordered_wrong' }],
     }, req(ops));
     await svc.reviewReturn(ops, r.id, { decision: 'approve' }, req(ops));
@@ -492,7 +523,7 @@ describe('the flow', () => {
   it('a failed inspection rejects it, with what happens to the item', async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'manufacturing_defect' }] }, req(ops));
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'manufacturing_defect' }] }, req(ops));
     await svc.reviewReturn(ops, r.id, { decision: 'approve' }, req(ops));
     await svc.markDroppedAtStore(ops, r.id, {}, req(ops));
     await expect(svc.recordInspection(ops, r.id, { passed: false, notes: 'Cut by customer' }, [photo()], req(ops)))
@@ -506,7 +537,7 @@ describe('the flow', () => {
   it('two failed pickups cancel the return and tell the customer once', async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
     await svc.reviewReturn(ops, r.id, { decision: 'approve' }, req(ops));
     await svc.bookPickup(ops, r.id, { provider: 'Delhivery', trackingNumber: 'DL1' }, req(ops));
     await expect(svc.recordPickupFailed(ops, r.id, {}, req(ops))).rejects.toMatchObject({ statusCode: 400 });
@@ -517,14 +548,14 @@ describe('the flow', () => {
     await expect(svc.recordPickupFailed(ops, r.id, { note: 'again' }, req(ops))).rejects.toMatchObject({ statusCode: 409 });
     expect(enqueued.filter((j) => j.name === 'send-return-status-email' && j.data.event === 'pickup_failed')).toHaveLength(1);
     // The units are free again: a fresh return for them can be raised.
-    await expect(svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'again', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops)))
+    await expect(svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'again', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops)))
       .resolves.toMatchObject({ status: 'pending' });
   });
 
   it('two people recording the same failed pickup at once count it once', async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
     await svc.reviewReturn(ops, r.id, { decision: 'approve' }, req(ops));
     const outcomes = await Promise.allSettled([1, 2, 3].map(() => svc.recordPickupFailed(ops, r.id, { note: 'Not home' }, req(ops))));
     expect(outcomes.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
@@ -593,7 +624,7 @@ describe('lists and the bell', () => {
   it('each queue lists what waits on that team, and the bell counts the same', async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
     const review = await svc.listReturns(ops, { queue: 'review' });
     expect(review.returns.map((x) => x.id)).toEqual([r.id]);
     const bell = await svc.countsFor(ops);
@@ -611,7 +642,7 @@ describe('lists and the bell', () => {
     const made = [];
     for (let i = 0; i < 27; i += 1) {
       const o = await deliveredOrder();
-      made.push((await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops))).id);
+      made.push((await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops))).id);
     }
     const first = await svc.listReturns(ops, { queue: 'review' });
     expect(first.returns).toHaveLength(25);
@@ -629,7 +660,7 @@ describe('lists and the bell', () => {
     const other = await person('sales');
     const o = await deliveredOrder({ salesUser: lead._id });
     const ops = await person('operations');
-    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
     expect((await svc.listReturns(lead, { queue: 'mine' })).returns.map((x) => x.id)).toEqual([r.id]);
     await expect(svc.getReturn(other, r.id)).rejects.toMatchObject({ statusCode: 404 });
     await forbidden(svc.listReturns(lead, { queue: 'all' }));
@@ -638,8 +669,8 @@ describe('lists and the bell', () => {
   it('shows the repeat-returner count (a flag, never a block)', async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');
-    await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
-    const second = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'y', images: PHOTOS, items: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    const second = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'y', images: PHOTOS, video: VIDEO, items: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }] }, req(ops));
     expect(second.repeatReturns).toBe(2);
   });
 });
@@ -687,7 +718,7 @@ describe('team chat (which also pushes to phones)', () => {
     const head = await person('sales', { isHead: true });
     const o = await deliveredOrder();
     const ops = await person('operations');
-    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }] }, req(ops));
     enqueued.length = 0;
     await postBusinessUpdate(RETURN_CHAT_JOB, { event: 'raised_sales', returnId: r.id });
     await postBusinessUpdate(RETURN_CHAT_JOB, { event: 'raised_sales', returnId: r.id });

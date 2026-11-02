@@ -513,13 +513,44 @@ export const returnReasonLabel = (reason: string): string =>
 // 7 days when the fault is ours, 4 for the customer's own reason.
 export const RETURN_WINDOW_DAYS = 4;
 export const RETURN_WINDOW_DAYS_OURS = 7;
-// Above this item value (₹) a video is needed with the return, whatever the reason.
-export const RETURN_VIDEO_ABOVE_RUPEES = 10000;
+
+/*
+  The unboxing video — required on EVERY return and replacement, whatever the reason
+  (owner, 2026-11-02). Mirrors backend config/returnPolicy.js VIDEO_MAX_MB and
+  VIDEO_LINK_HOSTS; the server re-checks both, these only shape the form.
+  The rule must be visible BEFORE purchase (policy, product and checkout pages), so
+  every surface renders UNBOXING_VIDEO_RULE / UNBOXING_VIDEO_NOTE rather than its own copy.
+*/
+export const RETURN_VIDEO_MAX_MB = 100;
+export const RETURN_VIDEO_LINK_HOSTS: readonly string[] = [
+  'drive.google.com', 'photos.google.com', 'photos.app.goo.gl',
+  'youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be',
+];
+
+/** Would the server take this as a video link? A form guard only — the API decides. */
+export const isAllowedVideoLink = (link: string): boolean => {
+  try {
+    const url = new URL(link.trim());
+    return url.protocol === 'https:' && !url.username && !url.password
+      && RETURN_VIDEO_LINK_HOSTS.includes(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+};
+
+/** The full rule, in the words the owner approved. */
+export const UNBOXING_VIDEO_RULE =
+  'Please record one continuous, unedited video while opening your package. Start with the sealed package ' +
+  'and the shipping label in view, then open it and show every item inside. We need this video for every ' +
+  'return or replacement, including damaged, missing or wrong items. Without it, we cannot accept the request.';
+
+/** One line for tight spots (product page, checkout). */
+export const UNBOXING_VIDEO_NOTE = 'Returns and replacements need an unboxing video.';
 
 export const RETURN_POLICY_POINTS = [
   `Our fault (wrong, damaged, defective, missing part): raise it within ${RETURN_WINDOW_DAYS_OURS} days of delivery and get everything back`,
   `Your own reason: raise it within ${RETURN_WINDOW_DAYS} days, unused and in its box; the pickup cost is deducted`,
-  'Add at least one photo; a video is needed for transit damage or items over ₹10,000',
+  'Record an unboxing video when you open the parcel — every return and replacement needs it, plus at least one photo',
   'Refund goes to your original payment method after the item passes inspection',
   'Electrical/electronic items once installed, custom-made and non-returnable imported items cannot come back for your own reason',
 ];
@@ -547,7 +578,8 @@ export const RETURN_POLICY_SUMMARY =
   'of delivery and we refund everything, including its share of delivery and any installation charge. ' +
   `For your own reason (ordered the wrong one, changed your mind) you can return it within ${RETURN_WINDOW_DAYS} days ` +
   'if it is unused, not installed and in its original box; you get the item price back minus the real pickup cost. ' +
-  'Add at least one photo when you raise it (a video for transit damage or items over ₹10,000). ' +
+  'Every return or replacement needs an unboxing video: one continuous, unedited video of opening the parcel, ' +
+  'starting with the sealed package and shipping label in view. Add at least one photo too. ' +
   'Refunds go to your original payment method after inspection; we do not offer store credit. ' +
   'Installed electrical/electronic, custom-made and non-returnable imported items cannot be returned for your own reason.';
 

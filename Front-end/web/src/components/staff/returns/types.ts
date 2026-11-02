@@ -62,7 +62,7 @@ export interface ReturnDetail extends ReturnRow {
     reasonLabel: string;
     fault: { claimed: ReturnFault; confirmed: ReturnFault | null; note: string | null };
   }[];
-  evidence: { video: { url: string } | null; proofOfPurchase: { url: string } | null; images: { url: string }[] };
+  evidence: { video: { url: string } | null; videoLink?: string | null; proofOfPurchase: { url: string } | null; images: { url: string }[] };
   files: { id: string; purpose: string; claimId: string | null; name: string; contentType: string }[];
   destinationOptions: { default: 'warehouse'; suppliers: string[] };
   courier: { provider?: string; trackingNumber?: string; bookedAt?: string } | null;

@@ -36,6 +36,7 @@ export const validateReturnRequest = [
     .isLength({ max: 2000 }).withMessage('Description cannot exceed 2000 characters'),
   body('unusedDeclared').optional().isBoolean().withMessage('Invalid declaration'),
   body('video.publicId').optional().isString().withMessage('Invalid video'),
+  body('videoLink').optional({ nullable: true }).isString().isLength({ max: 500 }).withMessage('Invalid video link'),
   body('proofOfPurchase.publicId').optional().isString().withMessage('Invalid proof of purchase'),
   body('images')
     .optional()
@@ -168,7 +169,7 @@ export const validateReturnRefundBody = [
   // The real pickup cost, for a customer-reason return. `shippingDeduction` above is
   // its older name and is still accepted; the controller treats the two as one figure.
   body('pickupDeduction').optional({ values: 'falsy' }).isFloat({ min: 0 }).withMessage('Pickup cost cannot be negative'),
-  body('pickupDeductionReason').optional({ values: 'null' }).isString().trim().isLength({ max: 500 })
+  body('pickupDeductionReason').optional({ nullable: true }).isString().trim().isLength({ max: 500 })
     .withMessage('Pickup cost note cannot exceed 500 characters'),
   // Installation lines to refund with an our-fault return. Only ids and an optional
   // LOWER amount are taken; what each line is worth is recomputed from the order.
@@ -176,11 +177,11 @@ export const validateReturnRefundBody = [
   body('serviceLines.*.orderItemId')
     .custom((value) => mongoose.Types.ObjectId.isValid(value))
     .withMessage('Invalid installation line'),
-  body('serviceLines.*.amountRupees').optional({ values: 'null' }).isFloat({ min: 0 })
+  body('serviceLines.*.amountRupees').optional({ nullable: true }).isFloat({ min: 0 })
     .withMessage('Installation amount cannot be negative'),
-  body('serviceLines.*.reductionReason').optional({ values: 'null' }).isString().trim().isLength({ max: 500 })
+  body('serviceLines.*.reductionReason').optional({ nullable: true }).isString().trim().isLength({ max: 500 })
     .withMessage('Reason cannot exceed 500 characters'),
-  body('creditNoteNo').optional({ values: 'null' }).isString().trim().isLength({ max: 60 })
+  body('creditNoteNo').optional({ nullable: true }).isString().trim().isLength({ max: 60 })
     .withMessage('Credit note number cannot exceed 60 characters'),
   body('notifyCustomer').optional().isBoolean().withMessage('notifyCustomer must be true or false'),
   validateRequest

@@ -39,8 +39,30 @@ export const RETURN_WINDOW_DAYS_BY_FAULT = Object.freeze({ ours: 7, customer: RE
 // still be raised (affiliate commission maturity) waits this long.
 export const LONGEST_RETURN_WINDOW_DAYS = Math.max(...Object.values(RETURN_WINDOW_DAYS_BY_FAULT));
 
-// A video is required for transit damage, and for any line worth more than this.
-export const VIDEO_REQUIRED_ABOVE_RUPEES = 10000;
+/*
+  The unboxing video (owner, 2026-11-02): REQUIRED on every return a customer raises
+  on the website or staff raise for them — every reason, change of mind included. It is
+  what settles "it arrived like this" against "it was damaged after". Shown on the
+  policy, product and checkout pages before purchase, so it is a disclosed condition.
+  Counter returns recorded by an admin (`admin_offline`) skip it: we hold the item.
+
+  Upload cap: 100 MB — the most a single direct upload takes on BOTH stores (Cloudinary
+  refuses a non-chunked request above 100 MB). Anything larger goes in as a link to a
+  host on VIDEO_LINK_HOSTS instead.
+*/
+export const VIDEO_MAX_MB = 100;
+
+// Where a too-big unboxing video may be linked from. Exact hostnames only: a suffix
+// match would let `drive.google.com.evil.example` through.
+export const VIDEO_LINK_HOSTS = Object.freeze([
+  'drive.google.com',
+  'photos.google.com',
+  'photos.app.goo.gl',
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+  'youtu.be',
+]);
 
 // Accounts members may send a return refund up to this much; above it needs the
 // accounts head or an admin.
@@ -140,11 +162,6 @@ export const effectiveFault = (item) => {
 /** Days a line may be returned in, from its delivery. */
 export const windowDaysFor = (fault) => RETURN_WINDOW_DAYS_BY_FAULT[fault] ?? RETURN_WINDOW_DAYS;
 
-/** Is a video required for this line? Transit damage always; otherwise above the threshold. */
-export const videoRequiredFor = ({ reason, unitPrice, quantity }) =>
-  reason === 'transit_damage'
-  || (Number(unitPrice) || 0) * (Number(quantity) || 1) > VIDEO_REQUIRED_ABOVE_RUPEES;
-
 // Why a product can never be returned. Set per-product in the admin editor
 // (Product.returnPolicy.nonReturnReason); mirrors the policy's non-returnable list.
 export const NON_RETURN_REASONS = Object.freeze(['electrical', 'custom', 'imported', 'installed']);
@@ -225,7 +242,8 @@ export default {
   FAULTS,
   RETURN_WINDOW_DAYS_BY_FAULT,
   LONGEST_RETURN_WINDOW_DAYS,
-  VIDEO_REQUIRED_ABOVE_RUPEES,
+  VIDEO_MAX_MB,
+  VIDEO_LINK_HOSTS,
   ACCOUNTS_REFUND_LIMIT_RUPEES,
   MAX_FAILED_PICKUPS,
   DISPOSITIONS,
@@ -242,7 +260,6 @@ export default {
   claimedFaultFor,
   effectiveFault,
   windowDaysFor,
-  videoRequiredFor,
   RESTOCK_PCT,
   RESTOCK_THRESHOLD_RUPEES,
   RETURN_REASONS,

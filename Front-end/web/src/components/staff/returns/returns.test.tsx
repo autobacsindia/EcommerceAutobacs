@@ -74,6 +74,27 @@ describe('check 1', () => {
   });
 });
 
+describe('the unboxing video', () => {
+  it('staff open the uploaded video, or the Drive/YouTube link, and see when there is none', async () => {
+    get.mockResolvedValue({ success: true, return: { ...base, evidence: { ...base.evidence, video: { url: 'https://signed/v.mp4' } } } });
+    const first = wrap(<ReturnPanel id="r1" />);
+    expect(await screen.findByRole('link', { name: 'Unboxing video' })).toHaveAttribute('href', 'https://signed/v.mp4');
+    first.unmount();
+
+    get.mockResolvedValue({ success: true, return: { ...base, evidence: { ...base.evidence, videoLink: 'https://youtu.be/abc' } } });
+    const second = wrap(<ReturnPanel id="r1" />);
+    const link = await screen.findByRole('link', { name: /Unboxing video \(link\)/ });
+    expect(link).toHaveAttribute('href', 'https://youtu.be/abc');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    second.unmount();
+
+    // A request from before the rule: no video, and staff are told so plainly.
+    get.mockResolvedValue({ success: true, return: base });
+    wrap(<ReturnPanel id="r1" />);
+    expect(await screen.findByText('No unboxing video')).toBeInTheDocument();
+  });
+});
+
 describe('check 2', () => {
   it('needs a photo, a note and what happens to the item before it can be saved', async () => {
     get.mockResolvedValue({ success: true, return: { ...base, status: 'received', can: { ...base.can, review: false, inspect: true } } });
@@ -180,7 +201,7 @@ describe('raise a return', () => {
     },
   };
 
-  it('needs a photo, a video for transit damage, and the unused declaration for a customer reason', async () => {
+  it('needs a photo, the unboxing video (or a Drive/YouTube link), and the unused declaration for a customer reason', async () => {
     get.mockResolvedValue(options);
     upload.mockResolvedValue({ publicId: 'autobacs/returns/f/photo0.jpg', provider: 'r2', resourceType: 'image' });
     post.mockResolvedValue({ success: true, return: { id: 'r9', ref: 'R9' } });
@@ -196,7 +217,13 @@ describe('raise a return', () => {
     const photoInput = screen.getByText('Add photo').querySelector('input') as HTMLInputElement;
     fireEvent.change(photoInput, { target: { files: [new File(['x'], 'p.jpg', { type: 'image/jpeg' })] } });
     await waitFor(() => expect(upload).toHaveBeenCalled());
-    expect(submit).toBeDisabled(); // transit damage still needs the video
+    expect(submit).toBeDisabled(); // every return still needs the unboxing video
+
+    const link = screen.getByLabelText('Unboxing video link');
+    fireEvent.change(link, { target: { value: 'https://vimeo.com/1' } });
+    expect(screen.getByText(/Only Google Drive or YouTube links/)).toBeInTheDocument();
+    expect(submit).toBeDisabled();
+    fireEvent.change(link, { target: { value: 'https://drive.google.com/file/d/abc/view' } });
 
     fireEvent.change(screen.getByLabelText('Reason for Seat cover'), { target: { value: 'changed_mind' } });
     expect(submit).toBeDisabled(); // a customer reason needs the declaration
@@ -206,6 +233,7 @@ describe('raise a return', () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/returns', expect.objectContaining({
       orderId: 'o1', items: [{ itemId: 'l1', quantity: 1, reason: 'changed_mind' }], unusedDeclared: true,
       images: [{ publicId: 'autobacs/returns/f/photo0.jpg', provider: 'r2' }],
+      videoLink: 'https://drive.google.com/file/d/abc/view',
     })));
     expect(await screen.findByText(/Return R9 raised/)).toBeInTheDocument();
   });

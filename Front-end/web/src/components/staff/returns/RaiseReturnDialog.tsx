@@ -4,8 +4,8 @@
  * "Raise return" from a team order — a GTM seller or operations raising it for the
  * customer (phone, WhatsApp, walk-in). The same rules as the website apply, and the
  * server re-checks all of them:
- *   - at least one photo the customer sent; a video for transit damage or any item
- *     worth more than ₹10,000;
+ *   - at least one photo the customer sent, and their unboxing video (uploaded, or a
+ *     Google Drive / YouTube link when it is too big) — on every return;
  *   - 7 days from delivery for a fault on our side, 4 for the customer's own reason;
  *   - a customer-reason return needs the item unused, uninstalled, in its box.
  * Photos and the video go straight to private storage; only references are sent.
@@ -17,7 +17,7 @@ import Link from 'next/link';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
-import { RETURN_REASON_OPTIONS } from '@/lib/constants';
+import { RETURN_REASON_OPTIONS, RETURN_VIDEO_MAX_MB, isAllowedVideoLink } from '@/lib/constants';
 import { getReturnUploadSignature, uploadReturnFile, type ReturnCredentials, type ReturnResourceType } from '@/lib/returnUploads';
 import { input, primary, secondary } from './ui';
 
@@ -35,7 +35,6 @@ type Options = {
 type Upload = { publicId: string; provider?: string; name: string };
 
 const UPLOAD_ENDPOINT = '/staff/returns/upload-targets';
-const VIDEO_ABOVE = 10000;
 const MB = 1024 * 1024;
 
 function reasonOpen(line: Options['lines'][number], fault: 'ours' | 'customer', now: number) {
@@ -55,16 +54,15 @@ function Dialog({ orderId, onClose }: { orderId: string; onClose: () => void }) 
   const [unused, setUnused] = useState(false);
   const [photos, setPhotos] = useState<Upload[]>([]);
   const [video, setVideo] = useState<Upload | null>(null);
+  const [videoLink, setVideoLink] = useState('');
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState('');
   const sigRef = useRef<ReturnCredentials | null>(null);
 
   const o = opts.data?.options;
   const chosen = Object.entries(picked);
-  const needsVideo = chosen.some(([id, p]) => {
-    const line = o?.lines.find((l) => l.itemId === id);
-    return p.reason === 'transit_damage' || (line ? line.unitPrice * p.quantity > VIDEO_ABOVE : false);
-  });
+  const link = videoLink.trim();
+  const linkOk = !!link && isAllowedVideoLink(link);
   const anyCustomer = chosen.some(([, p]) => RETURN_REASON_OPTIONS.find((r) => r.value === p.reason)?.fault === 'customer');
 
   const submit = useMutation({
@@ -75,13 +73,19 @@ function Dialog({ orderId, onClose }: { orderId: string; onClose: () => void }) 
       unusedDeclared: anyCustomer ? unused : undefined,
       images: photos.map(({ publicId, provider }) => ({ publicId, provider })),
       ...(video && { video: { publicId: video.publicId, provider: video.provider, resourceType: 'video' } }),
+      ...(!video && link && { videoLink: link }),
     }),
     onSuccess: () => qc.invalidateQueries({ queryKey: staffKeys.returns() }),
   });
 
   const upload = async (file: File, kind: 'photo' | 'video') => {
-    const max = kind === 'video' ? 60 * MB : 10 * MB;
-    if (file.size > max) { setUploadError(`That ${kind} is too large (max ${max / MB}MB).`); return; }
+    const max = kind === 'video' ? RETURN_VIDEO_MAX_MB * MB : 10 * MB;
+    if (file.size > max) {
+      setUploadError(kind === 'video'
+        ? `That video is over ${RETURN_VIDEO_MAX_MB}MB. Ask the customer for a Google Drive or YouTube link and paste it below.`
+        : `That photo is too large (max ${max / MB}MB).`);
+      return;
+    }
     setUploadError('');
     const slot = kind === 'video' ? 'video' : `photo${photos.length}`;
     const resourceType: ReturnResourceType = kind === 'video' ? 'video' : 'image';
@@ -103,7 +107,7 @@ function Dialog({ orderId, onClose }: { orderId: string; onClose: () => void }) 
   };
 
   const ready = chosen.length > 0 && chosen.every(([, p]) => p.reason) && description.trim() && photos.length > 0
-    && (!needsVideo || video) && (!anyCustomer || unused) && !uploading;
+    && (video || linkOk) && (!anyCustomer || unused) && !uploading;
 
   if (submit.isSuccess) {
     return (
@@ -170,7 +174,7 @@ function Dialog({ orderId, onClose }: { orderId: string; onClose: () => void }) 
         </label>
       )}
       <div className="space-y-2">
-        <p className="text-xs font-semibold text-gray-700">The customer&apos;s photos (at least one){needsVideo ? ' and a video (needed for transit damage or items over ₹10,000)' : ''}</p>
+        <p className="text-xs font-semibold text-gray-700">The customer&apos;s unboxing video and photos (at least one) — both are required</p>
         <div className="flex flex-wrap gap-2">
           <label className={`${secondary} cursor-pointer`}>
             {uploading === 'photo' ? 'Uploading…' : 'Add photo'}
@@ -183,6 +187,14 @@ function Dialog({ orderId, onClose }: { orderId: string; onClose: () => void }) 
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) upload(f, 'video'); }} />
           </label>
         </div>
+        {!video && (
+          <input
+            type="url" inputMode="url" className={input} maxLength={500} value={videoLink} onChange={(e) => setVideoLink(e.target.value)}
+            placeholder={`Video over ${RETURN_VIDEO_MAX_MB}MB? Paste the customer's Google Drive or YouTube link`}
+            aria-label="Unboxing video link"
+          />
+        )}
+        {!video && link && !linkOk && <p className="text-xs text-red-700">Only Google Drive or YouTube links starting with https://.</p>}
         {(photos.length > 0 || video) && (
           <p className="text-xs text-gray-600">{[...photos.map((p) => p.name), video ? `🎥 ${video.name}` : null].filter(Boolean).join(' · ')}</p>
         )}

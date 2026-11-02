@@ -691,6 +691,8 @@ function DetailModal({ request, loading, onClose, onActioned }: {
                     <>
                       {request.video?.url
                         ? <a href={request.video.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 hover:underline"><Video className="h-4 w-4" /> Unboxing video</a>
+                        : request.videoLink
+                        ? <a href={request.videoLink} target="_blank" rel="noopener noreferrer nofollow" className="flex items-center gap-2 text-blue-600 hover:underline"><Video className="h-4 w-4" /> Unboxing video (Drive/YouTube link)</a>
                         : <p className="text-gray-400 flex items-center gap-2"><Video className="h-4 w-4" /> No video</p>}
                       {request.proofOfPurchase?.url
                         ? <a href={request.proofOfPurchase.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-600 hover:underline"><FileText className="h-4 w-4" /> Proof of purchase</a>

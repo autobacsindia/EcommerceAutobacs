@@ -2,7 +2,7 @@
  * Unit tests — services/storage/returnsUploadTargets.js
  *
  * Return evidence is the customer's side of a refund dispute, so the slot a file
- * was uploaded for is load-bearing: the video slot allows 60MB and the photo
+ * was uploaded for is load-bearing: the video slot allows 100MB and the photo
  * slots 10MB, and if evidence could be moved between slots the cap on the
  * smaller one would be decorative. The minted key is what binds a file to its
  * slot, so most of these tests are about that binding holding.

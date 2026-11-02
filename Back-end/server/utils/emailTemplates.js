@@ -1175,12 +1175,21 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
     ? `\n\nPaid via ${emiPlan}. Your bank refunds the principal only — interest already billed on this EMI plan, and any cancellation charge your bank applies, are set by the bank and are not refundable.`
     : '';
 
+  /*
+    The unboxing-video reminder (owner, 2026-11-02): every return or replacement needs
+    one, and the customer can only record it if they know BEFORE they open the parcel —
+    so it rides on the shipped email, not the delivered one.
+  */
+  const unboxingText = status === 'shipped'
+    ? '\n\nBefore you open it: please record one continuous, unedited video while opening your parcel, starting with the sealed package and shipping label in view. We need this video for any return or replacement.'
+    : '';
+
   const text = `
 Hi ${name},
 
 ${blurb}
 
-Order: ${ref}${trackingText}${itemsText}${stillToComeText}${emiText}
+Order: ${ref}${trackingText}${itemsText}${stillToComeText}${emiText}${unboxingText}
 
 Questions? Contact us at ${supportEmail}.
 
@@ -1256,6 +1265,10 @@ ${companyName}
       ${trackingBlock}
       ${itemsTable}
       ${stillToComeTable}
+      ${status === 'shipped' ? `<div style="margin-top:20px;padding:14px 18px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
+        <p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#92400e;">🎥 Before you open it: record an unboxing video</p>
+        <p style="margin:0;font-size:13px;color:#92400e;">Please record one continuous, unedited video while opening your parcel, starting with the sealed package and shipping label in view. We need this video for any return or replacement.</p>
+      </div>` : ''}
       <p style="font-size:13px;color:#999;margin-top:24px;">Questions? Contact us at ${supportEmail}.</p>
     </div>
     <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">

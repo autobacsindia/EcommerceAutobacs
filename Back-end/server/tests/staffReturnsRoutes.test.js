@@ -125,8 +125,21 @@ it('runs one return from raise to refund, with the inspection photo uploaded and
   const options = await request(app).get(`${BASE}/staff/returns/orders/${orderId}/options`).set(as(seller)).expect(200);
   expect(options.body.options.lines[0]).toMatchObject({ itemId, returnableQuantity: 1 });
 
-  const raised = await request(app).post(`${BASE}/staff/returns`).set(as(seller)).send({
+  // No unboxing video (and no link): the API itself says no, and nothing is created.
+  const noVideo = await request(app).post(`${BASE}/staff/returns`).set(as(seller)).send({
     orderId, description: 'Wrong colour sent', images: [{ publicId: 'autobacs/returns/x/photo-1.jpg' }],
+    items: [{ itemId, quantity: 1, reason: 'wrong_item' }],
+  });
+  expect(noVideo.status).toBe(400);
+  expect(noVideo.body.message).toMatch(/unboxing video is required/i);
+  const badLink = await request(app).post(`${BASE}/staff/returns`).set(as(seller)).send({
+    orderId, description: 'x', images: [{ publicId: 'autobacs/returns/x/photo-1.jpg' }], videoLink: 'x'.repeat(501),
+    items: [{ itemId, quantity: 1, reason: 'wrong_item' }],
+  });
+  expect(badLink.status).toBe(400);
+
+  const raised = await request(app).post(`${BASE}/staff/returns`).set(as(seller)).send({
+    orderId, description: 'Wrong colour sent', images: [{ publicId: 'autobacs/returns/x/photo-1.jpg' }], video: { publicId: 'autobacs/returns/x/video.mp4' },
     items: [{ itemId, quantity: 1, reason: 'wrong_item' }],
   }).expect(201);
   const id = raised.body.return.id;

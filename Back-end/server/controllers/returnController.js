@@ -5,7 +5,7 @@
  * (owner-approved, 2026-10-30), shared with the team panel so there is ONE return system:
  *   - each line carries a reason that claims a FAULT; 7 days from delivery for our fault,
  *     4 for the customer's own reason (unused, uninstalled, in the box, returnable product);
- *   - evidence: a photo always; a video for transit damage or a line over ₹10,000;
+ *   - evidence: a photo and the unboxing video (upload, or a Drive/YouTube link) always;
  *   - flow: pending → approved → courier_booked → received → (inspection) → refunded/rejected.
  *     The courier step cannot be skipped on the admin route: the AWB is our claim handle.
  *   - the refund is computed by the server from the order (services/returnRefundService.js)
@@ -80,7 +80,7 @@ export const createReturnRequest = asyncHandler(async (req, res) => {
   // with their fault, 7 days for our fault / 4 for the customer's reason, the
   // non-returnable list for customer reasons only, quantity bounded by what was
   // DELIVERED and not yet claimed, the debit-card-EMI all-or-nothing rule, and the
-  // evidence rule (a photo always; a video for transit damage or a line over ₹10,000).
+  // evidence rule (a photo and the unboxing video, on every return).
   const returnRequest = await createCustomerReturn(req.user, req.body, req);
   res.status(201).json({ success: true, request: returnRequest });
 });
@@ -175,7 +175,7 @@ function customerView(rr) {
       method: refund.method || 'original_payment',
     },
     timeline: (rr.timeline || []).map((t) => ({ status: t.status, timestamp: t.timestamp })),
-    hasVideo: !!rr.video?.publicId,
+    hasVideo: !!(rr.video?.publicId || rr.videoLink),
     hasProof: !!rr.proofOfPurchase?.publicId,
     photoCount: Array.isArray(rr.images) ? rr.images.length : 0,
   };

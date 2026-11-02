@@ -71,6 +71,7 @@ export const validateRaise = [
   body('images').optional().isArray({ max: 5 }).withMessage('Up to 5 photos'),
   body('images.*.publicId').optional().isString().isLength({ max: 300 }).withMessage('Invalid upload'),
   ...assetRef('video'),
+  body('videoLink').optional({ nullable: true }).isString().isLength({ max: 500 }).withMessage('Invalid video link'),
   ...assetRef('proofOfPurchase'),
 ];
 
@@ -94,7 +95,7 @@ export const validateReview = [
   body('rejectionReason').optional().isString().isLength({ max: 1000 }),
   body('notes').optional().isString().isLength({ max: 1000 }),
   body('destination.kind').optional().isIn(['warehouse', 'supplier']).withMessage('Choose where the item goes'),
-  body('destination.supplierName').optional({ values: 'null' }).isString().isLength({ max: 120 }),
+  body('destination.supplierName').optional({ nullable: true }).isString().isLength({ max: 120 }),
   faultMap('faults'),
 ];
 

@@ -289,6 +289,9 @@ const ReturnRequestSchema = new mongoose.Schema({
   // ── Mandatory documentation (all three required to submit; enforced in the
   //    controller against Cloudinary — matches "all three required or rejected").
   video:              { type: CloudAssetSchema, default: null }, // continuous unboxing video
+  // A Google Drive / YouTube link instead, when the video is too big to upload. Set by
+  // services/returnEvidence.verifyVideoLink only (https, allow-listed host).
+  videoLink:          { type: String, default: null, trim: true, maxlength: 500 },
   proofOfPurchase:    { type: CloudAssetSchema, default: null }, // invoice / payment proof
   problemDescription: { type: String, required: true, trim: true, maxlength: 2000 },
   images:             { type: [CloudAssetSchema], default: [] }, // optional extra photos

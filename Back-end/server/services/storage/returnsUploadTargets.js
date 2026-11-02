@@ -20,6 +20,7 @@
  */
 import { newFolder, slotFromKey as sharedSlotFromKey, buildTargets } from './privateDirectUpload.js';
 import { KIND } from './contentSniff.js';
+import { VIDEO_MAX_MB } from '../../config/returnPolicy.js';
 
 /**
  * Base folder every return-evidence upload is constrained to.
@@ -73,7 +74,7 @@ export const RETURN_SLOTS = [
   {
     key: 'video', label: 'Unboxing video', types: VIDEO_TYPES,
     resourceType: 'video', kinds: [KIND.VIDEO],
-    maxBytes: 60 * 1024 * 1024, capLabel: '60MB',
+    maxBytes: VIDEO_MAX_MB * 1024 * 1024, capLabel: `${VIDEO_MAX_MB}MB`,
     want: 'a video (MP4/MOV/WEBM)',
   },
   {

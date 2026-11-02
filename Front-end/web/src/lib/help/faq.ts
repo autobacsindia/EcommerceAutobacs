@@ -104,7 +104,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         question: 'How do I return an item?',
-        answer: 'Sign in, open "My Orders", choose the order and tap "Return". Pick the items and the reason, and add at least one photo (a video for transit damage or items over ₹10,000). You can also call or WhatsApp us and our team raises it for you. Once we approve the request, we arrange the pickup.',
+        answer: 'Sign in, open "My Orders", choose the order and tap "Return". Pick the items and the reason, and add your unboxing video and at least one photo. Every return or replacement needs the unboxing video: one continuous, unedited video of opening the parcel, starting with the sealed package and shipping label in view. You can also call or WhatsApp us and our team raises it for you. Once we approve the request, we arrange the pickup.',
         links: [{ label: 'My orders', href: '/orders' }, { label: 'Return policy', href: '/returns' }],
       },
       {
