@@ -18,6 +18,7 @@ import chatRepository from '../repositories/chatRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import { publishChatEvent } from './chatEvents.js';
+import { claimTyping } from './chatTyping.js';
 import { pushConfigured, sendToUsers } from './pushService.js';
 import { onlineAmong } from './chatPresence.js';
 import { uploadChatAttachments, copyChatAttachments, MAX_ATTACHMENTS_PER_MESSAGE, CHAT_FILE_NAME, chatFolder, chatFileType } from './chatAttachmentService.js';
@@ -493,6 +494,8 @@ export async function getThread(user, rootId, { after, limit } = {}) {
   const size = Math.min(Math.max(parseInt(limit, 10) || THREAD_PAGE_MAX, 1), THREAD_PAGE_MAX);
   const from = after != null && after !== '' ? Number(after) : null;
   const replies = await chatRepository.findThreadReplies(root._id, from, size);
+  // Opening a thread reads it (for the Threads list's unread count).
+  await chatRepository.markThreadRead(root._id, user._id, root.activitySeq ?? root.seq);
   const [shapedRoot, ...shapedReplies] = await withStars(user, [root, ...replies].map((m) => shapeMessage(m, null, user)));
   return {
     root: shapedRoot,
@@ -865,6 +868,7 @@ async function insertMessage(channel, {
       mentions,
     });
     if (root) thread = shapeMessage(root);
+    await recordThreadReply(channel, threadRoot, { kind, sender, seq, at });
   }
   await publishChatEvent({
     type: 'message', channelId: idOf(channel), route: audienceOf(channel), message, ...(thread ? { thread } : {}),
@@ -874,6 +878,28 @@ async function insertMessage(channel, {
   // A pop-up on the devices of everyone who can see it — not awaited: chat never waits for push.
   void pushForMessage(channel, { kind, text, attachments, sender, updates, mentions, mentionTeams, mentionAll });
   return { message, thread, duplicate: false };
+}
+
+/**
+ * Keep the "Threads" list in step with a reply. The message is already
+ * written, so a failure here is logged rather than failing the send: the cost
+ * is a thread missing from someone's list until the next reply, never a lost
+ * or doubled message.
+ */
+async function recordThreadReply(channel, root, { kind, sender, seq, at }) {
+  try {
+    await chatRepository.recordThreadReply({
+      root: root._id,
+      channel: channel._id,
+      replier: kind === 'user' ? sender?._id ?? null : null,
+      rootAuthor: root.kind === 'user' && root.sender ? root.sender._id ?? root.sender : null,
+      rootSeq: root.seq,
+      seq,
+      at,
+    });
+  } catch (err) {
+    console.error('[chat] could not record thread reply:', err.message);
+  }
 }
 
 /**
@@ -1452,6 +1478,21 @@ export async function starMessage(user, messageId, { on = true } = {}) {
  * admin, who sees deleted messages everywhere.
  *   before=<star id>  the next page
  */
+/** Each channel's name as `user` sees it (a DM is named after the other person), resolved in one query. */
+async function channelNamer(user, channels) {
+  const uid = idOf(user);
+  const partnerIds = new Set();
+  for (const c of channels) if (c.kind === 'dm') for (const m of c.members || []) if (idOf(m) !== uid) partnerIds.add(idOf(m));
+  const partnerById = new Map((await userRepository.findDisplayByIds([...partnerIds])).map((p) => [idOf(p), p]));
+  return (c) => {
+    if (c.kind !== 'dm') return channelNameFor(c, user);
+    if ((c.members || []).length > 2) return groupNameFor(c, uid, partnerById);
+    return partnerById.get((c.members || []).map(idOf).find((m) => m !== uid) ?? '')?.name ?? 'Former member';
+  };
+}
+
+const CHANNEL_NAME_FIELDS = 'kind key name audience team teams members system archived';
+
 export async function listStarred(user, { before, limit } = {}) {
   const size = Math.min(Math.max(parseInt(limit, 10) || 25, 1), STARRED_PAGE_MAX);
   const cursor = before && mongoose.isValidObjectId(before) ? new mongoose.Types.ObjectId(String(before)) : null;
@@ -1459,21 +1500,10 @@ export async function listStarred(user, { before, limit } = {}) {
   if (!stars.length) return { messages: [], nextBefore: null };
 
   const channelIds = [...new Set(stars.map((s) => idOf(s.channel)))];
-  const channels = (await chatRepository.findChannels(
-    { _id: { $in: channelIds } },
-    'kind key name audience team teams members system archived',
-  )).filter((c) => canAccess(user, c));
+  const channels = (await chatRepository.findChannels({ _id: { $in: channelIds } }, CHANNEL_NAME_FIELDS))
+    .filter((c) => canAccess(user, c));
   const channelById = new Map(channels.map((c) => [idOf(c), c]));
-
-  const uid = idOf(user);
-  const partnerIds = new Set();
-  for (const c of channels) if (c.kind === 'dm') for (const m of c.members || []) if (idOf(m) !== uid) partnerIds.add(idOf(m));
-  const partnerById = new Map((await userRepository.findDisplayByIds([...partnerIds])).map((p) => [idOf(p), p]));
-  const nameOf = (c) => {
-    if (c.kind !== 'dm') return channelNameFor(c, user);
-    if ((c.members || []).length > 2) return groupNameFor(c, uid, partnerById);
-    return partnerById.get((c.members || []).map(idOf).find((m) => m !== uid) ?? '')?.name ?? 'Former member';
-  };
+  const nameOf = await channelNamer(user, channels);
 
   const readable = stars.filter((s) => channelById.has(idOf(s.channel)));
   const docs = await chatRepository.findMessagesByIds(readable.map((s) => s.message));
@@ -1497,6 +1527,117 @@ export async function listStarred(user, { before, limit } = {}) {
     // The cursor follows the stars read, not the ones shown, so skipped stars never stall paging.
     nextBefore: stars.length === size ? idOf(stars[stars.length - 1]._id) : null,
   };
+}
+
+// ── mentions ─────────────────────────────────────────────────────────────────
+
+export const MENTIONS_PAGE_MAX = 50;
+
+/**
+ * The "Mentions" view: every message that addresses me — by name, my team, or
+ * @all — in the conversations I can read TODAY, newest first, cursor-paginated
+ * by message id. "Today" matters: someone who moved from Sales to Accounts
+ * stops seeing #sales mentions the moment they move, because the channel list
+ * comes from the same rule as everything else (accessFilter), not from the
+ * message. Deleted messages are left out for everyone; my own messages too.
+ */
+export async function listMentions(user, { before, limit } = {}) {
+  const size = Math.min(Math.max(parseInt(limit, 10) || 25, 1), MENTIONS_PAGE_MAX);
+  const cursor = before && mongoose.isValidObjectId(before) ? new mongoose.Types.ObjectId(String(before)) : null;
+  const channels = await chatRepository.findChannels(accessFilter(user), CHANNEL_NAME_FIELDS);
+  if (!channels.length) return { messages: [], nextBefore: null };
+  const channelById = new Map(channels.map((c) => [idOf(c), c]));
+
+  const docs = await chatRepository.findMentions(user._id, teamOf(user), channels.map((c) => c._id), cursor, size);
+  const used = [...new Set(docs.map((d) => idOf(d.channel)))].map((id) => channelById.get(id));
+  const nameOf = await channelNamer(user, used);
+  return {
+    messages: docs.map((d) => {
+      const c = channelById.get(idOf(d.channel));
+      return { ...shapeMessage(d, null, user), channel: idOf(c), channelName: nameOf(c), channelKind: c.kind };
+    }),
+    nextBefore: docs.length === size ? idOf(docs[docs.length - 1]._id) : null,
+  };
+}
+
+// ── threads I'm in ───────────────────────────────────────────────────────────
+
+export const THREADS_PAGE_MAX = 50;
+
+/** The Threads list cursor: "<lastActivityAt ms>_<follow id>". Null when absent or malformed. */
+function parseThreadCursor(before) {
+  const m = /^(\d{1,15})_([a-f0-9]{24})$/.exec(String(before ?? ''));
+  return m ? { at: new Date(Number(m[1])), id: new mongoose.Types.ObjectId(m[2]) } : null;
+}
+
+/**
+ * The "Threads" list: threads I started or replied to, newest activity first,
+ * each with how many replies I have not seen. Only conversations I can read
+ * today — leaving a group or a team hides its threads, though the rows stay
+ * (they come back if I do). The cursor follows the rows read, not the ones
+ * shown, so hidden rows never stall paging.
+ */
+export async function listThreads(user, { before, limit } = {}) {
+  const size = Math.min(Math.max(parseInt(limit, 10) || 25, 1), THREADS_PAGE_MAX);
+  const rows = await chatRepository.findThreadFollows(user._id, parseThreadCursor(before), size);
+  if (!rows.length) return { threads: [], nextBefore: null };
+
+  const channelIds = [...new Set(rows.map((r) => idOf(r.channel)))];
+  const channels = (await chatRepository.findChannels({ _id: { $in: channelIds } }, CHANNEL_NAME_FIELDS))
+    .filter((c) => canAccess(user, c));
+  const channelById = new Map(channels.map((c) => [idOf(c), c]));
+  const readable = rows.filter((r) => channelById.has(idOf(r.channel)));
+
+  const [roots, unreadRows, nameOf] = await Promise.all([
+    chatRepository.findMessagesByIds(readable.map((r) => r.root)),
+    chatRepository.countUnreadReplies(readable),
+    channelNamer(user, channels),
+  ]);
+  const rootById = new Map(roots.map((m) => [idOf(m), m]));
+  const unreadBy = new Map(unreadRows.map((u) => [idOf(u._id), u.n]));
+
+  const last = rows[rows.length - 1];
+  return {
+    threads: readable
+      .filter((r) => rootById.has(idOf(r.root)))
+      .map((r) => {
+        const c = channelById.get(idOf(r.channel));
+        return {
+          root: shapeMessage(rootById.get(idOf(r.root)), null, user),
+          channel: idOf(c),
+          channelName: nameOf(c),
+          channelKind: c.kind,
+          lastActivityAt: r.lastActivityAt,
+          unread: unreadBy.get(idOf(r.root)) ?? 0,
+        };
+      }),
+    nextBefore: rows.length === size ? `${new Date(last.lastActivityAt).getTime()}_${idOf(last._id)}` : null,
+  };
+}
+
+// ── typing ───────────────────────────────────────────────────────────────────
+
+/**
+ * "I am typing" in a conversation (or one of its threads). Goes only to the
+ * people who can read the conversation (the stream routes on audienceOf),
+ * throttled per person, never stored in MongoDB. The thread id is checked only
+ * for shape: it is echoed to the same readers, so a made-up one tells nobody
+ * anything — and checking it would cost a read per keystroke burst.
+ * @returns {Promise<{ sent: boolean }>} sent=false: throttled, nothing went out.
+ */
+export async function announceTyping(user, channelId, { threadRoot } = {}) {
+  const channel = await loadAccessible(user, channelId);
+  const root = threadRoot && mongoose.isValidObjectId(threadRoot) ? String(threadRoot) : null;
+  if (!(await claimTyping(idOf(channel), idOf(user), root))) return { sent: false };
+  await publishChatEvent({
+    type: 'typing',
+    channelId: idOf(channel),
+    threadRoot: root,
+    userId: idOf(user),
+    name: user.name || '',
+    route: audienceOf(channel),
+  });
+  return { sent: true };
 }
 
 // ── forward ──────────────────────────────────────────────────────────────────

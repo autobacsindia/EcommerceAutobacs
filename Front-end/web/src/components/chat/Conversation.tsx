@@ -21,7 +21,9 @@ import {
   useStarMessage,
   usePinMessage,
   liveStatus,
+  useTypingSignal,
 } from '@/hooks/queries/useTeamChat';
+import { useTypingLine } from '@/lib/chatTyping';
 import type { ChatChannel, ChatMessage, ChatPerson, MessagePage, ReadPart, SendVars } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
 import MembersPanel from './MembersPanel';
@@ -135,6 +137,7 @@ export default function Conversation({
   initialTab,
   expanded = false,
   onToggleExpand,
+  openThread = null,
 }: {
   channel: ChatChannel;
   meId: string;
@@ -154,10 +157,16 @@ export default function Conversation({
   /** Desktop: the conversation takes the whole chat area (the lists hide). */
   expanded?: boolean;
   onToggleExpand?: () => void;
+  /**
+   * Open this thread (a mention picked from the Mentions list was a reply).
+   * `n` changes on every pick, so picking the same thread again reopens it.
+   */
+  openThread?: { id: string; n: number } | null;
 }) {
   const qc = useQueryClient();
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } =
     useChatMessages(channel.id);
+  const signalTyping = useTypingSignal(channel.id, null);
   const send = useSendMessage(channel.id);
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
@@ -303,6 +312,10 @@ export default function Conversation({
     setThread(null);
     setQuote(null);
   }, [channel.id]);
+  // After the reset above (effects run in order), so a thread asked for on open survives it.
+  useEffect(() => {
+    if (openThread) setThread(openThread.id);
+  }, [openThread]);
 
   /** Scroll to a quoted message and flash it. Older than what is loaded: say so. */
   const jumpTo = useCallback((id: string) => {
@@ -618,15 +631,19 @@ export default function Conversation({
               </div>
             )}
             {tab === 'messages' && (
+            <>
+            <TypingLine channelId={channel.id} threadRoot={null} />
             <Composer
               channelName={title}
               people={people.filter((p) => p.id !== meId)}
               teams={mentionableTeams(channel)}
               canMentionAll={channel.audience !== 'all' || isAdmin || !!people.find((p) => p.id === meId)?.isHead}
               onSend={doSend}
+              onTyping={signalTyping}
               quote={quote}
               onClearQuote={() => setQuote(null)}
             />
+            </>
             )}
           </>
         )}
@@ -659,3 +676,13 @@ export default function Conversation({
 }
 
 export { timeOf };
+
+/** "Ravi is typing…" under the messages; reserves its line so nothing jumps. */
+function TypingLine({ channelId, threadRoot }: { channelId: string; threadRoot: string | null }) {
+  const line = useTypingLine(channelId, threadRoot);
+  return (
+    <p className="h-5 truncate px-4 text-xs italic text-gray-500" aria-live="polite">
+      {line}
+    </p>
+  );
+}

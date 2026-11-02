@@ -70,6 +70,10 @@ export const chatKeys = {
   presence: () => [...chatKeys.all, 'presence'] as const,
   /** `/chat/starred` — my starred messages, newest first. */
   starred: () => [...chatKeys.all, 'starred'] as const,
+  /** `/chat/mentions` — messages that @mention me, my team or @all, newest first. */
+  mentions: () => [...chatKeys.all, 'mentions'] as const,
+  /** `/chat/threads` — threads I started or replied to, newest activity first. */
+  myThreads: () => [...chatKeys.all, 'my-threads'] as const,
   /** `/chat/channels/:id/pins` — a conversation's pinned messages. */
   pins: (channelId: string) => [...chatKeys.all, 'pins', channelId] as const,
 };

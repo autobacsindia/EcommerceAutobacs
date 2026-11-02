@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ChevronDown, Keyboard, MessageSquarePlus, Plus, Search, Star } from 'lucide-react';
+import { AtSign, ChevronDown, Keyboard, MessageSquarePlus, MessagesSquare, Plus, Search, Star } from 'lucide-react';
 import { useSSE } from '@/hooks/useSSE';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from '@/hooks/queries/keys';
@@ -35,10 +35,13 @@ import Conversation from './Conversation';
 import { NotifyIcon } from './NotifyMenu';
 import MessageSearch from './MessageSearch';
 import StarredPanel from './StarredPanel';
+import MentionsPanel from './MentionsPanel';
+import ThreadsListPanel from './ThreadsListPanel';
 import StatusDialog from './StatusDialog';
 import { ONE_PANE_BELOW, useFitToViewport } from './useFitToViewport';
 import { setOpenConversation } from '@/lib/chatSound';
 import { plainLine } from './chatFormat';
+import { clearTyping, noteTyping, useResetTypingOnUnmount } from '@/lib/chatTyping';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import './chat.css';
 
@@ -254,6 +257,10 @@ export default function TeamChat() {
   // null = closed. 'all' = every channel I can see; otherwise one channel id.
   const [searching, setSearching] = useState<string | null>(null);
   const [showStarred, setShowStarred] = useState(false);
+  const [showMentions, setShowMentions] = useState(false);
+  const [showThreads, setShowThreads] = useState(false);
+  // A thread to open in the conversation (picked from Mentions); `n` makes a repeat pick reopen it.
+  const [threadRequest, setThreadRequest] = useState<{ channelId: string; id: string; n: number } | null>(null);
   // Desktop: the open conversation fills the chat area; the lists hide.
   const [wide, setWide] = useState(false);
   // The Home column is an extra view of the same conversations (the left list has
@@ -310,6 +317,7 @@ export default function TeamChat() {
   }, [qc]);
   useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
 
+  useResetTypingOnUnmount();
   useSSE({
     url: '/api/v1/chat/stream',
     token: null,
@@ -320,18 +328,28 @@ export default function TeamChat() {
         reactions?: ChatReaction[];
         pinned?: ChatMessage['pinned'];
         preview?: ChatMessage['preview'];
+        threadRoot?: string | null; userId?: string; name?: string;
       };
-      if (e.type === 'message' && e.message && e.channelId) {
+      if (e.type === 'typing' && e.channelId && e.userId) {
+        // My own other tabs announce me too; I don't need to see myself.
+        if (e.userId !== meId) noteTyping({ channelId: e.channelId, threadRoot: e.threadRoot ?? null, userId: e.userId, name: e.name ?? '' });
+      } else if (e.type === 'message' && e.message && e.channelId) {
+        if (e.message.sender?.id) clearTyping(e.channelId, e.message.sender.id);
         if (e.message.threadRoot) {
           // A reply: into its thread if open, and its root moves to the bottom.
           qc.setQueryData<ThreadData>(chatKeys.thread(e.message.threadRoot), (d) => upsertReply(d, e.message!));
           if (e.thread) qc.setQueryData<Pages>(chatKeys.messages(e.channelId), (d) => applyThreadUpdate(d, e.thread!));
+          qc.invalidateQueries({ queryKey: chatKeys.myThreads() });
         } else {
           qc.setQueryData<Pages>(chatKeys.messages(e.channelId), (d) => upsertMessage(d, e.message!));
         }
         if (e.message.attachments?.length) qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
+        if (e.message.mentionAll || e.message.mentionTeams?.length || e.message.mentions?.includes(meId)) {
+          qc.invalidateQueries({ queryKey: chatKeys.mentions() });
+        }
         scheduleChannelsRefresh();
       } else if (e.type === 'message_edited' && e.message && e.channelId) {
+        qc.invalidateQueries({ queryKey: chatKeys.mentions() });
         /*
           The broadcast carries the PUBLIC version — current text, no history —
           because one payload goes to everyone in the channel. An admin is
@@ -346,12 +364,14 @@ export default function TeamChat() {
           applyMessageChange(qc, e.channelId, e.message, e.thread);
         }
       } else if (e.type === 'message_deleted' && e.channelId && e.messageId && isAdmin) {
+        qc.invalidateQueries({ queryKey: chatKeys.mentions() });
         // Admins see a deleted message's words; the broadcast carries only its id.
         qc.invalidateQueries({ queryKey: chatKeys.messages(e.channelId) });
         qc.invalidateQueries({ queryKey: [...chatKeys.all, 'thread'] });
         qc.invalidateQueries({ queryKey: chatKeys.files(e.channelId) });
         qc.invalidateQueries({ queryKey: chatKeys.pins(e.channelId) });
       } else if (e.type === 'message_deleted' && e.channelId && e.messageId) {
+        qc.invalidateQueries({ queryKey: chatKeys.mentions() });
         // A deleted message drops off the Pinned list.
         qc.invalidateQueries({ queryKey: chatKeys.pins(e.channelId) });
         // If it was a thread's newest reply, the thread's "last reply" line changed too.
@@ -681,6 +701,29 @@ export default function TeamChat() {
             </div>
           )}
 
+          <ul className="pb-1 pt-1" aria-label="Shortcuts">
+            <li>
+              <button
+                type="button"
+                onClick={() => setShowMentions(true)}
+                className="gc-row flex w-full items-center gap-3 rounded-full px-3 py-1.5 text-left text-sm text-gray-800"
+              >
+                <span className="grid h-7 w-7 place-items-center"><AtSign className="h-[18px] w-[18px] text-gray-700" aria-hidden="true" /></span>
+                <span className="min-w-0 flex-1 truncate">Mentions</span>
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={() => setShowThreads(true)}
+                className="gc-row flex w-full items-center gap-3 rounded-full px-3 py-1.5 text-left text-sm text-gray-800"
+              >
+                <span className="grid h-7 w-7 place-items-center"><MessagesSquare className="h-[18px] w-[18px] text-gray-700" aria-hidden="true" /></span>
+                <span className="min-w-0 flex-1 truncate">Threads</span>
+              </button>
+            </li>
+          </ul>
+
           {(show === 'all' || spaces.length > 0) && section('spaces', 'Spaces', spaces, 'No spaces',
             me?.canCreateSpace ? (
               <button type="button" onClick={() => setDialog('space')} className="rounded-lg p-1 text-gray-500 hover:bg-gray-100" aria-label="New space" title="New space">
@@ -772,6 +815,7 @@ export default function TeamChat() {
           initialTab={initialTab}
           expanded={wide}
           onToggleExpand={() => setWide((v) => !v)}
+          openThread={threadRequest?.channelId === selected.id ? threadRequest : null}
         />
       ) : (
         <div className="gc-card hidden flex-1 flex-col items-center justify-center gap-3 rounded-2xl px-6 text-center lg:flex">
@@ -811,6 +855,30 @@ export default function TeamChat() {
           channels={channels}
           onPick={(id) => { setShowStarred(false); select(id); }}
           onClose={() => setShowStarred(false)}
+        />
+      )}
+
+      {showMentions && (
+        <MentionsPanel
+          channels={channels}
+          onPick={(id, threadRoot) => {
+            setShowMentions(false);
+            setThreadRequest(threadRoot ? { channelId: id, id: threadRoot, n: Date.now() } : null);
+            select(id);
+          }}
+          onClose={() => setShowMentions(false)}
+        />
+      )}
+
+      {showThreads && (
+        <ThreadsListPanel
+          channels={channels}
+          onPick={(id, rootId) => {
+            setShowThreads(false);
+            setThreadRequest({ channelId: id, id: rootId, n: Date.now() });
+            select(id);
+          }}
+          onClose={() => setShowThreads(false)}
         />
       )}
 

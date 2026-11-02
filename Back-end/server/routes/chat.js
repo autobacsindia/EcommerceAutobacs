@@ -20,6 +20,9 @@ import {
   validateNotify,
   validateStar,
   validateStarredPage,
+  validateMentionsPage,
+  validateThreadsPage,
+  validateTyping,
   validateForward,
   validatePin,
   validateStatus,
@@ -46,6 +49,9 @@ import {
   markUnreadFrom,
   starMessage,
   listStarred,
+  listMentions,
+  listThreads,
+  announceTyping,
   forwardMessage,
   pinMessage,
   listPins,
@@ -211,6 +217,21 @@ router.get('/search', asyncHandler(async (req, res) => {
 // GET /chat/starred?before=&limit= — my starred messages, newest first
 router.get('/starred', validateStarredPage, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listStarred(req.user, req.query)) });
+}));
+
+// GET /chat/mentions?before=&limit= — messages that @mention me, my team or @all, newest first
+router.get('/mentions', validateMentionsPage, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listMentions(req.user, req.query)) });
+}));
+
+// GET /chat/threads?before=&limit= — threads I started or replied to, newest activity first, with my unread
+router.get('/threads', validateThreadsPage, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listThreads(req.user, req.query)) });
+}));
+
+// POST /chat/channels/:id/typing { threadRoot? } — "I am typing"; throttled server-side, nothing stored
+router.post('/channels/:id/typing', validateTyping, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await announceTyping(req.user, req.params.id, { threadRoot: req.body.threadRoot })) });
 }));
 
 // PUT /chat/messages/:id/star { on? } — star (default) or un-star a message, for me

@@ -43,6 +43,14 @@ export const validateStarredPage = [
   query('before').optional().custom(isObjectId).withMessage('Invalid cursor'),
   query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be 1–50'),
 ];
+// The Mentions view pages the same way (id cursor, at most 50).
+export const validateMentionsPage = validateStarredPage;
+
+// The Threads list: cursor is "<lastActivityAt ms>_<id>".
+export const validateThreadsPage = [
+  query('before').optional().matches(/^\d{1,15}_[a-f0-9]{24}$/).withMessage('Invalid cursor'),
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be 1–50'),
+];
 
 /** Forward a message into a conversation. */
 export const validateForward = [
@@ -116,4 +124,10 @@ export const validateOpenDm = [
   body('userIds').optional().isArray({ min: 1, max: 7 }).withMessage('Choose 1 to 7 people'),
   body('userIds.*').optional().custom(isObjectId).withMessage('Invalid person'),
   body().custom((b) => !!(b?.userId || (Array.isArray(b?.userIds) && b.userIds.length))).withMessage('Choose who to message'),
+];
+
+// POST /chat/channels/:id/typing { threadRoot? }
+export const validateTyping = [
+  ...validateChannelIdParam,
+  body('threadRoot').optional({ values: 'null' }).custom(isObjectId).withMessage('Invalid thread'),
 ];

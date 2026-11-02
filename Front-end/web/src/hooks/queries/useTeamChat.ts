@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
@@ -8,6 +8,7 @@ import { submitMultipart, parseApiResponse } from '@/lib/multipartResponse';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from './keys';
 import { pollInterval } from './useNotifications';
+import { TYPING_SEND_EVERY_MS } from '@/lib/chatTyping';
 
 export interface ChatPerson {
   id: string;
@@ -708,6 +709,73 @@ export function useStarred(enabled: boolean) {
     getNextPageParam: (last) => last.nextBefore ?? undefined,
     enabled,
     staleTime: 30_000,
+  });
+}
+
+/**
+ * Messages that @mention me, my team or @all, newest first, across every
+ * conversation I can read. A new message that mentions me arrives over the
+ * live stream, which invalidates this list (TeamChat).
+ */
+export function useMentions(enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.mentions(),
+    queryFn: async ({ pageParam }) => {
+      const q = new URLSearchParams({ limit: '25' });
+      if (pageParam) q.set('before', pageParam);
+      const res = await apiClient.get<SearchPage>(`/chat/mentions?${q}`);
+      return { messages: res.messages ?? [], nextBefore: res.nextBefore ?? null };
+    },
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextBefore ?? undefined,
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Tell the conversation I am typing — at most once every few seconds, however
+ * fast the keys go. Fire-and-forget: a lost signal only means no "typing…"
+ * line, so errors are swallowed.
+ */
+export function useTypingSignal(channelId: string, threadRoot: string | null) {
+  const last = useRef(0);
+  return useCallback(() => {
+    const now = Date.now();
+    if (now - last.current < TYPING_SEND_EVERY_MS) return;
+    last.current = now;
+    apiClient.post(`/chat/channels/${channelId}/typing`, threadRoot ? { threadRoot } : {}).catch(() => {});
+  }, [channelId, threadRoot]);
+}
+
+/** One row of the Threads list. `unread`: replies I have not seen (opening the thread clears it). */
+export interface MyThread {
+  root: ChatMessage;
+  channel: string;
+  channelName: string;
+  channelKind: 'space' | 'dm';
+  lastActivityAt: string;
+  unread: number;
+}
+
+/**
+ * Threads I started or replied to, newest activity first. Always refetched
+ * when shown (staleTime 0): opening a thread marks it read on the server, and
+ * the list should say so the next time it opens.
+ */
+export function useMyThreads(enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.myThreads(),
+    queryFn: async ({ pageParam }) => {
+      const q = new URLSearchParams({ limit: '25' });
+      if (pageParam) q.set('before', pageParam);
+      const res = await apiClient.get<{ threads?: MyThread[]; nextBefore?: string | null }>(`/chat/threads?${q}`);
+      return { threads: res.threads ?? [], nextBefore: res.nextBefore ?? null };
+    },
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextBefore ?? undefined,
+    enabled,
+    staleTime: 0,
   });
 }
 
