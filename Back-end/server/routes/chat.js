@@ -20,6 +20,7 @@ import {
   validateNotify,
   validateStar,
   validateStarredPage,
+  validateMentionsPage,
   validateForward,
   validatePin,
   validateStatus,
@@ -46,6 +47,7 @@ import {
   markUnreadFrom,
   starMessage,
   listStarred,
+  listMentions,
   forwardMessage,
   pinMessage,
   listPins,
@@ -211,6 +213,11 @@ router.get('/search', asyncHandler(async (req, res) => {
 // GET /chat/starred?before=&limit= — my starred messages, newest first
 router.get('/starred', validateStarredPage, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listStarred(req.user, req.query)) });
+}));
+
+// GET /chat/mentions?before=&limit= — messages that @mention me, my team or @all, newest first
+router.get('/mentions', validateMentionsPage, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listMentions(req.user, req.query)) });
 }));
 
 // PUT /chat/messages/:id/star { on? } — star (default) or un-star a message, for me

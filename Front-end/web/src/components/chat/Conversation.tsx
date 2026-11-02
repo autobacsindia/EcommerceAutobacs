@@ -135,6 +135,7 @@ export default function Conversation({
   initialTab,
   expanded = false,
   onToggleExpand,
+  openThread = null,
 }: {
   channel: ChatChannel;
   meId: string;
@@ -154,6 +155,11 @@ export default function Conversation({
   /** Desktop: the conversation takes the whole chat area (the lists hide). */
   expanded?: boolean;
   onToggleExpand?: () => void;
+  /**
+   * Open this thread (a mention picked from the Mentions list was a reply).
+   * `n` changes on every pick, so picking the same thread again reopens it.
+   */
+  openThread?: { id: string; n: number } | null;
 }) {
   const qc = useQueryClient();
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } =
@@ -303,6 +309,10 @@ export default function Conversation({
     setThread(null);
     setQuote(null);
   }, [channel.id]);
+  // After the reset above (effects run in order), so a thread asked for on open survives it.
+  useEffect(() => {
+    if (openThread) setThread(openThread.id);
+  }, [openThread]);
 
   /** Scroll to a quoted message and flash it. Older than what is loaded: say so. */
   const jumpTo = useCallback((id: string) => {

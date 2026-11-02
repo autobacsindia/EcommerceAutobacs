@@ -288,6 +288,34 @@ const chatRepository = {
   findStars: (user, before, limit) =>
     ChatStar.find({ user, ...(before ? { _id: { $lt: before } } : {}) })
       .sort({ _id: -1 }).limit(limit).select('message channel').lean(),
+  /**
+   * Messages that address `user` — by name, `team`, or @all — in `channels`,
+   * newest first, older than the `before` id. Each $or branch repeats its
+   * partial-index condition (models/ChatMessage.js MENTION_INDEXES) so the
+   * planner can use those indexes; channel, sender and deletedAt filter the
+   * few rows the merge produces. My own messages are left out: an @all I sent
+   * is not a mention of me.
+   */
+  findMentions: (user, team, channels, before, limit) => {
+    // Every filter is repeated INSIDE each branch. With the cursor or the
+    // channel/sender/deleted filters at the top level beside the $or, the
+    // planner dropped the _id bound from each index scan, so page N re-read
+    // every row of pages 1..N-1 (measured on 100k messages: page 2 examined
+    // 53 keys for 25 rows; distributed, 27 — the same as page 1).
+    const rest = {
+      ...(before ? { _id: { $lt: before } } : {}),
+      channel: { $in: channels },
+      sender: { $ne: user },
+      deletedAt: null,
+    };
+    const branches = [
+      { mentions: user, 'mentions.0': { $exists: true }, ...rest },
+      ...(team ? [{ mentionTeams: team, 'mentionTeams.0': { $exists: true }, ...rest }] : []),
+      { mentionAll: true, ...rest },
+    ];
+    return ChatMessage.find({ $or: branches })
+      .sort({ _id: -1 }).limit(limit).populate('sender', SENDER_FIELDS).lean();
+  },
   findMessagesByIds: (ids) =>
     ChatMessage.find({ _id: { $in: ids } }).populate('sender', SENDER_FIELDS).lean(),
 
