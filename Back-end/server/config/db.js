@@ -629,6 +629,9 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftasks').createIndex({ team: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_team', background: true });
     await db.collection('stafftasks').createIndex({ createdBy: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_creator', background: true });
     await db.collection('stafftasks').createIndex({ bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_all', background: true });
+    // Tasks with several people (phase 4): multikey twins of staff_task_assignee / staff_task_team.
+    await db.collection('stafftasks').createIndex({ 'assignees.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_assignees', background: true });
+    await db.collection('stafftasks').createIndex({ teams: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_teams', background: true });
     await db.collection('stafftasks').createIndex(
       { createdBy: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_task_client_id', background: true }

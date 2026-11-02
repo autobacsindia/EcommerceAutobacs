@@ -78,6 +78,15 @@ const ChecklistItemSchema = new mongoose.Schema(
   { _id: true },
 );
 
+/** One person doing the task, with their name when it was given (so a list never looks names up). */
+const PersonSchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    name: { type: String, default: '' },
+  },
+  { _id: false },
+);
+
 export const TASK_STATUSES = Object.freeze(['todo', 'in_progress', 'waiting', 'done']);
 export const TASK_PRIORITIES = Object.freeze(['urgent', 'high', 'normal', 'low']);
 export const TASK_BUCKETS = Object.freeze(['open', 'done', 'archived']);
@@ -102,6 +111,19 @@ const StaffTaskSchema = new mongoose.Schema(
     assigneeName: { type: String, default: '' },
     /** The assignee's team when it was given (null for the admin's own tasks) — whose head sees it. */
     team: { type: String, default: null },
+    /*
+      One shared task, several people (Tasks phase 4). Written beside `assignee` /
+      `team` on every create and change, and filled in for older tasks by
+      scripts/backfill-task-assignees.js, so the reads can move here once every
+      task has them. Until then `assignee` is the source of truth and these
+      always describe the same one person.
+    */
+    /** Everyone doing the task, in the order they were given it. */
+    assignees: { type: [PersonSchema], default: undefined },
+    /** The team of each person in `assignees` (null for the admin), once each — whose heads see it. */
+    teams: { type: [String], default: undefined },
+    /** People who follow the task without doing it: they see it and hear about it. */
+    followers: { type: [mongoose.Schema.Types.ObjectId], default: undefined },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdByName: { type: String, default: '' },
     order: { type: OrderRefSchema, default: null },
@@ -143,6 +165,10 @@ StaffTaskSchema.index({ assignee: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staf
 StaffTaskSchema.index({ team: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_team' });
 StaffTaskSchema.index({ createdBy: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_creator' });
 StaffTaskSchema.index({ bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_all' });
+// The same lists once a task has several people: multikey on the person / team,
+// one key per entry, so "my tasks" and "my team's tasks" stay one index range.
+StaffTaskSchema.index({ 'assignees.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_assignees' });
+StaffTaskSchema.index({ teams: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_teams' });
 // The copies of one task given to several people. Partial: most tasks have no group.
 StaffTaskSchema.index({ group: 1 }, { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group' });
 // `$type`, not `$ne`/`$exists: true` on null — MongoDB rejects `$ne` in a partialFilterExpression.
