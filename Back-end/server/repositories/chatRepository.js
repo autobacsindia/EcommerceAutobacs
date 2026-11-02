@@ -297,18 +297,23 @@ const chatRepository = {
    * is not a mention of me.
    */
   findMentions: (user, team, channels, before, limit) => {
-    const branches = [
-      { mentions: user, 'mentions.0': { $exists: true } },
-      ...(team ? [{ mentionTeams: team, 'mentionTeams.0': { $exists: true } }] : []),
-      { mentionAll: true },
-    ];
-    return ChatMessage.find({
-      $or: branches,
+    // Every filter is repeated INSIDE each branch. With the cursor or the
+    // channel/sender/deleted filters at the top level beside the $or, the
+    // planner dropped the _id bound from each index scan, so page N re-read
+    // every row of pages 1..N-1 (measured on 100k messages: page 2 examined
+    // 53 keys for 25 rows; distributed, 27 — the same as page 1).
+    const rest = {
       ...(before ? { _id: { $lt: before } } : {}),
       channel: { $in: channels },
       sender: { $ne: user },
       deletedAt: null,
-    })
+    };
+    const branches = [
+      { mentions: user, 'mentions.0': { $exists: true }, ...rest },
+      ...(team ? [{ mentionTeams: team, 'mentionTeams.0': { $exists: true }, ...rest }] : []),
+      { mentionAll: true, ...rest },
+    ];
+    return ChatMessage.find({ $or: branches })
       .sort({ _id: -1 }).limit(limit).populate('sender', SENDER_FIELDS).lean();
   },
   findMessagesByIds: (ids) =>
