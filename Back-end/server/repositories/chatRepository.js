@@ -355,8 +355,13 @@ const chatRepository = {
   findThreadFollows: (user, cursor, limit) =>
     ChatThreadFollow.find({
       user,
+      // `$lte` beside the $or gives the index scan a starting bound; the $or
+      // alone left it reading from the newest row (page 2 examined 50 keys for 25).
       ...(cursor
-        ? { $or: [{ lastActivityAt: { $lt: cursor.at } }, { lastActivityAt: cursor.at, _id: { $lt: cursor.id } }] }
+        ? {
+          lastActivityAt: { $lte: cursor.at },
+          $or: [{ lastActivityAt: { $lt: cursor.at } }, { lastActivityAt: cursor.at, _id: { $lt: cursor.id } }],
+        }
         : {}),
     })
       .sort({ lastActivityAt: -1, _id: -1 }).limit(limit).select('root channel readSeq lastActivityAt').lean(),
