@@ -17,6 +17,7 @@ import {
   validateChecklistUpdate,
   validateChecklistRemove,
   validateTaskFollowers,
+  validateStepToSubtask,
 } from '../validators/staffTask.validator.js';
 import {
   listTasks,
@@ -39,6 +40,8 @@ import {
   updateChecklistItem,
   removeChecklistItem,
   changeFollowers,
+  listSubtasks,
+  subtaskFromStep,
 } from '../services/staffTaskService.js';
 import { uploadChatFiles, handleChatUploadError } from '../services/chatAttachmentService.js';
 import { attachmentSizeGuard } from '../middleware/uploadMiddleware.js';
@@ -105,6 +108,16 @@ router.patch('/:id/checklist/:itemId', validateChecklistUpdate, validateRequest,
 // @route  DELETE /staff/tasks/:id/checklist/:itemId — remove a step
 router.delete('/:id/checklist/:itemId', validateChecklistRemove, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, task: await removeChecklistItem(req.user, req.params.id, req.params.itemId) });
+}));
+
+// @route  POST /staff/tasks/:id/checklist/:itemId/subtask { clientId, assigneeIds? } — make a step a sub-task
+router.post('/:id/checklist/:itemId/subtask', validateStepToSubtask, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await subtaskFromStep(req.user, req.params.id, req.params.itemId, req.body, req)) });
+}));
+
+// @route  GET /staff/tasks/:id/subtasks — the sub-tasks under a task (at most 50, not archived)
+router.get('/:id/subtasks', validateTaskId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listSubtasks(req.user, req.params.id)) });
 }));
 
 // @route  GET /staff/tasks/:id/comments?before=

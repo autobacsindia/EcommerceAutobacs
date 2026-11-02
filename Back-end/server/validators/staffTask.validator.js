@@ -47,6 +47,7 @@ export const validateTaskCreate = [
   body('checklist').optional().isArray({ max: 30 }).withMessage('A checklist can have at most 30 steps'),
   body('checklist.*').isString().withMessage('Invalid step'),
   optionalId('orderId'),
+  optionalId('parentId'),
   body('clientId').optional().isString().isLength({ max: 64 }),
 ];
 
@@ -130,3 +131,11 @@ export const validateChecklistUpdate = [
 ];
 
 export const validateChecklistRemove = itemParams;
+
+// Required clientId: a retry must find the sub-task its first attempt made.
+export const validateStepToSubtask = [
+  ...itemParams,
+  body('clientId').isString().isLength({ min: 8, max: 64 }).withMessage('Reload the task and try again'),
+  body('assigneeIds').optional().isArray({ max: 30 }).withMessage('Pick at most 30 people'),
+  body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
+];

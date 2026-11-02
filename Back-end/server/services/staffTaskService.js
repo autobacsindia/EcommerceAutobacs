@@ -32,6 +32,16 @@
  * request never sends a second one. New people hear "new task"; everyone hears
  * a status change and a comment; someone @mentioned hears "mentioned you".
  *
+ * ── Sub-tasks ───────────────────────────────────────────────────────────────
+ * A sub-task is a whole task (its own people, status, comments) that names its
+ * parent. One level only. Whoever may edit the parent adds them, at most
+ * SUBTASKS_MAX; the people on one follow the same rule as any task. Each shows
+ * in its people's lists like any task, with the parent's name. Whoever sees the
+ * parent sees its sub-tasks listed under it, but opens only those they may see.
+ * Archiving a parent archives its sub-tasks; restoring it brings back exactly
+ * those it took. The parent's "1/2" is counted from the sub-tasks after every
+ * change to one of them, never kept by adding.
+ *
  * ── What must hold ──────────────────────────────────────────────────────────
  *   - a double-click or a retried request creates ONE task (and one comment):
  *     the browser sends a clientId, unique per author
@@ -84,6 +94,8 @@ export const FOLLOWERS_MAX = 50;
 /** Tags on one task, and how long one tag may be. */
 export const TAGS_MAX = 10;
 export const TAG_MAX = 24;
+/** Sub-tasks under one task (not counting archived ones). */
+export const SUBTASKS_MAX = 50;
 /** Tasks one bulk change may touch. */
 export const BULK_MAX = 50;
 const SUMMARY_MAX = 160;
@@ -304,6 +316,10 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
     createdBy: { id: idOf(t.createdBy), name: t.createdByName || '' },
     order: t.order ? { id: idOf(t.order.target), code: t.order.code } : null,
     group: t.group ? { id: idOf(t.group), size: t.groupSize || 1 } : null,
+    // The parent's number and title travel with the sub-task, so a row can say
+    // "in T-20 …" even to someone who may not open T-20.
+    parent: t.parent ? { id: idOf(t.parent.task), code: `T-${t.parent.number}`, title: t.parent.title || '' } : null,
+    subtasks: { total: t.subtasks?.total ?? 0, done: t.subtasks?.done ?? 0 },
     // List rows carry counts from the database (LIST_PROJECTION); the task page counts the steps it has.
     checklist: {
       done: t.checklistDone ?? (t.checklist || []).filter((c) => c.done).length,
@@ -329,6 +345,8 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
       // Following yourself: anyone who sees it. Choosing who else follows: the editors.
       follow: canSee(viewer, t),
       followers: !archived && canEdit(viewer, t),
+      // One level only: a sub-task has no sub-tasks of its own.
+      subtask: !archived && !t.parent && canEdit(viewer, t),
     },
     ...(full && {
       files: (t.files || []).map((f) => ({
@@ -618,6 +636,38 @@ export async function countDueForBell(user) {
 
 // ── Write ───────────────────────────────────────────────────────────────────
 
+/** The task a new sub-task goes under: one `actor` may edit, not archived, not itself a sub-task. */
+async function loadParent(actor, id) {
+  const parent = await loadVisible(actor, id);
+  if (parent.parent) throw fail('A sub-task can’t have sub-tasks of its own.', 400);
+  if (parent.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
+  if (!canEdit(actor, parent)) throw fail('Only whoever gave this task, the team head or the admin can add sub-tasks to it.', 403);
+  return parent;
+}
+
+const subtaskEntry = (actor, action, child) => ({
+  at: new Date(), by: actor._id, byName: actor.name || '', action, from: '', to: `T-${child.number} ${child.title}`,
+});
+
+/**
+ * Count `parentId`'s sub-tasks and store the count on it. Counting (never
+ * adding) means a lost update or a crash cannot leave it wrong for good; and
+ * because two sub-tasks changing at once could each store a count read just
+ * before the other's change, it counts again after storing, and stores again
+ * until the two agree.
+ */
+export async function recountSubtasks(parentId) {
+  let counts = await staffTaskRepository.countSubtasks(parentId);
+  for (let i = 0; i < 3; i += 1) {
+    await staffTaskRepository.setSubtaskCounts(parentId, counts);
+    const again = await staffTaskRepository.countSubtasks(parentId);
+    if (again.total === counts.total && again.done === counts.done) return counts;
+    counts = again;
+  }
+  await staffTaskRepository.setSubtaskCounts(parentId, counts);
+  return counts;
+}
+
 /**
  * Create a task for one person; for several, one shared task (`shared: true`)
  * or a copy each.
@@ -627,10 +677,13 @@ export async function countDueForBell(user) {
  * after a half-finished create finds the copies already made, makes only the
  * missing ones, and keeps them in the same group.
  *
- * @param {{ title, description?, priority?, dueOn?, startOn?, tags?, assigneeId?, assigneeIds?, shared?, orderId?, clientId? }} input
+ * `parentId` makes it a sub-task of that task (see "Sub-tasks" above).
+ *
+ * @param {{ title, description?, priority?, dueOn?, startOn?, tags?, assigneeId?, assigneeIds?, shared?, orderId?, parentId?, clientId? }} input
+ * @param {{ note?: boolean }} [opts] `note: false` leaves the line on the parent's history to the caller
  * @returns {Promise<{ task: object, tasks: object[], duplicate: boolean }>}
  */
-export async function createTask(actor, input = {}, req) {
+export async function createTask(actor, input = {}, req, { note = true } = {}) {
   const clientId = cleanClientId(input.clientId);
   const title = cleanTitle(input.title);
   const description = cleanDescription(input.description);
@@ -645,6 +698,7 @@ export async function createTask(actor, input = {}, req) {
   const rawIds = Array.isArray(input.assigneeIds) && input.assigneeIds.length ? input.assigneeIds : [input.assigneeId].filter(Boolean);
   const people = await loadAssignees(actor, rawIds);
   const order = await loadOrderRef(input.orderId);
+  const parent = input.parentId ? await loadParent(actor, input.parentId) : null;
 
   // One shared task for everyone, unless the giver asked for a copy each.
   const shared = input.shared === true || input.shared === 'true';
@@ -655,6 +709,13 @@ export async function createTask(actor, input = {}, req) {
   const madeFor = new Map(earlier.map((t) => [t.clientId, t]));
   // A retry joins the group its first attempt started.
   const group = many ? (earlier.find((t) => t.group)?.group ?? new mongoose.Types.ObjectId()) : null;
+  if (parent) {
+    // Only the ones this request would add count against the limit: a retry of a full create is still a success.
+    const adding = rows.filter((who) => !madeFor.has(keyFor(who))).length;
+    if (adding && (await staffTaskRepository.countSubtasks(parent._id)).total + adding > SUBTASKS_MAX) {
+      throw fail(`A task can have at most ${SUBTASKS_MAX} sub-tasks.`, 400);
+    }
+  }
 
   const now = new Date();
   const results = [];
@@ -678,6 +739,7 @@ export async function createTask(actor, input = {}, req) {
         createdByName: actor.name || '',
         order,
         checklist,
+        ...(parent && { parent: { task: parent._id, number: parent.number, title: parent.title } }),
         group,
         groupSize: many ? people.length : undefined,
         ...placeOf({ status, dueOn }),
@@ -704,6 +766,14 @@ export async function createTask(actor, input = {}, req) {
       ...(group && { group: idOf(group), people: people.length }),
     });
     void notifyAssigned(doc, actor, peopleOf(doc).map((p) => p.user));
+  }
+  if (parent) {
+    const made = results.filter((r) => r.created).map((r) => r.doc);
+    if (note) {
+      for (const doc of made) await staffTaskRepository.noteHistory(parent._id, subtaskEntry(actor, 'subtask_added', doc));
+    }
+    // Every time, even for a retry: it also finishes the count a failed first attempt left.
+    await recountSubtasks(parent._id);
   }
   const tasks = results.map(({ doc }) => shape(doc, actor, { full: true }));
   return { task: tasks[0], tasks, duplicate: results.every((r) => !r.created) };
@@ -764,8 +834,13 @@ async function applyUpdate(actor, t, input, req) {
     const want = input.archived === true || input.archived === 'true';
     if (want !== archived) {
       if (!canEdit(actor, t)) throw fail('Only whoever gave this task, the team head or the admin can archive it.', 403);
+      if (!want && t.parent) await refuseOrphanRestore(t);
       set.archivedAt = want ? now : null;
+      if (!want && t.archivedWithParent) set.archivedWithParent = null;
       note(want ? 'archived' : 'restored');
+    } else if (canEdit(actor, t)) {
+      // Already so: a retry of an archive or restore whose sub-tasks were not all moved finishes them.
+      await moveSubtasksWith(actor, t, want, req);
     }
   }
   const willBeArchived = set.archivedAt !== undefined ? !!set.archivedAt : archived;
@@ -843,6 +918,11 @@ async function applyUpdate(actor, t, input, req) {
   const next = await staffTaskRepository.updateIfRev(t._id, rev, set, entries);
   if (!next) throw fail('Someone changed this task just now. It has been reloaded — check it and try again.', 409);
 
+  // Sub-tasks follow their parent's archive; a parent's count follows its sub-tasks.
+  if (set.archivedAt !== undefined) await moveSubtasksWith(actor, next, !!set.archivedAt, req);
+  if (t.parent && next.bucket !== t.bucket) await recountSubtasks(t.parent.task);
+  if (set.title !== undefined && !t.parent) await staffTaskRepository.renameParent(t._id, set.title);
+
   auditLogger.logAction(req, set.archivedAt ? 'DELETE' : 'UPDATE', 'StaffTask', t._id, {
     number: t.number, changes: entries.map((e) => e.action),
   });
@@ -851,6 +931,38 @@ async function applyUpdate(actor, t, input, req) {
   if (added.length) void notifyAssigned(next, actor, added);
   if (set.status !== undefined) void notifyStatus(next, actor, added);
   return shape(next, actor, { full: true });
+}
+
+/** A sub-task archived with (or apart from) its parent comes back only once the parent is back. */
+async function refuseOrphanRestore(t) {
+  const parent = await staffTaskRepository.findById(t.parent.task);
+  if (parent?.bucket === 'archived') throw fail(`Restore T-${t.parent.number} first: this is one of its sub-tasks.`, 409);
+}
+
+/**
+ * Archive `parent`'s sub-tasks with it, or bring back the ones archived with it.
+ * Each is moved by one conditional write (from the bucket it was read in), so a
+ * retry, or two of these at once, moves each sub-task once. Bounded by
+ * SUBTASKS_MAX. Nothing for a task that is itself a sub-task.
+ */
+async function moveSubtasksWith(actor, parent, archiving, req) {
+  if (parent.parent) return;
+  const at = new Date();
+  const children = archiving
+    ? await staffTaskRepository.findChildrenToArchive(parent._id)
+    : await staffTaskRepository.findChildrenToRestore(parent._id);
+  if (!children.length) return;
+  const entry = { at, by: actor._id, byName: actor.name || '', action: archiving ? 'archived' : 'restored', from: '', to: `with T-${parent.number}` };
+  for (const c of children) {
+    const set = archiving
+      ? { archivedAt: at, archivedWithParent: true, ...placeOf({ ...c, archivedAt: at }) }
+      : { archivedAt: null, archivedWithParent: null, ...placeOf({ ...c, archivedAt: null }) };
+    await staffTaskRepository.moveWithParent(c._id, c.bucket, set, entry);
+  }
+  auditLogger.logAction(req, archiving ? 'DELETE' : 'UPDATE', 'StaffTask', parent._id, {
+    number: parent.number, subtasks: children.map((c) => c.number), with: archiving ? 'archived' : 'restored',
+  });
+  await recountSubtasks(parent._id);
 }
 
 // ── Many at once ────────────────────────────────────────────────────────────
@@ -914,6 +1026,8 @@ export async function bulkUpdate(actor, { items, changes } = {}, req) {
       const t = await loadVisible(actor, id);
       const input = { ...base, ...(add.length || remove.length ? { tags: bulkTags(t, add, remove) } : {}) };
       if (changesNothing(t, input)) {
+        // A retried archive or restore still finishes moving the task's sub-tasks.
+        if (input.archived !== undefined && canEdit(actor, t)) await moveSubtasksWith(actor, t, input.archived, req);
         results.push({ id, ok: true, changed: false });
         continue;
       }
@@ -1003,6 +1117,56 @@ export async function removeChecklistItem(actor, id, itemId) {
   if (!item) return getTask(actor, id);
   await staffTaskRepository.pullChecklistItem(t._id, item._id, checkEntry(actor, 'check_removed', item.text));
   return getTask(actor, id);
+}
+
+// ── Sub-tasks ───────────────────────────────────────────────────────────────
+
+/**
+ * The sub-tasks under a task (not archived), for its page. Whoever sees the
+ * task sees them all listed; `canOpen` says which they may open, and the notes
+ * of one they may not open are left out.
+ *
+ * @returns {Promise<{ subtasks: object[], total: number, done: number }>}
+ */
+export async function listSubtasks(actor, id) {
+  const t = await loadVisible(actor, id);
+  if (t.parent) return { subtasks: [], total: 0, done: 0 };
+  const rows = await staffTaskRepository.findSubtasks(t._id, SUBTASKS_MAX);
+  const today = todayIST();
+  const subtasks = rows.map((r) => {
+    const canOpen = canSee(actor, r);
+    return { ...shape(r, actor, { today }), ...(!canOpen && { summary: '' }), canOpen };
+  });
+  return { subtasks, total: subtasks.length, done: subtasks.filter((r) => r.bucket === 'done').length };
+}
+
+/**
+ * Turn a checklist step into a sub-task with the step's words as its title,
+ * and take the step off. `clientId` is required: a retry finds the sub-task its
+ * first attempt made (and takes the step off if that is still to do), so it is
+ * never made twice.
+ *
+ * @returns {Promise<{ task: object, subtask: object }>} the parent as its page shows it, and the new sub-task
+ */
+export async function subtaskFromStep(actor, id, itemId, { clientId, assigneeIds } = {}, req) {
+  const key = cleanClientId(clientId);
+  if (!key) throw fail('Reload the task and try again.', 400);
+  const t = await loadVisible(actor, id);
+  const item = mongoose.isValidObjectId(itemId) && (t.checklist || []).find((c) => same(c._id, itemId));
+  if (!item) {
+    // Gone because a first attempt already did it: answer as that attempt did.
+    const made = await staffTaskRepository.findByClientId(actor._id, key);
+    if (made && same(made.parent?.task, t._id)) return { task: await getTask(actor, id), subtask: shape(made, actor, { full: true }) };
+    throw fail('That step is no longer on the checklist.', 404);
+  }
+  const { task: subtask } = await createTask(actor, {
+    title: item.text, parentId: id, clientId: key, shared: true,
+    ...(Array.isArray(assigneeIds) && assigneeIds.length ? { assigneeIds } : {}),
+  }, req, { note: false });
+  await staffTaskRepository.pullChecklistItem(t._id, item._id, {
+    at: new Date(), by: actor._id, byName: actor.name || '', action: 'check_to_subtask', from: item.text, to: subtask.code,
+  });
+  return { task: await getTask(actor, id), subtask };
 }
 
 // ── Followers ───────────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ const HISTORY_CAP = 100;
 export const LIST_PROJECTION = Object.freeze({
   number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, startOn: 1, tags: 1,
   assignee: 1, assigneeName: 1, team: 1, assignees: 1, teams: 1, followers: 1, createdBy: 1, createdByName: 1,
-  order: 1, group: 1, groupSize: 1, bucket: 1, rank: 1, rev: 1,
+  order: 1, group: 1, groupSize: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
   completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
   checklistTotal: { $size: { $ifNull: ['$checklist', []] } },
   checklistDone: { $size: { $filter: { input: { $ifNull: ['$checklist', []] }, cond: '$$this.done' } } },
@@ -98,6 +98,49 @@ const staffTaskRepository = {
   countDueIn: (userId, range) => StaffTask.countDocuments({ 'assignees.user': userId, bucket: 'open', rank: range }),
   /** Open tasks given to `userId` that are due on or before `day` (the bell). */
   countDueBy: (userId, day) => StaffTask.countDocuments({ 'assignees.user': userId, bucket: 'open', rank: { $lte: day } }),
+
+  // ── Sub-tasks ──
+  /*
+    Every read restates the partial filter of staff_task_parent (`$type`), so the
+    planner uses it instead of reading the whole collection.
+  */
+  childFilter: (parentId, extra = {}) => ({ 'parent.task': { $type: 'objectId', $eq: parentId }, ...extra }),
+  /** The sub-tasks of one task that are not archived, in list order (at most `limit`). */
+  findSubtasks: (parentId, limit) => StaffTask.find(staffTaskRepository.childFilter(parentId, { bucket: { $in: ['open', 'done'] } }), LIST_PROJECTION)
+    .sort({ rank: 1, _id: 1 })
+    .limit(limit)
+    .lean(),
+  /** `{ total, done }` over the sub-tasks that are not archived — counted, never kept by adding. */
+  countSubtasks: async (parentId) => {
+    const [total, done] = await Promise.all([
+      StaffTask.countDocuments(staffTaskRepository.childFilter(parentId, { bucket: { $in: ['open', 'done'] } })),
+      StaffTask.countDocuments(staffTaskRepository.childFilter(parentId, { bucket: 'done' })),
+    ]);
+    return { total, done };
+  },
+  /** Store the counts on the parent. Does not bump `rev`: a sub-task moving never blocks an edit of the parent. */
+  setSubtaskCounts: (parentId, counts) => StaffTask.updateOne({ _id: parentId }, { $set: { subtasks: counts } }),
+  readSubtaskCounts: async (parentId) => (await StaffTask.findById(parentId).select('subtasks').lean())?.subtasks ?? null,
+  /** Keep the parent's title on its sub-tasks up to date (at most SUBTASKS_MAX rows). */
+  renameParent: (parentId, title) => StaffTask.updateMany(staffTaskRepository.childFilter(parentId), { $set: { 'parent.title': title } }),
+  /**
+   * Sub-tasks to archive with their parent (those not archived yet), or to bring
+   * back with it (only those archived because it was).
+   */
+  findChildrenToArchive: (parentId) => StaffTask.find(staffTaskRepository.childFilter(parentId, { bucket: { $in: ['open', 'done'] } })).lean(),
+  findChildrenToRestore: (parentId) => StaffTask.find(staffTaskRepository.childFilter(parentId, { bucket: 'archived', archivedWithParent: true })).lean(),
+  /**
+   * Archive or restore one sub-task along with its parent, whatever its `rev`
+   * (the parent's editor decided), bumping `rev` so an open edit of it goes
+   * stale. `from` is the bucket it must still be in, so a retry changes nothing.
+   */
+  moveWithParent: (id, from, set, entry) => StaffTask.findOneAndUpdate(
+    { _id: id, bucket: from },
+    { $set: set, $inc: { rev: 1 }, $push: { history: { $each: [entry], $slice: -HISTORY_CAP } } },
+    { new: true },
+  ).lean(),
+  /** One line in a task's history, without bumping `rev`. */
+  noteHistory: (id, entry) => StaffTask.updateOne({ _id: id }, { $push: { history: { $each: [entry], $slice: -HISTORY_CAP } } }),
 
   // ── Checklist (never bumps `rev`: ticking a step must not block someone's edit) ──
   /**
