@@ -144,6 +144,25 @@ export type CommentPage = { comments: TaskComment[]; nextBefore: string | null }
 
 export type Person = { id: string; name: string };
 
+/** One line in the Inbox (GET /staff/tasks/inbox). */
+export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask';
+export type InboxItem = {
+  id: string;
+  kind: InboxKind;
+  /** The live title when it still opens; the title it had then when not. */
+  task: { id: string; code: string; title: string };
+  by: Person | null;
+  text: string;
+  read: boolean;
+  at: string;
+  canOpen: boolean;
+};
+export type InboxFilter = 'all' | 'unread';
+export type InboxPage = { items: InboxItem[]; nextCursor: string | null; unread: number };
+/** The server stops counting here; the badge says "99+". */
+export const INBOX_UNREAD_CAP = 100;
+export const unreadLabel = (n: number) => (n >= INBOX_UNREAD_CAP ? '99+' : String(n));
+
 /** Everyone on a task, for screens that may meet a task saved before `assignees` existed. */
 export const peopleOf = (t: Pick<Task, 'assignee' | 'assignees'>): Person[] => (t.assignees?.length ? t.assignees : [t.assignee]);
 

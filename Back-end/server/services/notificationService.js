@@ -28,6 +28,7 @@ import { STAFF_TEAMS } from '../config/staff.js';
 import { countPending as countPendingBankTransfers } from './bankTransferService.js';
 import { countDueForBell as countTasksDue } from './staffTaskService.js';
 import { countsFor as countReturnsFor } from './returnService.js';
+import { countUnread as countInboxUnread } from './staffTaskInboxService.js';
 
 const isAdmin = (u) => u?.role === 'admin';
 const isActiveStaff = (u) => u?.role === 'staff' && u?.staff?.active === true;
@@ -37,7 +38,12 @@ const isAccounts = (u) => isActiveStaff(u) && u.staff.team === STAFF_TEAMS.ACCOU
  * Everything waiting on `user`, newest counts straight from the source tables.
  *
  * @param {object} user
- * @returns {Promise<{items: {key: string, label: string, count: number, href: string}[], total: number}>}
+ * `total` counts WORK only — it is what rings the bell's "new work" alert. A
+ * row marked `quiet` (unread task updates) shows with its count but stays out
+ * of it: every comment would otherwise ring an alarm meant for payments, and
+ * those updates already arrive as pop-ups.
+ *
+ * @returns {Promise<{items: {key: string, label: string, count: number, href: string, quiet?: boolean}[], total: number}>}
  */
 export async function summaryFor(user) {
   const items = [];
@@ -45,7 +51,7 @@ export async function summaryFor(user) {
 
   const wantsPayments = isAdmin(user) || isAccounts(user);
   // One aggregate covers both payment queues; refunds are a separate table.
-  const [byStatus, refunds, transfers, tasksDue, returnItems] = await Promise.all([
+  const [byStatus, refunds, transfers, tasksDue, returnItems, inboxUnread] = await Promise.all([
     wantsPayments ? paymentRequestRepository.countByStatus() : Promise.resolve([]),
     isAdmin(user) || isAccounts(user) ? orderRepository.countPendingCancellationRefunds() : Promise.resolve(0),
     // A small collection (a handful of rows a week), so a count is cheap.
@@ -54,6 +60,8 @@ export async function summaryFor(user) {
     countTasksDue(user),
     // Returns waiting on this person's team — the same queries as the return lists.
     countReturnsFor(user),
+    // One covered count on staff_task_inbox_list, capped (the badge shows "99+").
+    countInboxUnread(user),
   ]);
   const n = (status) => byStatus.find((r) => r._id === status)?.n || 0;
 
@@ -108,7 +116,18 @@ export async function summaryFor(user) {
 
   items.push(...returnItems);
 
+  // What happened on this person's tasks that they have not read (the Inbox).
+  if (inboxUnread > 0) {
+    items.push({
+      key: 'tasks_inbox',
+      label: 'Unread task updates',
+      count: inboxUnread,
+      href: isAdmin(user) ? '/admin/tasks?view=inbox' : '/team/tasks?view=inbox',
+      quiet: true,
+    });
+  }
+
   // Zero-count rows are kept so the dropdown can say "nothing waiting" for a
   // queue that IS yours, rather than hiding it and looking like it vanished.
-  return { items, total: items.reduce((t, i) => t + i.count, 0) };
+  return { items, total: items.reduce((t, i) => t + (i.quiet ? 0 : i.count), 0) };
 }

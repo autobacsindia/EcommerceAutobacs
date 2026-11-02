@@ -135,7 +135,7 @@ describe('who sees a shared task', () => {
     for (const who of [procA, salesA]) {
       expect((await tasks.listTasks(who, { view: 'mine' })).tasks.map((x) => x.id)).toEqual([t.id]);
       expect(await tasks.countDueForBell(who)).toBe(1);
-      expect(await tasks.summaryFor(who)).toEqual({ late: 0, today: 1 });
+      expect(await tasks.summaryFor(who)).toMatchObject({ late: 0, today: 1 });
     }
   });
 

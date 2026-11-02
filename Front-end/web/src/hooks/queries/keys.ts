@@ -252,6 +252,9 @@ export const taskKeys = {
   assignees: () => [...taskKeys.all, 'assignees'] as const,
   /** The page header's late / due-today counts. */
   summary: () => [...taskKeys.all, 'summary'] as const,
+  /** The Inbox: what happened on your tasks. `state` is 'all' or 'unread'. */
+  inboxes: () => [...taskKeys.all, 'inbox'] as const,
+  inbox: (state: string) => [...taskKeys.inboxes(), state] as const,
 };
 
 /** `/admin/team-activity/*` — the admin's read-only view of the order workflow. */
