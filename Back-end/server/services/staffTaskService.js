@@ -1,26 +1,36 @@
 /**
- * Tasks in the staff panel — "do this, by then", given to one person.
+ * Tasks in the staff panel — "do this, by then", given to one person or several.
  *
  * ── Who gives tasks to whom ─────────────────────────────────────────────────
  *   anyone in the panel (active staff, or an admin) → anyone in the panel,
  *   themselves included. Never a customer, never someone whose access was removed.
  *
  * ── Who sees and changes a task ─────────────────────────────────────────────
- *   sees      the person doing it, whoever gave it, the head of its team, the admin
- *   edits     whoever gave it, the head of its team, the admin
- *             (title, notes, due day, priority, order link, archive)
- *   status    the same, plus the person doing it
- *   reassign  whoever gave it, the head of its team and the admin — to anyone
- *             in the panel (the person doing it cannot pass it on)
+ *   sees      the people doing it, its followers, whoever gave it, the head of
+ *             any team someone on it belongs to, the admin
+ *   edits     whoever gave it, those heads, the admin
+ *             (title, notes, due day, priority, order link, people, archive)
+ *   status    the same, plus the people doing it — never a follower
+ *   people    whoever gave it, those heads and the admin — anyone in the panel
+ *             (the people doing it cannot pass it on)
+ *   follow    anyone who sees it may follow or stop following it themselves;
+ *             the editors may add or remove anyone in the panel
  *   comments  everyone who sees it
- * A task's team is the assignee's team when it was given, so a head keeps seeing
- * the work they handed out even after the member moves on.
+ * A task's teams are its people's teams when they were given it, so a head keeps
+ * seeing the work they handed out even after the member moves on.
  *
  * ── One task for several people ─────────────────────────────────────────────
- * Each person gets their OWN copy (own number, status, comments), linked by a
- * shared `group` id, so everyone is answerable for their part and the giver sees
- * who has finished. The same who-gives-to-whom rule applies to every person
- * picked; if any one of them is not allowed, nothing is created.
+ * By default (`shared`) it is ONE task with several people in `assignees`: one
+ * number, one status, one conversation. "Own copy each" still makes a copy per
+ * person (own number, status, comments), linked by a `group` id, so everyone is
+ * answerable for their part. Either way the who-gives-to-whom rule applies to
+ * every person picked; if any one of them is not allowed, nothing is created.
+ *
+ * ── Pop-ups ─────────────────────────────────────────────────────────────────
+ * To the people doing it, its followers and whoever gave it — never to the person
+ * who did the thing, and only after the change was really saved, so a retried
+ * request never sends a second one. New people hear "new task"; everyone hears
+ * a status change and a comment; someone @mentioned hears "mentioned you".
  *
  * ── What must hold ──────────────────────────────────────────────────────────
  *   - a double-click or a retried request creates ONE task (and one comment):
@@ -69,6 +79,8 @@ export const CHECKLIST_MAX = 30;
 export const CHECK_TEXT_MAX = 200;
 /** One task can go to this many people at once (each gets their own copy). */
 export const MAX_ASSIGNEES = 30;
+/** Followers on one task. */
+export const FOLLOWERS_MAX = 50;
 /** Tags on one task, and how long one tag may be. */
 export const TAGS_MAX = 10;
 export const TAG_MAX = 24;
@@ -109,10 +121,22 @@ export function mayAssignTo(actor, target) {
   return !!target && inPanel(actor) && inPanel(target);
 }
 
-export const canSee = (u, t) => isAdmin(u) || same(u?._id, t.assignee) || same(u?._id, t.createdBy) || headOf(u, t.team);
-export const canEdit = (u, t) => isAdmin(u) || same(u?._id, t.createdBy) || headOf(u, t.team);
-const canSetStatus = (u, t) => canEdit(u, t) || same(u?._id, t.assignee);
-const canReassign = (u, t) => isAdmin(u) || same(u?._id, t.createdBy) || headOf(u, t.team);
+/*
+  The people on a task. `assignees` / `teams` are the truth; a task without them
+  (made before phase 4 and missed by the backfill) still answers from its one
+  `assignee` / `team`, so a rule never locks anyone out of it.
+*/
+export const peopleOf = (t) => t.assignees ?? (t.assignee ? [{ user: t.assignee, name: t.assigneeName || '' }] : []);
+const teamsOf = (t) => t.teams ?? [t.team ?? null];
+const followersOf = (t) => t.followers ?? [];
+const isDoing = (u, t) => peopleOf(t).some((p) => same(u?._id, p.user));
+const isFollowing = (u, t) => followersOf(t).some((p) => same(u?._id, p.user));
+const headOnTask = (u, t) => teamsOf(t).some((team) => headOf(u, team));
+
+export const canSee = (u, t) => isAdmin(u) || isDoing(u, t) || isFollowing(u, t) || same(u?._id, t.createdBy) || headOnTask(u, t);
+export const canEdit = (u, t) => isAdmin(u) || same(u?._id, t.createdBy) || headOnTask(u, t);
+const canSetStatus = (u, t) => canEdit(u, t) || isDoing(u, t);
+const canReassign = canEdit;
 
 /** The bucket a task lives in, and its sort key inside it. */
 export function placeOf({ status, dueOn, completedAt, archivedAt }) {
@@ -224,13 +248,20 @@ async function loadAssignees(actor, rawIds) {
 }
 
 /**
- * The several-people fields for `people` (phase 4), written beside `assignee` /
- * `team` until every read uses them: who is doing it, and each of their teams once.
+ * Everything a task stores about who is doing it, from loaded users: the list,
+ * each of their teams once, and the first person in the old one-person fields
+ * (kept for older code and the 4a rollback; nothing decides on them).
  */
-export const peopleFields = (people) => ({
-  assignees: people.map((p) => ({ user: p._id, name: p.name || '' })),
-  teams: [...new Set(people.map(teamOf))],
+export const peopleFields = (people) => personFields(people.map((p) => ({ user: p._id, name: p.name || '', team: teamOf(p) })));
+/** The same, from `{ user, name, team }` entries (some kept from the task, some just loaded). */
+const personFields = (list) => ({
+  assignee: list[0].user,
+  assigneeName: list[0].name,
+  team: list[0].team,
+  assignees: list.map(({ user, name, team }) => ({ user, name, team })),
+  teams: [...new Set(list.map((p) => p.team))],
 });
+const namesOf = (list) => list.map((p) => p.name || '?').join(', ');
 
 async function loadOrderRef(raw) {
   if (raw == null || raw === '') return null;
@@ -263,7 +294,11 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
     tags: t.tags || [],
     overdue: open && !!t.dueOn && t.dueOn < today,
     dueToday: open && t.dueOn === today,
-    assignee: { id: idOf(t.assignee), name: t.assigneeName || '' },
+    // The first person, for screens that show one; `assignees` is everyone.
+    assignee: { id: idOf(peopleOf(t)[0]?.user), name: peopleOf(t)[0]?.name || '' },
+    assignees: peopleOf(t).map((p) => ({ id: idOf(p.user), name: p.name || '' })),
+    followers: followersOf(t).map((p) => ({ id: idOf(p.user), name: p.name || '' })),
+    following: isFollowing(viewer, t),
     team: t.team || null,
     teamLabel: t.team ? STAFF_TEAM_LABELS[t.team] || t.team : 'Admin',
     createdBy: { id: idOf(t.createdBy), name: t.createdByName || '' },
@@ -291,6 +326,9 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
       comment: !archived && canSee(viewer, t),
       checklist: !archived && canEdit(viewer, t),
       files: !archived && canSee(viewer, t),
+      // Following yourself: anyone who sees it. Choosing who else follows: the editors.
+      follow: canSee(viewer, t),
+      followers: !archived && canEdit(viewer, t),
     },
     ...(full && {
       files: (t.files || []).map((f) => ({
@@ -359,24 +397,40 @@ const shapeOne = async (c, viewer) => shapeComment(c, viewer, await namesFor([c]
 
 // ── Pop-up ──────────────────────────────────────────────────────────────────
 
-/** "You have a new task" on the assignee's devices. Best effort; never throws. */
-async function notifyAssigned(task, actor) {
+/** Everyone who hears about a task: the people doing it, its followers and whoever gave it. */
+const audienceOf = (t) => [...peopleOf(t).map((p) => p.user), ...followersOf(t).map((p) => p.user), t.createdBy];
+
+/**
+ * Send one pop-up to `ids` about task `t` — never to `actor`, each person once,
+ * each to the panel they use. Best effort: the change is already saved, so a
+ * lost pop-up never undoes it, and this never throws.
+ */
+async function notifyPeople(t, actor, ids, message) {
   try {
-    const [target] = await userRepository.findChatUsersByIds([task.assignee]);
-    if (!target) return;
-    const base = isAdmin(target) ? '/admin/tasks' : '/team/tasks';
+    const wanted = [...new Set(ids.map(idOf))].filter((x) => x && !same(x, actor._id));
+    if (!wanted.length) return;
+    const people = await userRepository.findChatUsersByIds(wanted);
+    if (!people.length) return;
     await sendToUsers(
-      [{ userId: idOf(target._id), url: `${base}/${idOf(task._id)}` }],
-      {
-        title: `New task from ${actor.name || 'your team'}`,
-        body: `T-${task.number} · ${task.title}${task.dueOn ? ` · due ${task.dueOn}` : ''}`,
-        tag: `task-${idOf(task._id)}`,
-      },
+      people.map((u) => ({ userId: idOf(u._id), url: `${isAdmin(u) ? '/admin/tasks' : '/team/tasks'}/${idOf(t._id)}` })),
+      { ...message, tag: `task-${idOf(t._id)}` },
     );
   } catch (err) {
     console.error('[StaffTask] push failed (ignored):', err.message);
   }
 }
+
+/** "You have a new task" to the people just given it. */
+const notifyAssigned = (t, actor, ids) => notifyPeople(t, actor, ids, {
+  title: `New task from ${actor.name || 'your team'}`,
+  body: `T-${t.number} · ${t.title}${t.dueOn ? ` · due ${t.dueOn}` : ''}`,
+});
+
+/** "Moved to Done" to everyone on the task, apart from `skip` (just given it: they hear "new task"). */
+const notifyStatus = (t, actor, skip = []) => notifyPeople(t, actor, audienceOf(t).filter((x) => !skip.some((y) => same(x, y))), {
+  title: `${actor.name || 'Someone'} moved T-${t.number} to ${STATUS_LABELS[t.status]}`,
+  body: t.title,
+});
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -425,7 +479,7 @@ function decodeCursor(cursor) {
  * One page of tasks.
  *
  * @param {object} actor
- * @param {{ view?: 'mine'|'created'|'team', state?: 'open'|'done'|'archived',
+ * @param {{ view?: 'mine'|'following'|'created'|'team', state?: 'open'|'done'|'archived',
  *           due?: 'overdue'|'today'|'late', assignee?: string, team?: string, cursor?: string }} opts
  *   `late` = overdue or due today. `team` narrows the admin's team view.
  */
@@ -456,20 +510,22 @@ const TASK_COUNT_CAP = 1000;
 export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, priority, tag, q, sort, cursor } = {}) {
   const query = { bucket: state };
   if (view === 'mine') {
-    query.assignee = actor._id;
+    query['assignees.user'] = actor._id;
+  } else if (view === 'following') {
+    query['followers.user'] = actor._id;
   } else if (view === 'created') {
     query.createdBy = actor._id;
   } else if (view === 'team') {
     if (isAdmin(actor)) {
-      if (team) query.team = team === 'admin' ? null : team;
+      if (team) query.teams = team === 'admin' ? null : team;
     } else if (isHead(actor)) {
-      query.team = actor.staff.team;
+      query.teams = actor.staff.team;
     } else {
       throw fail('Only team heads and the admin see the team\'s tasks.', 403);
     }
     if (assignee) {
       if (!mongoose.isValidObjectId(assignee)) throw fail('Invalid person.', 400);
-      query.assignee = new mongoose.Types.ObjectId(assignee);
+      query['assignees.user'] = new mongoose.Types.ObjectId(assignee);
     }
   } else {
     throw fail('Invalid view.', 400);
@@ -563,14 +619,15 @@ export async function countDueForBell(user) {
 // ── Write ───────────────────────────────────────────────────────────────────
 
 /**
- * Create a task for one person, or a copy for each of several people.
+ * Create a task for one person; for several, one shared task (`shared: true`)
+ * or a copy each.
  *
- * Retries are safe: one person's copy is keyed by the browser's clientId; with
- * several people each copy is keyed by clientId + that person, so a retry after
- * a half-finished create finds the copies already made, makes only the missing
- * ones, and keeps them in the same group.
+ * Retries are safe: a single or shared task is keyed by the browser's clientId;
+ * with a copy each, each copy is keyed by clientId + that person, so a retry
+ * after a half-finished create finds the copies already made, makes only the
+ * missing ones, and keeps them in the same group.
  *
- * @param {{ title, description?, priority?, dueOn?, startOn?, tags?, assigneeId?, assigneeIds?, orderId?, clientId? }} input
+ * @param {{ title, description?, priority?, dueOn?, startOn?, tags?, assigneeId?, assigneeIds?, shared?, orderId?, clientId? }} input
  * @returns {Promise<{ task: object, tasks: object[], duplicate: boolean }>}
  */
 export async function createTask(actor, input = {}, req) {
@@ -589,17 +646,20 @@ export async function createTask(actor, input = {}, req) {
   const people = await loadAssignees(actor, rawIds);
   const order = await loadOrderRef(input.orderId);
 
-  const many = people.length > 1;
-  const keyFor = (p) => (!clientId ? undefined : many ? `${clientId}.${idOf(p._id)}` : clientId);
-  const earlier = clientId ? await staffTaskRepository.findByClientIds(actor._id, people.map(keyFor)) : [];
+  // One shared task for everyone, unless the giver asked for a copy each.
+  const shared = input.shared === true || input.shared === 'true';
+  const many = people.length > 1 && !shared;
+  const rows = many ? people.map((p) => [p]) : [people];
+  const keyFor = (who) => (!clientId ? undefined : many ? `${clientId}.${idOf(who[0]._id)}` : clientId);
+  const earlier = clientId ? await staffTaskRepository.findByClientIds(actor._id, rows.map(keyFor)) : [];
   const madeFor = new Map(earlier.map((t) => [t.clientId, t]));
   // A retry joins the group its first attempt started.
   const group = many ? (earlier.find((t) => t.group)?.group ?? new mongoose.Types.ObjectId()) : null;
 
   const now = new Date();
   const results = [];
-  for (const person of people) {
-    const key = keyFor(person);
+  for (const who of rows) {
+    const key = keyFor(who);
     const existing = key && madeFor.get(key);
     if (existing) { results.push({ doc: existing, created: false }); continue; }
     const number = await counterRepository.next(COUNTER);
@@ -613,10 +673,7 @@ export async function createTask(actor, input = {}, req) {
         dueOn,
         startOn,
         ...(tags.length ? { tags } : {}),
-        assignee: person._id,
-        assigneeName: person.name || '',
-        team: teamOf(person),
-        ...peopleFields([person]),
+        ...peopleFields(who),
         createdBy: actor._id,
         createdByName: actor.name || '',
         order,
@@ -625,7 +682,7 @@ export async function createTask(actor, input = {}, req) {
         groupSize: many ? people.length : undefined,
         ...placeOf({ status, dueOn }),
         clientId: key,
-        history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: person.name || '' }],
+        history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: namesOf(peopleFields(who).assignees) }],
       });
       results.push({ doc, created: true });
     } catch (err) {
@@ -641,9 +698,12 @@ export async function createTask(actor, input = {}, req) {
   for (const { doc, created } of results) {
     if (!created) continue;
     auditLogger.logAction(req, 'CREATE', 'StaffTask', doc._id, {
-      number: doc.number, assignee: idOf(doc.assignee), team: doc.team, ...(group && { group: idOf(group), people: people.length }),
+      number: doc.number,
+      assignees: peopleOf(doc).map((p) => idOf(p.user)),
+      teams: teamsOf(doc),
+      ...(group && { group: idOf(group), people: people.length }),
     });
-    if (!same(doc.assignee, actor._id)) void notifyAssigned(doc, actor);
+    void notifyAssigned(doc, actor, peopleOf(doc).map((p) => p.user));
   }
   const tasks = results.map(({ doc }) => shape(doc, actor, { full: true }));
   return { task: tasks[0], tasks, duplicate: results.every((r) => !r.created) };
@@ -652,10 +712,38 @@ export async function createTask(actor, input = {}, req) {
 /**
  * Change a task. Only the fields present in `input` change; `rev` is required.
  *
- * @param {{ rev: number, title?, description?, priority?, dueOn?, startOn?, tags?, orderId?, status?, assigneeId?, archived? }} input
+ * `assigneeIds` sets everyone doing it (at least one); `assigneeId` gives it to
+ * just that one person.
+ *
+ * @param {{ rev: number, title?, description?, priority?, dueOn?, startOn?, tags?, orderId?, status?, assigneeId?, assigneeIds?, archived? }} input
  */
 export async function updateTask(actor, id, input = {}, req) {
   return applyUpdate(actor, await loadVisible(actor, id), input, req);
+}
+
+const sameIds = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+
+/**
+ * The people on `t` once it is given to `ids`. Those already on it keep the name
+ * and team they were given it with (and are not checked again — someone who has
+ * since left the panel does not block taking a colleague off); only the new ones
+ * are loaded and must be allowed, all or nothing.
+ */
+async function nextPeople(actor, t, ids) {
+  if (!ids.length) throw fail('Keep at least one person on the task.', 400);
+  if (ids.length > MAX_ASSIGNEES) throw fail(`Pick at most ${MAX_ASSIGNEES} people for one task.`, 400);
+  if (ids.some((x) => !mongoose.isValidObjectId(x))) throw fail('Pick who should do this task.', 400);
+  const now = peopleOf(t);
+  const kept = new Map(now.map((p) => [idOf(p.user), {
+    user: p.user,
+    name: p.name || '',
+    // A backfilled task has one person and keeps their team on the task itself.
+    team: p.team !== undefined ? p.team : now.length === 1 ? teamsOf(t)[0] ?? null : null,
+  }]));
+  const fresh = ids.filter((x) => !kept.has(x));
+  const loaded = fresh.length ? await loadAssignees(actor, fresh) : [];
+  const byId = new Map(loaded.map((u) => [idOf(u._id), { user: u._id, name: u.name || '', team: teamOf(u) }]));
+  return ids.map((x) => kept.get(x) ?? byId.get(x));
 }
 
 /** updateTask on a task already loaded (and visible to `actor`). */
@@ -681,7 +769,7 @@ async function applyUpdate(actor, t, input, req) {
     }
   }
   const willBeArchived = set.archivedAt !== undefined ? !!set.archivedAt : archived;
-  const editing = ['title', 'description', 'priority', 'dueOn', 'startOn', 'tags', 'orderId', 'status', 'assigneeId'].some(has);
+  const editing = ['title', 'description', 'priority', 'dueOn', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds'].some(has);
   if (editing && willBeArchived) throw fail('This task is archived. Restore it first.', 409);
 
   const editable = canEdit(actor, t);
@@ -728,14 +816,19 @@ async function applyUpdate(actor, t, input, req) {
       note('status', STATUS_LABELS[t.status], STATUS_LABELS[status]);
     }
   }
-  let newAssignee = null;
-  if (has('assigneeId') && !same(input.assigneeId, t.assignee)) {
-    if (!canReassign(actor, t)) throw fail('Only whoever gave this task, the team head or the admin can give it to someone else.', 403);
-    newAssignee = await loadAssignee(actor, input.assigneeId);
-    Object.assign(set, {
-      assignee: newAssignee._id, assigneeName: newAssignee.name || '', team: teamOf(newAssignee), ...peopleFields([newAssignee]),
-    });
-    note('assignee', t.assigneeName, newAssignee.name || '');
+  let added = [];
+  const wanted = has('assigneeIds') ? input.assigneeIds : has('assigneeId') ? [input.assigneeId] : null;
+  if (wanted) {
+    if (!Array.isArray(wanted)) throw fail('Pick who should do this task.', 400);
+    const before = peopleOf(t);
+    const ids = [...new Set(wanted.map(idOf).filter(Boolean))];
+    if (!sameIds(ids, before.map((p) => idOf(p.user)))) {
+      if (!canReassign(actor, t)) throw fail('Only whoever gave this task, the team head or the admin can change who does it.', 403);
+      const list = await nextPeople(actor, t, ids);
+      Object.assign(set, personFields(list));
+      note('assignee', namesOf(before), namesOf(list));
+      added = list.filter((p) => !before.some((b) => same(b.user, p.user))).map((p) => p.user);
+    }
   }
 
   if (!entries.length) return shape(t, actor, { full: true });
@@ -753,7 +846,10 @@ async function applyUpdate(actor, t, input, req) {
   auditLogger.logAction(req, set.archivedAt ? 'DELETE' : 'UPDATE', 'StaffTask', t._id, {
     number: t.number, changes: entries.map((e) => e.action),
   });
-  if (newAssignee && !same(newAssignee._id, actor._id)) void notifyAssigned(next, actor);
+  // Only now, after the write landed: a retried request is refused above (stale
+  // rev) or changes nothing, so it never sends these twice.
+  if (added.length) void notifyAssigned(next, actor, added);
+  if (set.status !== undefined) void notifyStatus(next, actor, added);
   return shape(next, actor, { full: true });
 }
 
@@ -773,7 +869,7 @@ function changesNothing(t, input) {
   return (!has('status') || input.status === t.status)
     && (!has('priority') || input.priority === t.priority)
     && (!has('dueOn') || input.dueOn === (t.dueOn || null))
-    && (!has('assigneeId') || same(input.assigneeId, t.assignee))
+    && (!has('assigneeId') || (peopleOf(t).length === 1 && same(input.assigneeId, peopleOf(t)[0].user)))
     && (!has('archived') || input.archived === (t.bucket === 'archived'))
     && (!has('tags') || sameTags(input.tags, t.tags || []));
 }
@@ -909,6 +1005,74 @@ export async function removeChecklistItem(actor, id, itemId) {
   return getTask(actor, id);
 }
 
+// ── Followers ───────────────────────────────────────────────────────────────
+/*
+  A follower sees the task, comments and hears about it, but does not do it:
+  they cannot move it or tick its steps. Anyone who sees a task may follow it or
+  stop following it themselves; choosing for anyone else is editing it (whoever
+  gave it, the heads on it, the admin). None of it bumps `rev`, so following
+  never makes someone's open edit stale, and each change is one atomic write.
+*/
+
+const EDIT_FOLLOWERS = 'Only whoever gave this task, the team head or the admin can choose who follows it.';
+const FOLLOWERS_FULL = `A task can have at most ${FOLLOWERS_MAX} followers.`;
+const asUser = (x) => ({ _id: x });
+
+/** People in the panel, loaded and allowed, all or nothing — as `{ user, name }`. */
+async function loadFollowers(actor, ids) {
+  if (!ids.length) return [];
+  const found = await userRepository.findChatUsersByIds(ids);
+  const byId = new Map(found.map((u) => [idOf(u._id), u]));
+  const people = ids.map((x) => byId.get(x));
+  if (people.some((u) => !u)) throw fail('Someone you picked is no longer in the staff panel.', 400);
+  if (people.some((u) => !mayAssignTo(actor, u))) throw fail('Only people in the staff panel can follow a task.', 403);
+  return people.map((u) => ({ user: u._id, name: u.name || '' }));
+}
+
+/** Put `people` ({ user, name }) on `t` as followers and take `removeIds` off. Returns the task, or throws. */
+async function writeFollowers(actor, t, people, removeIds) {
+  const entries = [
+    ...people.map((p) => checkEntry(actor, 'follower_added', p.name)),
+    ...followersOf(t).filter((p) => removeIds.includes(idOf(p.user))).map((p) => ({ ...checkEntry(actor, 'follower_removed', ''), from: p.name || '' })),
+  ];
+  const next = await staffTaskRepository.changeFollowers(
+    t._id, { addPeople: people, removeIds: removeIds.map((x) => new mongoose.Types.ObjectId(x)) }, entries, FOLLOWERS_MAX,
+  );
+  if (next) return next;
+  if (!(await staffTaskRepository.findById(t._id))) throw fail('Task not found.', 404);
+  throw fail(FOLLOWERS_FULL, 400);
+}
+
+/**
+ * Add and remove followers (person ids). Adding someone already following, or
+ * someone doing the task, changes nothing; so does removing someone who is not
+ * following — a retried request is a success, not an error.
+ *
+ * @returns {Promise<{ task: object|null }>} null when the actor stopped following
+ *   a task they can no longer see.
+ */
+export async function changeFollowers(actor, id, { add = [], remove = [] } = {}) {
+  const t = await loadVisible(actor, id);
+  const clean = (list) => {
+    if (list == null) return [];
+    if (!Array.isArray(list) || list.some((x) => !mongoose.isValidObjectId(x))) throw fail('Invalid person.', 400);
+    return [...new Set(list.map(String))];
+  };
+  const addIds = clean(add);
+  const removeIds = clean(remove);
+  if (addIds.some((x) => removeIds.includes(x))) throw fail('Add or remove a person, not both.', 400);
+  if (![...addIds, ...removeIds].every((x) => same(x, actor._id)) && !canEdit(actor, t)) throw fail(EDIT_FOLLOWERS, 403);
+
+  const toAdd = addIds.filter((x) => !isDoing(asUser(x), t) && !isFollowing(asUser(x), t));
+  const toRemove = removeIds.filter((x) => isFollowing(asUser(x), t));
+  if (!toAdd.length && !toRemove.length) return { task: await getTask(actor, id) };
+  if (toAdd.length && t.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
+  if (followersOf(t).length - toRemove.length + toAdd.length > FOLLOWERS_MAX) throw fail(FOLLOWERS_FULL, 400);
+
+  const next = await writeFollowers(actor, t, await loadFollowers(actor, toAdd), toRemove);
+  return { task: canSee(actor, next) ? { ...shape(next, actor, { full: true }), siblings: await siblingsOf(actor, next) } : null };
+}
+
 // ── Comments ────────────────────────────────────────────────────────────────
 /*
   Everyone who sees a task may comment, @mention, react and attach files.
@@ -917,60 +1081,78 @@ export async function removeChecklistItem(actor, id, itemId) {
   giver, not a head, not the admin. Both are SOFT: the earlier words stay in the
   database, and what people see is "edited" or "This comment was deleted."
 
-  Pop-ups: a new comment goes to the person doing it and whoever gave it; anyone
-  @mentioned gets "mentioned you" instead. Never to the writer, never twice for a
-  retried post, never for a reaction or an edit.
+  Mentions: anyone on the task. Whoever gave it, a head on it or the admin may
+  also @mention someone in the panel who is not on it — that person becomes a
+  follower first, so they can open what they were called to.
+
+  Pop-ups: a new comment goes to the people doing it, its followers and whoever
+  gave it; anyone @mentioned gets "mentioned you" instead. Never to the writer,
+  never twice for a retried post, never for a reaction or an edit.
 */
 
 const peopleOnTask = async (t) => {
-  const heads = t.team ? (await userRepository.findActiveStaff(t.team)).filter((u) => u.staff?.isHead) : [];
-  const direct = await userRepository.findChatUsersByIds([t.assignee, t.createdBy].filter(Boolean));
+  const teams = teamsOf(t).filter(Boolean);
+  const staffOf = await Promise.all([...new Set(teams)].map((team) => userRepository.findActiveStaff(team)));
+  const heads = staffOf.flat().filter((u) => u.staff?.isHead);
+  const direct = await userRepository.findChatUsersByIds(audienceOf(t).filter(Boolean));
   const byId = new Map([...direct, ...heads].map((u) => [idOf(u._id), u]));
   return [...byId.values()];
 };
 
-/** Who `actor` may @mention on this task: the people on it, apart from themselves. */
+/**
+ * Who `actor` may @mention on this task, apart from themselves: the people on
+ * it, and — for those who may add followers — everyone else in the panel too,
+ * marked `onTask: false` (mentioning them makes them a follower).
+ */
 export async function listMentionable(actor, id) {
   const t = await loadVisible(actor, id);
-  const people = (await peopleOnTask(t))
+  const on = await peopleOnTask(t);
+  const onIds = new Set(on.map((u) => idOf(u._id)));
+  const everyone = canEdit(actor, t) && t.bucket !== 'archived'
+    ? (await userRepository.findChatUsers()).filter((u) => mayAssignTo(actor, u))
+    : [];
+  const byId = new Map([...on, ...everyone].map((u) => [idOf(u._id), u]));
+  const people = [...byId.values()]
     .filter((u) => !same(u._id, actor._id))
-    .map((u) => ({ id: idOf(u._id), name: u.name || '' }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .map((u) => ({ id: idOf(u._id), name: u.name || '', onTask: onIds.has(idOf(u._id)) }))
+    // The people on the task first, then everyone else — each by name.
+    .sort((a, b) => Number(b.onTask) - Number(a.onTask) || a.name.localeCompare(b.name));
   return { people };
 }
 
-/** Mentions as sent (a list, or a JSON list from a form with files): each must be on the task. */
+/**
+ * Mentions as sent (a list, or a JSON list from a form with files). Each must be
+ * on the task — or, for whoever may add followers, in the panel: those come back
+ * in `newFollowers` ({ user, name }) to be added before the comment is saved.
+ * @returns {Promise<{ ids: mongoose.Types.ObjectId[], newFollowers: object[] }>}
+ */
 async function cleanMentions(actor, t, raw) {
   let list = raw;
   if (typeof raw === 'string') {
     try { list = raw ? JSON.parse(raw) : []; } catch { throw fail('Invalid mentions.', 400); }
   }
-  if (list == null) return [];
+  if (list == null) return { ids: [], newFollowers: [] };
   if (!Array.isArray(list) || list.some((x) => !mongoose.isValidObjectId(x))) throw fail('Invalid mentions.', 400);
   const ids = [...new Set(list.map(String))].filter((x) => !same(x, actor._id));
-  if (!ids.length) return [];
+  if (!ids.length) return { ids: [], newFollowers: [] };
   if (ids.length > MENTIONS_MAX) throw fail(`Mention at most ${MENTIONS_MAX} people in one comment.`, 400);
   const on = new Set((await peopleOnTask(t)).map((u) => idOf(u._id)));
-  if (ids.some((x) => !on.has(x))) throw fail('You can only mention people on this task.', 400);
-  return ids.map((x) => new mongoose.Types.ObjectId(x));
+  const outside = ids.filter((x) => !on.has(x));
+  if (outside.length && !canEdit(actor, t)) throw fail('You can only mention people on this task.', 400);
+  if (followersOf(t).length + outside.length > FOLLOWERS_MAX) throw fail(FOLLOWERS_FULL, 400);
+  const newFollowers = await loadFollowers(actor, outside);
+  return { ids: ids.map((x) => new mongoose.Types.ObjectId(x)), newFollowers };
 }
 
 /** The pop-ups for a new comment. Best effort; never throws. */
 async function notifyComment(t, actor, c) {
   try {
-    const mentioned = new Set((c.mentions || []).map(idOf));
-    const ids = [...new Set([idOf(t.assignee), idOf(t.createdBy), ...mentioned])].filter((x) => x && !same(x, actor._id));
-    if (!ids.length) return;
-    const people = await userRepository.findChatUsersByIds(ids);
+    const mentioned = (c.mentions || []).map(idOf);
     const who = actor.name || 'Someone';
     const said = c.text ? c.text.replace(/\s+/g, ' ').slice(0, 120) : 'Shared a file';
-    const target = (u) => ({ userId: idOf(u._id), url: `${isAdmin(u) ? '/admin/tasks' : '/team/tasks'}/${idOf(t._id)}` });
     const body = `T-${t.number} · ${t.title}: ${said}`;
-    const tag = `task-${idOf(t._id)}`;
-    const named = people.filter((u) => mentioned.has(idOf(u._id)));
-    const others = people.filter((u) => !mentioned.has(idOf(u._id)));
-    if (named.length) await sendToUsers(named.map(target), { title: `${who} mentioned you`, body, tag });
-    if (others.length) await sendToUsers(others.map(target), { title: `${who} commented on T-${t.number}`, body, tag });
+    await notifyPeople(t, actor, mentioned, { title: `${who} mentioned you`, body });
+    await notifyPeople(t, actor, audienceOf(t).filter((x) => !mentioned.includes(idOf(x))), { title: `${who} commented on T-${t.number}`, body });
   } catch (err) {
     console.error('[StaffTask] comment push failed (ignored):', err.message);
   }
@@ -1010,7 +1192,11 @@ export async function addComment(actor, id, { text, clientId: rawClientId, menti
   if (!body && !files.length) throw fail('Write a comment first.', 400);
   if (body.length > COMMENT_MAX) throw fail(`Keep a comment under ${COMMENT_MAX} characters.`, 400);
   if (files.length > COMMENT_FILES_MAX) throw fail(`Attach at most ${COMMENT_FILES_MAX} files to one comment.`, 400);
-  const mentionIds = await cleanMentions(actor, t, mentions);
+  const { ids: mentionIds, newFollowers } = await cleanMentions(actor, t, mentions);
+  // Someone @mentioned from outside follows first, so the comment never names a
+  // person who cannot open it. Adding a follower twice changes nothing, so a
+  // retry that gets this far is safe too.
+  if (newFollowers.length) await writeFollowers(actor, t, newFollowers, []);
   const stored = await storeTaskFiles(files, idOf(t._id));
 
   let c;

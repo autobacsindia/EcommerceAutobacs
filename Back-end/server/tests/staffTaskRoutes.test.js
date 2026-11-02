@@ -183,6 +183,36 @@ describe('Staff task routes', () => {
     expect((await request(app).post(`${BASE}/staff/tasks/bulk`).send({})).status).toBe(403);
   });
 
+  it('one shared task, its people and its followers over HTTP', async () => {
+    const other = await makeUser('Sam', 'staff', { team: 'sales', isHead: false, active: true });
+    const created = await head.session.post('/staff/tasks', {
+      title: 'Shared', assigneeIds: [String(member.user._id), String(other.user._id)], shared: true,
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.tasks).toHaveLength(1);
+    const { id, rev } = created.body.task;
+    expect((await other.session.get('/staff/tasks?view=mine')).body.tasks.map((t) => t.id)).toEqual([id]);
+
+    const changed = await head.session.patch(`/staff/tasks/${id}`, { rev, assigneeIds: [String(other.user._id)] });
+    expect(changed.status).toBe(200);
+    expect(changed.body.task.assignees.map((p) => p.name)).toEqual(['Sam']);
+    expect((await head.session.patch(`/staff/tasks/${id}`, { rev: rev + 1, assigneeIds: [] })).status).toBe(400);
+    expect((await head.session.patch(`/staff/tasks/${id}`, { rev: rev + 1, assigneeIds: ['nope'] })).status).toBe(400);
+
+    const follow = await member.session.patch(`/staff/tasks/${id}/followers`, { add: [String(member.user._id)] });
+    expect(follow.status).toBe(404); // taken off the task: they no longer see it
+    const added = await head.session.patch(`/staff/tasks/${id}/followers`, { add: [String(member.user._id)] });
+    expect(added.status).toBe(200);
+    expect(added.body.task.followers.map((p) => p.name)).toEqual(['Arun']);
+    expect((await member.session.get('/staff/tasks?view=following')).body.tasks.map((t) => t.id)).toEqual([id]);
+    const off = await member.session.patch(`/staff/tasks/${id}/followers`, { remove: [String(member.user._id)] });
+    expect(off.status).toBe(200);
+    expect(off.body.task).toBeNull();
+    expect((await head.session.patch(`/staff/tasks/${id}/followers`, { add: ['nope'] })).status).toBe(400);
+    expect((await head.session.patch(`/staff/tasks/${id}/followers`, { add: 'not-a-list' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { title: 'x', shared: 'maybe' })).status).toBe(400);
+  });
+
   it('lists who you may give to', async () => {
     const res = await head.session.get('/staff/tasks/assignees');
     expect(res.status).toBe(200);

@@ -16,7 +16,7 @@ const HISTORY_CAP = 100;
 */
 export const LIST_PROJECTION = Object.freeze({
   number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, startOn: 1, tags: 1,
-  assignee: 1, assigneeName: 1, team: 1, createdBy: 1, createdByName: 1,
+  assignee: 1, assigneeName: 1, team: 1, assignees: 1, teams: 1, followers: 1, createdBy: 1, createdByName: 1,
   order: 1, group: 1, groupSize: 1, bucket: 1, rank: 1, rev: 1,
   completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
   checklistTotal: { $size: { $ifNull: ['$checklist', []] } },
@@ -53,7 +53,7 @@ const staffTaskRepository = {
    * a bare `{ group }` read every task in the collection (4,003 docs for 3, measured).
    */
   findGroup: (group) => StaffTask.find({ group: { $type: 'objectId', $eq: group } })
-    .select('number assignee assigneeName team createdBy status bucket').lean(),
+    .select('number assignee assigneeName team assignees teams followers createdBy status bucket').lean(),
 
   /**
    * Apply a change only if nobody changed the task since `rev` was read
@@ -95,9 +95,9 @@ const staffTaskRepository = {
   },
 
   /** Open tasks given to `userId` whose due day is in `range` (the page header). */
-  countDueIn: (userId, range) => StaffTask.countDocuments({ assignee: userId, bucket: 'open', rank: range }),
+  countDueIn: (userId, range) => StaffTask.countDocuments({ 'assignees.user': userId, bucket: 'open', rank: range }),
   /** Open tasks given to `userId` that are due on or before `day` (the bell). */
-  countDueBy: (userId, day) => StaffTask.countDocuments({ assignee: userId, bucket: 'open', rank: { $lte: day } }),
+  countDueBy: (userId, day) => StaffTask.countDocuments({ 'assignees.user': userId, bucket: 'open', rank: { $lte: day } }),
 
   // ── Checklist (never bumps `rev`: ticking a step must not block someone's edit) ──
   /**
@@ -129,6 +129,31 @@ const staffTaskRepository = {
     { $pull: { checklist: { _id: itemId } }, $push: { history: { $each: [entry], $slice: -HISTORY_CAP } } },
     { new: true },
   ).lean(),
+
+  // ── Followers (never bump `rev`: following must not block someone's edit) ──
+  /**
+   * Take `removeIds` off and put `addPeople` ({ user, name }) on, in ONE write
+   * the database works out from what the task holds at that moment — so two
+   * people following at once both land, someone already following is not added
+   * twice, and the cap holds. Null when the result would pass `max`, or the task
+   * is gone.
+   */
+  changeFollowers: (id, { addPeople = [], removeIds = [] }, entries, max) => {
+    const current = { $ifNull: ['$followers', []] };
+    const kept = { $filter: { input: current, cond: { $not: [{ $in: ['$$this.user', removeIds] }] } } };
+    const fresh = { $filter: { input: { $literal: addPeople }, cond: { $not: [{ $in: ['$$this.user', { $ifNull: ['$followers.user', []] }] }] } } };
+    const next = { $concatArrays: [kept, fresh] };
+    return StaffTask.findOneAndUpdate(
+      { _id: id, $expr: { $lte: [{ $size: next }, max] } },
+      [{
+        $set: {
+          followers: next,
+          history: { $slice: [{ $concatArrays: [{ $ifNull: ['$history', []] }, { $literal: entries }] }, -HISTORY_CAP] },
+        },
+      }],
+      { new: true },
+    ).lean();
+  },
 
   // ── Comments ──
   createComment: async (doc) => (await StaffTaskComment.create(doc)).toObject(),

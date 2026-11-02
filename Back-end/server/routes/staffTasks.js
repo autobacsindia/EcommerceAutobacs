@@ -16,6 +16,7 @@ import {
   validateChecklistAdd,
   validateChecklistUpdate,
   validateChecklistRemove,
+  validateTaskFollowers,
 } from '../validators/staffTask.validator.js';
 import {
   listTasks,
@@ -37,6 +38,7 @@ import {
   addChecklistItem,
   updateChecklistItem,
   removeChecklistItem,
+  changeFollowers,
 } from '../services/staffTaskService.js';
 import { uploadChatFiles, handleChatUploadError } from '../services/chatAttachmentService.js';
 import { attachmentSizeGuard } from '../middleware/uploadMiddleware.js';
@@ -52,7 +54,7 @@ const withFiles = [attachmentSizeGuard, uploadChatFiles, handleChatUploadError];
  */
 const router = express.Router();
 
-// @route  GET /staff/tasks?view=mine|created|team&state=open|done|archived&due=&priority=&tag=&q=&assignee=&team=&sort=due|newest|oldest|updated&cursor=
+// @route  GET /staff/tasks?view=mine|following|created|team&state=open|done|archived&due=&priority=&tag=&q=&assignee=&team=&sort=due|newest|oldest|updated&cursor=
 router.get('/', validateTaskList, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listTasks(req.user, req.query)) });
 }));
@@ -133,7 +135,12 @@ router.put('/:id/comments/:commentId/reactions', validateCommentReaction, valida
   res.json({ success: true, ...(await reactToComment(req.user, req.params.id, req.params.commentId, req.body)) });
 }));
 
-// @route  GET /staff/tasks/:id/mentionable — who can be @mentioned (the people on the task)
+// @route  PATCH /staff/tasks/:id/followers { add?: [personId], remove?: [personId] } — follow / unfollow; editors choose for others
+router.patch('/:id/followers', validateTaskFollowers, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await changeFollowers(req.user, req.params.id, req.body)) });
+}));
+
+// @route  GET /staff/tasks/:id/mentionable — who can be @mentioned (the people on the task; editors: anyone in the panel)
 router.get('/:id/mentionable', validateTaskId, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listMentionable(req.user, req.params.id)) });
 }));

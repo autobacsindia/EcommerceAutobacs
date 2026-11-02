@@ -83,6 +83,13 @@ const PersonSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     name: { type: String, default: '' },
+    /**
+     * Their team when they were given it (null for the admin), so taking one
+     * person off a shared task leaves the others' teams right. Tasks filled in by
+     * the backfill have one person and no `team` here: the task's `team` is theirs.
+     * Not stored for followers (following never lets a head see a task).
+     */
+    team: { type: String, default: undefined },
   },
   { _id: false },
 );
@@ -112,18 +119,22 @@ const StaffTaskSchema = new mongoose.Schema(
     /** The assignee's team when it was given (null for the admin's own tasks) — whose head sees it. */
     team: { type: String, default: null },
     /*
-      One shared task, several people (Tasks phase 4). Written beside `assignee` /
-      `team` on every create and change, and filled in for older tasks by
-      scripts/backfill-task-assignees.js, so the reads can move here once every
-      task has them. Until then `assignee` is the source of truth and these
-      always describe the same one person.
+      One shared task, several people (Tasks phase 4). These are the source of
+      truth: every list, rule and pop-up reads them. Older tasks got them from
+      scripts/backfill-task-assignees.js. `assignee` / `assigneeName` / `team`
+      above still name the FIRST person, so older code and the 4a rollback keep
+      working; nothing reads them for a decision any more.
     */
     /** Everyone doing the task, in the order they were given it. */
     assignees: { type: [PersonSchema], default: undefined },
     /** The team of each person in `assignees` (null for the admin), once each — whose heads see it. */
     teams: { type: [String], default: undefined },
-    /** People who follow the task without doing it: they see it and hear about it. */
-    followers: { type: [mongoose.Schema.Types.ObjectId], default: undefined },
+    /**
+     * People who follow the task without doing it: they see it, comment and hear
+     * about it, but cannot move it. Names are kept like `assignees`, so a list
+     * shows them without looking anyone up.
+     */
+    followers: { type: [PersonSchema], default: undefined },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdByName: { type: String, default: '' },
     order: { type: OrderRefSchema, default: null },
@@ -169,6 +180,8 @@ StaffTaskSchema.index({ bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_all' }
 // one key per entry, so "my tasks" and "my team's tasks" stay one index range.
 StaffTaskSchema.index({ 'assignees.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_assignees' });
 StaffTaskSchema.index({ teams: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_teams' });
+// "Following": the tasks someone follows, the same way.
+StaffTaskSchema.index({ 'followers.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_followers' });
 // The copies of one task given to several people. Partial: most tasks have no group.
 StaffTaskSchema.index({ group: 1 }, { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group' });
 // `$type`, not `$ne`/`$exists: true` on null — MongoDB rejects `$ne` in a partialFilterExpression.

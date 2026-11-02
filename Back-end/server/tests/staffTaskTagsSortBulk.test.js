@@ -139,6 +139,7 @@ describe('start dates', () => {
 describe('list order', () => {
   const seed = (count) => StaffTask.insertMany(Array.from({ length: count }, (_, i) => ({
     number: 200000 + i, title: `t${i}`, assignee: procA._id, assigneeName: 'Arun', team: 'procurement',
+    assignees: [{ user: procA._id, name: 'Arun' }], teams: ['procurement'],
     createdBy: procHead._id, createdByName: 'Priya', status: 'todo', priority: 'normal',
     dueOn: day(i % 5), bucket: 'open', rank: day(i % 5),
     // Several tasks share a createdAt / updatedAt, so the _id tie-break is exercised.

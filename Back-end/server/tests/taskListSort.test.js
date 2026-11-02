@@ -34,7 +34,7 @@ function task(assignee, { at, dueOn = null, title, bucket = 'open', team = 'proc
   const createdAt = new Date(T0 + (at ?? number) * HOUR);
   return {
     _id: oid(), number, title: title || `Task ${number}`, description: '', status: 'todo', priority: 'normal',
-    dueOn, assignee, assigneeName: '', team, createdBy: head._id, createdByName: 'Head',
+    dueOn, assignee, assigneeName: '', team, assignees: [{ user: assignee, name: '' }], teams: [team], createdBy: head._id, createdByName: 'Head',
     bucket, rank: bucket === 'open' ? (dueOn || '9999-12-31') : `d${String(9e12 - createdAt.getTime()).padStart(13, '0')}`,
     rev: 1, checklist: [], commentCount: 0, history: [], createdAt, updatedAt: createdAt,
   };

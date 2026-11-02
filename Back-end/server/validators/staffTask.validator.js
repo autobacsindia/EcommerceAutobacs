@@ -18,7 +18,7 @@ const optionalId = (field) => body(field).optional({ values: 'null' })
 export const validateTaskId = [param('id').custom(isObjectId).withMessage('Invalid task id')];
 
 export const validateTaskList = [
-  query('view').optional().isIn(['mine', 'created', 'team']).withMessage('Invalid view'),
+  query('view').optional().isIn(['mine', 'following', 'created', 'team']).withMessage('Invalid view'),
   query('state').optional().isIn(['open', 'done', 'archived']).withMessage('Invalid state'),
   query('due').optional().isIn(['overdue', 'today', 'late', 'week']).withMessage('Invalid due filter'),
   query('priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
@@ -43,6 +43,7 @@ export const validateTaskCreate = [
   optionalId('assigneeId'),
   body('assigneeIds').optional().isArray({ max: 30 }).withMessage('Pick at most 30 people'),
   body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
+  body('shared').optional().isBoolean().withMessage('Invalid choice'),
   body('checklist').optional().isArray({ max: 30 }).withMessage('A checklist can have at most 30 steps'),
   body('checklist.*').isString().withMessage('Invalid step'),
   optionalId('orderId'),
@@ -62,7 +63,17 @@ export const validateTaskUpdate = [
   body('tags.*').isString().withMessage('Invalid tag'),
   body('archived').optional().isBoolean().withMessage('Invalid archive flag'),
   optionalId('assigneeId'),
+  body('assigneeIds').optional().isArray({ min: 1, max: 30 }).withMessage('Keep between 1 and 30 people on a task'),
+  body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
   optionalId('orderId'),
+];
+
+export const validateTaskFollowers = [
+  ...validateTaskId,
+  body('add').optional().isArray({ max: 50 }).withMessage('Add at most 50 followers'),
+  body('add.*').custom(isObjectId).withMessage('Invalid person'),
+  body('remove').optional().isArray({ max: 50 }).withMessage('Remove at most 50 followers'),
+  body('remove.*').custom(isObjectId).withMessage('Invalid person'),
 ];
 
 export const validateTaskBulk = [
