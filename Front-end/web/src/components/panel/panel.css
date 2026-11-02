@@ -253,9 +253,15 @@
 /* A quiet scrollbar for a long menu on the dark green. */
 .pn-side nav { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.22) transparent; }
 
-/* Hover rail (Tasks): open over the page, so it reads as a layer above it. */
+/* Hover rail: open over the page, so it reads as a layer above it. */
 @media (min-width: 768px) {
   .pn-rail-peek { box-shadow: 1px 0 0 rgba(0, 0, 0, 0.06), 18px 0 40px -10px rgba(6, 51, 29, 0.45); }
+}
+/* Touch tablets cannot hover: keep the top-bar menu button (and its backdrop)
+   so the full menu is one tap away. Unlayered, so it beats Tailwind's md:hidden. */
+@media (min-width: 768px) and (hover: none) {
+  .pn-rail-touch .pn-menu-btn { display: inline-flex; }
+  .pn-rail-touch .pn-menu-backdrop { display: block; }
 }
 
 /* ── Top bar ─────────────────────────────────────────────────────────────── */

@@ -103,7 +103,7 @@ it('Log out calls the panel’s logout', () => {
   expect(onLogout).toHaveBeenCalledTimes(1);
 });
 
-describe('hover rail (the Tasks pages)', () => {
+describe('hover rail (every panel page)', () => {
   beforeEach(() => { jest.useFakeTimers(); localStorage.clear(); });
   afterEach(() => { jest.useRealTimers(); });
   const menu = () => document.getElementById('panel-menu')!;
@@ -207,5 +207,21 @@ describe('hover rail (the Tasks pages)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
     expect(menu()).toHaveAttribute('data-open', 'true');
     expect(menu().className).toContain('md:w-64');
+  });
+
+  it('touch tablets (no hover) keep the menu button: the frame is marked so panel.css can show it', () => {
+    const { container } = shell({ hoverRail: true });
+    expect(container.firstChild).toHaveClass('pn-rail-touch');
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveClass('pn-menu-btn');
+    fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    expect(screen.getAllByRole('button', { name: 'Close menu' })[0]).toHaveClass('pn-menu-backdrop');
+  });
+
+  it('page padding is separate from the rail: only tight pages (Tasks) lose it', () => {
+    const { unmount } = shell({ hoverRail: true });
+    expect(screen.getByRole('main').className).toContain('lg:p-8');
+    unmount();
+    shell({ hoverRail: true, tightPage: true });
+    expect(screen.getByRole('main').className).toContain('md:p-5');
   });
 });
