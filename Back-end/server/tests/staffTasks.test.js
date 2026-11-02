@@ -360,6 +360,7 @@ describe('lists', () => {
   it('pages through everything with no gaps and no repeats', async () => {
     const docs = Array.from({ length: 120 }, (_, i) => ({
       number: 100000 + i, title: `t${i}`, assignee: procA._id, assigneeName: 'Arun', team: 'procurement',
+      assignees: [{ user: procA._id, name: 'Arun' }], teams: ['procurement'],
       createdBy: procHead._id, createdByName: 'Priya', status: 'todo', priority: 'normal',
       dueOn: i % 3 ? day(i % 7) : null, bucket: 'open', rank: i % 3 ? day(i % 7) : '9999-12-31',
     }));

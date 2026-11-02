@@ -4,6 +4,7 @@
  *
  * What must hold:
  *   - a mention names someone already on the task; anyone else is refused (400)
+ *     (the giver may mention anyone in the panel: tests/staffTaskShared.test.js)
  *   - pop-ups go to the giver, the person doing it and anyone mentioned —
  *     never the person who wrote it — and a retried post sends none
  *   - only the author changes a comment, only within 30 minutes; a delete keeps
@@ -124,7 +125,7 @@ describe('Task comments: mentions, edit/delete, reactions, files, pop-ups', () =
     it('lists the people on the task, never the caller and never an outsider', async () => {
       const res = await member.session.get(`/staff/tasks/${taskId}/mentionable`);
       expect(res.status).toBe(200);
-      expect(res.body.people).toEqual([{ id: head.id, name: 'Priya' }]);
+      expect(res.body.people).toEqual([{ id: head.id, name: 'Priya', onTask: true }]);
       expect((await outsider.session.get(`/staff/tasks/${taskId}/mentionable`)).status).toBe(404);
     });
 
@@ -136,8 +137,9 @@ describe('Task comments: mentions, edit/delete, reactions, files, pop-ups', () =
       expect(pushes[0]).toMatchObject({ to: [member.id], title: 'Priya mentioned you', tag: `task-${taskId}` });
     });
 
-    it('mentioning someone not on the task is refused, and nothing is posted', async () => {
-      const res = await head.session.post(`/staff/tasks/${taskId}/comments`, { text: '@Bala look', mentions: [outsider.id] });
+    // The giver may (they become a follower): tests/staffTaskShared.test.js.
+    it('the person doing it mentioning someone not on the task is refused, and nothing is posted', async () => {
+      const res = await member.session.post(`/staff/tasks/${taskId}/comments`, { text: '@Bala look', mentions: [outsider.id] });
       expect(res.status).toBe(400);
       expect(await StaffTaskComment.countDocuments()).toBe(0);
       expect(pushes).toHaveLength(0);

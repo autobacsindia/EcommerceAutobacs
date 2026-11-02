@@ -53,6 +53,8 @@ beforeEach(async () => {
       const dueOn = i % 5 === 0 ? null : ymd((i % 30) - 10);
       docs.push({
         number, title: `t${number}`, assignee: people[p], team: teams[p % 4],
+        // As every task is stored since phase 4 (the backfill filled in the older ones).
+        assignees: [{ user: people[p], name: '' }], teams: [teams[p % 4]],
         createdBy: people[(p + 1) % PEOPLE], status: done ? 'done' : 'todo', priority: 'normal', dueOn,
         bucket: done ? 'done' : 'open', rank: done ? `d${String(9e12 - number).padStart(13, '0')}` : dueOn || '9999-12-31',
         clientId: `client-${number}`,
@@ -75,14 +77,14 @@ const listExplain = (query, opts = {}) => {
 
 describe('lists are one index range', () => {
   it('my tasks', async () => {
-    const s = stats(await listExplain({ assignee: people[3], bucket: 'open' }));
-    expect(s.index).toBe('staff_task_assignee');
+    const s = stats(await listExplain({ 'assignees.user': people[3], bucket: 'open' }));
+    expect(s.index).toBe('staff_task_assignees');
     expect(s.keys).toBeLessThanOrEqual(s.returned + 1);
   });
 
   it('my overdue tasks (the bell filter)', async () => {
-    const s = stats(await listExplain({ assignee: people[3], bucket: 'open' }, { range: { $lt: TODAY } }));
-    expect(s.index).toBe('staff_task_assignee');
+    const s = stats(await listExplain({ 'assignees.user': people[3], bucket: 'open' }, { range: { $lt: TODAY } }));
+    expect(s.index).toBe('staff_task_assignees');
     expect(s.keys).toBeLessThanOrEqual(s.returned + 1);
   });
 
@@ -93,8 +95,8 @@ describe('lists are one index range', () => {
   });
 
   it('a head\'s team', async () => {
-    const s = stats(await listExplain({ team: 'procurement', bucket: 'open' }));
-    expect(s.index).toBe('staff_task_team');
+    const s = stats(await listExplain({ teams: 'procurement', bucket: 'open' }));
+    expect(s.index).toBe('staff_task_teams');
     expect(s.keys).toBeLessThanOrEqual(s.returned + 1);
   });
 
@@ -105,20 +107,20 @@ describe('lists are one index range', () => {
   });
 
   it('a later page starts where the last one stopped', async () => {
-    const first = await StaffTask.find({ assignee: people[5], bucket: 'open' }).sort({ rank: 1, _id: 1 }).limit(20).lean();
+    const first = await StaffTask.find({ 'assignees.user': people[5], bucket: 'open' }).sort({ rank: 1, _id: 1 }).limit(20).lean();
     const last = first[first.length - 1];
-    const s = stats(await staffTaskRepository.page({ assignee: people[5], bucket: 'open' }, { after: { rank: last.rank, id: last._id }, limit: 21 })
+    const s = stats(await staffTaskRepository.page({ 'assignees.user': people[5], bucket: 'open' }, { after: { rank: last.rank, id: last._id }, limit: 21 })
       .explain('executionStats'));
-    expect(s.index).toBe('staff_task_assignee');
+    expect(s.index).toBe('staff_task_assignees');
     expect(s.docs).toBeLessThanOrEqual(s.returned + 2);
   });
 });
 
 describe('the bell count', () => {
   it('counts on the assignee index without fetching documents', async () => {
-    const explain = await StaffTask.find({ assignee: people[7], bucket: 'open', rank: { $lte: TODAY } }).explain('executionStats');
+    const explain = await StaffTask.find({ 'assignees.user': people[7], bucket: 'open', rank: { $lte: TODAY } }).explain('executionStats');
     const s = stats(explain);
-    expect(s.index).toBe('staff_task_assignee');
+    expect(s.index).toBe('staff_task_assignees');
     expect(s.keys).toBeLessThanOrEqual(s.returned + 1);
     expect(await staffTaskRepository.countDueBy(people[7], TODAY)).toBe(s.returned);
   });
@@ -154,7 +156,7 @@ describe('the copies of a task given to several people', () => {
   it('are found on the group index, reading only that group', async () => {
     const group = new mongoose.Types.ObjectId();
     await StaffTask.insertMany([0, 1, 2].map((i) => ({
-      number: 900000 + i, title: 'g', assignee: people[i], createdBy: people[9], status: 'todo', priority: 'normal',
+      number: 900000 + i, title: 'g', assignee: people[i], assignees: [{ user: people[i], name: '' }], createdBy: people[9], status: 'todo', priority: 'normal',
       bucket: 'open', rank: '9999-12-31', group, groupSize: 3,
     })));
     const s = stats(await staffTaskRepository.findGroup(group).explain('executionStats'));
@@ -182,15 +184,15 @@ describe('search', () => {
   // person's open tasks (52 keys for a page of 51); the admin's all-teams search reads every open
   // task (1,800 here) — fine at today's size, the one to revisit if open tasks reach the thousands.
   it('a T-number is one key on the unique number index', async () => {
-    const s = stats(await StaffTask.find({ assignee: people[3], bucket: 'open', number: 350 }).explain('executionStats'));
+    const s = stats(await StaffTask.find({ 'assignees.user': people[3], bucket: 'open', number: 350 }).explain('executionStats'));
     expect(s.index).toBe('staff_task_number');
     expect(s.keys).toBeLessThanOrEqual(1);
   });
 
   it('words in my list stay inside my rows', async () => {
-    const s = stats(await StaffTask.find({ assignee: people[3], bucket: 'open', title: { $regex: 't3', $options: 'i' } })
+    const s = stats(await StaffTask.find({ 'assignees.user': people[3], bucket: 'open', title: { $regex: 't3', $options: 'i' } })
       .sort({ rank: 1, _id: 1 }).limit(51).explain('executionStats'));
-    expect(s.index).toBe('staff_task_assignee');
+    expect(s.index).toBe('staff_task_assignees');
     expect(s.docs).toBeLessThanOrEqual(PER_PERSON);
   });
 });
