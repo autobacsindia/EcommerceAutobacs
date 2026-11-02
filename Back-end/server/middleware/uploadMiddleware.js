@@ -447,6 +447,8 @@ export const uploadPaymentRequestFiles = staffUpload(['qr']).fields([
 export const uploadPayDetailsQr = staffUpload(['qr'], (file) => `"${file.originalname}" is not a picture. `
   + 'The QR box takes a picture of our GPay / UPI QR only — a customer\'s payment receipt goes under "Customer already paid".')
   .fields([{ name: 'qr', maxCount: 1 }]);
+/** A tool / subscription on Payments → Subscriptions & dues: up to MAX_ATTACHMENTS invoices (field `invoice`). */
+export const uploadSubscriptionInvoices = staffUpload().array('invoice', MAX_ATTACHMENTS);
 /** Recording a payment or a bank transfer: up to MAX_ATTACHMENTS screenshots (field `proof`). */
 export const uploadPaymentProof = staffUpload().array('proof', MAX_ATTACHMENTS);
 /** Parcel proof: up to MAX_ATTACHMENTS photos or PDFs (field `photo`, repeated). */

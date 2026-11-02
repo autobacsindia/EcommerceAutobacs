@@ -43,6 +43,8 @@ export const PRIVATE_PREFIXES = [
   'sales-pay-details',
   // Files on staff tasks and their comments (services/taskFileService.js), one folder per task.
   'tasks',
+  // Invoices on the tools / subscriptions list (services/subscriptionDueService.js).
+  'subscription-dues',
 ];
 
 /** Prefixes that are public storefront/marketing imagery. */
