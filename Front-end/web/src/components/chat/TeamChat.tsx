@@ -41,6 +41,7 @@ import StatusDialog from './StatusDialog';
 import { ONE_PANE_BELOW, useFitToViewport } from './useFitToViewport';
 import { setOpenConversation } from '@/lib/chatSound';
 import { plainLine } from './chatFormat';
+import { clearTyping, noteTyping, useResetTypingOnUnmount } from '@/lib/chatTyping';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import './chat.css';
 
@@ -316,6 +317,7 @@ export default function TeamChat() {
   }, [qc]);
   useEffect(() => () => { if (refreshTimer.current) clearTimeout(refreshTimer.current); }, []);
 
+  useResetTypingOnUnmount();
   useSSE({
     url: '/api/v1/chat/stream',
     token: null,
@@ -326,8 +328,13 @@ export default function TeamChat() {
         reactions?: ChatReaction[];
         pinned?: ChatMessage['pinned'];
         preview?: ChatMessage['preview'];
+        threadRoot?: string | null; userId?: string; name?: string;
       };
-      if (e.type === 'message' && e.message && e.channelId) {
+      if (e.type === 'typing' && e.channelId && e.userId) {
+        // My own other tabs announce me too; I don't need to see myself.
+        if (e.userId !== meId) noteTyping({ channelId: e.channelId, threadRoot: e.threadRoot ?? null, userId: e.userId, name: e.name ?? '' });
+      } else if (e.type === 'message' && e.message && e.channelId) {
+        if (e.message.sender?.id) clearTyping(e.channelId, e.message.sender.id);
         if (e.message.threadRoot) {
           // A reply: into its thread if open, and its root moves to the bottom.
           qc.setQueryData<ThreadData>(chatKeys.thread(e.message.threadRoot), (d) => upsertReply(d, e.message!));

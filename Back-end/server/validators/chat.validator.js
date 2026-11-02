@@ -125,3 +125,9 @@ export const validateOpenDm = [
   body('userIds.*').optional().custom(isObjectId).withMessage('Invalid person'),
   body().custom((b) => !!(b?.userId || (Array.isArray(b?.userIds) && b.userIds.length))).withMessage('Choose who to message'),
 ];
+
+// POST /chat/channels/:id/typing { threadRoot? }
+export const validateTyping = [
+  ...validateChannelIdParam,
+  body('threadRoot').optional({ values: 'null' }).custom(isObjectId).withMessage('Invalid thread'),
+];

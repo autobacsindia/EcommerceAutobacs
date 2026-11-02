@@ -69,6 +69,7 @@ export default function Composer({
   quote,
   onClearQuote,
   canMentionAll = false,
+  onTyping,
 }: {
   channelName: string;
   people: ChatPerson[];
@@ -82,6 +83,8 @@ export default function Composer({
   onClearQuote?: () => void;
   /** May I @all here? (#company: admins and heads only — the API checks too.) */
   canMentionAll?: boolean;
+  /** Called as I type (the caller throttles and sends "typing…"). */
+  onTyping?: () => void;
 }) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<Pending[]>([]);
@@ -146,6 +149,7 @@ export default function Composer({
   // "@" plus what has been typed since, so the picker filters as you type.
   const onChangeText = (value: string) => {
     setText(value);
+    if (value.trim()) onTyping?.();
     const upToCaret = value.slice(0, box.current?.selectionStart ?? value.length);
     const match = /(?:^|\s)@([\w ]{0,20})$/.exec(upToCaret);
     setMentionQuery(match ? match[1] : null);
