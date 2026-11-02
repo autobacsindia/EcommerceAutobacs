@@ -163,3 +163,16 @@ export function formatMessage(text: string, { mentionNames = [], meName = '' }: 
   if (at < text.length) out.push(...lines(text.slice(at).replace(/^\n/, ''), ctx, `t${k}`));
   return out;
 }
+
+/**
+ * A message as one plain line, markers removed — for previews such as the Home
+ * list ("*urgent* ship today" → "urgent ship today"). Text only, never HTML.
+ */
+export function plainLine(text: string): string {
+  let out = text.replace(/```/g, ' ');
+  for (const r of MARK_RULES) {
+    if (r.kind === 'link') continue;
+    out = out.replace(new RegExp(r.re.source, 'g'), (_m, inner: string) => inner);
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}

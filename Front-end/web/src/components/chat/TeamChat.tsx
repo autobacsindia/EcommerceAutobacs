@@ -38,6 +38,7 @@ import StarredPanel from './StarredPanel';
 import StatusDialog from './StatusDialog';
 import { ONE_PANE_BELOW, useFitToViewport } from './useFitToViewport';
 import { setOpenConversation } from '@/lib/chatSound';
+import { plainLine } from './chatFormat';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import './chat.css';
 
@@ -97,6 +98,21 @@ function PeoplePicker({
 
 /** Up to 7 others: one is a direct message, more is a group conversation. */
 const MAX_GROUP_OTHERS = 7;
+
+/**
+ * The Home list's second line: the newest message, Google Chat style —
+ * "You: on my way", "Ravi: order shipped", or just the words in a one-to-one
+ * DM (whoever is not me said them). Empty when the server sent no preview.
+ */
+export function homeLine(c: ChatChannel): string {
+  const p = c.lastPreview;
+  if (!p) return '';
+  const words = p.deleted ? 'Message deleted' : plainLine(p.text);
+  if (!words) return '';
+  if (p.mine) return `You: ${words}`;
+  if (c.kind === 'dm' && !c.group) return words;
+  return p.by ? `${p.by}: ${words}` : words;
+}
 
 export function NewMessageDialog({ meId, onClose, onOpened }: { meId: string; onClose: () => void; onOpened: (id: string) => void }) {
   const { data: people = [] } = useChatPeople();
@@ -708,7 +724,7 @@ export default function TeamChat() {
             const counted = loud(c);
             const partnerOnline = c.kind === 'dm' && !c.group && !!c.partner && online.has(c.partner.id);
             const status = c.kind === 'dm' && !c.group && c.partner ? liveStatus(peopleById.get(c.partner.id)?.status) : null;
-            const line = status?.text || (c.kind === 'dm' ? (c.group ? 'Group conversation' : c.partner?.teamLabel ?? 'Direct message') : c.description || 'Space');
+            const line = homeLine(c) || status?.text || (c.kind === 'dm' ? (c.group ? 'Group conversation' : c.partner?.teamLabel ?? 'Direct message') : c.description || 'Space');
             return (
               <li key={c.id}>
                 <button

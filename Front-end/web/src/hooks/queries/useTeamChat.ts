@@ -58,6 +58,12 @@ export interface ChatChannel {
   canManageMembers?: boolean;
   lastMessageSeq: number;
   lastMessageAt: string | null;
+  /**
+   * The newest message, for the Home list. `mine`: I wrote it ("You: …").
+   * A deleted one has `deleted` and no text. Null before the first message
+   * (or from an older server).
+   */
+  lastPreview?: { by: string; mine: boolean; text: string; deleted: boolean } | null;
   /** Read position of the Chat tab. */
   lastReadSeq: number;
   /** Read position of the Order updates tab (read separately from Chat). */
