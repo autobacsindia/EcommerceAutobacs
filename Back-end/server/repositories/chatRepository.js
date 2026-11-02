@@ -3,6 +3,7 @@ import ChatMessage from '../models/ChatMessage.js';
 import ChatReadState from '../models/ChatReadState.js';
 import ChatStar from '../models/ChatStar.js';
 import ChatStatus from '../models/ChatStatus.js';
+import ChatThreadFollow from '../models/ChatThreadFollow.js';
 import { reactionStage } from '../utils/reactions.js';
 
 /**
@@ -318,6 +319,66 @@ const chatRepository = {
   },
   findMessagesByIds: (ids) =>
     ChatMessage.find({ _id: { $in: ids } }).populate('sender', SENDER_FIELDS).lean(),
+
+  // ── threads I'm in ──
+  /**
+   * A reply landed in thread `root`: the replier is in it (and has read up to
+   * their own reply), the root's author is in it, and everyone already in it
+   * sees the thread move. Upserts on the unique { root, user }, and every
+   * field moves only forward ($max), so a retried or out-of-order write is
+   * harmless. One round trip.
+   */
+  recordThreadReply: ({ root, channel, replier, rootAuthor, rootSeq, seq, at }) => {
+    const ops = [];
+    if (replier) {
+      ops.push({ updateOne: {
+        filter: { root, user: replier },
+        update: { $setOnInsert: { channel }, $max: { readSeq: seq, lastActivityAt: at } },
+        upsert: true,
+      } });
+    }
+    if (rootAuthor && String(rootAuthor) !== String(replier)) {
+      ops.push({ updateOne: {
+        filter: { root, user: rootAuthor },
+        // Starts as "read up to my own message": the replies are new to them.
+        update: { $setOnInsert: { channel, readSeq: rootSeq }, $max: { lastActivityAt: at } },
+        upsert: true,
+      } });
+    }
+    ops.push({ updateMany: { filter: { root }, update: { $max: { lastActivityAt: at } } } });
+    return ChatThreadFollow.bulkWrite(ops, { ordered: false });
+  },
+  /** I opened the thread: everything up to `seq` is read. No row (not in the thread) = nothing to do. */
+  markThreadRead: (root, user, seq) =>
+    ChatThreadFollow.updateOne({ root, user, readSeq: { $lt: seq } }, { $max: { readSeq: seq } }),
+  /** My threads, newest activity first, after the (lastActivityAt, _id) cursor. */
+  findThreadFollows: (user, cursor, limit) =>
+    ChatThreadFollow.find({
+      user,
+      // `$lte` beside the $or gives the index scan a starting bound; the $or
+      // alone left it reading from the newest row (page 2 examined 50 keys for 25).
+      ...(cursor
+        ? {
+          lastActivityAt: { $lte: cursor.at },
+          $or: [{ lastActivityAt: { $lt: cursor.at } }, { lastActivityAt: cursor.at, _id: { $lt: cursor.id } }],
+        }
+        : {}),
+    })
+      .sort({ lastActivityAt: -1, _id: -1 }).limit(limit).select('root channel readSeq lastActivityAt').lean(),
+  /**
+   * Unread replies per thread: replies past each read position that are still
+   * visible. Every branch is a range on chat_thread_replies (the $type states
+   * that partial index's condition, as findThreadReplies explains).
+   * @param {{ root: ObjectId, readSeq: number }[]} rows
+   */
+  countUnreadReplies: (rows) => {
+    if (!rows.length) return Promise.resolve([]);
+    return ChatMessage.aggregate([
+      { $match: { $or: rows.map((r) => ({ threadRoot: { $eq: r.root, $type: 'objectId' }, seq: { $gt: r.readSeq || 0 } })) } },
+      { $match: { deletedAt: null } },
+      { $group: { _id: '$threadRoot', n: { $sum: 1 } } },
+    ]);
+  },
 
   // ── read positions ──
   findReadStates: (user, channelIds) =>

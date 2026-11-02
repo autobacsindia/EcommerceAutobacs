@@ -493,6 +493,8 @@ export async function getThread(user, rootId, { after, limit } = {}) {
   const size = Math.min(Math.max(parseInt(limit, 10) || THREAD_PAGE_MAX, 1), THREAD_PAGE_MAX);
   const from = after != null && after !== '' ? Number(after) : null;
   const replies = await chatRepository.findThreadReplies(root._id, from, size);
+  // Opening a thread reads it (for the Threads list's unread count).
+  await chatRepository.markThreadRead(root._id, user._id, root.activitySeq ?? root.seq);
   const [shapedRoot, ...shapedReplies] = await withStars(user, [root, ...replies].map((m) => shapeMessage(m, null, user)));
   return {
     root: shapedRoot,
@@ -865,6 +867,7 @@ async function insertMessage(channel, {
       mentions,
     });
     if (root) thread = shapeMessage(root);
+    await recordThreadReply(channel, threadRoot, { kind, sender, seq, at });
   }
   await publishChatEvent({
     type: 'message', channelId: idOf(channel), route: audienceOf(channel), message, ...(thread ? { thread } : {}),
@@ -874,6 +877,28 @@ async function insertMessage(channel, {
   // A pop-up on the devices of everyone who can see it — not awaited: chat never waits for push.
   void pushForMessage(channel, { kind, text, attachments, sender, updates, mentions, mentionTeams, mentionAll });
   return { message, thread, duplicate: false };
+}
+
+/**
+ * Keep the "Threads" list in step with a reply. The message is already
+ * written, so a failure here is logged rather than failing the send: the cost
+ * is a thread missing from someone's list until the next reply, never a lost
+ * or doubled message.
+ */
+async function recordThreadReply(channel, root, { kind, sender, seq, at }) {
+  try {
+    await chatRepository.recordThreadReply({
+      root: root._id,
+      channel: channel._id,
+      replier: kind === 'user' ? sender?._id ?? null : null,
+      rootAuthor: root.kind === 'user' && root.sender ? root.sender._id ?? root.sender : null,
+      rootSeq: root.seq,
+      seq,
+      at,
+    });
+  } catch (err) {
+    console.error('[chat] could not record thread reply:', err.message);
+  }
 }
 
 /**
@@ -1531,6 +1556,61 @@ export async function listMentions(user, { before, limit } = {}) {
       return { ...shapeMessage(d, null, user), channel: idOf(c), channelName: nameOf(c), channelKind: c.kind };
     }),
     nextBefore: docs.length === size ? idOf(docs[docs.length - 1]._id) : null,
+  };
+}
+
+// ── threads I'm in ───────────────────────────────────────────────────────────
+
+export const THREADS_PAGE_MAX = 50;
+
+/** The Threads list cursor: "<lastActivityAt ms>_<follow id>". Null when absent or malformed. */
+function parseThreadCursor(before) {
+  const m = /^(\d{1,15})_([a-f0-9]{24})$/.exec(String(before ?? ''));
+  return m ? { at: new Date(Number(m[1])), id: new mongoose.Types.ObjectId(m[2]) } : null;
+}
+
+/**
+ * The "Threads" list: threads I started or replied to, newest activity first,
+ * each with how many replies I have not seen. Only conversations I can read
+ * today — leaving a group or a team hides its threads, though the rows stay
+ * (they come back if I do). The cursor follows the rows read, not the ones
+ * shown, so hidden rows never stall paging.
+ */
+export async function listThreads(user, { before, limit } = {}) {
+  const size = Math.min(Math.max(parseInt(limit, 10) || 25, 1), THREADS_PAGE_MAX);
+  const rows = await chatRepository.findThreadFollows(user._id, parseThreadCursor(before), size);
+  if (!rows.length) return { threads: [], nextBefore: null };
+
+  const channelIds = [...new Set(rows.map((r) => idOf(r.channel)))];
+  const channels = (await chatRepository.findChannels({ _id: { $in: channelIds } }, CHANNEL_NAME_FIELDS))
+    .filter((c) => canAccess(user, c));
+  const channelById = new Map(channels.map((c) => [idOf(c), c]));
+  const readable = rows.filter((r) => channelById.has(idOf(r.channel)));
+
+  const [roots, unreadRows, nameOf] = await Promise.all([
+    chatRepository.findMessagesByIds(readable.map((r) => r.root)),
+    chatRepository.countUnreadReplies(readable),
+    channelNamer(user, channels),
+  ]);
+  const rootById = new Map(roots.map((m) => [idOf(m), m]));
+  const unreadBy = new Map(unreadRows.map((u) => [idOf(u._id), u.n]));
+
+  const last = rows[rows.length - 1];
+  return {
+    threads: readable
+      .filter((r) => rootById.has(idOf(r.root)))
+      .map((r) => {
+        const c = channelById.get(idOf(r.channel));
+        return {
+          root: shapeMessage(rootById.get(idOf(r.root)), null, user),
+          channel: idOf(c),
+          channelName: nameOf(c),
+          channelKind: c.kind,
+          lastActivityAt: r.lastActivityAt,
+          unread: unreadBy.get(idOf(r.root)) ?? 0,
+        };
+      }),
+    nextBefore: rows.length === size ? `${new Date(last.lastActivityAt).getTime()}_${idOf(last._id)}` : null,
   };
 }
 
