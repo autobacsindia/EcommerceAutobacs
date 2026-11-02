@@ -60,7 +60,7 @@ export default function EmojiPicker({
       <div className="flex justify-between border-b border-gray-100 pb-1.5">
         {QUICK_REACTIONS.map((e) => (
           <button key={e} type="button" onClick={() => pick(e)} aria-label={e}
-            className="grid h-10 w-10 place-items-center rounded-full text-2xl hover:bg-emerald-50 focus:bg-emerald-50 focus:outline-none">
+            className="grid h-10 w-10 place-items-center rounded-full text-2xl hover:bg-blue-50 focus:bg-blue-50 focus:outline-none">
             {e}
           </button>
         ))}
@@ -68,7 +68,7 @@ export default function EmojiPicker({
       <div className="mt-1.5 grid grid-cols-8 gap-0.5">
         {MORE_EMOJI.map((e) => (
           <button key={e} type="button" onClick={() => pick(e)} aria-label={e}
-            className="grid h-8 w-8 place-items-center rounded-lg text-lg hover:bg-emerald-50 focus:bg-emerald-50 focus:outline-none">
+            className="grid h-8 w-8 place-items-center rounded-lg text-lg hover:bg-blue-50 focus:bg-blue-50 focus:outline-none">
             {e}
           </button>
         ))}

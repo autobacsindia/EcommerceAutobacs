@@ -76,7 +76,7 @@ export function CallDialog({ channel, onShare, onClose }: { channel: ChatChannel
         <li>
           <span className="font-semibold">1.</span> Start a new meeting — it opens in a new tab.
           <button type="button" onClick={() => open(NEW_MEET)}
-            className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium hover:border-emerald-600">
+            className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium hover:border-blue-600">
             <ExternalLink className="h-4 w-4" /> New Google Meet
           </button>
         </li>
@@ -84,7 +84,7 @@ export function CallDialog({ channel, onShare, onClose }: { channel: ChatChannel
           <span className="font-semibold">2.</span> Copy its link from Meet and paste it here:
           <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://meet.google.com/abc-defg-hij"
             aria-label="Meet link" inputMode="url"
-            className="mt-1.5 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-emerald-600" />
+            className="mt-1.5 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-600" />
           {clean && !valid && <span role="alert" className="mt-1 block text-xs text-red-600">That isn’t a Google Meet link (it looks like meet.google.com/abc-defg-hij).</span>}
         </li>
       </ol>
@@ -103,7 +103,7 @@ export function CallDialog({ channel, onShare, onClose }: { channel: ChatChannel
           </button>
         ) : <span />}
         <button type="button" onClick={() => void share().catch(() => {})} disabled={!valid || save.isPending}
-          className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">
+          className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">
           Share in chat
         </button>
       </div>

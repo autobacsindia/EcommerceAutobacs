@@ -48,7 +48,7 @@ export default function ForwardDialog({
         placeholder="Find a space, group or person"
         aria-label="Find a conversation"
         autoFocus
-        className="mb-2 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-emerald-600"
+        className="mb-2 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-600"
       />
       <ul className="max-h-64 overflow-y-auto rounded-lg border border-gray-200" aria-label="Conversations">
         {shown.length === 0 && <li className="p-3 text-sm text-gray-500">No conversation found</li>}

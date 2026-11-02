@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ChevronRight, CornerUpRight, Download, Phone, EyeOff, Forward, History, MessageSquareReply, MoreVertical, Package, Pencil, Pin, PinOff, Quote, RotateCcw, SmilePlus, Star, StarOff, Trash2 } from 'lucide-react';
 import type { ChatAttachment, ChatMessage, ChatPerson } from '@/hooks/queries/useTeamChat';
 import { meetLinkIn } from './meet';
-import { Avatar, FileKindIcon, TeamBadge, dayLabel, fileSize, timeOf, useOpenUpwardIfCut } from './chatUi';
+import { Avatar, TeamBadge, dayLabel, fileSize, timeOf, useOpenUpwardIfCut } from './chatUi';
 import EmojiPicker from './EmojiPicker';
 import { formatMessage } from './chatFormat';
 
@@ -31,7 +31,7 @@ function LinkCard({ preview }: { preview: NonNullable<ChatMessage['preview']> })
       href={preview.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-1.5 block max-w-md rounded-lg border-l-4 border-emerald-600 bg-gray-50 px-3 py-2 hover:bg-emerald-50"
+      className="mt-1.5 block max-w-md rounded-lg border-l-4 border-blue-600 bg-gray-50 px-3 py-2 hover:bg-blue-50"
     >
       <span className="block truncate text-xs text-gray-500">{preview.site}</span>
       <span className="block text-sm font-semibold text-gray-900 line-clamp-2">{preview.title}</span>
@@ -44,11 +44,11 @@ function LinkCard({ preview }: { preview: NonNullable<ChatMessage['preview']> })
 function MeetCard({ url }: { url: string }) {
   return (
     <a href={url} target="_blank" rel="noopener noreferrer"
-      className="mt-1.5 inline-flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 hover:bg-emerald-100">
-      <span className="grid h-9 w-9 place-items-center rounded-full bg-emerald-700 text-white"><Phone className="h-4 w-4" /></span>
+      className="mt-1.5 inline-flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 hover:bg-blue-100">
+      <span className="grid h-9 w-9 place-items-center rounded-full bg-blue-700 text-white"><Phone className="h-4 w-4" /></span>
       <span>
-        <span className="block text-sm font-semibold text-emerald-900">Google Meet call</span>
-        <span className="block text-xs text-emerald-800">Tap to join</span>
+        <span className="block text-sm font-semibold text-blue-900">Google Meet call</span>
+        <span className="block text-xs text-blue-800">Tap to join</span>
       </span>
     </a>
   );
@@ -84,29 +84,55 @@ function Photos({ items }: { items: ChatAttachment[] }) {
 }
 
 /** Documents: a row per file with its size and a download button. */
+/** The coloured file-type tag on a file card (PDF red, sheets green, documents blue). */
+export function fileBadge(mime: string, name: string): { label: string; colour: string } {
+  const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
+  if (mime === 'application/pdf' || ext === 'pdf') return { label: 'PDF', colour: 'bg-[#d93025]' };
+  if (mime.includes('sheet') || ext === 'xlsx') return { label: 'XLS', colour: 'bg-[#188038]' };
+  if (mime === 'text/csv' || ext === 'csv') return { label: 'CSV', colour: 'bg-[#188038]' };
+  if (mime.includes('word') || ext === 'docx') return { label: 'DOC', colour: 'bg-[#1a73e8]' };
+  return { label: (ext || 'file').slice(0, 4).toUpperCase(), colour: 'bg-[#5f6368]' };
+}
+
 function Documents({ items }: { items: ChatAttachment[] }) {
   if (!items.length) return null;
   return (
-    <div className="mt-2 space-y-1.5">
-      {items.map((a) => (
-        <a
-          key={a.url}
-          href={a.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          download={a.name}
-          className="flex max-w-sm items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2.5 hover:border-emerald-600 hover:bg-emerald-50"
-        >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-gray-600">
-            <FileKindIcon mime={a.mime} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-gray-900">{a.name}</span>
-            <span className="block text-xs text-gray-500">{fileSize(a.size)}</span>
-          </span>
-          <Download className="h-4 w-4 shrink-0 text-gray-400" aria-hidden="true" />
-        </a>
-      ))}
+    <div className="mt-2 flex flex-wrap gap-2">
+      {items.map((a) => {
+        const badge = fileBadge(a.mime, a.name);
+        return (
+          // A file card, as in Google Chat: a page-shaped preview over the name.
+          // The file itself is not embedded — the site's security policy blocks
+          // embedded documents (object-src 'none') — so the "page" is drawn.
+          <a
+            key={a.url}
+            href={a.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={a.name}
+            title={`${a.name} · ${fileSize(a.size)}`}
+            data-testid="file-card"
+            className="group/file block w-64 max-w-full overflow-hidden rounded-2xl border border-gray-200 bg-white text-left transition-shadow hover:shadow-md"
+          >
+            <span className="flex h-24 items-end justify-center bg-gray-100 px-6 pt-4" aria-hidden="true">
+              <span className="flex h-full w-full flex-col gap-1.5 rounded-t-md bg-white px-3 pt-3 shadow-sm">
+                <span className="h-1.5 w-1/3 rounded bg-gray-300" />
+                <span className="h-1 w-5/6 rounded bg-gray-200" />
+                <span className="h-1 w-4/6 rounded bg-gray-200" />
+                <span className="h-1 w-3/4 rounded bg-gray-200" />
+              </span>
+            </span>
+            <span className="flex items-center gap-2.5 px-3 py-2.5">
+              <span className={`shrink-0 rounded px-1 py-0.5 text-[10px] font-bold leading-none text-[#fff] ${badge.colour}`}>{badge.label}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-gray-900">{a.name}</span>
+                <span className="block text-xs text-gray-500">{fileSize(a.size)}</span>
+              </span>
+              <Download className="h-4 w-4 shrink-0 text-gray-400 group-hover/file:text-gray-700" aria-hidden="true" />
+            </span>
+          </a>
+        );
+      })}
     </div>
   );
 }
@@ -292,10 +318,10 @@ function QuoteBlock({ quote, onJump }: { quote: NonNullable<ChatMessage['quote']
     <button
       type="button"
       onClick={() => onJump?.(quote.id)}
-      className="mb-1 block w-full max-w-xl rounded-lg border-l-4 border-emerald-600 bg-gray-50 px-3 py-1.5 text-left hover:bg-emerald-50"
+      className="mb-1 block w-full max-w-xl rounded-lg border-l-4 border-blue-600 bg-gray-50 px-3 py-1.5 text-left hover:bg-blue-50"
       aria-label={`Quoted message from ${quote.by || 'someone'} — go to it`}
     >
-      <span className="block text-xs font-semibold text-emerald-800">{quote.by || 'Former member'}</span>
+      <span className="block text-xs font-semibold text-blue-800">{quote.by || 'Former member'}</span>
       <span className={`line-clamp-2 block text-sm ${quote.deleted && !quote.preview ? 'italic text-gray-400' : 'text-gray-600'}`}>
         {/* An empty preview of a deleted message is NOT "Shared a file": the
             server withholds deleted words from everyone but admins. */}
@@ -524,6 +550,9 @@ export default function MessageItem({
   ];
   const photos = m.attachments.filter((a) => a.kind === 'image');
   const documents = m.attachments.filter((a) => a.kind !== 'image');
+  // Your own messages: a light-blue card on the right, no avatar (as in Google Chat).
+  const card = mine && m.kind === 'user';
+  const sentAt = new Date(m.createdAt).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
   return (
     <div id={messageDomId(m.id)} className="scroll-mt-24">
@@ -537,23 +566,28 @@ export default function MessageItem({
       <div
         ref={row}
         onClick={onRowTap}
-        className={`group relative flex gap-3 rounded-xl px-3 transition-colors ${grouped ? 'py-0.5' : 'mt-1 pb-1 pt-2'} ${
-          mentionsMe ? 'bg-amber-50 ring-1 ring-amber-200' : actionsOpen ? 'bg-gray-50' : 'hover:bg-gray-50'
+        className={`group relative flex gap-3 rounded-2xl px-3 transition-colors ${grouped ? 'py-0.5' : 'mt-1 pb-1 pt-2'} ${
+          mentionsMe ? 'bg-amber-50 ring-1 ring-amber-200' : card ? '' : actionsOpen ? 'bg-gray-50' : 'hover:bg-gray-50'
         }`}
       >
-        {grouped ? <span className="w-9 shrink-0" /> : <Avatar person={m.sender} system={m.kind === 'system'} />}
-        <div className="min-w-0 flex-1">
+        {card ? null : grouped ? (
+          // The time of a follow-on message shows when you point at it.
+          <span className="w-9 shrink-0 pt-1 text-right text-[10px] leading-4 text-gray-500 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100" aria-hidden="true">
+            {timeOf(m.createdAt)}
+          </span>
+        ) : <Avatar person={m.sender} system={m.kind === 'system'} />}
+        <div className={card ? 'flex min-w-0 flex-1 flex-col items-end' : 'min-w-0 flex-1'}>
           {!grouped && (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span className="text-sm font-bold text-gray-900">
+            <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${card ? 'justify-end' : ''}`}>
+              <span className={card ? 'sr-only' : 'text-sm font-bold text-gray-900'}>
                 {m.kind === 'system' ? 'Roavion updates' : mine ? 'You' : m.sender?.name ?? 'Former member'}
               </span>
               {m.kind === 'system' ? (
-                <span className="rounded-full bg-emerald-100 px-2 py-px text-[11px] font-medium text-emerald-800">Automatic</span>
-              ) : (
+                <span className="rounded-full bg-blue-100 px-2 py-px text-[11px] font-medium text-blue-800">Automatic</span>
+              ) : !card && (
                 <TeamBadge person={m.sender} />
               )}
-              <span className="text-xs text-gray-500">{timeOf(m.createdAt)}</span>
+              <span className="text-xs text-gray-500" title={sentAt}>{timeOf(m.createdAt)}</span>
               {m.starred && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" aria-label="Starred" />}
               {m.pinned && (
                 <span className="inline-flex items-center gap-0.5 text-[11px] text-gray-500" title={`Pinned by ${m.pinned.by || 'someone'}`}>
@@ -596,14 +630,14 @@ export default function MessageItem({
                 maxLength={4000}
                 rows={Math.min(8, Math.max(2, draft.split('\n').length))}
                 aria-label="Edit message"
-                className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-600/20"
+                className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/20"
               />
               <div className="mt-1 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => void saveEdit()}
                   disabled={busy || (!draft.trim() && !m.attachments.length)}
-                  className="rounded-md bg-emerald-700 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-md bg-blue-700 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {busy ? 'Saving…' : 'Save'}
                 </button>
@@ -614,7 +648,10 @@ export default function MessageItem({
               </div>
             </div>
           ) : (
-            <div className={m.pending ? 'opacity-60' : ''}>
+            <div
+              title={sentAt}
+              className={`${m.pending ? 'opacity-60' : ''} ${card ? 'gc-mine mt-0.5 min-w-0 max-w-[min(38rem,88%)] rounded-[20px] rounded-br-md px-4 py-2.5' : ''}`}
+            >
               {m.quote && <QuoteBlock quote={m.quote} onJump={onJumpTo} />}
               {m.forwarded && (
                 <p className="mb-0.5 inline-flex items-center gap-1 text-xs text-gray-500">

@@ -83,7 +83,7 @@ export default function MembersPanel({ channelId, onDeleted }: { channelId: stri
         <section className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Add people</h3>
           <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search by name" aria-label="Search people to add"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100" />
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
           {people.isPending && <p className="text-xs text-gray-500">Loading people…</p>}
           {people.isSuccess && candidates.length === 0 && <p className="text-xs text-gray-500">Everyone{filter ? ' with that name' : ''} is already in the group.</p>}
           <ul className="max-h-60 divide-y divide-gray-100 overflow-y-auto rounded-xl border border-gray-200">
@@ -98,7 +98,7 @@ export default function MembersPanel({ channelId, onDeleted }: { channelId: stri
             ))}
           </ul>
           <button type="button" disabled={!picked.length || add.isPending} onClick={() => add.mutate()}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">
             {add.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Add {picked.length || ''} to group
           </button>
         </section>

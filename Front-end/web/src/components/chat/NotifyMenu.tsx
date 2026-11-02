@@ -73,7 +73,7 @@ export default function NotifyMenu({ channel }: { channel: ChatChannel }) {
                 <span className="block text-sm font-medium text-gray-900">{o.label}</span>
                 <span className="block text-xs text-gray-500">{o.hint}</span>
               </span>
-              {o.level === level && <Check className="mt-0.5 h-4 w-4 text-emerald-700" aria-hidden="true" />}
+              {o.level === level && <Check className="mt-0.5 h-4 w-4 text-blue-700" aria-hidden="true" />}
             </button>
           ))}
           {set.isError && <p role="alert" className="px-3 py-1 text-xs text-red-600">Couldn’t save that. Please try again.</p>}

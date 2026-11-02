@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react';
 import { Loader2, Star, StarOff, X } from 'lucide-react';
 import { useStarMessage, useStarred } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel } from '@/hooks/queries/useTeamChat';
-import { Avatar, ChannelIcon, GREEN, dayLabel, timeOf } from './chatUi';
+import { Avatar, ChannelIcon, dayLabel, timeOf } from './chatUi';
 
 /**
  * My starred messages, newest star first — the "come back to this" list.
@@ -48,7 +48,7 @@ export default function StarredPanel({
         {isError && (
           <p className="px-1 py-6 text-sm text-gray-600">
             Couldn&apos;t load your starred messages.{' '}
-            <button type="button" className="font-semibold text-emerald-700 underline" onClick={() => refetch()}>Try again</button>
+            <button type="button" className="font-semibold text-blue-700 underline" onClick={() => refetch()}>Try again</button>
           </p>
         )}
         {!isLoading && !isError && items.length === 0 && (
@@ -104,8 +104,7 @@ export default function StarredPanel({
             type="button"
             onClick={() => fetchNextPage()}
             disabled={isFetchingNextPage}
-            className="mt-3 h-10 w-full rounded-full text-sm font-semibold text-[#fff] disabled:opacity-50"
-            style={{ background: GREEN }}
+            className="mt-3 h-10 w-full rounded-full bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {isFetchingNextPage ? 'Loading…' : 'Show older'}
           </button>

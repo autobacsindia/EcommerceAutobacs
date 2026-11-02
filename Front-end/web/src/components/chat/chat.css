@@ -1,0 +1,110 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   CHAT THEME — Team chat only (/team/chat, /admin/chat). A clean, light
+   "Material" look: a grey-blue page, white cards with large rounded corners,
+   a soft blue selection, blue accents, and your own messages as light-blue
+   cards. The rest of the panel keeps its emerald theme: everything here is
+   scoped to `.gc-theme`, the root of the chat screen.
+
+   Same trick as panel.css and tasks.css: Tailwind v4 compiles every colour
+   utility to a variable, so redefining the ramps on `.gc-theme` re-colours
+   every chat screen without touching its class names.
+     • blue-*  → a true blue. Inside the panel `blue-*` is the primary colour
+                 (buttons, links, focus, selection), and panel.css turns it
+                 green; here it is blue again.
+     • gray-*  → the same lightness steps with a cool blue-grey hue.
+   Status families (red, amber, sky…) keep panel.css's values.
+
+   CONTRAST. White on blue-600 (#0b57d0) is 6.4:1; blue-700 text on the
+   blue-100 selection (#d3e3fd) is 7.6:1; gray-500 hint text is 4.8:1 on
+   white. Dark: blue-600 (#a8c7fa) carries the dark `text-white` at 9.8:1.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.gc-theme {
+  /* The page behind the cards, a row on hover, the selected row, your own message. */
+  --gc-page: #f6f8fc;
+  --gc-card: #ffffff;
+  --gc-hover: #e9eef6;
+  --gc-selected: #d3e3fd;
+  --gc-selected-ink: #041e49;
+  --gc-mine: #d3e3fd;
+  --gc-mine-ink: #041e49;
+  --gc-field: #e9eef6;
+  --gc-card-shadow: 0 1px 2px rgba(60, 64, 67, 0.15), 0 1px 3px 1px rgba(60, 64, 67, 0.08);
+  --pn-chat: var(--gc-page);
+  --pn-focus: #0b57d0;
+
+  --color-gray-50:  oklch(98.4% 0.004 255);
+  --color-gray-100: oklch(96.6% 0.006 255);
+  --color-gray-200: oklch(92.7% 0.008 255);
+  --color-gray-300: oklch(87.1% 0.010 255);
+  --color-gray-400: oklch(70.7% 0.012 255);
+  --color-gray-500: oklch(52% 0.014 255);   /* 4.8:1 on white */
+  --color-gray-600: oklch(44.6% 0.014 255);
+  --color-gray-700: oklch(37.3% 0.012 255);
+  --color-gray-800: oklch(27.8% 0.010 255);
+  --color-gray-900: oklch(21% 0.008 255);
+  --color-gray-950: oklch(13% 0.006 255);
+
+  --color-blue-50:  #eef3fd;
+  --color-blue-100: #d3e3fd;
+  --color-blue-200: #a8c7fa;
+  --color-blue-300: #7cacf8;
+  --color-blue-400: #4c8df6;
+  --color-blue-500: #1b6ef3;   /* rings, borders: 4.3:1 on white */
+  --color-blue-600: #0b57d0;   /* buttons: white text 6.4:1 */
+  --color-blue-700: #0842a0;   /* hover, links on the 100 tint: 7.6:1 */
+  --color-blue-800: #062e6f;
+  --color-blue-900: #041e49;
+  --color-blue-950: #001331;
+
+  background: var(--gc-page);
+}
+
+[data-theme='dark'] .gc-theme {
+  --gc-page: #111318;
+  --gc-card: #1b1e24;
+  --gc-hover: #262a31;
+  --gc-selected: #0f3a7a;
+  --gc-selected-ink: #d3e3fd;
+  --gc-mine: #1f3354;
+  --gc-mine-ink: #e3ecfb;
+  --gc-field: #262a31;
+  --gc-card-shadow: none;
+  --pn-focus: #a8c7fa;
+
+  --color-gray-50:  oklch(19% 0.008 255);
+  --color-gray-100: oklch(23% 0.009 255);
+  --color-gray-200: oklch(28% 0.010 255);
+  --color-gray-300: oklch(36% 0.011 255);
+  --color-gray-400: oklch(52% 0.012 255);
+  --color-gray-500: oklch(66% 0.012 255);
+  --color-gray-600: oklch(75% 0.011 255);
+  --color-gray-700: oklch(84% 0.009 255);
+  --color-gray-800: oklch(91% 0.006 255);
+  --color-gray-900: oklch(96% 0.004 255);
+  --color-gray-950: oklch(99% 0.002 255);
+
+  /* Tints dark, ink light: the inverted `text-white` on a 600 button is dark. */
+  --color-blue-50:  #14213a;
+  --color-blue-100: #1c2f52;
+  --color-blue-200: #244070;
+  --color-blue-300: #2f5594;
+  --color-blue-400: #4a78c4;
+  --color-blue-500: #7cacf8;
+  --color-blue-600: #a8c7fa;
+  --color-blue-700: #c2d7fb;
+  --color-blue-800: #d3e3fd;
+  --color-blue-900: #e3ecfb;
+  --color-blue-950: #f0f5fe;
+}
+
+/* Cards: the conversation list and the open conversation. */
+.gc-card { background: var(--gc-card); }
+.gc-shadow { box-shadow: var(--gc-card-shadow); }
+/* A conversation row: a full pill that tints on hover and turns blue when open. */
+.gc-row:hover { background: var(--gc-hover); }
+.gc-row[aria-current='true'] { background: var(--gc-selected); color: var(--gc-selected-ink); }
+/* Your own message: a light-blue rounded card on the right. */
+.gc-mine { background: var(--gc-mine); color: var(--gc-mine-ink); }
+/* The rounded compose bar and search field. */
+.gc-field { background: var(--gc-field); }

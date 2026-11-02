@@ -22,7 +22,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Search, X } from 'lucide-react';
 import { useChatSearch } from '@/hooks/queries/useTeamChat';
 import type { ChatChannel } from '@/hooks/queries/useTeamChat';
-import { Avatar, ChannelIcon, dayLabel, timeOf, GREEN } from './chatUi';
+import { Avatar, ChannelIcon, dayLabel, timeOf } from './chatUi';
 
 /** Long enough that a fast typist sends one request per word, not per letter. */
 const DEBOUNCE_MS = 300;
@@ -85,7 +85,7 @@ export default function MessageSearch({
             onChange={(e) => setTyped(e.target.value)}
             placeholder={scopeTo ? `Search in ${scopeTo.name}` : 'Search all messages'}
             aria-label={scopeTo ? `Search in ${scopeTo.name}` : 'Search all messages'}
-            className="h-10 w-full rounded-lg border border-gray-300 pl-8 pr-3 text-sm outline-none focus:border-emerald-600"
+            className="h-10 w-full rounded-lg border border-gray-300 pl-8 pr-3 text-sm outline-none focus:border-blue-600"
           />
         </div>
         <button
@@ -111,7 +111,7 @@ export default function MessageSearch({
             {/* The server has a plain-English reason in the window right after a
                 deploy, before the search index is built — worth showing. */}
             {error instanceof Error && error.message ? error.message : "Couldn't run the search."}{' '}
-            <button type="button" className="font-semibold text-emerald-700 underline" onClick={() => refetch()}>
+            <button type="button" className="font-semibold text-blue-700 underline" onClick={() => refetch()}>
               Try again
             </button>
           </p>
@@ -170,8 +170,7 @@ export default function MessageSearch({
             type="button"
             onClick={() => fetchNextPage()}
             disabled={isFetchingNextPage}
-            className="mt-3 h-10 w-full rounded-full text-sm font-semibold text-[#fff] disabled:opacity-50"
-            style={{ background: GREEN }}
+            className="mt-3 h-10 w-full rounded-full bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {isFetchingNextPage ? 'Loading…' : 'Show older matches'}
           </button>

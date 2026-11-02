@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bold, Code, Italic, List, Package, Paperclip, Quote, Send, Smile, Strikethrough, Type, X } from 'lucide-react';
+import { Bold, Code, Italic, List, Package, Paperclip, Quote, SendHorizontal, Smile, Strikethrough, Type, X } from 'lucide-react';
 import type { ChatChannel, ChatMessage, ChatPerson, RecentOrder, SendVars } from '@/hooks/queries/useTeamChat';
 import { useRecentOrders } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, fileSize, newClientId } from './chatUi';
@@ -243,7 +243,7 @@ export default function Composer({
             </span>
           ))}
           {orders.map((o) => (
-            <span key={o.id} className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm text-emerald-900">
+            <span key={o.id} className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-900">
               <Package className="h-3.5 w-3.5" aria-hidden="true" /> {o.code}
               <button type="button" onClick={() => setOrders((prev) => prev.filter((x) => x.id !== o.id))} aria-label={`Remove order ${o.code}`}>
                 <X className="h-3.5 w-3.5" />
@@ -256,10 +256,10 @@ export default function Composer({
       {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
 
       {quote && (
-        <div className="mb-2 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-          <Quote className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
+        <div className="mb-2 flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2">
+          <Quote className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-emerald-800">
+            <p className="text-xs font-semibold text-blue-800">
               Quoting {quote.kind === 'system' ? 'Roavion updates' : quote.sender?.name ?? 'Former member'}
             </p>
             <p className="truncate text-sm text-gray-700">{quote.text || 'Shared a file'}</p>
@@ -280,7 +280,7 @@ export default function Composer({
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => pickMention(option)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-emerald-50"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-blue-50"
                 >
                   {option.all ? (
                     <>
@@ -326,7 +326,7 @@ export default function Composer({
                   setOrders((prev) => (prev.some((x) => x.id === o.id) ? prev : [...prev, o]));
                   setShowOrders(false);
                 }}
-                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-emerald-50"
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-blue-50"
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-gray-900">{o.code} · {o.customer}</span>
@@ -364,14 +364,13 @@ export default function Composer({
             ))}
           </div>
         )}
-        {/* Phones: one row (tools, text, send), like a messaging app. From sm the
-            text box takes the full first row and the tools sit under it, as in
-            Google Chat — `order` moves the box without changing tab order. */}
-        <div className="flex flex-wrap items-end gap-1 rounded-3xl border border-gray-200 bg-gray-50 p-1.5 transition-[border-color,box-shadow,background-color] focus-within:border-blue-500 focus-within:bg-white focus-within:shadow-[0_0_0_4px_var(--color-blue-50)] sm:rounded-2xl sm:bg-white sm:p-2 sm:shadow-sm">
+        {/* One rounded bar: the text first, then the tools and the send arrow on
+            the right — `order` moves the text box without changing tab order. */}
+        <div className="gc-field flex items-end gap-0.5 rounded-[26px] py-1 pl-2 pr-1.5 transition-shadow focus-within:shadow-[0_0_0_2px_var(--color-blue-500)]">
           <button
             type="button"
             onClick={() => fileInput.current?.click()}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-100 sm:order-2 sm:rounded-lg hover:text-gray-800"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 order-2 hover:text-gray-800"
             aria-label="Attach a file"
             title="Attach a photo or document"
           >
@@ -380,7 +379,7 @@ export default function Composer({
           <button
             type="button"
             onClick={() => setShowOrders((v) => !v)}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-100 sm:order-2 sm:rounded-lg hover:text-gray-800"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 order-2 hover:text-gray-800"
             aria-label="Link an order"
             title="Link an order"
           >
@@ -389,7 +388,7 @@ export default function Composer({
           <button
             type="button"
             onClick={() => setShowEmoji((v) => !v)}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-100 sm:order-2 sm:rounded-lg hover:text-gray-800"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 order-2 hover:text-gray-800"
             aria-label="Add an emoji"
             title="Emoji"
           >
@@ -399,7 +398,7 @@ export default function Composer({
             type="button"
             onClick={() => setShowFormat((v) => !v)}
             aria-pressed={showFormat}
-            className={`hidden h-9 w-9 shrink-0 place-items-center rounded-lg hover:bg-gray-100 hover:text-gray-800 sm:order-2 sm:grid ${showFormat ? 'bg-gray-100 text-gray-900' : 'text-gray-600'}`}
+            className={`order-2 hidden h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-gray-200 hover:text-gray-800 sm:grid ${showFormat ? 'bg-gray-200 text-gray-900' : 'text-gray-600'}`}
             aria-label="Formatting"
             title="Formatting: *bold* _italic_ ~strike~ `code`"
           >
@@ -454,23 +453,20 @@ export default function Composer({
             maxLength={4000}
             placeholder={placeholder ?? `Message ${channelName}`}
             aria-label={placeholder ?? `Message ${channelName}`}
-            className="max-h-40 min-h-[40px] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-[15px] text-gray-900 outline-none sm:order-1 sm:basis-full"
+            className="max-h-40 min-h-[40px] min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-[15px] text-gray-900 outline-none order-1"
           />
-          <span className="hidden min-w-0 flex-1 truncate px-2 text-right text-[11px] text-gray-400 sm:order-3 sm:block">
-            Enter to send · Shift + Enter for a new line
-          </span>
           <button
             type="submit"
             disabled={!text.trim() && !files.length}
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-blue-600 text-white transition-[background-color,transform] hover:bg-blue-700 active:scale-95 disabled:opacity-40 sm:order-4 sm:h-9 sm:w-11 sm:rounded-xl"
+            className="order-4 grid h-9 w-9 shrink-0 place-items-center rounded-full text-blue-600 transition-[background-color,transform] hover:bg-blue-100 active:scale-95 disabled:text-gray-400 disabled:hover:bg-transparent"
             aria-label="Send message"
           >
-            <Send className="h-4 w-4" />
+            <SendHorizontal className="h-5 w-5" />
           </button>
         </div>
       </div>
       <p className="mt-1 hidden text-[11px] text-gray-400 lg:block">
-        @ to mention · *bold* _italic_ ~strike~ `code` · paste or drag in a photo or PDF to share it
+        Enter to send · Shift + Enter for a new line · @ to mention · *bold* _italic_ · paste or drag in a photo or PDF
       </p>
     </form>
   );

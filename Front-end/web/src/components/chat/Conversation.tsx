@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, Download, Search, Users } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Download, Maximize2, Minimize2, Search, Users } from 'lucide-react';
 import { chatKeys } from '@/hooks/queries/keys';
 import {
   readUpdatesSeqOf,
@@ -60,7 +60,7 @@ function FilesPanel({ channelId }: { channelId: string }) {
     return (
       <p className="p-6 text-sm text-gray-600">
         Couldn&apos;t load the files.{' '}
-        <button type="button" className="font-semibold text-emerald-700 underline" onClick={() => refetch()}>
+        <button type="button" className="font-semibold text-blue-700 underline" onClick={() => refetch()}>
           Try again
         </button>
       </p>
@@ -85,7 +85,7 @@ function FilesPanel({ channelId }: { channelId: string }) {
               target="_blank"
               rel="noopener noreferrer"
               download={f.name}
-              className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-2.5 hover:border-emerald-600 hover:bg-emerald-50"
+              className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-2.5 hover:border-blue-600 hover:bg-blue-50"
             >
               {f.kind === 'image' ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -133,6 +133,8 @@ export default function Conversation({
   online,
   onSearch,
   initialTab,
+  expanded = false,
+  onToggleExpand,
 }: {
   channel: ChatChannel;
   meId: string;
@@ -149,6 +151,9 @@ export default function Conversation({
   onSearch?: () => void;
   /** From the link (?t=updates — an order-update pop-up); otherwise chosen by what is unread. */
   initialTab?: 'messages' | 'updates';
+  /** Desktop: the conversation takes the whole chat area (the lists hide). */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 }) {
   const qc = useQueryClient();
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } =
@@ -427,8 +432,8 @@ export default function Conversation({
     // min-w-0: without it this pane grows to its widest child (the pinned bar, the
     // header icons) and every message is clipped on a phone, Send off-screen.
     <div className="relative flex h-full min-h-0 min-w-0 flex-1">
-      <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-white lg:rounded-2xl" aria-label={`Conversation ${title}`}>
-        <header className="border-b border-gray-100 px-4 pt-3 sm:px-5">
+      <section className="gc-card flex h-full min-h-0 min-w-0 flex-1 flex-col lg:rounded-2xl" aria-label={`Conversation ${title}`}>
+        <header className="border-b border-gray-200/70 px-4 pt-3 sm:px-5">
           <div className="flex items-center gap-2 sm:gap-3">
             <button type="button" onClick={onBack} className="-ml-1.5 shrink-0 rounded-lg p-2 text-gray-600 hover:bg-gray-100 lg:hidden" aria-label="Back to channels">
               <ArrowLeft className="h-5 w-5" />
@@ -452,11 +457,23 @@ export default function Conversation({
                 <button
                   type="button"
                   onClick={onSearch}
-                  className="rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+                  className="rounded-full p-2 text-gray-600 hover:bg-gray-100"
                   aria-label={`Search in ${title}`}
                   title={`Search in ${title}`}
                 >
                   <Search className="h-4 w-4" />
+                </button>
+              )}
+              {onToggleExpand && (
+                <button
+                  type="button"
+                  onClick={onToggleExpand}
+                  aria-pressed={expanded}
+                  className="hidden rounded-full p-2 text-gray-600 hover:bg-gray-100 lg:block"
+                  aria-label={expanded ? 'Show the conversation list' : 'Expand the conversation'}
+                  title={expanded ? 'Show the conversation list' : 'Expand'}
+                >
+                  {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </button>
               )}
             </div>
@@ -509,7 +526,7 @@ export default function Conversation({
                 {isError && (
                   <div className="py-10 text-center text-sm text-gray-600">
                     Couldn&apos;t load messages.{' '}
-                    <button type="button" className="font-semibold text-emerald-700 underline" onClick={() => refetch()}>
+                    <button type="button" className="font-semibold text-blue-700 underline" onClick={() => refetch()}>
                       Try again
                     </button>
                   </div>
@@ -584,7 +601,7 @@ export default function Conversation({
             </div>
 
             {forwardedTo && (
-              <div role="status" className="mx-4 mb-1 flex items-center justify-between gap-2 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs text-emerald-900">
+              <div role="status" className="mx-4 mb-1 flex items-center justify-between gap-2 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-900">
                 Forwarded to {forwardedTo.kind === 'dm' || forwardedTo.audience === 'teams' ? forwardedTo.name : `#${forwardedTo.name}`}.
                 <span className="flex gap-3">
                   {onOpenChannel && forwardedTo.id !== channel.id && (
