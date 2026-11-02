@@ -642,6 +642,11 @@ export async function ensureCriticalIndexes() {
       { group: 1 },
       { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group', background: true }
     );
+    // The sub-tasks of one task (partial: most tasks are not sub-tasks).
+    await db.collection('stafftasks').createIndex(
+      { 'parent.task': 1, bucket: 1, rank: 1, _id: 1 },
+      { partialFilterExpression: { 'parent.task': { $type: 'objectId' } }, name: 'staff_task_parent', background: true }
+    );
     await db.collection('stafftaskcomments').createIndex({ task: 1, _id: -1 }, { name: 'staff_task_comment_task', background: true });
     await db.collection('stafftaskcomments').createIndex(
       { by: 1, clientId: 1 },

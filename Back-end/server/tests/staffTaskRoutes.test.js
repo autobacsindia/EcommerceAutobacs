@@ -213,6 +213,35 @@ describe('Staff task routes', () => {
     expect((await head.session.post('/staff/tasks', { title: 'x', shared: 'maybe' })).status).toBe(400);
   });
 
+  it('sub-tasks over HTTP: make one, list them, turn a step into one, archive with the parent', async () => {
+    const parent = (await head.session.post('/staff/tasks', { title: 'Diwali stock check', checklist: ['Count wipers'] })).body.task;
+    const made = await head.session.post('/staff/tasks', {
+      title: 'Count Bosch pads', parentId: parent.id, assigneeIds: [String(member.user._id)], shared: true, clientId: 'route-sub-0001',
+    });
+    expect(made.status).toBe(201);
+    expect(made.body.task.parent).toMatchObject({ id: parent.id, code: parent.code });
+    expect((await head.session.post('/staff/tasks', { title: 'x', parentId: 'nope' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { title: 'deeper', parentId: made.body.task.id })).status).toBe(400);
+
+    const step = (await head.session.get(`/staff/tasks/${parent.id}`)).body.task.checklistItems[0];
+    const fromStep = await head.session.post(`/staff/tasks/${parent.id}/checklist/${step.id}/subtask`, { clientId: 'route-sub-0002' });
+    expect(fromStep.status).toBe(200);
+    expect(fromStep.body.subtask.title).toBe('Count wipers');
+    expect(fromStep.body.task.checklistItems).toEqual([]);
+    expect((await head.session.post(`/staff/tasks/${parent.id}/checklist/${step.id}/subtask`, {})).status).toBe(400);
+
+    const list = await member.session.get(`/staff/tasks/${parent.id}/subtasks`);
+    expect(list.status).toBe(404); // Arun is on a sub-task, not on the parent
+    const all = await head.session.get(`/staff/tasks/${parent.id}/subtasks`);
+    expect(all.status).toBe(200);
+    expect(all.body).toMatchObject({ total: 2, done: 0 });
+    expect(all.body.subtasks.map((t) => t.title).sort()).toEqual(['Count Bosch pads', 'Count wipers']);
+
+    const rev = (await head.session.get(`/staff/tasks/${parent.id}`)).body.task.rev;
+    expect((await head.session.patch(`/staff/tasks/${parent.id}`, { rev, archived: true })).status).toBe(200);
+    expect((await member.session.get('/staff/tasks?view=mine')).body.tasks).toEqual([]);
+  });
+
   it('lists who you may give to', async () => {
     const res = await head.session.get('/staff/tasks/assignees');
     expect(res.status).toBe(200);

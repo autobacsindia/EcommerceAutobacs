@@ -63,6 +63,21 @@ export const FileSchema = new mongoose.Schema(
 );
 
 /**
+ * The task a sub-task belongs to. Its number and title are copied here (and the
+ * title kept up to date when the parent is renamed), so a list row shows
+ * "in T-20 Diwali stock check" without loading the parent — and so does someone
+ * who may see the sub-task but not the parent.
+ */
+const ParentRefSchema = new mongoose.Schema(
+  {
+    task: { type: mongoose.Schema.Types.ObjectId, ref: 'StaffTask', required: true },
+    number: { type: Number, required: true },
+    title: { type: String, default: '' },
+  },
+  { _id: false },
+);
+
+/**
  * One step of a task's checklist ("Pack", "Label", "Book courier"). Ticking a step
  * never completes the task by itself — the person still moves the task to Done.
  */
@@ -138,6 +153,24 @@ const StaffTaskSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdByName: { type: String, default: '' },
     order: { type: OrderRefSchema, default: null },
+    /*
+      Sub-tasks (Tasks phase 5): a sub-task is a whole task of its own (people,
+      status, comments) that names its parent here. One level only: a sub-task
+      never has sub-tasks of its own.
+    */
+    parent: { type: ParentRefSchema, default: undefined },
+    /**
+     * On a parent: how many of its sub-tasks are not archived, and how many of
+     * those are done (the "1/2" on its row). Counted from the sub-tasks on every
+     * change to one of them (services/staffTaskService.js recountSubtasks), never
+     * added to or taken from, so it cannot drift.
+     */
+    subtasks: {
+      type: new mongoose.Schema({ total: { type: Number, default: 0 }, done: { type: Number, default: 0 } }, { _id: false }),
+      default: undefined,
+    },
+    /** Archived because its parent was: restoring the parent brings it back (and only it). */
+    archivedWithParent: { type: Boolean, default: undefined },
     /**
      * Set when one task was given to several people: each person has their own
      * copy, and every copy carries the same `group` (and how many there were).
@@ -184,6 +217,11 @@ StaffTaskSchema.index({ teams: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_t
 StaffTaskSchema.index({ 'followers.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_followers' });
 // The copies of one task given to several people. Partial: most tasks have no group.
 StaffTaskSchema.index({ group: 1 }, { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group' });
+// The sub-tasks of one task, in list order. Partial: most tasks are not sub-tasks.
+StaffTaskSchema.index(
+  { 'parent.task': 1, bucket: 1, rank: 1, _id: 1 },
+  { partialFilterExpression: { 'parent.task': { $type: 'objectId' } }, name: 'staff_task_parent' },
+);
 // `$type`, not `$ne`/`$exists: true` on null — MongoDB rejects `$ne` in a partialFilterExpression.
 StaffTaskSchema.index(
   { createdBy: 1, clientId: 1 },
