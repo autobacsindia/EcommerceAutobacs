@@ -447,13 +447,20 @@ async function notifyPeople(t, actor, ids, message) {
  * names the event, so writing the same one again (a retry) adds nothing. Best
  * effort like the pop-ups: the change is already saved, and this never throws.
  */
-async function toInbox(t, actor, ids, { kind, key, text = '' }) {
+async function toInbox(t, actor, ids, line) {
+  await toInboxAll(t, actor, [{ ids, ...line }]);
+}
+
+/** Several kinds of line about one event (a comment: "mentioned you" and "commented") in one write. */
+async function toInboxAll(t, actor, parts) {
   try {
-    const wanted = [...new Set(ids.map(idOf))].filter((x) => x && !same(x, actor._id));
-    await staffTaskInboxRepository.insertMany(wanted.map((user) => ({
-      user, key, kind, task: t._id, number: t.number, title: t.title,
-      by: actor._id, byName: actor.name || '', text: String(text).slice(0, 200),
-    })));
+    const rows = parts.flatMap(({ ids, kind, key, text = '' }) => [...new Set(ids.map(idOf))]
+      .filter((x) => x && !same(x, actor._id))
+      .map((user) => ({
+        user, key, kind, task: t._id, number: t.number, title: t.title,
+        by: actor._id, byName: actor.name || '', text: String(text).slice(0, 200),
+      })));
+    await staffTaskInboxRepository.insertMany(rows);
   } catch (err) {
     console.error('[StaffTask] inbox write failed (ignored):', err.message);
   }
@@ -1362,8 +1369,10 @@ const saidIn = (c) => (c.text ? c.text.replace(/\s+/g, ' ').slice(0, 120) : 'Sha
 async function commentToInbox(t, actor, c) {
   const mentioned = (c.mentions || []).map(idOf);
   const key = `c:${idOf(c._id)}`;
-  await toInbox(t, actor, mentioned, { kind: 'mention', key, text: saidIn(c) });
-  await toInbox(t, actor, audienceOf(t).filter((x) => !mentioned.includes(idOf(x))), { kind: 'comment', key, text: saidIn(c) });
+  await toInboxAll(t, actor, [
+    { ids: mentioned, kind: 'mention', key, text: saidIn(c) },
+    { ids: audienceOf(t).filter((x) => !mentioned.includes(idOf(x))), kind: 'comment', key, text: saidIn(c) },
+  ]);
 }
 
 /** The Inbox lines and pop-ups for a new comment. Best effort; never throws. */

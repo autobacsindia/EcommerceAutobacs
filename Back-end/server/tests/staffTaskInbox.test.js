@@ -166,9 +166,10 @@ describe('one event, one line', () => {
     const t = await give([arun, bala]);
     await StaffTaskInbox.deleteMany({});
     const spy = jest.spyOn(staffTaskInboxRepository, 'insertMany');
-    spy.mockRejectedValueOnce(new Error('timeout')); // the mention line (Arun) is lost
-    await tasks.addComment(priya, t.id, { text: 'Check the date', clientId: 'cmt-00000002', mentions: [String(arun._id)] });
-    expect(await lines()).toEqual(['Bala:comment:Check the date']);
+    spy.mockRejectedValueOnce(new Error('timeout')); // the comment's lines are lost
+    const first = await tasks.addComment(priya, t.id, { text: 'Check the date', clientId: 'cmt-00000002', mentions: [String(arun._id)] });
+    expect(first.duplicate).toBe(false); // the comment itself is saved
+    expect(await lines()).toEqual([]);
 
     const again = await tasks.addComment(priya, t.id, { text: 'Check the date', clientId: 'cmt-00000002', mentions: [String(arun._id)] });
     expect(again.duplicate).toBe(true);
