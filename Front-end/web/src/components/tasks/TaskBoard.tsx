@@ -9,7 +9,7 @@ import { errorMessage } from '@/components/staff/sales/types';
 import { useRefreshTasks, useTaskPages } from './hooks';
 import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
 import { AvatarStack, GroupPill, PriorityFlag, SkeletonRows } from './ui';
-import { TASK_STATUSES, formatDueDay, isConflict, peopleOf, type Task, type TaskFilters, type TaskStatus } from './types';
+import { TASK_STATUSES, confirmComplete, formatDueDay, isConflict, peopleOf, type Task, type TaskFilters, type TaskStatus } from './types';
 
 /** How many finished cards the Done column shows; the rest are in the list view. */
 const DONE_SHOWN = 20;
@@ -123,7 +123,10 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag }: {
     },
     onSettled: async (_r, _e, { t }) => { await refresh(); unmove(t.id); },
   });
-  const onMove = (t: Task, status: TaskStatus) => { if (status !== statusOf(t)) move.mutate({ t, status }); };
+  const onMove = (t: Task, status: TaskStatus) => {
+    if (status === statusOf(t) || (status === 'done' && !confirmComplete(t))) return;
+    move.mutate({ t, status });
+  };
 
   if (open.isLoading) return <SkeletonRows rows={6} />;
   if (open.isError) return <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{errorMessage(open.error, 'Could not load tasks.')}</p>;
@@ -131,7 +134,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag }: {
   const columns = TASK_STATUSES.filter((c) => !(filters.due && c.value === 'done'));
   return (
     <div className="space-y-3">
-      <div className="-mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-2 md:snap-none">
+      <div className="relative -mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-2 md:snap-none">
         {columns.map((col) => {
           const cards = tasks.filter((t) => statusOf(t) === col.value);
           return (

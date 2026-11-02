@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  Archive, ArrowLeft, Bell, BellOff, Check, Link2, ListChecks, MessageSquare, Pencil, RotateCcw, Send, UserPlus, Users, X,
+  Archive, ArrowLeft, Bell, BellOff, Check, ChevronDown, ChevronUp, CornerLeftUp, Link2, ListChecks, Maximize2, MessageSquare, Network,
+  Pencil, RotateCcw, Send, UserPlus, Users, X,
 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
@@ -17,9 +18,10 @@ import { Activity, TaskFiles, timeAgo } from './Comments';
 import { TagList } from './TaskList';
 import AssigneePicker from './AssigneePicker';
 import { useFollowers } from './hooks';
+import Subtasks from './Subtasks';
 import { Avatar, AvatarStack, DuePill, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import {
-  FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, formatDueDay, isConflict, isPastDay, newClientId, orderHrefFor, peopleOf,
+  FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, formatDueDay, isConflict, isPastDay, newClientId, orderHrefFor, peopleOf,
   type Assignee, type ChecklistItem, type CommentPage, type Person, type Task, type TaskComment, type TaskPriority, type TaskStatus,
 } from './types';
 
@@ -45,8 +47,10 @@ const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => 
   check_removed: (h) => `removed the step "${h.to}"`,
   checked: (h) => `ticked "${h.to}"`,
   unchecked: (h) => `unticked "${h.to}"`,
-  archived: () => 'archived it',
-  restored: () => 'restored it',
+  archived: (h) => (h.to ? `archived it ${h.to}` : 'archived it'),
+  restored: (h) => (h.to ? `restored it ${h.to}` : 'restored it'),
+  subtask_added: (h) => `added the sub-task ${h.to}`,
+  check_to_subtask: (h) => `made the step "${h.from}" into the sub-task ${h.to}`,
   file_added: (h) => `added the file "${h.to}"`,
   file_removed: (h) => `removed the file "${h.from}"`,
 };
@@ -241,6 +245,8 @@ function FollowersField({ task, choices, onGone }: { task: Task; choices: Assign
  */
 function Checklist({ task }: { task: Task }) {
   const queryClient = useQueryClient();
+  // One clientId per step being made a sub-task, so a retry makes it once.
+  const toSubKeys = useRef(new Map<string, string>());
   const items: ChecklistItem[] = task.checklistItems ?? [];
   const [text, setText] = useState('');
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
@@ -271,6 +277,20 @@ function Checklist({ task }: { task: Task }) {
     mutationFn: (id: string) => apiClient.delete<{ task: Task }>(`${url}/${encodeURIComponent(id)}`),
     onSuccess: settle,
     onError: fail('Could not remove the step.'),
+  });
+  const toSubtask = useMutation({
+    mutationFn: (id: string) => {
+      const keys = toSubKeys.current;
+      if (!keys.has(id)) keys.set(id, newClientId());
+      return apiClient.post<{ task: Task; subtask: Task }>(`${url}/${encodeURIComponent(id)}/subtask`, { clientId: keys.get(id) });
+    },
+    onSuccess: (res, id) => {
+      settle(res);
+      toSubKeys.current.delete(id);
+      queryClient.invalidateQueries({ queryKey: taskKeys.subtasks(task.id) });
+      toast.success(`Made ${res.subtask.code}`, { id: `to-sub-${id}` });
+    },
+    onError: fail('Could not make it a sub-task.'),
   });
 
   if (!items.length && !task.can.checklist) return null;
@@ -321,6 +341,15 @@ function Checklist({ task }: { task: Task }) {
                 </span>
                 {task.can.checklist && (
                   <span className="flex gap-0.5 md:opacity-0 md:group-hover:opacity-100">
+                    {task.can.subtask && !c.done && (
+                      <button
+                        onClick={() => toSubtask.mutate(c.id)}
+                        disabled={toSubtask.isPending}
+                        aria-label={`Make ${c.text} a sub-task`}
+                        title="Make it a sub-task"
+                        className="rounded p-1 text-gray-500 hover:bg-gray-100"
+                      ><Network className="h-3.5 w-3.5" /></button>
+                    )}
                     <button onClick={() => setEditing({ id: c.id, text: c.text })} aria-label={`Rename ${c.text}`} className="rounded p-1 text-gray-500 hover:bg-gray-100"><Pencil className="h-3.5 w-3.5" /></button>
                     <button onClick={() => remove.mutate(c.id)} aria-label={`Remove ${c.text}`} className="rounded p-1 text-gray-500 hover:bg-red-50 hover:text-red-600"><X className="h-3.5 w-3.5" /></button>
                   </span>
@@ -350,12 +379,19 @@ function Checklist({ task }: { task: Task }) {
 
 // ── The task ─────────────────────────────────────────────────────────────────
 
+/** Moving through the list the window was opened from: "3 of 14", previous and next. */
+export type TaskNav = { at: number; of: string; prev?: () => void; next?: () => void };
+
 /**
- * One task: title and notes (click to edit), its properties, checklist, the
- * people sharing it, and the activity timeline. `onClose` = shown in the side
- * panel; without it, as a page of its own (opened from a pop-up or the bell).
+ * One task: title and notes (click to edit), its properties, sub-tasks,
+ * checklist, the people sharing it, and the activity. `onClose` = shown in the
+ * task window (details left, activity right on a wide screen); without it, as
+ * a page of its own (opened from a pop-up or the bell). `onOpen` switches the
+ * window to another task (a parent or sub-task); without it, those are links.
  */
-export default function TaskDetail({ id, base, onClose }: { id: string; base: string; onClose?: () => void }) {
+export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
+  id: string; base: string; onClose?: () => void; onOpen?: (id: string) => void; nav?: TaskNav;
+}) {
   const queryClient = useQueryClient();
   const [error, setError] = useState('');
   const q = useQuery({
@@ -374,6 +410,12 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
       queryClient.setQueryData(taskKeys.one(id), { task: res.task });
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
       queryClient.invalidateQueries({ queryKey: taskKeys.summary() });
+      // Archiving takes the sub-tasks along; a sub-task's change moves its parent's count.
+      queryClient.invalidateQueries({ queryKey: taskKeys.subtasks(id) });
+      if (res.task.parent) {
+        queryClient.invalidateQueries({ queryKey: taskKeys.one(res.task.parent.id) });
+        queryClient.invalidateQueries({ queryKey: taskKeys.subtasks(res.task.parent.id) });
+      }
       toast.success('Saved', { id: `task-saved-${id}`, duration: 1500 });
     },
     onError: (e) => {
@@ -383,13 +425,16 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
     },
   });
 
+  const windowed = !!onClose;
   const back = onClose
     ? null
     : <Link href={base} className="inline-flex items-center gap-1 text-sm font-medium text-blue-700"><ArrowLeft className="h-4 w-4" /> All tasks</Link>;
+  const iconButton = 'rounded-md p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent';
+  const closeButton = onClose && <button onClick={onClose} aria-label="Close" title="Close (Esc)" className={iconButton}><X className="h-4 w-4" /></button>;
 
   if (q.isLoading) {
     return (
-      <div aria-hidden className="animate-pulse space-y-4 p-1">
+      <div aria-hidden className={`animate-pulse space-y-4 ${windowed ? 'p-6' : 'p-1'}`}>
         <div className="h-3 w-24 rounded bg-gray-200" />
         <div className="h-6 w-3/4 rounded bg-gray-200" />
         {[0, 1, 2, 3].map((i) => <div key={i} className="h-4 w-1/2 rounded bg-gray-100" />)}
@@ -398,8 +443,9 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
   }
   if (!task) {
     return (
-      <div className="space-y-3">
+      <div className={`space-y-3 ${windowed ? 'p-5' : ''}`}>
         {back}
+        {closeButton && <div className="flex justify-end">{closeButton}</div>}
         <p role="alert" className="text-sm text-red-600">{errorMessage(q.error, 'This task could not be found.')}</p>
       </div>
     );
@@ -413,27 +459,30 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
       toast.success('Link copied');
     } catch { toast.error('Could not copy the link'); }
   };
+  const setStatus = (status: TaskStatus) => {
+    if (status === 'done' && !confirmComplete(task)) return;
+    save.mutate({ status });
+  };
+  const archive = () => {
+    const n = task.subtasks?.total ?? 0;
+    const ask = n
+      ? `Archive this task and its ${n === 1 ? 'sub-task' : `${n} sub-tasks`}? They move to Archived and can be restored together.`
+      : 'Archive this task? It moves to Archived and can be restored.';
+    if (window.confirm(ask)) save.mutate({ archived: true });
+  };
+  // The parent, as a way back up: in the window it switches to it; on a page it is a link.
+  const parentLink = task.parent && (onOpen
+    ? <button type="button" onClick={() => onOpen(task.parent!.id)} className="inline-flex min-w-0 items-center gap-1 hover:text-gray-900 hover:underline"><CornerLeftUp aria-hidden className="h-3.5 w-3.5 shrink-0" /><span className="font-mono">{task.parent.code}</span><span className="truncate">{task.parent.title}</span></button>
+    : <Link href={`${base}/${task.parent.id}`} className="inline-flex min-w-0 items-center gap-1 hover:text-gray-900 hover:underline"><CornerLeftUp aria-hidden className="h-3.5 w-3.5 shrink-0" /><span className="font-mono">{task.parent.code}</span><span className="truncate">{task.parent.title}</span></Link>);
   const setDue = (value: string) => {
     if (value && isPastDay(value) && !window.confirm('This date has already passed, so the task will show as late. Use it anyway?')) return;
     save.mutate({ dueOn: value || null });
   };
 
-  return (
-    <article className="space-y-6">
-      {back}
+  // Details first; the activity beside them in the window on a wide screen, below them otherwise.
+  const details = (
+    <>
       <header className="space-y-2">
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span className="font-mono">{task.code}</span><span aria-hidden>·</span><span>{task.teamLabel}</span>
-          <span className="flex-1" />
-          <button onClick={copyLink} aria-label="Copy link" title="Copy link" className="rounded-md p-1.5 hover:bg-gray-100"><Link2 className="h-4 w-4" /></button>
-          {task.can.archive && (
-            <button
-              onClick={() => { if (window.confirm('Archive this task? It moves to Archived and can be restored.')) save.mutate({ archived: true }); }}
-              aria-label="Archive" title="Archive" className="rounded-md p-1.5 hover:bg-gray-100"
-            ><Archive className="h-4 w-4" /></button>
-          )}
-          {onClose && <button onClick={onClose} aria-label="Close" title="Close (Esc)" className="rounded-md p-1.5 hover:bg-gray-100"><X className="h-4 w-4" /></button>}
-        </div>
         {archived && (
           <div className="flex items-center justify-between rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700">
             This task is archived.
@@ -442,6 +491,7 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
             )}
           </div>
         )}
+        {parentLink && <div className="flex min-w-0 text-xs text-gray-500">{parentLink}</div>}
         <h1 className="sr-only">{task.title}</h1>
         <InlineText
           value={task.title}
@@ -459,7 +509,7 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
           {task.can.status ? (
             <select
               value={task.status}
-              onChange={(e) => save.mutate({ status: e.target.value as TaskStatus })}
+              onChange={(e) => setStatus(e.target.value as TaskStatus)}
               disabled={save.isPending}
               aria-label="Status"
               className={statusSelectClass(task.status)}
@@ -546,6 +596,7 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
         {!task.can.edit && !task.description && <p className="text-sm text-gray-400">No description.</p>}
       </section>
 
+      <Subtasks task={task} base={base} onOpen={onOpen} />
       <Checklist task={task} />
 
       {task.group && (
@@ -577,7 +628,53 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
       )}
 
       <TaskFiles task={task} />
-      <Activity task={task} describe={(h) => (HISTORY_TEXT[h.action] ?? (() => h.action))(h)} />
+    </>
+  );
+  const activity = <Activity task={task} describe={(h) => (HISTORY_TEXT[h.action] ?? (() => h.action))(h)} />;
+  const tools = (
+    <>
+      <button onClick={copyLink} aria-label="Copy link" title="Copy link" className={iconButton}><Link2 className="h-4 w-4" /></button>
+      {task.can.archive && <button onClick={archive} aria-label="Archive" title="Archive" className={iconButton}><Archive className="h-4 w-4" /></button>}
+    </>
+  );
+
+  if (windowed) {
+    return (
+      <article className="flex h-full min-h-0 flex-col">
+        <div className="flex shrink-0 items-center gap-1 border-b border-gray-100 px-3 py-2 text-xs text-gray-500 sm:px-5">
+          <span className="font-mono">{task.code}</span><span aria-hidden>·</span><span className="truncate">{task.teamLabel}</span>
+          <span className="flex-1" />
+          {nav && (
+            <span className="mr-1 flex items-center gap-0.5 border-r border-gray-100 pr-2">
+              <button onClick={nav.prev} disabled={!nav.prev} aria-label="Previous task" title="Previous task (K)" className={iconButton}><ChevronUp className="h-4 w-4" /></button>
+              <button onClick={nav.next} disabled={!nav.next} aria-label="Next task" title="Next task (J)" className={iconButton}><ChevronDown className="h-4 w-4" /></button>
+              <span className="hidden whitespace-nowrap px-1 sm:inline">{nav.at} of {nav.of}</span>
+            </span>
+          )}
+          {tools}
+          <Link href={`${base}/${task.id}`} aria-label="Open as a full page" title="Open as a full page" className={iconButton}><Maximize2 className="h-4 w-4" /></Link>
+          {closeButton}
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,40%)] lg:overflow-hidden">
+          <div className="space-y-6 px-5 py-5 sm:px-7 lg:overflow-y-auto">{details}</div>
+          <aside aria-label="Activity" className="border-t border-gray-100 bg-gray-50 px-5 py-5 sm:px-6 lg:overflow-y-auto lg:border-l lg:border-t-0">{activity}</aside>
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <article className="space-y-6">
+      {back}
+      <div className="flex items-center gap-1 text-xs text-gray-500">
+        <span className="font-mono">{task.code}</span><span aria-hidden>·</span><span>{task.teamLabel}</span>
+        <span className="flex-1" />
+        {tools}
+      </div>
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,40%)] lg:items-start lg:gap-8">
+        <div className="space-y-6">{details}</div>
+        <aside aria-label="Activity" className="mt-6 lg:mt-0">{activity}</aside>
+      </div>
     </article>
   );
 }

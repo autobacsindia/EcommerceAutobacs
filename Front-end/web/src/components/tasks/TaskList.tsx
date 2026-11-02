@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, Flag, ListChecks, MessageSquare, Package, Plus, Tag, UserPlus, Users, X } from 'lucide-react';
+import { CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CornerLeftUp, Flag, ListChecks, MessageSquare, Network, Package, Plus, Tag, UserPlus, Users, X } from 'lucide-react';
 import { errorMessage } from '@/components/staff/sales/types';
 import { useQuickAdd, useSetStatus, useTaskPages, type QuickExtras } from './hooks';
 import AssigneePicker from './AssigneePicker';
@@ -10,7 +10,7 @@ import { groupTasks, type TaskGroup } from './grouping';
 import BulkBar from './BulkBar';
 import { Avatar, AvatarStack, Chip, DuePill, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
 import {
-  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, formatDueDay, newClientId, peopleOf,
+  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, newClientId, peopleOf,
   type Task, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskStatus,
 } from './types';
 
@@ -41,10 +41,24 @@ const STATUS_RING: Record<TaskStatus, string> = {
   todo: 'border-gray-300', in_progress: 'border-sky-500', waiting: 'border-amber-500', done: 'border-emerald-500',
 };
 
-/** Small facts beside a title: shared, checklist, comments, start date (and, on cards, the order). */
+/**
+ * Small facts beside a title: the parent it belongs to, its sub-tasks, shared,
+ * checklist, comments, start date (and, on cards, the order).
+ */
 export function TaskMeta({ t, withOrder = true, withComments = true }: { t: Task; withOrder?: boolean; withComments?: boolean }) {
+  const subs = t.subtasks?.total ?? 0;
   return (
     <>
+      {t.parent && (
+        <Chip title={`A sub-task of ${t.parent.code} ${t.parent.title}`}>
+          <CornerLeftUp aria-hidden className="h-3 w-3 shrink-0" /><span className="max-w-[11rem] truncate">in {t.parent.code} {t.parent.title}</span>
+        </Chip>
+      )}
+      {subs > 0 && (
+        <Chip tone={t.subtasks!.done === subs ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'} title={`${t.subtasks!.done} of ${subs} sub-tasks done`}>
+          <Network aria-hidden className="h-3 w-3" />{t.subtasks!.done}/{subs}
+        </Chip>
+      )}
       {t.group && <Chip tone="bg-purple-100 text-purple-800" title={`Given to ${t.group.size} people`}><Users aria-hidden className="h-3 w-3" />{t.group.size}</Chip>}
       {t.checklist?.total > 0 && (
         <Chip tone={t.checklist.done === t.checklist.total ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'} title={`${t.checklist.done} of ${t.checklist.total} steps done`}>
@@ -120,7 +134,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
         <SelectBox checked={selected} onChange={onSelect} label={`Select ${t.code}`} />
       </span>
       <div className="flex min-w-0 flex-1 items-start gap-2.5">
-        <span className="mt-0.5"><CompleteButton t={t} busy={move.isPending} onToggle={() => move.mutate({ t, status: done ? 'todo' : 'done' })} /></span>
+        <span className="mt-0.5"><CompleteButton t={t} busy={move.isPending} onToggle={() => { if (done || confirmComplete(t)) move.mutate({ t, status: done ? 'todo' : 'done' }); }} /></span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className={`line-clamp-2 break-words text-sm font-medium ${done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</span>
