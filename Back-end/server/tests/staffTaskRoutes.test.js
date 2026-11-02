@@ -27,6 +27,7 @@ const { default: User } = await import('../models/User.js');
 const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskComment } = await import('../models/StaffTaskComment.js');
 const { default: StaffTaskInbox } = await import('../models/StaffTaskInbox.js');
+const { default: StaffTaskTime } = await import('../models/StaffTaskTime.js');
 
 const BASE = '/api/v1';
 const PW = 'SecurePass123!';
@@ -57,7 +58,7 @@ const makeUser = async (name, role, staff) => {
 };
 
 describe('Staff task routes', () => {
-  beforeAll(async () => { await dbHandler.connect(); await StaffTask.init(); await StaffTaskComment.init(); await StaffTaskInbox.init(); });
+  beforeAll(async () => { await dbHandler.connect(); await StaffTask.init(); await StaffTaskComment.init(); await StaffTaskInbox.init(); await StaffTaskTime.init(); });
   afterAll(async () => {
     await dbHandler.closeDatabase();
     if (cronService?.shutdown) cronService.shutdown();
@@ -267,6 +268,50 @@ describe('Staff task routes', () => {
     const rev = (await head.session.get(`/staff/tasks/${parent.id}`)).body.task.rev;
     expect((await head.session.patch(`/staff/tasks/${parent.id}`, { rev, archived: true })).status).toBe(200);
     expect((await member.session.get('/staff/tasks?view=mine')).body.tasks).toEqual([]);
+  });
+
+  it('time over HTTP: start, switch, stop, add by hand, correct, delete — with the right codes', async () => {
+    const a = (await head.session.post('/staff/tasks', { title: 'Count pads', assigneeId: String(member.user._id) })).body.task;
+    const b = (await head.session.post('/staff/tasks', { title: 'Ring courier', assigneeId: String(member.user._id) })).body.task;
+    expect((await member.session.get('/staff/tasks/time/current')).body).toMatchObject({ timer: null, autoStopped: null });
+    expect((await member.session.post('/staff/tasks/time/stop')).body).toMatchObject({ success: true, entry: null });
+
+    const started = await member.session.post(`/staff/tasks/${a.id}/time/start`);
+    expect(started.status).toBe(200);
+    expect(started.body).toMatchObject({ timer: { task: { id: a.id, code: a.code, title: 'Count pads' } }, stopped: null });
+    const current = await member.session.get('/staff/tasks/time/current');
+    expect(current.body.timer.id).toBe(started.body.timer.id);
+    const switched = await member.session.post(`/staff/tasks/${b.id}/time/start`);
+    expect(switched.body).toMatchObject({ timer: { task: { id: b.id } }, stopped: { id: started.body.timer.id, running: false } });
+    expect((await member.session.post('/staff/tasks/time/stop')).body.entry).toMatchObject({ running: false, source: 'timer' });
+
+    const today = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(0, 10);
+    const add = { minutes: 90, on: today, note: 'Called supplier', clientId: 'time-route-123' };
+    const added = await member.session.post(`/staff/tasks/${a.id}/time`, add);
+    expect(added.status).toBe(201);
+    expect(added.body.entry).toMatchObject({ seconds: 5400, source: 'manual', note: 'Called supplier', can: { edit: true, delete: true } });
+    const again = await member.session.post(`/staff/tasks/${a.id}/time`, add);
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ duplicate: true, entry: { id: added.body.entry.id } });
+
+    expect((await member.session.post(`/staff/tasks/${a.id}/time`, { ...add, clientId: undefined, minutes: 0 })).status).toBe(400);
+    expect((await member.session.post(`/staff/tasks/${a.id}/time`, { minutes: 30, on: '2999-01-01' })).status).toBe(400);
+    expect((await member.session.get(`/staff/tasks/${a.id}/time?cursor=nope`)).status).toBe(400);
+    expect((await head.session.patch(`/staff/tasks/${a.id}/time/${added.body.entry.id}`, { minutes: 5 })).status).toBe(403);
+    const outsider = await makeUser('Sam', 'staff', { team: 'sales', isHead: true, active: true });
+    expect((await outsider.session.post(`/staff/tasks/${a.id}/time/start`)).status).toBe(404);
+
+    const fixed = await member.session.patch(`/staff/tasks/${a.id}/time/${added.body.entry.id}`, { minutes: 60 });
+    expect(fixed.body.entry).toMatchObject({ seconds: 3600, edited: true });
+    const list = await head.session.get(`/staff/tasks/${a.id}/time`);
+    expect(list.status).toBe(200);
+    expect(list.body.entries).toHaveLength(2);
+    expect(list.body.total.people).toEqual([expect.objectContaining({ name: 'Arun' })]);
+    expect((await member.session.get('/staff/tasks?view=mine')).body.tasks.find((t) => t.id === a.id).timeSeconds)
+      .toBe(list.body.total.seconds);
+    expect((await member.session.del(`/staff/tasks/${a.id}/time/${added.body.entry.id}`)).status).toBe(200);
+    expect((await member.session.del(`/staff/tasks/${a.id}/time/${added.body.entry.id}`)).status).toBe(404);
+    expect((await member.session.postNoCsrf(`/staff/tasks/${a.id}/time/start`)).status).toBe(403);
   });
 
   it('lists who you may give to', async () => {
