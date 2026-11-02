@@ -31,6 +31,9 @@
  * who did the thing, and only after the change was really saved, so a retried
  * request never sends a second one. New people hear "new task"; everyone hears
  * a status change and a comment; someone @mentioned hears "mentioned you".
+ * Each also lands in that person's Inbox (services/staffTaskInboxService.js),
+ * written BEFORE the pop-up and keyed by the event, so a pop-up lost on a closed
+ * tab is still there to read, and a retry never writes a line twice.
  *
  * ── Sub-tasks ───────────────────────────────────────────────────────────────
  * A sub-task is a whole task (its own people, status, comments) that names its
@@ -59,6 +62,7 @@ import auditLogger from './auditLogger.js';
 import staffTaskRepository from '../repositories/staffTaskRepository.js';
 import counterRepository from '../repositories/counterRepository.js';
 import userRepository from '../repositories/userRepository.js';
+import staffTaskInboxRepository from '../repositories/staffTaskInboxRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import { sendToUsers } from './pushService.js';
 import { orderNumber } from './invoiceService.js';
@@ -438,17 +442,54 @@ async function notifyPeople(t, actor, ids, message) {
   }
 }
 
-/** "You have a new task" to the people just given it. */
-const notifyAssigned = (t, actor, ids) => notifyPeople(t, actor, ids, {
-  title: `New task from ${actor.name || 'your team'}`,
-  body: `T-${t.number} · ${t.title}${t.dueOn ? ` · due ${t.dueOn}` : ''}`,
-});
+/**
+ * Inbox lines about task `t` for `ids` — never `actor`, each person once. `key`
+ * names the event, so writing the same one again (a retry) adds nothing. Best
+ * effort like the pop-ups: the change is already saved, and this never throws.
+ */
+async function toInbox(t, actor, ids, { kind, key, text = '' }) {
+  try {
+    const wanted = [...new Set(ids.map(idOf))].filter((x) => x && !same(x, actor._id));
+    await staffTaskInboxRepository.insertMany(wanted.map((user) => ({
+      user, key, kind, task: t._id, number: t.number, title: t.title,
+      by: actor._id, byName: actor.name || '', text: String(text).slice(0, 200),
+    })));
+  } catch (err) {
+    console.error('[StaffTask] inbox write failed (ignored):', err.message);
+  }
+}
+
+/** The event key of a change: the rev it made is unique to it. */
+const revKey = (t, what) => `t:${idOf(t._id)}:r${t.rev}:${what}`;
+const createdKey = (t) => `t:${idOf(t._id)}:created`;
+const dueText = (t) => (t.dueOn ? `due ${t.dueOn}` : '');
+
+/** "You have a new task" to the people just given it: their Inbox, then a pop-up. */
+async function notifyAssigned(t, actor, ids, key = revKey(t, 'assigned')) {
+  await toInbox(t, actor, ids, { kind: 'assigned', key, text: dueText(t) });
+  void notifyPeople(t, actor, ids, {
+    title: `New task from ${actor.name || 'your team'}`,
+    body: `T-${t.number} · ${t.title}${t.dueOn ? ` · due ${t.dueOn}` : ''}`,
+  });
+}
 
 /** "Moved to Done" to everyone on the task, apart from `skip` (just given it: they hear "new task"). */
-const notifyStatus = (t, actor, skip = []) => notifyPeople(t, actor, audienceOf(t).filter((x) => !skip.some((y) => same(x, y))), {
-  title: `${actor.name || 'Someone'} moved T-${t.number} to ${STATUS_LABELS[t.status]}`,
-  body: t.title,
-});
+async function notifyStatus(t, actor, skip = []) {
+  const ids = audienceOf(t).filter((x) => !skip.some((y) => same(x, y)));
+  await toInbox(t, actor, ids, { kind: 'status', key: revKey(t, 'status'), text: STATUS_LABELS[t.status] });
+  void notifyPeople(t, actor, ids, {
+    title: `${actor.name || 'Someone'} moved T-${t.number} to ${STATUS_LABELS[t.status]}`,
+    body: t.title,
+  });
+}
+
+/** "A sub-task was added" to everyone on the parent — Inbox only; its own people heard "new task". */
+const noteSubtaskInInbox = (parent, actor, child) => toInbox(
+  parent,
+  actor,
+  audienceOf(parent).filter((x) => !peopleOf(child).some((p) => same(p.user, x))),
+  { kind: 'subtask', key: `t:${idOf(parent._id)}:sub:${idOf(child._id)}`, text: `T-${child.number} · ${child.title}` },
+);
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -758,20 +799,27 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   }
 
   for (const { doc, created } of results) {
-    if (!created) continue;
+    if (!created) {
+      // A retry of a create that saved but may not have reached the Inbox: write
+      // it again (keyed, so nothing doubles) — unless the task has changed since,
+      // when its people are no longer the ones it was made for. No second pop-up.
+      if (doc.rev === 1) await toInbox(doc, actor, peopleOf(doc).map((p) => p.user), { kind: 'assigned', key: createdKey(doc), text: dueText(doc) });
+      continue;
+    }
     auditLogger.logAction(req, 'CREATE', 'StaffTask', doc._id, {
       number: doc.number,
       assignees: peopleOf(doc).map((p) => idOf(p.user)),
       teams: teamsOf(doc),
       ...(group && { group: idOf(group), people: people.length }),
     });
-    void notifyAssigned(doc, actor, peopleOf(doc).map((p) => p.user));
+    await notifyAssigned(doc, actor, peopleOf(doc).map((p) => p.user), createdKey(doc));
   }
   if (parent) {
     const made = results.filter((r) => r.created).map((r) => r.doc);
     if (note) {
       for (const doc of made) await staffTaskRepository.noteHistory(parent._id, subtaskEntry(actor, 'subtask_added', doc));
     }
+    for (const { doc } of results) await noteSubtaskInInbox(parent, actor, doc);
     // Every time, even for a retry: it also finishes the count a failed first attempt left.
     await recountSubtasks(parent._id);
   }
@@ -928,8 +976,8 @@ async function applyUpdate(actor, t, input, req) {
   });
   // Only now, after the write landed: a retried request is refused above (stale
   // rev) or changes nothing, so it never sends these twice.
-  if (added.length) void notifyAssigned(next, actor, added);
-  if (set.status !== undefined) void notifyStatus(next, actor, added);
+  if (added.length) await notifyAssigned(next, actor, added);
+  if (set.status !== undefined) await notifyStatus(next, actor, added);
   return shape(next, actor, { full: true });
 }
 
@@ -1308,13 +1356,23 @@ async function cleanMentions(actor, t, raw) {
   return { ids: ids.map((x) => new mongoose.Types.ObjectId(x)), newFollowers };
 }
 
-/** The pop-ups for a new comment. Best effort; never throws. */
+const saidIn = (c) => (c.text ? c.text.replace(/\s+/g, ' ').slice(0, 120) : 'Shared a file');
+
+/** Inbox lines for a comment: "mentioned you" to those named, "commented" to the rest. */
+async function commentToInbox(t, actor, c) {
+  const mentioned = (c.mentions || []).map(idOf);
+  const key = `c:${idOf(c._id)}`;
+  await toInbox(t, actor, mentioned, { kind: 'mention', key, text: saidIn(c) });
+  await toInbox(t, actor, audienceOf(t).filter((x) => !mentioned.includes(idOf(x))), { kind: 'comment', key, text: saidIn(c) });
+}
+
+/** The Inbox lines and pop-ups for a new comment. Best effort; never throws. */
 async function notifyComment(t, actor, c) {
+  await commentToInbox(t, actor, c);
   try {
     const mentioned = (c.mentions || []).map(idOf);
     const who = actor.name || 'Someone';
-    const said = c.text ? c.text.replace(/\s+/g, ' ').slice(0, 120) : 'Shared a file';
-    const body = `T-${t.number} · ${t.title}: ${said}`;
+    const body = `T-${t.number} · ${t.title}: ${saidIn(c)}`;
     await notifyPeople(t, actor, mentioned, { title: `${who} mentioned you`, body });
     await notifyPeople(t, actor, audienceOf(t).filter((x) => !mentioned.includes(idOf(x))), { title: `${who} commented on T-${t.number}`, body });
   } catch (err) {
@@ -1350,7 +1408,8 @@ export async function addComment(actor, id, { text, clientId: rawClientId, menti
   const clientId = cleanClientId(rawClientId);
   if (clientId) {
     const seen = await staffTaskRepository.findCommentByClientId(actor._id, clientId);
-    if (seen) return { comment: await shapeOne(seen, actor), duplicate: true };
+    // A retry: finish the Inbox lines a failed first attempt may have missed (keyed, so none double).
+    if (seen) { await commentToInbox(t, actor, seen); return { comment: await shapeOne(seen, actor), duplicate: true }; }
   }
   const body = String(text ?? '').trim();
   if (!body && !files.length) throw fail('Write a comment first.', 400);
@@ -1374,7 +1433,7 @@ export async function addComment(actor, id, { text, clientId: rawClientId, menti
     await discardTaskFiles(stored);
     if (err?.code === 11000 && clientId) {
       const seen = await staffTaskRepository.findCommentByClientId(actor._id, clientId);
-      if (seen) return { comment: await shapeOne(seen, actor), duplicate: true };
+      if (seen) { await commentToInbox(t, actor, seen); return { comment: await shapeOne(seen, actor), duplicate: true }; }
     }
     throw err;
   }

@@ -26,6 +26,7 @@ const dbHandler = await import('./db-handler.js');
 const { default: User } = await import('../models/User.js');
 const { default: StaffTask } = await import('../models/StaffTask.js');
 const { default: StaffTaskComment } = await import('../models/StaffTaskComment.js');
+const { default: StaffTaskInbox } = await import('../models/StaffTaskInbox.js');
 
 const BASE = '/api/v1';
 const PW = 'SecurePass123!';
@@ -56,7 +57,7 @@ const makeUser = async (name, role, staff) => {
 };
 
 describe('Staff task routes', () => {
-  beforeAll(async () => { await dbHandler.connect(); await StaffTask.init(); await StaffTaskComment.init(); });
+  beforeAll(async () => { await dbHandler.connect(); await StaffTask.init(); await StaffTaskComment.init(); await StaffTaskInbox.init(); });
   afterAll(async () => {
     await dbHandler.closeDatabase();
     if (cronService?.shutdown) cronService.shutdown();
@@ -97,6 +98,32 @@ describe('Staff task routes', () => {
     const comments = await head.session.get(`/staff/tasks/${id}/comments`);
     expect(comments.body.comments.map((c) => c.text)).toEqual(['Bosch says Friday']);
     expect((await head.session.get(`/staff/tasks/${id}`)).body.task.commentCount).toBe(1);
+  });
+
+  it('the Inbox: the head gives a task, the member reads it, marks it, and cannot touch anyone else\'s', async () => {
+    const created = await head.session.post('/staff/tasks', { title: 'Ring the courier', assigneeId: String(member.user._id) });
+    expect(created.status).toBe(201);
+
+    const list = await member.session.get('/staff/tasks/inbox');
+    expect(list.status).toBe(200);
+    expect(list.body).toMatchObject({ unread: 1, nextCursor: null });
+    const [item] = list.body.items;
+    expect(item).toMatchObject({ kind: 'assigned', read: false, canOpen: true, task: { id: created.body.task.id, title: 'Ring the courier' }, by: { name: 'Priya' } });
+    expect((await head.session.get('/staff/tasks/inbox')).body.items).toEqual([]);
+
+    expect((await member.session.get('/staff/tasks/inbox?state=old')).status).toBe(400);
+    expect((await member.session.get('/staff/tasks/inbox?cursor=nope')).status).toBe(400);
+    expect((await member.session.patch(`/staff/tasks/inbox/${item.id}`, { state: 'gone' })).status).toBe(400);
+    expect((await head.session.patch(`/staff/tasks/inbox/${item.id}`, { state: 'read' })).status).toBe(404);
+    expect((await member.session.post('/staff/tasks/inbox/read-all', {})).status).toBe(400);
+
+    const read = await member.session.patch(`/staff/tasks/inbox/${item.id}`, { state: 'read' });
+    expect(read.status).toBe(200);
+    expect(read.body).toMatchObject({ state: 'read', unread: 0 });
+    await member.session.patch(`/staff/tasks/inbox/${item.id}`, { state: 'unread' });
+    const all = await member.session.post('/staff/tasks/inbox/read-all', { upTo: item.id });
+    expect(all.body).toMatchObject({ marked: 1, unread: 0 });
+    expect((await member.session.get('/staff/tasks/inbox?state=unread')).body.items).toEqual([]);
   });
 
   it('refuses what the rules refuse, with the right codes', async () => {
