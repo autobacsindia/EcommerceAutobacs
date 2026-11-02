@@ -87,6 +87,7 @@
     "fix-cart-indexes": "node scripts/fix-cart-indexes.js",
     "fix-cart-indexes-v2": "node scripts/fix-cart-indexes-v2.js",
     "audit-index-drift": "node scripts/audit-index-drift.js",
+    "backfill-task-assignees": "node scripts/backfill-task-assignees.js",
     "audit-es-mapping": "node scripts/audit-es-mapping.js",
     "create-atlas-search-index": "node scripts/create-atlas-search-index.js",
     "audit-atlas-search-index": "node scripts/audit-atlas-search-index.js",

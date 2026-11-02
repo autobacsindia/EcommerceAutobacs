@@ -223,6 +223,15 @@ async function loadAssignees(actor, rawIds) {
   return people;
 }
 
+/**
+ * The several-people fields for `people` (phase 4), written beside `assignee` /
+ * `team` until every read uses them: who is doing it, and each of their teams once.
+ */
+export const peopleFields = (people) => ({
+  assignees: people.map((p) => ({ user: p._id, name: p.name || '' })),
+  teams: [...new Set(people.map(teamOf))],
+});
+
 async function loadOrderRef(raw) {
   if (raw == null || raw === '') return null;
   if (!mongoose.isValidObjectId(raw)) throw fail('That order could not be found.', 400);
@@ -607,6 +616,7 @@ export async function createTask(actor, input = {}, req) {
         assignee: person._id,
         assigneeName: person.name || '',
         team: teamOf(person),
+        ...peopleFields([person]),
         createdBy: actor._id,
         createdByName: actor.name || '',
         order,
@@ -722,7 +732,9 @@ async function applyUpdate(actor, t, input, req) {
   if (has('assigneeId') && !same(input.assigneeId, t.assignee)) {
     if (!canReassign(actor, t)) throw fail('Only whoever gave this task, the team head or the admin can give it to someone else.', 403);
     newAssignee = await loadAssignee(actor, input.assigneeId);
-    Object.assign(set, { assignee: newAssignee._id, assigneeName: newAssignee.name || '', team: teamOf(newAssignee) });
+    Object.assign(set, {
+      assignee: newAssignee._id, assigneeName: newAssignee.name || '', team: teamOf(newAssignee), ...peopleFields([newAssignee]),
+    });
     note('assignee', t.assigneeName, newAssignee.name || '');
   }
 
