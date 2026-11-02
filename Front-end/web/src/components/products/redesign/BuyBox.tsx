@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { ShoppingBag, Zap, Heart, Shield, Truck, RotateCcw, CreditCard, Star } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { StockStatus } from '@/lib/stock';
@@ -13,6 +14,7 @@ import CampaignRateBadge from '@/components/campaign/CampaignRateBadge';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
 import { TRUST_BADGES, type TrustIcon } from '@/lib/storePolicies';
+import { UNBOXING_VIDEO_NOTE } from '@/lib/constants';
 import Eyebrow from '@/components/ui/Eyebrow';
 import SaleCountdown, { useSaleCountdown } from '@/components/products/SaleCountdown';
 import EmiOptions from '@/components/products/redesign/EmiOptions';
@@ -406,6 +408,15 @@ export default function BuyBox({
           );
         })}
       </div>
+
+      {/* A return condition, so it is shown BEFORE purchase (Consumer Protection (E-Commerce) Rules, 2020). */}
+      <p className="mt-3 flex items-start gap-2 text-[13px] text-ink-muted">
+        <RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-gold" aria-hidden />
+        <span>
+          {UNBOXING_VIDEO_NOTE} Record one while opening the parcel.{' '}
+          <Link href="/returns" className="text-gold underline-offset-4 hover:underline">Return Policy</Link>
+        </span>
+      </p>
 
       {/*
         Reviews are asked for HERE, where the customer has just decided — not

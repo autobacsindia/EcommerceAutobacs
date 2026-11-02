@@ -10,6 +10,7 @@
  */
 
 import AppError from '../utils/AppError.js';
+import { VIDEO_MAX_MB } from '../config/returnPolicy.js';
 import {
   RETURNS_FOLDER_BASE,
   generateReturnUploadSignature,
@@ -30,7 +31,7 @@ import {
 } from './storage/returnsUploadTargets.js';
 
 export const MB = 1024 * 1024;
-export const VIDEO_MAX_BYTES = 60 * MB;
+export const VIDEO_MAX_BYTES = VIDEO_MAX_MB * MB;
 export const PROOF_MAX_BYTES = 15 * MB;
 export const PHOTO_MAX_BYTES = 10 * MB;
 export const MAX_PHOTOS = 5;
@@ -125,7 +126,7 @@ const PHOTO_SLOT_KEYS = RETURN_SLOTS.filter((sl) => sl.key.startsWith('photo')).
 
 /** A verified video reference, or null when none was given. */
 export const verifyVideo = (raw, label = 'Video') => validateAsset(raw, {
-  label, allowedResourceTypes: ['video'], maxBytes: VIDEO_MAX_BYTES, formats: VIDEO_FORMATS, capLabel: '60MB',
+  label, allowedResourceTypes: ['video'], maxBytes: VIDEO_MAX_BYTES, formats: VIDEO_FORMATS, capLabel: `${VIDEO_MAX_MB}MB`,
   slotKeys: ['video'],
 });
 

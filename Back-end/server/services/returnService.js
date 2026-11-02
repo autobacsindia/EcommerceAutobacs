@@ -61,11 +61,12 @@ import {
   claimedFaultFor,
   effectiveFault,
   windowDaysFor,
-  videoRequiredFor,
+  VIDEO_MAX_MB,
 } from '../config/returnPolicy.js';
 import { refundableForLines, matchOrderLine, returnRefundBreakdown, RefundBreakdownError } from './refundMathService.js';
 import { previewRefund, initiateRefund, money } from './returnRefundService.js';
 import { verifyVideo, verifyProof, verifyPhotos, uploadTargets, withSignedEvidence } from './returnEvidence.js';
+import { verifyVideoLink } from '../utils/returnVideoLink.js';
 import { supportsPartialRefund, describeEmiPlan } from '../utils/paymentMethodDetails.js';
 import { deliveredAtForItem } from '../utils/orderFulfilment.js';
 import { coversEveryDeliveredLine, deliveredQuantityByProduct } from '../utils/orderReturns.js';
@@ -317,16 +318,22 @@ async function assertEmiAllowsReturn(order, lines) {
   }
 }
 
-/** The evidence rule (rule 5): at least one photo always; a video for transit damage or a line over ₹10,000. */
-async function verifyEvidence({ video, images, proofOfPurchase }, lines) {
+/**
+ * The evidence rule: at least one photo, and the unboxing video — uploaded, or a
+ * Google Drive / YouTube link when it is too big — on EVERY return (owner, 2026-11-02;
+ * see config/returnPolicy.js). Checked only when a return is raised, so requests made
+ * under the older rule keep moving.
+ */
+async function verifyEvidence({ video, videoLink, images, proofOfPurchase }) {
+  const linkUrl = verifyVideoLink(videoLink);
   const [videoAsset, photoAssets, proofAsset] = await Promise.all([
     verifyVideo(video), verifyPhotos(images), verifyProof(proofOfPurchase),
   ]);
   if (photoAssets.length === 0) throw fail('Add at least one photo the customer sent.', 400);
-  if (!videoAsset && lines.some(videoRequiredFor)) {
-    throw fail('A video is needed for transit damage, and for any item worth more than ₹10,000.', 400);
+  if (!videoAsset && !linkUrl) {
+    throw fail(`The unboxing video is required. Upload it (up to ${VIDEO_MAX_MB}MB) or paste a Google Drive or YouTube link.`, 400);
   }
-  return { videoAsset, photoAssets, proofAsset };
+  return { videoAsset, videoLink: videoAsset ? null : linkUrl, photoAssets, proofAsset };
 }
 
 /**
@@ -346,7 +353,7 @@ export async function raiseReturn(actor, input = {}, req = null) {
   const products = await returnProducts(order);
   const lines = await buildLines(order, input.items, { allowStaffReasons: true, unusedDeclared: input.unusedDeclared === true, products });
   await assertEmiAllowsReturn(order, lines);
-  const { videoAsset, photoAssets, proofAsset } = await verifyEvidence(input, lines);
+  const { videoAsset, videoLink, photoAssets, proofAsset } = await verifyEvidence(input);
 
   const { grossRupees, netRupees, discountShareRupees } = refundableForLines(order, lines);
   let rr;
@@ -363,6 +370,7 @@ export async function raiseReturn(actor, input = {}, req = null) {
       status: 'pending',
       problemDescription: description,
       video: videoAsset,
+      videoLink,
       proofOfPurchase: proofAsset,
       images: photoAssets,
       refund: { productValue: netRupees, listValue: grossRupees, discountShare: discountShareRupees, finalAmount: netRupees, status: 'pending' },
@@ -388,7 +396,7 @@ export async function raiseReturn(actor, input = {}, req = null) {
 /**
  * The customer raises a return on the website — the SAME rules as a staff-raised one
  * (buildLines, the EMI check, the evidence rule), minus the staff-only reason. The
- * customer's own photo is mandatory; a video for transit damage or a line over ₹10,000;
+ * customer's own photo and the unboxing video (or a Drive/YouTube link) are mandatory;
  * proof of purchase is optional (we hold the order). Their seller — or, for a website
  * order, the sales heads — is told to call them.
  */
@@ -403,7 +411,7 @@ export async function createCustomerReturn(user, input = {}, req = null) {
     itemId: i.itemId, productId: i.productId, variantId: i.variantId, quantity: i.quantity, reason: i.reason,
   })), { allowStaffReasons: false, unusedDeclared: input.unusedDeclared === true, products });
   await assertEmiAllowsReturn(order, lines);
-  const { videoAsset, photoAssets, proofAsset } = await verifyEvidence({ ...input, images: input.images }, lines);
+  const { videoAsset, videoLink, photoAssets, proofAsset } = await verifyEvidence(input);
 
   const { grossRupees, netRupees, discountShareRupees } = refundableForLines(order, lines);
   let rr;
@@ -419,6 +427,7 @@ export async function createCustomerReturn(user, input = {}, req = null) {
       status: 'pending',
       problemDescription: description,
       video: videoAsset,
+      videoLink,
       proofOfPurchase: proofAsset,
       images: photoAssets,
       refund: { productValue: netRupees, listValue: grossRupees, discountShare: discountShareRupees, finalAmount: netRupees, status: 'pending' },
@@ -1535,7 +1544,7 @@ export async function getReturn(actor, id) {
       reasonLabel: RETURN_REASON_LABELS[i.reason] || i.reason,
       fault: { claimed: i.fault?.claimed || claimedFaultFor(i.reason), confirmed: i.fault?.confirmed || null, note: i.fault?.note || null },
     })),
-    evidence: { video: signed.video, proofOfPurchase: signed.proofOfPurchase, images: signed.images },
+    evidence: { video: signed.video, videoLink: rr.videoLink || null, proofOfPurchase: signed.proofOfPurchase, images: signed.images },
     files: (rr.staffFiles || []).map((f) => ({
       id: idOf(f._id), purpose: f.purpose, claimId: f.claimId ? idOf(f.claimId) : null, name: f.name, contentType: f.contentType,
     })),

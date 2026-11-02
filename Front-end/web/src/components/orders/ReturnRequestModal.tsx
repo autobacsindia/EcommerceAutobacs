@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, CheckCircle, ChevronRight, ChevronLeft, AlertCircle, Video, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import {
-  API_ENDPOINTS, RETURN_REASONS, RETURN_VIDEO_ABOVE_RUPEES, RETURN_WINDOW_DAYS, RETURN_WINDOW_DAYS_OURS,
+  API_ENDPOINTS, RETURN_REASONS, RETURN_VIDEO_MAX_MB, RETURN_WINDOW_DAYS, RETURN_WINDOW_DAYS_OURS,
+  UNBOXING_VIDEO_RULE, isAllowedVideoLink,
 } from '@/lib/constants';
 import {
   getReturnUploadSignature,
@@ -68,7 +69,7 @@ interface ReturnRequestModalProps {
 }
 
 const MB = 1024 * 1024;
-const VIDEO_MAX = 60 * MB;
+const VIDEO_MAX = RETURN_VIDEO_MAX_MB * MB;
 const PROOF_MAX = 15 * MB;
 const PHOTO_MAX = 10 * MB;
 const DAY_MS = 1000 * 60 * 60 * 24;
@@ -82,6 +83,8 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
   const [returnReason, setReturnReason] = useState('');
   const [description, setDescription] = useState('');
   const [video, setVideo] = useState<Uploaded | null>(null);
+  // A Google Drive / YouTube link, for a video too big to upload.
+  const [videoLink, setVideoLink] = useState('');
   const [proof, setProof] = useState<Uploaded | null>(null);
   const [photos, setPhotos] = useState<Uploaded[]>([]);
   const [uploading, setUploading] = useState<{ slot: string; pct: number } | null>(null);
@@ -140,9 +143,9 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
     return at ? (now - new Date(at).getTime()) / DAY_MS > RETURN_WINDOW_DAYS : false;
   });
   const isCustomerReason = reasonFault(returnReason) === 'customer';
-  // Mirrors config/returnPolicy.js videoRequiredFor: transit damage, or a line worth more than ₹10,000.
-  const needsVideo = returnReason === 'transit_damage'
-    || selectedLines.some(({ sel, item }) => (item?.price || 0) * sel.quantity > RETURN_VIDEO_ABOVE_RUPEES);
+  // Every return needs the unboxing video (config/returnPolicy.js): an upload, or a link when it is too big.
+  const trimmedLink = videoLink.trim();
+  const hasVideo = !!video || !!trimmedLink;
   const estimateKey = JSON.stringify([returnReason, selectedLines.map(({ id, sel }) => [id, sel.quantity])]);
 
   /*
@@ -230,7 +233,11 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
     file: File, slot: 'video' | 'proof' | 'photo', resourceType: ReturnResourceType, maxBytes: number,
   ) => {
     if (file.size > maxBytes) {
-      setError(`${slot === 'video' ? 'Video' : slot === 'proof' ? 'Proof of purchase' : 'Photo'} is too large (max ${Math.round(maxBytes / MB)}MB).`);
+      if (slot === 'video') {
+        setError(`This video is over ${RETURN_VIDEO_MAX_MB}MB. Upload it to Google Drive or YouTube and paste the link below.`);
+        return;
+      }
+      setError(`${slot === 'proof' ? 'Proof of purchase' : 'Photo'} is too large (max ${Math.round(maxBytes / MB)}MB).`);
       return;
     }
     setError(null);
@@ -292,7 +299,8 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
         break;
       case 3:
         if (photos.length === 0) return 'Add at least one photo of the item.';
-        if (needsVideo && !video) return 'A video is needed for transit damage, and for any item worth more than ₹10,000.';
+        if (!hasVideo) return `The unboxing video is required. Upload it (up to ${RETURN_VIDEO_MAX_MB}MB) or paste a Google Drive or YouTube link.`;
+        if (!video && !isAllowedVideoLink(trimmedLink)) return 'Paste a Google Drive or YouTube link starting with https://.';
         break;
       case 4: if (!policyAccepted) return 'Please accept the return policy to continue.'; break;
     }
@@ -327,6 +335,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
           the server re-derives there; these two fields are the whole claim.
         */
         ...(video && { video: { publicId: video.publicId, provider: video.provider, resourceType: video.resourceType } }),
+        ...(!video && trimmedLink && { videoLink: trimmedLink }),
         ...(proof && { proofOfPurchase: { publicId: proof.publicId, provider: proof.provider, resourceType: proof.resourceType } }),
         images: photos.map((p) => ({ publicId: p.publicId, provider: p.provider, resourceType: p.resourceType })),
       };
@@ -353,7 +362,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
             Your return request for order #{orderNumber} has been received. We usually check it within <strong>one working day</strong> and will email you the decision.
           </p>
           <div className="bg-gold/10 border border-gold/40 rounded-lg p-4 mb-6 text-sm text-gold space-y-2">
-            <p>1. We check your photos{video ? ' and video' : ''}.</p>
+            <p>1. We check your unboxing video and photos.</p>
             <p>2. If approved, <strong>we arrange the return pickup</strong>.</p>
             <p>3. After the item reaches us and passes inspection, your refund is issued to your original payment method.</p>
           </div>
@@ -511,13 +520,11 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
         {currentStep === 3 && (
           <div className="space-y-6">
             <div>
-              <h4 className="font-bold text-lg mb-1">Photos{needsVideo ? ' and a video' : ''}</h4>
+              <h4 className="font-bold text-lg mb-1">Unboxing video and photos</h4>
               <p className="text-sm text-ink-muted">
-                At least one photo of the item is <strong>required</strong>.
-                {needsVideo
-                  ? ' A video is also required — for transit damage, and for any item worth more than ₹10,000.'
-                  : ' A video helps us decide faster, but is optional here.'}
+                The <strong>unboxing video</strong> and at least one photo are <strong>required</strong>.
               </p>
+              <p className="text-xs text-ink-muted mt-2">{UNBOXING_VIDEO_RULE}</p>
             </div>
 
             <div>
@@ -537,10 +544,22 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
               )}
             </div>
 
-            <UploadRow
-              icon={<Video className="h-5 w-5" />} label={needsVideo ? 'Video' : 'Video (optional)'} required={needsVideo} uploaded={video} accept="video/*"
-              busy={uploading?.slot === 'video' ? uploading.pct : null} hint="Show the item and the problem; for transit damage, the parcel as it arrived. Max 60MB."
-              onFile={(f) => handleUpload(f, 'video', 'video', VIDEO_MAX)} onRemove={() => setVideo(null)} />
+            <div>
+              <UploadRow
+                icon={<Video className="h-5 w-5" />} label="Unboxing video" required uploaded={video} accept="video/*"
+                busy={uploading?.slot === 'video' ? uploading.pct : null} hint={`MP4, MOV or WEBM, up to ${RETURN_VIDEO_MAX_MB}MB.`}
+                onFile={(f) => handleUpload(f, 'video', 'video', VIDEO_MAX)} onRemove={() => setVideo(null)} />
+              {!video && (
+                <label className="block mt-3 text-sm">
+                  <span className="text-ink-muted">Video too big? Paste a Google Drive or YouTube link instead (set it to &quot;Anyone with the link&quot;).</span>
+                  <input
+                    type="url" inputMode="url" value={videoLink} maxLength={500} onChange={(e) => setVideoLink(e.target.value)}
+                    placeholder="https://drive.google.com/…"
+                    className="mt-1 w-full rounded border border-hairline bg-obsidian-deep px-3 py-2 text-sm"
+                  />
+                </label>
+              )}
+            </div>
 
             <UploadRow
               icon={<FileText className="h-5 w-5" />} label="Invoice (optional)" uploaded={proof} accept="image/*,application/pdf"
@@ -564,7 +583,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
                 return <div key={id} className="text-ink/80">{(it?.product?.name || it?.name || 'Item')} × {s.quantity}</div>;
               })}
               <div className="pt-2 border-t border-hairline flex gap-4 text-ink-muted text-xs">
-                <span>{photos.length} photo(s)</span>{video && <span>Video ✓</span>}{proof && <span>Invoice ✓</span>}
+                <span>{photos.length} photo(s)</span>{video ? <span>Video ✓</span> : trimmedLink && <span>Video link ✓</span>}{proof && <span>Invoice ✓</span>}
               </div>
             </div>
             <EstimateBox estimate={shownEstimate} />

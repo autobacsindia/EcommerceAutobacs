@@ -8,7 +8,8 @@ import {
   claimedFaultFor,
   effectiveFault,
   windowDaysFor,
-  videoRequiredFor,
+  VIDEO_MAX_MB,
+  VIDEO_LINK_HOSTS,
   LONGEST_RETURN_WINDOW_DAYS,
   RETURN_WINDOW_DAYS,
 } from '../../../config/returnPolicy.js';
@@ -48,10 +49,10 @@ describe('return policy — fault rules (2026-10-30)', () => {
     expect(LONGEST_RETURN_WINDOW_DAYS).toBe(7);
   });
 
-  it('requires a video for transit damage and for lines above ₹10,000', () => {
-    expect(videoRequiredFor({ reason: 'transit_damage', unitPrice: 100, quantity: 1 })).toBe(true);
-    expect(videoRequiredFor({ reason: 'wrong_item', unitPrice: 10000, quantity: 1 })).toBe(false);
-    expect(videoRequiredFor({ reason: 'wrong_item', unitPrice: 10000.01, quantity: 1 })).toBe(true);
-    expect(videoRequiredFor({ reason: 'changed_mind', unitPrice: 6000, quantity: 2 })).toBe(true);
+  it('caps the unboxing video upload at 100 MB and allows only Drive / Photos / YouTube links', () => {
+    expect(VIDEO_MAX_MB).toBe(100);
+    expect([...VIDEO_LINK_HOSTS].sort()).toEqual([
+      'drive.google.com', 'm.youtube.com', 'photos.app.goo.gl', 'photos.google.com', 'www.youtube.com', 'youtu.be', 'youtube.com',
+    ]);
   });
 });

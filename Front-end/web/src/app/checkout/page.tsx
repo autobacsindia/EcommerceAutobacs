@@ -13,7 +13,7 @@ import {
 } from '@/lib/analytics';
 import { trackGoogleBeginCheckout } from '@/lib/googleAdsEvents';
 import orderService from '@/lib/services/orderService';
-import { API_ENDPOINTS, PAYMENT_METHODS } from '@/lib/constants';
+import { API_ENDPOINTS, PAYMENT_METHODS, UNBOXING_VIDEO_NOTE } from '@/lib/constants';
 import {
   PAYMENT_CHOICES,
   PAYMENT_CHOICE_LABELS,
@@ -1220,6 +1220,14 @@ function CheckoutPageContent() {
                   </>
                 )}{' '}
                 <span className="text-ink-muted/70">(terms version {CURRENT_TERMS_VERSION})</span>
+              </p>
+              {/* A return condition, shown before the buyer pays. */}
+              <p className="text-xs text-ink-muted font-display mt-2 pl-7">
+                {UNBOXING_VIDEO_NOTE} Please record one continuous video while opening your parcel. See our{' '}
+                <Link href={LEGAL_LINKS.returns.href} target="_blank" className="text-gold hover:text-ink transition-colors underline">
+                  {LEGAL_LINKS.returns.label}
+                </Link>
+                .
               </p>
             </div>
 

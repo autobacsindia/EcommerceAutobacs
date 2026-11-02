@@ -1,7 +1,7 @@
 'use client';
 
 import StorePageHeader from '@/components/store/StorePageHeader';
-import { RETURN_WINDOW_DAYS, RETURN_WINDOW_DAYS_OURS } from '@/lib/constants';
+import { RETURN_WINDOW_DAYS, RETURN_WINDOW_DAYS_OURS, RETURN_VIDEO_MAX_MB, UNBOXING_VIDEO_RULE } from '@/lib/constants';
 
 export default function ReturnsPage() {
   return (
@@ -12,6 +12,15 @@ export default function ReturnsPage() {
       <section className="py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-obsidian border border-hairline rounded-lg p-8 space-y-10">
+
+            {/* The unboxing video — a condition of every return, so it leads the page. */}
+            <div id="unboxing-video" className="rounded-lg border border-gold/40 bg-gold/10 p-5">
+              <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-lg mb-2">Unboxing video required</h2>
+              <p className="text-ink/80 font-display leading-relaxed">{UNBOXING_VIDEO_RULE}</p>
+              <p className="text-ink/60 font-display text-sm leading-relaxed mt-2">
+                Upload it with your return request (MP4, MOV or WEBM, up to {RETURN_VIDEO_MAX_MB}&nbsp;MB), or share a Google Drive or YouTube link if it is bigger.
+              </p>
+            </div>
 
             {/* 1. Who pays */}
             <div>
@@ -78,8 +87,8 @@ export default function ReturnsPage() {
               <h2 className="font-display font-bold text-ink tracking-[-0.01em] text-xl mb-4">2. How a return works</h2>
               <ol className="space-y-3">
                 {[
-                  { step: '1', label: 'Raise it', desc: 'From My Orders on the website, or call or WhatsApp us and our team raises it for you. Add at least one photo of the problem; a video is needed for transit damage and for any item over ₹10,000.' },
-                  { step: '2', label: 'We check your photos', desc: 'Usually within one working day. We tell you by email whether it is approved, and why if it is not.' },
+                  { step: '1', label: 'Raise it', desc: 'From My Orders on the website, or call or WhatsApp us and our team raises it for you. Add your unboxing video and at least one photo of the problem.' },
+                  { step: '2', label: 'We check your video and photos', desc: 'Usually within one working day. We tell you by email whether it is approved, and why if it is not.' },
                   { step: '3', label: 'Pickup', desc: 'We arrange the pickup (or you can drop it at our store). If the courier cannot collect it after two attempts, the request is cancelled and we email you.' },
                   { step: '4', label: 'Inspection', desc: 'We check the item. If it was damaged after delivery, the return is declined and the item is sent back at your cost, or held for 30 days and then disposed of.' },
                   { step: '5', label: 'Refund', desc: 'Paid to your original payment method (card, UPI, net banking) — it usually reaches you in 5–9 business days. Orders paid by bank transfer or cash are refunded by bank transfer.' },

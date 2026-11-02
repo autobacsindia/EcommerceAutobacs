@@ -28,6 +28,17 @@ describe('orderStatusEmail', () => {
     }
   );
 
+  test('the shipped email (only) asks the customer to record an unboxing video', () => {
+    const shipped = orderStatusEmail({ order: baseOrder(), status: 'shipped', company });
+    expect(shipped.text).toMatch(/record one continuous, unedited video while opening your parcel/);
+    expect(shipped.html).toContain('record an unboxing video');
+    for (const status of ['delivered', 'cancelled', 'refunded', 'returned']) {
+      const other = orderStatusEmail({ order: baseOrder(), status, company });
+      expect(other.text).not.toMatch(/unboxing|unedited video/);
+      expect(other.html).not.toContain('unboxing video');
+    }
+  });
+
   test('returned email uses tailored copy, not the generic status fallback', () => {
     const { subject, html } = orderStatusEmail({ order: baseOrder(), status: 'returned', company });
     expect(subject).toContain('Return completed');

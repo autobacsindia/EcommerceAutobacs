@@ -357,7 +357,10 @@ export default function ReturnPanel({ id, showRefund = false }: { id: string; sh
       </div>
 
       <div className="flex flex-wrap gap-3 text-xs">
-        {r.evidence.video?.url && <a className="flex items-center gap-1 text-blue-700 underline" href={r.evidence.video.url} target="_blank" rel="noopener noreferrer"><Video className="h-3.5 w-3.5" /> Video</a>}
+        {r.evidence.video?.url && <a className="flex items-center gap-1 text-blue-700 underline" href={r.evidence.video.url} target="_blank" rel="noopener noreferrer"><Video className="h-3.5 w-3.5" /> Unboxing video</a>}
+        {/* A Drive/YouTube link (server-checked: https, allow-listed host). Open it before approving — it may be private or deleted. */}
+        {!r.evidence.video?.url && r.evidence.videoLink && <a className="flex items-center gap-1 text-blue-700 underline" href={r.evidence.videoLink} target="_blank" rel="noopener noreferrer nofollow"><Video className="h-3.5 w-3.5" /> Unboxing video (link)</a>}
+        {!r.evidence.video?.url && !r.evidence.videoLink && r.origin !== 'admin_offline' && <span className="flex items-center gap-1 text-gray-500"><Video className="h-3.5 w-3.5" /> No unboxing video</span>}
         {r.evidence.proofOfPurchase?.url && <a className="flex items-center gap-1 text-blue-700 underline" href={r.evidence.proofOfPurchase.url} target="_blank" rel="noopener noreferrer"><FileText className="h-3.5 w-3.5" /> Proof of purchase</a>}
         {r.evidence.images.map((img, i) => <a key={img.url} className="text-blue-700 underline" href={img.url} target="_blank" rel="noopener noreferrer">Customer photo {i + 1}</a>)}
         {r.files.map((f) => <a key={f.id} className="text-blue-700 underline" href={fileUrl(f.id)} target="_blank" rel="noopener noreferrer">{f.purpose.replace(/_/g, ' ')}: {f.name || 'file'}</a>)}
