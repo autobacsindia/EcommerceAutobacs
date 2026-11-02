@@ -9,7 +9,7 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'waiting' | 'done';
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskBucket = 'open' | 'done' | 'archived';
-export type TaskView = 'mine' | 'created' | 'team';
+export type TaskView = 'mine' | 'following' | 'created' | 'team';
 export type TaskDue = 'late' | 'overdue' | 'today' | 'week';
 /** How a list is ordered (server-side, keyset-paged). Open tasks only; done and archived keep "most recently finished first". */
 export type TaskSort = 'due' | 'newest' | 'oldest' | 'updated';
@@ -51,12 +51,19 @@ export type Task = {
   tags: string[];
   overdue: boolean;
   dueToday: boolean;
+  /** The first person doing it; `assignees` is everyone. */
   assignee: { id: string; name: string };
+  /** Everyone doing it: one shared task, one status. */
+  assignees: Person[];
+  /** People who see it and hear about it without doing it. */
+  followers: Person[];
+  /** The viewer follows it. */
+  following: boolean;
   team: string | null;
   teamLabel: string;
   createdBy: { id: string; name: string };
   order: { id: string; code: string } | null;
-  /** Set when one task went to several people: each has their own copy. */
+  /** Set when the giver chose "own copy each": each person has their own copy. */
   group: { id: string; size: number } | null;
   /** How many checklist steps are ticked, of how many. */
   checklist: { done: number; total: number };
@@ -73,7 +80,11 @@ export type Task = {
   updatedAt: string;
   rev: number;
   /** `status` also allows ticking steps; `checklist` is adding, renaming and removing them. */
-  can: { edit: boolean; status: boolean; reassign: boolean; archive: boolean; restore: boolean; comment: boolean; checklist: boolean; files: boolean };
+  /** `follow`: follow or stop following it yourself; `followers`: choose who else follows it. */
+  can: {
+    edit: boolean; status: boolean; reassign: boolean; archive: boolean; restore: boolean; comment: boolean; checklist: boolean; files: boolean;
+    follow: boolean; followers: boolean;
+  };
   history?: { at: string; by: string; action: string; from: string; to: string }[];
   /** The task page only: the other people's copies the viewer may see. */
   siblings?: TaskSibling[];
@@ -107,6 +118,15 @@ export type TaskComment = {
   mentions: { id: string; name: string }[]; files: TaskFile[]; reactions: TaskReaction[];
 };
 export type CommentPage = { comments: TaskComment[]; nextBefore: string | null };
+
+export type Person = { id: string; name: string };
+
+/** Everyone on a task, for screens that may meet a task saved before `assignees` existed. */
+export const peopleOf = (t: Pick<Task, 'assignee' | 'assignees'>): Person[] => (t.assignees?.length ? t.assignees : [t.assignee]);
+
+/** The server's limits on people (services/staffTaskService.js). */
+export const MAX_ASSIGNEES = 30;
+export const FOLLOWERS_MAX = 50;
 
 export type Assignee = { id: string; name: string; team: string | null; teamLabel: string; isHead: boolean; me: boolean };
 

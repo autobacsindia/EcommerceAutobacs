@@ -142,9 +142,13 @@ export function TaskFiles({ task }: { task: Task }) {
 
 // ── @mentions ────────────────────────────────────────────────────────────────
 
-type Person = { id: string; name: string };
+/** `onTask: false` = not on the task yet: mentioning them makes them a follower. */
+type Person = { id: string; name: string; onTask?: boolean };
 
-/** Who may be @mentioned on this task: the people who can already see it. */
+/**
+ * Who may be @mentioned on this task: the people on it — and, for whoever gave
+ * it, a head or the admin, everyone else in the panel (the API decides).
+ */
 function useMentionable(taskId: string, enabled: boolean) {
   return useQuery({
     queryKey: [...taskKeys.one(taskId), 'mentionable'],
@@ -357,7 +361,9 @@ function CommentBox({ task }: { task: Task }) {
                 onMouseDown={(e) => { e.preventDefault(); choose(p); }}
                 className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${i === highlight ? 'bg-blue-50 text-blue-800' : 'text-gray-800 hover:bg-gray-50'}`}
               >
-                <Avatar name={p.name} id={p.id} size="sm" /> {p.name}
+                <Avatar name={p.name} id={p.id} size="sm" />
+                <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                {p.onTask === false && <span className="shrink-0 text-[11px] text-gray-500">will follow</span>}
               </button>
             </li>
           ))}

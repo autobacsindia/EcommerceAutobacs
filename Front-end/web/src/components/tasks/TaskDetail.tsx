@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  Archive, ArrowLeft, Check, Link2, ListChecks, MessageSquare, Pencil, RotateCcw, Send, Users, X,
+  Archive, ArrowLeft, Bell, BellOff, Check, Link2, ListChecks, MessageSquare, Pencil, RotateCcw, Send, UserPlus, Users, X,
 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
@@ -15,21 +15,25 @@ import { OrderPicker, useAssignees } from './TaskForm';
 import TagInput from './TagInput';
 import { Activity, TaskFiles, timeAgo } from './Comments';
 import { TagList } from './TaskList';
-import { Avatar, DuePill, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
+import AssigneePicker from './AssigneePicker';
+import { useFollowers } from './hooks';
+import { Avatar, AvatarStack, DuePill, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import {
-  TASK_PRIORITIES, TASK_STATUSES, formatDueDay, isConflict, isPastDay, newClientId, orderHrefFor, personLabel,
-  type ChecklistItem, type CommentPage, type Task, type TaskComment, type TaskPriority, type TaskStatus,
+  FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, formatDueDay, isConflict, isPastDay, newClientId, orderHrefFor, peopleOf,
+  type Assignee, type ChecklistItem, type CommentPage, type Person, type Task, type TaskComment, type TaskPriority, type TaskStatus,
 } from './types';
 
 type Patch = Partial<{
   title: string; description: string; priority: TaskPriority; dueOn: string | null; startOn: string | null; tags: string[];
-  orderId: string | null; status: TaskStatus; assigneeId: string; archived: boolean;
+  orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean;
 }>;
 
 const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => string> = {
   created: (h) => `created this task for ${h.to}`,
   status: (h) => `moved it from ${h.from} to ${h.to}`,
-  assignee: (h) => `gave it to ${h.to} (was ${h.from})`,
+  assignee: (h) => `changed who does it to ${h.to} (was ${h.from})`,
+  follower_added: (h) => `added ${h.to} as a follower`,
+  follower_removed: (h) => `removed ${h.from} as a follower`,
   priority: (h) => `changed priority from ${h.from} to ${h.to}`,
   due: (h) => `changed the due date from ${h.from === 'none' ? 'none' : formatDueDay(h.from)} to ${h.to === 'none' ? 'none' : formatDueDay(h.to)}`,
   start: (h) => `changed the start date from ${h.from === 'none' ? 'none' : formatDueDay(h.from)} to ${h.to === 'none' ? 'none' : formatDueDay(h.to)}`,
@@ -110,6 +114,123 @@ function Field({ label, icon, children }: { label: string; icon?: ReactNode; chi
 }
 
 const quietSelect = quietControl;
+
+const firstNames = (people: Person[]) => people.map((p) => p.name.split(' ')[0] || p.name).join(', ');
+const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
+
+/** Faces and first names: "(A)(S) Arun, Sam". */
+function PeopleLine({ people, empty }: { people: Person[]; empty: string }) {
+  if (!people.length) return <span className="text-gray-400">{empty}</span>;
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2">
+      <AvatarStack people={people} max={5} size="sm" />
+      <span className="truncate">{firstNames(people)}</span>
+    </span>
+  );
+}
+
+/**
+ * Who does it. Whoever gave it, a head or the admin opens the picker, ticks and
+ * unticks, and it saves once when the picker closes — never leaving nobody.
+ */
+function AssigneesField({ task, choices, saving, onSave }: {
+  task: Task; choices: Assignee[]; saving: boolean; onSave: (ids: string[]) => void;
+}) {
+  const now = peopleOf(task);
+  const ids = now.map((p) => p.id);
+  const [draft, setDraft] = useState<string[] | null>(null);
+  if (!task.can.reassign || !choices.length) return <PeopleLine people={now} empty="Nobody" />;
+  const shown = draft ?? ids;
+  const done = () => {
+    const next = draft;
+    setDraft(null);
+    if (!next || sameSet(next, ids)) return;
+    if (!next.length) { toast.error('Keep at least one person on the task.'); return; }
+    onSave(next);
+  };
+  const byId = new Map([...now.map((p) => [p.id, p] as const), ...choices.map((p) => [p.id, p] as const)]);
+  return (
+    <AssigneePicker
+      people={choices}
+      selected={shown}
+      onChange={setDraft}
+      onDone={done}
+      max={MAX_ASSIGNEES}
+      label="Assignees"
+      triggerLabel="Who does it"
+      disabled={saving}
+      trigger={(
+        <span className="inline-flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 hover:bg-gray-50">
+          <PeopleLine people={shown.map((id) => byId.get(id)).filter((p): p is Person => !!p)} empty="Nobody yet" />
+          <UserPlus aria-hidden className="h-3.5 w-3.5 text-gray-400" />
+        </span>
+      )}
+    />
+  );
+}
+
+/**
+ * Who follows it: they see it and hear about it, but do not do it. Anyone who
+ * sees the task may follow it; whoever gave it, a head or the admin may choose
+ * for others (saved once, when the picker closes).
+ */
+function FollowersField({ task, choices, onGone }: { task: Task; choices: Assignee[]; onGone?: () => void }) {
+  const follow = useFollowers(task.id, { onGone });
+  const [draft, setDraft] = useState<string[] | null>(null);
+  const me = choices.find((p) => p.me);
+  const doing = peopleOf(task).map((p) => p.id);
+  const ids = task.followers.map((p) => p.id);
+  const done = () => {
+    const next = draft;
+    setDraft(null);
+    if (!next || sameSet(next, ids)) return;
+    follow.mutate({ add: next.filter((x) => !ids.includes(x)), remove: ids.filter((x) => !next.includes(x)) });
+  };
+  const toggleMe = () => {
+    if (!me) return;
+    if (task.following) {
+      // Following is all that lets some people see a task: say so before they lose it.
+      const onlyFollowing = !task.can.edit && !doing.includes(me.id) && task.createdBy.id !== me.id;
+      if (onlyFollowing && !window.confirm('Stop following? You will no longer see this task.')) return;
+      follow.mutate({ remove: [me.id] });
+    } else follow.mutate({ add: [me.id] });
+  };
+  const byId = new Map([...task.followers.map((p) => [p.id, p] as const), ...choices.map((p) => [p.id, p] as const)]);
+  const shown = (draft ?? ids).map((id) => byId.get(id)).filter((p): p is Person => !!p);
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      {task.can.followers && choices.length ? (
+        <AssigneePicker
+          people={choices.filter((p) => !doing.includes(p.id))}
+          selected={draft ?? ids}
+          onChange={setDraft}
+          onDone={done}
+          max={FOLLOWERS_MAX}
+          label="Followers"
+          triggerLabel="Choose followers"
+          disabled={follow.isPending}
+          trigger={(
+            <span className="inline-flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 hover:bg-gray-50">
+              <PeopleLine people={shown} empty="Nobody" />
+              <UserPlus aria-hidden className="h-3.5 w-3.5 text-gray-400" />
+            </span>
+          )}
+        />
+      ) : <PeopleLine people={task.followers} empty="Nobody" />}
+      {task.can.follow && me && !doing.includes(me.id) && (task.following || !task.archivedAt) && (
+        <button
+          type="button"
+          onClick={toggleMe}
+          disabled={follow.isPending}
+          aria-pressed={task.following}
+          className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+        >
+          {task.following ? <><BellOff aria-hidden className="h-3.5 w-3.5" /> Unfollow</> : <><Bell aria-hidden className="h-3.5 w-3.5" /> Follow</>}
+        </button>
+      )}
+    </span>
+  );
+}
 
 // ── Checklist ────────────────────────────────────────────────────────────────
 
@@ -347,22 +468,11 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
             </select>
           ) : <StatusPill status={task.status} />}
         </Field>
-        <Field label="Assignee">
-          <span className="flex items-center gap-2">
-            <Avatar name={task.assignee.name} id={task.assignee.id} size="sm" />
-            {task.can.reassign && reassignTo.length > 1 ? (
-              <select
-                value={task.assignee.id}
-                onChange={(e) => save.mutate({ assigneeId: e.target.value })}
-                disabled={save.isPending}
-                aria-label="Who does it"
-                className={quietSelect}
-              >
-                {!reassignTo.some((p) => p.id === task.assignee.id) && <option value={task.assignee.id}>{task.assignee.name} (no longer here)</option>}
-                {reassignTo.map((p) => <option key={p.id} value={p.id}>{personLabel(p)}</option>)}
-              </select>
-            ) : <span>{task.assignee.name}</span>}
-          </span>
+        <Field label="Assignees">
+          <AssigneesField task={task} choices={reassignTo} saving={save.isPending} onSave={(assigneeIds) => save.mutate({ assigneeIds })} />
+        </Field>
+        <Field label="Followers">
+          <FollowersField task={task} choices={reassignTo} onGone={onClose} />
         </Field>
         <Field label="Due date">
           {task.can.edit ? (

@@ -32,12 +32,12 @@ const wrap = (ui: React.ReactElement) => render(
   <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>,
 );
 
-const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true, files: true };
+const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true, files: true, follow: true, followers: true };
 const task = (over: Partial<Task> = {}): Task => ({
   id: 't1', number: 7, code: 'T-7', title: 'Call Bosch', summary: '', description: '',
   status: 'todo', statusLabel: 'To do', priority: 'high', priorityLabel: 'High',
   dueOn: '2099-10-27', startOn: null, tags: [], overdue: false, dueToday: false,
-  assignee: { id: 'u2', name: 'Arun Kumar' }, team: 'procurement', teamLabel: 'Procurement',
+  assignees: [], followers: [], following: false, assignee: { id: 'u2', name: 'Arun Kumar' }, team: 'procurement', teamLabel: 'Procurement',
   createdBy: { id: 'u1', name: 'Priya' }, order: null, group: null, checklist: { done: 0, total: 0 }, bucket: 'open',
   completedAt: null, archivedAt: null, commentCount: 0, lastCommentAt: null,
   createdAt: '2026-10-27T04:00:00Z', updatedAt: '2026-10-27T04:00:00Z', rev: 3, can, history: [], ...over,

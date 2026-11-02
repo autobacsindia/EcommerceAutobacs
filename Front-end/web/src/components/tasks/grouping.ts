@@ -6,7 +6,7 @@
  * A group's `addStatus` is where "+ Add task" in it starts a task — only status
  * groups have one; `key` is stable so folding a group survives a reload.
  */
-import { formatDueDay, todayIST, type Task, type TaskGroupBy, type TaskPriority, type TaskStatus } from './types';
+import { formatDueDay, peopleOf, todayIST, type Task, type TaskGroupBy, type TaskPriority, type TaskStatus } from './types';
 
 export type TaskGroup = {
   key: string;
@@ -68,11 +68,13 @@ export function groupTasks(tasks: Task[], by: TaskGroupBy, { today = todayIST(),
     return DUE_ORDER.filter((v) => buckets.has(v)).map((v) => buckets.get(v)!);
   }
   // By person: in order of first appearance would shuffle as pages load, so by name.
+  // A shared task sits under each of its people, as it is on each of their plates.
   const people = new Map<string, TaskGroup>();
   for (const t of tasks) {
-    const id = t.assignee.id;
-    if (!people.has(id)) people.set(id, { key: `person:${id}`, label: t.assignee.name || 'Someone', kind: 'person', value: id, tasks: [] });
-    people.get(id)!.tasks.push(t);
+    for (const p of peopleOf(t)) {
+      if (!people.has(p.id)) people.set(p.id, { key: `person:${p.id}`, label: p.name || 'Someone', kind: 'person', value: p.id, tasks: [] });
+      people.get(p.id)!.tasks.push(t);
+    }
   }
   return [...people.values()].sort((a, b) => a.label.localeCompare(b.label));
 }

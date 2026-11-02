@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { AlarmClock, ArrowDownUp, Columns3, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Plus, Search, Send, Tag, User, Users, X } from 'lucide-react';
+import { AlarmClock, ArrowDownUp, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Plus, Search, Send, Tag, User, Users, X } from 'lucide-react';
 import { Kbd, ShortcutsDialog, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import { ListResultLine } from '@/components/panel/ListControls';
 import { useListParams } from '@/lib/hooks/useListParams';
@@ -72,6 +72,7 @@ function EmptyState({ view, narrowed, onNew }: { view: TaskView; narrowed: boole
     ? ['No tasks match', 'Try another filter, or clear the search.']
     : view === 'mine' ? ['Nothing on your plate', 'Tasks given to you show up here. Add one for yourself to get started.']
       : view === 'created' ? ['You haven’t given out any tasks', 'Give a job to someone in your team and follow it here.']
+        : view === 'following' ? ['You aren’t following any tasks', 'Open a task and press Follow to hear about it without doing it.']
         : ['No open tasks in the team', 'Everyone is up to date.'];
   return (
     <div className="flex flex-col items-center rounded-xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center">
@@ -116,7 +117,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
     view: 'mine', team: '', due: '', priority: '', assignee: '', tag: '', q: '', sort: 'due',
   });
   // A view this person cannot see (an old or shared link) falls back to "Assigned to me".
-  const view: TaskView = lp.view === 'created' || (lp.view === 'team' && canSeeTeam) ? lp.view : 'mine';
+  const view: TaskView = lp.view === 'created' || lp.view === 'following' || (lp.view === 'team' && canSeeTeam) ? lp.view : 'mine';
   // The admin's team view: one team, or '' for all of them.
   const team = view === 'team' && isAdmin && SPACES.some((sp) => sp.value === lp.team) ? lp.team : '';
   // The bell's ?due=late means "late or due today".
@@ -171,6 +172,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
 
   const views: { value: TaskView; label: string }[] = [
     { value: 'mine', label: 'Assigned to me' },
+    { value: 'following', label: 'Following' },
     { value: 'created', label: 'I gave out' },
     ...(canSeeTeam ? [{ value: 'team' as const, label: isAdmin ? 'All teams' : 'My team' }] : []),
   ];
@@ -192,7 +194,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
   const title = view === 'team' && space ? `${space.label} tasks` : dueNow ? 'Today & overdue' : view === 'mine' ? 'Assigned to me' : (views.find((v) => v.value === view) ?? views[0]).label;
   const late = summary.data?.late ?? 0;
   const today = summary.data?.today ?? 0;
-  const VIEW_ICONS: Record<TaskView, typeof Inbox> = { mine: Inbox, created: Send, team: Users };
+  const VIEW_ICONS: Record<TaskView, typeof Inbox> = { mine: Inbox, following: Eye, created: Send, team: Users };
   const shortcutGroups: ShortcutGroup[] = [
     { title: 'Tasks', items: [
       { keys: ['N'], label: 'New task' },
@@ -282,6 +284,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
             </h1>
             <p className="mt-0.5 text-sm text-gray-500">
               {view === 'created' ? 'Jobs you gave to others, and how far they have got.'
+                : view === 'following' ? 'Tasks you watch without doing them: you hear about every change.'
                 : view === 'team' ? (space ? `Open work in ${space.label}.` : isAdmin ? 'Every team’s open work.' : 'Everything your team is working on.')
                   : 'Who has to do what, and by when.'}
             </p>

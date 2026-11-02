@@ -39,10 +39,10 @@ jest.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
 
-const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true, files: true };
+const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true, files: true, follow: true, followers: true };
 const task = (over: Partial<Task> = {}): Task => ({
   id: 't1', number: 7, code: 'T-7', title: 'Call Bosch', description: '', status: 'todo', statusLabel: 'To do',
-  priority: 'normal', dueOn: null, startOn: null, tags: [], overdue: false, assignee: { id: 'u2', name: 'Arun' }, team: 'procurement',
+  priority: 'normal', dueOn: null, startOn: null, tags: [], overdue: false, assignees: [], followers: [], following: false, assignee: { id: 'u2', name: 'Arun' }, team: 'procurement',
   teamLabel: 'Procurement', createdBy: { id: 'u1', name: 'Priya' }, order: null, group: null, checklist: { done: 0, total: 0 },
   checklistItems: [], bucket: 'open', completedAt: null, archivedAt: null, commentCount: 0, lastCommentAt: null,
   createdAt: '2026-10-27T04:00:00Z', updatedAt: '2026-10-27T04:00:00Z', rev: 3, can, history: [], files: [], ...over,
@@ -56,7 +56,9 @@ const later = () => new Date(Date.now() + 10 * 60_000).toISOString();
 function open({ one = task(), comments = [] as TaskComment[] } = {}) {
   get.mockImplementation((url: string) => {
     if (url === '/staff/tasks/assignees') return Promise.resolve({ people: [] });
-    if (url.endsWith('/mentionable')) return Promise.resolve({ people: [{ id: 'u1', name: 'Priya Nair' }, { id: 'u3', name: 'Bala' }] });
+    if (url.endsWith('/mentionable')) {
+      return Promise.resolve({ people: [{ id: 'u1', name: 'Priya Nair', onTask: true }, { id: 'u3', name: 'Bala', onTask: true }, { id: 'u7', name: 'Sam', onTask: false }] });
+    }
     if (url.includes('/comments')) return Promise.resolve({ comments, nextBefore: null });
     return Promise.resolve({ task: one });
   });
@@ -97,6 +99,18 @@ describe('@mentions', () => {
     fireEvent.change(box, { target: { value: 'never mind', selectionStart: 10 } });
     fireEvent.click(screen.getByRole('button', { name: 'Post' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks/t1/comments', expect.objectContaining({ text: 'never mind', mentions: [] })));
+  });
+
+  it('someone not on the task is marked: mentioning them makes them a follower', async () => {
+    post.mockResolvedValue({ comment: comment({ id: 'c9' }) });
+    open();
+    const box = await screen.findByLabelText('Comment');
+    fireEvent.change(box, { target: { value: '@sa', selectionStart: 3 } });
+    const option = await screen.findByRole('button', { name: /Sam/ });
+    expect(option).toHaveTextContent('will follow');
+    fireEvent.mouseDown(option);
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks/t1/comments', expect.objectContaining({ mentions: ['u7'] })));
   });
 
   it('a mentioned name stands out in the comment', async () => {
