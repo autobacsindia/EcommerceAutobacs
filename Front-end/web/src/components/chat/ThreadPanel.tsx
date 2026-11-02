@@ -4,7 +4,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { chatKeys } from '@/hooks/queries/keys';
-import { upsertReply, useDeleteMessage, useEditMessage, useReactToMessage, useSendMessage, useStarMessage, useThread } from '@/hooks/queries/useTeamChat';
+import { upsertReply, useDeleteMessage, useEditMessage, useReactToMessage, useSendMessage, useStarMessage, useThread, useTypingSignal } from '@/hooks/queries/useTeamChat';
+import { useTypingLine } from '@/lib/chatTyping';
 import type { ChatChannel, ChatMessage, ChatPerson, SendVars, ThreadData } from '@/hooks/queries/useTeamChat';
 import { useResendStore } from './resend';
 import Composer, { mentionableTeams } from './Composer';
@@ -50,6 +51,7 @@ export default function ThreadPanel({
   const qc = useQueryClient();
   const { data, isLoading, isError, refetch } = useThread(rootId);
   const send = useSendMessage(channel.id);
+  const signalTyping = useTypingSignal(channel.id, rootId);
   const edit = useEditMessage(channel.id);
   const remove = useDeleteMessage(channel.id);
   const react = useReactToMessage(channel.id, meId);
@@ -173,15 +175,27 @@ export default function ThreadPanel({
         )}
       </div>
 
+      <TypingLine channelId={channel.id} threadRoot={rootId} />
       <Composer
         channelName={channel.kind === 'dm' ? channel.name : `#${channel.name}`}
         people={people.filter((p) => p.id !== meId)}
         teams={mentionableTeams(channel)}
         onSend={doSend}
+        onTyping={signalTyping}
         placeholder="Reply in thread"
         quote={quote}
         onClearQuote={() => setQuote(null)}
       />
     </aside>
+  );
+}
+
+/** "Ravi is typing…" under the messages; reserves its line so nothing jumps. */
+function TypingLine({ channelId, threadRoot }: { channelId: string; threadRoot: string | null }) {
+  const line = useTypingLine(channelId, threadRoot);
+  return (
+    <p className="h-5 truncate px-4 text-xs italic text-gray-500" aria-live="polite">
+      {line}
+    </p>
   );
 }

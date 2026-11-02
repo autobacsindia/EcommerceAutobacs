@@ -18,6 +18,7 @@ import chatRepository from '../repositories/chatRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { STAFF_TEAM_LABELS, STAFF_TEAM_VALUES } from '../config/staff.js';
 import { publishChatEvent } from './chatEvents.js';
+import { claimTyping } from './chatTyping.js';
 import { pushConfigured, sendToUsers } from './pushService.js';
 import { onlineAmong } from './chatPresence.js';
 import { uploadChatAttachments, copyChatAttachments, MAX_ATTACHMENTS_PER_MESSAGE, CHAT_FILE_NAME, chatFolder, chatFileType } from './chatAttachmentService.js';
@@ -1612,6 +1613,31 @@ export async function listThreads(user, { before, limit } = {}) {
       }),
     nextBefore: rows.length === size ? `${new Date(last.lastActivityAt).getTime()}_${idOf(last._id)}` : null,
   };
+}
+
+// ── typing ───────────────────────────────────────────────────────────────────
+
+/**
+ * "I am typing" in a conversation (or one of its threads). Goes only to the
+ * people who can read the conversation (the stream routes on audienceOf),
+ * throttled per person, never stored in MongoDB. The thread id is checked only
+ * for shape: it is echoed to the same readers, so a made-up one tells nobody
+ * anything — and checking it would cost a read per keystroke burst.
+ * @returns {Promise<{ sent: boolean }>} sent=false: throttled, nothing went out.
+ */
+export async function announceTyping(user, channelId, { threadRoot } = {}) {
+  const channel = await loadAccessible(user, channelId);
+  const root = threadRoot && mongoose.isValidObjectId(threadRoot) ? String(threadRoot) : null;
+  if (!(await claimTyping(idOf(channel), idOf(user), root))) return { sent: false };
+  await publishChatEvent({
+    type: 'typing',
+    channelId: idOf(channel),
+    threadRoot: root,
+    userId: idOf(user),
+    name: user.name || '',
+    route: audienceOf(channel),
+  });
+  return { sent: true };
 }
 
 // ── forward ──────────────────────────────────────────────────────────────────
