@@ -46,6 +46,12 @@ export const validateStarredPage = [
 // The Mentions view pages the same way (id cursor, at most 50).
 export const validateMentionsPage = validateStarredPage;
 
+// The Threads list: cursor is "<lastActivityAt ms>_<id>".
+export const validateThreadsPage = [
+  query('before').optional().matches(/^\d{1,15}_[a-f0-9]{24}$/).withMessage('Invalid cursor'),
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be 1–50'),
+];
+
 /** Forward a message into a conversation. */
 export const validateForward = [
   param('id').custom(isObjectId).withMessage('Invalid message id'),
