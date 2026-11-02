@@ -183,6 +183,25 @@ describe('hover rail (the Tasks pages)', () => {
     get.mockRestore(); set.mockRestore();
   });
 
+  it('opening and closing it never re-renders the page under it (the Tasks board is big)', () => {
+    let renders = 0;
+    const Page = () => { renders += 1; return <p>page content</p>; };
+    // The layout builds the page element once; the shell only passes it through.
+    const page = <Page />;
+    render(
+      <PanelShell homeHref="/team" subtitle="Team" sections={sections()} heading={<h2>Tasks</h2>} user={{ name: 'A' }} onLogout={jest.fn()} hoverRail>
+        {page}
+      </PanelShell>,
+    );
+    const before = renders;
+    fireEvent.mouseEnter(menu());
+    act(() => { jest.advanceTimersByTime(150); });
+    fireEvent.mouseLeave(menu());
+    act(() => { jest.advanceTimersByTime(250); });
+    expect(menu()).toHaveAttribute('data-rail', 'rail');
+    expect(renders).toBe(before);
+  });
+
   it('phones keep the drawer: the menu button opens it with full labels', () => {
     shell({ hoverRail: true });
     fireEvent.click(screen.getByRole('button', { name: 'Open menu' }));
