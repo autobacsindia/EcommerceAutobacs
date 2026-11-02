@@ -43,6 +43,8 @@ export const validateStarredPage = [
   query('before').optional().custom(isObjectId).withMessage('Invalid cursor'),
   query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be 1–50'),
 ];
+// The Mentions view pages the same way (id cursor, at most 50).
+export const validateMentionsPage = validateStarredPage;
 
 /** Forward a message into a conversation. */
 export const validateForward = [

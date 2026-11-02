@@ -288,6 +288,29 @@ const chatRepository = {
   findStars: (user, before, limit) =>
     ChatStar.find({ user, ...(before ? { _id: { $lt: before } } : {}) })
       .sort({ _id: -1 }).limit(limit).select('message channel').lean(),
+  /**
+   * Messages that address `user` — by name, `team`, or @all — in `channels`,
+   * newest first, older than the `before` id. Each $or branch repeats its
+   * partial-index condition (models/ChatMessage.js MENTION_INDEXES) so the
+   * planner can use those indexes; channel, sender and deletedAt filter the
+   * few rows the merge produces. My own messages are left out: an @all I sent
+   * is not a mention of me.
+   */
+  findMentions: (user, team, channels, before, limit) => {
+    const branches = [
+      { mentions: user, 'mentions.0': { $exists: true } },
+      ...(team ? [{ mentionTeams: team, 'mentionTeams.0': { $exists: true } }] : []),
+      { mentionAll: true },
+    ];
+    return ChatMessage.find({
+      $or: branches,
+      ...(before ? { _id: { $lt: before } } : {}),
+      channel: { $in: channels },
+      sender: { $ne: user },
+      deletedAt: null,
+    })
+      .sort({ _id: -1 }).limit(limit).populate('sender', SENDER_FIELDS).lean();
+  },
   findMessagesByIds: (ids) =>
     ChatMessage.find({ _id: { $in: ids } }).populate('sender', SENDER_FIELDS).lean(),
 

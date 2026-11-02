@@ -1452,6 +1452,21 @@ export async function starMessage(user, messageId, { on = true } = {}) {
  * admin, who sees deleted messages everywhere.
  *   before=<star id>  the next page
  */
+/** Each channel's name as `user` sees it (a DM is named after the other person), resolved in one query. */
+async function channelNamer(user, channels) {
+  const uid = idOf(user);
+  const partnerIds = new Set();
+  for (const c of channels) if (c.kind === 'dm') for (const m of c.members || []) if (idOf(m) !== uid) partnerIds.add(idOf(m));
+  const partnerById = new Map((await userRepository.findDisplayByIds([...partnerIds])).map((p) => [idOf(p), p]));
+  return (c) => {
+    if (c.kind !== 'dm') return channelNameFor(c, user);
+    if ((c.members || []).length > 2) return groupNameFor(c, uid, partnerById);
+    return partnerById.get((c.members || []).map(idOf).find((m) => m !== uid) ?? '')?.name ?? 'Former member';
+  };
+}
+
+const CHANNEL_NAME_FIELDS = 'kind key name audience team teams members system archived';
+
 export async function listStarred(user, { before, limit } = {}) {
   const size = Math.min(Math.max(parseInt(limit, 10) || 25, 1), STARRED_PAGE_MAX);
   const cursor = before && mongoose.isValidObjectId(before) ? new mongoose.Types.ObjectId(String(before)) : null;
@@ -1459,21 +1474,10 @@ export async function listStarred(user, { before, limit } = {}) {
   if (!stars.length) return { messages: [], nextBefore: null };
 
   const channelIds = [...new Set(stars.map((s) => idOf(s.channel)))];
-  const channels = (await chatRepository.findChannels(
-    { _id: { $in: channelIds } },
-    'kind key name audience team teams members system archived',
-  )).filter((c) => canAccess(user, c));
+  const channels = (await chatRepository.findChannels({ _id: { $in: channelIds } }, CHANNEL_NAME_FIELDS))
+    .filter((c) => canAccess(user, c));
   const channelById = new Map(channels.map((c) => [idOf(c), c]));
-
-  const uid = idOf(user);
-  const partnerIds = new Set();
-  for (const c of channels) if (c.kind === 'dm') for (const m of c.members || []) if (idOf(m) !== uid) partnerIds.add(idOf(m));
-  const partnerById = new Map((await userRepository.findDisplayByIds([...partnerIds])).map((p) => [idOf(p), p]));
-  const nameOf = (c) => {
-    if (c.kind !== 'dm') return channelNameFor(c, user);
-    if ((c.members || []).length > 2) return groupNameFor(c, uid, partnerById);
-    return partnerById.get((c.members || []).map(idOf).find((m) => m !== uid) ?? '')?.name ?? 'Former member';
-  };
+  const nameOf = await channelNamer(user, channels);
 
   const readable = stars.filter((s) => channelById.has(idOf(s.channel)));
   const docs = await chatRepository.findMessagesByIds(readable.map((s) => s.message));
@@ -1496,6 +1500,37 @@ export async function listStarred(user, { before, limit } = {}) {
     messages,
     // The cursor follows the stars read, not the ones shown, so skipped stars never stall paging.
     nextBefore: stars.length === size ? idOf(stars[stars.length - 1]._id) : null,
+  };
+}
+
+// ── mentions ─────────────────────────────────────────────────────────────────
+
+export const MENTIONS_PAGE_MAX = 50;
+
+/**
+ * The "Mentions" view: every message that addresses me — by name, my team, or
+ * @all — in the conversations I can read TODAY, newest first, cursor-paginated
+ * by message id. "Today" matters: someone who moved from Sales to Accounts
+ * stops seeing #sales mentions the moment they move, because the channel list
+ * comes from the same rule as everything else (accessFilter), not from the
+ * message. Deleted messages are left out for everyone; my own messages too.
+ */
+export async function listMentions(user, { before, limit } = {}) {
+  const size = Math.min(Math.max(parseInt(limit, 10) || 25, 1), MENTIONS_PAGE_MAX);
+  const cursor = before && mongoose.isValidObjectId(before) ? new mongoose.Types.ObjectId(String(before)) : null;
+  const channels = await chatRepository.findChannels(accessFilter(user), CHANNEL_NAME_FIELDS);
+  if (!channels.length) return { messages: [], nextBefore: null };
+  const channelById = new Map(channels.map((c) => [idOf(c), c]));
+
+  const docs = await chatRepository.findMentions(user._id, teamOf(user), channels.map((c) => c._id), cursor, size);
+  const used = [...new Set(docs.map((d) => idOf(d.channel)))].map((id) => channelById.get(id));
+  const nameOf = await channelNamer(user, used);
+  return {
+    messages: docs.map((d) => {
+      const c = channelById.get(idOf(d.channel));
+      return { ...shapeMessage(d, null, user), channel: idOf(c), channelName: nameOf(c), channelKind: c.kind };
+    }),
+    nextBefore: docs.length === size ? idOf(docs[docs.length - 1]._id) : null,
   };
 }
 
