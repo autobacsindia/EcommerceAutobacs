@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
@@ -8,6 +8,7 @@ import { submitMultipart, parseApiResponse } from '@/lib/multipartResponse';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from './keys';
 import { pollInterval } from './useNotifications';
+import { TYPING_SEND_EVERY_MS } from '@/lib/chatTyping';
 
 export interface ChatPerson {
   id: string;
@@ -730,6 +731,21 @@ export function useMentions(enabled: boolean) {
     enabled,
     staleTime: 30_000,
   });
+}
+
+/**
+ * Tell the conversation I am typing — at most once every few seconds, however
+ * fast the keys go. Fire-and-forget: a lost signal only means no "typing…"
+ * line, so errors are swallowed.
+ */
+export function useTypingSignal(channelId: string, threadRoot: string | null) {
+  const last = useRef(0);
+  return useCallback(() => {
+    const now = Date.now();
+    if (now - last.current < TYPING_SEND_EVERY_MS) return;
+    last.current = now;
+    apiClient.post(`/chat/channels/${channelId}/typing`, threadRoot ? { threadRoot } : {}).catch(() => {});
+  }, [channelId, threadRoot]);
 }
 
 /** One row of the Threads list. `unread`: replies I have not seen (opening the thread clears it). */

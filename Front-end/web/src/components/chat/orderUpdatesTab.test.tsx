@@ -36,6 +36,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
   useReactToMessage: () => ({ mutate: jest.fn() }),
   useMarkUnread: () => ({ mutate: (...a: unknown[]) => markUnread(...a) }),
   useStarMessage: () => ({ mutate: jest.fn() }),
+  useTypingSignal: () => () => {},
   useForwardMessage: () => ({ mutateAsync: jest.fn(), isPending: false, isError: false }),
   useChatChannels: () => ({ data: [] }),
   usePins: () => ({ data: [] }),
