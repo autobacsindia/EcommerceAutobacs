@@ -46,6 +46,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
   notifyOf: () => 'all',
   liveStatus: () => null,
   useOpenDm: () => ({ mutate: jest.fn(), isPending: false }),
+  useMentions: () => ({ data: { pages: [], pageParams: [''] }, isLoading: false, isError: false, refetch: jest.fn(), hasNextPage: false, fetchNextPage: jest.fn(), isFetchingNextPage: false }),
 }));
 
 /** A screen this wide (min-width media queries answered from it). */
@@ -182,5 +183,29 @@ describe('the chat screen', () => {
     render(<TeamChat />);
     expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Search all messages' })).toHaveTextContent('Search chat');
+  });
+});
+
+describe('left list shortcuts', () => {
+  it('a Mentions entry opens the Mentions list', () => {
+    setWidth(1440);
+    render(<TeamChat />);
+    fireEvent.click(screen.getByRole('button', { name: 'Mentions' }));
+    expect(screen.getByRole('dialog', { name: 'Mentions' })).toBeInTheDocument();
+  });
+});
+
+describe('Home list preview', () => {
+  it('shows the newest message instead of the description', () => {
+    setWidth(1440);
+    (channels[1] as ChatChannel).lastPreview = { by: 'Ravi', mine: false, text: 'Order *4521* shipped', deleted: false };
+    try {
+      render(<TeamChat />);
+      const home = screen.getByRole('region', { name: /Home/ });
+      expect(within(home).getByText('Ravi: Order 4521 shipped')).toBeInTheDocument();
+      expect(within(home).queryByText('GTM team')).not.toBeInTheDocument();
+    } finally {
+      delete (channels[1] as ChatChannel).lastPreview;
+    }
   });
 });

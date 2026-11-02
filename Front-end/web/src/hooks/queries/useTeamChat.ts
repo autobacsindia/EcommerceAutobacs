@@ -712,6 +712,27 @@ export function useStarred(enabled: boolean) {
 }
 
 /**
+ * Messages that @mention me, my team or @all, newest first, across every
+ * conversation I can read. A new message that mentions me arrives over the
+ * live stream, which invalidates this list (TeamChat).
+ */
+export function useMentions(enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.mentions(),
+    queryFn: async ({ pageParam }) => {
+      const q = new URLSearchParams({ limit: '25' });
+      if (pageParam) q.set('before', pageParam);
+      const res = await apiClient.get<SearchPage>(`/chat/mentions?${q}`);
+      return { messages: res.messages ?? [], nextBefore: res.nextBefore ?? null };
+    },
+    initialPageParam: '' as string,
+    getNextPageParam: (last) => last.nextBefore ?? undefined,
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
  * Forward a message into a conversation I am in. The copy is a normal new
  * message there; the target's timeline (if loaded) and the channel list refresh.
  */

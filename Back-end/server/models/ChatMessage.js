@@ -242,8 +242,27 @@ ChatMessageSchema.index(
   { channel: 1, pinnedAt: -1 },
   { name: 'chat_pins', partialFilterExpression: { pinnedAt: { $type: 'date' } } }
 );
-// "Mentions of me", newest first.
-ChatMessageSchema.index({ mentions: 1, createdAt: -1 });
+/*
+  The "Mentions" view: messages that address me by name, my team, or @all,
+  newest first (chatRepository.findMentions). One index per way of being
+  addressed, each ending in _id so the three branches of the $or merge already
+  in order (SORT_MERGE) instead of sorting in memory, and the _id cursor is a
+  range on every branch.
+
+  Partial, because almost no message mentions anyone: indexing every message's
+  empty array would make every send pay for an index nobody reads. `$exists`
+  and `$eq` only — `$ne` is rejected inside a partialFilterExpression and the
+  index would silently never be built. The query repeats each filter, since
+  the planner uses a partial index only when the query states its condition.
+
+  Replaces { mentions: 1, createdAt: -1 }, which nothing ever queried.
+*/
+export const MENTION_INDEXES = Object.freeze([
+  { key: { mentions: 1, _id: -1 }, name: 'chat_mentions_people', partialFilterExpression: { 'mentions.0': { $exists: true } } },
+  { key: { mentionTeams: 1, _id: -1 }, name: 'chat_mentions_teams', partialFilterExpression: { 'mentionTeams.0': { $exists: true } } },
+  { key: { mentionAll: 1, _id: -1 }, name: 'chat_mentions_all', partialFilterExpression: { mentionAll: { $eq: true } } },
+]);
+for (const { key, ...options } of MENTION_INDEXES) ChatMessageSchema.index(key, options);
 
 /*
   Message search.
