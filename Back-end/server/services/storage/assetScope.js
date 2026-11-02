@@ -41,6 +41,8 @@ export const PRIVATE_PREFIXES = [
   'chat',
   // The GPay / UPI QR a GTM lead shares with a customer (services/salesPayDetailsService.js).
   'sales-pay-details',
+  // Files on staff tasks and their comments (services/taskFileService.js), one folder per task.
+  'tasks',
 ];
 
 /** Prefixes that are public storefront/marketing imagery. */

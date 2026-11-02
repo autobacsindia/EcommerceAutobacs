@@ -13,6 +13,7 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage } from '@/components/staff/sales/types';
 import { OrderPicker, useAssignees } from './TaskForm';
 import TagInput from './TagInput';
+import { Activity, TaskFiles, timeAgo } from './Comments';
 import { TagList } from './TaskList';
 import { Avatar, DuePill, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import {
@@ -42,17 +43,12 @@ const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => 
   unchecked: (h) => `unticked "${h.to}"`,
   archived: () => 'archived it',
   restored: () => 'restored it',
+  file_added: (h) => `added the file "${h.to}"`,
+  file_removed: (h) => `removed the file "${h.from}"`,
 };
 
-/** "just now", "5m", "3h", "2d", then the date. */
-export function timeAgo(iso: string, now = Date.now()): string {
-  const s = Math.max(0, (now - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  if (s < 7 * 86400) return `${Math.floor(s / 86400)}d ago`;
-  return formatDateTimeIST(iso);
-}
+/** Kept here too: older imports read it from this file. */
+export { timeAgo };
 
 // ── Inline editing ───────────────────────────────────────────────────────────
 
@@ -227,97 +223,6 @@ function Checklist({ task }: { task: Task }) {
         </form>
       )}
       {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
-    </section>
-  );
-}
-
-// ── Activity: comments and history on one timeline ───────────────────────────
-
-type ActivityItem =
-  | { kind: 'event'; at: string; by: string; text: string }
-  | { kind: 'comment'; at: string; by: { id: string; name: string }; text: string; id: string };
-
-function Activity({ task }: { task: Task }) {
-  const queryClient = useQueryClient();
-  const [text, setText] = useState('');
-  const [error, setError] = useState('');
-  // One id per comment being written, so a double-send posts once.
-  const clientId = useRef(newClientId());
-  const q = useInfiniteQuery({
-    queryKey: taskKeys.comments(task.id),
-    queryFn: ({ pageParam }) => apiClient.get<CommentPage>(
-      `/staff/tasks/${encodeURIComponent(task.id)}/comments${pageParam ? `?before=${encodeURIComponent(pageParam)}` : ''}`,
-    ),
-    initialPageParam: '' as string,
-    getNextPageParam: (last) => last.nextBefore || undefined,
-    refetchInterval: 30_000,
-  });
-  const comments: TaskComment[] = q.data?.pages.flatMap((p) => p.comments) ?? [];
-  const send = useMutation({
-    mutationFn: () => apiClient.post<{ comment: TaskComment }>(`/staff/tasks/${encodeURIComponent(task.id)}/comments`, {
-      text: text.trim(), clientId: clientId.current,
-    }),
-    onSuccess: () => {
-      setText('');
-      setError('');
-      clientId.current = newClientId();
-      queryClient.invalidateQueries({ queryKey: taskKeys.comments(task.id) });
-      queryClient.invalidateQueries({ queryKey: taskKeys.one(task.id) });
-      queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
-    },
-    onError: (e) => setError(errorMessage(e, 'Could not post the comment.')),
-  });
-
-  const items: ActivityItem[] = [
-    ...(task.history ?? []).map((h) => ({ kind: 'event' as const, at: h.at, by: h.by, text: (HISTORY_TEXT[h.action] ?? (() => h.action))(h) })),
-    ...comments.map((c) => ({ kind: 'comment' as const, at: c.createdAt, by: c.by, text: c.text, id: c.id })),
-  ].sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
-
-  return (
-    <section>
-      <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-gray-900">
-        <MessageSquare aria-hidden className="h-4 w-4 text-gray-500" /> Activity
-      </h3>
-      {q.hasNextPage && (
-        <button onClick={() => q.fetchNextPage()} className="mb-2 text-xs font-medium text-blue-700 hover:underline">Show older comments</button>
-      )}
-      <ol className="space-y-3">
-        {items.map((it, i) => (it.kind === 'comment' ? (
-          <li key={it.id} className="flex gap-2.5">
-            <Avatar name={it.by.name} id={it.by.id} size="sm" />
-            <div className="min-w-0 flex-1 rounded-lg rounded-tl-none bg-gray-50 px-3 py-2">
-              <p className="text-xs text-gray-500"><span className="font-semibold text-gray-900">{it.by.name}</span> · <time title={formatDateTimeIST(it.at)}>{timeAgo(it.at)}</time></p>
-              <p className="mt-0.5 whitespace-pre-wrap text-sm text-gray-800">{it.text}</p>
-            </div>
-          </li>
-        ) : (
-          <li key={`e-${i}-${it.at}`} className="flex items-start gap-2.5 pl-1.5 text-xs text-gray-500">
-            <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-300" />
-            <p><span className="font-medium text-gray-700">{it.by}</span> {it.text} · <time title={formatDateTimeIST(it.at)}>{timeAgo(it.at)}</time></p>
-          </li>
-        )))}
-      </ol>
-      {task.can.comment && (
-        <form onSubmit={(e) => { e.preventDefault(); if (text.trim()) send.mutate(); }} className="mt-4">
-          <div className="flex items-end gap-2 rounded-xl border border-gray-200 bg-white p-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && text.trim()) { e.preventDefault(); send.mutate(); } }}
-              maxLength={2000}
-              rows={2}
-              placeholder="Write an update or a question…"
-              aria-label="Comment"
-              className="flex-1 resize-none border-0 bg-transparent px-1 text-sm outline-none"
-            />
-            <button type="submit" aria-label="Post" disabled={send.isPending || !text.trim()} className="rounded-lg bg-blue-600 p-2 text-white disabled:opacity-40">
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-          <p className="mt-1 text-[11px] text-gray-400">Ctrl/⌘ + Enter to send</p>
-          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-        </form>
-      )}
     </section>
   );
 }
@@ -561,7 +466,8 @@ export default function TaskDetail({ id, base, onClose }: { id: string; base: st
         </section>
       )}
 
-      <Activity task={task} />
+      <TaskFiles task={task} />
+      <Activity task={task} describe={(h) => (HISTORY_TEXT[h.action] ?? (() => h.action))(h)} />
     </article>
   );
 }
