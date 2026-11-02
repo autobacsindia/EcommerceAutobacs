@@ -23,6 +23,8 @@ export interface WaitingItem {
   label: string;
   count: number;
   href: string;
+  /** Shown and counted on the badge, but never rings the "new work" alert (unread task updates). */
+  quiet?: boolean;
 }
 
 const POLL_MS = 20_000;

@@ -30,7 +30,7 @@ jest.mock('@/lib/notificationChime', () => ({
   setMuted: (v: boolean) => { mutedValue = v; },
 }));
 
-let waiting: { items: { key: string; label: string; count: number; href: string }[]; total: number };
+let waiting: { items: { key: string; label: string; count: number; href: string; quiet?: boolean }[]; total: number };
 let chatUnread: number;
 let updatesUnread: number;
 // Each change of the counts is a NEW message, a little later than the last.
@@ -80,6 +80,25 @@ describe('NotificationBell', () => {
     waiting = { items: [{ key: 'payments_to_approve', label: 'Payments to approve', count: 3, href: '/team/payments' }], total: 3 };
     render(<NotificationBell chatHref="/team/chat" />);
     expect(screen.getByRole('button', { name: /5 waiting/i })).toBeInTheDocument();
+  });
+
+  it('unread task updates count on the badge and list as a row, but never ring the work alert', async () => {
+    const inbox = (count: number) => ({ key: 'tasks_inbox', label: 'Unread task updates', count, href: '/team/tasks?view=inbox', quiet: true });
+    // The server leaves quiet rows out of `total`.
+    waiting = { items: [inbox(2)], total: 0 };
+    const { rerender } = render(<NotificationBell chatHref="/team/chat" />);
+    expect(screen.getByRole('button', { name: /2 waiting/i })).toBeInTheDocument();
+
+    waiting = { items: [inbox(150)], total: 0 };
+    rerender(<NotificationBell chatHref="/team/chat" />);
+    await settle();
+    expect(workAlert).not.toHaveBeenCalled();
+    expect(chime).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /150 waiting/i }));
+    const row = await screen.findByRole('menuitem', { name: /Unread task updates/ });
+    expect(row).toHaveAttribute('href', '/team/tasks?view=inbox');
+    expect(row).toHaveTextContent('99+');
   });
 
   it('does NOT chime on first render — that would fire on every page change', () => {

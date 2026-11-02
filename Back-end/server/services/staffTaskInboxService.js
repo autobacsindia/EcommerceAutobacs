@@ -16,12 +16,11 @@
  */
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
-import staffTaskInboxRepository from '../repositories/staffTaskInboxRepository.js';
+import staffTaskInboxRepository, { INBOX_UNREAD_CAP } from '../repositories/staffTaskInboxRepository.js';
 import { canSee } from './staffTaskService.js';
 
 export const INBOX_PAGE_SIZE = 30;
-/** The badge stops counting here and shows "99+". */
-export const INBOX_UNREAD_CAP = 100;
+export { INBOX_UNREAD_CAP };
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v && v._id ? String(v._id) : v ? String(v) : null);

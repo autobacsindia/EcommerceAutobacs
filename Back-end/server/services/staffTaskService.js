@@ -62,7 +62,7 @@ import auditLogger from './auditLogger.js';
 import staffTaskRepository from '../repositories/staffTaskRepository.js';
 import counterRepository from '../repositories/counterRepository.js';
 import userRepository from '../repositories/userRepository.js';
-import staffTaskInboxRepository from '../repositories/staffTaskInboxRepository.js';
+import staffTaskInboxRepository, { INBOX_UNREAD_CAP } from '../repositories/staffTaskInboxRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
 import { sendToUsers } from './pushService.js';
 import { orderNumber } from './invoiceService.js';
@@ -667,14 +667,15 @@ export async function listAssignees(actor) {
     }));
 }
 
-/** The page header: how many of `user`'s open tasks are late, and due today. */
+/** The page header: how many of `user`'s open tasks are late, and due today — and unread Inbox lines (capped). */
 export async function summaryFor(user) {
   const today = todayIST();
-  const [late, dueToday] = await Promise.all([
+  const [late, dueToday, inbox] = await Promise.all([
     staffTaskRepository.countDueIn(user._id, { $lt: today }),
     staffTaskRepository.countDueIn(user._id, { $gte: today, $lte: today }),
+    staffTaskInboxRepository.countUnread(user._id, INBOX_UNREAD_CAP),
   ]);
-  return { late, today: dueToday };
+  return { late, today: dueToday, inbox };
 }
 
 /** The bell: open tasks given to `user` that are overdue or due today. */

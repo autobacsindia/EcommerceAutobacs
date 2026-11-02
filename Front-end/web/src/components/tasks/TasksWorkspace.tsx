@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { AlarmClock, ArrowDownUp, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Plus, Search, Send, Tag, User, Users, X } from 'lucide-react';
+import { AlarmClock, ArrowDownUp, BellDot, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Plus, Search, Send, Tag, User, Users, X } from 'lucide-react';
 import { Kbd, ShortcutsDialog, isTypingIn, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import { ListResultLine } from '@/components/panel/ListControls';
 import { useListParams } from '@/lib/hooks/useListParams';
@@ -16,11 +16,12 @@ import TaskDetail, { type TaskNav } from './TaskDetail';
 import TaskForm, { useAssignees } from './TaskForm';
 import { Dialog, TaskWindow } from './Overlays';
 import { groupTasks } from './grouping';
+import InboxView, { inboxOrder, useInboxPages } from './Inbox';
 import { teamColour } from '@/components/chat/chatUi';
 import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 import {
-  TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, TASK_STATUSES, personLabel,
-  type Task, type TaskDue, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskSort, type TaskView,
+  TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, TASK_STATUSES, personLabel, unreadLabel,
+  type InboxFilter, type Task, type TaskDue, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskSort, type TaskView,
 } from './types';
 
 type Layout = 'list' | 'board';
@@ -117,6 +118,9 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
   const { values: lp, set: setList, clear: clearList } = useListParams({
     view: 'mine', team: '', due: '', priority: '', assignee: '', tag: '', q: '', sort: 'due',
   });
+  // The Inbox (?view=inbox) is not a list of tasks: it replaces the list, filters and board.
+  const inInbox = lp.view === 'inbox';
+  const [inboxFilter, setInboxFilter] = useState<InboxFilter>('all');
   // A view this person cannot see (an old or shared link) falls back to "Assigned to me".
   const view: TaskView = lp.view === 'created' || lp.view === 'following' || (lp.view === 'team' && canSeeTeam) ? lp.view : 'mine';
   // The admin's team view: one team, or '' for all of them.
@@ -166,7 +170,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
 
   const summary = useQuery({
     queryKey: taskKeys.summary(),
-    queryFn: () => apiClient.get<{ late: number; today: number }>('/staff/tasks/summary'),
+    queryFn: () => apiClient.get<{ late: number; today: number; inbox?: number }>('/staff/tasks/summary'),
     refetchInterval: 60_000,
   });
   const people = useAssignees();
@@ -180,10 +184,14 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
   const filters: TaskFilters = { view, due, priority, q, tag, sort, assignee, team };
   const narrowed = !!(due || priority || q || tag || assignee);
   // The same requests (and cache entries) as the list's or board's own: no extra call.
-  const openPages = useTaskPages(filters, 'open');
+  const openPages = useTaskPages(filters, 'open', !inInbox);
   const counted = openPages.data?.pages[0]?.summary;
   // The board's Complete column; the list folds done tasks away, so it is not read there.
-  const donePages = useTaskPages(filters, 'done', layout === 'board' && !filters.due);
+  const donePages = useTaskPages(filters, 'done', !inInbox && layout === 'board' && !filters.due);
+  // The same request (and cache) as the Inbox screen's own.
+  const inboxPages = useInboxPages(inboxFilter, inInbox);
+  // Unread Inbox lines come with the header counts (one request, polled each minute).
+  const inboxUnread = summary.data?.inbox ?? 0;
 
   /*
     The tasks in the order they are on screen, for "previous / next" in the
@@ -191,6 +199,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
     columns left to right. A task under several people appears once.
   */
   const order = useMemo(() => {
+    if (inInbox) return inboxOrder(inboxPages.data);
     const open = (openPages.data?.pages ?? []).flatMap((pg) => pg.tasks);
     const rows: Task[] = layout === 'board'
       ? TASK_STATUSES.flatMap((st) => (st.value === 'done'
@@ -198,20 +207,20 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
         : open.filter((t) => t.status === st.value)))
       : groupTasks(open, groupBy).flatMap((g) => g.tasks);
     return [...new Set(rows.map((t) => t.id))];
-  }, [openPages.data, donePages.data, layout, groupBy, filters.due]);
+  }, [inInbox, inboxPages.data, openPages.data, donePages.data, layout, groupBy, filters.due]);
   // Quick add in the team list with one person picked gives it to them; otherwise to me.
   const quickAddFor = view === 'team' && assignee ? assignee : undefined;
   // Whose tasks (and which team), and the order, are where you are — not filters.
   const clear = () => { clearList(['view', 'team', 'sort']); setSearch(''); };
   // "Today & overdue" is Assigned to me with the bell's filter: late or due today.
-  const dueNow = view === 'mine' && due === 'late';
+  const dueNow = !inInbox && view === 'mine' && due === 'late';
   const showDueNow = () => setList({ view: 'mine', team: '', due: dueNow ? '' : 'late' });
   const filterTag = (t: string) => setList({ tag: tag === t ? '' : t });
 
   const at = openId ? order.indexOf(openId) : -1;
   const nav: TaskNav | undefined = at < 0 ? undefined : {
     at: at + 1,
-    of: `${order.length}${openPages.hasNextPage && layout === 'list' ? '+' : ''}`,
+    of: `${order.length}${(inInbox ? inboxPages.hasNextPage : openPages.hasNextPage && layout === 'list') ? '+' : ''}`,
     prev: at > 0 ? () => setOpenId(order[at - 1]) : undefined,
     next: at < order.length - 1 ? () => setOpenId(order[at + 1]) : undefined,
   };
@@ -233,7 +242,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
 
   const control = 'h-8 rounded-md border border-gray-200 bg-white px-2 text-[13px] text-gray-700 hover:border-gray-300';
   const space = SPACES.find((sp) => sp.value === team);
-  const title = view === 'team' && space ? `${space.label} tasks` : dueNow ? 'Today & overdue' : view === 'mine' ? 'Assigned to me' : (views.find((v) => v.value === view) ?? views[0]).label;
+  const title = inInbox ? 'Inbox' : view === 'team' && space ? `${space.label} tasks` : dueNow ? 'Today & overdue' : view === 'mine' ? 'Assigned to me' : (views.find((v) => v.value === view) ?? views[0]).label;
   const late = summary.data?.late ?? 0;
   const today = summary.data?.today ?? 0;
   const VIEW_ICONS: Record<TaskView, typeof Inbox> = { mine: Inbox, following: Eye, created: Send, team: Users };
@@ -256,7 +265,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
   const teamViews = views.filter((v) => v.value === 'team');
   const viewButton = (v: (typeof views)[number]) => {
     const Icon = VIEW_ICONS[v.value];
-    const active = view === v.value && !team && !(v.value === 'mine' && dueNow);
+    const active = !inInbox && view === v.value && !team && !(v.value === 'mine' && dueNow);
     return (
       <button key={v.value} aria-pressed={active} onClick={() => setView(v.value)} className={navItem}>
         <Icon aria-hidden className="hidden h-4 w-4 text-gray-500 lg:block" />{v.label}
@@ -276,6 +285,14 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
           <span className="text-sm font-bold text-gray-900">Tasks</span>
         </p>
         <div className="flex gap-1.5 lg:flex-col lg:gap-px" role="group" aria-label="Whose tasks">
+          <button aria-pressed={inInbox} onClick={() => setList({ view: 'inbox', team: '' })} className={navItem}>
+            <BellDot aria-hidden className="hidden h-4 w-4 text-gray-500 lg:block" />Inbox
+            {inboxUnread > 0 && (
+              <span className="ml-auto rounded-full bg-blue-600 px-1.5 text-[11px] font-bold leading-[18px] text-white">
+                {unreadLabel(inboxUnread)}<span className="sr-only"> unread</span>
+              </span>
+            )}
+          </button>
           {viewButton(personal[0])}
           <button aria-pressed={dueNow} onClick={showDueNow} className={navItem}>
             <AlarmClock aria-hidden className="hidden h-4 w-4 text-gray-500 lg:block" />Today &amp; overdue
@@ -323,17 +340,18 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
             <h1 className="pn-title flex flex-wrap items-center gap-2 text-xl text-gray-900">
               {space && <span aria-hidden className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold ${teamColour(space.value)}`}>{space.label[0]}</span>}
               {title}
-              {view === 'mine' && late > 0 && <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">{late} late</span>}
-              {view === 'mine' && today > 0 && <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{today} due today</span>}
+              {!inInbox && view === 'mine' && late > 0 && <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">{late} late</span>}
+              {!inInbox && view === 'mine' && today > 0 && <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{today} due today</span>}
             </h1>
             <p className="mt-0.5 text-sm text-gray-500">
-              {view === 'created' ? 'Jobs you gave to others, and how far they have got.'
+              {inInbox ? 'What happened on your tasks: new tasks, status changes, comments and mentions.'
+                : view === 'created' ? 'Jobs you gave to others, and how far they have got.'
                 : view === 'following' ? 'Tasks you watch without doing them: you hear about every change.'
                 : view === 'team' ? (space ? `Open work in ${space.label}.` : isAdmin ? 'Every team’s open work.' : 'Everything your team is working on.')
                   : 'Who has to do what, and by when.'}
             </p>
           </div>
-          <div className="flex gap-1" role="tablist" aria-label="Show as">
+          {!inInbox && <div className="flex gap-1" role="tablist" aria-label="Show as">
             {([['list', 'List', List], ['board', 'Board', Columns3]] as const).map(([value, label, Icon]) => (
               <button
                 key={value}
@@ -348,12 +366,15 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
                 <Icon aria-hidden className="h-4 w-4" /> {label}
               </button>
             ))}
-          </div>
+          </div>}
           <button onClick={() => setCreating(true)} className="ml-auto inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3.5 text-sm font-semibold text-white shadow-sm transition-[background-color,transform] hover:bg-blue-700 active:scale-[0.98]" title="New task (N)">
             <Plus className="h-4 w-4" /> New task <span className="hidden sm:contents"><Kbd className="border-transparent! bg-white/20! text-white! shadow-none!">N</Kbd></span>
           </button>
         </header>
 
+        {inInbox ? (
+          <InboxView filter={inboxFilter} onFilter={setInboxFilter} openId={openId} onOpen={setOpenId} />
+        ) : (<>
         <HowItWorks />
 
         <div className="flex flex-wrap items-center gap-2">
@@ -441,6 +462,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
             empty={<EmptyState view={view} narrowed={narrowed} onNew={() => setCreating(true)} />}
           />
         )}
+        </>)}
       </div>
 
       <TaskWindow open={!!openId} onClose={() => setOpenId(null)} label="Task">

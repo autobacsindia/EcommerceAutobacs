@@ -1,6 +1,9 @@
 import StaffTaskInbox, { INBOX_STATES } from '../models/StaffTaskInbox.js';
 import StaffTask from '../models/StaffTask.js';
 
+/** The unread count stops here; the badge shows "99+". */
+export const INBOX_UNREAD_CAP = 100;
+
 /** What canSee() reads on a task — enough to say whether an Inbox line still opens. */
 const SEE_PROJECTION = Object.freeze({
   number: 1, title: 1, assignee: 1, assignees: 1, team: 1, teams: 1, followers: 1, createdBy: 1,

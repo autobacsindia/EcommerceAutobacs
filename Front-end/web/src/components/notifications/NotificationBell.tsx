@@ -62,8 +62,11 @@ export default function NotificationBell({
   const [quiet, setQuiet] = useState(false);
   const [updatesSound, setUpdatesSoundState] = useState(false);
 
+  // `total` is work only, and rings the alert below; quiet rows (unread task
+  // updates) count on the badge but never ring it — they arrive as pop-ups.
   const approvals = data?.total ?? 0;
-  const total = approvals + chatUnread;
+  const quietCount = (data?.items ?? []).reduce((t, i) => t + (i.quiet ? i.count : 0), 0);
+  const total = approvals + chatUnread + quietCount;
 
   // `undefined` until the first count arrives, so the first render cannot be
   // read as a rise from zero.
@@ -239,7 +242,7 @@ export default function NotificationBell({
                         r.count > 0 ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-500'
                       }`}
                     >
-                      {r.count}
+                      {r.count >= 100 ? '99+' : r.count}
                     </span>
                   </Link>
                 </li>

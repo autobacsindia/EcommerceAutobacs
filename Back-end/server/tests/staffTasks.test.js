@@ -456,6 +456,20 @@ describe('the bell', () => {
     expect((await summaryFor(procHead)).items.find((i) => i.key === 'tasks_due')).toBeUndefined();
   });
 
+  it('shows unread task updates, without adding them to the work total that rings the alarm', async () => {
+    await make(procHead, { assigneeId: String(procA._id), dueOn: day(0) });
+    await make(procHead, { assigneeId: String(procA._id) });
+    const sum = await summaryFor(procA);
+    expect(sum.items.find((i) => i.key === 'tasks_inbox')).toEqual({
+      key: 'tasks_inbox', label: 'Unread task updates', count: 2, href: '/team/tasks?view=inbox', quiet: true,
+    });
+    // Only the due task is work; the two Inbox lines are not.
+    expect(sum.total).toBe(sum.items.filter((i) => !i.quiet).reduce((t, i) => t + i.count, 0));
+    expect(sum.items.find((i) => i.key === 'tasks_due').count).toBe(1);
+    // Nothing unread: no row.
+    expect((await summaryFor(procHead)).items.find((i) => i.key === 'tasks_inbox')).toBeUndefined();
+  });
+
   it('sends the admin to the admin panel', async () => {
     await make(admin, { dueOn: day(0) });
     expect((await summaryFor(admin)).items.find((i) => i.key === 'tasks_due').href).toBe('/admin/tasks?due=late');
@@ -688,8 +702,9 @@ describe('search, filters, counters and quick add', () => {
     await make(procHead, { assigneeId: String(procA._id), dueOn: day(0) });
     await make(procHead, { assigneeId: String(procA._id), dueOn: day(3) });
     await make(procHead, { assigneeId: String(procB._id), dueOn: day(-1) });
-    expect(await tasks.summaryFor(procA)).toEqual({ late: 2, today: 1 });
-    expect(await tasks.summaryFor(salesA)).toEqual({ late: 0, today: 0 });
+    // …and an unread Inbox line for each of the four tasks given to procA.
+    expect(await tasks.summaryFor(procA)).toEqual({ late: 2, today: 1, inbox: 4 });
+    expect(await tasks.summaryFor(salesA)).toEqual({ late: 0, today: 0, inbox: 0 });
   });
 
   it('"+ Add task" in a status group starts the task there — never in Done', async () => {
