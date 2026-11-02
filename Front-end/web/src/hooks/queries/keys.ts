@@ -247,6 +247,8 @@ export const taskKeys = {
   list: (filters: object) => [...taskKeys.lists(), filters] as const,
   one: (id: string) => [...taskKeys.all, 'one', id] as const,
   comments: (id: string) => [...taskKeys.all, 'comments', id] as const,
+  /** The sub-tasks listed under one task. */
+  subtasks: (id: string) => [...taskKeys.all, 'subtasks', id] as const,
   assignees: () => [...taskKeys.all, 'assignees'] as const,
   /** The page header's late / due-today counts. */
   summary: () => [...taskKeys.all, 'summary'] as const,

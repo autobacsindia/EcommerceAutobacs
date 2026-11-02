@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { AlarmClock, ArrowDownUp, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Plus, Search, Send, Tag, User, Users, X } from 'lucide-react';
-import { Kbd, ShortcutsDialog, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
+import { Kbd, ShortcutsDialog, isTypingIn, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import { ListResultLine } from '@/components/panel/ListControls';
 import { useListParams } from '@/lib/hooks/useListParams';
 import apiClient from '@/lib/api-client';
@@ -12,14 +12,15 @@ import { taskKeys } from '@/hooks/queries/keys';
 import TaskListView from './TaskList';
 import { useTaskPages } from './hooks';
 import TaskBoard from './TaskBoard';
-import TaskDetail from './TaskDetail';
+import TaskDetail, { type TaskNav } from './TaskDetail';
 import TaskForm, { useAssignees } from './TaskForm';
-import { Dialog, SidePanel } from './Overlays';
+import { Dialog, TaskWindow } from './Overlays';
+import { groupTasks } from './grouping';
 import { teamColour } from '@/components/chat/chatUi';
 import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 import {
-  TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, personLabel,
-  type TaskDue, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskSort, type TaskView,
+  TASK_GROUPINGS, TASK_PRIORITIES, TASK_SORTS, TASK_STATUSES, personLabel,
+  type Task, type TaskDue, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskSort, type TaskView,
 } from './types';
 
 type Layout = 'list' | 'board';
@@ -178,8 +179,26 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
   ];
   const filters: TaskFilters = { view, due, priority, q, tag, sort, assignee, team };
   const narrowed = !!(due || priority || q || tag || assignee);
-  // The same request (and cache entry) as the list's own open tasks: no extra call.
-  const counted = useTaskPages(filters, 'open').data?.pages[0]?.summary;
+  // The same requests (and cache entries) as the list's or board's own: no extra call.
+  const openPages = useTaskPages(filters, 'open');
+  const counted = openPages.data?.pages[0]?.summary;
+  // The board's Complete column; the list folds done tasks away, so it is not read there.
+  const donePages = useTaskPages(filters, 'done', layout === 'board' && !filters.due);
+
+  /*
+    The tasks in the order they are on screen, for "previous / next" in the
+    task window (and J / K): the list's groups top to bottom, or the board's
+    columns left to right. A task under several people appears once.
+  */
+  const order = useMemo(() => {
+    const open = (openPages.data?.pages ?? []).flatMap((pg) => pg.tasks);
+    const rows: Task[] = layout === 'board'
+      ? TASK_STATUSES.flatMap((st) => (st.value === 'done'
+        ? (filters.due ? [] : (donePages.data?.pages ?? []).flatMap((pg) => pg.tasks))
+        : open.filter((t) => t.status === st.value)))
+      : groupTasks(open, groupBy).flatMap((g) => g.tasks);
+    return [...new Set(rows.map((t) => t.id))];
+  }, [openPages.data, donePages.data, layout, groupBy, filters.due]);
   // Quick add in the team list with one person picked gives it to them; otherwise to me.
   const quickAddFor = view === 'team' && assignee ? assignee : undefined;
   // Whose tasks (and which team), and the order, are where you are — not filters.
@@ -188,6 +207,29 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
   const dueNow = view === 'mine' && due === 'late';
   const showDueNow = () => setList({ view: 'mine', team: '', due: dueNow ? '' : 'late' });
   const filterTag = (t: string) => setList({ tag: tag === t ? '' : t });
+
+  const at = openId ? order.indexOf(openId) : -1;
+  const nav: TaskNav | undefined = at < 0 ? undefined : {
+    at: at + 1,
+    of: `${order.length}${openPages.hasNextPage && layout === 'list' ? '+' : ''}`,
+    prev: at > 0 ? () => setOpenId(order[at - 1]) : undefined,
+    next: at < order.length - 1 ? () => setOpenId(order[at + 1]) : undefined,
+  };
+  // J / K step through the list while a task is open (never while typing, or with another window on top).
+  const navRef = useRef(nav);
+  useEffect(() => { navRef.current = nav; });
+  useEffect(() => {
+    if (!openId) return undefined;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.metaKey || e.ctrlKey || e.altKey || isTypingIn(e.target)) return;
+      if (document.querySelectorAll('[aria-modal="true"]').length > 1) return;
+      const k = e.key.toLowerCase();
+      const go = k === 'j' ? navRef.current?.next : k === 'k' ? navRef.current?.prev : undefined;
+      if (go) { e.preventDefault(); go(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [openId]);
 
   const control = 'h-8 rounded-md border border-gray-200 bg-white px-2 text-[13px] text-gray-700 hover:border-gray-300';
   const space = SPACES.find((sp) => sp.value === team);
@@ -202,6 +244,8 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
       { keys: ['L'], label: 'Show as a list' },
       { keys: ['B'], label: 'Show as a board' },
       { keys: ['Space'], label: 'Tick the task in focus (to change several at once)' },
+      { keys: ['J'], label: 'Next task (with a task open)' },
+      { keys: ['K'], label: 'Previous task (with a task open)' },
       { keys: ['Esc'], label: 'Close a task or a pop-up' },
       { keys: ['?'], label: 'Show these shortcuts' },
     ] },
@@ -225,7 +269,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
       {/* Which tasks: a list down the side on a wide screen, a row of chips on a phone. */}
       <nav
         aria-label="Task lists"
-        className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] lg:sticky lg:top-[4.5rem] lg:mx-0 lg:mb-0 lg:max-h-[calc(100vh-6rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:rounded-xl lg:border lg:border-gray-200 lg:bg-white lg:p-2"
+        className="relative -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] lg:sticky lg:top-[4.5rem] lg:mx-0 lg:mb-0 lg:max-h-[calc(100vh-6rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:rounded-xl lg:border lg:border-gray-200 lg:bg-white lg:p-2"
       >
         <p className="hidden items-center gap-2 px-2 pb-2 pt-1 lg:flex">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white"><ListTodo aria-hidden className="h-3.5 w-3.5" /></span>
@@ -399,9 +443,9 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
         )}
       </div>
 
-      <SidePanel open={!!openId} onClose={() => setOpenId(null)} label="Task">
-        {openId && <TaskDetail id={openId} base={base} onClose={() => setOpenId(null)} />}
-      </SidePanel>
+      <TaskWindow open={!!openId} onClose={() => setOpenId(null)} label="Task">
+        {openId && <TaskDetail key={openId} id={openId} base={base} onClose={() => setOpenId(null)} onOpen={setOpenId} nav={nav} />}
+      </TaskWindow>
 
       <Dialog open={creating} onClose={() => setCreating(false)} label="New task">
         <TaskForm onDone={(t) => { setCreating(false); if (t?.id) setOpenId(t.id); }} onCancel={() => setCreating(false)} />

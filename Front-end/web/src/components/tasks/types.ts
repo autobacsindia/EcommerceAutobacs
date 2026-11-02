@@ -65,6 +65,10 @@ export type Task = {
   order: { id: string; code: string } | null;
   /** Set when the giver chose "own copy each": each person has their own copy. */
   group: { id: string; size: number } | null;
+  /** The task this is a sub-task of (its number and title; the viewer may not be allowed to open it). */
+  parent?: { id: string; code: string; title: string } | null;
+  /** On a parent: its sub-tasks that are not archived, and how many of them are done. */
+  subtasks?: { done: number; total: number };
   /** How many checklist steps are ticked, of how many. */
   checklist: { done: number; total: number };
   /** The task page only: the steps themselves. */
@@ -84,11 +88,30 @@ export type Task = {
   can: {
     edit: boolean; status: boolean; reassign: boolean; archive: boolean; restore: boolean; comment: boolean; checklist: boolean; files: boolean;
     follow: boolean; followers: boolean;
+    /** Add sub-tasks (never on a sub-task: one level only). */
+    subtask?: boolean;
   };
   history?: { at: string; by: string; action: string; from: string; to: string }[];
   /** The task page only: the other people's copies the viewer may see. */
   siblings?: TaskSibling[];
 };
+
+/** A row under "Sub-tasks": every sub-task is listed to whoever sees the parent; `canOpen` says which they may open. */
+export type Subtask = Task & { canOpen: boolean };
+export type SubtaskList = { subtasks: Subtask[]; total: number; done: number };
+/** Sub-tasks under one task, at most this many. */
+export const SUBTASKS_MAX = 50;
+/** Sub-tasks still open on `t` (not done, not archived). */
+export const openSubtasks = (t: Pick<Task, 'subtasks'>) => Math.max(0, (t.subtasks?.total ?? 0) - (t.subtasks?.done ?? 0));
+/**
+ * Completing a task whose sub-tasks are still open is allowed, but asked first.
+ * True when it may go ahead.
+ */
+export function confirmComplete(t: Pick<Task, 'subtasks'>): boolean {
+  const n = openSubtasks(t);
+  if (!n) return true;
+  return window.confirm(`${n === 1 ? '1 sub-task is' : `${n} sub-tasks are`} still open. Complete anyway?`);
+}
 
 export type ChecklistItem = { id: string; text: string; done: boolean; doneAt: string | null; doneBy: string };
 
