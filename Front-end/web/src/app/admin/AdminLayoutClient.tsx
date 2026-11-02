@@ -225,6 +225,8 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
       sections={sections}
       collapsed={!sidebarOpen}
       onToggleCollapsed={() => setSidebarOpen(!sidebarOpen)}
+      // Tasks wants the room: the menu shrinks to icons and opens over the page on hover.
+      hoverRail={pathname === '/admin/tasks' || pathname.startsWith('/admin/tasks/')}
       user={{ name: userName, role: 'Admin' }}
       onLogout={handleLogout}
       heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{pageLabel || 'Admin'}</h2>}

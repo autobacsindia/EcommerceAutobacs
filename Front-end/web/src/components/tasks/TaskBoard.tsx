@@ -2,13 +2,14 @@
 
 import { useState, type KeyboardEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { CalendarDays, Flag, MessageSquare, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
 import apiClient from '@/lib/api-client';
 import { errorMessage } from '@/components/staff/sales/types';
 import { useRefreshTasks, useTaskPages } from './hooks';
 import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
-import { Avatar, DuePill, GroupPill, PriorityFlag, SkeletonRows } from './ui';
-import { TASK_STATUSES, isConflict, type Task, type TaskFilters, type TaskStatus } from './types';
+import { AvatarStack, GroupPill, PriorityFlag, SkeletonRows } from './ui';
+import { TASK_STATUSES, formatDueDay, isConflict, type Task, type TaskFilters, type TaskStatus } from './types';
 
 /** How many finished cards the Done column shows; the rest are in the list view. */
 const DONE_SHOWN = 20;
@@ -18,6 +19,12 @@ function BoardCard({ t, onOpen, onMove, moving, onTag, activeTag }: {
   onTag?: (tag: string) => void; activeTag?: string;
 }) {
   const onKey = (e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); onOpen(t.id); } };
+  const done = t.status === 'done';
+  const late = !done && t.overdue;
+  const today = !done && t.dueToday;
+  // An unset date / flag / tag is a faint icon that shows on hover, so a card
+  // says at a glance what is missing without the clutter.
+  const ghost = 'text-gray-300 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100';
   return (
     <li
       draggable={t.can.status}
@@ -27,24 +34,40 @@ function BoardCard({ t, onOpen, onMove, moving, onTag, activeTag }: {
       role="button"
       tabIndex={0}
       aria-label={`Open ${t.code}: ${t.title}`}
-      className={`group rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+      className={`tk-card group rounded-lg bg-white p-2.5 focus:outline-none ${
         t.can.status ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
       } ${moving ? 'opacity-50' : ''}`}
     >
-      {t.tags?.length > 0 && <div className="mb-2"><TagList tags={t.tags} onTag={onTag} activeTag={activeTag} max={3} /></div>}
       <div className="flex items-start gap-2">
-        <span className="mt-0.5"><CompleteButton t={t} busy={moving} onToggle={() => onMove(t, t.status === 'done' ? 'todo' : 'done')} /></span>
-        <p className={`flex-1 text-sm font-medium leading-snug ${t.status === 'done' ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</p>
+        <span className="mt-px"><CompleteButton t={t} busy={moving} onToggle={() => onMove(t, done ? 'todo' : 'done')} /></span>
+        <p className={`min-w-0 flex-1 break-words text-[13px] font-medium leading-snug ${done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</p>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-[26px]"><TaskMeta t={t} /></div>
-      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 pl-[26px]">
-        <span className="flex items-center gap-2">
-          <PriorityFlag priority={t.priority} />
-          <DuePill t={t} />
+      {t.tags?.length > 0 && <div className="mt-2"><TagList tags={t.tags} onTag={onTag} activeTag={activeTag} max={3} /></div>}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 empty:hidden"><TaskMeta t={t} withComments={false} /></div>
+      <div className="mt-2.5 flex items-center gap-2">
+        <AvatarStack people={[t.assignee]} />
+        <span
+          title={t.dueOn ? `Due ${formatDueDay(t.dueOn)}` : 'No due date'}
+          className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-medium ${
+            !t.dueOn ? ghost : late ? 'text-red-700' : today ? 'text-amber-700' : 'text-gray-500'
+          }`}
+        >
+          <CalendarDays aria-hidden className="h-3.5 w-3.5" />
+          {t.dueOn ? (today ? 'Today' : formatDueDay(t.dueOn)) : <span className="sr-only">No due date</span>}
         </span>
-        <span className="ml-auto flex items-center gap-1.5">
+        {t.priority === 'normal'
+          ? <span className={ghost} title="Normal priority"><Flag aria-hidden className="h-3.5 w-3.5" /><span className="sr-only">Normal priority</span></span>
+          : <PriorityFlag priority={t.priority} />}
+        {!t.tags?.length && <span className={ghost} title="No tags"><Tag aria-hidden className="h-3.5 w-3.5" /><span className="sr-only">No tags</span></span>}
+        <span className="ml-auto flex items-center gap-2">
+          {t.commentCount > 0 && (
+            <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-gray-500" title={`${t.commentCount} comments`}>
+              <MessageSquare aria-hidden className="h-3.5 w-3.5" />{t.commentCount}
+              <span className="sr-only"> comments</span>
+            </span>
+          )}
+          {late && <span className="rounded bg-red-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-red-800">Late</span>}
           <span className="whitespace-nowrap font-mono text-[10px] text-gray-400">{t.code}</span>
-          <Avatar name={t.assignee.name} id={t.assignee.id} size="xs" />
         </span>
       </div>
       {/* Phones and tablets cannot drag: a small picker does the same move. */}
@@ -91,7 +114,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag }: {
     mutationFn: ({ t, status }: { t: Task; status: TaskStatus }) =>
       apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(t.id)}`, { rev: t.rev, status }),
     onMutate: ({ t, status }) => { setMoved((m) => ({ ...m, [t.id]: status })); },
-    onSuccess: (_r, { t, status }) => { if (status === 'done') toast.success(`${t.code} done`, { id: `done-${t.id}` }); },
+    onSuccess: (_r, { t, status }) => { if (status === 'done') toast.success(`${t.code} complete`, { id: `done-${t.id}` }); },
     onError: (e, { t }) => {
       unmove(t.id);
       toast.error(isConflict(e)
@@ -108,7 +131,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag }: {
   const columns = TASK_STATUSES.filter((c) => !(filters.due && c.value === 'done'));
   return (
     <div className="space-y-3">
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+      <div className="-mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-2 md:snap-none">
         {columns.map((col) => {
           const cards = tasks.filter((t) => statusOf(t) === col.value);
           return (
@@ -123,15 +146,15 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag }: {
                 const t = byId.get(e.dataTransfer.getData('text/plain'));
                 if (t?.can.status) onMove(t, col.value);
               }}
-              className={`flex w-72 shrink-0 flex-col rounded-2xl border border-gray-200 bg-gray-50 p-2 transition md:w-auto md:min-w-0 md:flex-1 ${
-                over === col.value ? 'bg-blue-50 ring-2 ring-blue-300' : ''
-              }`}
+              data-status={col.value}
+              data-over={over === col.value}
+              className="tk-col flex w-[272px] shrink-0 snap-start flex-col rounded-xl p-2 transition md:w-auto md:min-w-[200px] md:flex-1"
             >
-              <h3 className="mb-2 flex items-center gap-2 px-1 pt-0.5">
+              <h3 className="mb-2 flex items-center gap-2 px-0.5">
                 <GroupPill status={col.value}>{col.label}</GroupPill>
                 <span className="text-xs font-semibold text-gray-500">{cards.length}</span>
               </h3>
-              <ul className="min-h-24 space-y-2">
+              <ul className="min-h-24 space-y-1.5">
                 {cards.map((t) => (
                   <BoardCard key={t.id} t={t} onOpen={onOpen} onMove={onMove} moving={move.isPending && move.variables?.t.id === t.id} onTag={onTag} activeTag={filters.tag} />
                 ))}
@@ -140,7 +163,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag }: {
                 <p className="mt-2 px-1 text-xs text-gray-500">Showing the latest {DONE_SHOWN}. The list view has the rest.</p>
               )}
               {col.value !== 'done' && quickAddFor !== null && (
-                <div className="mt-1 rounded-xl"><QuickAdd status={col.value} assigneeId={quickAddFor} /></div>
+                <div className="mt-1.5"><QuickAdd status={col.value} assigneeId={quickAddFor} variant="board" /></div>
               )}
             </section>
           );

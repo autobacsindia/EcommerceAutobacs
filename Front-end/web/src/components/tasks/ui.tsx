@@ -12,6 +12,7 @@
 import { CalendarClock, Flag, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { formatDueDay, type Task, type TaskPriority, type TaskStatus } from './types';
+import './tasks.css';
 
 // ── Status ───────────────────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ export const STATUS_STYLE: Record<TaskStatus, { dot: string; pill: string; bar: 
   todo: { dot: 'bg-gray-400', pill: 'bg-gray-100 text-gray-700', bar: 'border-t-gray-400', label: 'To do' },
   in_progress: { dot: 'bg-sky-500', pill: 'bg-sky-100 text-sky-800', bar: 'border-t-sky-500', label: 'In progress' },
   waiting: { dot: 'bg-amber-500', pill: 'bg-amber-100 text-amber-800', bar: 'border-t-amber-500', label: 'Waiting' },
-  done: { dot: 'bg-emerald-500', pill: 'bg-emerald-100 text-emerald-800', bar: 'border-t-emerald-500', label: 'Done' },
+  done: { dot: 'bg-emerald-500', pill: 'bg-emerald-100 text-emerald-800', bar: 'border-t-emerald-500', label: 'Complete' },
 };
 
 /**
@@ -104,6 +105,24 @@ export function Avatar({ name, id, size = 'sm' }: { name: string; id?: string; s
   );
 }
 
+/** Overlapping faces, then "+n" for the rest. Everyone is named for screen readers. */
+export function AvatarStack({ people, max = 3, size = 'xs' }: { people: { id: string; name: string }[]; max?: number; size?: 'xs' | 'sm' }) {
+  if (!people.length) return null;
+  const shown = people.slice(0, max);
+  const rest = people.length - shown.length;
+  const dims = size === 'xs' ? 'h-5 min-w-5 text-[10px]' : 'h-6 min-w-6 text-[11px]';
+  return (
+    <span className="tk-stack inline-flex items-center" role="img" aria-label={people.map((p) => p.name).join(', ')}>
+      {shown.map((p) => <Avatar key={p.id || p.name} name={p.name} id={p.id} size={size} />)}
+      {rest > 0 && (
+        <span title={people.slice(max).map((p) => p.name).join(', ')} className={`inline-flex shrink-0 items-center justify-center rounded-full bg-gray-200 px-1 font-semibold text-gray-700 ${dims}`}>
+          +{rest}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // ── Due date ─────────────────────────────────────────────────────────────────
 
 /** "Late · 21 Oct" (red), "Today" (amber), otherwise the day — or nothing. */
@@ -155,12 +174,22 @@ export function TagChip({ tag, onClick, onRemove, active = false }: {
   );
 }
 
-/** A group heading as a coloured pill: the status' colour, otherwise neutral. */
+/**
+ * A group heading as a pill. A status is solid colour with a white label
+ * (`.tk-pill` in tasks.css; the Tailwind tone is the fallback outside Tasks),
+ * anything else neutral.
+ */
 export function GroupPill({ status, children }: { status?: TaskStatus; children: ReactNode }) {
-  const tone = status ? STATUS_STYLE[status].pill : 'bg-gray-100 text-gray-800';
+  if (status) {
+    return (
+      <span data-status={status} className={`tk-pill inline-flex items-center gap-1.5 rounded-md px-2 py-[3px] text-[11px] font-bold uppercase leading-4 tracking-wide ${STATUS_STYLE[status].pill}`}>
+        <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full border-[1.5px] border-current ${status === 'done' ? 'bg-current' : ''}`} />{children}
+      </span>
+    );
+  }
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-bold uppercase tracking-wide ${tone}`}>
-      {status && <StatusDot status={status} />}{children}
+    <span className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-gray-800">
+      {children}
     </span>
   );
 }

@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TasksWorkspace from './TasksWorkspace';
 import TaskDetail, { timeAgo } from './TaskDetail';
-import { initialsOf, toneFor } from './ui';
+import { AvatarStack, initialsOf, toneFor } from './ui';
 import { formatDueDay, isPastDay, todayIST, type Task } from './types';
 import { addressBar } from '@/test-utils/addressBarMock';
 
@@ -84,7 +84,7 @@ const workspace = (props: Partial<{ base: string; canSeeTeam: boolean }> = {}) =
   wrap(<TasksWorkspace base={props.base ?? '/team/tasks'} canSeeTeam={props.canSeeTeam ?? false} />);
 
 describe('the Tasks page', () => {
-  it('groups open tasks by status, each with "+ Add task"; Done is folded until opened', async () => {
+  it('groups open tasks by status, each with "+ Add task"; Complete is folded until opened', async () => {
     serve({
       list: [task(), task({ id: 't2', code: 'T-8', title: 'Chase supplier', status: 'in_progress', statusLabel: 'In progress' })],
       done: [task({ id: 't3', code: 'T-9', title: 'Old job', status: 'done', bucket: 'done' })],
@@ -95,18 +95,24 @@ describe('the Tasks page', () => {
     expect(within(await group('To do')).getByText('Call Bosch')).toBeInTheDocument();
     expect(within(await group('To do')).getByRole('button', { name: /Add task/ })).toBeInTheDocument();
     expect(screen.queryByText('Old job')).toBeNull();
-    fireEvent.click(within(await group('Done')).getByRole('button', { name: /Done/ }));
+    fireEvent.click(within(await group('Complete')).getByRole('button', { name: /Complete/ }));
     expect(await screen.findByText('Old job')).toBeInTheDocument();
     expect(listCalls()).toContain('/staff/tasks?view=mine&state=done');
   });
 
-  it('shows late / due-today counters that filter the list', async () => {
+  it('"Today & overdue" counts what is late or due today, and filters to it (a second press goes back)', async () => {
     serve({ summary: { late: 3, today: 2 } });
     workspace();
-    fireEvent.click(await screen.findByRole('button', { name: /3 late/ }));
-    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open&due=overdue'));
-    fireEvent.click(screen.getByRole('button', { name: /2 due today/ }));
-    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open&due=today'));
+    const nav = await screen.findByRole('navigation', { name: 'Task lists' });
+    const dueNow = await within(nav).findByRole('button', { name: /Today & overdue 5 due now/ });
+    fireEvent.click(dueNow);
+    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open&due=late'));
+    expect(dueNow).toHaveAttribute('aria-pressed', 'true');
+    expect(within(nav).getByRole('button', { name: 'Assigned to me' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('heading', { level: 1, name: /Today & overdue/ })).toBeInTheDocument();
+    fireEvent.click(dueNow);
+    await waitFor(() => expect(dueNow).toHaveAttribute('aria-pressed', 'false'));
+    expect(within(nav).getByRole('button', { name: 'Assigned to me' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('searches after a short pause, and "/" jumps to the search box', async () => {
@@ -123,7 +129,7 @@ describe('the Tasks page', () => {
     serve();
     const { unmount } = workspace();
     await screen.findByText('Call Bosch');
-    expect(screen.getByRole('button', { name: 'For me' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Assigned to me' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByRole('button', { name: 'My team' })).toBeNull();
     unmount();
     const head = workspace({ canSeeTeam: true });
@@ -147,10 +153,10 @@ describe('the Tasks page', () => {
     serve();
     patch.mockResolvedValueOnce({ task: task({ status: 'done', rev: 4 }) }).mockRejectedValueOnce({ status: 409 });
     workspace();
-    fireEvent.click(await screen.findByRole('button', { name: 'Mark T-7 done' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Mark T-7 complete' }));
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'done' }));
-    expect(toastSuccess).toHaveBeenCalledWith('T-7 done', expect.anything());
-    fireEvent.click(screen.getByRole('button', { name: 'Mark T-7 done' }));
+    expect(toastSuccess).toHaveBeenCalledWith('T-7 complete', expect.anything());
+    fireEvent.click(screen.getByRole('button', { name: 'Mark T-7 complete' }));
     await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringContaining('changed by someone else')));
   });
 
@@ -158,7 +164,7 @@ describe('the Tasks page', () => {
     serve({ list: [task({ can: { ...can, status: false } })] });
     workspace();
     await screen.findByText('Call Bosch');
-    expect(screen.queryByRole('button', { name: 'Mark T-7 done' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mark T-7 complete' })).toBeNull();
   });
 
   it('"+ Add task" in a group: type, Enter — it starts in that status; Escape closes', async () => {
@@ -199,8 +205,9 @@ describe('the Tasks page', () => {
     serve({ summary: { late: 0, today: 0 } });
     workspace({ canSeeTeam: true });
     const nav = await screen.findByRole('navigation', { name: 'Task lists' });
-    expect(screen.getByRole('heading', { level: 1, name: 'Tasks for me' })).toBeInTheDocument();
-    expect(within(nav).queryByRole('button', { name: /late/ })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Assigned to me' })).toBeInTheDocument();
+    // Nothing due: "Today & overdue" carries no count.
+    expect(within(nav).getByRole('button', { name: 'Today & overdue' })).toBeInTheDocument();
     fireEvent.click(within(nav).getByRole('button', { name: 'I gave out' }));
     expect(screen.getByRole('heading', { level: 1, name: 'I gave out' })).toBeInTheDocument();
     expect(within(nav).getByRole('button', { name: 'I gave out' })).toHaveAttribute('aria-pressed', 'true');
@@ -251,7 +258,7 @@ describe('search, filters and sort in the address', () => {
     fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'newest' } });
     await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open&sort=newest'));
     expect(addressBar.search).toBe('sort=newest');
-    fireEvent.click(within(await screen.findByRole('region', { name: 'Done' })).getByRole('button', { name: /Done/ }));
+    fireEvent.click(within(await screen.findByRole('region', { name: 'Complete' })).getByRole('button', { name: /Complete/ }));
     await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=done'));
     expect(listCalls().filter((u) => u.includes('state=done') && u.includes('sort='))).toEqual([]);
   });
@@ -303,7 +310,7 @@ describe('the board', () => {
     );
     await waitFor(() => expect(within(col('To do')).getByText('Call Bosch')).toBeInTheDocument());
     expect(within(col('Waiting')).getByText('Chase supplier')).toBeInTheDocument();
-    expect(await within(col('Done')).findByText('Old job')).toBeInTheDocument();
+    expect(await within(col('Complete')).findByText('Old job')).toBeInTheDocument();
     expect(localStorage.getItem('tasks-view-mode')).toBe('board');
   });
 
@@ -320,7 +327,7 @@ describe('the board', () => {
     patch.mockRejectedValue({ status: 409 });
     await board([task()]);
     await screen.findByText('Call Bosch');
-    fireEvent.drop(col('Done'), { dataTransfer: dt('t1') });
+    fireEvent.drop(col('Complete'), { dataTransfer: dt('t1') });
     await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringContaining('T-7 was changed by someone else')));
     await waitFor(() => expect(within(col('To do')).getByText('Call Bosch')).toBeInTheDocument());
   });
@@ -329,7 +336,7 @@ describe('the board', () => {
     await board([task({ can: { ...can, status: false } })]);
     const card = await screen.findByRole('button', { name: 'Open T-7: Call Bosch' });
     expect(card).toHaveAttribute('draggable', 'false');
-    fireEvent.drop(col('Done'), { dataTransfer: dt('t1') });
+    fireEvent.drop(col('Complete'), { dataTransfer: dt('t1') });
     expect(patch).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Move T-7')).toBeNull();
   });
@@ -341,11 +348,11 @@ describe('the board', () => {
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'waiting' }));
   });
 
-  it('a date filter shows only what is still to do (no Done column)', async () => {
+  it('a date filter shows only what is still to do (no Complete column)', async () => {
     await board([task()]);
     await screen.findByText('Call Bosch');
     fireEvent.click(screen.getByRole('button', { name: 'Late' }));
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Done' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Complete' })).toBeNull());
   });
 });
 
@@ -592,3 +599,58 @@ describe('helpers', () => {
 
 // Keep `act` referenced for environments that warn on unused imports.
 void act;
+
+describe('the board card', () => {
+  const board = async (list: Task[], done: Task[] = []) => {
+    serve({ list, done });
+    localStorage.setItem('tasks-view-mode', 'board');
+    workspace();
+    return screen.findByRole('button', { name: `Open ${list[0]?.code ?? done[0].code}: ${list[0]?.title ?? done[0].title}` });
+  };
+
+  it('shows the person, the date, the T-number, comments and a Late badge', async () => {
+    const card = await board([task({ commentCount: 3, overdue: true, dueToday: false, dueOn: '2026-10-21' })]);
+    expect(within(card).getByRole('img', { name: 'Arun' })).toBeInTheDocument();
+    expect(within(card).getByText('T-7')).toBeInTheDocument();
+    expect(within(card).getByText('3')).toBeInTheDocument();
+    expect(within(card).getByText('Late')).toBeInTheDocument();
+    expect(within(card).getByTitle('Due 21 Oct')).toBeInTheDocument();
+    expect(within(card).getByTitle('High priority')).toBeInTheDocument();
+  });
+
+  it('a bare task: no comment count, no Late; the empty date, flag and tag say so to screen readers', async () => {
+    const card = await board([task({ priority: 'normal', dueOn: null, overdue: false, dueToday: false })]);
+    expect(within(card).queryByText('Late')).toBeNull();
+    expect(within(card).queryByTitle(/comments/)).toBeNull();
+    expect(within(card).getByText('No due date')).toBeInTheDocument();
+    expect(within(card).getByText('Normal priority')).toBeInTheDocument();
+    expect(within(card).getByText('No tags')).toBeInTheDocument();
+  });
+
+  it('a finished task is never Late', async () => {
+    const card = await board([], [task({ status: 'done', bucket: 'done', overdue: true, dueToday: false })]);
+    expect(within(card).queryByText('Late')).toBeNull();
+  });
+
+  it('clicking the card opens the task; the column headings are status pills', async () => {
+    const card = await board([task()]);
+    expect(screen.getByRole('region', { name: 'To do' }).querySelector('.tk-pill')).toHaveAttribute('data-status', 'todo');
+    fireEvent.click(card);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(expect.stringContaining('task=t1'), expect.anything()));
+  });
+});
+
+describe('AvatarStack', () => {
+  it('shows up to three faces, then "+n", and names everyone', () => {
+    const people = ['Arun', 'Bala', 'Chitra', 'Dev', 'Esha'].map((name, i) => ({ id: `u${i}`, name }));
+    render(<AvatarStack people={people} />);
+    const stack = screen.getByRole('img', { name: 'Arun, Bala, Chitra, Dev, Esha' });
+    expect(within(stack).getByText('+2')).toHaveAttribute('title', 'Dev, Esha');
+    expect(within(stack).getAllByTitle(/^(Arun|Bala|Chitra)$/)).toHaveLength(3);
+  });
+
+  it('renders nothing for nobody', () => {
+    const { container } = render(<AvatarStack people={[]} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});

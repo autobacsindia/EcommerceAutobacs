@@ -130,6 +130,8 @@ export default function TeamLayoutClient({
         </Link>
       )}
       onLogout={signOut}
+      // Tasks wants the room: the menu shrinks to icons and opens over the page on hover.
+      hoverRail={pathname === '/team/tasks' || pathname.startsWith('/team/tasks/')}
       heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{current?.label || `${teamLabel} Team`}</h2>}
       // Everything waiting on this team in one place — approvals, refunds,
       // unread chat — so nobody opens each page to check. Every team gets the
