@@ -1,13 +1,18 @@
 'use client';
 
-import { useState, type KeyboardEvent, type ReactNode } from 'react';
-import { CalendarRange, Check, ChevronDown, ChevronRight, ListChecks, MessageSquare, Package, Plus, Users } from 'lucide-react';
+import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, Flag, ListChecks, MessageSquare, Package, Plus, Tag, UserPlus, Users, X } from 'lucide-react';
 import { errorMessage } from '@/components/staff/sales/types';
-import { useQuickAdd, useSetStatus, useTaskPages } from './hooks';
+import { useQuickAdd, useSetStatus, useTaskPages, type QuickExtras } from './hooks';
+import AssigneePicker from './AssigneePicker';
+import { useAssignees } from './TaskForm';
 import { groupTasks, type TaskGroup } from './grouping';
 import BulkBar from './BulkBar';
 import { Avatar, AvatarStack, Chip, DuePill, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
-import { formatDueDay, type Task, type TaskFilters, type TaskGroupBy, type TaskStatus } from './types';
+import {
+  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, formatDueDay, newClientId, peopleOf,
+  type Task, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskStatus,
+} from './types';
 
 /** The round tick at the start of a row: one click marks the task done (or opens it again). */
 export function CompleteButton({ t, onToggle, busy }: { t: Task; onToggle: () => void; busy: boolean }) {
@@ -128,7 +133,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
           </div>
           {/* Phones and tablets: the columns, folded into one line. */}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 lg:hidden">
-            <AvatarStack people={[t.assignee]} />
+            <AvatarStack people={peopleOf(t)} />
             <DuePill t={t} />
             {t.priority !== 'normal' && <PriorityFlag priority={t.priority} withLabel />}
             <TagList tags={t.tags} onTag={onTag} activeTag={activeTag} />
@@ -136,9 +141,9 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
           </div>
         </div>
       </div>
-      <span className="hidden min-w-0 items-center gap-2 lg:flex" title={t.assignee.name}>
-        <AvatarStack people={[t.assignee]} size="sm" />
-        <span className="truncate text-xs text-gray-700">{t.assignee.name.split(' ')[0]}</span>
+      <span className="hidden min-w-0 items-center gap-2 lg:flex" title={peopleOf(t).map((p) => p.name).join(', ')}>
+        <AvatarStack people={peopleOf(t)} size="sm" />
+        {peopleOf(t).length === 1 && <span className="truncate text-xs text-gray-700">{t.assignee.name.split(' ')[0]}</span>}
       </span>
       <span className="hidden lg:block"><DuePill t={t} empty={<span className="text-xs text-gray-300">—</span>} /></span>
       <span className="hidden lg:block"><PriorityFlag priority={t.priority} withLabel /></span>
@@ -150,19 +155,118 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
   );
 }
 
-/** "+ Add task" at the foot of a group or column: type, Enter, keep typing; Escape to stop. */
+const chipClass = 'inline-flex h-7 items-center gap-1 rounded-md border border-gray-200 bg-white px-2 text-xs font-medium text-gray-600 hover:border-gray-300 hover:text-gray-900';
+
+/**
+ * The board's chips under a new task's name: who does it, the due date, the
+ * priority and tags — each optional, each shown as what it is once set.
+ */
+function QuickChips({ extras, onChange }: { extras: QuickExtras; onChange: (patch: QuickExtras) => void }) {
+  const people = useAssignees();
+  const choices = people.data?.people ?? [];
+  const byId = new Map(choices.map((p) => [p.id, p]));
+  const ids = extras.assigneeIds ?? [];
+  const picked = ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
+  const [dating, setDating] = useState(false);
+  const [tagging, setTagging] = useState(false);
+  const [tag, setTag] = useState('');
+  const tags = extras.tags ?? [];
+  const addTag = () => {
+    const clean = cleanTag(tag);
+    setTag('');
+    setTagging(false);
+    if (clean && !tags.includes(clean) && tags.length < TAGS_MAX) onChange({ tags: [...tags, clean] });
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <AssigneePicker
+        people={choices}
+        selected={ids}
+        onChange={(next) => onChange({ assigneeIds: next })}
+        max={MAX_ASSIGNEES}
+        label="Assignees"
+        triggerLabel={picked.length ? `Assignees: ${picked.map((p) => p.name).join(', ')}` : 'Add assignee'}
+        trigger={(
+          <span className={chipClass}>
+            {picked.length ? <AvatarStack people={picked} /> : <><UserPlus aria-hidden className="h-3.5 w-3.5" /> Add assignee</>}
+          </span>
+        )}
+      />
+      {dating || extras.dueOn ? (
+        <input
+          type="date"
+          value={extras.dueOn || ''}
+          onChange={(e) => onChange({ dueOn: e.target.value || null })}
+          onBlur={() => setDating(false)}
+          autoFocus={dating && !extras.dueOn}
+          aria-label="Due date"
+          className="h-7 rounded-md border border-gray-200 px-1.5 text-xs"
+        />
+      ) : (
+        <button type="button" onClick={() => setDating(true)} className={chipClass}><CalendarDays aria-hidden className="h-3.5 w-3.5" /> Add dates</button>
+      )}
+      <label className={`${chipClass} relative`}>
+        <Flag aria-hidden className={`h-3.5 w-3.5 ${extras.priority && extras.priority !== 'normal' ? PRIORITY_STYLE[extras.priority].flag : ''}`} />
+        {extras.priority && extras.priority !== 'normal' ? PRIORITY_STYLE[extras.priority].label : 'Add priority'}
+        <select
+          value={extras.priority ?? 'normal'}
+          onChange={(e) => onChange({ priority: e.target.value as TaskPriority })}
+          aria-label="Priority"
+          className="absolute inset-0 cursor-pointer opacity-0"
+        >
+          {TASK_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+        </select>
+      </label>
+      {tags.map((t) => (
+        <span key={t} className={chipClass}>
+          #{t}
+          <button type="button" onClick={() => onChange({ tags: tags.filter((x) => x !== t) })} aria-label={`Remove tag ${t}`} className="-mr-1 rounded p-0.5 hover:bg-gray-100"><X aria-hidden className="h-3 w-3" /></button>
+        </span>
+      ))}
+      {tagging ? (
+        <input
+          value={tag}
+          onChange={(e) => setTag(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); addTag(); }
+            if (e.key === 'Escape') { e.stopPropagation(); setTag(''); setTagging(false); }
+          }}
+          onBlur={addTag}
+          autoFocus
+          maxLength={30}
+          placeholder="Tag, then Enter"
+          aria-label="New tag"
+          className="h-7 w-28 rounded-md border border-gray-200 px-1.5 text-xs"
+        />
+      ) : tags.length < TAGS_MAX && (
+        <button type="button" onClick={() => setTagging(true)} className={chipClass}><Tag aria-hidden className="h-3.5 w-3.5" /> Add tag</button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "+ Add task" at the foot of a group or column: type, Enter, keep typing;
+ * Escape to stop. On the board, chips under the name set who does it, the due
+ * date, the priority and tags before it is saved. One id per draft: a double
+ * Enter or a retried request makes one task.
+ */
 export function QuickAdd({ status, assigneeId, label = 'Add task', variant = 'list' }: {
   status: TaskStatus; assigneeId?: string; label?: string; variant?: 'list' | 'board';
 }) {
   const add = useQuickAdd();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
+  const [extras, setExtras] = useState<QuickExtras>({});
+  const clientId = useRef(newClientId());
+  const board = variant === 'board';
+  const stop = () => { setOpen(false); setTitle(''); setExtras({}); };
   if (!open) {
     return (
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={variant === 'board'
+        className={board
           ? 'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] font-medium text-gray-500 hover:bg-white hover:text-gray-800'
           : 'flex w-full items-center gap-2 border-t border-gray-100 px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-800 lg:pl-[52px]'}
       >
@@ -170,30 +274,50 @@ export function QuickAdd({ status, assigneeId, label = 'Add task', variant = 'li
       </button>
     );
   }
+  const touched = !!(title.trim() || extras.assigneeIds?.length || extras.dueOn || extras.tags?.length || (extras.priority && extras.priority !== 'normal'));
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         const text = title.trim();
         if (!text) return;
-        add.mutate({ title: text, status, assigneeId }, { onSuccess: () => setTitle('') });
+        add.mutate({ title: text, status, assigneeId, extras, clientId: clientId.current }, {
+          // Ready for the next one; the people and the chips stay, the name clears.
+          onSuccess: () => { setTitle(''); clientId.current = newClientId(); },
+        });
       }}
-      className={variant === 'board'
-        ? 'tk-card flex items-center gap-2 rounded-lg bg-white p-1.5'
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); stop(); } }}
+      // Leaving an untouched draft closes it; one with anything in it stays.
+      // A chip's pop-over lives outside the form (on the page), but is part of it.
+      onBlur={(e) => {
+        const to = e.relatedTarget as Element | null;
+        if (!e.currentTarget.contains(to) && !to?.closest('[data-popover]') && !touched) stop();
+      }}
+      className={board
+        ? 'tk-card space-y-2 rounded-lg bg-white p-2'
         : 'flex items-center gap-2 border-t border-gray-100 px-3 py-1.5 lg:pl-[52px]'}
     >
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); setTitle(''); } }}
-        onBlur={() => { if (!title.trim()) setOpen(false); }}
-        autoFocus
-        maxLength={200}
-        placeholder="Task name, then Enter"
-        aria-label={`New task in ${STATUS_STYLE[status].label}`}
-        className="min-w-0 flex-1 rounded-md border border-blue-500! px-2 py-1 text-sm outline-none ring-2 ring-blue-100"
-      />
-      <button type="submit" disabled={add.isPending || !title.trim()} className="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white disabled:opacity-40">Save</button>
+      <div className="flex items-center gap-2">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          autoFocus
+          maxLength={200}
+          placeholder={board ? 'Task name…' : 'Task name, then Enter'}
+          aria-label={`New task in ${STATUS_STYLE[status].label}`}
+          className="min-w-0 flex-1 rounded-md border border-blue-500! px-2 py-1 text-sm outline-none ring-2 ring-blue-100"
+        />
+        {!board && <button type="submit" disabled={add.isPending || !title.trim()} className="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white disabled:opacity-40">Save</button>}
+      </div>
+      {board && (
+        <>
+          <QuickChips extras={extras} onChange={(patch) => setExtras((x) => ({ ...x, ...patch }))} />
+          <div className="flex justify-end gap-1.5">
+            <button type="button" onClick={stop} className="rounded-md px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100">Cancel</button>
+            <button type="submit" disabled={add.isPending || !title.trim()} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40">Save</button>
+          </div>
+        </>
+      )}
     </form>
   );
 }

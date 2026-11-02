@@ -6,7 +6,7 @@ import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
 import {
-  isConflict, newClientId, type BulkChange, type BulkResult, type Task, type TaskBucket, type TaskFilters, type TaskPage, type TaskStatus,
+  isConflict, newClientId, type BulkChange, type BulkResult, type Task, type TaskBucket, type TaskFilters, type TaskPage, type TaskPriority, type TaskStatus,
 } from './types';
 
 /** The query string for one list: only the filters that are set. */
@@ -65,20 +65,32 @@ export function useSetStatus() {
   });
 }
 
+/** What "+ Add task" may set beside the title (the board's chips). */
+export type QuickExtras = { assigneeIds?: string[]; dueOn?: string | null; priority?: TaskPriority; tags?: string[] };
+
 /**
  * "+ Add task" inside a status group or board column: a title, Enter, done.
- * The task starts in that status and goes to `assigneeId` (or the person adding it).
+ * The task starts in that status and goes to `assigneeId` / `assigneeIds` (or
+ * the person adding it); several people share ONE task. `clientId` is per
+ * draft, so a double Enter or a retried request still makes one task.
  */
 export function useQuickAdd() {
   const refresh = useRefreshTasks();
   return useMutation({
-    mutationFn: ({ title, status, assigneeId }: { title: string; status: TaskStatus; assigneeId?: string }) =>
-      apiClient.post<{ task: Task }>('/staff/tasks', {
+    mutationFn: ({ title, status, assigneeId, extras = {}, clientId = newClientId() }: {
+      title: string; status: TaskStatus; assigneeId?: string; extras?: QuickExtras; clientId?: string;
+    }) => {
+      const ids = extras.assigneeIds?.length ? extras.assigneeIds : assigneeId ? [assigneeId] : [];
+      return apiClient.post<{ task: Task }>('/staff/tasks', {
         title,
         ...(status !== 'done' && status !== 'todo' ? { status } : {}),
-        ...(assigneeId ? { assigneeIds: [assigneeId] } : {}),
-        clientId: newClientId(),
-      }),
+        ...(ids.length ? { assigneeIds: ids, shared: true } : {}),
+        ...(extras.dueOn ? { dueOn: extras.dueOn } : {}),
+        ...(extras.priority && extras.priority !== 'normal' ? { priority: extras.priority } : {}),
+        ...(extras.tags?.length ? { tags: extras.tags } : {}),
+        clientId,
+      });
+    },
     onSuccess: () => refresh(),
     onError: (e) => { toast.error(errorMessage(e, 'Could not add the task.')); },
   });
@@ -120,4 +132,27 @@ export function useKnownTags(): string[] {
     for (const page of data?.pages ?? []) for (const t of page.tasks) for (const tag of t.tags ?? []) seen.add(tag);
   }
   return [...seen].sort();
+}
+
+/**
+ * Follow / stop following a task, or (whoever gave it, a head, the admin) add
+ * and remove followers. Never bumps the task's revision, so it never makes an
+ * open edit stale. The answer is the task now — or null when the viewer stopped
+ * following a task they could see only as a follower.
+ */
+export function useFollowers(taskId: string, { onGone }: { onGone?: () => void } = {}) {
+  const queryClient = useQueryClient();
+  const refresh = useRefreshTasks();
+  return useMutation({
+    mutationFn: (change: { add?: string[]; remove?: string[] }) =>
+      apiClient.patch<{ task: Task | null }>(`/staff/tasks/${encodeURIComponent(taskId)}/followers`, change),
+    onSuccess: (res) => {
+      if (res.task) queryClient.setQueryData(taskKeys.one(taskId), { task: res.task });
+      else { queryClient.removeQueries({ queryKey: taskKeys.one(taskId) }); onGone?.(); }
+      // The mention list marks who is on the task.
+      queryClient.invalidateQueries({ queryKey: [...taskKeys.one(taskId), 'mentionable'] });
+      refresh();
+    },
+    onError: (e) => { toast.error(errorMessage(e, 'Could not change who follows this task.')); },
+  });
 }

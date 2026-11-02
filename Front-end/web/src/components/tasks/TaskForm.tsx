@@ -3,12 +3,14 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { CalendarDays, CalendarRange, Flag, ListChecks, Loader2, Tag, X } from 'lucide-react';
+import { CalendarDays, CalendarRange, Flag, ListChecks, Loader2, Tag, UserPlus, Users, X } from 'lucide-react';
 import TagInput from './TagInput';
+import AssigneePicker from './AssigneePicker';
+import { AvatarStack } from './ui';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
-import { TASK_PRIORITIES, isPastDay, newClientId, personLabel, type Assignee, type Task, type TaskPriority } from './types';
+import { MAX_ASSIGNEES, TASK_PRIORITIES, isPastDay, newClientId, type Assignee, type Task, type TaskPriority } from './types';
 
 /** Shown under a due date that has already passed. */
 export function PastDueWarning({ dueOn }: { dueOn: string }) {
@@ -87,50 +89,56 @@ export function useAssignees() {
 }
 
 /**
- * Tick everyone who should do it — each person gets their own copy. The API
- * lists you first, then team heads, then everyone else; a search box appears
- * once the list is long.
+ * Who does it: the people picker behind a button, and — once several are picked —
+ * one shared task (the default: one status, one conversation) or a copy each.
  */
-export function PeoplePicker({ people, selected, onChange }: {
-  people: Assignee[]; selected: string[]; onChange: (ids: string[]) => void;
+export function PeopleField({ people, selected, onChange, copies, onCopies }: {
+  people: Assignee[]; selected: string[]; onChange: (ids: string[]) => void; copies: boolean; onCopies: (copies: boolean) => void;
 }) {
-  const [q, setQ] = useState('');
-  const term = q.trim().toLowerCase();
-  const shown = term ? people.filter((p) => personLabel(p).toLowerCase().includes(term)) : people;
-  const toggle = (id: string) => onChange(
-    // Keep the list's own order (heads first), whatever order people were ticked in.
-    people.map((p) => p.id).filter((pid) => (pid === id ? !selected.includes(id) : selected.includes(pid))),
-  );
+  const byId = new Map(people.map((p) => [p.id, p]));
+  const chosen = selected.map((id) => byId.get(id)).filter((p): p is Assignee => !!p);
   const n = selected.length;
+  const choice = (value: boolean, title: string, hint: string) => (
+    <label className={`flex flex-1 cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 ${copies === value ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+      <input type="radio" name="task-copies" checked={copies === value} onChange={() => onCopies(value)} className="mt-0.5 h-4 w-4" />
+      <span>
+        <span className="block text-sm font-medium text-gray-900">{title}</span>
+        <span className="block text-xs font-normal text-gray-500">{hint}</span>
+      </span>
+    </label>
+  );
   return (
-    <fieldset className="rounded-lg border border-gray-300 p-2">
-      <legend className="px-1 text-xs font-medium text-gray-600">Who does it — tick one or more people</legend>
-      {people.length > 8 && (
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name or team"
-          aria-label="Search people"
-          className="mb-2 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex items-center gap-1 text-xs font-medium text-gray-500"><Users aria-hidden className="h-3.5 w-3.5" /> Assignees</span>
+        <AssigneePicker
+          people={people}
+          selected={selected}
+          onChange={onChange}
+          max={MAX_ASSIGNEES}
+          label="Assignees"
+          triggerLabel="Who does it"
+          trigger={n ? (
+            <span className="inline-flex items-center gap-2 rounded-md border border-gray-200 px-2 py-1 text-sm text-gray-800 hover:border-gray-300">
+              <AvatarStack people={chosen} max={4} size="sm" />
+              <span className="max-w-[14rem] truncate">{chosen.map((p) => (p.me ? 'Me' : p.name.split(' ')[0])).join(', ')}</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-gray-300 px-2 py-1 text-sm text-gray-500 hover:border-gray-400">
+              <UserPlus aria-hidden className="h-4 w-4" /> Add assignee
+            </span>
+          )}
         />
+      </div>
+      {n === 0 && <p className="text-xs text-red-600">Pick at least one person.</p>}
+      {n > 1 && (
+        <fieldset className="flex flex-col gap-2 sm:flex-row">
+          <legend className="sr-only">One task or a copy each</legend>
+          {choice(false, 'One shared task', 'One status and one conversation for everyone.')}
+          {choice(true, 'Own copy each', `${n} tasks — each person marks their own done.`)}
+        </fieldset>
       )}
-      <ul className="max-h-56 space-y-0.5 overflow-auto">
-        {shown.map((p) => (
-          <li key={p.id}>
-            <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50">
-              <input type="checkbox" checked={selected.includes(p.id)} onChange={() => toggle(p.id)} className="h-4 w-4" />
-              <span className={p.isHead ? 'font-medium text-gray-900' : 'text-gray-800'}>{personLabel(p)}</span>
-            </label>
-          </li>
-        ))}
-        {shown.length === 0 && <li className="px-2 py-1 text-sm text-gray-500">Nobody matches.</li>}
-      </ul>
-      <p className={`mt-1 px-1 text-xs ${n === 0 ? 'text-red-600' : 'text-gray-500'}`}>
-        {n === 0 ? 'Pick at least one person.'
-          : n === 1 ? '1 person picked.'
-            : `${n} people picked — each gets their own copy and marks it done separately.`}
-      </p>
-    </fieldset>
+    </div>
   );
 }
 
@@ -146,6 +154,9 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
   // null until the person touches the list: it then starts with just "me" ticked.
   const [picked, setPicked] = useState<string[] | null>(null);
   const chosen = picked ?? (me ? [me.id] : []);
+  // Several people share one task unless the giver asks for a copy each.
+  const [copies, setCopies] = useState(false);
+  const many = copies && chosen.length > 1;
   const [order, setOrder] = useState<PickedOrder | null>(null);
   const [error, setError] = useState('');
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
@@ -156,6 +167,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
       title: form.title.trim(),
       description: form.description.trim(),
       assigneeIds: chosen,
+      shared: !copies,
       checklist: form.steps.split('\n').map((l) => l.trim()).filter(Boolean),
       priority: form.priority,
       dueOn: form.dueOn || null,
@@ -224,7 +236,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
           <span className="mb-1 flex items-center gap-1"><Tag aria-hidden className="h-3.5 w-3.5" /> Tags (optional)</span>
           <TagInput value={form.tags} onChange={(tags) => set({ tags })} />
         </label>
-        {choices.length > 1 && <PeoplePicker people={choices} selected={chosen} onChange={setPicked} />}
+        {choices.length > 1 && <PeopleField people={choices} selected={chosen} onChange={setPicked} copies={copies} onCopies={setCopies} />}
         {choices.length === 1 && (
           <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">This task is for you.</p>
         )}
@@ -250,7 +262,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
         >
           {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {chosen.length > 1 ? `Create ${chosen.length} tasks` : 'Create task'}
+          {many ? `Create ${chosen.length} tasks` : 'Create task'}
         </button>
       </div>
     </form>

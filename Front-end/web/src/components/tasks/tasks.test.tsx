@@ -10,6 +10,8 @@ import TasksWorkspace from './TasksWorkspace';
 import TaskDetail, { timeAgo } from './TaskDetail';
 import { AvatarStack, initialsOf, toneFor } from './ui';
 import { formatDueDay, isPastDay, todayIST, type Task } from './types';
+import { groupTasks } from './grouping';
+import { placePopover } from './AssigneePicker';
 import { addressBar } from '@/test-utils/addressBarMock';
 
 const get = jest.fn();
@@ -37,12 +39,12 @@ const wrap = (ui: React.ReactElement) => render(
   <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>,
 );
 
-const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true, files: true };
+const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true, files: true, follow: true, followers: true };
 const task = (over: Partial<Task> = {}): Task => ({
   id: 't1', number: 7, code: 'T-7', title: 'Call Bosch', summary: '', description: 'Ask about the lift kit',
   status: 'todo', statusLabel: 'To do', priority: 'high', priorityLabel: 'High',
   dueOn: '2026-10-27', startOn: null, tags: [], overdue: false, dueToday: true,
-  assignee: { id: 'u2', name: 'Arun' }, team: 'procurement', teamLabel: 'Procurement',
+  assignees: [], followers: [], following: false, assignee: { id: 'u2', name: 'Arun' }, team: 'procurement', teamLabel: 'Procurement',
   createdBy: { id: 'u1', name: 'Priya' }, order: null, group: null, checklist: { done: 0, total: 0 }, bucket: 'open',
   completedAt: null, archivedAt: null, commentCount: 0, lastCommentAt: null,
   createdAt: '2026-10-27T04:00:00Z', updatedAt: '2026-10-27T04:00:00Z', rev: 3, can,
@@ -364,38 +366,88 @@ describe('new task', () => {
     return screen.findByRole('dialog', { name: 'New task' });
   };
 
-  it('opens with N; a head ticks someone; pressing Create twice sends ONE clientId', async () => {
+  /** Open the people picker in the form. */
+  const picker = async (dialog: HTMLElement) => {
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Who does it' }));
+    return screen.getByRole('listbox', { name: 'Assignees' });
+  };
+
+  it('opens with N; a head swaps themselves for someone; pressing Create twice sends ONE clientId', async () => {
     serve({ list: [] });
     post.mockRejectedValueOnce({ status: 503, rawData: { message: 'Try again' } }).mockResolvedValue({ task: task(), tasks: [task()] });
     const dialog = await openForm({ canSeeTeam: true });
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Pack order 51234' } });
-    expect(await within(dialog).findByRole('checkbox', { name: /Priya \(me\)/ })).toBeChecked();
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Priya \(me\)/ }));
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Arun/ }));
+    const list = await picker(dialog);
+    // You are at the top, already picked.
+    const [first] = within(list).getAllByRole('option');
+    expect(first).toHaveTextContent('Me');
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(first);
+    fireEvent.click(within(list).getByRole('option', { name: /Arun/ }));
     fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: '2099-10-30' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Try again');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
-    const [first, second] = post.mock.calls.map((c) => c[1]);
-    expect(first).toMatchObject({ title: 'Pack order 51234', assigneeIds: ['u2'], dueOn: '2099-10-30', priority: 'normal', orderId: null });
-    expect(second.clientId).toBe(first.clientId);
+    const [sent, again] = post.mock.calls.map((c) => c[1]);
+    expect(sent).toMatchObject({ title: 'Pack order 51234', assigneeIds: ['u2'], shared: true, dueOn: '2099-10-30', priority: 'normal', orderId: null });
+    expect(again.clientId).toBe(sent.clientId);
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Task created'));
     // The new task opens in the side panel.
     expect(replace).toHaveBeenLastCalledWith('/team/tasks?task=t1', { scroll: false });
   });
 
-  it('heads are labelled as heads; several ticked people make one copy each, in list order', async () => {
+  it('heads are labelled as heads; several people share ONE task by default', async () => {
+    serve({ list: [] });
+    post.mockResolvedValue({ task: task(), tasks: [task()] });
+    const dialog = await openForm({ base: '/admin/tasks', canSeeTeam: true });
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Stock count' } });
+    const list = await picker(dialog);
+    expect(within(list).getByRole('option', { name: /Priya · Procurement head/ })).toBeInTheDocument();
+    fireEvent.click(within(list).getByRole('option', { name: /Bala/ }));
+    fireEvent.click(within(list).getByRole('option', { name: /Arun/ }));
+    expect(within(dialog).getByRole('radio', { name: /One shared task/ })).toBeChecked();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: ['u1', 'u3', 'u2'], shared: true })));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Task created'));
+  });
+
+  it('"Own copy each" makes one task per person', async () => {
     serve({ list: [] });
     post.mockResolvedValue({ task: task(), tasks: [task(), task(), task()] });
-    const dialog = await openForm({ base: '/admin/tasks', canSeeTeam: true });
-    expect(await within(dialog).findByText('Priya (me) · Procurement head')).toBeInTheDocument();
-    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Stock count' } });
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Bala/ }));
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Arun/ }));
+    const dialog = await openForm({ canSeeTeam: true });
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Read the policy' } });
+    const list = await picker(dialog);
+    fireEvent.click(within(list).getByRole('option', { name: /Bala/ }));
+    fireEvent.click(within(list).getByRole('option', { name: /Arun/ }));
+    fireEvent.click(within(dialog).getByRole('radio', { name: /Own copy each/ }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create 3 tasks' }));
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: ['u1', 'u2', 'u3'] })));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: ['u1', 'u3', 'u2'], shared: false })));
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('3 tasks created'));
+  });
+
+  it('the picker: search narrows it, arrow keys and Enter tick, Escape closes and returns focus', async () => {
+    serve({ list: [] });
+    const dialog = await openForm({ canSeeTeam: true });
+    const list = await picker(dialog);
+    const search = screen.getByRole('combobox', { name: 'Search assignees' });
+    expect(search).toHaveAttribute('placeholder', 'Search or enter name…');
+    fireEvent.change(search, { target: { value: 'ar' } });
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual([expect.stringContaining('Arun')]);
+    fireEvent.keyDown(search, { key: 'Enter' });
+    expect(within(list).getByRole('option', { name: /Arun/ })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.change(search, { target: { value: '' } });
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    fireEvent.keyDown(search, { key: 'ArrowDown' });
+    fireEvent.keyDown(search, { key: 'Enter' });
+    expect(within(list).getByRole('option', { name: /Bala/ })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.change(search, { target: { value: 'zzz' } });
+    expect(within(list).getByText(/Nobody matches/)).toBeInTheDocument();
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(screen.queryByRole('listbox', { name: 'Assignees' })).toBeNull();
+    expect(within(dialog).getByRole('button', { name: 'Who does it' })).toHaveFocus();
+    // The form is still open: Escape in the picker closes only the picker.
+    expect(screen.getByRole('dialog', { name: 'New task' })).toBeInTheDocument();
   });
 
   it('a member picks people from other teams like anyone else', async () => {
@@ -403,7 +455,7 @@ describe('new task', () => {
     post.mockResolvedValue({ task: task(), tasks: [task()] });
     const dialog = await openForm();
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Quote for 4512' } });
-    fireEvent.click(await within(dialog).findByRole('checkbox', { name: /Bala/ }));
+    fireEvent.click(within(await picker(dialog)).getByRole('option', { name: /Bala/ }));
     fireEvent.click(within(dialog).getByRole('button', { name: /^Create/ }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks', expect.objectContaining({ assigneeIds: expect.arrayContaining(['u3']) })));
   });
@@ -413,7 +465,7 @@ describe('new task', () => {
     post.mockResolvedValue({ task: task(), tasks: [task()] });
     const dialog = await openForm();
     expect(await within(dialog).findByText(/This task is for you/)).toBeInTheDocument();
-    expect(within(dialog).queryByRole('checkbox')).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Who does it' })).toBeNull();
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Mine' } });
     fireEvent.change(within(dialog).getByLabelText('Checklist steps'), { target: { value: 'Pack\n\n  Label  \n' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create task' }));
@@ -424,7 +476,7 @@ describe('new task', () => {
     serve({ list: [] });
     const dialog = await openForm({ canSeeTeam: true });
     fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'x' } });
-    fireEvent.click(await within(dialog).findByRole('checkbox', { name: /Priya \(me\)/ }));
+    fireEvent.click(within(await picker(dialog)).getByRole('option', { name: /Priya/ }));
     expect(within(dialog).getByText('Pick at least one person.')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Create task' })).toBeDisabled();
   });
@@ -479,8 +531,13 @@ describe('one task', () => {
     detail(task());
     fireEvent.change(await screen.findByLabelText('Priority'), { target: { value: 'urgent' } });
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, priority: 'urgent' }));
-    fireEvent.change(await screen.findByLabelText('Who does it'), { target: { value: 'u3' } });
-    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', expect.objectContaining({ assigneeId: 'u3' })));
+    // People: ticked in a draft, saved ONCE when the picker closes.
+    fireEvent.click(await screen.findByRole('button', { name: 'Who does it' }));
+    fireEvent.click(screen.getByRole('option', { name: /Bala/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Priya/ }));
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', expect.objectContaining({ assigneeIds: ['u2', 'u3', 'u1'] })));
+    expect(patch.mock.calls.filter((c) => 'assigneeIds' in c[1])).toHaveLength(1);
     (window.confirm as jest.Mock).mockReturnValueOnce(false);
     fireEvent.change(screen.getByLabelText('Due date'), { target: { value: '2020-01-01' } });
     expect(patch).not.toHaveBeenCalledWith('/staff/tasks/t1', expect.objectContaining({ dueOn: '2020-01-01' }));
@@ -652,5 +709,169 @@ describe('AvatarStack', () => {
   it('renders nothing for nobody', () => {
     const { container } = render(<AvatarStack people={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe('shared tasks and followers (phase 4)', () => {
+  const shared = (over: Partial<Task> = {}) => task({
+    assignees: [{ id: 'u2', name: 'Arun' }, { id: 'u3', name: 'Bala' }], ...over,
+  });
+  const detail = (one: Task, opts: Record<string, unknown> = {}, onClose?: () => void) => {
+    serve({ one, ...opts });
+    return wrap(<TaskDetail id="t1" base="/team/tasks" onClose={onClose} />);
+  };
+
+  it('everyone on a shared task shows on its board card and list row', async () => {
+    serve({ list: [shared()] });
+    localStorage.setItem('tasks-view-mode', 'board');
+    workspace();
+    const card = await screen.findByRole('button', { name: 'Open T-7: Call Bosch' });
+    expect(within(card).getByRole('img', { name: 'Arun, Bala' })).toBeInTheDocument();
+  });
+
+  it('grouped by person, a shared task sits under each of its people', () => {
+    const groups = groupTasks([shared(), task({ id: 't2', title: 'Solo' })], 'assignee');
+    expect(groups.map((g) => [g.label, g.tasks.map((t) => t.id)])).toEqual([['Arun', ['t1', 't2']], ['Bala', ['t1']]]);
+  });
+
+  it('taking everyone off is refused on the screen; nothing is sent', async () => {
+    detail(task());
+    fireEvent.click(await screen.findByRole('button', { name: 'Who does it' }));
+    fireEvent.click(screen.getByRole('option', { name: /Arun/ }));
+    fireEvent.mouseDown(document.body);
+    expect(toastError).toHaveBeenCalledWith('Keep at least one person on the task.');
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('closing the picker with nothing changed sends nothing', async () => {
+    detail(task());
+    fireEvent.click(await screen.findByRole('button', { name: 'Who does it' }));
+    fireEvent.click(screen.getByRole('option', { name: /Bala/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Bala/ }));
+    fireEvent.mouseDown(document.body);
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('Follow and Unfollow, without a revision (following never makes an edit stale)', async () => {
+    patch.mockResolvedValueOnce({ task: task({ following: true, followers: [{ id: 'u1', name: 'Priya' }] }) })
+      .mockResolvedValueOnce({ task: task() });
+    detail(task());
+    fireEvent.click(await screen.findByRole('button', { name: 'Follow' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1/followers', { add: ['u1'] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Unfollow' }));
+    await waitFor(() => expect(patch).toHaveBeenLastCalledWith('/staff/tasks/t1/followers', { remove: ['u1'] }));
+    // The giver may see it anyway: no warning.
+    expect(window.confirm).not.toHaveBeenCalledWith('Stop following? You will no longer see this task.');
+  });
+
+  it('someone who only follows is warned before unfollowing, and the panel closes after', async () => {
+    const onClose = jest.fn();
+    patch.mockResolvedValue({ task: null });
+    detail(task({
+      createdBy: { id: 'u9', name: 'Owner' }, following: true, followers: [{ id: 'u1', name: 'Priya' }],
+      can: { ...can, edit: false, reassign: false, status: false, followers: false },
+    }), {}, onClose);
+    fireEvent.click(await screen.findByRole('button', { name: 'Unfollow' }));
+    expect(window.confirm).toHaveBeenCalledWith('Stop following? You will no longer see this task.');
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it('the person doing it has no Follow button', async () => {
+    detail(task(), { assignees: { people: people.people.map((p) => ({ ...p, me: p.id === 'u2' })) } });
+    expect(await screen.findByText('Ask about the lift kit')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Follow' })).toBeNull();
+  });
+
+  it('the giver chooses followers (never the people doing it), saved once when the picker closes', async () => {
+    patch.mockResolvedValue({ task: task({ followers: [{ id: 'u3', name: 'Bala' }] }) });
+    detail(task());
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose followers' }));
+    const list = screen.getByRole('listbox', { name: 'Followers' });
+    expect(within(list).queryByRole('option', { name: /Arun/ })).toBeNull();
+    fireEvent.click(within(list).getByRole('option', { name: /Bala/ }));
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1/followers', { add: ['u3'], remove: [] }));
+    expect(patch).toHaveBeenCalledTimes(1);
+  });
+
+  it('the history says who changed the people and the followers', async () => {
+    detail(task({ history: [
+      { at: '2026-10-27T05:00:00Z', by: 'Priya', action: 'assignee', from: 'Arun', to: 'Arun, Bala' },
+      { at: '2026-10-27T06:00:00Z', by: 'Priya', action: 'follower_added', from: '', to: 'Sam' },
+    ] }));
+    expect(await screen.findByText(/changed who does it to Arun, Bala \(was Arun\)/)).toBeInTheDocument();
+    expect(screen.getByText(/added Sam as a follower/)).toBeInTheDocument();
+  });
+
+  it('"Following" lists the tasks you follow', async () => {
+    serve({ list: [] });
+    workspace();
+    fireEvent.click(await screen.findByRole('button', { name: /Following/ }));
+    await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=following&state=open'));
+    expect(await screen.findByText('You aren’t following any tasks')).toBeInTheDocument();
+  });
+
+  it('the people pop-over opens below its button, flips above near the bottom, and stays inside the window', () => {
+    const at = (top: number, left: number) => ({ top, bottom: top + 28, left, right: left + 120 });
+    // Room below: just under the button.
+    expect(placePopover(at(100, 50), 'left', 1280, 860)).toEqual({ top: 132, left: 50 });
+    // Near the bottom: above it, pinned by its bottom edge.
+    expect(placePopover(at(700, 50), 'left', 1280, 860)).toEqual({ bottom: 164, left: 50 });
+    // Right-aligned near the left edge, or too far right: kept 8px inside.
+    expect(placePopover(at(100, 0), 'right', 1280, 860)).toEqual({ top: 132, left: 8 });
+    expect(placePopover(at(100, 1200), 'left', 1280, 860)).toEqual({ top: 132, left: 1280 - 304 - 8 });
+  });
+
+  it('an empty board draft stays open while its people picker is in use, and closes when you leave it', async () => {
+    serve({ list: [task()] });
+    localStorage.setItem('tasks-view-mode', 'board');
+    workspace();
+    const column = await screen.findByRole('region', { name: 'In progress' });
+    fireEvent.click(within(column).getByRole('button', { name: /Add task/ }));
+    const name = within(column).getByLabelText('New task in In progress');
+    const chip = within(column).getByRole('button', { name: 'Add assignee' });
+    fireEvent.click(chip);
+    const search = await screen.findByRole('combobox', { name: 'Search assignees' });
+    // The pop-over is drawn on the page, outside the column, so nothing clips it.
+    expect(column.contains(search)).toBe(false);
+    fireEvent.blur(name, { relatedTarget: search });
+    expect(within(column).getByLabelText('New task in In progress')).toBeInTheDocument();
+    fireEvent.blur(name, { relatedTarget: document.body });
+    expect(within(column).queryByLabelText('New task in In progress')).toBeNull();
+  });
+
+  it('the board\'s "+ Add task" sets people, a date, priority and a tag; a retry keeps one clientId', async () => {
+    serve({ list: [task()] });
+    localStorage.setItem('tasks-view-mode', 'board');
+    post.mockRejectedValueOnce({ status: 503, rawData: { message: 'Try again' } }).mockResolvedValue({ task: task(), tasks: [task()] });
+    workspace();
+    const column = await screen.findByRole('region', { name: 'In progress' });
+    fireEvent.click(within(column).getByRole('button', { name: /Add task/ }));
+    fireEvent.change(within(column).getByLabelText('New task in In progress'), { target: { value: 'Ring Bosch' } });
+    fireEvent.click(within(column).getByRole('button', { name: 'Add assignee' }));
+    fireEvent.click(await screen.findByRole('option', { name: /Bala/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Arun/ }));
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
+    // Escape closed the picker, not the draft.
+    expect(within(column).getByLabelText('New task in In progress')).toHaveValue('Ring Bosch');
+    fireEvent.click(within(column).getByRole('button', { name: /Add dates/ }));
+    fireEvent.change(within(column).getByLabelText('Due date'), { target: { value: '2099-11-05' } });
+    fireEvent.change(within(column).getByLabelText('Priority'), { target: { value: 'urgent' } });
+    fireEvent.click(within(column).getByRole('button', { name: /Add tag/ }));
+    fireEvent.change(within(column).getByLabelText('New tag'), { target: { value: '#Kochi' } });
+    fireEvent.keyDown(within(column).getByLabelText('New tag'), { key: 'Enter' });
+    expect(within(column).getByText('#kochi')).toBeInTheDocument();
+    fireEvent.click(within(column).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    fireEvent.click(within(column).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    const [sent, again] = post.mock.calls.map((c) => c[1]);
+    expect(sent).toEqual({
+      title: 'Ring Bosch', status: 'in_progress', assigneeIds: ['u3', 'u2'], shared: true,
+      dueOn: '2099-11-05', priority: 'urgent', tags: ['kochi'], clientId: expect.any(String),
+    });
+    expect(again.clientId).toBe(sent.clientId);
+    // Saved: the name clears for the next one, and a new one gets a new id.
+    await waitFor(() => expect(within(column).getByLabelText('New task in In progress')).toHaveValue(''));
   });
 });

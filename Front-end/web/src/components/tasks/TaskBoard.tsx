@@ -9,7 +9,7 @@ import { errorMessage } from '@/components/staff/sales/types';
 import { useRefreshTasks, useTaskPages } from './hooks';
 import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
 import { AvatarStack, GroupPill, PriorityFlag, SkeletonRows } from './ui';
-import { TASK_STATUSES, formatDueDay, isConflict, type Task, type TaskFilters, type TaskStatus } from './types';
+import { TASK_STATUSES, formatDueDay, isConflict, peopleOf, type Task, type TaskFilters, type TaskStatus } from './types';
 
 /** How many finished cards the Done column shows; the rest are in the list view. */
 const DONE_SHOWN = 20;
@@ -45,7 +45,7 @@ function BoardCard({ t, onOpen, onMove, moving, onTag, activeTag }: {
       {t.tags?.length > 0 && <div className="mt-2"><TagList tags={t.tags} onTag={onTag} activeTag={activeTag} max={3} /></div>}
       <div className="mt-2 flex flex-wrap items-center gap-1.5 empty:hidden"><TaskMeta t={t} withComments={false} /></div>
       <div className="mt-2.5 flex items-center gap-2">
-        <AvatarStack people={[t.assignee]} />
+        <AvatarStack people={peopleOf(t)} />
         <span
           title={t.dueOn ? `Due ${formatDueDay(t.dueOn)}` : 'No due date'}
           className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-medium ${
