@@ -119,3 +119,15 @@ it('every team gets the Help page in its menu', () => {
     unmount();
   }
 });
+
+it('every team page gets the hover menu (icon strip), not just Tasks', () => {
+  localStorage.clear();
+  for (const path of ['/team', '/team/chat', '/team/tasks/abc']) {
+    pathname = path;
+    const { unmount } = shell(false);
+    expect(document.getElementById('panel-menu')).toHaveAttribute('data-rail', 'rail');
+    expect(screen.getByRole('main').className).toContain(path.startsWith('/team/tasks') ? 'md:p-5' : 'lg:p-8');
+    unmount();
+  }
+  pathname = '/team';
+});

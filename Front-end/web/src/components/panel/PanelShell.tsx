@@ -52,6 +52,7 @@ export default function PanelShell({
   collapsed = false,
   onToggleCollapsed,
   hoverRail = false,
+  tightPage = false,
   children,
 }: {
   homeHref: string;
@@ -72,9 +73,12 @@ export default function PanelShell({
   /**
    * Desktop: an icon rail that opens OVER the page on hover or keyboard focus
    * (the page never shifts), with a pin to keep it open. For screens that want
-   * the room (Tasks). Replaces `collapsed`; phones keep the drawer.
+   * the room. Replaces `collapsed`. Phones keep the drawer; touch tablets
+   * (no hover) also get the top-bar menu button, which opens it over the page.
    */
   hoverRail?: boolean;
+  /** Less padding round the page, for screens that want every pixel (Tasks). */
+  tightPage?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -122,13 +126,13 @@ export default function PanelShell({
   } : {};
 
   return (
-    <div className="panel-theme admin-panel min-h-screen">
+    <div className={`panel-theme admin-panel min-h-screen${hoverRail ? ' pn-rail-touch' : ''}`}>
       {menuOpen && (
         <button
           type="button"
           aria-label="Close menu"
           onClick={() => setMenuOpen(false)}
-          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          className="pn-menu-backdrop fixed inset-0 z-30 bg-black/40 md:hidden"
         />
       )}
 
@@ -246,7 +250,7 @@ export default function PanelShell({
             aria-label="Open menu"
             aria-controls="panel-menu"
             aria-expanded={menuOpen}
-            className="-ml-1 rounded-lg p-2 text-gray-700 hover:bg-gray-100 md:hidden"
+            className="pn-menu-btn -ml-1 rounded-lg p-2 text-gray-700 hover:bg-gray-100 md:hidden"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -256,7 +260,7 @@ export default function PanelShell({
             {actions}
           </div>
         </header>
-        <main className={`min-w-0 flex-1 ${hoverRail ? 'p-3 md:p-5' : 'p-4 md:p-6 lg:p-8'}`}>
+        <main className={`min-w-0 flex-1 ${tightPage ? 'p-3 md:p-5' : 'p-4 md:p-6 lg:p-8'}`}>
           <PushPrompt />
           {children}
         </main>

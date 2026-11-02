@@ -23,6 +23,24 @@ jest.mock('@/components/notifications/NotificationBell', () => ({ __esModule: tr
 jest.mock('@/components/notifications/PushPrompt', () => ({ __esModule: true, default: () => null }));
 
 const shell = () => render(<AdminLayoutClient userName="Autobacs India"><p>page</p></AdminLayoutClient>);
+const menu = () => document.getElementById('panel-menu')!;
+
+// The menu groups are checked with the menu pinned open (full sidebar).
+beforeEach(() => { pathname = '/admin/orders/abc123'; localStorage.setItem('panel-rail-pinned', '1'); });
+afterEach(() => localStorage.clear());
+
+it('every admin page gets the hover menu (icon strip), not just Tasks; Tasks alone keeps the tight page', () => {
+  localStorage.clear();
+  for (const path of ['/admin', '/admin/orders/abc123', '/admin/chat', '/admin/tasks']) {
+    pathname = path;
+    const { unmount } = shell();
+    expect(menu()).toHaveAttribute('data-rail', 'rail');
+    // The strip still names every link, so it works with a screen reader.
+    expect(screen.getByRole('link', { name: /^Brands$/ })).toBeInTheDocument();
+    expect(screen.getByRole('main').className).toContain(path === '/admin/tasks' ? 'md:p-5' : 'lg:p-8');
+    unmount();
+  }
+});
 
 it('lights the parent menu item on a detail page and titles the page with it', () => {
   shell();
