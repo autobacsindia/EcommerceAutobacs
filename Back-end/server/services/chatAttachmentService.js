@@ -57,6 +57,23 @@ const TYPES = {
 
 export const ALLOWED_ATTACHMENT_TYPES = Object.keys(TYPES);
 
+/** { kind, ext } for an allowed MIME type, or undefined. */
+export const attachmentType = (mime) => TYPES[mime];
+
+/** Refuse the batch (400) when any file's BYTES do not match its declared type — a renamed .exe never gets stored. */
+export function assertRealFiles(files) {
+  for (const file of files || []) {
+    const type = TYPES[file.mimetype];
+    if (!type || !type.verify(file.buffer)) {
+      throw new AppError(
+        `"${file.originalname}" does not look like a real ${type?.ext?.toUpperCase() || 'supported'} file, so it was not shared.`,
+        400,
+        { expose: true },
+      );
+    }
+  }
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_ATTACHMENT_SIZE, files: MAX_ATTACHMENTS_PER_MESSAGE },
@@ -109,16 +126,7 @@ export function safeName(original, ext) {
 export async function uploadChatAttachments(files, { channelId }) {
   if (!files?.length) return [];
 
-  for (const file of files) {
-    const type = TYPES[file.mimetype];
-    if (!type || !type.verify(file.buffer)) {
-      throw new AppError(
-        `"${file.originalname}" does not look like a real ${type?.ext?.toUpperCase() || 'supported'} file, so it was not shared.`,
-        400,
-        { expose: true },
-      );
-    }
-  }
+  assertRealFiles(files);
 
   // On R2 (STORAGE_PROVIDER=r2, as the rest of the site): PRIVATE objects, read
   // back through GET /chat/channels/:id/files/:name, which checks the reader may

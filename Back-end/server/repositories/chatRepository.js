@@ -3,6 +3,7 @@ import ChatMessage from '../models/ChatMessage.js';
 import ChatReadState from '../models/ChatReadState.js';
 import ChatStar from '../models/ChatStar.js';
 import ChatStatus from '../models/ChatStatus.js';
+import { reactionStage } from '../utils/reactions.js';
 
 /**
  * Team-chat data access (channels, messages, read positions). Access decisions
@@ -167,52 +168,11 @@ const chatRepository = {
    * Deleted messages are left alone. Returns { channel, threadRoot, reactions },
    * or null when the message is gone or deleted.
    */
-  setReaction: (id, userId, emoji, on, max) => {
-    const e = { $literal: emoji }; // never read as a field path
-    const current = { $ifNull: ['$reactions', []] };
-    const add = {
-      $let: {
-        vars: { r: current },
-        in: {
-          $cond: [
-            { $in: [e, '$$r.emoji'] },
-            {
-              $map: {
-                input: '$$r',
-                as: 'x',
-                in: {
-                  $cond: [
-                    { $and: [{ $eq: ['$$x.emoji', e] }, { $not: [{ $in: [userId, '$$x.users'] }] }] },
-                    { emoji: '$$x.emoji', users: { $concatArrays: ['$$x.users', [userId]] } },
-                    '$$x',
-                  ],
-                },
-              },
-            },
-            { $cond: [{ $lt: [{ $size: '$$r' }, max] }, { $concatArrays: ['$$r', [{ emoji: e, users: [userId] }]] }, '$$r'] },
-          ],
-        },
-      },
-    };
-    const remove = {
-      $filter: {
-        input: {
-          $map: {
-            input: current,
-            as: 'x',
-            in: { emoji: '$$x.emoji', users: { $filter: { input: '$$x.users', as: 'u', cond: { $ne: ['$$u', userId] } } } },
-          },
-        },
-        as: 'y',
-        cond: { $gt: [{ $size: '$$y.users' }, 0] },
-      },
-    };
-    return ChatMessage.findOneAndUpdate(
-      { _id: id, deletedAt: null },
-      [{ $set: { reactions: on ? add : remove } }],
-      { new: true, projection: { channel: 1, threadRoot: 1, reactions: 1 } },
-    ).lean();
-  },
+  setReaction: (id, userId, emoji, on, max) => ChatMessage.findOneAndUpdate(
+    { _id: id, deletedAt: null },
+    [reactionStage(userId, emoji, on, max)],
+    { new: true, projection: { channel: 1, threadRoot: 1, reactions: 1 } },
+  ).lean(),
   /** Soft-delete. Returns the message as it now stands, or null. */
   deleteOwnMessage: (id, sender, { notBefore, at = new Date() }) =>
     ChatMessage.findOneAndUpdate(

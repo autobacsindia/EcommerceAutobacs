@@ -32,7 +32,7 @@ const wrap = (ui: React.ReactElement) => render(
   <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>,
 );
 
-const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true };
+const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true, files: true };
 const task = (over: Partial<Task> = {}): Task => ({
   id: 't1', number: 7, code: 'T-7', title: 'Call Bosch', summary: '', description: '',
   status: 'todo', statusLabel: 'To do', priority: 'high', priorityLabel: 'High',

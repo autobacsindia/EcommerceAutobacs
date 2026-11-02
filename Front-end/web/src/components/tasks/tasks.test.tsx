@@ -37,7 +37,7 @@ const wrap = (ui: React.ReactElement) => render(
   <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>,
 );
 
-const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true };
+const can = { edit: true, status: true, reassign: true, archive: true, restore: false, comment: true, checklist: true, files: true };
 const task = (over: Partial<Task> = {}): Task => ({
   id: 't1', number: 7, code: 'T-7', title: 'Call Bosch', summary: '', description: 'Ask about the lift kit',
   status: 'todo', statusLabel: 'To do', priority: 'high', priorityLabel: 'High',
@@ -532,7 +532,10 @@ describe('one task', () => {
     post.mockResolvedValue({ comment: { id: 'c9' } });
     detail(
       task({ history: [{ at: '2026-10-27T04:00:00Z', by: 'Priya', action: 'created', from: '', to: 'Arun' }] }),
-      { comments: [{ id: 'm1', by: { id: 'u2', name: 'Arun' }, text: 'Bosch says Friday', createdAt: '2026-10-27T05:00:00Z' }] },
+      { comments: [{
+        id: 'm1', by: { id: 'u2', name: 'Arun' }, text: 'Bosch says Friday', createdAt: '2026-10-27T05:00:00Z',
+        editedAt: null, deleted: false, mine: false, editableUntil: null, mentions: [], files: [], reactions: [],
+      }] },
     );
     const created = await screen.findByText(/created this task for Arun/);
     const comment = await screen.findByText('Bosch says Friday');

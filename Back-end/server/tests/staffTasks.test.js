@@ -647,7 +647,7 @@ describe('list rows (what the database sends for a page)', () => {
     // A field missing from LIST_PROJECTION would show up here as a difference.
     const full = await tasks.getTask(procA, t.id);
     const listOnly = ['summary'];
-    const pageOnly = ['description', 'checklistItems', 'history', 'siblings'];
+    const pageOnly = ['description', 'checklistItems', 'history', 'siblings', 'files'];
     for (const key of Object.keys(full).filter((k) => !pageOnly.includes(k))) expect(row[key]).toEqual(full[key]);
     expect(Object.keys(row).filter((k) => !listOnly.includes(k)).sort())
       .toEqual(Object.keys(full).filter((k) => !pageOnly.includes(k)).sort());

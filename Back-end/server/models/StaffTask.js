@@ -35,9 +35,29 @@ const HistorySchema = new mongoose.Schema(
     at: { type: Date, required: true },
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     byName: { type: String, default: '' },
-    action: { type: String, required: true }, // created, status, assignee, due, start, tags, priority, edited, archived, restored
+    action: { type: String, required: true }, // created, status, assignee, due, start, tags, priority, edited, archived, restored, file_added, file_removed
     from: { type: String, default: '' },
     to: { type: String, default: '' },
+  },
+  { _id: false },
+);
+
+/**
+ * A file in private storage (services/taskFileService.js) — on the task, or on a
+ * comment (models/StaffTaskComment.js). `publicId` is the storage key
+ * `tasks/<taskId>/<name>`; the browser only ever sees /staff/tasks/:id/files/:name.
+ */
+export const FileSchema = new mongoose.Schema(
+  {
+    publicId: { type: String, required: true },
+    provider: { type: String, default: 'r2' },
+    kind: { type: String, enum: ['image', 'file'], required: true },
+    name: { type: String, required: true, maxlength: 100 },
+    mime: { type: String, required: true },
+    size: { type: Number, default: 0 },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    byName: { type: String, default: '' },
+    at: { type: Date, default: null },
   },
   { _id: false },
 );
@@ -98,6 +118,8 @@ const StaffTaskSchema = new mongoose.Schema(
     archivedAt: { type: Date, default: null },
     /** At most CHECKLIST_MAX steps (services/staffTaskService.js); changing them does not bump `rev`. */
     checklist: { type: [ChecklistItemSchema], default: [] },
+    /** Files on the task itself, at most TASK_FILES_MAX (services/taskFileService.js); adding one does not bump `rev`. */
+    files: { type: [FileSchema], default: [] },
     commentCount: { type: Number, default: 0 },
     lastCommentAt: { type: Date, default: null },
     /**

@@ -46,6 +46,11 @@ import { formatIsoDateIST } from '../utils/datetime.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { TASK_STATUSES, TASK_PRIORITIES } from '../models/StaffTask.js';
 import { keysetPage } from '../utils/listQuery.js';
+import { normalizeEmoji } from '../utils/reactions.js';
+import {
+  storeTaskFiles, discardTaskFiles, removeTaskFile, readTaskFile, taskFileUrl, taskFolder, basenameOf, isTaskFileName,
+  TASK_FILES_MAX, COMMENT_FILES_MAX,
+} from './taskFileService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -54,6 +59,11 @@ export const COMMENT_PAGE_SIZE = 50;
 export const TITLE_MAX = 200;
 export const DESCRIPTION_MAX = 4000;
 export const COMMENT_MAX = 2000;
+/** How long the author may edit or delete a comment — the same as team chat (CHAT_EDIT_WINDOW_MS). */
+export const COMMENT_EDIT_WINDOW_MS = 30 * 60 * 1000;
+/** Different emoji on one comment, and people @mentioned in one (as chat). */
+export const REACTIONS_MAX = 20;
+export const MENTIONS_MAX = 20;
 /** Steps on one task's checklist, and how long one step may be. */
 export const CHECKLIST_MAX = 30;
 export const CHECK_TEXT_MAX = 200;
@@ -271,8 +281,15 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
       restore: archived && canEdit(viewer, t),
       comment: !archived && canSee(viewer, t),
       checklist: !archived && canEdit(viewer, t),
+      files: !archived && canSee(viewer, t),
     },
     ...(full && {
+      files: (t.files || []).map((f) => ({
+        ...fileOut(t._id, f),
+        by: f.byName || '',
+        at: f.at || null,
+        canRemove: !archived && (same(f.by, viewer?._id) || canEdit(viewer, t)),
+      })),
       checklistItems: (t.checklist || []).map((c) => ({
         id: idOf(c._id), text: c.text, done: !!c.done, doneAt: c.doneAt || null, doneBy: c.doneByName || '',
       })),
@@ -283,7 +300,53 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
   };
 }
 
-const shapeComment = (c) => ({ id: idOf(c._id), by: { id: idOf(c.by), name: c.byName || '' }, text: c.text, createdAt: c.createdAt });
+/** A stored file as the browser sees it: a URL on this API, never the storage key. */
+const fileOut = (taskId, f) => ({
+  url: taskFileUrl(idOf(taskId), basenameOf(f.publicId)), name: f.name, mime: f.mime, size: f.size || 0, kind: f.kind,
+});
+
+/**
+ * One comment as `viewer` sees it. A deleted one keeps its place with nothing
+ * in it; `editableUntil` is set only for the author, while the window is open.
+ * `names` maps the ids of mentioned and reacting people to their names.
+ */
+function shapeComment(c, viewer, names = new Map(), now = Date.now()) {
+  const deleted = !!c.deletedAt;
+  const mine = same(c.by, viewer?._id);
+  const until = new Date(c.createdAt).getTime() + COMMENT_EDIT_WINDOW_MS;
+  const nameOf = (u) => names.get(idOf(u)) || '';
+  return {
+    id: idOf(c._id),
+    by: { id: idOf(c.by), name: c.byName || '' },
+    text: deleted ? '' : c.text || '',
+    createdAt: c.createdAt,
+    editedAt: c.editedAt || null,
+    deleted,
+    mine,
+    editableUntil: mine && !deleted && until > now ? new Date(until) : null,
+    mentions: deleted ? [] : (c.mentions || []).map((u) => ({ id: idOf(u), name: nameOf(u) })),
+    files: deleted ? [] : (c.attachments || []).map((a) => fileOut(c.task, a)),
+    reactions: deleted ? [] : (c.reactions || []).map((r) => ({
+      emoji: r.emoji,
+      count: r.users.length,
+      mine: r.users.some((u) => same(u, viewer?._id)),
+      names: r.users.map(nameOf),
+    })),
+  };
+}
+
+/** Names of everyone mentioned in or reacting to `comments` — one lookup for the whole page. */
+async function namesFor(comments) {
+  const ids = new Set();
+  for (const c of comments) {
+    if (c.deletedAt) continue;
+    for (const u of c.mentions || []) ids.add(idOf(u));
+    for (const r of c.reactions || []) for (const u of r.users) ids.add(idOf(u));
+  }
+  const people = await userRepository.findDisplayByIds([...ids]);
+  return new Map(people.map((u) => [idOf(u._id), u.name || '']));
+}
+const shapeOne = async (c, viewer) => shapeComment(c, viewer, await namesFor([c]));
 
 // ── Pop-up ──────────────────────────────────────────────────────────────────
 
@@ -835,6 +898,71 @@ export async function removeChecklistItem(actor, id, itemId) {
 }
 
 // ── Comments ────────────────────────────────────────────────────────────────
+/*
+  Everyone who sees a task may comment, @mention, react and attach files.
+  The author may edit or delete their own comment for COMMENT_EDIT_WINDOW_MS
+  (the same 30 minutes as team chat); nobody may change anyone else's — not the
+  giver, not a head, not the admin. Both are SOFT: the earlier words stay in the
+  database, and what people see is "edited" or "This comment was deleted."
+
+  Pop-ups: a new comment goes to the person doing it and whoever gave it; anyone
+  @mentioned gets "mentioned you" instead. Never to the writer, never twice for a
+  retried post, never for a reaction or an edit.
+*/
+
+const peopleOnTask = async (t) => {
+  const heads = t.team ? (await userRepository.findActiveStaff(t.team)).filter((u) => u.staff?.isHead) : [];
+  const direct = await userRepository.findChatUsersByIds([t.assignee, t.createdBy].filter(Boolean));
+  const byId = new Map([...direct, ...heads].map((u) => [idOf(u._id), u]));
+  return [...byId.values()];
+};
+
+/** Who `actor` may @mention on this task: the people on it, apart from themselves. */
+export async function listMentionable(actor, id) {
+  const t = await loadVisible(actor, id);
+  const people = (await peopleOnTask(t))
+    .filter((u) => !same(u._id, actor._id))
+    .map((u) => ({ id: idOf(u._id), name: u.name || '' }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return { people };
+}
+
+/** Mentions as sent (a list, or a JSON list from a form with files): each must be on the task. */
+async function cleanMentions(actor, t, raw) {
+  let list = raw;
+  if (typeof raw === 'string') {
+    try { list = raw ? JSON.parse(raw) : []; } catch { throw fail('Invalid mentions.', 400); }
+  }
+  if (list == null) return [];
+  if (!Array.isArray(list) || list.some((x) => !mongoose.isValidObjectId(x))) throw fail('Invalid mentions.', 400);
+  const ids = [...new Set(list.map(String))].filter((x) => !same(x, actor._id));
+  if (!ids.length) return [];
+  if (ids.length > MENTIONS_MAX) throw fail(`Mention at most ${MENTIONS_MAX} people in one comment.`, 400);
+  const on = new Set((await peopleOnTask(t)).map((u) => idOf(u._id)));
+  if (ids.some((x) => !on.has(x))) throw fail('You can only mention people on this task.', 400);
+  return ids.map((x) => new mongoose.Types.ObjectId(x));
+}
+
+/** The pop-ups for a new comment. Best effort; never throws. */
+async function notifyComment(t, actor, c) {
+  try {
+    const mentioned = new Set((c.mentions || []).map(idOf));
+    const ids = [...new Set([idOf(t.assignee), idOf(t.createdBy), ...mentioned])].filter((x) => x && !same(x, actor._id));
+    if (!ids.length) return;
+    const people = await userRepository.findChatUsersByIds(ids);
+    const who = actor.name || 'Someone';
+    const said = c.text ? c.text.replace(/\s+/g, ' ').slice(0, 120) : 'Shared a file';
+    const target = (u) => ({ userId: idOf(u._id), url: `${isAdmin(u) ? '/admin/tasks' : '/team/tasks'}/${idOf(t._id)}` });
+    const body = `T-${t.number} · ${t.title}: ${said}`;
+    const tag = `task-${idOf(t._id)}`;
+    const named = people.filter((u) => mentioned.has(idOf(u._id)));
+    const others = people.filter((u) => !mentioned.has(idOf(u._id)));
+    if (named.length) await sendToUsers(named.map(target), { title: `${who} mentioned you`, body, tag });
+    if (others.length) await sendToUsers(others.map(target), { title: `${who} commented on T-${t.number}`, body, tag });
+  } catch (err) {
+    console.error('[StaffTask] comment push failed (ignored):', err.message);
+  }
+}
 
 export async function listComments(actor, id, { before } = {}) {
   const t = await loadVisible(actor, id);
@@ -845,32 +973,186 @@ export async function listComments(actor, id, { before } = {}) {
   });
   const more = rows.length > COMMENT_PAGE_SIZE;
   const comments = more ? rows.slice(0, COMMENT_PAGE_SIZE) : rows;
-  return { comments: comments.map(shapeComment), nextBefore: more ? idOf(comments[comments.length - 1]._id) : null };
+  const names = await namesFor(comments);
+  const now = Date.now();
+  return {
+    comments: comments.map((c) => shapeComment(c, actor, names, now)),
+    nextBefore: more ? idOf(comments[comments.length - 1]._id) : null,
+  };
 }
 
-/** @returns {Promise<{ comment: object, duplicate: boolean }>} */
-export async function addComment(actor, id, { text, clientId: rawClientId } = {}) {
+/**
+ * Post a comment: words, files, or both. Files are stored first and removed
+ * again if the comment is not saved, so nothing is left in storage unreferenced.
+ * @returns {Promise<{ comment: object, duplicate: boolean }>}
+ */
+export async function addComment(actor, id, { text, clientId: rawClientId, mentions, files = [] } = {}) {
   const t = await loadVisible(actor, id);
   if (t.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
   const clientId = cleanClientId(rawClientId);
   if (clientId) {
     const seen = await staffTaskRepository.findCommentByClientId(actor._id, clientId);
-    if (seen) return { comment: shapeComment(seen), duplicate: true };
+    if (seen) return { comment: await shapeOne(seen, actor), duplicate: true };
   }
   const body = String(text ?? '').trim();
-  if (!body) throw fail('Write a comment first.', 400);
+  if (!body && !files.length) throw fail('Write a comment first.', 400);
   if (body.length > COMMENT_MAX) throw fail(`Keep a comment under ${COMMENT_MAX} characters.`, 400);
+  if (files.length > COMMENT_FILES_MAX) throw fail(`Attach at most ${COMMENT_FILES_MAX} files to one comment.`, 400);
+  const mentionIds = await cleanMentions(actor, t, mentions);
+  const stored = await storeTaskFiles(files, idOf(t._id));
 
   let c;
   try {
-    c = await staffTaskRepository.createComment({ task: t._id, by: actor._id, byName: actor.name || '', text: body, clientId });
+    c = await staffTaskRepository.createComment({
+      task: t._id, by: actor._id, byName: actor.name || '', text: body, clientId,
+      ...(mentionIds.length ? { mentions: mentionIds } : {}),
+      ...(stored.length ? { attachments: stored } : {}),
+    });
   } catch (err) {
+    await discardTaskFiles(stored);
     if (err?.code === 11000 && clientId) {
       const seen = await staffTaskRepository.findCommentByClientId(actor._id, clientId);
-      if (seen) return { comment: shapeComment(seen), duplicate: true };
+      if (seen) return { comment: await shapeOne(seen, actor), duplicate: true };
     }
     throw err;
   }
   await staffTaskRepository.noteComment(t._id, c.createdAt);
-  return { comment: shapeComment(c), duplicate: false };
+  await notifyComment(t, actor, c);
+  return { comment: await shapeOne(c, actor), duplicate: false };
+}
+
+const commentWindowStart = (now = Date.now()) => new Date(now - COMMENT_EDIT_WINDOW_MS);
+const WINDOW_MINUTES = Math.round(COMMENT_EDIT_WINDOW_MS / 60000);
+
+/**
+ * A comment the actor is about to change. Order matters: "no such task for you"
+ * (404) before "not yours" (403) before "too late", so nobody learns anything
+ * about a comment they could not read.
+ */
+async function loadComment(actor, id, commentId) {
+  const t = await loadVisible(actor, id);
+  if (!mongoose.isValidObjectId(commentId)) throw fail('Comment not found.', 404);
+  const c = await staffTaskRepository.findComment(t._id, commentId);
+  if (!c) throw fail('Comment not found.', 404);
+  return { t, c };
+}
+async function loadOwnComment(actor, id, commentId) {
+  const found = await loadComment(actor, id, commentId);
+  if (!same(found.c.by, actor._id)) throw fail('You can only change your own comments.', 403);
+  return found;
+}
+function assertCommentWindow(c) {
+  if (new Date(c.createdAt).getTime() < commentWindowStart().getTime()) {
+    throw fail(`Comments can only be changed within ${WINDOW_MINUTES} minutes of posting.`, 403);
+  }
+}
+
+/** Change your own comment's words. Mentions and files stay; nobody is notified again. */
+export async function editComment(actor, id, commentId, { text } = {}) {
+  const { c } = await loadOwnComment(actor, id, commentId);
+  if (c.deletedAt) throw fail('This comment was deleted.', 409);
+  assertCommentWindow(c);
+  const body = String(text ?? '').trim();
+  if (!body && !(c.attachments || []).length) throw fail('A comment needs some words — delete it instead.', 400);
+  if (body.length > COMMENT_MAX) throw fail(`Keep a comment under ${COMMENT_MAX} characters.`, 400);
+  if (body === c.text) return { comment: await shapeOne(c, actor) };
+
+  const updated = await staffTaskRepository.editComment(c._id, actor._id, { fromText: c.text, toText: body, notBefore: commentWindowStart() });
+  if (!updated) {
+    // Lost a race: deleted, the window closed, or another edit landed first.
+    const now = await staffTaskRepository.findComment(c.task, c._id);
+    if (now?.deletedAt) throw fail('This comment was deleted.', 409);
+    assertCommentWindow(now);
+    throw fail('This comment was changed at the same time — please try again.', 409);
+  }
+  return { comment: await shapeOne(updated, actor) };
+}
+
+/** Delete your own comment. Deleting one already deleted is a success: it is gone, as wanted. */
+export async function deleteComment(actor, id, commentId) {
+  const { c } = await loadOwnComment(actor, id, commentId);
+  if (c.deletedAt) return { comment: shapeComment(c, actor) };
+  assertCommentWindow(c);
+  const updated = await staffTaskRepository.deleteComment(c._id, actor._id, { notBefore: commentWindowStart() });
+  if (!updated) {
+    const now = await staffTaskRepository.findComment(c.task, c._id);
+    if (now?.deletedAt) return { comment: shapeComment(now, actor) };
+    assertCommentWindow(now);
+    throw fail('Could not delete the comment — please try again.', 409);
+  }
+  return { comment: shapeComment(updated, actor) };
+}
+
+/** Put the actor's reaction on (`on`, the default) or take it off. Says what it should BE, so a retry is harmless. */
+export async function reactToComment(actor, id, commentId, { emoji, on = true } = {}) {
+  const { c } = await loadComment(actor, id, commentId);
+  const e = normalizeEmoji(emoji);
+  if (!e) throw fail('Pick an emoji.', 400);
+  if (c.deletedAt) throw fail('This comment was deleted.', 409);
+  const want = on !== false;
+  const updated = await staffTaskRepository.setCommentReaction(c._id, actor._id, e, want, REACTIONS_MAX);
+  if (!updated) throw fail('This comment was deleted.', 409);
+  if (want && !(updated.reactions || []).some((r) => r.emoji === e)) {
+    throw fail(`A comment can have up to ${REACTIONS_MAX} different reactions.`, 400);
+  }
+  return { comment: await shapeOne(updated, actor) };
+}
+
+// ── Files on the task ───────────────────────────────────────────────────────
+/*
+  Anyone who sees the task may add files; the person who added one, or anyone
+  who may edit the task, removes it. Adding and removing never bump `rev`, and
+  both are in the history. Removing deletes the stored bytes.
+*/
+
+/** Add files to the task. Stored first, then listed on the task; a refused write removes them again. */
+export async function addTaskFiles(actor, id, files = []) {
+  const t = await loadVisible(actor, id);
+  if (t.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
+  if (!files.length) throw fail('Pick a file first.', 400);
+  if (files.length > COMMENT_FILES_MAX) throw fail(`Add at most ${COMMENT_FILES_MAX} files at a time.`, 400);
+  if ((t.files || []).length + files.length > TASK_FILES_MAX) throw fail(`A task can have at most ${TASK_FILES_MAX} files.`, 400);
+
+  const stored = await storeTaskFiles(files, idOf(t._id));
+  const at = new Date();
+  const refs = stored.map((f) => ({ ...f, by: actor._id, byName: actor.name || '', at }));
+  const entries = refs.map((f) => ({ at, by: actor._id, byName: actor.name || '', action: 'file_added', to: f.name }));
+  const next = await staffTaskRepository.pushFiles(t._id, refs, entries, TASK_FILES_MAX);
+  if (!next) {
+    await discardTaskFiles(stored);
+    const now = await staffTaskRepository.findById(t._id);
+    if (now?.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
+    throw fail(`A task can have at most ${TASK_FILES_MAX} files.`, 400);
+  }
+  return getTask(actor, id);
+}
+
+/** Remove one of the task's files. Already gone is the same result, not an error. */
+export async function removeTaskFileFrom(actor, id, name) {
+  const t = await loadVisible(actor, id);
+  if (!isTaskFileName(name)) throw fail('File not found.', 404);
+  const publicId = `${taskFolder(idOf(t._id))}/${name}`;
+  const file = (t.files || []).find((f) => f.publicId === publicId);
+  if (!file) return getTask(actor, id);
+  if (t.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
+  if (!same(file.by, actor._id) && !canEdit(actor, t)) {
+    throw fail('Only the person who added this file, or someone who can edit the task, can remove it.', 403);
+  }
+  const entry = { at: new Date(), by: actor._id, byName: actor.name || '', action: 'file_removed', from: file.name };
+  if (await staffTaskRepository.pullFile(t._id, publicId, entry)) await removeTaskFile(file);
+  return getTask(actor, id);
+}
+
+/**
+ * The bytes of a file on the task or on one of its comments, for someone who
+ * sees the task. A file that was removed, or whose comment was deleted, is 404.
+ */
+export async function readFileOf(actor, id, name) {
+  const t = await loadVisible(actor, id);
+  if (!isTaskFileName(name)) throw fail('File not found.', 404);
+  const publicId = `${taskFolder(idOf(t._id))}/${name}`;
+  const listed = (t.files || []).some((f) => f.publicId === publicId)
+    || await staffTaskRepository.hasLiveCommentFile(t._id, publicId);
+  if (!listed) throw fail('File not found.', 404);
+  return readTaskFile(idOf(t._id), name);
 }

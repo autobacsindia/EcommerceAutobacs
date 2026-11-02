@@ -67,11 +67,13 @@ export type Task = {
   archivedAt: string | null;
   commentCount: number;
   lastCommentAt: string | null;
+  /** The task page only: files attached to the task itself (comments carry their own). */
+  files?: TaskFile[];
   createdAt: string;
   updatedAt: string;
   rev: number;
   /** `status` also allows ticking steps; `checklist` is adding, renaming and removing them. */
-  can: { edit: boolean; status: boolean; reassign: boolean; archive: boolean; restore: boolean; comment: boolean; checklist: boolean };
+  can: { edit: boolean; status: boolean; reassign: boolean; archive: boolean; restore: boolean; comment: boolean; checklist: boolean; files: boolean };
   history?: { at: string; by: string; action: string; from: string; to: string }[];
   /** The task page only: the other people's copies the viewer may see. */
   siblings?: TaskSibling[];
@@ -86,7 +88,24 @@ export type TaskSibling = {
 /** `summary`: how many open tasks match (the open list's first page only; counting stops at 1,000). */
 export type TaskPage = { tasks: Task[]; nextCursor: string | null; summary?: { count: number; capped: boolean } };
 
-export type TaskComment = { id: string; by: { id: string; name: string }; text: string; createdAt: string };
+/** A file on a task or a comment. `url` is served only to people who can see the task. */
+export type TaskFile = {
+  url: string; name: string; mime: string; size: number; kind: 'image' | 'file';
+  /** Task files only: who added it, and whether the viewer may remove it. */
+  by?: { id: string; name: string }; at?: string; canRemove?: boolean;
+};
+
+export type TaskReaction = { emoji: string; count: number; mine: boolean; names: string[] };
+
+/**
+ * A comment. A deleted one keeps its place with no words or files. `editableUntil`
+ * is set only for the viewer's own comment while they may still change it.
+ */
+export type TaskComment = {
+  id: string; by: { id: string; name: string }; text: string; createdAt: string;
+  editedAt: string | null; deleted: boolean; mine: boolean; editableUntil: string | null;
+  mentions: { id: string; name: string }[]; files: TaskFile[]; reactions: TaskReaction[];
+};
 export type CommentPage = { comments: TaskComment[]; nextBefore: string | null };
 
 export type Assignee = { id: string; name: string; team: string | null; teamLabel: string; isHead: boolean; me: boolean };
@@ -184,3 +203,9 @@ export function formatDueDay(ymd: string | null): string {
 /** Where a task's linked order opens: the admin's orders screen, or the team's order list. */
 export const orderHrefFor = (base: string, orderId: string) =>
   (base.startsWith('/admin') ? `/admin/orders?order=${encodeURIComponent(orderId)}` : '/team/orders');
+
+/** Files on one comment, and on one task over its life (the server checks both). */
+export const COMMENT_FILES_MAX = 10;
+export const TASK_FILES_MAX = 30;
+/** What a task or comment file may be (the server checks the bytes too). */
+export const TASK_FILE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,application/pdf,text/csv,text/plain,.xlsx,.docx';

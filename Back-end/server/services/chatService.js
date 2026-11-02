@@ -26,6 +26,7 @@ import { firstUrl, previewFor, linkPreviewsEnabled } from './linkPreviewService.
 import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 import { orderNumber } from './invoiceService.js';
+import { normalizeEmoji } from '../utils/reactions.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -1303,21 +1304,8 @@ export async function openConversation(user, { userId, userIds } = {}) {
 
 export const MAX_REACTIONS_PER_MESSAGE = 20;
 
-const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
-// Every code point must belong to an emoji, and at least one must be a real
-// picture (not just a digit, '#', or a lone skin-tone modifier).
-const EMOJI_CHARS = /^[\p{Extended_Pictographic}\p{Emoji_Component}]+$/u;
-const EMOJI_PICTURE = /\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|\u20E3/u;
-
-/** The emoji, if `raw` is exactly one emoji (one character as people see it); otherwise null. */
-export function normalizeEmoji(raw) {
-  if (typeof raw !== 'string') return null;
-  const e = raw.trim();
-  if (!e || e.length > 32 || !EMOJI_CHARS.test(e) || !EMOJI_PICTURE.test(e)) return null;
-  let count = 0;
-  for (const _ of segmenter.segment(e)) if (++count > 1) return null;
-  return e;
-}
+/** The emoji, if `raw` is exactly one emoji; otherwise null (shared with task comments: utils/reactions.js). */
+export { normalizeEmoji };
 
 /** Add (`on`, the default) or remove the caller's reaction on a message. */
 export async function reactToMessage(user, messageId, { emoji, on = true } = {}) {

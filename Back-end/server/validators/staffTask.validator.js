@@ -86,11 +86,23 @@ export const validateCommentList = [
   query('before').optional().custom(isObjectId).withMessage('Invalid page cursor'),
 ];
 
+// JSON, or multipart when files are attached (then `mentions` is a JSON string).
 export const validateCommentCreate = [
   ...validateTaskId,
-  body('text').isString().withMessage('Write a comment first'),
+  body('text').optional().isString().withMessage('Write a comment first'),
   body('clientId').optional().isString().isLength({ max: 64 }),
+  body('mentions').optional().custom((v) => Array.isArray(v) || (typeof v === 'string' && v.length <= 2000)).withMessage('Invalid mentions'),
 ];
+
+const commentParams = [...validateTaskId, param('commentId').custom(isObjectId).withMessage('Invalid comment')];
+export const validateCommentId = commentParams;
+export const validateCommentEdit = [...commentParams, body('text').isString().withMessage('Write the comment first')];
+export const validateCommentReaction = [
+  ...commentParams,
+  body('emoji').isString().isLength({ min: 1, max: 32 }).withMessage('Pick an emoji'),
+  body('on').optional().isBoolean().withMessage('Invalid reaction'),
+];
+export const validateTaskFileName = [...validateTaskId, param('name').isString().isLength({ min: 1, max: 120 }).withMessage('File not found')];
 
 const itemParams = [...validateTaskId, param('itemId').custom(isObjectId).withMessage('Invalid step')];
 

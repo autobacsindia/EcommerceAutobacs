@@ -9,6 +9,10 @@ import {
   validateTaskBulk,
   validateCommentList,
   validateCommentCreate,
+  validateCommentId,
+  validateCommentEdit,
+  validateCommentReaction,
+  validateTaskFileName,
   validateChecklistAdd,
   validateChecklistUpdate,
   validateChecklistRemove,
@@ -23,10 +27,22 @@ import {
   bulkUpdate,
   listComments,
   addComment,
+  editComment,
+  deleteComment,
+  reactToComment,
+  listMentionable,
+  addTaskFiles,
+  removeTaskFileFrom,
+  readFileOf,
   addChecklistItem,
   updateChecklistItem,
   removeChecklistItem,
 } from '../services/staffTaskService.js';
+import { uploadChatFiles, handleChatUploadError } from '../services/chatAttachmentService.js';
+import { attachmentSizeGuard } from '../middleware/uploadMiddleware.js';
+
+/** Files arrive on the `files` field of a multipart form: same checks and limits as team chat. */
+const withFiles = [attachmentSizeGuard, uploadChatFiles, handleChatUploadError];
 
 /**
  * Staff tasks (/api/v1/staff/tasks). Mounted inside routes/staff.js, AFTER its
@@ -94,10 +110,56 @@ router.get('/:id/comments', validateCommentList, validateRequest, asyncHandler(a
   res.json({ success: true, ...(await listComments(req.user, req.params.id, req.query)) });
 }));
 
-// @route  POST /staff/tasks/:id/comments { text, clientId? }
-router.post('/:id/comments', validateCommentCreate, validateRequest, asyncHandler(async (req, res) => {
-  const { comment, duplicate } = await addComment(req.user, req.params.id, req.body);
+// @route  POST /staff/tasks/:id/comments { text, clientId?, mentions?: [userId] } — JSON, or multipart with `files`
+router.post('/:id/comments', ...withFiles, validateCommentCreate, validateRequest, asyncHandler(async (req, res) => {
+  const { comment, duplicate } = await addComment(req.user, req.params.id, {
+    text: req.body.text, clientId: req.body.clientId, mentions: req.body.mentions, files: req.files || [],
+  });
   res.status(duplicate ? 200 : 201).json({ success: true, comment, duplicate });
+}));
+
+// @route  PATCH /staff/tasks/:id/comments/:commentId { text } — your own, within 30 minutes
+router.patch('/:id/comments/:commentId', validateCommentEdit, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await editComment(req.user, req.params.id, req.params.commentId, req.body)) });
+}));
+
+// @route  DELETE /staff/tasks/:id/comments/:commentId — your own, within 30 minutes (soft)
+router.delete('/:id/comments/:commentId', validateCommentId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await deleteComment(req.user, req.params.id, req.params.commentId)) });
+}));
+
+// @route  PUT /staff/tasks/:id/comments/:commentId/reactions { emoji, on? } — what my reaction should be
+router.put('/:id/comments/:commentId/reactions', validateCommentReaction, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await reactToComment(req.user, req.params.id, req.params.commentId, req.body)) });
+}));
+
+// @route  GET /staff/tasks/:id/mentionable — who can be @mentioned (the people on the task)
+router.get('/:id/mentionable', validateTaskId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listMentionable(req.user, req.params.id)) });
+}));
+
+// @route  POST /staff/tasks/:id/files (multipart `files`) — add files to the task
+router.post('/:id/files', ...withFiles, validateTaskId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, task: await addTaskFiles(req.user, req.params.id, req.files || []) });
+}));
+
+// @route  DELETE /staff/tasks/:id/files/:name — remove one
+router.delete('/:id/files/:name', validateTaskFileName, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, task: await removeTaskFileFrom(req.user, req.params.id, req.params.name) });
+}));
+
+// @route  GET /staff/tasks/:id/files/:name — a file's bytes (task or comment), for people who see the task
+router.get('/:id/files/:name', validateTaskFileName, validateRequest, asyncHandler(async (req, res) => {
+  const { buffer, mime, inline } = await readFileOf(req.user, req.params.id, req.params.name);
+  res.set({
+    'Content-Type': mime,
+    'Content-Length': buffer.length,
+    'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${String(req.params.name).replace(/^\d+-[a-z0-9]+-/, '').replace(/[^\w.-]+/g, '_')}"`,
+    'X-Content-Type-Options': 'nosniff',
+    // The bytes never change; private so no shared cache keeps them.
+    'Cache-Control': 'private, max-age=86400',
+  });
+  res.send(buffer);
 }));
 
 export default router;
