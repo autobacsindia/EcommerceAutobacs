@@ -154,3 +154,30 @@ export const validateInboxItem = [
 export const validateInboxReadAll = [
   body('upTo').custom(isObjectId).withMessage('Reload the inbox and try again'),
 ];
+
+// ── Time ────────────────────────────────────────────────────────────────────
+
+export const validateTimeList = [
+  param('id').custom(isObjectId).withMessage('Invalid task id'),
+  query('cursor').optional().custom(isObjectId).withMessage('Invalid page cursor'),
+];
+
+export const validateTimeAdd = [
+  param('id').custom(isObjectId).withMessage('Invalid task id'),
+  body('minutes').isInt({ min: 1, max: 24 * 60 }).withMessage('Enter between 1 minute and 24 hours'),
+  body('on').isString().withMessage('Pick a date'),
+  body('note').optional({ values: 'null' }).isString().isLength({ max: 200 }).withMessage('Keep the note under 200 characters'),
+  body('clientId').optional().isString().isLength({ max: 64 }),
+];
+
+export const validateTimeEntry = [
+  param('id').custom(isObjectId).withMessage('Invalid task id'),
+  param('entryId').custom(isObjectId).withMessage('Time entry not found'),
+];
+
+export const validateTimeEdit = [
+  ...validateTimeEntry,
+  body('minutes').optional().isInt({ min: 1, max: 24 * 60 }).withMessage('Enter between 1 minute and 24 hours'),
+  body('on').optional().isString().withMessage('Pick a date'),
+  body('note').optional({ values: 'null' }).isString().isLength({ max: 200 }).withMessage('Keep the note under 200 characters'),
+];

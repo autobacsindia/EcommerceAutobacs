@@ -64,6 +64,7 @@ import counterRepository from '../repositories/counterRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import staffTaskInboxRepository, { INBOX_UNREAD_CAP } from '../repositories/staffTaskInboxRepository.js';
 import orderRepository from '../repositories/orderRepository.js';
+import staffTaskTimeRepository from '../repositories/staffTaskTimeRepository.js';
 import { sendToUsers } from './pushService.js';
 import { orderNumber } from './invoiceService.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
@@ -351,6 +352,8 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
       followers: !archived && canEdit(viewer, t),
       // One level only: a sub-task has no sub-tasks of its own.
       subtask: !archived && !t.parent && canEdit(viewer, t),
+      // Anyone who sees a task may track time on it (services/staffTaskTimeService.js).
+      time: !archived && canSee(viewer, t),
     },
     ...(full && {
       files: (t.files || []).map((f) => ({
@@ -573,6 +576,13 @@ export const TASK_SORTS = Object.freeze({
 });
 const TASK_COUNT_CAP = 1000;
 
+/** Time spent on each row, from one total over the page (running timers counted up to now). */
+async function withTime(rows) {
+  const totals = await staffTaskTimeRepository.totalsByTask(rows.map((r) => r.id), new Date());
+  const seconds = new Map(totals.map((x) => [idOf(x._id), x.seconds]));
+  return rows.map((r) => ({ ...r, timeSeconds: seconds.get(r.id) ?? 0 }));
+}
+
 export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, priority, tag, q, sort, cursor } = {}) {
   const query = { bucket: state };
   if (view === 'mine') {
@@ -631,7 +641,7 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
       find: staffTaskRepository.pageSorted,
     });
     return {
-      tasks: items.map((t) => shape(t, actor, { today })),
+      tasks: await withTime(items.map((t) => shape(t, actor, { today }))),
       nextCursor,
       sort,
       ...(counted ? { summary: await counted } : {}),
@@ -642,7 +652,7 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
   const more = rows.length > TASK_PAGE_SIZE;
   const tasks = more ? rows.slice(0, TASK_PAGE_SIZE) : rows;
   return {
-    tasks: tasks.map((t) => shape(t, actor, { today })),
+    tasks: await withTime(tasks.map((t) => shape(t, actor, { today }))),
     nextCursor: more ? encodeCursor(tasks[tasks.length - 1]) : null,
     sort: 'due',
     ...(counted ? { summary: await counted } : {}),

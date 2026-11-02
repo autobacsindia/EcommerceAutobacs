@@ -655,6 +655,15 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftaskinbox').createIndex({ user: 1, key: 1 }, { unique: true, name: 'staff_task_inbox_key', background: true });
     await db.collection('stafftaskinbox').createIndex({ user: 1, state: 1, _id: -1 }, { name: 'staff_task_inbox_list', background: true });
     await db.collection('stafftaskinbox').createIndex({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60, name: 'staff_task_inbox_ttl', background: true });
+    await db.collection('stafftasktime').createIndex(
+      { user: 1 },
+      { unique: true, partialFilterExpression: { running: { $eq: true } }, name: 'staff_task_time_running', background: true }
+    );
+    await db.collection('stafftasktime').createIndex({ task: 1, _id: -1 }, { name: 'staff_task_time_task', background: true });
+    await db.collection('stafftasktime').createIndex(
+      { user: 1, clientId: 1 },
+      { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_task_time_client_id', background: true }
+    );
     console.log('✓ Staff task indexes confirmed');
 
     // ── Affiliate program ──────────────────────────────────────────────────────

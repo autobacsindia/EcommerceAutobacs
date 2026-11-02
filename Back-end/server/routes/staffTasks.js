@@ -21,8 +21,15 @@ import {
   validateInboxList,
   validateInboxItem,
   validateInboxReadAll,
+  validateTimeList,
+  validateTimeAdd,
+  validateTimeEntry,
+  validateTimeEdit,
 } from '../validators/staffTask.validator.js';
 import { listInbox, setInboxState, readAllInbox } from '../services/staffTaskInboxService.js';
+import {
+  currentTimer, startTimer, stopTimer, listTime, addTime, editTime, deleteTime,
+} from '../services/staffTaskTimeService.js';
 import {
   listTasks,
   listAssignees,
@@ -89,6 +96,16 @@ router.post('/inbox/read-all', validateInboxReadAll, validateRequest, asyncHandl
 // @route  PATCH /staff/tasks/inbox/:itemId { state: unread|read|cleared } — one of the caller's lines
 router.patch('/inbox/:itemId', validateInboxItem, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await setInboxState(req.user, req.params.itemId, req.body.state)) });
+}));
+
+// @route  GET /staff/tasks/time/current — the caller's running timer (one left past the limit is stopped here)
+router.get('/time/current', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await currentTimer(req.user)) });
+}));
+
+// @route  POST /staff/tasks/time/stop — stop the caller's timer; `entry` is null when none was running
+router.post('/time/stop', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await stopTimer(req.user)) });
 }));
 
 // @route  POST /staff/tasks { title, description?, priority?, dueOn?, assigneeId? | assigneeIds?, orderId?, clientId? }
@@ -165,6 +182,32 @@ router.delete('/:id/comments/:commentId', validateCommentId, validateRequest, as
 // @route  PUT /staff/tasks/:id/comments/:commentId/reactions { emoji, on? } — what my reaction should be
 router.put('/:id/comments/:commentId/reactions', validateCommentReaction, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await reactToComment(req.user, req.params.id, req.params.commentId, req.body)) });
+}));
+
+// @route  POST /staff/tasks/:id/time/start — start the caller's timer here (stopping one on another task)
+router.post('/:id/time/start', validateTaskId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await startTimer(req.user, req.params.id)) });
+}));
+
+// @route  GET /staff/tasks/:id/time?cursor= — the task's time entries, newest first, and its totals
+router.get('/:id/time', validateTimeList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listTime(req.user, req.params.id, req.query)) });
+}));
+
+// @route  POST /staff/tasks/:id/time { minutes, on, note?, clientId? } — add time by hand
+router.post('/:id/time', validateTimeAdd, validateRequest, asyncHandler(async (req, res) => {
+  const { entry, duplicate } = await addTime(req.user, req.params.id, req.body);
+  res.status(duplicate ? 200 : 201).json({ success: true, entry, duplicate });
+}));
+
+// @route  PATCH /staff/tasks/:id/time/:entryId { minutes?, on?, note? } — correct your own entry (admin: anyone's)
+router.patch('/:id/time/:entryId', validateTimeEdit, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await editTime(req.user, req.params.id, req.params.entryId, req.body)) });
+}));
+
+// @route  DELETE /staff/tasks/:id/time/:entryId — delete your own entry, or discard your running timer
+router.delete('/:id/time/:entryId', validateTimeEntry, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await deleteTime(req.user, req.params.id, req.params.entryId)) });
 }));
 
 // @route  PATCH /staff/tasks/:id/followers { add?: [personId], remove?: [personId] } — follow / unfollow; editors choose for others
