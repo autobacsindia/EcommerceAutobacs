@@ -18,7 +18,11 @@ import {
   validateChecklistRemove,
   validateTaskFollowers,
   validateStepToSubtask,
+  validateInboxList,
+  validateInboxItem,
+  validateInboxReadAll,
 } from '../validators/staffTask.validator.js';
+import { listInbox, setInboxState, readAllInbox } from '../services/staffTaskInboxService.js';
 import {
   listTasks,
   listAssignees,
@@ -70,6 +74,21 @@ router.get('/summary', asyncHandler(async (req, res) => {
 // @route  GET /staff/tasks/assignees — who the caller may give a task to
 router.get('/assignees', asyncHandler(async (req, res) => {
   res.json({ success: true, people: await listAssignees(req.user) });
+}));
+
+// @route  GET /staff/tasks/inbox?state=all|unread&cursor= — the caller's Inbox, newest first
+router.get('/inbox', validateInboxList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listInbox(req.user, req.query)) });
+}));
+
+// @route  POST /staff/tasks/inbox/read-all { upTo } — every unread line up to the newest one shown
+router.post('/inbox/read-all', validateInboxReadAll, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await readAllInbox(req.user, req.body.upTo)) });
+}));
+
+// @route  PATCH /staff/tasks/inbox/:itemId { state: unread|read|cleared } — one of the caller's lines
+router.patch('/inbox/:itemId', validateInboxItem, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await setInboxState(req.user, req.params.itemId, req.body.state)) });
 }));
 
 // @route  POST /staff/tasks { title, description?, priority?, dueOn?, assigneeId? | assigneeIds?, orderId?, clientId? }

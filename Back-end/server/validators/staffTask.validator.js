@@ -10,6 +10,7 @@ import { body, param, query } from 'express-validator';
 import mongoose from 'mongoose';
 import { STAFF_TEAM_VALUES } from '../config/staff.js';
 import { TASK_STATUSES, TASK_PRIORITIES } from '../models/StaffTask.js';
+import { INBOX_STATES } from '../models/StaffTaskInbox.js';
 
 const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v);
 const optionalId = (field) => body(field).optional({ values: 'null' })
@@ -138,4 +139,18 @@ export const validateStepToSubtask = [
   body('clientId').isString().isLength({ min: 8, max: 64 }).withMessage('Reload the task and try again'),
   body('assigneeIds').optional().isArray({ max: 30 }).withMessage('Pick at most 30 people'),
   body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
+];
+
+export const validateInboxList = [
+  query('state').optional().isIn(['all', 'unread']).withMessage('Invalid inbox filter'),
+  query('cursor').optional().custom(isObjectId).withMessage('Invalid page cursor'),
+];
+
+export const validateInboxItem = [
+  param('itemId').custom(isObjectId).withMessage('Inbox item not found'),
+  body('state').isIn(INBOX_STATES).withMessage('Invalid inbox state'),
+];
+
+export const validateInboxReadAll = [
+  body('upTo').custom(isObjectId).withMessage('Reload the inbox and try again'),
 ];
