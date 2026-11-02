@@ -16,19 +16,25 @@ export type PaymentRequest = {
   team: string;
   teamLabel: string;
   requestedBy: string;
-  /** Rupees, always — what is approved, paid and totalled. */
+  /** Rupees — what is paid and totalled. 0 while `rupeesPending`. */
   amount: number;
-  /** A foreign bill (procurement imports): its currency, amount and the quoted rate. 'INR' / null otherwise. */
+  /**
+   * A foreign bill (procurement imports): its currency and amount. `fxRate` is the
+   * rate the rupees came to — typed on older requests, worked out from the bank
+   * debit on newer ones once paid. 'INR' / null otherwise.
+   */
   currency?: string;
   foreignAmount?: number | null;
   fxRate?: number | null;
+  /** A foreign bill not yet paid: no rupee figure exists until the admin records the bank debit. */
+  rupeesPending?: boolean;
   category: string;
   /** The readable name, for old values (fuel, purchase…) too. */
   categoryLabel?: string;
   description: string;
   payee: {
     name: string; method: 'upi' | 'bank'; upiId?: string; accountName?: string;
-    accountNumber?: string; ifsc?: string; bankName?: string; phone?: string;
+    accountNumber?: string; ifsc?: string; swift?: string; bankName?: string; phone?: string;
   };
   order: { id: string; number: string } | null;
   itemNames: string[];
@@ -74,22 +80,26 @@ export const getExpenseOptions = (team?: string) =>
 /** "Import purchase", or the stored value for anything the server did not name. */
 export const categoryName = (r: Pick<PaymentRequest, 'category' | 'categoryLabel'>) => r.categoryLabel || r.category;
 
-/** "THB 10,000 @ ₹2.45" for a foreign bill; '' for rupees (and every older request). */
-export const foreignBill = (r: Pick<PaymentRequest, 'currency' | 'foreignAmount' | 'fxRate'>) =>
+/** "THB 22,950" — a foreign bill as billed; '' for rupees. */
+export const billAmount = (r: Pick<PaymentRequest, 'currency' | 'foreignAmount'>) =>
   (r.currency && r.currency !== 'INR' && r.foreignAmount != null
-    ? `${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })} @ ₹${r.fxRate}`
+    ? `${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
     : '');
 
-/**
- * The rupees a foreign bill comes to, for the form's preview only — the server
- * works it out again and its figure is the one saved. null until both are valid.
- */
-export const previewRupees = (foreignAmount: string, fxRate: string) => {
-  const a = Number(foreignAmount);
-  const r = Number(fxRate);
-  if (!foreignAmount || !fxRate || !Number.isFinite(a) || !Number.isFinite(r) || a <= 0 || r <= 0) return null;
-  return Math.round(Math.round(a * 100) / 100 * (Math.round(r * 1e6) / 1e6) * 100) / 100;
+/** "THB 10,000 @ ₹2.45" once its rupees are known, "THB 22,950" before; '' for rupees (and every older request). */
+export const foreignBill = (r: Pick<PaymentRequest, 'currency' | 'foreignAmount' | 'fxRate'>) => {
+  const bill = billAmount(r);
+  if (!bill || !r.fxRate) return bill;
+  return `${bill} @ ₹${Number(r.fxRate).toLocaleString('en-IN', { maximumFractionDigits: 4 })}`;
 };
+
+/** The headline money: "₹24,500", or "THB 22,950" while a foreign bill's rupees are not known yet. */
+export const amountText = (r: Pick<PaymentRequest, 'amount' | 'currency' | 'foreignAmount' | 'rupeesPending'>) =>
+  (r.rupeesPending ? billAmount(r) : rupees(r.amount));
+
+/** "IFSC HDFC0001234" / "SWIFT KASITHBK" — whichever the bank has; '' for neither. */
+export const bankCode = (p: { ifsc?: string; swift?: string }) =>
+  (p.swift ? `SWIFT ${p.swift}` : p.ifsc ? `IFSC ${p.ifsc}` : '');
 
 export const STATUS_TONE: Record<PaymentStatus, string> = {
   submitted: 'bg-amber-100 text-amber-800',
@@ -140,8 +150,11 @@ export async function postForm<T>(endpoint: string, form: FormData, method: 'POS
   return body as T;
 }
 
-/** How many match the filters and what they add up to (first page only; `total` is null when capped). */
-export type ListSummary = { count: number; total: number | null; capped: boolean };
+/**
+ * How many match the filters and what they add up to (first page only; `total` is null when capped).
+ * `pending`: foreign bills counted but not in the total — their rupees come when paid.
+ */
+export type ListSummary = { count: number; total: number | null; capped: boolean; pending?: number | null };
 export type RequestPage = { requests: PaymentRequest[]; nextCursor: string | null; sort?: string; summary?: ListSummary };
 export const listRequests = (filters: Record<string, string>, cursor?: string) => {
   const q = new URLSearchParams({ ...filters, ...(cursor ? { cursor } : {}) });

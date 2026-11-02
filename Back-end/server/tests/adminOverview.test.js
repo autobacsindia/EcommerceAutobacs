@@ -98,6 +98,8 @@ it('shows money waiting, paid this month by team, and item refunds still to pay'
   await payReq({ amount: 1000 });
   await payReq({ amount: 500, status: 'approved' });
   await payReq({ amount: 250, status: 'on_hold' });
+  // A baht bill approved but not yet paid: no rupees yet — counted, not totalled, and said so.
+  await payReq({ amount: 0, status: 'approved', team: 'procurement', category: 'import_purchase', currency: 'THB', foreignAmount: 22950 });
   await payReq({ amount: 4000, status: 'paid', team: 'procurement', kind: 'supplier', category: 'supplier', payment: { method: 'bank', reference: 'UTR1', paidAt: new Date() } });
   await payReq({ amount: 9999, status: 'paid', payment: { method: 'bank', reference: 'UTR0', paidAt: new Date(Date.now() - 60 * 24 * H) } }); // an earlier month
 
@@ -109,8 +111,8 @@ it('shows money waiting, paid this month by team, and item refunds still to pay'
   await wf.reviewRefund(accounts, id, item, { approve: true }, req);
 
   const { money } = await companyOverview(admin);
-  expect(money.awaitingApproval).toEqual({ n: 1, amount: 1000 });
-  expect(money.toPay).toEqual({ n: 2, amount: 750, onHold: 1 });
+  expect(money.awaitingApproval).toEqual({ n: 1, amount: 1000, pending: 0 });
+  expect(money.toPay).toEqual({ n: 3, amount: 750, pending: 1, onHold: 1 });
   expect(money.paidThisMonth).toMatchObject({ n: 1, amount: 4000, byTeam: [{ team: 'procurement', n: 1, amount: 4000 }] });
   expect(money.itemRefundsToPay).toBe(1);
 });

@@ -44,7 +44,7 @@ import {
 } from '../config/expenseCategories.js';
 import { workflowView, STAGE } from '../utils/teamWorkflow.js';
 import { variantDisplayName } from '../utils/orderLines.js';
-import { cleanPayee, maskAccount, payKeyOf } from '../utils/payee.js';
+import { bankCodeLabel, cleanPayee, maskAccount, payKeyOf } from '../utils/payee.js';
 import {
   and, amountOf, amountRange, isObjectId, istRange, keysetPage, plainQuery, searchClauses, searchWords,
 } from '../utils/listQuery.js';
@@ -56,6 +56,8 @@ const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 export const PAYMENT_FILES_FOLDER = 'payment-requests'; // a PRIVATE prefix (storage/assetScope.js)
 export const MAX_PAYMENT_FILE_BYTES = MAX_ATTACHMENT_BYTES;
 export const MAX_AMOUNT = 10000000; // ₹1 crore: a typo guard, not a business limit
+// A foreign bill's typo guard: generous for currencies with large numbers (yen, rupiah).
+export const MAX_FOREIGN_AMOUNT = 1000000000;
 /**
  * Which teams may raise an expense: every one of them.
  *
@@ -161,14 +163,21 @@ function checkNote(team, category, description) {
 const filled = (v) => v != null && v !== '';
 
 /**
- * The money on an expense: always rupees in `amount`, plus — for a foreign bill —
- * its currency, amount and the quoted rate. The rupees are worked out HERE from
- * those two; a client-sent rupee figure that disagrees is refused rather than
- * trusted or silently replaced.
+ * The money on an expense.
+ *
+ *   • Rupees: `amount`, as typed (₹1 or more).
+ *   • A foreign bill (procurement imports): its currency and amount ONLY. The
+ *     rupees are not known until the bank debits them, so `amount` stays 0 and
+ *     the admin records the rupees with the payment (markPaid). Accounts approves
+ *     the bill as billed — "THB 22,950" — never a guessed rupee figure.
  *
  * `current` (an edit): fields not sent keep their value, and the currency is
  * checked against the team's list only when it changes — an old record keeps
- * the currency it was raised in.
+ * the currency it was raised in. A foreign bill whose currency and amount are
+ * unchanged keeps its money exactly as it is, so correcting the details of an
+ * older request does not drop the rate it was raised with.
+ *
+ * A stale browser tab may still send the retired `fxRate`: it is ignored.
  */
 function cleanMoney(team, input, current = null) {
   const was = current ? (current.currency || BASE_CURRENCY) : null;
@@ -180,24 +189,46 @@ function cleanMoney(team, input, current = null) {
     const amount = filled(input.amount) || !current ? cleanAmount(input.amount) : current.amount;
     return { amount, currency, foreignAmount: null, fxRate: null };
   }
+  if (filled(input.amount)) {
+    throw fail(`A ${currency} bill is approved in ${currency}; the rupees are recorded when it is paid. Change the ${currency} amount instead.`, 400);
+  }
   const foreignAmount = round2(filled(input.foreignAmount) ? input.foreignAmount : current?.foreignAmount);
   if (!Number.isFinite(foreignAmount) || foreignAmount <= 0) throw fail(`Enter the bill amount in ${currency}.`, 400);
-  const rate = Number(filled(input.fxRate) ? input.fxRate : current?.fxRate);
-  const fxRate = Math.round(rate * 1e6) / 1e6;
-  if (!Number.isFinite(fxRate) || fxRate < MIN_FX_RATE || fxRate > MAX_FX_RATE) {
-    throw fail(`Enter the exchange rate from your bank or forex quote: rupees for 1 ${currency} (e.g. 2.45).`, 400);
+  if (foreignAmount > MAX_FOREIGN_AMOUNT) throw fail('That bill amount looks too large — check it.', 400);
+  if (current && currency === was && foreignAmount === current.foreignAmount) {
+    return { amount: current.amount, currency, foreignAmount, fxRate: current.fxRate ?? null };
   }
-  const amount = cleanAmount(foreignAmount * fxRate);
-  if (filled(input.amount) && round2(input.amount) !== amount) {
-    throw fail(`The rupee amount is worked out from the ${currency} amount and the rate (${inr(amount)}). Change those instead.`, 400);
-  }
-  return { amount, currency, foreignAmount, fxRate };
+  return { amount: 0, currency, foreignAmount, fxRate: null };
 }
 
-/** "THB 10,000 @ ₹2.45" — for chat, the slip and the edit log; '' for a rupee request. */
+/** A foreign bill whose rupees are not recorded yet (raised without a rate, not paid). */
+export const rupeesPending = (r) => Boolean(r?.currency && r.currency !== BASE_CURRENCY && !(Number(r.amount) > 0));
+
+/**
+ * The rupees the bank debited for a foreign bill, and the rate they come to.
+ * The rate must land in the same sane range a typed rate always had to — a
+ * rupee figure off by a few zeros is refused, not recorded.
+ */
+function cleanDebit(r, value) {
+  const amount = cleanAmount(value);
+  const fxRate = Math.round((amount / Number(r.foreignAmount)) * 1e6) / 1e6;
+  if (!Number.isFinite(fxRate) || fxRate < MIN_FX_RATE || fxRate > MAX_FX_RATE) {
+    throw fail(`${inr(amount)} for ${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN')} does not look right — enter the rupees the bank debited.`, 400);
+  }
+  return { amount, fxRate };
+}
+
+const rateText = (rate) => Number(rate).toLocaleString('en-IN', { maximumFractionDigits: 4 });
+
+/** "THB 10,000 @ ₹2.45" (or "THB 22,950" before its rupees are known) — for chat, the edit log; '' for a rupee request. */
 export const foreignLine = (r) => (r?.currency && r.currency !== BASE_CURRENCY && r.foreignAmount != null
-  ? `${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })} @ ₹${r.fxRate}`
+  ? `${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN', { maximumFractionDigits: 2 })}${r.fxRate ? ` @ ₹${rateText(r.fxRate)}` : ''}`
   : '');
+
+/** The money in one phrase: "₹24,500 (THB 10,000 @ ₹2.45)", "₹800", or "THB 22,950 (rupees when paid)". */
+const moneyText = (r) => (rupeesPending(r)
+  ? `${foreignLine(r)} (rupees when paid)`
+  : `${inr(r.amount)}${foreignLine(r) ? ` (${foreignLine(r)})` : ''}`);
 
 export { cleanPayee, maskAccount };
 
@@ -289,7 +320,7 @@ async function tellChat(req, action, text, { mentionAdmins = false, mentionReque
 
 const what = (r) => (r.kind === 'supplier'
   ? `supplier payment ${r.number} — ${inr(r.amount)} to ${r.payee.name}${r.orderNumber ? ` for ${r.orderNumber}` : ''}`
-  : `${categoryLabel(r.category)} expense ${r.number} — ${inr(r.amount)}${foreignLine(r) ? ` (${foreignLine(r)})` : ''} to ${r.payee.name}`);
+  : `${categoryLabel(r.category)} expense ${r.number} — ${moneyText(r)} to ${r.payee.name}`);
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
 
@@ -309,11 +340,14 @@ export function shape(r, viewer) {
     team: r.team,
     teamLabel: STAFF_TEAM_LABELS[r.team] || r.team,
     requestedBy: r.requestedByName,
-    amount: r.amount, // rupees, always
+    amount: r.amount, // rupees, always (0 while `rupeesPending`)
     // Records from before currencies have none: they are rupees.
     currency: r.currency || BASE_CURRENCY,
     foreignAmount: r.foreignAmount ?? null,
     fxRate: r.fxRate ?? null,
+    // A foreign bill not yet paid: no rupee figure exists — show the bill, and the
+    // admin enters the bank's rupee debit when paying.
+    rupeesPending: rupeesPending(r),
     category: r.category,
     categoryLabel: categoryLabel(r.category),
     description: r.description,
@@ -381,7 +415,7 @@ export async function createExpense(actor, input, uploaded, req) {
     files: stored,
     history: [entry(actor, 'submitted')],
   });
-  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'expense', amount, team, currency: money.currency });
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'expense', amount, team, currency: money.currency, foreignAmount: money.foreignAmount });
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} from ${doc.requestedByName} (${STAFF_TEAM_LABELS[team]}). Accounts: please approve or decline.`);
   return shape(doc, actor);
 }
@@ -565,8 +599,16 @@ export async function hold(actor, id, { note } = {}, req) {
   return shape(r, actor);
 }
 
-/** The admin records the payment made (Razorpay / bank / UPI), with a reference and a screenshot. */
-export async function markPaid(actor, id, { method, reference, note, transactionAt } = {}, proofFiles = [], req) {
+/**
+ * The admin records the payment made (Razorpay / bank / UPI), with a reference and a screenshot.
+ *
+ * A foreign bill also takes `rupees`: what the bank actually debited. It is
+ * required while the rupees are unknown (raised without a rate), and may replace
+ * an older request's quoted estimate — the debit is what it cost. The rate is
+ * worked out from it. A rupee request's amount is what accounts approved: a
+ * different figure is refused, never applied.
+ */
+export async function markPaid(actor, id, { method, reference, note, transactionAt, rupees } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin pays payment requests — accounts approves them.', 403);
   const how = ['razorpay', 'bank', 'upi', 'other'].includes(method) ? method : null;
   if (!how) throw fail('Choose how it was paid.', 400);
@@ -575,21 +617,37 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   const now = new Date();
   const txAt = cleanTransactionAt(transactionAt, now.getTime());
   const r0 = await loadVisible(actor, id);
+  const isForeign = Boolean(foreignLine(r0));
+  let priced = null;
+  if (isForeign && filled(rupees)) {
+    priced = cleanDebit(r0, rupees);
+    if (priced.amount === r0.amount) priced = null;
+  } else if (rupeesPending(r0)) {
+    throw fail(`Enter the rupees the bank debited for this ${foreignLine(r0)} bill.`, 400);
+  } else if (filled(rupees) && round2(rupees) !== r0.amount) {
+    throw fail(`This request is for ${inr(r0.amount)} — that is what accounts approved. Edit the request to change it.`, 400);
+  }
   // The admin paying a request still waiting for approval approves it in the same step.
   const from = ['submitted', 'approved', 'on_hold'];
   const uploads = (Array.isArray(proofFiles) ? proofFiles : [proofFiles]).filter(Boolean);
   const proof = uploads.length ? await storeFiles(uploads, uploads.map(() => 'proof'), actor, { existing: (r0.files || []).length }) : [];
-  const r = await paymentRequestRepository.transition(id, from, {
-    ...(r0.status === 'submitted' ? { approvedBy: actor._id, approvedAt: now } : {}),
-    status: 'paid',
-    payment: { method: how, reference: ref.slice(0, 120), paidAt: now, transactionAt: txAt, paidBy: actor._id, paidByName: actor.name || '' },
-  }, entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`.trim(), note].filter(Boolean).join(' — ')), proof.length ? { files: { $each: proof } } : {});
+  const debit = priced ? `${inr(priced.amount)} debited for ${foreignLine({ ...r0, fxRate: null })} (₹${rateText(priced.fxRate)} per ${r0.currency})` : '';
+  // A priced payment is also pinned to the bill it priced: an edit to the bill
+  // between reading it and paying makes this a lost race, not a wrong rate.
+  const r = await paymentRequestRepository.transitionInSession(id, from,
+    priced ? { foreignAmount: r0.foreignAmount, amount: r0.amount } : {}, {
+      ...(r0.status === 'submitted' ? { approvedBy: actor._id, approvedAt: now } : {}),
+      ...(priced || {}),
+      status: 'paid',
+      payment: { method: how, reference: ref.slice(0, 120), paidAt: now, transactionAt: txAt, paidBy: actor._id, paidByName: actor.name || '' },
+    }, entry(actor, 'paid', [`${how.toUpperCase()} ${ref}`.trim(), debit, note].filter(Boolean).join(' — ')),
+    proof.length ? { files: { $each: proof } } : {}, undefined);
   if (!r) {
     // Lost the race: the screenshot belongs to no payment.
     await Promise.all(proof.map((f) => deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeOf(f) }).catch(() => {})));
     throw fail(MOVED, 409);
   }
-  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'paid', method: how, reference: ref });
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'paid', method: how, reference: ref, ...(priced ? { amount: priced.amount, fxRate: priced.fxRate } : {}) });
   await followOnOrder(r, actor, 'paid');
   const next = r.kind === 'supplier' ? ' Procurement: get the shipping details from the supplier and upload them.' : '';
   await tellChat(r, 'paid', `💸 Paid ${what(r)} — ${how.toUpperCase()}${ref ? ` ref ${ref}` : ''}.${next}`, { mentionRequester: true });
@@ -656,7 +714,8 @@ export async function update(actor, id, input = {}, req) {
   requireUpiOrQr(payee, (r0.files || []).map((f) => f.kind));
 
   const changes = [];
-  if (amount !== r0.amount) changes.push(`amount ${inr(r0.amount)} → ${inr(amount)}`);
+  // A foreign bill without rupees yet has no rupee amount to compare: its bill line says it.
+  if (amount !== r0.amount && !rupeesPending(money) && !rupeesPending(r0)) changes.push(`amount ${inr(r0.amount)} → ${inr(amount)}`);
   if (fxChanged) changes.push(`bill ${foreignLine(before) || 'in rupees'} → ${foreignLine(money) || 'in rupees'}`);
   if (payee.name !== r0.payee.name) changes.push(`payee ${r0.payee.name} → ${payee.name}`);
   if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) changes.push('payment details');
@@ -686,7 +745,7 @@ export async function update(actor, id, input = {}, req) {
  * (payBatch) is corrected together with them: it was one transfer. One
  * transaction; every change is in each request's history.
  */
-export async function editPayment(actor, id, { method, reference, note, removeFileIds, transactionAt } = {}, proofFiles = [], req) {
+export async function editPayment(actor, id, { method, reference, note, removeFileIds, transactionAt, rupees } = {}, proofFiles = [], req) {
   if (!mayPay(actor)) throw fail('Only the admin can edit a payment record.', 403);
   const r0 = await loadVisible(actor, id);
   if (r0.status !== 'paid') throw fail('Only a paid payment\'s details can be edited here.', 409);
@@ -701,8 +760,19 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
   removeIds = new Set((Array.isArray(removeIds) ? removeIds : []).map(String));
   const removing = (r0.files || []).filter((f) => f.kind === 'proof' && removeIds.has(idOf(f._id)));
   const uploads = (Array.isArray(proofFiles) ? proofFiles : [proofFiles]).filter(Boolean);
+  // A foreign bill's rupees are the admin's own record of the bank debit, so a
+  // typo in them is theirs to correct. A rupee payment's amount is not: it was
+  // approved, and a wrong one is a new payment or a refund.
+  let priced = null;
+  if (filled(rupees)) {
+    if (!foreignLine(r0)) throw fail('The amount of a paid rupee payment cannot be changed — a wrong amount is a new payment or a refund.', 400);
+    if (r0.payment?.batch) throw fail('This was paid in one transfer with others — its amount cannot be changed alone.', 400);
+    priced = cleanDebit(r0, rupees);
+    if (priced.amount === r0.amount) priced = null;
+  }
 
   const changes = [];
+  if (priced) changes.push(`rupees debited ${inr(r0.amount)} → ${inr(priced.amount)} (₹${rateText(priced.fxRate)} per ${r0.currency})`);
   if (how !== r0.payment?.method) changes.push(`paid by ${String(r0.payment?.method || '—').toUpperCase()} → ${how.toUpperCase()}`);
   if (ref !== (r0.payment?.reference || '')) changes.push(`reference ${r0.payment?.reference || '—'} → ${ref || '—'}`);
   if (txAt && (!wasAt || new Date(txAt).getTime() !== new Date(wasAt).getTime())) {
@@ -728,7 +798,7 @@ export async function editPayment(actor, id, { method, reference, note, removeFi
       let mine = null;
       for (const tid of targets) {
         if (publicIds.length) await paymentRequestRepository.pullProofsInSession(tid, publicIds, session);
-        const next = await paymentRequestRepository.editPaidInSession(tid, { 'payment.method': how, 'payment.reference': ref, ...(txAt ? { 'payment.transactionAt': txAt } : {}) }, log, stored, session);
+        const next = await paymentRequestRepository.editPaidInSession(tid, { 'payment.method': how, 'payment.reference': ref, ...(txAt ? { 'payment.transactionAt': txAt } : {}), ...(priced || {}) }, log, stored, session);
         if (!next) throw fail(MOVED, 409);
         if (idOf(tid) === idOf(r0._id)) mine = next;
       }
@@ -791,7 +861,8 @@ export function listQuery(actor, f = {}) {
     /^[a-z][a-z0-9_]{1,39}$/.test(f.category || '') ? { category: f.category } : null,
     isObjectId(f.by) ? { requestedBy: new mongoose.Types.ObjectId(f.by) } : null,
     PAID_METHODS.includes(f.method) ? { 'payment.method': f.method } : null,
-    amount ? { amount } : null,
+    // A foreign bill not yet priced (amount 0) has no rupee figure to filter on.
+    amount ? { amount: { $gt: 0, ...amount } } : null,
     range && f.dateOf === 'paid'
       // When the money went; older records only know when it was recorded.
       ? { $or: [{ 'payment.transactionAt': range }, { 'payment.transactionAt': null, 'payment.paidAt': range }] }
@@ -800,7 +871,8 @@ export function listQuery(actor, f = {}) {
       const n = amountOf(w);
       // "meta ads" finds a meta_ads expense: categories are stored as codes, shown by name.
       const named = w.length >= 3 ? categoriesNamed(w) : [];
-      return [...(n ? [{ amount: n }] : []), ...(named.length ? [{ category: { $in: named } }] : [])];
+      // A typed number is a rupee amount, or a foreign bill's amount ("22950" finds THB 22,950).
+      return [...(n ? [{ amount: n }, { foreignAmount: n }] : []), ...(named.length ? [{ category: { $in: named } }] : [])];
     }),
   );
 }
@@ -927,7 +999,7 @@ const TO_PAY = ['approved', 'on_hold'];
 /** An opaque id for a pay destination: the key itself holds the account number. */
 const groupIdOf = (r) => crypto.createHash('sha256').update(payKeyOf(r.payee, idOf(r._id))).digest('hex').slice(0, 16);
 
-const destinationLabel = (p = {}) => (p.method === 'upi' ? (p.upiId ? `UPI ${p.upiId}` : 'UPI by QR (see the request)') : `${p.bankName || 'Bank'} ${maskAccount(p.accountNumber)} · ${p.ifsc}`);
+const destinationLabel = (p = {}) => (p.method === 'upi' ? (p.upiId ? `UPI ${p.upiId}` : 'UPI by QR (see the request)') : `${p.bankName || 'Bank'} ${maskAccount(p.accountNumber)} · ${bankCodeLabel(p)}`);
 
 /** The "to pay, by supplier" sorts: longest waiting first unless asked. */
 const GROUP_SORTS = Object.freeze({
@@ -943,7 +1015,7 @@ const GROUP_SORTS = Object.freeze({
  *
  * Search / filter / sort work on the groups, after grouping: the open queue is
  * one bounded read (TO_PAY_CAP), so this adds no query. A group matches when every
- * typed word is in its supplier name, UPI ID, bank, IFSC, or one of its payments'
+ * typed word is in its supplier name, UPI ID, bank, IFSC / SWIFT, or one of its payments'
  * PR number, order number or customer — or is its total or one payment's amount.
  * A match shows the whole group (its count and total stay what is to pay).
  */
@@ -967,7 +1039,7 @@ export async function supplierPayGroups(actor, params = {}) {
     if (r.bankNotice?.at) g.bankNotice = true;
     groups.set(id, g);
     const p = r.payee || {};
-    text.set(id, `${text.get(id) || ''} ${[p.name, p.upiId, p.bankName, p.ifsc, g.destination, r.number, r.orderNumber, r.customer?.name].filter(Boolean).join(' ')}`.toLowerCase());
+    text.set(id, `${text.get(id) || ''} ${[p.name, p.upiId, p.bankName, p.ifsc, p.swift, g.destination, r.number, r.orderNumber, r.customer?.name].filter(Boolean).join(' ')}`.toLowerCase());
     amounts.set(id, [...(amounts.get(id) || []), r.amount]);
   }
   const words = searchWords(f.q);

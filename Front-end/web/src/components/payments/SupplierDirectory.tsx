@@ -6,6 +6,8 @@ import { AlertTriangle, Loader2, Pencil, Plus } from 'lucide-react';
 import { useListParams } from '@/lib/hooks/useListParams';
 import { ListClear, ListResultLine, ListSearch, ListSelect } from '@/components/panel/ListControls';
 import { errorMessage } from './api';
+import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
+import { payLine } from './SupplierPicker';
 import {
   createSupplier, listSuppliers, setSupplierActive, supplierKeys, updateSupplier,
   type Supplier, type SupplierInput,
@@ -16,14 +18,14 @@ const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gra
 
 const EMPTY: SupplierInput = {
   name: '', contactPerson: '', phone: '', email: '', gstin: '', address: '', notes: '',
-  payment: { method: 'bank', upiId: '', accountName: '', accountNumber: '', ifsc: '', bankName: '' },
+  payment: { method: 'bank', upiId: '', accountName: '', accountNumber: '', ifsc: '', swift: '', bankName: '' },
 };
 
 const toInput = (s: Supplier): SupplierInput => ({
   name: s.name, contactPerson: s.contactPerson, phone: s.phone, email: s.email, gstin: s.gstin, address: s.address, notes: s.notes,
   payment: {
     method: s.payment.method, upiId: s.payment.upiId, accountName: s.payment.accountName,
-    accountNumber: s.payment.accountNumber, ifsc: s.payment.ifsc, bankName: s.payment.bankName,
+    accountNumber: s.payment.accountNumber, ifsc: s.payment.ifsc, swift: s.payment.swift || '', bankName: s.payment.bankName,
   },
 });
 
@@ -34,23 +36,28 @@ export function SupplierForm({ supplier, onDone, onCancel }: {
   onCancel: () => void;
 }) {
   const [v, setV] = useState<SupplierInput>(supplier ? toInput(supplier) : EMPTY);
+  const [codeKind, setCodeKind] = useState<BankCodeKind>(supplier ? kindOf(supplier.payment) : 'ifsc');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k: keyof Omit<SupplierInput, 'payment'>) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setV({ ...v, [k]: e.target.value });
   const setPay = (k: keyof SupplierInput['payment']) => (e: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, payment: { ...v.payment, [k]: e.target.value } });
   const bank = v.payment.method === 'bank';
+  const code = bankCodePayload(codeKind, v.payment[codeKind]);
   const bankEdited = !!supplier && (
     v.payment.method !== supplier.payment.method || v.payment.upiId !== supplier.payment.upiId
-    || v.payment.accountNumber !== supplier.payment.accountNumber || v.payment.ifsc !== supplier.payment.ifsc);
+    || v.payment.accountNumber !== supplier.payment.accountNumber
+    || (bank && (code.ifsc !== supplier.payment.ifsc || code.swift !== (supplier.payment.swift || ''))));
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    const codeProblem = bank ? bankCodeProblem(codeKind, v.payment[codeKind]) : '';
+    if (codeProblem) { setError(codeProblem); return; }
     if (bankEdited && !window.confirm('You are changing where this supplier is paid. Did you confirm the new details with the supplier by phone? Payments raised in the next 30 days will show a warning to accounts and the admin.')) return;
     const body: SupplierInput = {
       ...v,
       gstin: v.gstin.trim().toUpperCase(),
-      payment: { ...v.payment, accountNumber: v.payment.accountNumber.replace(/\s+/g, ''), ifsc: v.payment.ifsc.trim().toUpperCase() },
+      payment: { ...v.payment, accountNumber: v.payment.accountNumber.replace(/\s+/g, ''), ...(bank ? code : { ifsc: '', swift: '' }) },
     };
     setBusy(true);
     try {
@@ -94,9 +101,9 @@ export function SupplierForm({ supplier, onDone, onCancel }: {
         {bank ? (
           <div className="mt-2 grid gap-3 sm:grid-cols-2">
             <input aria-label="Account holder" className={input} required value={v.payment.accountName} onChange={setPay('accountName')} placeholder="Account holder name" />
-            <input aria-label="Account number" className={input} required inputMode="numeric" value={v.payment.accountNumber} onChange={setPay('accountNumber')} placeholder="Account number" />
-            <input aria-label="IFSC" className={input} required value={v.payment.ifsc} onChange={setPay('ifsc')} placeholder="IFSC, e.g. HDFC0001234" autoCapitalize="characters" />
-            <input aria-label="Bank name" className={input} value={v.payment.bankName} onChange={setPay('bankName')} placeholder="Bank (optional)" />
+            <input aria-label="Account number" className={input} required inputMode={codeKind === 'swift' ? 'text' : 'numeric'} value={v.payment.accountNumber} onChange={setPay('accountNumber')} placeholder={codeKind === 'swift' ? 'Account number / IBAN' : 'Account number'} />
+            <BankCodeField kind={codeKind} value={v.payment[codeKind]} onKind={setCodeKind} onChange={(x) => setV({ ...v, payment: { ...v.payment, [codeKind]: x } })} inputClass={input} />
+            <input aria-label="Bank name" className={`${input} sm:self-end`} value={v.payment.bankName} onChange={setPay('bankName')} placeholder="Bank (optional)" />
           </div>
         ) : (
           <div className="mt-2"><input aria-label="UPI ID" className={input} value={v.payment.upiId} onChange={setPay('upiId')} placeholder="UPI ID (optional — or attach their QR on each payment)" autoCapitalize="none" /></div>
@@ -126,7 +133,6 @@ function SupplierCard({ s, onEdit }: { s: Supplier; onEdit: () => void }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const p = s.payment;
   async function toggle() {
     setBusy(true);
     try { await setSupplierActive(s.id, !s.active); await qc.invalidateQueries({ queryKey: supplierKeys.all }); } catch (err) { setError(errorMessage(err, 'Could not change it.')); } finally { setBusy(false); }
@@ -138,7 +144,7 @@ function SupplierCard({ s, onEdit }: { s: Supplier; onEdit: () => void }) {
           <p className="font-semibold text-gray-900">{s.name}{!s.active && <span className="ml-2 rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-700">Inactive</span>}</p>
           <p className="text-sm text-gray-600">{[s.contactPerson, s.phone, s.email].filter(Boolean).join(' · ')}</p>
           <p className="text-sm text-gray-700">
-            {p.method === 'upi' ? `UPI · ${p.upiId}` : `${p.bankName || 'Bank'} · ${p.accountName} · A/c ${p.accountNumber || p.accountMasked} · ${p.ifsc}`}
+            {payLine(s)}
           </p>
           {s.gstin && <p className="text-xs text-gray-500">GST {s.gstin}</p>}
           {s.bankChangedAt && <p className="text-xs text-amber-700">Bank details changed {new Date(s.bankChangedAt).toLocaleDateString('en-IN')} by {s.bankChangedBy}</p>}

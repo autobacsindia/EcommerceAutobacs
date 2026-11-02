@@ -33,7 +33,7 @@ const wrap = (ui: React.ReactElement) => render(
 
 const ARB: Supplier = {
   id: 's1', name: 'ARB Supplies', contactPerson: 'Joseph', phone: '9800000001', email: '', gstin: '', address: '', notes: '',
-  payment: { method: 'bank', upiId: '', accountName: 'ARB Pvt Ltd', accountNumber: '', accountMasked: 'XXXXXXXX9012', ifsc: 'HDFC0001234', bankName: 'HDFC' },
+  payment: { method: 'bank', upiId: '', accountName: 'ARB Pvt Ltd', accountNumber: '', accountMasked: 'XXXXXXXX9012', ifsc: 'HDFC0001234', swift: '', bankName: 'HDFC' },
   active: true, bankChangedAt: null, bankChangedBy: '', updatedAt: '', can: { edit: true },
 };
 const SUPPLIER_CTX = { orderId: 'o1', orderNumber: '#AB12', customer: 'Ravi', closedBy: 'Website', lines: [{ itemId: 'i1', name: 'Lift kit' }] };
@@ -117,6 +117,33 @@ describe('the directory', () => {
     expect(put).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /Save supplier/ }));
     await waitFor(() => expect(put).toHaveBeenCalledWith('/suppliers/s1', expect.objectContaining({ payment: expect.objectContaining({ accountNumber: '555566667777' }) })));
+  });
+
+  it('a foreign supplier is saved with its SWIFT code, not an IFSC', async () => {
+    get.mockResolvedValue({ suppliers: [], nextAfter: null });
+    post.mockResolvedValue({ supplier: ARB });
+    wrap(<SupplierDirectory canEdit />);
+    fireEvent.click(await screen.findByRole('button', { name: /Add supplier/ }));
+    fireEvent.change(screen.getByLabelText('Supplier name'), { target: { value: 'Open N' } });
+    fireEvent.change(screen.getByLabelText('Account holder'), { target: { value: 'Nikom Amranan' } });
+    fireEvent.change(screen.getByLabelText('Account number'), { target: { value: '8582102601' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'SWIFT (foreign bank)' }));
+    fireEvent.change(screen.getByLabelText('SWIFT code'), { target: { value: 'kasi thbk' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save supplier/ }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/suppliers', expect.objectContaining({
+      payment: expect.objectContaining({ method: 'bank', swift: 'KASITHBK', ifsc: '', accountNumber: '8582102601' }),
+    })));
+  });
+
+  it('a saved foreign supplier shows its SWIFT code in the list, and editing it stays on SWIFT', async () => {
+    const thai: Supplier = { ...ARB, id: 's2', name: 'Open N', payment: { ...ARB.payment, accountNumber: '8582102601', accountMasked: 'XXXXXX2601', ifsc: '', swift: 'KASITHBK', bankName: 'KASIKORNBANK' } };
+    get.mockResolvedValue({ suppliers: [thai], nextAfter: null });
+    wrap(<SupplierDirectory canEdit />);
+    expect(await screen.findByText(/KASIKORNBANK · ARB Pvt Ltd · A\/c 8582102601 · SWIFT KASITHBK/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Edit/ }));
+    expect(screen.getByLabelText('SWIFT code')).toHaveValue('KASITHBK');
+    // Untouched: no "you are changing where this supplier is paid" warning.
+    expect(screen.queryByText(/changing where this supplier is paid/)).toBeNull();
   });
 
   it('a viewer who may not edit sees no edit buttons', async () => {
@@ -237,6 +264,7 @@ describe('admin corrects a paid payment', () => {
     expect(form.get('reference')).toBe('UTR777888');
     expect(JSON.parse(form.get('removeFileIds') as string)).toEqual(['f9']);
     expect(form.get('amount')).toBeNull();
+    expect(form.get('rupees')).toBeNull();
     // Prefilled from the recorded payment; sent back as an exact instant.
     expect(Number.isNaN(new Date(form.get('transactionAt') as string).getTime())).toBe(false);
     await waitFor(() => expect(onDone).toHaveBeenCalled());

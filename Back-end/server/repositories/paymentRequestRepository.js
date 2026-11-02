@@ -2,6 +2,9 @@ import mongoose from 'mongoose';
 import PaymentRequest from '../models/PaymentRequest.js';
 import { readSummary, summaryPipeline } from '../utils/listQuery.js';
 
+/** Counts foreign bills not yet priced — every rupee request is ₹1 or more, so amount 0 means exactly that. */
+const PENDING_RUPEES = { $sum: { $cond: [{ $lte: ['$amount', 0] }, 1, 0] } };
+
 /**
  * Payment requests (models/PaymentRequest.js). Data access only — who may do
  * what lives in services/paymentRequestService.js.
@@ -33,8 +36,13 @@ const paymentRequestRepository = {
    * so a huge match costs a bounded read. `capped` says the real count is higher.
    */
   summary: async (query, cap) => {
-    const [row] = await PaymentRequest.aggregate(summaryPipeline(query, cap, 'amount')).option({ maxTimeMS: 5000 });
-    return readSummary(row, cap, true);
+    const pipeline = summaryPipeline(query, cap, 'amount');
+    // Foreign bills whose rupees are not known yet (amount 0): the total leaves
+    // them out, so the list says how many it left out rather than look complete.
+    pipeline.at(-1).$group.pending = PENDING_RUPEES;
+    const [row] = await PaymentRequest.aggregate(pipeline).option({ maxTimeMS: 5000 });
+    const summary = readSummary(row, cap, true);
+    return { ...summary, pending: summary.capped ? null : row?.pending || 0 };
   },
 
   /** Supplier requests for an order that are not finished (served by payment_request_order). */
@@ -104,7 +112,7 @@ const paymentRequestRepository = {
     { new: true, session },
   ).lean(),
 
-  countByStatus: () => PaymentRequest.aggregate([{ $group: { _id: '$status', n: { $sum: 1 }, amount: { $sum: '$amount' } } }]),
+  countByStatus: () => PaymentRequest.aggregate([{ $group: { _id: '$status', n: { $sum: 1 }, amount: { $sum: '$amount' }, pending: PENDING_RUPEES } }]),
 
   /** Paid since a date, by team (index payment_request_status). */
   paidSinceByTeam: (since) => PaymentRequest.aggregate([

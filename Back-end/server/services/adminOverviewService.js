@@ -122,8 +122,10 @@ export async function companyOverview(actor, now = Date.now()) {
   };
 
   // ── Money waiting ──
-  const by = Object.fromEntries(requestsByStatus.map((r) => [r._id, { n: r.n, amount: round2(r.amount) }]));
-  const zero = { n: 0, amount: 0 };
+  // `pending`: foreign bills in the count whose rupees are recorded only when paid —
+  // left out of `amount`, so the card can say so instead of looking complete.
+  const by = Object.fromEntries(requestsByStatus.map((r) => [r._id, { n: r.n, amount: round2(r.amount), pending: r.pending || 0 }]));
+  const zero = { n: 0, amount: 0, pending: 0 };
   const money = {
     // Accounts has not decided yet.
     awaitingApproval: by.submitted || zero,
@@ -133,6 +135,7 @@ export async function companyOverview(actor, now = Date.now()) {
     toPay: {
       n: (by.approved?.n || 0) + (by.on_hold?.n || 0),
       amount: round2((by.approved?.amount || 0) + (by.on_hold?.amount || 0)),
+      pending: (by.approved?.pending || 0) + (by.on_hold?.pending || 0),
       onHold: by.on_hold?.n || 0,
     },
     paidThisMonth: {

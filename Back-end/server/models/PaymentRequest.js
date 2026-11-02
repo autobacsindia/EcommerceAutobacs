@@ -73,12 +73,19 @@ const PaymentRequestSchema = new mongoose.Schema(
     requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     requestedByName: { type: String, required: true },
 
-    // Rupees, two decimals at most — ALWAYS, whatever the bill's currency: what is
-    // approved, paid and totalled. Never derived from client totals elsewhere.
-    amount: { type: Number, required: true, min: 1 },
-    // A foreign-currency expense (procurement imports): what was billed, and the
-    // rupees-per-unit rate from the quote it was paid at. `amount` is worked out
-    // from them by the server. Absent / 'INR' on every rupee request, old ones too.
+    // Rupees, two decimals at most: what is approved, paid and totalled. Never
+    // derived from client totals elsewhere.
+    //   • A rupee request: at least ₹1, from the moment it is raised.
+    //   • A foreign-currency expense (procurement imports) raised since the rate
+    //     box was dropped: 0 until it is PAID — the rupees are not known until the
+    //     bank debits them, and the admin records that figure with the payment.
+    //     0 rather than null so the amount sort / cursor still page every row
+    //     (a null drops out of a `$lte` range); `shape().rupeesPending` says it.
+    amount: { type: Number, required: true, min: 0 },
+    // A foreign-currency expense: what was billed, and the rupees-per-unit rate.
+    //   • older records: the rate from the quote typed in, `amount` worked out from it;
+    //   • newer ones: null until paid, then the bank debit ÷ the bill.
+    // Absent / 'INR' on every rupee request, old ones too.
     currency: { type: String, default: 'INR', maxlength: 3 },
     foreignAmount: { type: Number, default: null },
     fxRate: { type: Number, default: null },
@@ -95,6 +102,9 @@ const PaymentRequestSchema = new mongoose.Schema(
       accountName: { type: String, default: '', maxlength: 120 },
       accountNumber: { type: String, default: '', maxlength: 34 },
       ifsc: { type: String, default: '', maxlength: 11 },
+      // A foreign bank (international suppliers): its SWIFT / BIC instead of an
+      // IFSC — exactly one of the two is set. '' on every record from before.
+      swift: { type: String, default: '', maxlength: 11 },
       bankName: { type: String, default: '', maxlength: 120 },
       phone: { type: String, default: '', maxlength: 20 },
     },
