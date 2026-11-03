@@ -189,7 +189,7 @@ async function bootstrap() {
     } else if (process.env.NODE_ENV === 'production' && !process.env.REDIS_URL) {
       console.error('✗ FATAL: REDIS_URL environment variable is required in production');
       console.error('');
-      console.error('  FIX: Provision Redis (e.g., Upstash) and set REDIS_URL + REDIS_TOKEN');
+      console.error('  FIX: Set REDIS_URL to the cache/session Redis URL (see docs/ENVIRONMENTS.md)');
       process.exit(1);
     } else {
       console.log('✓ Redis check skipped (development mode)');

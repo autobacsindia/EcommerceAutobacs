@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 import * as Sentry from '@sentry/node';
+import { redisTransportOptions } from '../utils/redisTransport.js';
 
 let redisClient = null;
 let redisDownSince = null;
@@ -19,7 +20,7 @@ if (process.env.REDIS_URL) {
         if (times > 3) return null;
         return Math.min(times * 100, 3000);
       },
-      tls: process.env.REDIS_URL.startsWith('rediss://') ? {} : undefined,
+      ...redisTransportOptions(process.env.REDIS_URL),
     });
 
     redisClient.on('error', (err) => {

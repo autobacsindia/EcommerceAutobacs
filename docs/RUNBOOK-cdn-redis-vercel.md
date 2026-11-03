@@ -1,5 +1,10 @@
 # Runbook — Upstash Redis split, Vercel frontend, Cloudflare CDN
 
+> **2026-11: the Upstash parts of this runbook are superseded.** Production cache/sessions moved
+> from Upstash to a Railway `Redis-Cache` service — see
+> [RUNBOOK-upstash-to-railway-redis.md](RUNBOOK-upstash-to-railway-redis.md). The Vercel and
+> Cloudflare steps still apply.
+
 Operational steps to take the code changes (already merged) to production. Order is
 **safe and reversible** — each step is a no-op until its env vars are set, and Railway
 Redis stays as rollback until Step 3 is verified.
