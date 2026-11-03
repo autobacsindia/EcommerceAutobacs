@@ -65,6 +65,29 @@ export function useSetStatus() {
   });
 }
 
+/** What a card's quick buttons may change in place. */
+export type QuickEdit = { dueOn?: string | null; priority?: TaskPriority; assigneeIds?: string[] };
+
+/**
+ * Change one thing on a task from its card (date, priority, people), against the
+ * revision it was shown at. Nothing on screen changes until the server says yes;
+ * a refusal says why and reloads, so the card never shows what was not saved.
+ */
+export function useQuickEdit() {
+  const refresh = useRefreshTasks();
+  return useMutation({
+    mutationFn: ({ t, patch }: { t: Task; patch: QuickEdit }) =>
+      apiClient.patch<{ task: Task }>(`/staff/tasks/${encodeURIComponent(t.id)}`, { rev: t.rev, ...patch }),
+    onSuccess: (_r, { t }) => { toast.success(`${t.code} saved`, { id: `quick-${t.id}`, duration: 1500 }); },
+    onError: (e, { t }) => {
+      toast.error(isConflict(e)
+        ? `${t.code} was changed by someone else just now — refreshed.`
+        : errorMessage(e, `Could not change ${t.code}.`));
+    },
+    onSettled: () => refresh(),
+  });
+}
+
 /** What "+ Add task" may set beside the title (the board's chips). */
 export type QuickExtras = { assigneeIds?: string[]; dueOn?: string | null; priority?: TaskPriority; tags?: string[] };
 

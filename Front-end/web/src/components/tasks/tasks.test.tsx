@@ -350,6 +350,13 @@ describe('the board', () => {
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'waiting' }));
   });
 
+  it('a task in both the open and the done list (just ticked) shows once, where the done list has it', async () => {
+    const ticked = task({ status: 'done', statusLabel: 'Done', bucket: 'done' });
+    await board([task()], [ticked]);
+    expect(await within(col('Complete')).findByText('Call Bosch')).toBeInTheDocument();
+    expect(screen.getAllByText('Call Bosch')).toHaveLength(1);
+  });
+
   it('a date filter shows only what is still to do (no Complete column)', async () => {
     await board([task()]);
     await screen.findByText('Call Bosch');
@@ -694,6 +701,136 @@ describe('the board card', () => {
     expect(screen.getByRole('region', { name: 'To do' }).querySelector('.tk-pill')).toHaveAttribute('data-status', 'todo');
     fireEvent.click(card);
     await waitFor(() => expect(replace).toHaveBeenCalledWith(expect.stringContaining('task=t1'), expect.anything()));
+  });
+});
+
+describe('the board card quick buttons', () => {
+  const board = async (list: Task[], props: Partial<{ base: string; canSeeTeam: boolean }> = {}) => {
+    serve({ list });
+    localStorage.setItem('tasks-view-mode', 'board');
+    workspace(props);
+    return screen.findByRole('button', { name: `Open ${list[0].code}: ${list[0].title}` });
+  };
+  const opened = () => replace.mock.calls.some((c) => String(c[0]).includes('task='));
+
+  it('priority: the flag opens a menu; a pick saves with the revision and never opens the task', async () => {
+    patch.mockResolvedValue({ task: task({ priority: 'urgent', rev: 4 }) });
+    const card = await board([task()]);
+    fireEvent.click(within(card).getByRole('button', { name: 'Priority of T-7' }));
+    const menu = screen.getByRole('menu', { name: 'Priority of T-7' });
+    expect(within(menu).getByRole('menuitemradio', { name: 'High' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Urgent' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, priority: 'urgent' }));
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(opened()).toBe(false);
+  });
+
+  it('priority: picking the same one again changes nothing; Escape closes the menu', async () => {
+    const card = await board([task()]);
+    const flag = within(card).getByRole('button', { name: 'Priority of T-7' });
+    fireEvent.click(flag);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'High' }));
+    fireEvent.click(flag);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('due date: a new day saves it; clearing it saves no date', async () => {
+    patch.mockResolvedValue({ task: task({ rev: 4 }) });
+    const card = await board([task()]);
+    const field = within(card).getByLabelText('Due date for T-7');
+    fireEvent.change(field, { target: { value: '2026-11-20' } });
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, dueOn: '2026-11-20' }));
+    fireEvent.change(field, { target: { value: '' } });
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, dueOn: null }));
+    expect(opened()).toBe(false);
+  });
+
+  it('move to: the menu moves the card like a drag does', async () => {
+    patch.mockResolvedValue({ task: task({ status: 'waiting', rev: 4 }) });
+    const card = await board([task()]);
+    fireEvent.click(within(card).getByRole('button', { name: 'Move T-7 to' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Waiting' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'waiting' }));
+  });
+
+  it('people: tick someone and close — ONE shared task with both people, saved once', async () => {
+    patch.mockResolvedValue({ task: task({ rev: 4 }) });
+    const card = await board([task()]);
+    fireEvent.click(within(card).getByRole('button', { name: 'Who does T-7' }));
+    const list = await screen.findByRole('listbox', { name: 'Assignees' });
+    fireEvent.click(within(list).getByRole('option', { name: /Bala/ }));
+    expect(patch).not.toHaveBeenCalled();
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, assigneeIds: ['u2', 'u3'] }));
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(opened()).toBe(false);
+  });
+
+  it('people: closing with nobody ticked keeps the task as it was', async () => {
+    const card = await board([task()]);
+    fireEvent.click(within(card).getByRole('button', { name: 'Who does T-7' }));
+    const list = await screen.findByRole('listbox', { name: 'Assignees' });
+    fireEvent.click(within(list).getByRole('option', { name: /Arun/ }));
+    fireEvent.mouseDown(document.body);
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it('someone else changed it first: says so and reloads, nothing is shown as saved', async () => {
+    patch.mockRejectedValue({ status: 409 });
+    const card = await board([task()]);
+    fireEvent.click(within(card).getByRole('button', { name: 'Priority of T-7' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Low' }));
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringContaining('T-7 was changed by someone else')));
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('without the right to change a task, its card shows the facts but no buttons', async () => {
+    const card = await board([task({ can: { ...can, edit: false, reassign: false, status: false } })]);
+    expect(within(card).queryByLabelText('Due date for T-7')).toBeNull();
+    expect(within(card).queryByRole('button', { name: 'Priority of T-7' })).toBeNull();
+    expect(within(card).queryByRole('button', { name: 'Who does T-7' })).toBeNull();
+    expect(within(card).queryByRole('button', { name: 'Move T-7 to' })).toBeNull();
+    expect(within(card).getByTitle('High priority')).toBeInTheDocument();
+    expect(within(card).getByRole('img', { name: 'Arun' })).toBeInTheDocument();
+  });
+
+  it('a late card is marked for its red edge; a finished one is not', async () => {
+    const card = await board([task({ overdue: true, dueToday: false })]);
+    expect(card).toHaveAttribute('data-late', 'true');
+  });
+
+  it('the order on a card links to the order: the team list, or the admin order itself', async () => {
+    const one = task({ order: { id: 'o9', code: '#10482' } });
+    const card = await board([one]);
+    expect(within(card).getByRole('link', { name: /#10482/ })).toHaveAttribute('href', '/team/orders');
+  });
+
+  it('the admin\'s card opens that exact order', async () => {
+    const card = await board([task({ order: { id: 'o9', code: '#10482' } })], { base: '/admin/tasks', canSeeTeam: true });
+    expect(within(card).getByRole('link', { name: /#10482/ })).toHaveAttribute('href', '/admin/orders?order=o9');
+  });
+});
+
+describe('the page header', () => {
+  it('shows where you are: Tasks › My work › the list; "Tasks" goes back to Assigned to me', async () => {
+    serve();
+    addressBar.reset('/team/tasks', 'view=following');
+    workspace();
+    const crumbs = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(crumbs).toHaveTextContent('Tasks');
+    expect(crumbs).toHaveTextContent('My work');
+    expect(within(crumbs).getByText('Following')).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(within(crumbs).getByRole('button', { name: 'Tasks' }));
+    await waitFor(() => expect(replace).toHaveBeenCalled());
+  });
+
+  it('a team head\'s team list sits under "Team"', async () => {
+    serve();
+    addressBar.reset('/team/tasks', 'view=team');
+    workspace({ canSeeTeam: true });
+    expect(await screen.findByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Team');
   });
 });
 
