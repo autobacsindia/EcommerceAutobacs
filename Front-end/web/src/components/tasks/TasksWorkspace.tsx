@@ -17,6 +17,7 @@ import TaskForm, { useAssignees } from './TaskForm';
 import { Dialog, TaskWindow } from './Overlays';
 import { groupTasks } from './grouping';
 import InboxView, { inboxOrder, useInboxPages } from './Inbox';
+import { TimerChip, TimerNotice } from './Timer';
 import { teamColour } from '@/components/chat/chatUi';
 import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 import {
@@ -383,10 +384,14 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
               </button>
             ))}
           </div>}
-          <button onClick={() => setCreating(true)} className="ml-auto inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3.5 text-sm font-semibold text-white shadow-sm transition-[background-color,transform] hover:bg-blue-700 active:scale-[0.98]" title="New task (N)">
+          <div className="ml-auto flex items-center gap-2">
+          <TimerChip onOpen={setOpenId} />
+          <button onClick={() => setCreating(true)} className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3.5 text-sm font-semibold text-white shadow-sm transition-[background-color,transform] hover:bg-blue-700 active:scale-[0.98]" title="New task (N)">
             <Plus className="h-4 w-4" /> New task <span className="hidden sm:contents"><Kbd className="border-transparent! bg-white/20! text-white! shadow-none!">N</Kbd></span>
           </button>
+          </div>
         </header>
+        <TimerNotice onOpen={setOpenId} />
 
         {inInbox ? (
           <InboxView filter={inboxFilter} onFilter={setInboxFilter} openId={openId} onOpen={setOpenId} />

@@ -6,7 +6,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import toast from 'react-hot-toast';
 import {
   Archive, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, CornerLeftUp, Eye, Flag, Link2,
-  ListChecks, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, UserPlus, UserRound, Users, X, type LucideIcon,
+  ListChecks, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, Timer as TimerIcon, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
@@ -19,6 +19,7 @@ import { TagList } from './TaskList';
 import AssigneePicker from './AssigneePicker';
 import { useFollowers } from './hooks';
 import Subtasks from './Subtasks';
+import { TimePanel, TimerButton } from './Timer';
 import { Avatar, AvatarStack, DuePill, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import {
   FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, formatDueDay, isConflict, isPastDay, newClientId, orderHrefFor, peopleOf,
@@ -555,6 +556,9 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
               </select>
             ) : <StatusPill status={task.status} />}
           </Field>
+          <Field label="Timer" icon={TimerIcon}>
+            <TimerButton task={task} />
+          </Field>
           <Field label="Assignees" icon={UserRound}>
             <AssigneesField task={task} choices={reassignTo} saving={save.isPending} onSave={(assigneeIds) => save.mutate({ assigneeIds })} />
           </Field>
@@ -662,6 +666,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
         </section>
       )}
 
+      <TimePanel task={task} />
       <TaskFiles task={task} />
     </>
   );
