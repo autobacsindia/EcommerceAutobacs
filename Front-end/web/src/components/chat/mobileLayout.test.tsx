@@ -5,7 +5,7 @@
  * every message at once — and the chat box sized to the visible screen.
  */
 import { useRef } from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import MessageItem from './MessageItem';
 import TeamChat from './TeamChat';
 import { useFitToViewport } from './useFitToViewport';
@@ -149,7 +149,7 @@ describe('one pane at a time below 1024 px', () => {
   it('picking a conversation opens it; the list hides until "back"', () => {
     setWidth(390);
     const { rerender } = render(<TeamChat />);
-    fireEvent.click(screen.getByRole('button', { name: /^gtm/ }));
+    fireEvent.click(within(list()).getByRole('button', { name: /^gtm/ }));
     expect(replace).toHaveBeenLastCalledWith('/team/chat?c=c2', { scroll: false });
 
     query = 'c=c2';
@@ -157,6 +157,8 @@ describe('one pane at a time below 1024 px', () => {
     expect(screen.getByRole('region', { name: 'Conversation gtm' })).toBeInTheDocument();
     // Hidden on a small screen, shown beside the conversation from lg up.
     expect(list()).toHaveClass('hidden', 'lg:flex');
+    // Home sits between the sections and the chat only on the widest screens.
+    expect(screen.getByRole('region', { name: 'Home' })).toHaveClass('hidden', 'xl:flex');
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to channels' }));
     expect(replace).toHaveBeenLastCalledWith('/team/chat', { scroll: false });
