@@ -91,10 +91,10 @@ export const returnEmail = ({ event, rr, order, company, payment = null }) => {
     case 'submitted':
       subject = `Return request received — Order #${ref}`;
       heading = 'We’ve received your return request';
-      intro = `Thank you — your return request for order #${ref} has been received. Our team reviews every request within <strong>3–5 business days</strong> and will email you once a decision is made.`;
+      intro = `Thank you — your return request for order #${ref} has been received. Our team will review it and email you once a decision is made.`;
       textLines = [
         `Your return request for order #${ref} has been received.`,
-        `Our team reviews every request within 3-5 business days and will email you the decision.`,
+        `Our team will review it and email you the decision.`,
       ];
       break;
     case 'approved':
@@ -182,7 +182,7 @@ export const returnEmail = ({ event, rr, order, company, payment = null }) => {
       }
       subject = `Refund initiated — ${inr(amt)} — Order #${ref}`;
       heading = 'Your refund is on its way';
-      intro = `We’ve initiated a refund of <strong>${inr(amt)}</strong> for order #${ref} to your original payment method. It typically settles in <strong>5–9 business days</strong>, depending on your bank or payment provider.`;
+      intro = `We’ve initiated a refund of <strong>${inr(amt)}</strong> for order #${ref} to your original payment method. How long it takes to show in your account depends on your bank or payment provider.`;
       const parts = [...breakdownParts];
       // EMI orders: the refund covers PRINCIPAL only. Interest the bank has already
       // billed, and any cancellation charge it levies, are the bank's and cannot be
@@ -198,7 +198,7 @@ export const returnEmail = ({ event, rr, order, company, payment = null }) => {
       textLines = [
         `We've initiated a refund of ${inr(amt)} for order #${ref} to your original payment method.`,
         ...parts,
-        `It typically settles in 5-9 business days.`,
+        `How long it takes to show in your account depends on your bank or payment provider.`,
       ];
       break;
     }

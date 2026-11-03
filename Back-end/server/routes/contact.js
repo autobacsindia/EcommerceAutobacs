@@ -1,11 +1,9 @@
 import express from "express";
 import contactRepository from "../repositories/contactRepository.js";
-import emailHandler from "../services/emailHandler.js";
 import { protect, admin, optionalAuth } from "../middleware/authMiddleware.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { 
   validateContactSubmission, 
-  validateContactReply, 
   validateContactStatusUpdate,
   validateContactQuery,
   validateIdParam
@@ -109,57 +107,18 @@ router.get("/", protect, admin, validateContactQuery, asyncHandler(async (req, r
 }));
 
 // @route   POST /contact/:id/reply
-// @desc    Reply to a contact message
+// @desc    Retired. Customer replies go out only through the support helpdesk
+//          (services/supportEmailService.js), so there is one reply email with one
+//          sender, one once-only guard and one thread. This route sent a second,
+//          differently-branded "Response from Autobacs" email and no admin screen
+//          calls it. 410 rather than 404 so a stale client learns why.
 // @access  Private/Admin
-router.post("/:id/reply", protect, admin, validateContactReply, asyncHandler(async (req, res) => {
-  const { message } = req.body;
-
-  const contact = await contactRepository.findById(req.params.id);
-
-  if (!contact) {
-    return res.status(404).json({
-      success: false,
-      message: "Message not found"
-    });
-  }
-
-  contact.reply = message;
-  contact.repliedAt = Date.now();
-  contact.status = 'replied';
-
-  await contactRepository.save(contact);
-
-  // Send email notification
-  try {
-    await emailHandler.sendEmail({
-      to: contact.email,
-      subject: `Re: ${contact.subject} - Response from Autobacs`,
-      text: `Dear ${contact.name},\n\n${message}\n\nBest regards,\nAutobacs Team`,
-      html: `
-        <div style="font-family: Arial, sans-serif; color: #333;">
-          <p>Dear ${contact.name},</p>
-          <p>Thank you for contacting Autobacs. Here is our response to your inquiry:</p>
-          <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #d01f2f; margin: 20px 0;">
-            <p style="white-space: pre-wrap; margin: 0;">${message}</p>
-          </div>
-          <p>Original Message:<br/>
-          <em style="color: #666;">"${contact.message}"</em></p>
-          <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;" />
-          <p>Best regards,<br/><strong>Autobacs Team</strong></p>
-        </div>
-      `
-    });
-  } catch (emailError) {
-    console.error('Failed to send reply email:', emailError);
-    // Continue execution, don't fail the request
-  }
-
-  res.json({
-    success: true,
-    message: "Reply sent successfully",
-    data: contact
+router.post("/:id/reply", protect, admin, (req, res) => {
+  res.status(410).json({
+    success: false,
+    message: "Replying here is no longer supported. Reply from the Support inbox instead."
   });
-}));
+});
 
 // @route   PUT /contact/:id
 // @desc    Update contact message status

@@ -31,7 +31,7 @@
  *   process-inbound-email            { inboundId }       — parse a captured support email into a ticket (idempotent)
  *   send-support-acknowledgement     { ticketId }        — confirm a new ticket to the customer (loop-guarded)
  *   send-support-reply               { ticketId, body, authorId, authorName } — an agent's reply to the customer
- *   send-support-resolution          { ticketId }        — tell the customer their ticket is resolved
+ *   send-support-resolution          { ticketId }        — RETIRED no-op (resolve no longer emails the customer)
  *   create-support-ticket            { sourceModel, sourceId } — open a linked ticket for a
  *                                                          ProductQuestion / Review / ReturnRequest (idempotent)
  */
@@ -246,18 +246,18 @@ const handlers = {
     const { ticketId, body, authorId, authorName } = job.data;
     const ticket = await supportTicketRepository.findById(ticketId);
     if (!ticket) return { skipped: 'ticket not found' };
-    return supportEmailService.sendAgentReply(ticket, body, {
-      user: authorId,
-      name: authorName,
-    });
+    // job.id is stable across BullMQ retries, so it keys this reply once-only.
+    return supportEmailService.sendAgentReply(
+      ticket,
+      body,
+      { user: authorId, name: authorName },
+      { onceKey: `reply:${job.id}` }
+    );
   },
 
-  'send-support-resolution': async (job) => {
-    const { ticketId } = job.data;
-    const ticket = await supportTicketRepository.findById(ticketId);
-    if (!ticket) return { skipped: 'ticket not found' };
-    return supportEmailService.sendResolutionNotice(ticket);
-  },
+  // Retired: resolving a ticket no longer emails the customer. Kept as a no-op so
+  // jobs already queued before the deploy drain quietly instead of erroring.
+  'send-support-resolution': async () => ({ skipped: 'resolution email retired' }),
 
   /**
    * Open a linked support ticket for a record from another channel.

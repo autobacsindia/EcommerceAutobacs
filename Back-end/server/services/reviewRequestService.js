@@ -13,6 +13,16 @@ import orderRepository from '../repositories/orderRepository.js';
 import emailHandler from './emailHandler.js';
 
 /**
+ * Review-request emails are OFF unless REVIEW_REQUEST_EMAILS=on. The owner cut
+ * customer email down to the order/return/support essentials (2026-11), and ZeptoMail
+ * is transactional-only, which a "please review us" email sits awkwardly with.
+ * Checked at SEND time, not enqueue time, so delayed jobs already sitting in the
+ * queue from before the switch also stay silent.
+ */
+export const reviewRequestsEnabled = () =>
+  String(process.env.REVIEW_REQUEST_EMAILS || '').trim().toLowerCase() === 'on';
+
+/**
  * Send the review-request email for a delivered order, once per order.
  * Idempotent via Order.reviewRequestedAt so BullMQ retries never double-send.
  *
@@ -21,7 +31,7 @@ import emailHandler from './emailHandler.js';
  * or has no reviewable products (all line items reference deleted/slug-less products).
  *
  * @param {string} orderId
- * @returns {Promise<{status: 'sent'|'skipped'|'not-found'|'not-delivered'|'no-user'}>}
+ * @returns {Promise<{status: 'sent'|'skipped'|'disabled'|'not-found'|'not-delivered'|'no-user'}>}
  */
 export const emailReviewRequest = async (orderId) => {
   const order = await orderRepository.findById(orderId, [
@@ -29,6 +39,8 @@ export const emailReviewRequest = async (orderId) => {
     { path: 'items.product', select: 'name slug images' },
   ]);
   if (!order) return { status: 'not-found' };
+
+  if (!reviewRequestsEnabled()) return { status: 'disabled' };
 
   // Idempotency: only ever request a review once per order.
   if (order.reviewRequestedAt) return { status: 'skipped' };

@@ -103,12 +103,21 @@ export const emailKey = (rr, event) => {
 };
 
 /**
+ * Return steps the customer is NOT emailed about. "Received at the warehouse" is an
+ * internal milestone between "pickup booked" and the refund email — telling the
+ * customer about it added an email without telling them anything they can act on.
+ * The event stays (staff timeline, admin alerts); only the customer email stops.
+ */
+export const SILENT_RETURN_EVENTS = new Set(['received']);
+
+/**
  * Send a lifecycle status email (approved / courier_booked / received / rejected / refunded).
  * @param {string} returnId
  * @param {'approved'|'courier_booked'|'received'|'rejected'|'refunded'} event
- * @returns {Promise<{status: 'sent'|'skipped'|'skipped-disabled'|'not-found'|'no-recipient'}>}
+ * @returns {Promise<{status: 'sent'|'skipped'|'skipped-disabled'|'skipped-silent'|'not-found'|'no-recipient'}>}
  */
 export const emailReturnStatus = async (returnId, event) => {
+  if (SILENT_RETURN_EVENTS.has(event)) return { status: 'skipped-silent' };
   const rr = await loadReturn(returnId);
   if (!rr) { warn(`${event}: return ${returnId} not found`); return { status: 'not-found' }; }
   const to = recipientEmail(rr);
