@@ -240,26 +240,33 @@ export function useChatChannels(options: { poll?: boolean } = {}) {
   });
 }
 
-/** Total unread across every channel — for the "Chat" nav badge. Muted conversations do not count. */
+/**
+ * Unread messages from PEOPLE across every channel — the "Chat" nav badge.
+ * Automatic order updates are not messages anyone wrote: counting them made the
+ * badge read 79 when a handful of people had written. They have their own
+ * quiet row in the bell. Muted conversations do not count.
+ */
 export function useChatUnreadTotal(): number {
   const { data } = useChatChannels({ poll: true });
-  return (data ?? []).reduce((n, c) => { const u = countedUnread(c); return n + u.chat + u.updates; }, 0);
+  return (data ?? []).reduce((n, c) => n + countedUnread(c).chat, 0);
 }
 
+const newestFirst = (a: ChatChannel, b: ChatChannel) =>
+  new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime();
+
 /**
- * Unread split by tab, for the bell: people's messages, and order updates with
- * the space that most recently got one (where "Unread order updates" opens).
+ * Unread split by tab, for the bell: people's messages with the chat that got
+ * the newest one (where "Unread messages" opens), and order updates with the
+ * space that most recently got one (where "Unread order updates" opens).
  */
-export function useChatUnreadSplit(): { chat: number; updates: number; updatesChannelId: string | null } {
+export function useChatUnreadSplit(): { chat: number; updates: number; chatChannelId: string | null; updatesChannelId: string | null } {
   const { data } = useChatChannels({ poll: true });
-  const list = data ?? [];
-  const withUpdates = list
-    .filter((c) => countedUnread(c).updates > 0)
-    .sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime());
+  const list = [...(data ?? [])].sort(newestFirst);
   return {
     chat: list.reduce((n, c) => n + countedUnread(c).chat, 0),
     updates: list.reduce((n, c) => n + countedUnread(c).updates, 0),
-    updatesChannelId: withUpdates[0]?.id ?? null,
+    chatChannelId: list.find((c) => countedUnread(c).chat > 0)?.id ?? null,
+    updatesChannelId: list.find((c) => countedUnread(c).updates > 0)?.id ?? null,
   };
 }
 

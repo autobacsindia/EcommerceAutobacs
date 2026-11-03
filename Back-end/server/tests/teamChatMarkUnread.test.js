@@ -129,11 +129,13 @@ describe('Mark as unread', () => {
     expect(await mine()).toMatchObject({ unreadChat: 1, unreadUpdates: 0 });
   });
 
-  it('works on a thread reply', async () => {
+  it('on a thread reply, the chat counts again from there — the messages after it, not the reply itself', async () => {
     const root = await say('root');
     const reply = await say('reply', { threadRoot: root.id });
+    await say('after');
     await readAll();
-    await pavan.post(`/chat/messages/${reply.id}/unread`);
+    expect((await pavan.post(`/chat/messages/${reply.id}/unread`)).status).toBe(200);
+    // The reply lives in its thread (the Threads list counts it); "after" is unread again.
     expect((await mine()).unreadChat).toBe(1);
   });
 

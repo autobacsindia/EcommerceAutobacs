@@ -56,8 +56,10 @@ export default function NotificationBell({
   const { data } = useWaitingWork();
   const unreadSplit = useChatUnreadSplit();
   const { data: channels } = useChatChannels({ poll: true });
-  // The badge counts both kinds; the sound is filtered (see below).
-  const chatUnread = unreadSplit.chat + unreadSplit.updates;
+  // The badge counts messages from people, the same number as the Chat button.
+  // Automatic order updates keep their own row in the panel but never add to
+  // the red number: 56 bot posts made it read "82" with a handful of people waiting.
+  const chatUnread = unreadSplit.chat;
   const [open, setOpen] = useState(false);
   const [quiet, setQuiet] = useState(false);
   const [updatesSound, setUpdatesSoundState] = useState(false);
@@ -141,16 +143,23 @@ export default function NotificationBell({
 
   /*
     People's messages and automatic order updates are separate rows, each opening
-    its own tab: "Unread order updates" goes straight to the Order updates tab of
-    the space that got the latest one.
+    exactly where the new thing is: "Unread messages" opens the chat with the
+    newest one, "Unread order updates" the Order updates tab of the space that
+    got the latest one. Order updates are `info`: a grey count, not on the badge.
   */
-  const rows = [
-    ...(unreadSplit.chat > 0 ? [{ key: 'chat', label: 'Unread messages', count: unreadSplit.chat, href: chatHref }] : []),
+  const rows: { key: string; label: string; count: number; href: string; quiet?: boolean; info?: boolean }[] = [
+    ...(unreadSplit.chat > 0 ? [{
+      key: 'chat',
+      label: 'Unread messages',
+      count: unreadSplit.chat,
+      href: unreadSplit.chatChannelId ? `${chatHref}?c=${unreadSplit.chatChannelId}` : chatHref,
+    }] : []),
     ...(unreadSplit.updates > 0 ? [{
       key: 'chat_updates',
       label: 'Unread order updates',
       count: unreadSplit.updates,
       href: unreadSplit.updatesChannelId ? `${chatHref}?c=${unreadSplit.updatesChannelId}&t=updates` : chatHref,
+      info: true,
     }] : []),
     ...(data?.items ?? []),
   ];
@@ -239,7 +248,7 @@ export default function NotificationBell({
                     <span className={r.count > 0 ? 'font-medium text-gray-900' : 'text-gray-500'}>{r.label}</span>
                     <span
                       className={`min-w-[22px] rounded-full px-1.5 text-center text-xs font-bold leading-5 ${
-                        r.count > 0 ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-500'
+                        r.count > 0 && !r.info ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-500'
                       }`}
                     >
                       {r.count >= 100 ? '99+' : r.count}

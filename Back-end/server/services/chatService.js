@@ -83,20 +83,21 @@ const spaceDisplayName = (c) => (c.system && typeof c.key === 'string' && c.key.
   ? (STAFF_TEAM_LABELS[c.team] || c.name).toLowerCase()
   : c.name);
 
+/** "Procurement & Accounts": both teams of a team-to-team conversation, `first` leading. */
+export function pairName(teams = [], first = null) {
+  const ordered = first && teams.includes(first) ? [first, ...teams.filter((t) => t !== first)] : teams;
+  return ordered.map((t) => STAFF_TEAM_LABELS[t] || t).join(' & ');
+}
+
 /**
- * A team-to-team conversation is named from where the reader sits: Procurement
- * sees "Accounts", Accounts sees "Procurement", an admin sees both sides. Team
- * labels as written ("GTM"), not #lowercase — these are teams, not spaces.
+ * A team-to-team conversation always names BOTH teams, the reader's own first:
+ * Procurement sees "Procurement & Accounts", Accounts sees "Accounts &
+ * Procurement". Naming only the other side ("Accounts") read as the Accounts
+ * team's own space. Team labels as written ("GTM"), not #lowercase.
  */
 function channelNameFor(c, user) {
   if (c.audience !== 'teams') return spaceDisplayName(c);
-  const labels = (c.teams || []).map((t) => STAFF_TEAM_LABELS[t] || t);
-  const mine = teamOf(user);
-  if (mine && (c.teams || []).includes(mine)) {
-    const other = (c.teams || []).find((t) => t !== mine);
-    return STAFF_TEAM_LABELS[other] || other || c.name;
-  }
-  return labels.join(' ↔ ');
+  return pairName(c.teams || [], teamOf(user)) || c.name;
 }
 
 // ── who is who ───────────────────────────────────────────────────────────────
@@ -370,7 +371,7 @@ export async function listChannels(user) {
           ? groupNameFor(c, uid, partnerById)
           : c.kind === 'dm' ? partner?.name ?? 'Former member' : channelNameFor(c, user),
         description: c.audience === 'teams'
-          ? (c.teams || []).map((t) => STAFF_TEAM_LABELS[t] || t).join(' ↔ ')
+          ? `Private chat between the ${pairName(c.teams || [], teamOf(user))} teams`
           : c.system && c.team ? `${STAFF_TEAM_LABELS[c.team] || c.team} team` : c.description || '',
         audience: c.audience,
         team: c.team ?? null,
@@ -876,7 +877,9 @@ async function insertMessage(channel, {
   // The first link's card, fetched after the message is out — never awaited.
   if (kind === 'user') void attachPreview(channel, doc);
   // A pop-up on the devices of everyone who can see it — not awaited: chat never waits for push.
-  void pushForMessage(channel, { kind, text, attachments, sender, updates, mentions, mentionTeams, mentionAll });
+  void pushForMessage(channel, {
+    kind, text, attachments, sender, updates, mentions, mentionTeams, mentionAll, threadRoot: threadRoot?._id ?? null,
+  });
   return { message, thread, duplicate: false };
 }
 
@@ -958,7 +961,7 @@ async function publishPreview(channel, updated) {
  * already counts and chimes for in the page. Never throws.
  */
 async function pushForMessage(channel, {
-  kind, text, attachments = [], sender, updates = false, mentions = [], mentionTeams = [], mentionAll = false,
+  kind, text, attachments = [], sender, updates = false, mentions = [], mentionTeams = [], mentionAll = false, threadRoot = null,
 }) {
   try {
     if (!pushConfigured()) return;
@@ -973,13 +976,15 @@ async function pushForMessage(channel, {
     if (!recipients.length) return;
     const where = channel.kind === 'dm'
       ? ((channel.members || []).length > 2 ? 'Group' : '')
-      : (channel.team ? STAFF_TEAM_LABELS[channel.team] || channel.team : `#${channel.name || 'chat'}`);
+      : channel.audience === 'teams' ? pairName(channel.teams || [])
+        : (channel.team ? STAFF_TEAM_LABELS[channel.team] || channel.team : `#${channel.name || 'chat'}`);
     const body = (text || (attachments.length ? '📎 Shared a file' : '')).replace(/\s+/g, ' ').slice(0, 200);
     await sendToUsers(
-      // An order update opens that space's Order updates tab; a message opens Chat.
+      // An order update opens that space's Order updates tab, a thread reply
+      // opens its thread, a message opens Chat.
       recipients.map((u) => ({
         userId: idOf(u),
-        url: `${isAdmin(u) ? '/admin/chat' : '/team/chat'}?c=${idOf(channel)}${updates ? '&t=updates' : ''}`,
+        url: `${isAdmin(u) ? '/admin/chat' : '/team/chat'}?c=${idOf(channel)}${updates ? '&t=updates' : ''}${threadRoot ? `&th=${idOf(threadRoot)}` : ''}`,
       })),
       {
         title: kind === 'system' ? `Roavion update${where ? ` · ${where}` : ''}` : `${sender?.name || 'Message'}${where ? ` · ${where}` : ''}`,

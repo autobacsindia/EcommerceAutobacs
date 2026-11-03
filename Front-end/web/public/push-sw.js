@@ -57,17 +57,41 @@ self.addEventListener('pushsubscriptionchange', (event) => {
   })());
 });
 
+/*
+ * Which open tab a click should take over: one already in the same panel (the
+ * admin panel for an /admin link, the team panel for a /team link) — the chat
+ * page itself first, then the tab in front. Never the shop: taking over a
+ * customer-facing tab someone was reading is "it went somewhere else".
+ */
+const panelOf = (path) => (path.startsWith('/admin') ? '/admin' : path.startsWith('/team') ? '/team' : null);
+function pickTab(open, url) {
+  const target = new URL(url);
+  const panel = panelOf(target.pathname);
+  if (!panel) return null;
+  const same = open.filter((c) => {
+    const u = new URL(c.url);
+    return u.origin === target.origin && panelOf(u.pathname) === panel;
+  });
+  return same.find((c) => new URL(c.url).pathname === target.pathname)
+    || same.find((c) => c.focused || c.visibilityState === 'visible')
+    || same[0]
+    || null;
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = new URL(event.notification.data?.url || '/', self.location.origin).href;
   event.waitUntil((async () => {
-    const open = await tabs();
-    // Reuse a tab of this site if one is open; otherwise open a new one.
-    const tab = open.find((c) => new URL(c.url).origin === self.location.origin);
+    const tab = pickTab(await tabs(), url);
     if (tab) {
-      await tab.focus();
-      if ('navigate' in tab) await tab.navigate(url);
-      return;
+      try {
+        await tab.focus();
+        // navigate() refuses a tab this worker does not control (one loaded
+        // before it, or after a hard reload) — then open the page fresh.
+        if ('navigate' in tab && await tab.navigate(url)) return;
+      } catch {
+        // fall through
+      }
     }
     await self.clients.openWindow(url);
   })());

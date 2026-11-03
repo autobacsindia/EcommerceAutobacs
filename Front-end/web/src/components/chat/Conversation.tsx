@@ -557,7 +557,7 @@ export default function Conversation({
                     <p className="text-[15px] font-medium text-gray-800">No messages yet</p>
                     <p className="text-sm text-gray-500">
                       {channel.audience === 'teams'
-                        ? `Only ${channel.description || 'these two teams'} (and admin) can see this conversation.`
+                        ? `Only the ${channel.name} teams (and admin) can see this chat.`
                         : 'Say hello, share a photo, or link an order to get started.'}
                     </p>
                   </div>

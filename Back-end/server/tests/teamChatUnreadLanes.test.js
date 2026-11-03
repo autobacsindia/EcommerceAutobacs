@@ -36,6 +36,7 @@ async function signIn(email) {
   return {
     get: (url) => agent.get(`${BASE}${url}`),
     post: (url, body = {}) => agent.post(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf).send(body),
+    del: (url) => agent.delete(`${BASE}${url}`).set('X-XSRF-TOKEN', csrf),
   };
 }
 
@@ -100,6 +101,20 @@ describe('Team chat — separate unread for Chat and Order updates', () => {
     expect(await space(ravi)).toMatchObject({ unreadChat: 0, unreadUpdates: 1 });
     // Sam's own reply marks Sam's Order updates read — but not Ravi's chat line.
     expect(await space(sam)).toMatchObject({ unreadChat: 1, unreadUpdates: 0 });
+  });
+
+  it('a reply in a chat thread and a deleted message do not count on the Chat tab', async () => {
+    const root = await say(ravi, 'Who has the GST invoice?');
+    await read(sam, (await space(sam)).lastMessageSeq);
+    // Ravi's reply lives inside the thread (the Threads list counts it) …
+    await say(ravi, 'Found it', { threadRoot: root.body.message.id });
+    // … and a message deleted before Sam opened the chat is gone.
+    const gone = await say(ravi, 'wrong chat');
+    await ravi.del(`/chat/messages/${gone.body.message.id}`);
+    expect(await space(sam)).toMatchObject({ unreadChat: 0, unread: 0 });
+
+    await say(ravi, 'Thanks all');
+    expect(await space(sam)).toMatchObject({ unreadChat: 1 });
   });
 
   it('a read row from before the split keeps its meaning, and Chat moving on does not clear updates', async () => {

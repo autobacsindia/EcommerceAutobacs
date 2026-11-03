@@ -2,10 +2,11 @@
  * The Google Chat-style look: your own messages are light-blue cards on the
  * right (no avatar), others' words sit in a light grey bubble, a follow-on
  * message shows its time when you point at it, and files are cards with a
- * coloured type tag. One list on the left (Direct messages, Spaces, Between
- * teams) with Unread / Mentions / Threads / Starred buttons; automatic order
- * updates are counted quietly so people's messages stand out. The conversation
- * can be expanded over the list.
+ * coloured type tag. One list on the left, as Google Chat's Home: newest
+ * first, each row with its newest message, never-used chats folded, with
+ * Unread / Mentions / Threads / Starred buttons; automatic order updates are
+ * shown quietly and never counted with people's messages. The conversation can
+ * be expanded over the list.
  */
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import MessageItem, { fileBadge } from './MessageItem';
@@ -26,8 +27,8 @@ jest.mock('@/hooks/useSSE', () => ({ useSSE: () => undefined }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me', name: 'Sana', role: 'staff' } }) }));
 jest.mock('./Conversation', () => ({
   __esModule: true,
-  default: ({ channel, expanded, onToggleExpand }: { channel: ChatChannel; expanded?: boolean; onToggleExpand?: () => void }) => (
-    <section aria-label={`Conversation ${channel.name}`}>
+  default: ({ channel, expanded, onToggleExpand, openThread }: { channel: ChatChannel; expanded?: boolean; onToggleExpand?: () => void; openThread?: { id: string } | null }) => (
+    <section aria-label={`Conversation ${channel.name}`} data-thread={openThread?.id ?? ''}>
       <button type="button" onClick={onToggleExpand} aria-pressed={expanded}>Expand</button>
     </section>
   ),
@@ -39,6 +40,8 @@ const channels = [
   { id: 'c3', kind: 'dm', key: 'dm:a:b', name: 'Priya', audience: 'members', unread: 0, lastMessageAt: '2026-11-02T05:00:00Z', partner: { id: 'u2', name: 'Priya', teamLabel: 'Procurement' } },
   // Only automatic order updates are new here, nothing from people.
   { id: 'c4', kind: 'space', key: 'team:procurement', name: 'procurement', audience: 'team', unread: 3, unreadChat: 0, unreadUpdates: 3, lastMessageAt: '2026-11-02T03:00:00Z', partner: null },
+  // A team-to-team chat nobody has written in yet.
+  { id: 'c5', kind: 'space', key: 'pair:procurement:sales', name: 'GTM & Procurement', audience: 'teams', unread: 0, lastMessageSeq: 0, lastMessageAt: null, partner: null },
 ] as unknown as ChatChannel[];
 jest.mock('@/hooks/queries/useTeamChat', () => ({
   useCanChat: () => true,
@@ -139,40 +142,80 @@ describe('file cards', () => {
 describe('the chat screen', () => {
   const list = () => screen.getByRole('complementary', { name: 'Chat channels' });
 
-  it('has one list — no second "Home" column — with Direct messages first, then Spaces, then Between teams', () => {
+  const rowNames = () => within(screen.getByRole('list', { name: 'Chats, newest first' }))
+    .getAllByRole('button').map((b) => b.querySelector('.truncate')?.textContent);
+
+  it('is one list, newest first, as Google Chat\'s Home — no sections, no "Between teams"', () => {
     setWidth(1440);
     query = 'c=c1';
     render(<TeamChat />);
     expect(screen.queryByRole('region', { name: /Home/ })).toBeNull();
-    const sections = within(list()).getAllByRole('button', { expanded: true }).map((b) => b.textContent);
-    expect(sections).toEqual(['Direct messages', 'Spaces', 'Between teams']);
+    expect(screen.queryByText('Between teams')).toBeNull();
+    expect(rowNames()).toEqual(['gtm', 'Priya', 'company', 'procurement']);
     // The open conversation is highlighted; a space's name drops the "#" (its round icon shows it).
     expect(within(list()).getByRole('button', { name: /^company/ })).toHaveAttribute('aria-current', 'true');
   });
 
-  it('people’s unread messages are bold with a blue count; automatic updates only say "3 updates", quietly', () => {
+  it('chats nobody has written in yet are folded at the bottom until asked for', () => {
+    setWidth(1440);
+    query = 'c=c1';
+    render(<TeamChat />);
+    expect(rowNames()).not.toContain('GTM & Procurement');
+    fireEvent.click(screen.getByRole('button', { name: 'Show 1 chat with no messages yet' }));
+    expect(rowNames().at(-1)).toBe('GTM & Procurement');
+    expect(within(list()).getByRole('button', { name: /^GTM & Procurement/ })).toHaveTextContent('No messages yet');
+  });
+
+  it('every row shows its newest message under the name', () => {
+    setWidth(1440);
+    (channels[1] as ChatChannel).lastPreview = { by: 'Ravi', mine: false, text: 'Order *4521* shipped', deleted: false };
+    (channels[2] as ChatChannel).lastPreview = { by: 'Sana', mine: true, text: 'See you at 3', deleted: false };
+    try {
+      render(<TeamChat />);
+      expect(within(list()).getByRole('button', { name: /^gtm/ })).toHaveTextContent('Ravi: Order 4521 shipped');
+      expect(within(list()).getByRole('button', { name: /^Priya/ })).toHaveTextContent('You: See you at 3');
+    } finally {
+      delete (channels[1] as ChatChannel).lastPreview;
+      delete (channels[2] as ChatChannel).lastPreview;
+    }
+  });
+
+  it('people’s unread messages are bold with a blue number; automatic updates only say "3 order updates", in grey', () => {
     setWidth(1440);
     render(<TeamChat />);
     const gtm = within(list()).getByRole('button', { name: /^gtm/ });
-    expect(gtm).toHaveClass('font-bold');
-    expect(within(gtm).getByLabelText('2 unread')).toHaveClass('text-blue-700');
+    expect(gtm.querySelector('.truncate')).toHaveClass('font-bold');
+    expect(within(gtm).getByLabelText('2 unread')).toHaveClass('bg-blue-700');
     const procurement = within(list()).getByRole('button', { name: /^procurement/ });
-    expect(procurement).not.toHaveClass('font-bold');
-    expect(within(procurement).getByLabelText('3 new order updates')).toHaveTextContent('3 updates');
-    expect(within(procurement).getByLabelText('3 new order updates')).toHaveClass('text-gray-500');
+    expect(procurement.querySelector('.truncate')).not.toHaveClass('font-bold');
+    expect(procurement).toHaveTextContent('3 order updates');
+    expect(within(procurement).queryByLabelText(/unread/)).toBeNull();
   });
 
-  it('the Unread button keeps only conversations with something unread (and the open one)', () => {
+  it('with no chat named, a computer opens the newest chat where a person is waiting', () => {
+    setWidth(1440);
+    render(<TeamChat />);
+    expect(replace).toHaveBeenCalledWith('/team/chat?c=c2', { scroll: false });
+  });
+
+  it('a pop-up for a thread reply opens that thread', () => {
+    setWidth(1440);
+    query = 'c=c2&th=root9';
+    render(<TeamChat />);
+    expect(screen.getByRole('region', { name: 'Conversation gtm' })).toHaveAttribute('data-thread', 'root9');
+  });
+
+  it('the Unread button counts and keeps only chats where people wrote (and the open one)', () => {
     setWidth(1440);
     query = 'c=c1';
     render(<TeamChat />);
     const unread = screen.getByRole('switch', { name: /Unread/ });
+    // 2 from people in gtm; procurement's 3 order updates are not counted.
+    expect(unread).toHaveTextContent('Unread · 2');
     expect(unread).toHaveAttribute('aria-checked', 'false');
     fireEvent.click(unread);
     expect(unread).toHaveAttribute('aria-checked', 'true');
-    expect(within(list()).queryByRole('button', { name: /Priya/ })).toBeNull();
-    expect(within(list()).getByRole('button', { name: /^gtm/ })).toBeInTheDocument();
-    expect(within(list()).getByRole('button', { name: /^company/ })).toBeInTheDocument();
+    expect(rowNames()).toEqual(['gtm', 'company']);
   });
 
   it('Expand hides the list on a computer; pressing it again brings it back', () => {
@@ -191,17 +234,6 @@ describe('the chat screen', () => {
     expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Search all messages' })).toHaveTextContent('Search messages');
     expect(screen.queryByRole('button', { name: /Jump/ })).toBeNull();
-  });
-
-  it('pointing at a row shows its newest message', () => {
-    setWidth(1440);
-    (channels[1] as ChatChannel).lastPreview = { by: 'Ravi', mine: false, text: 'Order *4521* shipped', deleted: false };
-    try {
-      render(<TeamChat />);
-      expect(within(list()).getByRole('button', { name: /^gtm/ })).toHaveAttribute('title', 'Ravi: Order 4521 shipped');
-    } finally {
-      delete (channels[1] as ChatChannel).lastPreview;
-    }
   });
 });
 
