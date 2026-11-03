@@ -124,6 +124,10 @@ const SupportTicketSchema = new mongoose.Schema({
   resolutionBreached:  { type: Boolean, default: false },
   closedAt:            { type: Date, default: null },
 
+  // Once-only keys for customer emails ('ack', 'reply:<jobId>'), claimed atomically
+  // by supportTicketRepository.claimEmailKey so a queue retry never mails twice.
+  sentEmailKeys:       { type: [String], default: [] },
+
   // ── Activity watermarks ───────────────────────────────────────────────────
   // Drive the "awaiting our reply" / "awaiting customer" inbox views without a
   // per-row lookup into the messages collection.

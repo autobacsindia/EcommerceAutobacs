@@ -373,10 +373,8 @@ router.patch(
       ticket = await ticketService.setPriority(ticket._id, priority, actor);
     }
     if (status !== undefined) {
+      // No customer email on resolve — the agent's reply already said it.
       ticket = await ticketService.transitionStatus(ticket._id, status, actor);
-      if (status === 'resolved') {
-        await enqueue('send-support-resolution', { ticketId: String(ticket._id) });
-      }
     }
 
     res.json({ success: true, data: ticket });

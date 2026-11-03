@@ -25,6 +25,8 @@ import crypto from 'crypto';
 import emailHandler from './emailHandler.js';
 import companyInfo from '../config/company.js';
 import ticketService from './ticketService.js';
+import ticketRepository from '../repositories/supportTicketRepository.js';
+import { trackOrderUrl } from '../utils/storefrontUrl.js';
 import messageRepository from '../repositories/supportMessageRepository.js';
 import { REPLY_SENTINEL } from './supportSanitizer.js';
 
@@ -34,7 +36,6 @@ const supportAddress = () =>
 
 const supportName = () => process.env.SUPPORT_FROM_NAME || `${companyInfo.name} Support`;
 
-const appUrl = () => (process.env.FRONTEND_URL || 'https://autobacsindia.com').replace(/\/$/, '');
 
 /**
  * Secret backing the reply-token HMAC.
@@ -146,7 +147,11 @@ const renderEmail = ({ heading, bodyHtml, reference, ctaLabel, ctaHref }) => `<!
  * @param {Object} [input.author] - agent identity for the thread record
  * @param {boolean} [input.automated=false] - marks machine-generated mail
  * @param {boolean} [input.record=true] - persist a SupportMessage for this send
+ * @param {string} [input.onceKey] - once-only key per ticket; a second send with
+ *   the same key (a queue retry, a double-click) is skipped
  * @returns {Promise<{ sent: boolean, reason?: string, messageId?: string }>}
+ * @throws when the provider rejects the send, so the BullMQ job retries — the
+ *   once-only key is released first so that retry can claim it again
  */
 const send = async ({
   ticket,
@@ -156,7 +161,12 @@ const send = async ({
   author = {},
   automated = false,
   record = true,
+  onceKey = null,
 }) => {
+  if (onceKey && !(await ticketRepository.claimEmailKey(ticket._id, onceKey))) {
+    return { sent: false, reason: 'already_sent' };
+  }
+
   // Loop guard first: if this ticket is ping-ponging with an autoresponder we
   // must not add to it, and we must not record a message that never went out.
   const slot = await ticketService.claimOutboundSlot(ticket._id);
@@ -199,35 +209,64 @@ const send = async ({
     },
   });
 
-  if (record) {
-    await ticketService.addMessage({
-      ticketId: ticket._id,
-      direction: 'outbound',
-      visibility: 'public',
-      author: {
-        user: author.user || null,
-        email: supportAddress(),
-        name: author.name || supportName(),
-        isAgent: true,
-      },
-      bodyText: text,
-      bodyHtml: html,
-      messageId,
-      inReplyTo: latest?.messageId || null,
-      references,
-      providerMessageId: result?.messageId || null,
-    });
-  }
-
   if (!result?.success) {
     console.error(`[SupportEmail] Send failed for ${ticket.reference}: ${result?.error}`);
-    return { sent: false, reason: result?.error || 'send_failed' };
+    if (onceKey) await ticketRepository.releaseEmailKey(ticket._id, onceKey);
+    throw new Error(`Support email failed for ${ticket.reference}: ${result?.error || 'send_failed'}`);
   }
+
+  // Recorded only after the provider accepted it: the thread shows what the
+  // customer actually received, and a retried failure cannot leave two copies.
+  // A failed record is logged, never thrown — throwing would retry the job and
+  // mail the customer a second time (the once-only key would stop it, but only
+  // for keyed sends).
+  if (record) {
+    try {
+      await ticketService.addMessage({
+        ticketId: ticket._id,
+        direction: 'outbound',
+        visibility: 'public',
+        author: {
+          user: author.user || null,
+          email: supportAddress(),
+          name: author.name || supportName(),
+          isAgent: true,
+        },
+        bodyText: text,
+        bodyHtml: html,
+        messageId,
+        inReplyTo: latest?.messageId || null,
+        references,
+        providerMessageId: result?.messageId || null,
+      });
+    } catch (err) {
+      console.error(`[SupportEmail] Sent ${ticket.reference} but could not record it: ${err.message}`);
+    }
+  }
+
   return { sent: true, messageId };
 };
 
 /**
- * Acknowledge a newly opened ticket.
+ * Wording rules for every automated support email (enforced by
+ * tests/unit/services/supportEmailCopy.test.js):
+ *
+ * - Never state a dispatch, delivery or any other date, a price, or stock. Those
+ *   are facts about one order that only a person looking at that order may give —
+ *   an automated "dispatched today, Monday" sent on a Sunday is exactly the
+ *   promise we must never make.
+ * - Link to the Track Order page (built from FRONTEND_URL) so the customer can
+ *   see live status themselves.
+ */
+export const ACK_LINES = Object.freeze({
+  heading: 'Thanks for reaching out',
+  body: 'Thanks for reaching out. Our team is on it and will update you soon.',
+  track: 'You can track your order any time here:',
+  replyHint: 'If you want to add anything, just reply to this email.',
+});
+
+/**
+ * Acknowledge a newly opened ticket — once per ticket, ever.
  *
  * Never sent in response to an auto-reply, and never for a ticket opened from
  * mail we classified as spam — both would be shouting into a void, or worse,
@@ -235,14 +274,14 @@ const send = async ({
  */
 export const sendAcknowledgement = async (ticket) => {
   const name = ticket.requester.name || 'there';
+  const trackUrl = trackOrderUrl();
   const text = [
     `Hi ${name},`,
     '',
-    `Thanks for getting in touch. We've opened ticket ${ticket.reference} and a member of our support team will reply shortly.`,
+    ACK_LINES.body,
+    ...(trackUrl ? ['', `${ACK_LINES.track} ${trackUrl}`] : []),
     '',
-    `You can reply directly to this email and it will be added to the same ticket.`,
-    '',
-    `Subject: ${ticket.subject}`,
+    ACK_LINES.replyHint,
     '',
     `— ${supportName()}`,
     '',
@@ -250,16 +289,15 @@ export const sendAcknowledgement = async (ticket) => {
   ].join('\n');
 
   const html = renderEmail({
-    heading: 'We\'ve received your message',
+    heading: ACK_LINES.heading,
     reference: ticket.reference,
     bodyHtml: `
       <p style="margin:0 0 12px;">Hi ${escapeHtml(name)},</p>
-      <p style="margin:0 0 12px;">Thanks for getting in touch. We've opened ticket <strong>${escapeHtml(ticket.reference)}</strong> and a member of our support team will reply shortly.</p>
-      <p style="margin:0 0 12px;">You can reply directly to this email and it will be added to the same ticket.</p>
-      <p style="margin:0;color:#6b7280;font-size:13px;">Subject: ${escapeHtml(ticket.subject)}</p>`,
-    // Top-level route, matching the rest of the customer area (/orders, /profile).
-    ctaLabel: 'View your tickets',
-    ctaHref: `${appUrl()}/support`,
+      <p style="margin:0 0 12px;">${escapeHtml(ACK_LINES.body)}</p>
+      ${trackUrl ? `<p style="margin:0 0 12px;">${escapeHtml(ACK_LINES.track)}</p>` : ''}
+      <p style="margin:0;color:#6b7280;font-size:13px;">${escapeHtml(ACK_LINES.replyHint)}</p>`,
+    ctaLabel: 'Track your order',
+    ctaHref: trackUrl,
   });
 
   return send({
@@ -268,21 +306,34 @@ export const sendAcknowledgement = async (ticket) => {
     text,
     html,
     automated: true,
+    onceKey: 'ack',
   });
 };
 
 /**
  * Send an agent's reply to the customer.
  *
+ * A person wrote `body`, so it is sent as written; the Track Order link is added
+ * underneath so every reply points the customer at live status rather than at a
+ * promise.
+ *
  * @param {Object} ticket
  * @param {string} body - the agent's plain-text message
  * @param {Object} author - { user, name }
+ * @param {Object} [opts]
+ * @param {string} [opts.onceKey] - e.g. `reply:<jobId>`; stops a queue retry
+ *   from sending the same reply twice
  */
-export const sendAgentReply = async (ticket, body, author = {}) => {
+export const sendAgentReply = async (ticket, body, author = {}, { onceKey = null } = {}) => {
   const name = ticket.requester.name || 'there';
   const signature = author.name ? `— ${author.name}, ${companyInfo.name} Support` : `— ${supportName()}`;
+  const trackUrl = trackOrderUrl();
 
-  const text = [`Hi ${name},`, '', body, '', signature, '', REPLY_SENTINEL].join('\n');
+  const text = [
+    `Hi ${name},`, '', body, '',
+    ...(trackUrl ? [`${ACK_LINES.track} ${trackUrl}`, ''] : []),
+    signature, '', REPLY_SENTINEL,
+  ].join('\n');
 
   const html = renderEmail({
     heading: `Re: ${ticket.subject}`,
@@ -291,6 +342,8 @@ export const sendAgentReply = async (ticket, body, author = {}) => {
       <p style="margin:0 0 12px;">Hi ${escapeHtml(name)},</p>
       <div style="margin:0 0 12px;white-space:pre-wrap;">${escapeHtml(body)}</div>
       <p style="margin:0;color:#6b7280;font-size:13px;">${escapeHtml(signature)}</p>`,
+    ctaLabel: 'Track your order',
+    ctaHref: trackUrl,
   });
 
   return send({
@@ -302,40 +355,17 @@ export const sendAgentReply = async (ticket, body, author = {}) => {
     // A human wrote this, so it is not Auto-Submitted — an out-of-office in
     // response is a legitimate signal, not a loop.
     automated: false,
+    onceKey,
   });
 };
 
-/** Tell the customer their ticket is resolved, and how to reopen it. */
-export const sendResolutionNotice = async (ticket, author = {}) => {
-  const name = ticket.requester.name || 'there';
-  const text = [
-    `Hi ${name},`,
-    '',
-    `We've marked ticket ${ticket.reference} as resolved.`,
-    '',
-    `If this isn't sorted, just reply to this email and the ticket will reopen automatically.`,
-    '',
-    `— ${supportName()}`,
-    '',
-    REPLY_SENTINEL,
-  ].join('\n');
-
-  const html = renderEmail({
-    heading: 'Your ticket is resolved',
-    reference: ticket.reference,
-    bodyHtml: `
-      <p style="margin:0 0 12px;">Hi ${escapeHtml(name)},</p>
-      <p style="margin:0 0 12px;">We've marked ticket <strong>${escapeHtml(ticket.reference)}</strong> as resolved.</p>
-      <p style="margin:0 0 12px;">If this isn't sorted, just reply to this email and the ticket will reopen automatically.</p>`,
-  });
-
-  return send({ ticket, subject: `Resolved: ${threadSubject(ticket)}`, text, html, author, automated: true });
-};
+// No "your ticket is resolved" email: the agent's reply already tells the
+// customer the outcome, and a second automated message added nothing (owner
+// decision, 2026-11). Resolving a ticket is now silent to the customer.
 
 export default {
   buildReplyTo,
   parseReplyTo,
   sendAcknowledgement,
   sendAgentReply,
-  sendResolutionNotice,
 };

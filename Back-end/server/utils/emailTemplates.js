@@ -3,7 +3,7 @@
  * HTML and text templates for password reset and email verification
  */
 import { formatInvoiceNumber } from './invoiceFormat.js';
-import { formatLongDateIST } from './datetime.js';
+import { trackOrderUrl } from './storefrontUrl.js';
 import { describeEmiPlan } from './paymentMethodDetails.js';
 import { buildOrderLines, variantDisplayName } from './orderLines.js';
 import { discountLabel } from './quoteDiscount.js';
@@ -597,6 +597,8 @@ ${offer ? `Order total: ${inr(order.totalAmount)}\n${offerLabel}: -${inr(offer.d
 
 Your tax invoice is attached to this email as a PDF.
 
+We'll email you a tracking link as soon as your order ships.
+
 Questions? Contact us at ${supportEmail}.
 
 Best regards,
@@ -664,6 +666,7 @@ ${companyName}
       <p style="margin-top:24px;background:#f0f9ff;border:1px solid #bae6fd;padding:12px;border-radius:6px;font-size:14px;">
         📎 Your tax invoice is attached to this email as a PDF.
       </p>
+      <p style="font-size:14px;margin-top:16px;">We'll email you a tracking link as soon as your order ships.</p>
       <p style="font-size:13px;color:#999;margin-top:24px;">Questions? Contact us at ${supportEmail}.</p>
     </div>
     <div style="text-align:center;padding:20px;border-top:1px solid #eee;font-size:12px;color:#999;">
@@ -938,7 +941,7 @@ const STATUS_COPY = {
   shipped: {
     subject: (ref) => `Your order is on its way — ${ref}`,
     heading: 'Your order has shipped 🚚',
-    blurb: 'Good news! Your order is on its way. You can track it from your account.',
+    blurb: 'Good news! Your order is on its way. You can track it any time using the link below.',
   },
   delivered: {
     subject: (ref) => `Delivered — ${ref}`,
@@ -1115,9 +1118,15 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
   const showTracking = status === 'shipped' && !!src.trackingNumber;
   const carrierName = src.carrier?.name;
   const trackingUrl = src.carrier?.trackingUrl;
-  const etaText = src.estimatedDelivery ? formatLongDateIST(src.estimatedDelivery) : null;
   const hasSlip = status === 'shipped' && !!src.shippingSlip?.url;
   const trackingNumber = src.trackingNumber;
+  // No delivery date, on purpose: the courier's estimate is not ours to promise, and a
+  // date in writing reads as a commitment the customer will hold us to. The Track Order
+  // page shows live courier status instead.
+  // /track looks up the ORDER-level tracking number only, so only that one is
+  // deep-linked; a parcel's own AWB gets the plain page (the number is printed above).
+  const trackPageUrl = trackOrderUrl(
+    trackingNumber && trackingNumber === order.trackingNumber ? trackingNumber : undefined);
 
   const subject = isPartial && parcelRef
     ? (status === 'delivered'
@@ -1161,8 +1170,8 @@ export const orderStatusEmail = ({ order, user = null, status, company = {}, pay
     ? '\n\nTracking details:' +
       `\n  • Tracking number: ${trackingNumber}` +
       (carrierName ? `\n  • Carrier: ${carrierName}` : '') +
-      (etaText ? `\n  • Estimated delivery: ${etaText}` : '') +
-      (trackingUrl ? `\n  • Track your package: ${trackingUrl}` : '') +
+      (trackPageUrl ? `\n  • Track your order: ${trackPageUrl}` : '') +
+      (trackingUrl ? `\n  • Or track with the courier: ${trackingUrl}` : '') +
       (hasSlip ? '\n\nYour shipping slip is attached to this email.' : '')
     : '';
 
@@ -1230,8 +1239,8 @@ ${companyName}
         <p style="margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#888;">Tracking details</p>
         <p style="margin:4px 0;font-size:14px;">Tracking number: <strong>${esc(trackingNumber)}</strong></p>
         ${carrierName ? `<p style="margin:4px 0;font-size:14px;">Carrier: <strong>${esc(carrierName)}</strong></p>` : ''}
-        ${etaText ? `<p style="margin:4px 0;font-size:14px;">Estimated delivery: <strong>${esc(etaText)}</strong></p>` : ''}
-        ${trackingUrl ? `<p style="margin:16px 0 4px;"><a href="${esc(trackingUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;">Track your package</a></p>` : ''}
+        ${trackPageUrl ? `<p style="margin:16px 0 4px;"><a href="${esc(trackPageUrl)}" style="display:inline-block;background:#111;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;">Track your order</a></p>` : ''}
+        ${trackingUrl ? `<p style="margin:8px 0 0;font-size:13px;"><a href="${esc(trackingUrl)}" style="color:#555;">Or track with the courier</a></p>` : ''}
         ${hasSlip ? `<p style="margin:12px 0 0;font-size:13px;color:#666;">📎 Your shipping slip is attached to this email.</p>` : ''}
       </div>`
     : '';
