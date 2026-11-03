@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { AlarmClock, ArrowDownUp, BellDot, CircleHelp, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Plus, Search, Send, Tag, User, Users, X } from 'lucide-react';
+import { AlarmClock, ArrowDownUp, BellDot, ChevronRight, CircleHelp, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Plus, Search, Send, Tag, User, Users, X } from 'lucide-react';
 import { Kbd, ShortcutsDialog, isTypingIn, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import { ListResultLine } from '@/components/panel/ListControls';
 import { useListParams } from '@/lib/hooks/useListParams';
@@ -271,8 +271,10 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
       { keys: ['?'], label: 'Show these shortcuts' },
     ] },
   ];
-  const navItem = 'tk-menu-item inline-flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 max-lg:bg-white max-lg:shadow-sm lg:min-h-9 lg:rounded-lg lg:px-2.5 lg:py-2';
-  const sectionLabel = 'hidden px-2.5 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 lg:block';
+  const navItem = 'tk-menu-item inline-flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 max-lg:border max-lg:border-gray-200 max-lg:bg-white lg:min-h-8 lg:rounded-md lg:px-2 lg:py-1.5';
+  const sectionLabel = 'hidden px-2 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 lg:block';
+  // Where you are, ClickUp-style: Tasks › My work (or Team / a space) › this list.
+  const crumbSection = view === 'team' && !inInbox ? (isAdmin ? 'Spaces' : 'Team') : 'My work';
   const personal = views.filter((v) => v.value !== 'team');
   const teamViews = views.filter((v) => v.value === 'team');
   const viewButton = (v: (typeof views)[number]) => {
@@ -286,15 +288,17 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
   };
 
   return (
-    <div className="tk-theme lg:flex lg:items-start lg:gap-5">
-      {/* Which tasks: a list down the side on a wide screen, a row of chips on a phone. */}
+    // Edge to edge: cancels the panel's padding (PanelShell `tightPage`), so the
+    // side menu and the board use the whole width, the way ClickUp does.
+    <div className="tk-theme tk-edge -m-3 md:-m-5 lg:flex lg:min-h-[calc(100dvh-3.5rem)] lg:items-stretch">
+      {/* Which tasks: a menu flush down the side on a wide screen, a row of chips on a phone. */}
       <nav
         aria-label="Task lists"
-        className="relative -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] lg:sticky lg:top-[4.5rem] lg:mx-0 lg:mb-0 lg:max-h-[calc(100vh-6rem)] lg:w-60 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-gray-200 lg:bg-white lg:p-2.5 lg:shadow-[0_1px_2px_rgba(20,22,40,0.04)]"
+        className="tk-side relative flex gap-1.5 overflow-x-auto border-b px-3 py-2.5 [scrollbar-width:none] md:px-5 lg:sticky lg:top-14 lg:h-[calc(100dvh-3.5rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-2 lg:py-3"
       >
-        <p className="hidden items-center gap-2.5 px-2 pb-3 pt-1 lg:flex">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm"><ListTodo aria-hidden className="h-4 w-4" /></span>
-          <span className="text-[15px] font-bold text-gray-900">Tasks</span>
+        <p className="hidden items-center gap-2 px-2 pb-3 lg:flex">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm"><ListTodo aria-hidden className="h-3.5 w-3.5" /></span>
+          <span className="text-sm font-bold text-gray-900">Tasks</span>
         </p>
         <div className="flex gap-1.5 lg:flex-col lg:gap-px" role="group" aria-label="Whose tasks">
           <button aria-pressed={inInbox} onClick={() => setList({ view: 'inbox', team: '' })} className={navItem}>
@@ -340,15 +344,22 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
         <button
           onClick={() => setShortcuts(true)}
           aria-label="Keyboard shortcuts"
-          className="hidden min-h-9 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 lg:flex"
+          className="hidden min-h-8 items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 lg:flex"
         >
-          <Keyboard aria-hidden className="h-4 w-4 text-gray-500" /> Keyboard shortcuts <Kbd className="ml-auto">?</Kbd>
+          <Keyboard aria-hidden className="h-4 w-4 text-gray-500" /> Shortcuts <Kbd className="ml-auto">?</Kbd>
         </button>
       </nav>
 
-      <div className="min-w-0 flex-1 space-y-3">
-        <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-gray-200 pb-2">
-          <div className="min-w-0 flex-1 basis-full sm:basis-auto">
+      <div className="min-w-0 flex-1 space-y-3 px-3 py-3 md:px-5 lg:px-6 lg:py-4">
+        <header className="tk-line flex flex-wrap items-end gap-x-3 gap-y-2 border-b">
+          <div className="min-w-0 flex-1 pb-2">
+            <nav aria-label="Breadcrumb" className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-500">
+              <button onClick={() => setView('mine')} className="rounded px-0.5 hover:text-gray-900 hover:underline">Tasks</button>
+              <ChevronRight aria-hidden className="h-3 w-3 text-gray-400" />
+              <span>{crumbSection}</span>
+              <ChevronRight aria-hidden className="h-3 w-3 text-gray-400" />
+              <span aria-current="page" className="truncate text-gray-700">{title}</span>
+            </nav>
             <h1 className="pn-title flex flex-wrap items-center gap-2 text-xl text-gray-900">
               {space && <span aria-hidden className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold ${teamColour(space.value)}`}>{space.label[0]}</span>}
               {title}
@@ -360,7 +371,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
               {!inInbox && view === 'mine' && late > 0 && <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">{late} late</span>}
               {!inInbox && view === 'mine' && today > 0 && <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{today} due today</span>}
             </h1>
-            <p className="mt-0.5 text-sm text-gray-500">
+            <p className="mt-0.5 text-[13px] text-gray-500">
               {inInbox ? 'What happened on your tasks: new tasks, status changes, comments and mentions.'
                 : view === 'created' ? 'Jobs you gave to others, and how far they have got.'
                 : view === 'following' ? 'Tasks you watch without doing them: you hear about every change.'
@@ -368,7 +379,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
                   : 'Who has to do what, and by when.'}
             </p>
           </div>
-          {!inInbox && <div className="flex gap-1" role="tablist" aria-label="Show as">
+          {!inInbox && <div className="order-last -mt-1 flex basis-full gap-1" role="tablist" aria-label="Show as">
             {([['list', 'List', List], ['board', 'Board', Columns3]] as const).map(([value, label, Icon]) => (
               <button
                 key={value}
@@ -376,7 +387,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
                 aria-selected={layout === value}
                 onClick={() => setLayout(value)}
                 title={`${label} (${value === 'list' ? 'L' : 'B'})`}
-                className={`-mb-[9px] inline-flex h-9 items-center gap-1.5 border-b-2 px-2.5 text-sm font-medium transition-colors ${
+                className={`-mb-px inline-flex h-9 items-center gap-1.5 border-b-2 px-2.5 text-sm font-medium transition-colors ${
                   layout === value ? 'border-blue-500 font-semibold text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-900'
                 }`}
               >
@@ -384,8 +395,11 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
               </button>
             ))}
           </div>}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2 pb-2">
           <TimerChip onOpen={setOpenId} />
+          <button onClick={() => setShortcuts(true)} title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts" className="hidden h-9 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 md:inline-flex lg:hidden">
+            <Keyboard aria-hidden className="h-4 w-4" /><Kbd>?</Kbd>
+          </button>
           <button onClick={() => setCreating(true)} className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3.5 text-sm font-semibold text-white shadow-sm transition-[background-color,transform] hover:bg-blue-700 active:scale-[0.98]" title="New task (N)">
             <Plus className="h-4 w-4" /> New task <span className="hidden sm:contents"><Kbd className="border-transparent! bg-white/20! text-white! shadow-none!">N</Kbd></span>
           </button>
@@ -413,22 +427,23 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
             />
             <span className="pointer-events-none absolute right-2 hidden sm:block"><Kbd>/</Kbd></span>
           </label>
+          <div className="-mx-3 flex min-w-0 basis-full items-center gap-2 overflow-x-auto px-3 [scrollbar-width:none] sm:mx-0 sm:basis-auto sm:flex-wrap sm:overflow-visible sm:px-0">
           {layout === 'list' && (
-            <label className="inline-flex items-center gap-1" title="Group by">
+            <label className="inline-flex shrink-0 items-center gap-1" title="Group by">
               <Layers aria-hidden className="h-4 w-4 text-gray-400" />
               <select value={groupBy} onChange={(e) => setGroupBy(asGroup(e.target.value))} aria-label="Group by" className={control}>
                 {TASK_GROUPINGS.map((g) => <option key={g.value} value={g.value}>Group: {g.label}</option>)}
               </select>
             </label>
           )}
-          <label className="inline-flex items-center gap-1" title="Order">
+          <label className="inline-flex shrink-0 items-center gap-1" title="Order">
             <ArrowDownUp aria-hidden className="h-4 w-4 text-gray-400" />
             <select value={sort} onChange={(e) => setList({ sort: e.target.value })} aria-label="Sort" className={control}>
               {TASK_SORTS.map((o) => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
             </select>
           </label>
           {view === 'team' && (
-            <label className="inline-flex items-center gap-1">
+            <label className="inline-flex shrink-0 items-center gap-1">
               <User aria-hidden className="h-4 w-4 text-gray-400" />
               <select value={assignee} onChange={(e) => setList({ assignee: e.target.value })} aria-label="Person" className={control}>
                 <option value="">Everyone</option>
@@ -436,14 +451,14 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
               </select>
             </label>
           )}
-          <label className="inline-flex items-center gap-1">
+          <label className="inline-flex shrink-0 items-center gap-1">
             <Flag aria-hidden className="h-4 w-4 text-gray-400" />
             <select value={priority} onChange={(e) => setList({ priority: e.target.value })} aria-label="Priority filter" className={control}>
               <option value="">Any priority</option>
               {TASK_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
           </label>
-          <div className="flex flex-wrap gap-0.5 rounded-full border border-gray-200 bg-white p-0.5" role="group" aria-label="Due date">
+          <div className="flex shrink-0 gap-0.5 rounded-full border border-gray-200 bg-white p-0.5" role="group" aria-label="Due date">
             {DUES.map((d) => {
               const on = due === d.value || (d.value === 'overdue' && due === 'late');
               return (
@@ -451,26 +466,27 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
                   key={d.value || 'any'}
                   aria-pressed={on}
                   onClick={() => setDue(d.value)}
-                  className={`h-7 rounded-full px-2.5 text-[13px] font-medium transition ${on ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
+                  className={`h-7 whitespace-nowrap rounded-full px-2.5 text-[13px] font-medium transition ${on ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
                 >
                   {d.label}
                 </button>
               );
             })}
           </div>
-          {due === 'late' && <span className="text-xs text-gray-500">(late or due today)</span>}
+          {due === 'late' && <span className="shrink-0 whitespace-nowrap text-xs text-gray-500">(late or due today)</span>}
           {tag && (
-            <span className="inline-flex h-8 items-center gap-1 rounded-lg bg-blue-50 pl-2 pr-1 text-sm font-medium text-blue-800">
+            <span className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-blue-50 pl-2 pr-1 text-sm font-medium text-blue-800">
               <Tag aria-hidden className="h-3.5 w-3.5" /> {tag}
               <button onClick={() => setList({ tag: '' })} aria-label={`Stop filtering by ${tag}`} className="rounded p-0.5 hover:bg-blue-100"><X className="h-3.5 w-3.5" /></button>
             </span>
           )}
-          {narrowed && <button onClick={clear} className="text-sm font-medium text-blue-700 hover:underline">Clear all</button>}
+          {narrowed && <button onClick={clear} className="shrink-0 whitespace-nowrap text-sm font-medium text-blue-700 hover:underline">Clear all</button>}
+          </div>
         </div>
         {counted && <ListResultLine count={counted.count} capped={counted.capped} noun={['open task', 'open tasks']} />}
 
         {layout === 'board' ? (
-          <TaskBoard filters={filters} onOpen={setOpenId} quickAddFor={quickAddFor} onTag={filterTag} />
+          <TaskBoard filters={filters} onOpen={setOpenId} quickAddFor={quickAddFor} onTag={filterTag} base={base} />
         ) : (
           <TaskListView
             // A new list is a new selection: ticks never carry over to tasks no longer shown.
