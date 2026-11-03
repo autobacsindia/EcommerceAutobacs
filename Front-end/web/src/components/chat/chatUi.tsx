@@ -136,22 +136,24 @@ const TEAM_COLOURS: Record<string, string> = {
 export const teamColour = (team: string | null | undefined) =>
   (team && TEAM_COLOURS[team]) || 'bg-gray-100 text-gray-700';
 
-/** "GTM", "Procurement" … as a small coloured pill. Admins read "Admin". */
+/** "GTM", "Procurement" … in quiet grey beside a name. Admins read "Admin". */
 export function TeamBadge({ person }: { person: ChatPerson | null }) {
   if (!person?.teamLabel) return null;
   return (
-    <span className={`rounded-full px-2 py-px text-[11px] font-medium ${person.role === 'admin' ? 'bg-gray-900 text-white' : teamColour(person.team)}`}>
+    <span className="text-xs text-gray-500">
       {person.teamLabel}{person.isHead ? ' · Head' : ''}
     </span>
   );
 }
 
-/** The square icon a conversation shows in the list and its header. */
 export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; size?: 'sm' | 'md' | 'lg' }) {
   const box = size === 'lg' ? 'h-10 w-10 text-sm' : size === 'md' ? 'h-9 w-9 text-sm' : 'h-7 w-7 text-[11px]';
+  // People keep their colour (a face you recognise); spaces and team pairs are a
+  // calm grey circle, so the list is not a wall of coloured tiles.
+  const quiet = `grid ${box} shrink-0 place-items-center rounded-full bg-gray-200/70 text-gray-600`;
   if (channel.kind === 'dm' && channel.group) {
     return (
-      <span className={`grid ${box} shrink-0 place-items-center rounded-full bg-sky-100 text-sky-800`} aria-hidden="true">
+      <span className={quiet} aria-hidden="true">
         <Users className="h-3.5 w-3.5" />
       </span>
     );
@@ -163,16 +165,9 @@ export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; si
       </span>
     );
   }
-  if (channel.audience === 'teams') {
-    return (
-      <span className={`grid ${box} shrink-0 place-items-center rounded-xl ${teamColour(channel.withTeam ?? channel.teams?.[0])}`} aria-hidden="true">
-        <ArrowLeftRight className="h-3.5 w-3.5" />
-      </span>
-    );
-  }
-  const Icon = channel.audience === 'members' ? Lock : Hash;
+  const Icon = channel.audience === 'teams' ? ArrowLeftRight : channel.audience === 'members' ? Lock : Hash;
   return (
-    <span className={`grid ${box} shrink-0 place-items-center rounded-xl ${channel.audience === 'team' ? teamColour(channel.team) : 'bg-blue-100 text-blue-800'}`} aria-hidden="true">
+    <span className={quiet} aria-hidden="true">
       <Icon className="h-3.5 w-3.5" />
     </span>
   );

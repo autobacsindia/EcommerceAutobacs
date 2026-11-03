@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bold, Code, Italic, List, Package, Paperclip, Quote, SendHorizontal, Smile, Strikethrough, Type, X } from 'lucide-react';
+import { Bold, Code, Italic, List, Package, Paperclip, Plus, Quote, SendHorizontal, Smile, Strikethrough, Type, X } from 'lucide-react';
 import type { ChatChannel, ChatMessage, ChatPerson, RecentOrder, SendVars } from '@/hooks/queries/useTeamChat';
 import { useRecentOrders } from '@/hooks/queries/useTeamChat';
 import { Avatar, FileKindIcon, fileSize, newClientId } from './chatUi';
@@ -95,6 +95,8 @@ export default function Composer({
   const [showOrders, setShowOrders] = useState(false);
   const [showFormat, setShowFormat] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
+  // The "+" menu: attach, link an order, formatting — kept off the bar so it stays calm.
+  const [showMore, setShowMore] = useState(false);
   const [error, setError] = useState('');
 
   const box = useRef<HTMLTextAreaElement>(null);
@@ -366,29 +368,60 @@ export default function Composer({
                 <Icon className="h-4 w-4" />
               </button>
             ))}
+            <button type="button" onClick={() => setShowFormat(false)}
+              className="ml-auto grid h-8 w-8 place-items-center rounded-lg text-gray-500 hover:bg-gray-200 hover:text-gray-900"
+              aria-label="Hide formatting" title="Hide formatting">
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
         {/* One rounded bar: the text first, then the tools and the send arrow on
             the right — `order` moves the text box without changing tab order. */}
-        <div className="gc-field flex items-end gap-0.5 rounded-[26px] py-1 pl-2 pr-1.5 transition-shadow focus-within:shadow-[0_0_0_2px_var(--color-blue-500)]">
-          <button
-            type="button"
-            onClick={() => fileInput.current?.click()}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 order-2 hover:text-gray-800"
-            aria-label="Attach a file"
-            title="Attach a photo or document"
-          >
-            <Paperclip className="h-[18px] w-[18px]" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowOrders((v) => !v)}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-gray-600 hover:bg-gray-200 order-2 hover:text-gray-800"
-            aria-label="Link an order"
-            title="Link an order"
-          >
-            <Package className="h-[18px] w-[18px]" />
-          </button>
+        <div className="gc-field flex items-end gap-0.5 rounded-[26px] py-1 pl-1.5 pr-1.5 transition-shadow focus-within:shadow-[0_0_0_2px_var(--color-blue-500)]">
+          <div className="relative order-0 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowMore((v) => !v)}
+              aria-expanded={showMore}
+              aria-haspopup="menu"
+              className={`grid h-9 w-9 place-items-center rounded-full hover:bg-gray-200 hover:text-gray-800 ${showMore ? 'bg-gray-200 text-gray-900' : 'text-gray-600'}`}
+              aria-label="Add a photo, file or order"
+              title="Add a photo, file or order"
+            >
+              <Plus className={`h-5 w-5 transition-transform ${showMore ? 'rotate-45' : ''}`} />
+            </button>
+            {showMore && (
+              <>
+                {/* A click anywhere else closes the menu. */}
+                <div className="fixed inset-0 z-10" aria-hidden="true" onClick={() => setShowMore(false)} />
+                <div
+                  role="menu"
+                  aria-label="Add to your message"
+                  onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setShowMore(false); box.current?.focus(); } }}
+                  className="pn-pop absolute bottom-full left-0 z-20 mb-2 w-60 overflow-hidden rounded-2xl border border-gray-200 bg-[var(--gc-card)] py-1.5 shadow-lg"
+                >
+                  {([
+                    ['Attach a file', 'Photo or document', Paperclip, () => fileInput.current?.click()],
+                    ['Link an order', 'Link an order', Package, () => setShowOrders(true)],
+                    ['Formatting', 'Bold, italic, list…', Type, () => setShowFormat((v) => !v)],
+                  ] as const).map(([label, text, Icon, run], i) => (
+                    <button
+                      key={label}
+                      type="button"
+                      role="menuitem"
+                      autoFocus={i === 0}
+                      aria-label={label}
+                      onClick={() => { setShowMore(false); run(); }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-800 hover:bg-[var(--gc-hover)] focus:bg-[var(--gc-hover)] focus:outline-none"
+                    >
+                      <Icon className="h-[18px] w-[18px] text-gray-600" aria-hidden="true" />
+                      {text}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => setShowEmoji((v) => !v)}
@@ -397,16 +430,6 @@ export default function Composer({
             title="Emoji"
           >
             <Smile className="h-[18px] w-[18px]" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowFormat((v) => !v)}
-            aria-pressed={showFormat}
-            className={`order-2 hidden h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-gray-200 hover:text-gray-800 sm:grid ${showFormat ? 'bg-gray-200 text-gray-900' : 'text-gray-600'}`}
-            aria-label="Formatting"
-            title="Formatting: *bold* _italic_ ~strike~ `code`"
-          >
-            <Type className="h-[18px] w-[18px]" />
           </button>
           <input
             ref={fileInput}
@@ -469,9 +492,6 @@ export default function Composer({
           </button>
         </div>
       </div>
-      <p className="mt-1 hidden text-[11px] text-gray-400 lg:block">
-        Enter to send · Shift + Enter for a new line · @ to mention · *bold* _italic_ · paste or drag in a photo or PDF
-      </p>
     </form>
   );
 }
