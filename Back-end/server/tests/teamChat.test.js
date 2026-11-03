@@ -101,7 +101,7 @@ describe('Team chat', () => {
       const n = STAFF_TEAM_VALUES.length;
       expect(keys.filter((k) => k.startsWith('pair:'))).toHaveLength((n * (n - 1)) / 2);
       const pair = body.channels.find((c) => c.key === 'pair:accounts:procurement');
-      expect(pair).toMatchObject({ audience: 'teams', name: 'Accounts ↔ Procurement', withTeam: null });
+      expect(pair).toMatchObject({ audience: 'teams', name: 'Accounts & Procurement', withTeam: null });
     });
 
     it('staff see #company, their own team space and their team\'s conversations with each other team', async () => {
@@ -114,10 +114,13 @@ describe('Team chat', () => {
         ...others.map((t) => `pair:${[t, 'sales'].sort().join(':')}`),
         'team:sales',
       ].sort());
-      // Named after the OTHER team, from where the reader sits.
-      expect(body.channels.find((c) => c.key === 'pair:accounts:sales')).toMatchObject({ name: 'Accounts', withTeam: 'accounts' });
+      // Both teams by name, the reader's own first — "Accounts" alone read as the
+      // Accounts team's own space.
+      expect(body.channels.find((c) => c.key === 'pair:accounts:sales')).toMatchObject({
+        name: 'GTM & Accounts', withTeam: 'accounts', description: 'Private chat between the GTM & Accounts teams',
+      });
       const fromAccounts = (await accounts.get('/chat/channels')).body.channels.find((c) => c.key === 'pair:accounts:sales');
-      expect(fromAccounts).toMatchObject({ name: 'GTM', withTeam: 'sales' });
+      expect(fromAccounts).toMatchObject({ name: 'Accounts & GTM', withTeam: 'sales' });
     });
 
     it('another team cannot read or post in a team space (404, not 403)', async () => {

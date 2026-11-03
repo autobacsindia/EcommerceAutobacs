@@ -11,7 +11,8 @@
  *   - a reply obeys the channel's access rules; no replies to replies; no
  *     replies across channels
  *   - a retried reply is one reply, counted once
- *   - replies count as unread until read past the thread's activity
+ *   - a reply is not unread on the chat: it lives in its thread (the Threads
+ *     list counts it), so a chat never shows a number with nothing new in it
  *   - one thread per order per space, even when two first updates race
  */
 import mongoose from 'mongoose';
@@ -188,18 +189,21 @@ describe('Team chat threads', () => {
       expect(seen.sort()).toEqual(['m1', 'm3', 'm4', 'm5', 'm6'].sort());
     });
 
-    it('replies count as unread, and reading the thread\'s activity clears them', async () => {
+    it('a reply does not count as unread on the chat — only a new message in the chat itself does', async () => {
       const root = (await say(admin, company, 'root')).body.message;
       const ch = (await salesMember.get('/chat/channels')).body.channels.find((c) => c.id === company);
       await salesMember.post(`/chat/channels/${company}/read`, { seq: ch.lastMessageSeq });
       await say(accounts, company, 'r', { threadRoot: root.id });
 
       const before = (await salesMember.get('/chat/channels')).body.channels.find((c) => c.id === company);
-      expect(before.unread).toBe(1);
-      const { messages } = await timeline(salesMember, company);
-      await salesMember.post(`/chat/channels/${company}/read`, { seq: messages[0].activitySeq });
+      expect(before).toMatchObject({ unread: 0, unreadChat: 0 });
+      await say(accounts, company, 'a new message in the chat');
       const after = (await salesMember.get('/chat/channels')).body.channels.find((c) => c.id === company);
-      expect(after.unread).toBe(0);
+      expect(after).toMatchObject({ unread: 1, unreadChat: 1 });
+      // Reading up to the newest activity clears it.
+      const { messages } = await timeline(salesMember, company);
+      await salesMember.post(`/chat/channels/${company}/read`, { seq: Math.max(...messages.map((m) => m.activitySeq)) });
+      expect((await salesMember.get('/chat/channels')).body.channels.find((c) => c.id === company).unread).toBe(0);
     });
 
     it('a live reply event carries the moved root', async () => {

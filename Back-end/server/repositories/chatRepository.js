@@ -475,11 +475,20 @@ const chatRepository = {
       {
         $match: {
           $or: positions.flatMap((p) => [
-            { channel: p.channel, seq: { $gt: p.chatFrom }, kind: { $ne: 'system' }, lane: { $ne: 'updates' } },
+            /*
+              Only what the Chat tab itself shows as new: a reply sits inside its
+              thread (the Threads list counts it). Counting replies put numbers on
+              a chat that opened with nothing new in it. Order updates keep their
+              replies — that tab shows each order's thread in full.
+            */
+            { channel: p.channel, seq: { $gt: p.chatFrom }, kind: { $ne: 'system' }, lane: { $ne: 'updates' }, threadRoot: null },
             { channel: p.channel, seq: { $gt: p.updatesFrom }, ...isUpdates },
           ]),
         },
       },
+      // A deleted message is gone from both tabs. A second $match, so the first
+      // keeps its { channel, seq } index ranges.
+      { $match: { deletedAt: null } },
       {
         $group: {
           _id: { channel: '$channel', updates: { $or: [{ $eq: ['$kind', 'system'] }, { $eq: ['$lane', 'updates'] }] } },

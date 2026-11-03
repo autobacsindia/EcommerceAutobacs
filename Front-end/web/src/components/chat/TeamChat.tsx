@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import { ChevronDown, Keyboard, MessageSquarePlus, MessagesSquare, Plus, Search } from 'lucide-react';
+import { firstToOpen, homeList, listWhen, totalPeopleUnread } from './chatList';
 import { useSSE } from '@/hooks/useSSE';
 import { useAuth } from '@/context/AuthContext';
 import { chatKeys } from '@/hooks/queries/keys';
@@ -252,7 +253,8 @@ export default function TeamChat() {
   const [switcher, setSwitcher] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const openDm = useOpenDm();
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Never-used chats are folded at the bottom of the list until asked for.
+  const [showEmpty, setShowEmpty] = useState(false);
   // null = closed. 'all' = every channel I can see; otherwise one channel id.
   const [searching, setSearching] = useState<string | null>(null);
   const [showStarred, setShowStarred] = useState(false);
@@ -283,12 +285,18 @@ export default function TeamChat() {
   }, [selected?.id]);
   // ?t=updates: opened from an order-update pop-up or the bell — start on Order updates.
   const initialTab = params.get('t') === 'updates' ? 'updates' as const : undefined;
+  // ?th=<root>: a pop-up for a thread reply opens that thread, where the reply is.
+  const threadParam = params.get('th');
+  useEffect(() => {
+    if (selectedId && threadParam) setThreadRequest({ channelId: selectedId, id: threadParam, n: Date.now() });
+  }, [selectedId, threadParam]);
 
   const select = useCallback(
     (id: string | null) => {
       const q = new URLSearchParams(params.toString());
-      // Picking a conversation by hand opens the tab its unread calls for.
+      // Picking a conversation by hand opens the tab its unread calls for, and no thread.
       q.delete('t');
+      q.delete('th');
       if (id) q.set('c', id);
       else q.delete('c');
       router.replace(`${pathname}${q.toString() ? `?${q}` : ''}`, { scroll: false });
@@ -296,11 +304,13 @@ export default function TeamChat() {
     [params, pathname, router],
   );
 
-  // Side by side, never show an empty pane; one pane at a time (phones, tablets),
-  // start on the list.
+  // Side by side, never show an empty pane: open where something is waiting
+  // (the Chat button's number sent you here), else the newest chat. One pane at
+  // a time (phones, tablets): start on the list, newest at the top.
   useEffect(() => {
     if (!selectedId && channels.length && typeof window !== 'undefined' && window.innerWidth >= ONE_PANE_BELOW) {
-      select(channels[0].id);
+      const first = firstToOpen(channels);
+      if (first) select(first.id);
     }
   }, [selectedId, channels, select]);
 
@@ -413,25 +423,14 @@ export default function TeamChat() {
     },
   });
 
-  // Muted conversations do not add to "N new" (the same rule as the nav badge).
-  const totalUnread = useMemo(
-    () => channels.reduce((n, c) => { const u = countedUnread(c); return n + u.chat + u.updates; }, 0),
-    [channels],
-  );
+  // Messages from people only — the same number as the Chat button and the bell.
+  const totalUnread = useMemo(() => totalPeopleUnread(channels), [channels]);
 
-  const { spaces, betweenTeams, dms } = useMemo(() => {
-    // "Unread" keeps the open conversation in the list, so it does not vanish
-    // the moment it is read.
-    const visible = channels.filter((c) => show === 'all' || c.unread > 0 || c.id === selectedId);
-    return {
-      spaces: visible.filter((c) => c.kind === 'space' && c.audience !== 'teams'),
-      betweenTeams: visible
-        .filter((c) => c.audience === 'teams')
-        // Busiest first: the conversation that moved last is the one to look at.
-        .sort((x, y) => new Date(y.lastMessageAt || 0).getTime() - new Date(x.lastMessageAt || 0).getTime()),
-      dms: visible.filter((c) => c.kind === 'dm'),
-    };
-  }, [channels, show, selectedId]);
+  // One list, as Google Chat's Home: newest first, never-used chats folded.
+  const { active, empty } = useMemo(
+    () => homeList(channels, { unreadOnly: show === 'unread', selectedId }),
+    [channels, show, selectedId],
+  );
 
   const openPerson = useCallback(async (personId: string) => {
     setSwitcher(false);
@@ -443,18 +442,14 @@ export default function TeamChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [select]);
 
-  // Alt+↑ / Alt+↓ walk the list in the order it is drawn (collapsed sections skipped).
+  // Alt+↑ / Alt+↓ walk the list in the order it is drawn (folded chats skipped).
   const step = useCallback((by: number) => {
-    const order = [
-      ...(collapsed.has('dms') ? [] : dms),
-      ...(collapsed.has('spaces') ? [] : spaces),
-      ...(collapsed.has('teams') ? [] : betweenTeams),
-    ];
+    const order = [...active, ...(showEmpty ? empty : [])];
     if (!order.length) return;
     const at = order.findIndex((c) => c.id === selectedId);
     const next = order[at < 0 ? 0 : (at + by + order.length) % order.length];
     select(next.id);
-  }, [spaces, betweenTeams, dms, collapsed, selectedId, select]);
+  }, [active, empty, showEmpty, selectedId, select]);
 
   useHotkeys([
     { key: 'k', mod: true, run: (e) => { e.preventDefault(); setSwitcher(true); } },
@@ -470,93 +465,69 @@ export default function TeamChat() {
     return <p className="p-6 text-gray-600">Team chat is available to staff and admins only.</p>;
   }
 
+  /*
+    A row as in Google Chat's Home: the name and the time of the newest message,
+    the newest message underneath ("You: …", "Priya: …"). Messages from people
+    waiting: bold, with a blue time and a blue number. Automatic order updates
+    only get a grey "3 order updates", so a busy bot never shouts.
+  */
   const row = (c: ChatChannel) => {
     const active = c.id === selectedId;
     const level = notifyOf(c);
-    // People's messages ask for attention (bold, blue count); automatic order
-    // updates only get a quiet grey "3 updates", so a busy bot never shouts.
     const { chat: fromPeople, updates } = countedUnread(c);
     const status = c.kind === 'dm' && !c.group && c.partner ? liveStatus(peopleById.get(c.partner.id)?.status) : null;
     const cap = (n: number) => (n > 99 ? '99+' : String(n));
+    const waiting = fromPeople > 0;
+    const line = homeLine(c) || status?.text || (c.lastMessageAt ? '' : 'No messages yet');
     return (
       <li key={c.id}>
         <button
           type="button"
           onClick={() => select(c.id)}
           aria-current={active ? 'true' : undefined}
-          // Pointing at a row shows its newest message.
-          title={homeLine(c) || c.description || c.name}
-          className={`gc-row flex w-full items-center gap-3 rounded-full px-3 py-[7px] text-left text-sm ${
-            fromPeople > 0 ? 'font-bold text-gray-900' : active ? 'font-semibold' : 'text-gray-800'
-          }`}
+          className="gc-row flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left"
         >
           <span className="relative inline-flex shrink-0">
-            <ChannelIcon channel={c} />
+            <ChannelIcon channel={c} size="lg" />
             {c.kind === 'dm' && !c.group && c.partner && online.has(c.partner.id) && <OnlineDot />}
           </span>
           <span className="min-w-0 flex-1">
-            {/* The round "#" icon already says it is a space, so the name drops its "#". */}
-            <span className="block truncate">{c.kind === 'space' ? channelTitle(c).replace(/^#/, '') : channelTitle(c)}</span>
-            {status && <span className="block truncate text-xs font-normal text-gray-500">{status.text}</span>}
+            <span className="flex items-baseline gap-2">
+              {/* The round "#" icon already says it is a space, so the name drops its "#". */}
+              <span className={`min-w-0 flex-1 truncate text-[15px] ${waiting ? 'font-bold text-gray-900' : active ? 'font-semibold text-gray-900' : 'text-gray-900'}`}>
+                {c.kind === 'space' ? channelTitle(c).replace(/^#/, '') : channelTitle(c)}
+              </span>
+              {level !== 'all' && (
+                <span className="shrink-0 self-center text-gray-400" title={level === 'off' ? 'Notifications off' : 'Only @mentions'}>
+                  <NotifyIcon level={level} className="h-3.5 w-3.5" />
+                </span>
+              )}
+              {c.lastMessageAt && (
+                <span className={`shrink-0 text-xs ${waiting ? 'font-bold text-blue-700' : 'text-gray-500'}`}>{listWhen(c.lastMessageAt)}</span>
+              )}
+            </span>
+            <span className="mt-0.5 flex items-center gap-2">
+              <span className={`min-w-0 flex-1 truncate text-[13px] ${waiting ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{line}</span>
+              {waiting ? (
+                <span className="shrink-0 rounded-full bg-blue-700 px-1.5 text-[11px] font-bold leading-[18px] text-white"
+                  aria-label={level === 'mentions' ? `${fromPeople} unread mentions` : `${fromPeople} unread`}>
+                  {level === 'mentions' ? '@' : ''}{cap(fromPeople)}
+                </span>
+              ) : updates > 0 ? (
+                <span className="shrink-0 rounded-full border border-gray-300 px-1.5 text-[11px] leading-[18px] text-gray-600">
+                  {cap(updates)} order {updates === 1 ? 'update' : 'updates'}
+                </span>
+              ) : c.unread > 0 ? (
+                // Quietened, with unread: still visible, but grey — it does not ask for attention.
+                <span className="shrink-0 text-xs text-gray-500"
+                  aria-label={`${c.unread} unread (notifications ${level === 'off' ? 'off' : 'for @mentions only'})`}>
+                  {cap(c.unread)}
+                </span>
+              ) : null}
+            </span>
           </span>
-          {level !== 'all' && (
-            <span className="shrink-0 text-gray-400" title={level === 'off' ? 'Notifications off' : 'Only @mentions'}>
-              <NotifyIcon level={level} className="h-3.5 w-3.5" />
-            </span>
-          )}
-          {fromPeople > 0 ? (
-            <span className="shrink-0 text-xs font-bold text-blue-700"
-              aria-label={level === 'mentions' ? `${fromPeople} unread mentions` : `${fromPeople} unread`}>
-              {level === 'mentions' ? '@' : ''}{cap(fromPeople)}
-            </span>
-          ) : updates > 0 ? (
-            <span className="shrink-0 text-xs font-normal text-gray-500" aria-label={`${updates} new order updates`}>
-              {cap(updates)} {updates === 1 ? 'update' : 'updates'}
-            </span>
-          ) : c.unread > 0 ? (
-            // Quietened, with unread: still visible, but grey — it does not ask for attention.
-            <span className="shrink-0 text-xs font-normal text-gray-500"
-              aria-label={`${c.unread} unread (notifications ${level === 'off' ? 'off' : 'for @mentions only'})`}>
-              {cap(c.unread)}
-            </span>
-          ) : (
-            c.lastMessageAt && <span className="shrink-0 text-xs font-normal text-gray-500">{shortWhen(c.lastMessageAt)}</span>
-          )}
         </button>
       </li>
-    );
-  };
-
-  /** A collapsible list section, as in Google Chat. */
-  const section = (key: string, label: string, items: ChatChannel[], empty: string, action?: React.ReactNode) => {
-    const open = !collapsed.has(key);
-    const unread = items.reduce((n, c) => n + countedUnread(c).chat, 0);
-    return (
-      <div className="mt-3 first:mt-0">
-        <div className="flex items-center justify-between pr-1">
-          <button
-            type="button"
-            onClick={() => setCollapsed((prev) => {
-              const next = new Set(prev);
-              if (next.has(key)) next.delete(key); else next.add(key);
-              return next;
-            })}
-            className="flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[13px] font-semibold text-gray-700 hover:bg-[var(--gc-hover)]"
-            aria-expanded={open}
-          >
-            <ChevronDown className={`h-4 w-4 text-gray-500 transition-transform ${open ? '' : '-rotate-90'}`} aria-hidden="true" />
-            {label}
-            {!open && unread > 0 && <span className="ml-1 h-2 w-2 rounded-full bg-blue-600" aria-label={`${unread} unread`} />}
-          </button>
-          {action}
-        </div>
-        {open && (
-          <ul className="mt-0.5 space-y-px">
-            {items.length === 0 && <li className="px-3 py-1 text-sm text-gray-500">{empty}</li>}
-            {items.map(row)}
-          </ul>
-        )}
-      </div>
     );
   };
 
@@ -586,10 +557,12 @@ export default function TeamChat() {
     // Fills the panel's page edge to edge (cancelling its padding), its height
     // fitted to the visible screen by useFitToViewport. Below lg one pane at a
     // time; from lg the list sits on the page colour beside the open
-    // conversation, a white card (as in Google Chat).
+    // conversation, a white card (as in Google Chat). `isolate` keeps every
+    // layer inside (the thread panel is a z-20 flex item) under the panel's top
+    // bar, so the bell's drop-down is never drawn behind the chat.
     <div
       ref={box}
-      className={`gc-theme relative -m-4 flex h-[calc(100dvh-3.5rem)] min-h-[320px] overflow-hidden md:-m-6 lg:-m-8 lg:py-2 lg:pr-2 ${wide && selected ? 'lg:pl-2' : ''}`}
+      className={`gc-theme relative isolate -m-4 flex h-[calc(100dvh-3.5rem)] min-h-[320px] overflow-hidden md:-m-6 lg:-m-8 lg:py-2 lg:pr-2 ${wide && selected ? 'lg:pl-2' : ''}`}
     >
       <aside
         className={`w-full min-w-0 shrink-0 flex-col bg-[var(--gc-card)] lg:w-[336px] lg:bg-transparent ${selected ? 'hidden' : 'flex'} ${wide && selected ? '' : 'lg:flex'}`}
@@ -611,6 +584,17 @@ export default function TeamChat() {
               <span className="hidden sm:inline">New chat</span>
             </button>
             <span className="hidden flex-1 lg:block" />
+            {me?.canCreateSpace && (
+              <button
+                type="button"
+                onClick={() => setDialog('space')}
+                className="grid h-10 w-10 place-items-center rounded-full text-gray-600 hover:bg-[var(--gc-hover)]"
+                aria-label="New space"
+                title="Create a space for a group or topic"
+              >
+                <Plus className="h-5 w-5" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShortcuts(true)}
@@ -673,7 +657,7 @@ export default function TeamChat() {
               </button>
             </p>
           )}
-          {!isLoading && show === 'unread' && !spaces.length && !betweenTeams.length && !dms.length && (
+          {!isLoading && show === 'unread' && !active.length && (
             <div className="px-4 py-8 text-center">
               <p className="text-sm font-semibold text-gray-800">You’re all caught up</p>
               <p className="mt-1 text-xs text-gray-500">Nothing unread anywhere.</p>
@@ -681,17 +665,23 @@ export default function TeamChat() {
             </div>
           )}
 
-          {(show === 'all' || dms.length > 0) && section('dms', 'Direct messages', dms, 'No direct messages yet',
-            <button type="button" onClick={() => setDialog('dm')} className="rounded-full p-1.5 text-gray-500 hover:bg-[var(--gc-hover)]" aria-label="Start a direct message" title="Start a direct message">
-              <Plus className="h-4 w-4" />
-            </button>)}
-          {(show === 'all' || spaces.length > 0) && section('spaces', 'Spaces', spaces, 'No spaces',
-            me?.canCreateSpace ? (
-              <button type="button" onClick={() => setDialog('space')} className="rounded-full p-1.5 text-gray-500 hover:bg-[var(--gc-hover)]" aria-label="New space" title="New space">
-                <Plus className="h-4 w-4" />
-              </button>
-            ) : undefined)}
-          {(show === 'all' || betweenTeams.length > 0) && section('teams', 'Between teams', betweenTeams, 'No team conversations')}
+          {!isLoading && !isError && (
+            <ul className="space-y-px" aria-label="Chats, newest first">
+              {active.map(row)}
+              {showEmpty && empty.map(row)}
+            </ul>
+          )}
+          {empty.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowEmpty((v) => !v)}
+              className="mt-1 flex w-full items-center gap-1.5 rounded-full px-3 py-2 text-left text-[13px] font-semibold text-blue-700 hover:bg-[var(--gc-hover)]"
+              aria-expanded={showEmpty}
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${showEmpty ? 'rotate-180' : ''}`} aria-hidden="true" />
+              {showEmpty ? 'Hide chats with no messages yet' : `Show ${empty.length} ${empty.length === 1 ? 'chat' : 'chats'} with no messages yet`}
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2.5 border-t border-gray-200 px-4 py-2.5 lg:mx-2 lg:px-2">

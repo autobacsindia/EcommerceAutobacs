@@ -14,7 +14,7 @@
  *     a burst), never for automatic order updates unless chosen, never for the
  *     conversation on screen, and not on top of a pop-up (lib/chatSound.ts).
  */
-import { render, screen, act, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, act, fireEvent, waitFor, within } from '@testing-library/react';
 import NotificationBell from './NotificationBell';
 
 const chime = jest.fn();
@@ -48,7 +48,9 @@ jest.mock('@/hooks/queries/useNotifications', () => ({
   useWaitingWork: () => ({ data: waiting }),
 }));
 jest.mock('@/hooks/queries/useTeamChat', () => ({
-  useChatUnreadSplit: () => ({ chat: chatUnread, updates: updatesUnread, updatesChannelId: updatesUnread ? 'ch42' : null }),
+  useChatUnreadSplit: () => ({
+    chat: chatUnread, updates: updatesUnread, chatChannelId: chatUnread ? 'ch7' : null, updatesChannelId: updatesUnread ? 'ch42' : null,
+  }),
   useChatChannels: () => ({ data: channel() }),
   countedUnread: (c: { unreadChat: number; unreadUpdates: number }) => ({ chat: c.unreadChat, updates: c.unreadUpdates }),
 }));
@@ -168,8 +170,8 @@ describe('NotificationBell', () => {
     rerender(<NotificationBell chatHref="/team/chat" />);
     await settle();
     expect(chime).not.toHaveBeenCalled();
-    // …but they still count on the badge.
-    expect(screen.getByRole('button', { name: /1 waiting/i })).toBeInTheDocument();
+    // …and they are not on the red badge: it counts what people wrote.
+    expect(screen.getByRole('button', { name: /nothing waiting/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /notifications/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /automatic order updates/i }));
@@ -252,26 +254,27 @@ describe('NotificationBell', () => {
     render(<NotificationBell chatHref="/team/chat" />);
     fireEvent.click(screen.getByRole('button', { name: /3 waiting/i }));
 
-    expect(await screen.findByRole('menuitem', { name: /unread messages/i })).toHaveAttribute('href', '/team/chat');
+    // Straight to the chat with the newest message from a person.
+    expect(await screen.findByRole('menuitem', { name: /unread messages/i })).toHaveAttribute('href', '/team/chat?c=ch7');
     expect(screen.getByRole('menuitem', { name: /payments to approve/i })).toHaveAttribute('href', '/team/payments');
   });
 
-  it('order updates are their own row, opening that space\'s Order updates tab; messages open Chat', async () => {
+  it('order updates are their own grey row, opening that space\'s Order updates tab, and stay off the badge', async () => {
     chatUnread = 1;
     updatesUnread = 4;
     render(<NotificationBell chatHref="/admin/chat" />);
-    fireEvent.click(screen.getByRole('button', { name: /5 waiting/i }));
+    fireEvent.click(screen.getByRole('button', { name: /1 waiting/i }));
 
-    expect(await screen.findByRole('menuitem', { name: /unread messages/i })).toHaveAttribute('href', '/admin/chat');
+    expect(await screen.findByRole('menuitem', { name: /unread messages/i })).toHaveAttribute('href', '/admin/chat?c=ch7');
     const updates = screen.getByRole('menuitem', { name: /unread order updates/i });
     expect(updates).toHaveAttribute('href', '/admin/chat?c=ch42&t=updates');
-    expect(updates).toHaveTextContent('4');
+    expect(within(updates).getByText('4')).toHaveClass('bg-gray-100');
   });
 
   it('only order updates waiting → no "Unread messages" row', async () => {
     updatesUnread = 2;
     render(<NotificationBell chatHref="/team/chat" />);
-    fireEvent.click(screen.getByRole('button', { name: /2 waiting/i }));
+    fireEvent.click(screen.getByRole('button', { name: /nothing waiting/i }));
     expect(await screen.findByRole('menuitem', { name: /unread order updates/i })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: /unread messages/i })).toBeNull();
   });

@@ -123,6 +123,20 @@ describe('Push notifications', () => {
     expect(sent.find((x) => x.endpoint === SUB(4).endpoint).payload.url).toBe(`/admin/chat?c=${team.id}`);
   });
 
+  it('a thread reply opens its thread; a team-to-team chat is titled with both teams', async () => {
+    const a = await person('Priya', 'staff', staff('procurement'));
+    const b = await person('Anu', 'staff', staff('accounts'));
+    await b.s.post('/push/subscriptions', SUB(2));
+    const pair = (await a.s.get('/chat/channels')).body.channels.find((ch) => ch.key === 'pair:accounts:procurement');
+    const root = await a.s.post(`/chat/channels/${pair.id}/messages`, { text: 'Invoice?', clientId: '3e777eb2-3395-4f4d-9723-532ee8e65fd6' });
+    await settle();
+    expect(sent[0].payload).toMatchObject({ title: 'Priya · Accounts & Procurement', url: `/team/chat?c=${pair.id}` });
+    sent.length = 0;
+    await a.s.post(`/chat/channels/${pair.id}/messages`, { text: 'Found it', threadRoot: root.body.message.id, clientId: '4e777eb2-3395-4f4d-9723-532ee8e65fd6' });
+    await settle();
+    expect(sent[0].payload.url).toBe(`/team/chat?c=${pair.id}&th=${root.body.message.id}`);
+  });
+
   it('a direct message pops up only for the other person — never the admin', async () => {
     const a = await person('Priya', 'staff', staff('procurement'));
     const b = await person('Pavan', 'staff', staff('procurement'));

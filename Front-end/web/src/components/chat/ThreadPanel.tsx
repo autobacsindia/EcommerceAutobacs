@@ -10,6 +10,7 @@ import type { ChatChannel, ChatMessage, ChatPerson, SendVars, ThreadData } from 
 import { useResendStore } from './resend';
 import Composer, { mentionableTeams } from './Composer';
 import MessageItem from './MessageItem';
+import { channelTitle } from './QuickSwitcher';
 
 /**
  * One thread: the message it hangs from, its replies, and a composer that
@@ -121,7 +122,9 @@ export default function ThreadPanel({
       onDelete={(msg) => remove.mutateAsync(msg.id)}
       onReact={(msg, emoji, on) => react.mutate({ message: msg, emoji, on })}
       onStar={(msg, on) => star.mutate({ id: msg.id, on })}
-      onMarkUnread={onMarkUnread}
+      // A reply never counts on the chat (it lives in its thread), so marking one
+      // unread would change nothing you can see: only the thread's first message offers it.
+      onMarkUnread={m.threadRoot ? undefined : onMarkUnread}
       onForward={onForward}
       onPin={onPin}
     />
@@ -136,7 +139,7 @@ export default function ThreadPanel({
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-gray-900">Thread</h3>
           <p className="truncate text-xs text-gray-500">
-            {channel.kind === 'dm' ? channel.name : `#${channel.name}`}
+            {channelTitle(channel)}
           </p>
         </div>
         <button
@@ -177,7 +180,7 @@ export default function ThreadPanel({
 
       <TypingLine channelId={channel.id} threadRoot={rootId} />
       <Composer
-        channelName={channel.kind === 'dm' ? channel.name : `#${channel.name}`}
+        channelName={channelTitle(channel)}
         people={people.filter((p) => p.id !== meId)}
         teams={mentionableTeams(channel)}
         onSend={doSend}
