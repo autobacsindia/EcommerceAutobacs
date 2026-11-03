@@ -5,12 +5,12 @@ import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  Archive, ArrowLeft, Bell, BellOff, Check, ChevronDown, ChevronUp, CornerLeftUp, Link2, ListChecks, Maximize2, MessageSquare, Network,
-  Pencil, RotateCcw, Send, UserPlus, Users, X,
+  Archive, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, CornerLeftUp, Eye, Flag, Link2,
+  ListChecks, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
-import { formatDateTimeIST } from '@/lib/datetime';
+import { formatDateTimeIST, formatIsoDateIST } from '@/lib/datetime';
 import { errorMessage } from '@/components/staff/sales/types';
 import { OrderPicker, useAssignees } from './TaskForm';
 import TagInput from './TagInput';
@@ -108,12 +108,48 @@ function InlineText({ value, onSave, multiline = false, placeholder, label, clas
   return multiline ? <textarea rows={4} {...props} /> : <input {...props} />;
 }
 
-function Field({ label, icon, children }: { label: string; icon?: ReactNode; children: ReactNode }) {
+/**
+ * One detail: an icon and a label, then its value. In a wide window two sit
+ * side by side (`wide` takes the whole row); in a narrow one, one per row.
+ */
+function Field({ label, icon: Icon, wide = false, children }: { label: string; icon: LucideIcon; wide?: boolean; children: ReactNode }) {
   return (
-    <>
-      <dt className="flex items-center gap-1.5 py-1.5 text-xs font-medium text-gray-500">{icon}{label}</dt>
-      <dd className="min-w-0 py-1 text-sm text-gray-900">{children}</dd>
-    </>
+    <div className={`flex min-h-9 min-w-0 items-center gap-3 ${wide ? '@xl:col-span-2' : ''}`}>
+      <dt className="flex w-[104px] shrink-0 items-center gap-2 text-[13px] text-gray-500">
+        <Icon aria-hidden className="h-4 w-4 shrink-0 text-gray-400" />{label}
+      </dt>
+      <dd className="min-w-0 flex-1 text-sm text-gray-900">{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * A day shown as "6 Nov" (or a soft "Empty") until clicked, which opens the
+ * browser's date picker. The real date input is there, invisible, on top — so
+ * it stays labelled and works with the keyboard.
+ */
+function DateField({ value, label, min, max, onChange, extra }: {
+  value: string | null; label: string; min?: string; max?: string; onChange: (v: string) => void; extra?: ReactNode;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <span className="relative inline-flex rounded-md px-1.5 py-1 hover:bg-gray-50 focus-within:ring-2 focus-within:ring-blue-100">
+        <span className={value ? 'text-gray-900' : 'text-gray-400'}>{value ? formatDueDay(value) : 'Empty'}</span>
+        <input
+          ref={ref}
+          type="date"
+          value={value || ''}
+          min={min}
+          max={max}
+          onChange={(e) => onChange(e.target.value)}
+          onClick={() => { try { ref.current?.showPicker?.(); } catch { /* a browser without it opens on its own */ } }}
+          aria-label={label}
+          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        />
+      </span>
+      {extra}
+    </span>
   );
 }
 
@@ -504,80 +540,79 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
         />
       </header>
 
-      <dl className="grid grid-cols-[84px_minmax(0,1fr)] items-center gap-x-3 border-y border-gray-100 py-2 sm:grid-cols-[110px_minmax(0,1fr)]">
-        <Field label="Status">
-          {task.can.status ? (
-            <select
-              value={task.status}
-              onChange={(e) => setStatus(e.target.value as TaskStatus)}
-              disabled={save.isPending}
-              aria-label="Status"
-              className={statusSelectClass(task.status)}
-            >
-              {TASK_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-          ) : <StatusPill status={task.status} />}
-        </Field>
-        <Field label="Assignees">
-          <AssigneesField task={task} choices={reassignTo} saving={save.isPending} onSave={(assigneeIds) => save.mutate({ assigneeIds })} />
-        </Field>
-        <Field label="Followers">
-          <FollowersField task={task} choices={reassignTo} onGone={onClose} />
-        </Field>
-        <Field label="Due date">
-          {task.can.edit ? (
-            <span className="flex flex-wrap items-center gap-2">
-              <input type="date" value={task.dueOn || ''} min={task.startOn || undefined} onChange={(e) => setDue(e.target.value)} aria-label="Due date" className={quietSelect} />
-              <DuePill t={task} />
-            </span>
-          ) : <DuePill t={task} empty={<span className="text-gray-400">No due date</span>} />}
-        </Field>
-        <Field label="Start date">
-          {task.can.edit ? (
-            <input
-              type="date"
-              value={task.startOn || ''}
-              max={task.dueOn || undefined}
-              onChange={(e) => save.mutate({ startOn: e.target.value || null })}
-              aria-label="Start date"
-              className={quietSelect}
-            />
-          ) : task.startOn ? <span>{formatDueDay(task.startOn)}</span> : <span className="text-gray-400">None</span>}
-        </Field>
-        <Field label="Priority">
-          {task.can.edit ? (
-            <span className="flex items-center gap-1">
-              <PriorityFlag priority={task.priority} />
-              <select value={task.priority} onChange={(e) => save.mutate({ priority: e.target.value as TaskPriority })} aria-label="Priority" className={quietSelect}>
-                {TASK_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+      <div className="@container">
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-0.5 border-y border-gray-100 py-3 @xl:grid-cols-2">
+          <Field label="Status" icon={CircleDot}>
+            {task.can.status ? (
+              <select
+                value={task.status}
+                onChange={(e) => setStatus(e.target.value as TaskStatus)}
+                disabled={save.isPending}
+                aria-label="Status"
+                className={statusSelectClass(task.status)}
+              >
+                {TASK_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
+            ) : <StatusPill status={task.status} />}
+          </Field>
+          <Field label="Assignees" icon={UserRound}>
+            <AssigneesField task={task} choices={reassignTo} saving={save.isPending} onSave={(assigneeIds) => save.mutate({ assigneeIds })} />
+          </Field>
+          <Field label="Due date" icon={CalendarDays}>
+            {task.can.edit ? (
+              <DateField
+                value={task.dueOn}
+                label="Due date"
+                min={task.startOn || undefined}
+                onChange={setDue}
+                extra={(task.overdue || task.dueToday) && <DuePill t={task} />}
+              />
+            ) : <DuePill t={task} empty={<span className="text-gray-400">Empty</span>} />}
+          </Field>
+          <Field label="Start date" icon={CalendarRange}>
+            {task.can.edit ? (
+              <DateField value={task.startOn} label="Start date" max={task.dueOn || undefined} onChange={(v) => save.mutate({ startOn: v || null })} />
+            ) : task.startOn ? <span>{formatDueDay(task.startOn)}</span> : <span className="text-gray-400">Empty</span>}
+          </Field>
+          <Field label="Priority" icon={Flag}>
+            {task.can.edit ? (
+              <span className="flex items-center gap-1">
+                <PriorityFlag priority={task.priority} />
+                <select value={task.priority} onChange={(e) => save.mutate({ priority: e.target.value as TaskPriority })} aria-label="Priority" className={quietSelect}>
+                  {TASK_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </span>
+            ) : <PriorityFlag priority={task.priority} withLabel />}
+          </Field>
+          <Field label="Followers" icon={Eye}>
+            <FollowersField task={task} choices={reassignTo} onGone={onClose} />
+          </Field>
+          <Field label="Tags" icon={Tag} wide>
+            {task.can.edit
+              ? <TagInput value={task.tags} onChange={(tags) => save.mutate({ tags })} disabled={save.isPending} quiet />
+              : task.tags.length ? <TagList tags={task.tags} max={10} /> : <span className="text-gray-400">Empty</span>}
+          </Field>
+          <Field label="Order" icon={Package}>
+            {task.can.edit && task.order ? (
+              <span className="flex items-center gap-1">
+                <Link href={orderHrefFor(base, task.order.id)} className="font-medium text-blue-700 hover:underline">{task.order.code}</Link>
+                <button onClick={() => save.mutate({ orderId: null })} aria-label="Unlink the order" title="Unlink" className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X className="h-3.5 w-3.5" /></button>
+              </span>
+            ) : task.can.edit ? (
+              <OrderPicker value={null} onChange={(o) => { if (o) save.mutate({ orderId: o.id }); }} quiet />
+            ) : task.order
+              ? <Link href={orderHrefFor(base, task.order.id)} className="font-medium text-blue-700 hover:underline">{task.order.code}</Link>
+              : <span className="text-gray-400">Empty</span>}
+          </Field>
+          <Field label="Given by" icon={UserPlus}>
+            <span className="flex min-w-0 items-center gap-2 text-gray-700">
+              <Avatar name={task.createdBy.name} id={task.createdBy.id} size="xs" />
+              <span className="truncate">{task.createdBy.name}</span>
+              <span className="shrink-0 text-xs text-gray-400" title={formatDateTimeIST(task.createdAt)}>· {formatDueDay(formatIsoDateIST(task.createdAt))}</span>
             </span>
-          ) : <PriorityFlag priority={task.priority} withLabel />}
-        </Field>
-        <Field label="Tags">
-          {task.can.edit
-            ? <TagInput value={task.tags} onChange={(tags) => save.mutate({ tags })} disabled={save.isPending} />
-            : task.tags.length ? <TagList tags={task.tags} max={10} /> : <span className="text-gray-400">None</span>}
-        </Field>
-        <Field label="Order">
-          {task.can.edit && task.order ? (
-            <span className="flex items-center gap-1">
-              <Link href={orderHrefFor(base, task.order.id)} className="font-medium text-blue-700 hover:underline">{task.order.code}</Link>
-              <button onClick={() => save.mutate({ orderId: null })} aria-label="Unlink the order" title="Unlink" className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X className="h-3.5 w-3.5" /></button>
-            </span>
-          ) : task.can.edit ? (
-            <OrderPicker value={null} onChange={(o) => { if (o) save.mutate({ orderId: o.id }); }} />
-          ) : task.order
-            ? <Link href={orderHrefFor(base, task.order.id)} className="font-medium text-blue-700 hover:underline">{task.order.code}</Link>
-            : <span className="text-gray-400">None</span>}
-        </Field>
-        <Field label="Given by">
-          <span className="flex items-center gap-2 text-gray-700">
-            <Avatar name={task.createdBy.name} id={task.createdBy.id} size="xs" />{task.createdBy.name}
-            <span className="text-xs text-gray-400">· {formatDateTimeIST(task.createdAt)}</span>
-          </span>
-        </Field>
-      </dl>
+          </Field>
+        </dl>
+      </div>
 
       {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
