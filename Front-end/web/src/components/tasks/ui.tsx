@@ -9,7 +9,7 @@
  * 100 background + 800 text steps, which the panel's dark theme re-maps; dots
  * and flags use mid steps that read on either theme.
  */
-import { CalendarClock, Flag, X } from 'lucide-react';
+import { CalendarClock, CircleCheck, CircleDashed, CircleDot, Clock3, Flag, X, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { formatDueDay, type Task, type TaskPriority, type TaskStatus } from './types';
 import './tasks.css';
@@ -74,12 +74,11 @@ export function PriorityFlag({ priority, withLabel = false }: { priority: TaskPr
 
 // ── People ───────────────────────────────────────────────────────────────────
 
-// Families the panel's dark theme re-maps (100 background, 800 text).
-const AVATAR_TONES = [
-  'bg-teal-100 text-teal-800', 'bg-amber-100 text-amber-800', 'bg-purple-100 text-purple-800',
-  'bg-rose-100 text-rose-800', 'bg-sky-100 text-sky-800', 'bg-indigo-100 text-indigo-800',
-  'bg-orange-100 text-orange-800', 'bg-emerald-100 text-emerald-800',
-];
+/*
+  Solid faces with white initials (`.tk-face` in tasks.css). Each colour carries
+  white at 4.5:1 or better, and reads on a dark page too, so no dark-mode remap.
+*/
+const AVATAR_COLOURS = ['#0f766e', '#b45309', '#7e22ce', '#be123c', '#0369a1', '#4338ca', '#c2410c', '#047857'];
 
 export const initialsOf = (name: string) => {
   const parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
@@ -87,18 +86,19 @@ export const initialsOf = (name: string) => {
 };
 
 /** The same person always gets the same colour. */
-export const toneFor = (key: string) => {
+export const colourFor = (key: string) => {
   let h = 0;
   for (const ch of String(key)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return AVATAR_TONES[h % AVATAR_TONES.length];
+  return AVATAR_COLOURS[h % AVATAR_COLOURS.length];
 };
 
 export function Avatar({ name, id, size = 'sm' }: { name: string; id?: string; size?: 'xs' | 'sm' | 'md' }) {
-  const dims = size === 'xs' ? 'h-5 w-5 text-[10px]' : size === 'md' ? 'h-8 w-8 text-xs' : 'h-6 w-6 text-[11px]';
+  const dims = size === 'xs' ? 'h-5 w-5 text-[9px]' : size === 'md' ? 'h-8 w-8 text-xs' : 'h-6 w-6 text-[10px]';
   return (
     <span
       title={name}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold ${dims} ${toneFor(id || name)}`}
+      style={{ background: colourFor(id || name) }}
+      className={`tk-face inline-flex shrink-0 items-center justify-center rounded-full font-bold tracking-tight ${dims}`}
     >
       {initialsOf(name)}
     </span>
@@ -179,19 +179,30 @@ export function TagChip({ tag, onClick, onRemove, active = false }: {
  * (`.tk-pill` in tasks.css; the Tailwind tone is the fallback outside Tasks),
  * anything else neutral.
  */
+/** The icon in a status pill: an empty ring to do, a dot in progress, a clock waiting, a tick done. */
+const STATUS_ICON: Record<TaskStatus, LucideIcon> = {
+  todo: CircleDashed, in_progress: CircleDot, waiting: Clock3, done: CircleCheck,
+};
+
 export function GroupPill({ status, children }: { status?: TaskStatus; children: ReactNode }) {
   if (status) {
+    const Icon = STATUS_ICON[status];
     return (
-      <span data-status={status} className={`tk-pill inline-flex items-center gap-1.5 rounded-md px-2 py-[3px] text-[11px] font-bold uppercase leading-4 tracking-wide ${STATUS_STYLE[status].pill}`}>
-        <span aria-hidden className={`h-2 w-2 shrink-0 rounded-full border-[1.5px] border-current ${status === 'done' ? 'bg-current' : ''}`} />{children}
+      <span data-status={status} className={`tk-pill inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-[11px] font-bold uppercase tracking-wide ${STATUS_STYLE[status].pill}`}>
+        <Icon aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />{children}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md bg-gray-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-gray-800">
+    <span className="inline-flex h-6 items-center gap-1.5 rounded-md bg-gray-100 px-2 text-[11px] font-bold uppercase tracking-wide text-gray-800">
       {children}
     </span>
   );
+}
+
+/** The number beside a group pill, in the status colour. */
+export function GroupCount({ status, children }: { status?: TaskStatus; children: ReactNode }) {
+  return <span data-status={status} className={`${status ? 'tk-count' : 'text-gray-500'} text-[13px] font-semibold tabular-nums`}>{children}</span>;
 }
 
 // ── Misc ─────────────────────────────────────────────────────────────────────

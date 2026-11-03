@@ -8,7 +8,7 @@ import apiClient from '@/lib/api-client';
 import { errorMessage } from '@/components/staff/sales/types';
 import { useRefreshTasks, useTaskPages } from './hooks';
 import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
-import { AvatarStack, GroupPill, PriorityFlag, SkeletonRows } from './ui';
+import { AvatarStack, GroupCount, GroupPill, PriorityFlag, SkeletonRows } from './ui';
 import { TASK_STATUSES, confirmComplete, formatDueDay, isConflict, peopleOf, type Task, type TaskFilters, type TaskStatus } from './types';
 
 /** How many finished cards the Done column shows; the rest are in the list view. */
@@ -34,18 +34,19 @@ function BoardCard({ t, onOpen, onMove, moving, onTag, activeTag }: {
       role="button"
       tabIndex={0}
       aria-label={`Open ${t.code}: ${t.title}`}
-      className={`tk-card group rounded-lg bg-white p-2.5 focus:outline-none ${
+      className={`tk-card group rounded-[10px] bg-white px-3 py-2.5 focus:outline-none ${
         t.can.status ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
       } ${moving ? 'opacity-50' : ''}`}
     >
       <div className="flex items-start gap-2">
         <span className="mt-px"><CompleteButton t={t} busy={moving} onToggle={() => onMove(t, done ? 'todo' : 'done')} /></span>
-        <p className={`min-w-0 flex-1 break-words text-[13px] font-medium leading-snug ${done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</p>
+        <p className={`min-w-0 flex-1 break-words text-sm font-medium leading-snug ${done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</p>
+        <span className="mt-0.5 shrink-0 whitespace-nowrap font-mono text-[10px] text-gray-400">{t.code}</span>
       </div>
-      {t.tags?.length > 0 && <div className="mt-2"><TagList tags={t.tags} onTag={onTag} activeTag={activeTag} max={3} /></div>}
-      <div className="mt-2 flex flex-wrap items-center gap-1.5 empty:hidden"><TaskMeta t={t} withComments={false} /></div>
-      <div className="mt-2.5 flex items-center gap-2">
-        <AvatarStack people={peopleOf(t)} />
+      {t.tags?.length > 0 && <div className="mt-2 pl-[26px]"><TagList tags={t.tags} onTag={onTag} activeTag={activeTag} max={3} /></div>}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-[26px] empty:hidden"><TaskMeta t={t} withComments={false} /></div>
+      <div className="mt-3 flex items-center gap-2.5 border-t border-gray-100 pt-2">
+        <AvatarStack people={peopleOf(t)} size="sm" />
         <span
           title={t.dueOn ? `Due ${formatDueDay(t.dueOn)}` : 'No due date'}
           className={`inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-medium ${
@@ -67,7 +68,6 @@ function BoardCard({ t, onOpen, onMove, moving, onTag, activeTag }: {
             </span>
           )}
           {late && <span className="rounded bg-red-100 px-1.5 py-px text-[10px] font-bold uppercase tracking-wide text-red-800">Late</span>}
-          <span className="whitespace-nowrap font-mono text-[10px] text-gray-400">{t.code}</span>
         </span>
       </div>
       {/* Phones and tablets cannot drag: a small picker does the same move. */}
@@ -134,7 +134,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag }: {
   const columns = TASK_STATUSES.filter((c) => !(filters.due && c.value === 'done'));
   return (
     <div className="space-y-3">
-      <div className="relative -mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-2 md:snap-none">
+      <div className="relative -mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 md:snap-none">
         {columns.map((col) => {
           const cards = tasks.filter((t) => statusOf(t) === col.value);
           return (
@@ -151,13 +151,13 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag }: {
               }}
               data-status={col.value}
               data-over={over === col.value}
-              className="tk-col flex w-[272px] shrink-0 snap-start flex-col rounded-xl p-2 transition md:w-auto md:min-w-[200px] md:flex-1"
+              className="tk-col flex w-[280px] shrink-0 snap-start flex-col rounded-xl p-2.5 transition md:w-auto md:min-w-[220px] md:flex-1"
             >
-              <h3 className="mb-2 flex items-center gap-2 px-0.5">
+              <h3 className="mb-2.5 flex items-center gap-2 px-0.5">
                 <GroupPill status={col.value}>{col.label}</GroupPill>
-                <span className="text-xs font-semibold text-gray-500">{cards.length}</span>
+                <GroupCount status={col.value}>{cards.length}</GroupCount>
               </h3>
-              <ul className="min-h-24 space-y-1.5">
+              <ul className="min-h-24 space-y-2">
                 {cards.map((t) => (
                   <BoardCard key={t.id} t={t} onOpen={onOpen} onMove={onMove} moving={move.isPending && move.variables?.t.id === t.id} onTag={onTag} activeTag={filters.tag} />
                 ))}
@@ -166,7 +166,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag }: {
                 <p className="mt-2 px-1 text-xs text-gray-500">Showing the latest {DONE_SHOWN}. The list view has the rest.</p>
               )}
               {col.value !== 'done' && quickAddFor !== null && (
-                <div className="mt-1.5"><QuickAdd status={col.value} assigneeId={quickAddFor} variant="board" /></div>
+                <div className="mt-2"><QuickAdd status={col.value} assigneeId={quickAddFor} variant="board" /></div>
               )}
             </section>
           );

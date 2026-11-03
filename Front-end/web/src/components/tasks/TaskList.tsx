@@ -8,7 +8,7 @@ import AssigneePicker from './AssigneePicker';
 import { useAssignees } from './TaskForm';
 import { groupTasks, type TaskGroup } from './grouping';
 import BulkBar from './BulkBar';
-import { Avatar, AvatarStack, Chip, DuePill, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
+import { Avatar, AvatarStack, Chip, DuePill, GroupCount, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
 import {
   MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, newClientId, peopleOf,
   type Task, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskStatus,
@@ -89,7 +89,9 @@ export function TagList({ tags, onTag, activeTag, max = 2 }: { tags: string[]; o
   One grid for the column headings and every row, so the columns line up. Below
   `lg` a row is the title with its facts on a second line instead.
 */
-const COLUMNS = 'lg:grid lg:grid-cols-[24px_minmax(0,1fr)_120px_100px_84px] lg:items-center lg:gap-3 xl:grid-cols-[24px_minmax(0,1fr)_120px_100px_84px_minmax(0,150px)_88px]';
+const COLUMNS = 'lg:grid lg:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px] lg:items-center lg:gap-3 xl:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px_minmax(0,170px)]';
+/** The same, with an Order column — only for a group where some task has an order. */
+const COLUMNS_ORDER = 'lg:grid lg:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px] lg:items-center lg:gap-3 xl:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px_minmax(0,150px)_96px]';
 /** Tags and order get their own columns only on a wide screen; in between they sit beside the title. */
 const WIDE = 'hidden xl:block';
 
@@ -107,9 +109,9 @@ function SelectBox({ checked, onChange, label, mixed = false }: { checked: boole
   );
 }
 
-function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
+function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder }: {
   t: Task; onOpen: (id: string) => void; selected: boolean; onSelect: (on: boolean) => void;
-  onTag?: (tag: string) => void; activeTag?: string;
+  onTag?: (tag: string) => void; activeTag?: string; withOrder: boolean;
 }) {
   const move = useSetStatus();
   const open = () => onOpen(t.id);
@@ -126,7 +128,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
       onClick={open}
       onKeyDown={onKey}
       aria-label={`Open ${t.code}: ${t.title}`}
-      className={`group flex cursor-pointer items-start gap-3 border-t border-gray-100 px-3 py-2.5 transition-colors first:border-t-0 lg:min-h-10 lg:py-1.5 ${COLUMNS} ${
+      className={`group flex cursor-pointer items-start gap-3 border-t border-gray-100 px-3 py-2.5 transition-colors first:border-t-0 lg:min-h-11 lg:py-2 ${withOrder ? COLUMNS_ORDER : COLUMNS} ${
         selected ? 'bg-blue-50' : 'hover:bg-gray-50'
       } focus-visible:bg-blue-50 focus:outline-none`}
     >
@@ -162,9 +164,11 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag }: {
       <span className="hidden lg:block"><DuePill t={t} empty={<span className="text-xs text-gray-300">—</span>} /></span>
       <span className="hidden lg:block"><PriorityFlag priority={t.priority} withLabel /></span>
       <span className={`${WIDE} min-w-0`}><TagList tags={t.tags} onTag={onTag} activeTag={activeTag} /></span>
-      <span className={`${WIDE} truncate`}>
-        {t.order && <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700"><Package aria-hidden className="h-3.5 w-3.5" />{t.order.code}</span>}
-      </span>
+      {withOrder && (
+        <span className={`${WIDE} truncate`}>
+          {t.order && <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700"><Package aria-hidden className="h-3.5 w-3.5" />{t.order.code}</span>}
+        </span>
+      )}
     </li>
   );
 }
@@ -281,8 +285,8 @@ export function QuickAdd({ status, assigneeId, label = 'Add task', variant = 'li
         type="button"
         onClick={() => setOpen(true)}
         className={board
-          ? 'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] font-medium text-gray-500 hover:bg-white hover:text-gray-800'
-          : 'flex w-full items-center gap-2 border-t border-gray-100 px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-800 lg:pl-[52px]'}
+          ? 'tk-add flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] font-semibold'
+          : 'tk-add flex w-full items-center gap-2 border-t border-gray-100 px-3 py-2 text-left text-[13px] font-medium lg:pl-[52px]'}
       >
         <Plus aria-hidden className="h-4 w-4" /> {label}
       </button>
@@ -354,14 +358,16 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, footer, selected, 
 }) {
   const Chevron = collapsed ? ChevronRight : ChevronDown;
   const picked = g.tasks.filter((t) => selected.has(t.id)).length;
+  // No task here has an order: no empty Order column.
+  const withOrder = g.tasks.some((t) => !!t.order);
   return (
     <section aria-label={g.label}>
-      <div className="mb-1 flex items-center gap-2 px-1">
+      <div className="mb-2 flex items-center gap-2 px-1">
         <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={`${collapsed ? 'Show' : 'Hide'} ${g.label}`} className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
           <Chevron aria-hidden className="h-4 w-4" />
         </button>
         <GroupHeading g={g} />
-        <span className="text-xs font-semibold text-gray-500">{countLabel ?? g.tasks.length}</span>
+        <GroupCount status={g.kind === 'status' ? g.value as TaskStatus : undefined}>{countLabel ?? g.tasks.length}</GroupCount>
         {!collapsed && g.tasks.length > 0 && (
           <span className="ml-auto">
             <SelectBox checked={picked === g.tasks.length} mixed={picked > 0} onChange={(on) => onSelect(g.tasks, on)} label={`Select every task in ${g.label}`} />
@@ -369,16 +375,16 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, footer, selected, 
         )}
       </div>
       {!collapsed && (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <div className="tk-sheet overflow-hidden rounded-xl bg-white">
           {g.tasks.length > 0 && (
-            <div aria-hidden className={`hidden border-b border-gray-100 px-3 py-1.5 text-[11px] font-semibold text-gray-500 ${COLUMNS}`}>
-              <span /><span className="pl-7">Name</span><span>Assignee</span><span>Due</span><span>Priority</span>
-              <span className={WIDE}>Tags</span><span className={WIDE}>Order</span>
+            <div aria-hidden className={`hidden border-b border-gray-100 bg-gray-50/60 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500 ${withOrder ? COLUMNS_ORDER : COLUMNS}`}>
+              <span /><span className="pl-7">Name</span><span>Assignee</span><span>Due date</span><span>Priority</span>
+              <span className={WIDE}>Tags</span>{withOrder && <span className={WIDE}>Order</span>}
             </div>
           )}
           <ul>
             {g.tasks.map((t) => (
-              <TaskRow key={t.id} t={t} onOpen={onOpen} selected={selected.has(t.id)} onSelect={(on) => onSelect([t], on)} onTag={onTag} activeTag={activeTag} />
+              <TaskRow key={t.id} t={t} onOpen={onOpen} selected={selected.has(t.id)} onSelect={(on) => onSelect([t], on)} onTag={onTag} activeTag={activeTag} withOrder={withOrder} />
             ))}
           </ul>
           {footer}

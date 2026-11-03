@@ -34,10 +34,20 @@
 
   /* Solid status pills: white text on each is ≥5:1. */
   --tk-st-todo: #656f7d;           /* 5.1:1 */
-  --tk-st-in_progress: #0369a1;    /* 5.9:1 */
+  --tk-st-in_progress: #2563eb;    /* 5.2:1 */
   --tk-st-waiting: #b45309;        /* 5.0:1 */
   --tk-st-done: #047857;           /* 5.5:1 */
   --tk-st-ink: #fff;
+  /* "To do" is the quiet one: dark ink on a light chip. */
+  --tk-st-todo-bg: #ffffff;
+  --tk-st-todo-ink: #4b5563;       /* 7.6:1 */
+  --tk-st-todo-line: #d5d9e0;
+
+  /* Board columns, washed in their status colour. */
+  --tk-col-in_progress: #edf3fe;
+  --tk-col-waiting: #fcf6ee;
+  --tk-col-done: #e9f6f0;
+  --tk-add-hover: rgba(123, 104, 238, 0.08);
 
   --pn-focus: #6a57e3;
 
@@ -78,6 +88,13 @@
   --tk-menu-active-bg: #262046;
   --tk-menu-active-ink: #cfc8fb;   /* 10.4:1 */
   --pn-focus: #a093f5;
+  --tk-st-todo-bg: #22242c;
+  --tk-st-todo-ink: #c9cdd6;
+  --tk-st-todo-line: #363945;
+  --tk-col-in_progress: #15202b;
+  --tk-col-waiting: #241d14;
+  --tk-col-done: #13221c;
+  --tk-add-hover: rgba(160, 147, 245, 0.12);
 
   /* The inverted ramp (globals.css / panel.css), in the cool hue. */
   --color-gray-50:  oklch(19% 0.006 265);
@@ -114,26 +131,30 @@
 .tk-theme .tk-pill {
   background: var(--tk-st-todo);
   color: var(--tk-st-ink);
+  box-shadow: 0 1px 0 rgba(20, 22, 40, 0.08);
 }
 .tk-theme .tk-pill[data-status='in_progress'] { background: var(--tk-st-in_progress); }
 .tk-theme .tk-pill[data-status='waiting'] { background: var(--tk-st-waiting); }
 .tk-theme .tk-pill[data-status='done'] { background: var(--tk-st-done); }
+/* "To do" is a quiet pill: a light chip with dark ink, the way an empty status reads. */
+.tk-theme .tk-pill[data-status='todo'] {
+  background: var(--tk-st-todo-bg);
+  color: var(--tk-st-todo-ink);
+  box-shadow: inset 0 0 0 1px var(--tk-st-todo-line);
+}
+/* The count beside a pill takes the status colour. */
+.tk-theme .tk-count { color: var(--tk-st-todo-ink); }
+.tk-theme .tk-count[data-status='in_progress'] { color: var(--tk-st-in_progress); }
+.tk-theme .tk-count[data-status='waiting'] { color: var(--tk-st-waiting); }
+.tk-theme .tk-count[data-status='done'] { color: var(--tk-st-done); }
 
 /* ── Board ────────────────────────────────────────────────────────────── */
+/* Each column is washed in its status colour, so the board reads at a glance. */
 .tk-theme .tk-col { background: var(--tk-col); }
+.tk-theme .tk-col[data-status='in_progress'] { background: var(--tk-col-in_progress); }
+.tk-theme .tk-col[data-status='waiting'] { background: var(--tk-col-waiting); }
+.tk-theme .tk-col[data-status='done'] { background: var(--tk-col-done); }
 .tk-theme .tk-col[data-over='true'] { background: var(--tk-col-over); box-shadow: inset 0 0 0 2px var(--tk-accent); }
-/* The column's status colour, as a thin line across its top. */
-.tk-theme .tk-col::before {
-  content: '';
-  display: block;
-  height: 3px;
-  margin: -0.5rem -0.5rem 0.5rem;
-  border-radius: 0.75rem 0.75rem 0 0;
-  background: var(--tk-st-todo);
-}
-.tk-theme .tk-col[data-status='in_progress']::before { background: var(--tk-st-in_progress); }
-.tk-theme .tk-col[data-status='waiting']::before { background: var(--tk-st-waiting); }
-.tk-theme .tk-col[data-status='done']::before { background: var(--tk-st-done); }
 
 .tk-theme .tk-card {
   border: 1px solid var(--tk-card-line);
@@ -145,6 +166,21 @@
 @media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .tk-theme .tk-card:hover { transform: translateY(-1px); }
 }
+
+/* "+ Add task": the accent, so the next step is easy to find. */
+.tk-theme .tk-add { color: var(--color-blue-600); }
+.tk-theme .tk-add:hover { color: var(--color-blue-700); background: var(--tk-add-hover); }
+
+/* ── List ─────────────────────────────────────────────────────────────── */
+.tk-theme .tk-sheet {
+  border: 1px solid var(--tk-card-line);
+  box-shadow: 0 1px 2px rgba(20, 22, 40, 0.04);
+}
+
+/* ── People ───────────────────────────────────────────────────────────── */
+/* Solid faces with white initials: the colour is set per person (ui.tsx).
+   `color` is a literal white, not `text-white`, which turns dark in dark mode. */
+.tk-theme .tk-face { color: #fff; }
 
 /* Avatars in a stack overlap, each ringed in the card colour so they read apart. */
 .tk-theme .tk-stack > * + * { margin-left: -6px; }

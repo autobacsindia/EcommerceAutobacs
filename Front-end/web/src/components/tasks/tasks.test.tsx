@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TasksWorkspace from './TasksWorkspace';
 import TaskDetail, { timeAgo } from './TaskDetail';
-import { AvatarStack, initialsOf, toneFor } from './ui';
+import { AvatarStack, colourFor, initialsOf } from './ui';
 import { formatDueDay, isPastDay, todayIST, type Task } from './types';
 import { groupTasks } from './grouping';
 import { placePopover } from './AssigneePicker';
@@ -642,7 +642,7 @@ describe('helpers', () => {
   it('initials and colours are stable per person', () => {
     expect(initialsOf('Herald Winston Pottipati')).toBe('HP');
     expect(initialsOf('Akash')).toBe('A');
-    expect(toneFor('u1')).toBe(toneFor('u1'));
+    expect(colourFor('u1')).toBe(colourFor('u1'));
   });
 
   it('times read as "5m ago", then the date', () => {
