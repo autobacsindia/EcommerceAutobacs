@@ -446,7 +446,7 @@ export default function Conversation({
     // header icons) and every message is clipped on a phone, Send off-screen.
     <div className="relative flex h-full min-h-0 min-w-0 flex-1">
       <section className="gc-card flex h-full min-h-0 min-w-0 flex-1 flex-col lg:rounded-2xl" aria-label={`Conversation ${title}`}>
-        <header className="border-b border-gray-200/70 px-4 pt-3 sm:px-5">
+        <header className="border-b border-gray-200/70 px-3 pt-2.5 sm:px-5 sm:pt-3">
           <div className="flex items-center gap-2 sm:gap-3">
             <button type="button" onClick={onBack} className="-ml-1.5 shrink-0 rounded-lg p-2 text-gray-600 hover:bg-gray-100 lg:hidden" aria-label="Back to channels">
               <ArrowLeft className="h-5 w-5" />
@@ -491,7 +491,7 @@ export default function Conversation({
               )}
             </div>
           </div>
-          <div className="mt-2 flex gap-5 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Conversation sections">
+          <div className="-mx-1 mt-2 flex gap-1 overflow-x-auto pb-2 [scrollbar-width:none]" role="tablist" aria-label="Conversation sections">
             {([
               'messages',
               ...(hasUpdatesTab ? (['updates'] as const) : []),
@@ -504,15 +504,16 @@ export default function Conversation({
                 role="tab"
                 aria-selected={tab === key}
                 onClick={() => setTab(key)}
-                className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-2.5 pt-1 text-sm capitalize transition-colors ${
-                  tab === key ? 'border-blue-600 font-semibold text-blue-700' : 'border-transparent font-medium text-gray-500 hover:text-gray-800'
+                className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] transition-colors ${
+                  tab === key ? 'bg-[var(--gc-selected)] font-semibold text-[var(--gc-selected-ink)]' : 'font-medium text-gray-600 hover:bg-[var(--gc-hover)] hover:text-gray-900'
                 }`}
               >
                 {key === 'messages' ? 'Chat' : key === 'updates' ? 'Order updates' : key === 'files' ? 'Files' : 'Members'}
                 {(() => {
                   const n = key === 'messages' ? unreadChatOf(channel) : key === 'updates' ? unreadUpdatesOf(channel) : 0;
                   return n > 0 && (
-                    <span className={`ml-1.5 rounded-full px-1.5 text-[11px] font-bold leading-[18px] ${key === 'updates' ? 'bg-amber-100 text-amber-800' : 'bg-blue-600 text-white'}`} aria-label={`${n} unread`}>
+                    // A quiet count: blue for people's messages, grey for automatic updates.
+                    <span className={`ml-1.5 text-xs font-bold ${key === 'updates' ? 'text-gray-500' : 'text-blue-700'}`} aria-label={`${n} unread`}>
                       {n > 99 ? '99+' : n}
                     </span>
                   );
@@ -530,7 +531,7 @@ export default function Conversation({
         ) : (
           <>
             <div className="relative min-h-0 flex-1">
-              <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-3 py-3 sm:px-4" aria-live="polite">
+              <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-2 py-3 sm:px-4" aria-live="polite">
                 {tab === 'messages' && isFetchingNextPage && <p className="py-2 text-center text-xs text-gray-500">Loading older messages…</p>}
                 {tab === 'messages' && !hasNextPage && !isLoading && visible.length > 0 && (
                   <p className="py-3 text-center text-xs text-gray-400">This is the beginning of {title}</p>
@@ -545,15 +546,15 @@ export default function Conversation({
                   </div>
                 )}
                 {!isLoading && !isError && visible.length === 0 && tab === 'updates' && (
-                  <div className="py-16 text-center">
-                    <p className="text-base font-semibold text-gray-800">No order updates here yet</p>
+                  <div className="py-10 text-center">
+                    <p className="text-[15px] font-medium text-gray-800">No order updates here yet</p>
                     <p className="text-sm text-gray-500">Automatic updates about orders, payments and refunds for this space appear here.</p>
                   </div>
                 )}
                 {!isLoading && !isError && visible.length === 0 && tab === 'messages' && (
-                  <div className="py-16 text-center">
+                  <div className="py-10 text-center">
                     <div className="mx-auto mb-3 w-fit"><ChannelIcon channel={channel} size="md" /></div>
-                    <p className="text-base font-semibold text-gray-800">No messages yet</p>
+                    <p className="text-[15px] font-medium text-gray-800">No messages yet</p>
                     <p className="text-sm text-gray-500">
                       {channel.audience === 'teams'
                         ? `Only ${channel.description || 'these two teams'} (and admin) can see this conversation.`

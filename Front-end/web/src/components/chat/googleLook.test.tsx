@@ -1,9 +1,11 @@
 /**
  * The Google Chat-style look: your own messages are light-blue cards on the
- * right (no avatar), a follow-on message shows its time when you point at it,
- * files are cards with a coloured type tag, and on wide screens a "Home" column
- * lists every conversation newest first with an Unread switch. The conversation
- * can be expanded over the lists.
+ * right (no avatar), others' words sit in a light grey bubble, a follow-on
+ * message shows its time when you point at it, and files are cards with a
+ * coloured type tag. One list on the left (Direct messages, Spaces, Between
+ * teams) with Unread / Mentions / Threads / Starred buttons; automatic order
+ * updates are counted quietly so people's messages stand out. The conversation
+ * can be expanded over the list.
  */
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import MessageItem, { fileBadge } from './MessageItem';
@@ -35,6 +37,8 @@ const channels = [
   { id: 'c1', kind: 'space', key: 'company', name: 'company', audience: 'all', unread: 0, lastMessageAt: '2026-11-02T04:00:00Z', partner: null },
   { id: 'c2', kind: 'space', key: 'team:sales', name: 'gtm', audience: 'team', unread: 2, lastMessageAt: '2026-11-02T06:00:00Z', partner: null, description: 'GTM team' },
   { id: 'c3', kind: 'dm', key: 'dm:a:b', name: 'Priya', audience: 'members', unread: 0, lastMessageAt: '2026-11-02T05:00:00Z', partner: { id: 'u2', name: 'Priya', teamLabel: 'Procurement' } },
+  // Only automatic order updates are new here, nothing from people.
+  { id: 'c4', kind: 'space', key: 'team:procurement', name: 'procurement', audience: 'team', unread: 3, unreadChat: 0, unreadUpdates: 3, lastMessageAt: '2026-11-02T03:00:00Z', partner: null },
 ] as unknown as ChatChannel[];
 jest.mock('@/hooks/queries/useTeamChat', () => ({
   useCanChat: () => true,
@@ -42,7 +46,7 @@ jest.mock('@/hooks/queries/useTeamChat', () => ({
   useChatMe: () => ({ data: { userId: 'me', canCreateSpace: false } }),
   useChatPeople: () => ({ data: [] }),
   usePresence: () => new Set<string>(),
-  countedUnread: (c: ChatChannel) => ({ chat: c.unread, updates: 0 }),
+  countedUnread: (c: ChatChannel) => ({ chat: c.unreadChat ?? c.unread, updates: c.unreadUpdates ?? 0 }),
   notifyOf: () => 'all',
   liveStatus: () => null,
   useOpenDm: () => ({ mutate: jest.fn(), isPending: false }),
@@ -133,87 +137,86 @@ describe('file cards', () => {
 });
 
 describe('the chat screen', () => {
-  it('wide screens (1280+) get a Home column: every conversation, newest first', () => {
-    setWidth(1440);
-    query = 'c=c1';
-    render(<TeamChat />);
-    const home = screen.getByRole('region', { name: /Home/ });
-    const names = within(home).getAllByRole('button').map((b) => b.textContent);
-    expect(names[0]).toMatch(/gtm/);
-    expect(names[1]).toMatch(/Priya/);
-    expect(names[2]).toMatch(/company/);
-    // The open conversation is highlighted.
-    expect(within(home).getByRole('button', { name: /company/ })).toHaveAttribute('aria-current', 'true');
-  });
+  const list = () => screen.getByRole('complementary', { name: 'Chat channels' });
 
-  it('below 1280 there is no Home column (the left list has every conversation)', () => {
-    setWidth(1100);
+  it('has one list — no second "Home" column — with Direct messages first, then Spaces, then Between teams', () => {
+    setWidth(1440);
     query = 'c=c1';
     render(<TeamChat />);
     expect(screen.queryByRole('region', { name: /Home/ })).toBeNull();
+    const sections = within(list()).getAllByRole('button', { expanded: true }).map((b) => b.textContent);
+    expect(sections).toEqual(['Direct messages', 'Spaces', 'Between teams']);
+    // The open conversation is highlighted; a space's name drops the "#" (its round icon shows it).
+    expect(within(list()).getByRole('button', { name: /^company/ })).toHaveAttribute('aria-current', 'true');
   });
 
-  it('the Unread switch keeps only conversations with something unread (and the open one)', () => {
+  it('people’s unread messages are bold with a blue count; automatic updates only say "3 updates", quietly', () => {
+    setWidth(1440);
+    render(<TeamChat />);
+    const gtm = within(list()).getByRole('button', { name: /^gtm/ });
+    expect(gtm).toHaveClass('font-bold');
+    expect(within(gtm).getByLabelText('2 unread')).toHaveClass('text-blue-700');
+    const procurement = within(list()).getByRole('button', { name: /^procurement/ });
+    expect(procurement).not.toHaveClass('font-bold');
+    expect(within(procurement).getByLabelText('3 new order updates')).toHaveTextContent('3 updates');
+    expect(within(procurement).getByLabelText('3 new order updates')).toHaveClass('text-gray-500');
+  });
+
+  it('the Unread button keeps only conversations with something unread (and the open one)', () => {
     setWidth(1440);
     query = 'c=c1';
     render(<TeamChat />);
-    const home = screen.getByRole('region', { name: /Home/ });
-    const unread = within(home).getByRole('switch', { name: /Unread/ });
+    const unread = screen.getByRole('switch', { name: /Unread/ });
     expect(unread).toHaveAttribute('aria-checked', 'false');
     fireEvent.click(unread);
     expect(unread).toHaveAttribute('aria-checked', 'true');
-    expect(within(home).queryByRole('button', { name: /Priya/ })).toBeNull();
-    expect(within(home).getByRole('button', { name: /gtm/ })).toBeInTheDocument();
-    expect(within(home).getByRole('button', { name: /company/ })).toBeInTheDocument();
+    expect(within(list()).queryByRole('button', { name: /Priya/ })).toBeNull();
+    expect(within(list()).getByRole('button', { name: /^gtm/ })).toBeInTheDocument();
+    expect(within(list()).getByRole('button', { name: /^company/ })).toBeInTheDocument();
   });
 
-  it('Expand hides the lists on a computer; pressing it again brings them back', () => {
+  it('Expand hides the list on a computer; pressing it again brings it back', () => {
     setWidth(1440);
     query = 'c=c1';
     render(<TeamChat />);
-    const list = screen.getByRole('complementary', { name: 'Chat channels' });
-    expect(list.className).toContain('lg:flex');
+    expect(list().className).toContain('lg:flex');
     fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
-    expect(list.className).not.toContain('lg:flex');
-    expect(screen.getByRole('region', { name: /Home/ }).className).not.toContain('xl:flex');
+    expect(list().className).not.toContain('lg:flex');
     fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
-    expect(list.className).toContain('lg:flex');
+    expect(list().className).toContain('lg:flex');
   });
 
-  it('has a "New chat" button and a "Search chat" field, as in Google Chat', () => {
+  it('has a "New chat" button and a "Search messages" field, and no unexplained "Jump" button', () => {
     render(<TeamChat />);
     expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Search all messages' })).toHaveTextContent('Search chat');
+    expect(screen.getByRole('button', { name: 'Search all messages' })).toHaveTextContent('Search messages');
+    expect(screen.queryByRole('button', { name: /Jump/ })).toBeNull();
+  });
+
+  it('pointing at a row shows its newest message', () => {
+    setWidth(1440);
+    (channels[1] as ChatChannel).lastPreview = { by: 'Ravi', mine: false, text: 'Order *4521* shipped', deleted: false };
+    try {
+      render(<TeamChat />);
+      expect(within(list()).getByRole('button', { name: /^gtm/ })).toHaveAttribute('title', 'Ravi: Order 4521 shipped');
+    } finally {
+      delete (channels[1] as ChatChannel).lastPreview;
+    }
   });
 });
 
 describe('left list shortcuts', () => {
-  it('a Mentions entry opens the Mentions list', () => {
+  it('a Mentions button opens the Mentions list', () => {
     setWidth(1440);
     render(<TeamChat />);
     fireEvent.click(screen.getByRole('button', { name: 'Mentions' }));
     expect(screen.getByRole('dialog', { name: 'Mentions' })).toBeInTheDocument();
   });
 
-  it('a Threads entry opens the Threads list', () => {
+  it('a Threads button opens the Threads list', () => {
     setWidth(1440);
     render(<TeamChat />);
     fireEvent.click(screen.getByRole('button', { name: 'Threads' }));
     expect(screen.getByRole('dialog', { name: 'Threads' })).toBeInTheDocument();
-  });
-});
-
-describe('Home list preview', () => {
-  it('shows the newest message instead of the description', () => {
-    setWidth(1440);
-    (channels[1] as ChatChannel).lastPreview = { by: 'Ravi', mine: false, text: 'Order *4521* shipped', deleted: false };
-    try {
-      render(<TeamChat />);
-      const home = screen.getByRole('region', { name: /Home/ });
-      expect(within(home).getByText('Ravi: Order 4521 shipped')).toBeInTheDocument();
-      expect(within(home).queryByText('GTM team')).not.toBeInTheDocument();
-    } finally {
-      delete (channels[1] as ChatChannel).lastPreview;
-    }
   });
 });

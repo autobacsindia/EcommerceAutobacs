@@ -579,11 +579,11 @@ export default function MessageItem({
         <div className={card ? 'flex min-w-0 flex-1 flex-col items-end' : 'min-w-0 flex-1'}>
           {!grouped && (
             <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${card ? 'justify-end' : ''}`}>
-              <span className={card ? 'sr-only' : 'text-sm font-bold text-gray-900'}>
+              <span className={card ? 'sr-only' : 'text-[13px] font-semibold text-gray-900'}>
                 {m.kind === 'system' ? 'Roavion updates' : mine ? 'You' : m.sender?.name ?? 'Former member'}
               </span>
               {m.kind === 'system' ? (
-                <span className="rounded-full bg-blue-100 px-2 py-px text-[11px] font-medium text-blue-800">Automatic</span>
+                <span className="text-xs text-gray-500">Automatic</span>
               ) : !card && (
                 <TeamBadge person={m.sender} />
               )}
@@ -648,25 +648,37 @@ export default function MessageItem({
               </div>
             </div>
           ) : (
-            <div
-              title={sentAt}
-              className={`${m.pending ? 'opacity-60' : ''} ${card ? 'gc-mine mt-0.5 min-w-0 max-w-[min(38rem,88%)] rounded-[20px] rounded-br-md px-4 py-2.5' : ''}`}
-            >
-              {m.quote && <QuoteBlock quote={m.quote} onJump={onJumpTo} />}
-              {m.forwarded && (
-                <p className="mb-0.5 inline-flex items-center gap-1 text-xs text-gray-500">
-                  <CornerUpRight className="h-3.5 w-3.5" aria-hidden="true" />
-                  Forwarded · originally from <span className="font-medium text-gray-700">{m.forwarded.by || 'someone'}</span>
-                  <span className="text-gray-400">· {dayLabel(m.forwarded.at)}</span>
-                </p>
+            <>
+              {/* The words sit in a bubble (yours light blue, others' light grey);
+                  photos, files and order cards sit under it, as in Google Chat. */}
+              {(m.quote || m.forwarded || m.text || m.preview) && (
+                <div
+                  title={sentAt}
+                  className={`${m.pending ? 'opacity-60' : ''} mt-0.5 min-w-0 max-w-[min(38rem,100%)] px-4 py-2 ${
+                    card ? 'gc-mine max-w-[min(38rem,88%)] rounded-[20px] rounded-br-md' : 'gc-bubble w-fit rounded-[20px] rounded-tl-md'
+                  }`}
+                >
+                  {m.quote && <QuoteBlock quote={m.quote} onJump={onJumpTo} />}
+                  {m.forwarded && (
+                    <p className="mb-0.5 inline-flex items-center gap-1 text-xs text-gray-500">
+                      <CornerUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                      Forwarded · originally from <span className="font-medium text-gray-700">{m.forwarded.by || 'someone'}</span>
+                      <span className="text-gray-400">· {dayLabel(m.forwarded.at)}</span>
+                    </p>
+                  )}
+                  {m.text && <MessageText text={m.text} mentionNames={mentionNames} meName={meName} />}
+                  {meetLinkIn(m.text) ? <MeetCard url={meetLinkIn(m.text)!} /> : m.preview && <LinkCard preview={m.preview} />}
+                </div>
               )}
-              {m.text && <MessageText text={m.text} mentionNames={mentionNames} meName={meName} />}
-              {meetLinkIn(m.text) ? <MeetCard url={meetLinkIn(m.text)!} /> : m.preview && <LinkCard preview={m.preview} />}
-              <Photos items={photos} />
-              <Documents items={documents} />
-              <OrderRefs refs={m.refs} orderHref={orderHref} />
+              {(photos.length > 0 || documents.length > 0 || m.refs.length > 0) && (
+                <div title={m.text ? undefined : sentAt} className={`${m.pending ? 'opacity-60' : ''} min-w-0 max-w-full ${card ? 'flex flex-col items-end' : ''}`}>
+                  <Photos items={photos} />
+                  <Documents items={documents} />
+                  <OrderRefs refs={m.refs} orderHref={orderHref} />
+                </div>
+              )}
               {m.pending && <p className="mt-1 text-xs text-gray-400">Sending…</p>}
-            </div>
+            </>
           )}
           {m.editHistory && m.editHistory.length > 0 && <EditHistory history={m.editHistory} />}
           {confirmDelete && (

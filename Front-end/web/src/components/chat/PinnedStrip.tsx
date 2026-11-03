@@ -22,24 +22,24 @@ export default function PinnedStrip({ channelId, onJump }: { channelId: string; 
   const [latest] = pins;
 
   return (
-    <div className="border-b border-gray-100 bg-amber-50/60 px-4 py-1.5 text-sm">
+    <div className="border-b border-gray-200/70 px-4 py-1.5 text-sm sm:px-5">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className="flex w-full items-center gap-2 text-left"
       >
-        <Pin className="h-4 w-4 shrink-0 text-amber-700" aria-hidden="true" />
+        <Pin className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate text-gray-800">
           <span className="font-medium">{authorOf(latest)}:</span> {previewOf(latest)}
         </span>
-        <span className="shrink-0 text-xs font-semibold text-amber-800">{pins.length} pinned</span>
-        <ChevronDown className={`h-4 w-4 shrink-0 text-amber-800 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+        <span className="shrink-0 text-xs font-medium text-gray-600">{pins.length} pinned</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
       {open && (
         <ul className="mt-1.5 max-h-60 space-y-1 overflow-y-auto pb-1" aria-label="Pinned messages">
           {pins.map((m) => (
-            <li key={m.id} className="flex items-start gap-2 rounded-lg bg-white px-2.5 py-1.5 shadow-sm">
+            <li key={m.id} className="flex items-start gap-2 rounded-lg bg-[var(--gc-bubble)] px-2.5 py-1.5">
               <button type="button" onClick={() => { setOpen(false); onJump(m.threadRoot ?? m.id); }} className="min-w-0 flex-1 text-left">
                 <span className="block text-xs text-gray-500">
                   <span className="font-semibold text-gray-700">{authorOf(m)}</span> · {dayLabel(m.createdAt)} {timeOf(m.createdAt)}

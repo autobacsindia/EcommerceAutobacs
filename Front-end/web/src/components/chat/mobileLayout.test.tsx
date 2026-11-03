@@ -149,7 +149,7 @@ describe('one pane at a time below 1024 px', () => {
   it('picking a conversation opens it; the list hides until "back"', () => {
     setWidth(390);
     const { rerender } = render(<TeamChat />);
-    fireEvent.click(screen.getByRole('button', { name: /#gtm/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^gtm/ }));
     expect(replace).toHaveBeenLastCalledWith('/team/chat?c=c2', { scroll: false });
 
     query = 'c=c2';
@@ -199,11 +199,11 @@ describe('the chat box fits the visible screen', () => {
     await waitFor(() => expect(screen.getByTestId('box').style.height).toBe('428px'));
   });
 
-  it('leaves the height to the stylesheet from 1024 px up', async () => {
+  it('fits on a computer too, under the taller panel bar', async () => {
     setWidth(1280);
-    placeAt(72);
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 });
+    placeAt(92);
     render(<Box />);
-    await new Promise((r) => setTimeout(r, 40));
-    expect(screen.getByTestId('box').style.height).toBe('');
+    await waitFor(() => expect(screen.getByTestId('box').style.height).toBe('808px'));
   });
 });
