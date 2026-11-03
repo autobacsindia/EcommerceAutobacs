@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { AlarmClock, ArrowDownUp, BellDot, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Plus, Search, Send, Tag, User, Users, X } from 'lucide-react';
+import { AlarmClock, ArrowDownUp, BellDot, CircleHelp, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Plus, Search, Send, Tag, User, Users, X } from 'lucide-react';
 import { Kbd, ShortcutsDialog, isTypingIn, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import { ListResultLine } from '@/components/panel/ListControls';
 import { useListParams } from '@/lib/hooks/useListParams';
@@ -47,22 +47,32 @@ const DUES: { value: TaskDue | ''; label: string }[] = [
   { value: 'week', label: 'This week' },
 ];
 
-/** Plain-words explanation, shown until the person hides it (remembered on this device). */
-function HowItWorks() {
+/**
+ * Plain-words explanation, shown until the person hides it (remembered on this
+ * device). Once hidden, the "?" beside the page title brings it back.
+ */
+function useHelp() {
   const [hidden, setHidden] = useState(true);
   useEffect(() => { setHidden(read(HELP_KEY) === '1'); }, []);
-  if (hidden) return null;
+  return {
+    hidden,
+    hide: () => { setHidden(true); write(HELP_KEY, '1'); },
+    show: () => { setHidden(false); write(HELP_KEY, '0'); },
+  };
+}
+
+function HowItWorks({ onHide }: { onHide: () => void }) {
   return (
-    <aside className="relative flex gap-3 rounded-xl border border-sky-200 bg-sky-50 p-3 pr-10 text-sm text-sky-900">
-      <Info aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+    <aside className="relative flex gap-3 rounded-xl border border-blue-100 bg-blue-50/70 px-3.5 py-2.5 pr-10 text-[13px] text-gray-700">
+      <span aria-hidden className="mt-px flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700"><Info className="h-3.5 w-3.5" /></span>
       <div>
-        <p className="font-semibold">How tasks work</p>
-        <p className="mt-0.5">
+        <p className="font-semibold text-gray-900">How tasks work</p>
+        <p className="mt-0.5 leading-relaxed">
           Press <strong>New task</strong> (or the N key), choose who should do it — yourself or anyone in the panel — and pick a due date.
           They get a pop-up and find it under Assigned to me. Tick the circle when a job is done; open a task to comment, add steps or change it.
         </p>
       </div>
-      <button onClick={() => { setHidden(true); write(HELP_KEY, '1'); }} aria-label="Hide how tasks work" className="absolute right-2 top-2 rounded p-1 hover:bg-sky-100">
+      <button onClick={onHide} aria-label="Hide how tasks work" className="absolute right-2 top-2 rounded-md p-1 text-gray-500 hover:bg-blue-100 hover:text-gray-800">
         <X className="h-4 w-4" />
       </button>
     </aside>
@@ -240,7 +250,8 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
     return () => window.removeEventListener('keydown', onKey);
   }, [openId]);
 
-  const control = 'h-8 rounded-md border border-gray-200 bg-white px-2 text-[13px] text-gray-700 hover:border-gray-300';
+  const control = 'h-8 rounded-full border border-gray-200 bg-white pl-3 pr-7 text-[13px] font-medium text-gray-700 shadow-[0_1px_1px_rgba(20,22,40,0.03)] hover:border-gray-300 hover:bg-gray-50';
+  const help = useHelp();
   const space = SPACES.find((sp) => sp.value === team);
   const title = inInbox ? 'Inbox' : view === 'team' && space ? `${space.label} tasks` : dueNow ? 'Today & overdue' : view === 'mine' ? 'Assigned to me' : (views.find((v) => v.value === view) ?? views[0]).label;
   const late = summary.data?.late ?? 0;
@@ -340,6 +351,11 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
             <h1 className="pn-title flex flex-wrap items-center gap-2 text-xl text-gray-900">
               {space && <span aria-hidden className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold ${teamColour(space.value)}`}>{space.label[0]}</span>}
               {title}
+              {!inInbox && help.hidden && (
+                <button onClick={help.show} aria-label="Show how tasks work" title="How tasks work" className="rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                  <CircleHelp aria-hidden className="h-4 w-4" />
+                </button>
+              )}
               {!inInbox && view === 'mine' && late > 0 && <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">{late} late</span>}
               {!inInbox && view === 'mine' && today > 0 && <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{today} due today</span>}
             </h1>
@@ -375,10 +391,10 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
         {inInbox ? (
           <InboxView filter={inboxFilter} onFilter={setInboxFilter} openId={openId} onOpen={setOpenId} />
         ) : (<>
-        <HowItWorks />
+        {!help.hidden && <HowItWorks onHide={help.hide} />}
 
         <div className="flex flex-wrap items-center gap-2">
-          <label className="relative flex min-w-0 flex-1 basis-48 items-center sm:max-w-xs">
+          <label className="relative flex min-w-0 flex-1 basis-56 items-center sm:max-w-xs">
             <Search aria-hidden className="pointer-events-none absolute left-2.5 h-4 w-4 text-gray-400" />
             <input
               ref={searchRef}
@@ -388,7 +404,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
               placeholder="Search tasks or T-number"
               aria-label="Search tasks"
               maxLength={100}
-              className="h-8 w-full rounded-md border border-gray-200 bg-white pl-8 pr-8 text-[13px] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="h-8 w-full rounded-full border border-gray-200 bg-white pl-8 pr-8 text-[13px] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
             <span className="pointer-events-none absolute right-2 hidden sm:block"><Kbd>/</Kbd></span>
           </label>
@@ -422,7 +438,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
               {TASK_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
           </label>
-          <div className="flex flex-wrap gap-0.5 rounded-md border border-gray-200 bg-white p-0.5" role="group" aria-label="Due date">
+          <div className="flex flex-wrap gap-0.5 rounded-full border border-gray-200 bg-white p-0.5" role="group" aria-label="Due date">
             {DUES.map((d) => {
               const on = due === d.value || (d.value === 'overdue' && due === 'late');
               return (
@@ -430,7 +446,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
                   key={d.value || 'any'}
                   aria-pressed={on}
                   onClick={() => setDue(d.value)}
-                  className={`h-7 rounded px-2 text-[13px] font-medium transition ${on ? 'bg-blue-100 text-blue-800' : 'text-gray-600 hover:bg-gray-100'}`}
+                  className={`h-7 rounded-full px-2.5 text-[13px] font-medium transition ${on ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
                 >
                   {d.label}
                 </button>
