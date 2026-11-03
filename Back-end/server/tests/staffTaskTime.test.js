@@ -100,6 +100,7 @@ describe('the timer', () => {
 
     const other = await time.startTimer(arun, b.id, at(30 * 60000));
     expect(other.stopped).toMatchObject({ id: first.timer.id, seconds: 1800, running: false });
+    expect(other.stopped.task).toEqual({ id: a.id, code: a.code });
     expect(other.timer.task.id).toBe(b.id);
     expect(await runningOf(arun)).toHaveLength(1);
     expect(await StaffTaskTime.countDocuments({})).toBe(2);
@@ -143,6 +144,8 @@ describe('the timer', () => {
     const { timer, autoStopped } = await time.currentTimer(arun, at(14 * HOUR));
     expect(timer).toBeNull();
     expect(autoStopped).toMatchObject({ seconds: 36000, autoStopped: true, running: false, endedAt: at(10 * HOUR) });
+    // It names its task, so the screen can link to it after a reload.
+    expect(autoStopped.task).toEqual({ id: a.id, code: a.code });
     expect(await runningOf(arun)).toHaveLength(0);
   });
 

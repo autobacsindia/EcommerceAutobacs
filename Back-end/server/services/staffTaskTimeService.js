@@ -103,6 +103,12 @@ function entryOut(row, viewer, now) {
   };
 }
 
+/** A just-stopped entry, with the task it was on, so the screen can name it and link to it. */
+const stoppedOut = (row, viewer, now) => ({
+  ...entryOut(row, viewer, now),
+  task: { id: idOf(row.task), code: `T-${row.number}` },
+});
+
 /** Stop `row` at `now`, or at the limit when it ran past it. Null when another call stopped it first. */
 function closeOut(row, now) {
   const capped = overCap(row, now);
@@ -120,7 +126,7 @@ export async function currentTimer(actor, now = new Date()) {
   if (!row) return { timer: null, autoStopped: null };
   if (overCap(row, now)) {
     const closed = await closeOut(row, now);
-    return { timer: null, autoStopped: closed ? entryOut(closed, actor, now) : null };
+    return { timer: null, autoStopped: closed ? stoppedOut(closed, actor, now) : null };
   }
   const task = await staffTaskRepository.findById(row.task);
   return { timer: timerOut(row, task, actor, now), autoStopped: null };
@@ -142,7 +148,7 @@ export async function startTimer(actor, id, now = new Date()) {
     }
     if (running) {
       const closed = await closeOut(running, now);
-      if (closed) stopped = entryOut(closed, actor, now);
+      if (closed) stopped = stoppedOut(closed, actor, now);
     }
     try {
       const row = await staffTaskTimeRepository.insert({
@@ -166,7 +172,7 @@ export async function stopTimer(actor, now = new Date()) {
   const row = await staffTaskTimeRepository.findRunning(actor._id);
   if (!row) return { entry: null };
   const closed = await closeOut(row, now);
-  return { entry: closed ? entryOut(closed, actor, now) : null };
+  return { entry: closed ? stoppedOut(closed, actor, now) : null };
 }
 
 /**

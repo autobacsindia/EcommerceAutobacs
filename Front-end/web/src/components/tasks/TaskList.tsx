@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CornerLeftUp, Flag, ListChecks, MessageSquare, Network, Package, Plus, Tag, UserPlus, Users, X } from 'lucide-react';
+import { CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CornerLeftUp, Flag, ListChecks, MessageSquare, Network, Package, Plus, Tag, Timer as TimerIcon, UserPlus, Users, X } from 'lucide-react';
 import { errorMessage } from '@/components/staff/sales/types';
 import { useQuickAdd, useSetStatus, useTaskPages, type QuickExtras } from './hooks';
 import AssigneePicker from './AssigneePicker';
@@ -10,7 +10,7 @@ import { groupTasks, type TaskGroup } from './grouping';
 import BulkBar from './BulkBar';
 import { Avatar, AvatarStack, Chip, DuePill, GroupCount, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
 import {
-  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, newClientId, peopleOf,
+  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, formatDuration, newClientId, peopleOf,
   type Task, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskStatus,
 } from './types';
 
@@ -68,6 +68,9 @@ export function TaskMeta({ t, withOrder = true, withComments = true }: { t: Task
       {withComments && t.commentCount > 0 && <Chip title={`${t.commentCount} comments`}><MessageSquare aria-hidden className="h-3 w-3" />{t.commentCount}</Chip>}
       {t.startOn && t.bucket === 'open' && (
         <Chip title={`Starts ${formatDueDay(t.startOn)}`}><CalendarRange aria-hidden className="h-3 w-3" />{formatDueDay(t.startOn)}</Chip>
+      )}
+      {(t.timeSeconds ?? 0) > 0 && (
+        <Chip title={`${formatDuration(t.timeSeconds!)} tracked`}><TimerIcon aria-hidden className="h-3 w-3" />{formatDuration(t.timeSeconds!)}</Chip>
       )}
       {withOrder && t.order && <Chip tone="bg-sky-100 text-sky-800" title={`Order ${t.order.code}`}><Package aria-hidden className="h-3 w-3" />{t.order.code}</Chip>}
     </>

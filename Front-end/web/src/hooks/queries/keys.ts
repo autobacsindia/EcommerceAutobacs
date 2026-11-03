@@ -259,6 +259,11 @@ export const taskKeys = {
   /** The Inbox: what happened on your tasks. `state` is 'all' or 'unread'. */
   inboxes: () => [...taskKeys.all, 'inbox'] as const,
   inbox: (state: string) => [...taskKeys.inboxes(), state] as const,
+  /** Your running timer (one at a time, across all tasks). */
+  timer: () => [...taskKeys.all, 'timer'] as const,
+  /** The time logged on tasks: `times()` is every task's, `time(id)` one task's. */
+  times: () => [...taskKeys.all, 'time'] as const,
+  time: (id: string) => [...taskKeys.times(), id] as const,
 };
 
 /** `/admin/team-activity/*` — the admin's read-only view of the order workflow. */

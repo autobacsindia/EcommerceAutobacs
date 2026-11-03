@@ -90,7 +90,11 @@ export type Task = {
     follow: boolean; followers: boolean;
     /** Add sub-tasks (never on a sub-task: one level only). */
     subtask?: boolean;
+    /** Start a timer or add time on it (anyone who sees it, while it is not archived). */
+    time?: boolean;
   };
+  /** The lists only: all the time logged on it, everyone's, in seconds. */
+  timeSeconds?: number;
   history?: { at: string; by: string; action: string; from: string; to: string }[];
   /** The task page only: the other people's copies the viewer may see. */
   siblings?: TaskSibling[];
@@ -271,3 +275,79 @@ export const COMMENT_FILES_MAX = 10;
 export const TASK_FILES_MAX = 30;
 /** What a task or comment file may be (the server checks the bytes too). */
 export const TASK_FILE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,application/pdf,text/csv,text/plain,.xlsx,.docx';
+
+/** Your running timer, as the server read it (`seconds` at the moment it answered). */
+export type RunningTimer = {
+  id: string; task: { id: string; code: string; title: string }; startedAt: string; seconds: number; limitSeconds: number;
+};
+
+/** One stretch of time on a task: from a timer, or added by hand. */
+export type TimeEntry = {
+  id: string; by: { id: string; name: string }; source: 'timer' | 'manual'; day: string;
+  startedAt: string; endedAt: string | null; seconds: number; running: boolean; autoStopped: boolean; edited: boolean; note: string;
+  can: { edit: boolean; delete: boolean };
+  /** Only on an entry that was just stopped: the task it was on. */
+  task?: { id: string; code: string };
+};
+
+/** `GET /staff/tasks/time/current`. `autoStopped` is a timer left past the limit, stopped by this very read. */
+export type TimerState = { timer: RunningTimer | null; autoStopped: TimeEntry | null };
+
+/** One page of `GET /staff/tasks/:id/time`; the totals cover every entry, not just this page. */
+export type TaskTimePage = {
+  entries: TimeEntry[]; nextCursor: string | null;
+  total: { seconds: number; people: { id: string; name: string; seconds: number }[] };
+  can: { track: boolean };
+};
+
+/** What can be added by hand at once, and how far back (the server checks both). */
+export const TIME_MAX_MINUTES = 24 * 60;
+export const TIME_PAST_DAYS = 90;
+export const TIME_NOTE_MAX = 200;
+
+/** "45s", "12m", "1h 05m", "10h" — a length of time, rounded down to the minute past one minute. */
+export function formatDuration(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds || 0));
+  if (s < 60) return `${s}s`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (!h) return `${m}m`;
+  return m ? `${h}h ${String(m).padStart(2, '0')}m` : `${h}h`;
+}
+
+/** "0:42:10" — the running timer's clock. */
+export function formatClock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds || 0));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${Math.floor(s / 3600)}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+}
+
+/**
+ * What someone typed as a length of time, in whole minutes — or null when it
+ * cannot be read. "90" and "90m" are minutes; "1h 30m", "1:30", "1.5h" and
+ * "2h" read as you would expect.
+ */
+export function parseDuration(raw: string): number | null {
+  const s = raw.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!s) return null;
+  let m: RegExpMatchArray | null;
+  if ((m = s.match(/^(\d+)\s*(?:m|min|mins)?$/))) return Number(m[1]);
+  if ((m = s.match(/^(\d+):([0-5]\d)$/))) return Number(m[1]) * 60 + Number(m[2]);
+  if ((m = s.match(/^(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)$/))) return Math.round(Number(m[1]) * 60);
+  if ((m = s.match(/^(\d+)\s*(?:h|hr|hrs)\s*(\d+)\s*(?:m|min|mins)?$/))) return Number(m[1]) * 60 + Number(m[2]);
+  return null;
+}
+
+/** Why a length typed by hand would be refused, or '' when it is fine. */
+export function durationProblem(minutes: number | null): string {
+  if (minutes === null) return 'Type a length like 45, 1h 30m or 1:30.';
+  if (minutes < 1 || minutes > TIME_MAX_MINUTES) return 'Enter between 1 minute and 24 hours.';
+  return '';
+}
+
+/** "1h 30m" — a whole number of minutes as it is typed back into the box. */
+export const minutesText = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+};
