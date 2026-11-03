@@ -26,7 +26,8 @@ type PickedOrder = { id: string; code: string };
 type OrderOption = { id: string; code: string; customer: string };
 
 /** Pick a recent paid order by number or customer name (the same picker team chat uses). */
-export function OrderPicker({ value, onChange }: { value: PickedOrder | null; onChange: (o: PickedOrder | null) => void }) {
+/** `quiet`: plain text until hovered or typed in, with a short prompt — for the task window. */
+export function OrderPicker({ value, onChange, quiet = false }: { value: PickedOrder | null; onChange: (o: PickedOrder | null) => void; quiet?: boolean }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const term = q.trim();
@@ -54,9 +55,11 @@ export function OrderPicker({ value, onChange }: { value: PickedOrder | null; on
         onChange={(e) => { setQ(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="Link an order — type its number or the customer's name (optional)"
+        placeholder={quiet ? 'Empty' : "Link an order — type its number or the customer's name (optional)"}
         aria-label="Link an order"
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        className={quiet
+          ? 'w-full rounded-md border border-transparent! bg-transparent! px-1.5 py-1 text-sm placeholder:text-gray-400 hover:border-gray-200! hover:bg-gray-50! focus:border-blue-500! focus:bg-white!'
+          : 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm'}
       />
       {open && (orders.data?.orders?.length ?? 0) > 0 && (
         <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">

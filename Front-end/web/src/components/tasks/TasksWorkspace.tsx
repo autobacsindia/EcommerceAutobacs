@@ -270,8 +270,8 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
       { keys: ['?'], label: 'Show these shortcuts' },
     ] },
   ];
-  const navItem = 'tk-menu-item inline-flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 max-lg:bg-white max-lg:shadow-sm lg:rounded-md lg:px-2 lg:py-1.5 lg:text-[13px]';
-  const sectionLabel = 'hidden px-2 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 lg:block';
+  const navItem = 'tk-menu-item inline-flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 max-lg:bg-white max-lg:shadow-sm lg:min-h-9 lg:rounded-lg lg:px-2.5 lg:py-2';
+  const sectionLabel = 'hidden px-2.5 pb-1.5 pt-5 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 lg:block';
   const personal = views.filter((v) => v.value !== 'team');
   const teamViews = views.filter((v) => v.value === 'team');
   const viewButton = (v: (typeof views)[number]) => {
@@ -289,11 +289,11 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
       {/* Which tasks: a list down the side on a wide screen, a row of chips on a phone. */}
       <nav
         aria-label="Task lists"
-        className="relative -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] lg:sticky lg:top-[4.5rem] lg:mx-0 lg:mb-0 lg:max-h-[calc(100vh-6rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:rounded-xl lg:border lg:border-gray-200 lg:bg-white lg:p-2"
+        className="relative -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] lg:sticky lg:top-[4.5rem] lg:mx-0 lg:mb-0 lg:max-h-[calc(100vh-6rem)] lg:w-60 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-gray-200 lg:bg-white lg:p-2.5 lg:shadow-[0_1px_2px_rgba(20,22,40,0.04)]"
       >
-        <p className="hidden items-center gap-2 px-2 pb-2 pt-1 lg:flex">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white"><ListTodo aria-hidden className="h-3.5 w-3.5" /></span>
-          <span className="text-sm font-bold text-gray-900">Tasks</span>
+        <p className="hidden items-center gap-2.5 px-2 pb-3 pt-1 lg:flex">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm"><ListTodo aria-hidden className="h-4 w-4" /></span>
+          <span className="text-[15px] font-bold text-gray-900">Tasks</span>
         </p>
         <div className="flex gap-1.5 lg:flex-col lg:gap-px" role="group" aria-label="Whose tasks">
           <button aria-pressed={inInbox} onClick={() => setList({ view: 'inbox', team: '' })} className={navItem}>
@@ -339,7 +339,7 @@ export default function TasksWorkspace({ base, canSeeTeam }: { base: string; can
         <button
           onClick={() => setShortcuts(true)}
           aria-label="Keyboard shortcuts"
-          className="hidden items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 lg:flex"
+          className="hidden min-h-9 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 lg:flex"
         >
           <Keyboard aria-hidden className="h-4 w-4 text-gray-500" /> Keyboard shortcuts <Kbd className="ml-auto">?</Kbd>
         </button>
