@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ChevronDown, Keyboard, MessageSquarePlus, MessagesSquare, Plus, Search } from 'lucide-react';
+import { ArrowLeft, ChevronDown, MessagesSquare } from 'lucide-react';
+import ChatSidebar from './ChatSidebar';
 import { firstToOpen, homeList, listWhen, totalPeopleUnread } from './chatList';
 import { useSSE } from '@/hooks/useSSE';
 import { useAuth } from '@/context/AuthContext';
@@ -264,6 +265,8 @@ export default function TeamChat() {
   const [threadRequest, setThreadRequest] = useState<{ channelId: string; id: string; n: number } | null>(null);
   // Desktop: the open conversation fills the chat area; the lists hide.
   const [wide, setWide] = useState(false);
+  // Phones and tablets show one pane at a time: the sections, or Home (newest first).
+  const [smallPane, setSmallPane] = useState<'nav' | 'home'>('nav');
 
   const meId = me?.userId ?? '';
   const meName = user?.name ?? 'You';
@@ -307,8 +310,13 @@ export default function TeamChat() {
   // Side by side, never show an empty pane: open where something is waiting
   // (the Chat button's number sent you here), else the newest chat. One pane at
   // a time (phones, tablets): start on the list, newest at the top.
+  // Only once per visit: closing the conversation (×) shows Home, and must not
+  // be undone by opening one again.
+  const autoOpened = useRef(false);
   useEffect(() => {
-    if (!selectedId && channels.length && typeof window !== 'undefined' && window.innerWidth >= ONE_PANE_BELOW) {
+    if (autoOpened.current || !channels.length) return;
+    autoOpened.current = true;
+    if (!selectedId && typeof window !== 'undefined' && window.innerWidth >= ONE_PANE_BELOW) {
       const first = firstToOpen(channels);
       if (first) select(first.id);
     }
@@ -485,13 +493,13 @@ export default function TeamChat() {
           type="button"
           onClick={() => select(c.id)}
           aria-current={active ? 'true' : undefined}
-          className="gc-row flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left"
+          className="gc-row flex w-full items-center gap-4 rounded-2xl px-4 text-left"
         >
           <span className="relative inline-flex shrink-0">
             <ChannelIcon channel={c} size="lg" />
             {c.kind === 'dm' && !c.group && c.partner && online.has(c.partner.id) && <OnlineDot />}
           </span>
-          <span className="min-w-0 flex-1">
+          <span className="gc-sep min-w-0 flex-1 py-3">
             <span className="flex items-baseline gap-2">
               {/* The round "#" icon already says it is a space, so the name drops its "#". */}
               <span className={`min-w-0 flex-1 truncate text-[15px] ${waiting ? 'font-bold text-gray-900' : active ? 'font-semibold text-gray-900' : 'text-gray-900'}`}>
@@ -549,101 +557,94 @@ export default function TeamChat() {
     ] },
   ];
 
-  /** A small rounded filter / shortcut under the search field. */
-  const CHIP = 'inline-flex h-8 shrink-0 items-center gap-1 rounded-full border px-2.5 text-[13px] font-medium transition-colors';
-  const chipIdle = `${CHIP} border-gray-300 text-gray-700 hover:bg-[var(--gc-hover)]`;
+  const me_ = peopleById.get(meId) ?? { id: meId, name: meName, role: isAdmin ? 'admin' as const : 'staff' as const, team: null, teamLabel: null, isHead: false };
+  const listHidden = wide && !!selected;
+  // Which panes are on screen. Phones/tablets (below lg): one at a time. lg: the
+  // sections plus Home OR the open chat. xl: sections, Home and the open chat.
+  const navClass = selected ? 'hidden' : smallPane === 'nav' ? 'flex' : 'hidden';
+  const homeClass = selected
+    ? 'hidden xl:flex'
+    : smallPane === 'home' ? 'flex' : 'hidden lg:flex';
 
   return (
     // Fills the panel's page edge to edge (cancelling its padding), its height
-    // fitted to the visible screen by useFitToViewport. Below lg one pane at a
-    // time; from lg the list sits on the page colour beside the open
-    // conversation, a white card (as in Google Chat). `isolate` keeps every
-    // layer inside (the thread panel is a z-20 flex item) under the panel's top
-    // bar, so the bell's drop-down is never drawn behind the chat.
+    // fitted to the visible screen by useFitToViewport. Laid out as Google Chat:
+    // the sections on the page colour, then Home and the open conversation as
+    // white rounded cards with a thin gap between. `isolate` keeps every layer
+    // inside (the thread panel is a z-20 flex item) under the panel's top bar,
+    // so the bell's drop-down is never drawn behind the chat.
     <div
       ref={box}
-      className={`gc-theme relative isolate -m-4 flex h-[calc(100dvh-3.5rem)] min-h-[320px] overflow-hidden md:-m-6 lg:-m-8 lg:py-2 lg:pr-2 ${wide && selected ? 'lg:pl-2' : ''}`}
+      className="gc-theme relative isolate -m-4 flex h-[calc(100dvh-3.5rem)] min-h-[320px] overflow-hidden md:-m-6 lg:-m-8 lg:gap-2 lg:py-2 lg:pr-2"
     >
       <aside
-        className={`w-full min-w-0 shrink-0 flex-col bg-[var(--gc-card)] lg:w-[336px] lg:bg-transparent ${selected ? 'hidden' : 'flex'} ${wide && selected ? '' : 'lg:flex'}`}
+        className={`${navClass} w-full min-w-0 shrink-0 flex-col bg-[var(--gc-page)] lg:w-[272px] ${listHidden ? 'lg:hidden' : 'lg:flex'}`}
         aria-label="Chat channels"
       >
-        <div className="px-3 pb-2 pt-3 lg:pl-3 lg:pr-2 lg:pt-1">
-          <div className="flex items-center gap-1">
-            <h1 className="pn-title min-w-0 flex-1 truncate text-xl text-gray-900 lg:sr-only">
-              Team chat
-            </h1>
-            <button
-              type="button"
-              onClick={() => setDialog('dm')}
-              className="gc-card gc-shadow inline-flex h-11 items-center gap-2.5 rounded-2xl px-4 text-sm font-medium text-gray-900 transition-shadow hover:shadow-md lg:h-12 lg:px-5"
-              aria-label="New chat"
-              title="Start a chat with a person or a group"
-            >
-              <MessageSquarePlus className="h-5 w-5 text-gray-700" aria-hidden="true" />
-              <span className="hidden sm:inline">New chat</span>
-            </button>
-            <span className="hidden flex-1 lg:block" />
-            {me?.canCreateSpace && (
+        <ChatSidebar
+          channels={channels}
+          selectedId={selectedId}
+          homeOn={!selected || smallPane === 'home'}
+          online={online}
+          canCreateSpace={!!me?.canCreateSpace}
+          onSelect={select}
+          onHome={() => { setSmallPane('home'); setWide(false); select(null); }}
+          onNewChat={() => setDialog('dm')}
+          onNewSpace={() => setDialog('space')}
+          onSearch={() => setSearching('all')}
+          onMentions={() => setShowMentions(true)}
+          onThreads={() => setShowThreads(true)}
+          onStarred={() => setShowStarred(true)}
+          onShortcuts={() => setShortcuts(true)}
+          footer={(
+            <div className="flex items-center gap-2.5 border-t border-gray-200 px-4 py-2.5">
+              <Avatar person={me_} size="sm" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-gray-900">{meName}</span>
+                <span className="block truncate text-xs text-gray-500">{myStatus ? myStatus.text : 'Active'}</span>
+              </span>
               <button
                 type="button"
-                onClick={() => setDialog('space')}
-                className="grid h-10 w-10 place-items-center rounded-full text-gray-600 hover:bg-[var(--gc-hover)]"
-                aria-label="New space"
-                title="Create a space for a group or topic"
+                onClick={() => setEditingStatus(true)}
+                className="gc-icon-btn shrink-0 rounded-full border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700"
+                title="Set a status everyone in chat can see"
               >
-                <Plus className="h-5 w-5" />
+                {myStatus ? 'Change status' : 'Set a status'}
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setShortcuts(true)}
-              className="hidden h-10 w-10 place-items-center rounded-full text-gray-600 hover:bg-[var(--gc-hover)] sm:grid"
-              aria-label="Keyboard shortcuts"
-              title="Keyboard shortcuts (?)"
-            >
-              <Keyboard className="h-[18px] w-[18px]" />
-            </button>
-          </div>
+            </div>
+          )}
+        />
+      </aside>
+
+      <section
+        className={`${homeClass} gc-card gc-pane min-h-0 w-full min-w-0 flex-col lg:flex-1 lg:rounded-2xl xl:w-[400px] xl:flex-none 2xl:w-[440px] ${listHidden ? 'xl:hidden' : ''}`}
+        aria-label="Home"
+      >
+        <div className="flex items-center gap-2 px-4 pb-2 pt-3 lg:px-6 lg:pt-4">
+          <button type="button" onClick={() => setSmallPane('nav')} className="gc-icon-btn -ml-2 grid h-10 w-10 place-items-center rounded-full text-gray-600 lg:hidden" aria-label="Back to sections">
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <h2 className="min-w-0 flex-1 truncate text-[22px] font-normal text-gray-900">Home</h2>
           <button
             type="button"
-            onClick={() => setSearching('all')}
-            className="gc-field mt-3 flex h-11 w-full items-center gap-3 rounded-full px-4 text-left text-sm text-gray-600 transition-colors hover:text-gray-900"
-            aria-label="Search all messages"
-            title={`Search all messages (${mod} K finds a chat by name)`}
+            role="switch"
+            aria-checked={show === 'unread'}
+            aria-label={`Unread only${totalUnread ? `, ${totalUnread} waiting` : ''}`}
+            onClick={() => setShow(show === 'unread' ? 'all' : 'unread')}
+            title="Show only chats where someone wrote something new"
+            className="flex items-center gap-2.5 rounded-full py-1 pl-2 pr-1 text-sm font-medium text-gray-800"
           >
-            <Search className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate">Search messages</span>
+            Unread{totalUnread ? <span className="text-xs font-bold text-blue-700">{totalUnread > 99 ? '99+' : totalUnread}</span> : null}
+            <span className="gc-switch" data-on={show === 'unread'} aria-hidden="true"><span /></span>
           </button>
-          <div className="mt-3 flex flex-wrap gap-1" aria-label="Filters and shortcuts" role="group">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={show === 'unread'}
-              onClick={() => setShow(show === 'unread' ? 'all' : 'unread')}
-              title="Show only chats with something new"
-              className={show === 'unread' ? `${CHIP} border-transparent bg-[var(--gc-selected)] text-[var(--gc-selected-ink)]` : chipIdle}
-            >
-              Unread{totalUnread ? ` · ${totalUnread > 99 ? '99+' : totalUnread}` : ''}
-            </button>
-            <button type="button" onClick={() => setShowMentions(true)} className={chipIdle} title="Messages that mention you">
-              Mentions
-            </button>
-            <button type="button" onClick={() => setShowThreads(true)} className={chipIdle} title="Reply threads you are part of">
-              Threads
-            </button>
-            <button type="button" onClick={() => setShowStarred(true)} className={chipIdle} aria-label="Starred messages" title="Messages you starred">
-              Starred
-            </button>
-          </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 lg:pl-1 lg:pr-2">
+        <div className="gc-scroll gc-home min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {isLoading && (
             <ul className="space-y-3 px-3 py-2" aria-label="Loading conversations">
               {[0, 1, 2, 3, 4].map((i) => (
                 <li key={i} className="flex animate-pulse items-center gap-3">
-                  <span className="h-7 w-7 rounded-full bg-gray-200" />
+                  <span className="h-10 w-10 rounded-full bg-gray-200" />
                   <span className="h-3 flex-1 rounded bg-gray-200" />
                 </li>
               ))}
@@ -658,15 +659,15 @@ export default function TeamChat() {
             </p>
           )}
           {!isLoading && show === 'unread' && !active.length && (
-            <div className="px-4 py-8 text-center">
-              <p className="text-sm font-semibold text-gray-800">You’re all caught up</p>
-              <p className="mt-1 text-xs text-gray-500">Nothing unread anywhere.</p>
-              <button type="button" onClick={() => setShow('all')} className="mt-3 text-xs font-semibold text-blue-700 underline">Show all chats</button>
+            <div className="px-4 py-10 text-center">
+              <p className="text-[15px] font-medium text-gray-800">You’re all caught up</p>
+              <p className="mt-1 text-sm text-gray-500">Nobody is waiting for a reply.</p>
+              <button type="button" onClick={() => setShow('all')} className="mt-3 text-sm font-medium text-blue-700 hover:underline">Show all chats</button>
             </div>
           )}
 
           {!isLoading && !isError && (
-            <ul className="space-y-px" aria-label="Chats, newest first">
+            <ul aria-label="Chats, newest first">
               {active.map(row)}
               {showEmpty && empty.map(row)}
             </ul>
@@ -675,31 +676,15 @@ export default function TeamChat() {
             <button
               type="button"
               onClick={() => setShowEmpty((v) => !v)}
-              className="mt-1 flex w-full items-center gap-1.5 rounded-full px-3 py-2 text-left text-[13px] font-semibold text-blue-700 hover:bg-[var(--gc-hover)]"
+              className="gc-icon-btn mt-1 flex w-full items-center gap-1.5 rounded-full px-4 py-2 text-left text-[13px] font-medium text-blue-700"
               aria-expanded={showEmpty}
             >
-              <ChevronDown className={`h-4 w-4 transition-transform ${showEmpty ? 'rotate-180' : ''}`} aria-hidden="true" />
+              <ChevronDown className={`gc-caret h-4 w-4 ${showEmpty ? 'rotate-180' : ''}`} aria-hidden="true" />
               {showEmpty ? 'Hide chats with no messages yet' : `Show ${empty.length} ${empty.length === 1 ? 'chat' : 'chats'} with no messages yet`}
             </button>
           )}
         </div>
-
-        <div className="flex items-center gap-2.5 border-t border-gray-200 px-4 py-2.5 lg:mx-2 lg:px-2">
-          <Avatar person={peopleById.get(meId) ?? { id: meId, name: meName, role: isAdmin ? 'admin' : 'staff', team: null, teamLabel: null, isHead: false }} size="sm" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-gray-900">{meName}</span>
-            <span className="block truncate text-xs text-gray-500">{myStatus ? myStatus.text : 'Active'}</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => setEditingStatus(true)}
-            className="shrink-0 rounded-full border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-[var(--gc-hover)]"
-            title="Set a status everyone in chat can see"
-          >
-            {myStatus ? 'Change status' : 'Set a status'}
-          </button>
-        </div>
-      </aside>
+      </section>
 
       {selected ? (
         <Conversation
@@ -710,7 +695,7 @@ export default function TeamChat() {
           isAdmin={isAdmin}
           people={people}
           orderHref={orderHref}
-          onBack={() => select(null)}
+          onBack={() => { setWide(false); select(null); }}
           onOpenChannel={select}
           online={online}
           onSearch={() => setSearching(selected.id)}
@@ -720,9 +705,9 @@ export default function TeamChat() {
           openThread={threadRequest?.channelId === selected.id ? threadRequest : null}
         />
       ) : (
-        <div className="gc-card hidden flex-1 flex-col items-center justify-center gap-2 rounded-2xl px-6 text-center lg:flex">
+        <div className="gc-card gc-pane hidden flex-1 flex-col items-center justify-center gap-2 rounded-2xl px-6 text-center xl:flex">
           <MessagesSquare className="h-8 w-8 text-gray-400" aria-hidden="true" />
-          <p className="text-base font-medium text-gray-800">Pick a chat on the left</p>
+          <p className="text-base font-medium text-gray-800">Pick a chat to read it here</p>
           <p className="max-w-xs text-sm text-gray-500">Tip: press <Kbd>{mod}</Kbd> <Kbd>K</Kbd> to find any person or space by name.</p>
         </div>
       )}

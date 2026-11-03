@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, Download, Maximize2, Minimize2, Search, Users } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Download, Maximize2, Minimize2, Search, Users, X } from 'lucide-react';
 import { chatKeys } from '@/hooks/queries/keys';
 import {
   readUpdatesSeqOf,
@@ -445,7 +445,7 @@ export default function Conversation({
     // min-w-0: without it this pane grows to its widest child (the pinned bar, the
     // header icons) and every message is clipped on a phone, Send off-screen.
     <div className="relative flex h-full min-h-0 min-w-0 flex-1">
-      <section className="gc-card flex h-full min-h-0 min-w-0 flex-1 flex-col lg:rounded-2xl" aria-label={`Conversation ${title}`}>
+      <section className="gc-card gc-pane flex h-full min-h-0 min-w-0 flex-1 flex-col lg:rounded-2xl" aria-label={`Conversation ${title}`}>
         <header className="border-b border-gray-200/70 px-3 pt-2.5 sm:px-5 sm:pt-3">
           <div className="flex items-center gap-2 sm:gap-3">
             <button type="button" onClick={onBack} className="-ml-1.5 shrink-0 rounded-lg p-2 text-gray-600 hover:bg-gray-100 lg:hidden" aria-label="Back to channels">
@@ -489,6 +489,15 @@ export default function Conversation({
                   {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </button>
               )}
+              <button
+                type="button"
+                onClick={onBack}
+                className="hidden rounded-full p-2 text-gray-600 hover:bg-gray-100 lg:block"
+                aria-label="Close the conversation"
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           </div>
           <div className="-mx-1 mt-2 flex gap-1 overflow-x-auto pb-2 [scrollbar-width:none]" role="tablist" aria-label="Conversation sections">

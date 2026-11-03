@@ -65,3 +65,39 @@ export function listWhen(iso: string, now = new Date()): string {
   if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
+
+/** The sidebar's sections, as Google Chat's left column: what kind of chat it is. */
+export type SectionKey = 'dms' | 'groups' | 'spaces' | 'teams';
+export const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
+  { key: 'dms', label: 'Direct messages', hint: 'Chats with one person' },
+  { key: 'groups', label: 'Groups', hint: 'Chats with a few people you picked' },
+  { key: 'spaces', label: 'Spaces', hint: 'The whole company, your team, and topic spaces' },
+  { key: 'teams', label: 'Between teams', hint: 'Private chats between two whole teams' },
+];
+
+export const sectionOf = (c: ChatChannel): SectionKey =>
+  c.kind === 'dm' ? (c.group ? 'groups' : 'dms') : c.audience === 'teams' ? 'teams' : 'spaces';
+
+/** Every chat in its section, newest first; never-used chats last, by name. */
+export function sectionsOf(channels: ChatChannel[]): Record<SectionKey, ChatChannel[]> {
+  const out: Record<SectionKey, ChatChannel[]> = { dms: [], groups: [], spaces: [], teams: [] };
+  for (const c of channels) out[sectionOf(c)].push(c);
+  const order = (a: ChatChannel, b: ChatChannel) =>
+    (isEmpty(a) ? 1 : 0) - (isEmpty(b) ? 1 : 0) || at(b) - at(a) || a.name.localeCompare(b.name);
+  for (const k of Object.keys(out) as SectionKey[]) out[k].sort(order);
+  return out;
+}
+
+/** How many rows a section shows before "Show all", as Google Chat does. */
+export const SECTION_LIMIT = 7;
+
+/**
+ * The rows a section draws: the first SECTION_LIMIT, plus anything beyond them
+ * that must not hide behind "Show all" — the open chat, and chats where a
+ * person is waiting. `hidden` is how many "Show all" would add.
+ */
+export function sectionRows(list: ChatChannel[], { all = false, selectedId = null }: { all?: boolean; selectedId?: string | null } = {}) {
+  if (all || list.length <= SECTION_LIMIT) return { rows: list, hidden: 0 };
+  const rows = list.filter((c, i) => i < SECTION_LIMIT || c.id === selectedId || peopleUnread(c) > 0);
+  return { rows, hidden: list.length - rows.length };
+}

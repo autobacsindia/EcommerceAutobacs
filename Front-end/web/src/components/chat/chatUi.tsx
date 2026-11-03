@@ -146,8 +146,8 @@ export function TeamBadge({ person }: { person: ChatPerson | null }) {
   );
 }
 
-export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; size?: 'sm' | 'md' | 'lg' }) {
-  const box = size === 'lg' ? 'h-10 w-10 text-sm' : size === 'md' ? 'h-9 w-9 text-sm' : 'h-7 w-7 text-[11px]';
+export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; size?: 'xs' | 'sm' | 'md' | 'lg' }) {
+  const box = size === 'lg' ? 'h-10 w-10 text-sm' : size === 'md' ? 'h-9 w-9 text-sm' : size === 'xs' ? 'h-6 w-6 text-[10px]' : 'h-7 w-7 text-[11px]';
   // People keep their colour (a face you recognise); spaces and team pairs are a
   // calm grey circle, so the list is not a wall of coloured tiles.
   const quiet = `grid ${box} shrink-0 place-items-center rounded-full bg-gray-200/70 text-gray-600`;

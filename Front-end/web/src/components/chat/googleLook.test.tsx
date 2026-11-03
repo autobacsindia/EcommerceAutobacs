@@ -141,39 +141,85 @@ describe('file cards', () => {
 
 describe('the chat screen', () => {
   const list = () => screen.getByRole('complementary', { name: 'Chat channels' });
+  const home = () => screen.getByRole('region', { name: 'Home' });
+  const section = (name: string) => within(list()).getByRole('list', { name });
 
   const rowNames = () => within(screen.getByRole('list', { name: 'Chats, newest first' }))
     .getAllByRole('button').map((b) => b.querySelector('.truncate')?.textContent);
 
-  it('is one list, newest first, as Google Chat\'s Home — no sections, no "Between teams"', () => {
+  it('the left side sorts chats into Direct messages, Groups, Spaces and Between teams', () => {
     setWidth(1440);
     query = 'c=c1';
     render(<TeamChat />);
-    expect(screen.queryByRole('region', { name: /Home/ })).toBeNull();
-    expect(screen.queryByText('Between teams')).toBeNull();
-    expect(rowNames()).toEqual(['gtm', 'Priya', 'company', 'procurement']);
-    // The open conversation is highlighted; a space's name drops the "#" (its round icon shows it).
-    expect(within(list()).getByRole('button', { name: /^company/ })).toHaveAttribute('aria-current', 'true');
+    const names = (name: string) => within(section(name)).queryAllByRole('button').map((b) => b.textContent);
+    expect(names('Direct messages')).toEqual([expect.stringMatching(/Priya$/)]);
+    expect(names('Groups')).toEqual([]);
+    expect(within(section('Groups')).getByText(/pick a few people/)).toBeInTheDocument();
+    expect(names('Spaces').map((n) => n?.replace(/\d+$/, ''))).toEqual(['gtm', 'company', 'procurement']);
+    expect(names('Between teams')).toEqual(['GTM & Procurement']);
+    // The open conversation is highlighted in its section.
+    expect(within(section('Spaces')).getByRole('button', { name: /^company/ })).toHaveAttribute('aria-current', 'true');
   });
 
-  it('chats nobody has written in yet are folded at the bottom until asked for', () => {
+  it('each section header shows its unread count and folds away with its arrow', () => {
+    setWidth(1440);
+    query = 'c=c1';
+    render(<TeamChat />);
+    const head = within(list()).getByRole('button', { name: /^Spaces/ });
+    expect(within(head).getByLabelText('2 unread in Spaces')).toBeInTheDocument();
+    expect(head).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(head);
+    expect(head).toHaveAttribute('aria-expanded', 'false');
+    expect(document.getElementById(head.getAttribute('aria-controls')!)).toHaveAttribute('data-open', 'false');
+    fireEvent.click(head);
+    expect(head).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('a long section shows 7 chats and a "Show all" button for the rest', () => {
+    setWidth(1440);
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      id: `d${i}`, kind: 'dm', key: `dm:${i}`, name: `Person ${i}`, audience: 'members', unread: 0,
+      lastMessageAt: `2026-11-01T0${i}:00:00Z`, partner: { id: `p${i}`, name: `Person ${i}` },
+    })) as unknown as ChatChannel[];
+    channels.push(...many);
+    try {
+      render(<TeamChat />);
+      expect(within(section('Direct messages')).getAllByRole('button')).toHaveLength(7);
+      fireEvent.click(within(list()).getByRole('button', { name: 'Show all (11)' }));
+      expect(within(section('Direct messages')).getAllByRole('button')).toHaveLength(11);
+      expect(within(list()).getByRole('button', { name: 'Show fewer' })).toBeInTheDocument();
+    } finally {
+      channels.splice(channels.length - many.length);
+    }
+  });
+
+  it('Home in the middle is one list, newest first, as Google Chat\'s Home', () => {
+    setWidth(1440);
+    query = 'c=c1';
+    render(<TeamChat />);
+    expect(within(home()).getByRole('heading', { name: 'Home' })).toBeInTheDocument();
+    expect(rowNames()).toEqual(['gtm', 'Priya', 'company', 'procurement']);
+    expect(within(home()).getByRole('button', { name: /^company/ })).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('chats nobody has written in yet are folded at the bottom of Home until asked for', () => {
     setWidth(1440);
     query = 'c=c1';
     render(<TeamChat />);
     expect(rowNames()).not.toContain('GTM & Procurement');
     fireEvent.click(screen.getByRole('button', { name: 'Show 1 chat with no messages yet' }));
     expect(rowNames().at(-1)).toBe('GTM & Procurement');
-    expect(within(list()).getByRole('button', { name: /^GTM & Procurement/ })).toHaveTextContent('No messages yet');
+    expect(within(home()).getByRole('button', { name: /^GTM & Procurement/ })).toHaveTextContent('No messages yet');
   });
 
-  it('every row shows its newest message under the name', () => {
+  it('every Home row shows its newest message under the name', () => {
     setWidth(1440);
     (channels[1] as ChatChannel).lastPreview = { by: 'Ravi', mine: false, text: 'Order *4521* shipped', deleted: false };
     (channels[2] as ChatChannel).lastPreview = { by: 'Sana', mine: true, text: 'See you at 3', deleted: false };
     try {
       render(<TeamChat />);
-      expect(within(list()).getByRole('button', { name: /^gtm/ })).toHaveTextContent('Ravi: Order 4521 shipped');
-      expect(within(list()).getByRole('button', { name: /^Priya/ })).toHaveTextContent('You: See you at 3');
+      expect(within(home()).getByRole('button', { name: /^gtm/ })).toHaveTextContent('Ravi: Order 4521 shipped');
+      expect(within(home()).getByRole('button', { name: /^Priya/ })).toHaveTextContent('You: See you at 3');
     } finally {
       delete (channels[1] as ChatChannel).lastPreview;
       delete (channels[2] as ChatChannel).lastPreview;
@@ -183,13 +229,15 @@ describe('the chat screen', () => {
   it('people’s unread messages are bold with a blue number; automatic updates only say "3 order updates", in grey', () => {
     setWidth(1440);
     render(<TeamChat />);
-    const gtm = within(list()).getByRole('button', { name: /^gtm/ });
+    const gtm = within(home()).getByRole('button', { name: /^gtm/ });
     expect(gtm.querySelector('.truncate')).toHaveClass('font-bold');
     expect(within(gtm).getByLabelText('2 unread')).toHaveClass('bg-blue-700');
-    const procurement = within(list()).getByRole('button', { name: /^procurement/ });
+    const procurement = within(home()).getByRole('button', { name: /^procurement/ });
     expect(procurement.querySelector('.truncate')).not.toHaveClass('font-bold');
     expect(procurement).toHaveTextContent('3 order updates');
     expect(within(procurement).queryByLabelText(/unread/)).toBeNull();
+    // Same rule on the left: the order updates add nothing to Spaces' count.
+    expect(within(list()).getByLabelText('2 unread in Spaces')).toBeInTheDocument();
   });
 
   it('with no chat named, a computer opens the newest chat where a person is waiting', () => {
@@ -205,26 +253,28 @@ describe('the chat screen', () => {
     expect(screen.getByRole('region', { name: 'Conversation gtm' })).toHaveAttribute('data-thread', 'root9');
   });
 
-  it('the Unread button counts and keeps only chats where people wrote (and the open one)', () => {
+  it('the Unread switch counts and keeps only chats where people wrote (and the open one)', () => {
     setWidth(1440);
     query = 'c=c1';
     render(<TeamChat />);
     const unread = screen.getByRole('switch', { name: /Unread/ });
     // 2 from people in gtm; procurement's 3 order updates are not counted.
-    expect(unread).toHaveTextContent('Unread · 2');
+    expect(unread).toHaveAccessibleName('Unread only, 2 waiting');
     expect(unread).toHaveAttribute('aria-checked', 'false');
     fireEvent.click(unread);
     expect(unread).toHaveAttribute('aria-checked', 'true');
     expect(rowNames()).toEqual(['gtm', 'company']);
   });
 
-  it('Expand hides the list on a computer; pressing it again brings it back', () => {
+  it('Expand hides the sections and Home on a computer; pressing it again brings them back', () => {
     setWidth(1440);
     query = 'c=c1';
     render(<TeamChat />);
     expect(list().className).toContain('lg:flex');
+    expect(home().className).not.toContain('xl:hidden');
     fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
-    expect(list().className).not.toContain('lg:flex');
+    expect(list().className).toContain('lg:hidden');
+    expect(home().className).toContain('xl:hidden');
     fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
     expect(list().className).toContain('lg:flex');
   });
@@ -238,6 +288,12 @@ describe('the chat screen', () => {
 });
 
 describe('left list shortcuts', () => {
+  it('Home is a shortcut with the total waiting from people', () => {
+    setWidth(1440);
+    render(<TeamChat />);
+    expect(screen.getByRole('button', { name: /^Home/ })).toHaveTextContent('2');
+  });
+
   it('a Mentions button opens the Mentions list', () => {
     setWidth(1440);
     render(<TeamChat />);
