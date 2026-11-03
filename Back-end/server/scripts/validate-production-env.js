@@ -153,7 +153,7 @@ const requiredEnvVars = {
   
   // Redis (optional but recommended for production)
   REDIS_URL: {
-    description: 'Primary Redis (Upstash) for cache, sessions, CSRF',
+    description: 'Cache/session Redis (Railway Redis-Cache service)',
     required: false,
     validate: (value) => {
       if (value && !value.startsWith('redis://') && !value.startsWith('rediss://')) {

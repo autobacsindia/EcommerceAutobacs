@@ -17,10 +17,11 @@ then merge `develop` → `main` to release. Both apps auto-deploy on push.
 | Branch | Backend (Railway env) | Frontend (Vercel) | Data |
 |---|---|---|---|
 | `develop` | project `bountiful-surprise`, env **test** | **Preview** deployment (per-branch alias) | `autobacstest` cluster, test Redis, ES off |
-| `main` | project `bountiful-surprise`, env **production** | **Production** deployment | prod `cluster0`, Upstash cache + prod Redis queue, ES on |
+| `main` | project `bountiful-surprise`, env **production** | **Production** deployment | prod `cluster0`, Railway `Redis-Cache` (cache/sessions) + Railway `Redis` (queue), ES on |
 
 Verified isolation (as of 2026-07): test and prod use **separate Atlas clusters**, **separate Redis**
-(prod cache = Upstash, all others = per-env Railway Redis — private domains are environment-scoped),
+(every tier uses per-env Railway Redis — private domains are environment-scoped; prod cache moved off
+Upstash 2026-11, see [RUNBOOK-upstash-to-railway-redis.md](RUNBOOK-upstash-to-railway-redis.md)),
 and email in test is caught by `EMAIL_REDIRECT_TO`. Elasticsearch is the one **shared** deployment;
 it's safe only because test has `ELASTICSEARCH_ENABLED=false`. **If you enable ES in test, you MUST set
 `ELASTICSEARCH_INDEX` (e.g. `products_staging`)** or a test reindex will clobber the prod `products` index.
@@ -51,16 +52,18 @@ The committed `.env.example` files are the contract — they document every vari
 | Service | Dev instance | Prod instance |
 |---|---|---|
 | MongoDB (Atlas) | separate DB, e.g. `autobacs_dev` (same cluster is fine) | prod DB |
-| Redis cache/sessions (Upstash) | separate Upstash DB (`rediss://`) | prod Upstash |
-| Redis queue/rate-limit (Upstash) | separate Upstash DB (`rediss://`) | prod Upstash |
+| Redis cache/sessions (`REDIS_URL`) | local Redis or a dev Railway Redis | prod Railway `Redis-Cache` service (private `redis://`) |
+| Redis queue/rate-limit (`QUEUE_REDIS_URL`) | local Redis or a dev Railway Redis | prod Railway `Redis` service (private `redis://`) |
 | Elasticsearch | dev index/deployment, or `ELASTICSEARCH_ENABLED=false` locally | prod ES |
 | Cloudinary | dedicated `dev/` folder/upload preset (or a dev cloud) | prod cloud |
 | Email (Zoho ZeptoMail) | `EMAIL_REDIRECT_TO=<your inbox>`, or `ENABLE_EMAIL_NOTIFICATIONS=false` | prod ZeptoMail token |
 | Razorpay | `rzp_test_*` + a test-mode webhook | `rzp_test_*` until cutover → `rzp_live_*` + live webhook |
 | Google/Facebook OAuth | add `http://localhost:8080/...` redirect URIs to the app | prod redirect URIs |
 
-> Upstash gotcha: `server.js` runs a hard Redis preflight and **exits** on a bad scheme — Upstash
-> needs `rediss://`. After prod data/SEO migrations, flush Redis `route:*` / `public:*`.
+> Redis gotcha: `server.js` runs a hard Redis preflight and **exits** if `REDIS_URL` is unreachable.
+> TLS is used only for `rediss://` (hosted Redis such as Upstash); Railway's private network is plain
+> `redis://`. All clients pass `family: 0` (`utils/redisTransport.js`) so `*.railway.internal` resolves
+> over IPv6. After prod data/SEO migrations, flush Redis `route:*` / `public:*`.
 
 ## Variable matrix
 
@@ -75,8 +78,8 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 |---|---|---|---|
 | `MONGO_URI` | dev Atlas DB (`autobacs_dev`) | prod Atlas DB | **#1 risk** — never let dev write prod data |
 | `MONGODB_URI` | = dev `MONGO_URI` (footgun, see below) | unset unless a prod script needs it | scripts/tests read this name |
-| `REDIS_URL` | dev Upstash | prod Upstash | dev must not poison prod cache |
-| `QUEUE_REDIS_URL` | dev Upstash | prod Upstash | **dev worker must not consume prod jobs** |
+| `REDIS_URL` | dev Redis | prod `Redis-Cache` (`${{Redis-Cache.REDIS_URL}}`) | dev must not poison prod cache |
+| `QUEUE_REDIS_URL` | dev Redis | prod `Redis` (`${{Redis.REDIS_URL}}`) | **dev worker must not consume prod jobs** |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | `rzp_test_*` | `rzp_test_*` → `rzp_live_*` at cutover | test vs live mode. The ONLY copy of the key id: checkout gets it from create-order and the PDP EMI widget from `GET /payment-config/razorpay` — there is no frontend `NEXT_PUBLIC_RAZORPAY_KEY_ID` any more |
 | `RAZORPAY_WEBHOOK_SECRET` | test-mode webhook secret | live-mode webhook secret at cutover | separate webhook endpoints |
 | `JWT_SECRET` | dev secret (≥64 chars) | prod secret (≥64 chars) | leaked dev token must not forge prod sessions; **must match frontend in same tier** |
@@ -149,7 +152,7 @@ prod dashboards. For a one-off import, keep them in a local `.env.migration` you
 
 ## Setup checklist
 
-1. Provision the dev instances in the table above (Atlas DB, 2× Upstash, ES, Cloudinary, email,
+1. Provision the dev instances in the table above (Atlas DB, 2× Redis, ES, Cloudinary, email,
    Razorpay test webhook, OAuth localhost redirect URIs).
 2. Backend dev: copy `Back-end/server/.env.example` → `.env`; fill Bucket A dev + Bucket B; generate a
    fresh dev `JWT_SECRET`; set `MONGODB_URI` = dev `MONGO_URI`; leave `SLACK_WEBHOOK_URL` / prod

@@ -22,6 +22,8 @@
  * 120 s healthcheck window.
  */
 
+import { redisTransportOptions } from './redisTransport.js';
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Bound a promise; reject with `message` after `ms`. */
@@ -56,7 +58,7 @@ export async function verifyRedisAtStartup(url, {
       enableOfflineQueue: false,
       retryStrategy: () => null, // one connection per attempt; this loop does the retrying
       connectTimeout,
-      tls: url.startsWith('rediss://') ? {} : undefined,
+      ...redisTransportOptions(url),
     });
     client.on('error', () => {}); // surfaced through the awaited calls below
     try {

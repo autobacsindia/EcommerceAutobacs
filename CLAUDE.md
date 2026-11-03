@@ -36,7 +36,9 @@ The live site `autobacsindia.com` is still **WooCommerce/WordPress**. This repo 
 
 - **The move is env-only** — code is env-driven, no host edits needed. Key vars: frontend `NEXT_PUBLIC_API_URL` (→ `https://api.autobacsindia.com`), `NEXT_PUBLIC_APP_URL` (→ `https://autobacsindia.com`), `BACKEND_API_URL` (suggestions route, needs `/api/v1`); backend `FRONTEND_URL`/`FRONTEND_URLS` (CORS), `GOOGLE_CALLBACK_URL`, `NODE_ENV=production`.
 
-- **Also at cutover:** split Redis into `REDIS_URL` (cache/sessions) + `QUEUE_REDIS_URL` (BullMQ/rate-limit); `COOKIE_DOMAIN`/`COOKIE_SAMESITE` matter once api/apex are separate subdomains. External dashboards: Cloudflare DNS (apex→Vercel, `api`→Railway, low TTL for rollback), Google OAuth redirect URI, Razorpay webhook, ZeptoMail sender domain (already verified on `autobacsindia.com`).
+- **Redis is two Railway services:** `REDIS_URL` → `Redis-Cache` (cache/sessions) and `QUEUE_REDIS_URL` → `Redis` (BullMQ/rate-limit/CSRF), both private `redis://`. Upstash was retired 2026-11 ([docs/RUNBOOK-upstash-to-railway-redis.md](docs/RUNBOOK-upstash-to-railway-redis.md)); don't point either back at it.
+
+- **Also at cutover:** `COOKIE_DOMAIN`/`COOKIE_SAMESITE` matter once api/apex are separate subdomains. External dashboards: Cloudflare DNS (apex→Vercel, `api`→Railway, low TTL for rollback), Google OAuth redirect URI, Razorpay webhook, ZeptoMail sender domain (already verified on `autobacsindia.com`).
 
 - **Gotcha:** legacy `autobacsindia.com/wp-content/**` images (`next.config.ts` allowlist) die when the apex leaves WordPress — migrate to Cloudinary first. Flush Redis `route:*`/`public:*` after cutover.
 

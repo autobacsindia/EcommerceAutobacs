@@ -13,6 +13,7 @@
  */
 
 import { Redis } from 'ioredis';
+import { redisTransportOptions } from '../utils/redisTransport.js';
 
 const QUEUE_URL = process.env.QUEUE_REDIS_URL || process.env.REDIS_URL;
 
@@ -24,6 +25,6 @@ export function createConnection() {
   return new Redis(QUEUE_URL, {
     maxRetriesPerRequest: null,   // required by BullMQ
     enableReadyCheck: false,
-    tls: QUEUE_URL.startsWith('rediss://') ? {} : undefined,
+    ...redisTransportOptions(QUEUE_URL),
   });
 }
