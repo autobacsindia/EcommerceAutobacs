@@ -46,8 +46,8 @@ describe('_enqueueStatusNotification', () => {
   // `refunded` is NOT here: it's a payment-axis outcome delivered via the Razorpay
   // refund webhook (see razorpayService.applyRefundWebhook / refundWebhook.test.js),
   // not a fulfillment-status transition.
-  test.each(['shipped', 'delivered', 'cancelled', 'returned'])(
-    'enqueues send-order-status-email for Core-4 status %s',
+  test.each(['shipped', 'delivered', 'cancelled'])(
+    'enqueues send-order-status-email for notified status %s',
     (status) => {
       service._enqueueStatusNotification('order123', status);
       expect(mockNotificationsAdd).toHaveBeenCalledWith('send-order-status-email', {
@@ -57,7 +57,9 @@ describe('_enqueueStatusNotification', () => {
     }
   );
 
-  test.each(['confirmed', 'processing', 'pending', 'failed'])(
+  // `returned` is silent: the returns flow emails every step and its refund email
+  // closes the loop, so "Return completed" only repeated it (owner decision 2026-11).
+  test.each(['confirmed', 'processing', 'pending', 'failed', 'returned'])(
     'does NOT enqueue an email for non-notified status %s',
     (status) => {
       service._enqueueStatusNotification('order123', status);
@@ -65,8 +67,21 @@ describe('_enqueueStatusNotification', () => {
     }
   );
 
-  test('delivered ALSO enqueues a delayed send-review-request job', () => {
+  test('delivered does NOT enqueue a review request while review emails are off (the default)', () => {
+    delete process.env.REVIEW_REQUEST_EMAILS;
     service._enqueueStatusNotification('order123', 'delivered');
+
+    expect(mockNotificationsAdd).toHaveBeenCalledTimes(1);
+    expect(mockNotificationsAdd).toHaveBeenCalledWith('send-order-status-email', {
+      orderId: 'order123',
+      status: 'delivered',
+    });
+  });
+
+  test('delivered ALSO enqueues a delayed send-review-request job when REVIEW_REQUEST_EMAILS=on', () => {
+    process.env.REVIEW_REQUEST_EMAILS = 'on';
+    service._enqueueStatusNotification('order123', 'delivered');
+    delete process.env.REVIEW_REQUEST_EMAILS;
 
     expect(mockNotificationsAdd).toHaveBeenCalledWith('send-order-status-email', {
       orderId: 'order123',

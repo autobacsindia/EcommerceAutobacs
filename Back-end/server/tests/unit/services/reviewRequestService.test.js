@@ -33,6 +33,12 @@ const makeOrder = (over = {}) => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Review emails are off by default; the existing cases exercise the "on" path.
+  process.env.REVIEW_REQUEST_EMAILS = 'on';
+});
+
+afterAll(() => {
+  delete process.env.REVIEW_REQUEST_EMAILS;
 });
 
 describe('emailReviewRequest', () => {
@@ -117,6 +123,16 @@ describe('emailReviewRequest', () => {
 
     await expect(emailReviewRequest('order123')).rejects.toThrow(/postmark down/);
     expect(order.reviewRequestedAt).toBeNull();
+    expect(mockSave).not.toHaveBeenCalled();
+  });
+
+  test('sends nothing while REVIEW_REQUEST_EMAILS is not "on" — even for a job queued before the switch', async () => {
+    delete process.env.REVIEW_REQUEST_EMAILS;
+    const order = makeOrder();
+    mockFindById.mockResolvedValue(order);
+
+    expect(await emailReviewRequest('order123')).toEqual({ status: 'disabled' });
+    expect(mockSendReview).not.toHaveBeenCalled();
     expect(mockSave).not.toHaveBeenCalled();
   });
 });

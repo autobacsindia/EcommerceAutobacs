@@ -48,6 +48,28 @@ class SupportTicketRepository extends BaseRepository {
   }
 
   /**
+   * Claim a once-only key for an outbound customer email on this ticket.
+   *
+   * One atomic update: it matches only while the key is absent, so of two
+   * concurrent or retried sends exactly one gets `true`. Keyed by ticket _id, so it
+   * needs no new index. The array grows by one entry per email actually sent.
+   *
+   * @returns {Promise<boolean>} true if this caller now owns the key
+   */
+  async claimEmailKey(ticketId, key) {
+    const res = await SupportTicket.updateOne(
+      { _id: ticketId, sentEmailKeys: { $ne: key } },
+      { $push: { sentEmailKeys: key } }
+    );
+    return res.modifiedCount === 1;
+  }
+
+  /** Give a key back after a failed send so the queue retry can claim it again. */
+  async releaseEmailKey(ticketId, key) {
+    await SupportTicket.updateOne({ _id: ticketId }, { $pull: { sentEmailKeys: key } });
+  }
+
+  /**
    * Atomically claim the outbound-send budget for a ticket.
    *
    * Returns the updated document, on which the caller checks

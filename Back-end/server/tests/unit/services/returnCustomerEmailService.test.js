@@ -55,6 +55,12 @@ describe('emailReturnStatus', () => {
     expect(mockRepo.markEmailed).toHaveBeenCalledWith('ret-1', 'approved');
   });
 
+  it('never emails the customer for "received" — an internal step, folded into the refund email', async () => {
+    await expect(emailReturnStatus('ret-1', 'received')).resolves.toEqual({ status: 'skipped-silent' });
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(mockRepo.markEmailed).not.toHaveBeenCalled();
+  });
+
   it('sends nothing when the key is already stamped (queue retry / double-click)', async () => {
     mockRepo.wasEmailed.mockResolvedValue(true);
     await expect(emailReturnStatus('ret-1', 'approved')).resolves.toEqual({ status: 'skipped' });

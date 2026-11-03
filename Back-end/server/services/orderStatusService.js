@@ -12,6 +12,7 @@ import { CANCELLATION_REASON_CODES } from '../config/cancellationReasons.js';
 import leadSyncService from './leadSyncService.js';
 import spinService from './spinService.js';
 import { getOrderQueue, getNotificationsQueue } from '../queue/queues.js';
+import { reviewRequestsEnabled } from './reviewRequestService.js';
 
 const LOYALTY_JOB_BY_STATUS = {
   delivered: 'post-order-delivered',
@@ -20,8 +21,10 @@ const LOYALTY_JOB_BY_STATUS = {
 };
 
 // Fulfillment milestones that warrant a customer email. `processing` (the paid,
-// pre-ship state) intentionally stays silent.
-const CUSTOMER_NOTIFIED_STATUSES = new Set(['shipped', 'delivered', 'cancelled', 'returned']);
+// pre-ship state) intentionally stays silent, and so does `returned`: the returns
+// flow already emails each step and its refund email closes the loop, so a separate
+// "Return completed" email only repeated it (owner decision, 2026-11).
+const CUSTOMER_NOTIFIED_STATUSES = new Set(['shipped', 'delivered', 'cancelled']);
 
 // Denormalized payment axis inferred from a fulfillment transition (mainly for the
 // offline-order path, which sets fulfillment directly). Reaching any post-payment
@@ -422,8 +425,9 @@ class OrderStatusService {
         .catch(err => console.error(`[OrderStatus] Failed to enqueue send-order-status-email:`, err.message));
     }
 
-    // A day after delivery, ask the customer to review what they bought.
-    if (newStatus === 'delivered') {
+    // A day after delivery, ask the customer to review what they bought — only when
+    // switched on (see reviewRequestService.reviewRequestsEnabled; off by default).
+    if (newStatus === 'delivered' && reviewRequestsEnabled()) {
       queue
         .add('send-review-request', { orderId }, { delay: REVIEW_REQUEST_DELAY_MS })
         .catch(err => console.error(`[OrderStatus] Failed to enqueue send-review-request:`, err.message));
