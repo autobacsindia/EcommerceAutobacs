@@ -1499,10 +1499,19 @@ class OrderRepository extends BaseRepository {
     if (after) {
       const past = newestFirst ? '$lt' : '$gt';
       const value = byListDate ? after.listDate : after.enteredAt;
-      query.$or = [
-        { [field]: { [past]: value } },
-        { [field]: value, _id: { [past]: after.id } },
-      ];
+      // An order written before listDate existed has none until
+      // scripts/backfill-order-list-date.js has run. MongoDB sorts a missing field
+      // with null, below every real date, so `{ field: null }` is that whole class:
+      // the tail of a newest-first page and the head of an oldest-first one.
+      if (value == null) {
+        query[field] = null;
+        query._id = { [past]: after.id };
+      } else {
+        query.$or = [
+          { [field]: { [past]: value } },
+          { [field]: value, _id: { [past]: after.id } },
+        ];
+      }
     }
     const dir = newestFirst ? -1 : 1;
     return Order.find(query)

@@ -63,8 +63,12 @@ const toRupees = (v) => {
 */
 export const ORDER_LIST_SORTS = Object.freeze({
   // The list date: when the order was paid, or created while unpaid (utils/orderListDate.js).
-  newest: { field: 'listDate', dir: -1, type: 'date' },
-  oldest: { field: 'listDate', dir: 1, type: 'date' },
+  // fallback: orders written before listDate existed have none until
+  // scripts/backfill-order-list-date.js has run. utils/listQuery.js reads these
+  // in turn so such a row still gets a cursor instead of a RangeError, and the
+  // descending page keeps chasing the rows that have no listDate at all.
+  newest: { field: 'listDate', dir: -1, type: 'date', fallback: ['paidAt', 'createdAt'] },
+  oldest: { field: 'listDate', dir: 1, type: 'date', fallback: ['paidAt', 'createdAt'] },
   amount_desc: { field: 'totalAmount', dir: -1, type: 'number' },
   amount_asc: { field: 'totalAmount', dir: 1, type: 'number' },
 });

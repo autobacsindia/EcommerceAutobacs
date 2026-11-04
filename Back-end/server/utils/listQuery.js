@@ -92,10 +92,28 @@ export const isObjectId = (v) => typeof v === 'string' && /^[a-f0-9]{24}$/i.test
 
 const get = (row, path) => path.split('.').reduce((v, k) => (v == null ? v : v[k]), row);
 
+/*
+  The cursor for the last row of a page. It must never throw: it runs on every
+  page of every staff list, and `new Date(undefined).toISOString()` is a
+  RangeError that took the order lists down with a 500 when Order.listDate was
+  added before the backfill had run.
+
+  A sort that declares `fallback` (Order.listDate: paidAt, then createdAt) can meet
+  rows that have no value for its field yet. Such a row gets `value: null`, which
+  afterClause reads as "the rows with no value, by _id" — MongoDB sorts them
+  together, below every real value. Every other sort encodes exactly as it always
+  has; the one change is that an unusable date ends the list (no next page)
+  instead of throwing.
+*/
 export function encodeCursor(sortName, sort, row) {
   const v = get(row, sort.field);
-  const value = sort.type === 'date' ? new Date(v).toISOString()
-    : sort.type === 'string' || sort.type === 'objectId' ? String(v ?? '') : Number(v);
+  let value;
+  if (v == null && (sort.fallback || []).length) value = null;
+  else if (sort.type === 'date') {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return null;
+    value = d.toISOString();
+  } else value = sort.type === 'string' || sort.type === 'objectId' ? String(v ?? '') : Number(v);
   return Buffer.from(JSON.stringify([sortName, value, String(row._id)])).toString('base64url');
 }
 
@@ -104,6 +122,8 @@ export function decodeCursor(sortName, sort, cursor) {
   try {
     const [name, raw, id] = JSON.parse(Buffer.from(String(cursor), 'base64url').toString());
     if (name !== sortName || !isObjectId(id)) return null;
+    // The previous page ended on a row with no value for the sort field itself.
+    if (raw === null && (sort.fallback || []).length) return { value: null, id: new mongoose.Types.ObjectId(id) };
     if (sort.type === 'string') return typeof raw === 'string' ? { value: raw, id: new mongoose.Types.ObjectId(id) } : null;
     if (sort.type === 'objectId') return isObjectId(raw) ? { value: new mongoose.Types.ObjectId(raw), id: new mongoose.Types.ObjectId(id) } : null;
     const value = sort.type === 'date' ? new Date(raw) : Number(raw);
@@ -133,6 +153,22 @@ export function decodeCursor(sortName, sort, cursor) {
 export function afterClause(sort, after) {
   if (!after) return null;
   const desc = sort.dir < 0;
+  // A row with no value for the sort field: MongoDB sorts a missing field and an
+  // explicit null as one class, below every real value, so `{ field: null }` IS
+  // that class — and an equality on the sort field plus an _id range is walked in
+  // order by the very same index the list already uses.
+  //
+  // Deliberately NOT $or'd with the dated rows. Admitting both in one query is the
+  // shape the note above measured at 16,000 rows read and a sort in memory, and
+  // tests/teamListIndexes.test.js fails on it. The valueless rows are reached as
+  // the tail of a page that starts in the dated rows, not by widening the query.
+  //
+  // This one page does still sort in memory: the index entry for a missing field
+  // is null, so the bounds are not the single interval that would let the walk
+  // keep _id order ({ $exists: false } plans identically — both were measured).
+  // The read stays bounded and index-backed, and the whole branch disappears once
+  // scripts/backfill-order-list-date.js has run, because then no row lands here.
+  if (after.value === null) return { [sort.field]: null, _id: { [desc ? '$lt' : '$gt']: after.id } };
   if (sort.unique) return { [sort.field]: { [desc ? '$lt' : '$gt']: after.value } };
   return {
     [sort.field]: { [desc ? '$lte' : '$gte']: after.value },

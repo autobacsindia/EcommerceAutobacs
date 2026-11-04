@@ -60,3 +60,24 @@ export function stampListDate(doc, now = new Date()) {
   const want = doc.paidAt || doc.createdAt;
   if (!doc.listDate || doc.listDate.getTime() !== want.getTime()) doc.listDate = want;
 }
+
+/**
+ * The date to list `row` under, for a row read from the database rather than one
+ * about to be saved. `listDate` when it is stored, else the same rule applied on
+ * the fly — paidAt, then createdAt. Returns null when the row carries no usable
+ * date at all.
+ *
+ * Orders written before listDate existed have none until
+ * `scripts/backfill-order-list-date.js` has run, and a list that sorts or pages on
+ * the raw field crashes on them (`new Date(undefined).toISOString()` throws
+ * RangeError). Every list read goes through here so a missing listDate degrades to
+ * the created date instead of taking the list down.
+ */
+export function listDateOf(row) {
+  for (const v of [row?.listDate, row?.paidAt, row?.createdAt]) {
+    if (v == null) continue;
+    const d = v instanceof Date ? v : new Date(v);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+}

@@ -174,6 +174,39 @@ describe('Paid-date lists outside the sales service (utils/orderListDate.js)', (
     }
   });
 
+  // The state production was actually in: nothing backfilled, so every order is in
+  // the undated class and page 1 ends on one of them. The page after that is read
+  // with `{ listDate: null, _id: { $lt } }` (utils/listQuery.js afterClause), which
+  // has to stay an ordered walk of the same index — an $or across the dated and
+  // undated rows would sort in memory, which is what the clause avoids.
+  it('before the backfill, the page after an undated order is still a bounded index read', async () => {
+    await Order.collection.updateMany({}, { $unset: { listDate: '' } });
+    const plans = await twoPages('orders', (p) => sales.listPaidSalesOrders(accounts, p), { stage: 'processing' });
+    expect(plans).toHaveLength(4);
+    for (const p of plans) {
+      expect(p.plan).toMatch(/^IXSCAN \{ paymentStatus: 1, listDate: -1, _id: -1 \}(, IXSCAN \{ paymentStatus: 1, listDate: -1, _id: -1 \})*$/);
+      // The undated page sorts in memory (utils/listQuery.js afterClause says why),
+      // but it stays an index read of a bounded slice — not the whole collection.
+      expect(p.read).toBeLessThan(ORDERS / 2);
+    }
+    // Page 1 is an ordered index walk; only the undated page below it sorts.
+    expect(plans.slice(0, 2).every((p) => !p.sortsInMemory)).toBe(true);
+  });
+
+  it('once backfilled, that same list is an ordered index walk again', async () => {
+    await Order.collection.updateMany({ paidAt: { $type: 'date' } }, [{ $set: { listDate: '$paidAt' } }]);
+    await Order.collection.updateMany({ listDate: null }, [{ $set: { listDate: '$createdAt' } }]);
+    const plans = await twoPages('orders', (p) => sales.listPaidSalesOrders(accounts, p), { stage: 'processing' });
+    for (const p of plans) expect(p.sortsInMemory).toBe(false);
+  });
+
+  it('before the backfill, the admin list still reads order_list_date in order', async () => {
+    await Order.collection.updateMany({}, { $unset: { listDate: '' } });
+    const res = { json(b) { this.body = b; return this; }, status() { return this; } };
+    const [p] = await plansOf('orders', () => getAllOrdersAdmin({ query: { page: '1' }, user: adminUser }, res));
+    expect(p).toEqual(indexed('listDate: -1, _id: -1'));
+  });
+
   it('a work queue walks team_workflow_open_list_date in order', async () => {
     const plans = await plansOf('orders', () => wf.listQueue(procurement, 'procurement', {}));
     expect(plans.length).toBeGreaterThan(0);

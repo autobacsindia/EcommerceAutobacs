@@ -2365,6 +2365,11 @@ export const getAllOrdersAdmin = async (req, res) => {
     const d = new Date(`${req.query.endDate}T23:59:59.999${STORE_TZ_OFFSET}`);
     if (!isNaN(d.getTime())) createdAt.$lte = d;
   }
+  // Compares the stored listDate only: widening this to also match paidAt/createdAt
+  // for orders written before listDate existed would mean an $or, and that costs an
+  // in-memory sort of every matching row (utils/listQuery.js afterClause). So an
+  // order that has not been backfilled yet is absent from a date-filtered list until
+  // scripts/backfill-order-list-date.js has run — the unfiltered list still shows it.
   if (Object.keys(createdAt).length) query.listDate = createdAt;
 
   // Total-amount range (rupees, matching Order.totalAmount and the UI display).
@@ -2478,6 +2483,9 @@ export const getAllOrdersAdmin = async (req, res) => {
   // _id breaks list-date ties (order_list_date covers both), so two orders paid at
   // the same moment never swap between pages. The other sorts keep their old shape
   // and the indexes that already serve them.
+  // _id alone breaks list-date ties, and stays the tie-breaker for the orders that
+  // have no listDate yet (they all sort together as null): adding createdAt as a
+  // second key would take the sort off the order_list_date index and into memory.
   const sort = sortField === 'listDate' ? { listDate: sortOrder, _id: sortOrder } : { [sortField]: sortOrder };
 
   // The admin's own pinned orders (services/orderPinService.js) sit on top of

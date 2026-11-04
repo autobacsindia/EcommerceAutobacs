@@ -27,6 +27,7 @@ import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { orderNumber } from './invoiceService.js';
 import { pinnedIds, inPinOrder } from './orderPinService.js';
 import { and } from '../utils/listQuery.js';
+import { listDateOf } from '../utils/orderListDate.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -47,19 +48,42 @@ function assertMay(actor) {
 
 // ── Cursor (keyset on listDate desc, _id desc — the paid date, utils/orderListDate.js)
 // The `L` tag retires cursors made when this list paged on createdAt.
-const encodeCursor = (o) => Buffer.from(`L|${new Date(o.listDate).toISOString()}|${o._id}`).toString('base64url');
+// An order written before listDate existed has none until
+// scripts/backfill-order-list-date.js has run. Those rows are one class MongoDB
+// sorts together, below every real date, so they are the tail of this list and
+// get the `N` tag — paged through by _id. Encoding must never throw:
+// `new Date(undefined).toISOString()` is a RangeError that 500s the whole list.
+const encodeCursor = (o) => {
+  if (!o?._id) return null;
+  const at = o.listDate == null ? null : listDateOf({ listDate: o.listDate });
+  return Buffer.from(at ? `L|${at.toISOString()}|${o._id}` : `N||${o._id}`).toString('base64url');
+};
 function decodeCursor(cursor) {
   if (!cursor) return null;
   try {
     const [tag, iso, id] = Buffer.from(String(cursor), 'base64url').toString().split('|');
-    if (tag !== 'L') return null;
+    if (!['L', 'N'].includes(tag) || !/^[a-f0-9]{24}$/i.test(id || '')) return null;
+    if (tag === 'N') return { listDate: null, id };
     const listDate = new Date(iso);
-    if (Number.isNaN(listDate.getTime()) || !/^[a-f0-9]{24}$/i.test(id || '')) return null;
+    if (Number.isNaN(listDate.getTime())) return null;
     return { listDate, id };
   } catch {
     return null;
   }
 }
+
+/** The keyset clause for the page after `c`, or null on page 1. */
+const afterCursor = (c) => {
+  if (!c) return null;
+  // Past the dated rows and into the undated tail: the rest of that tail.
+  if (c.listDate === null) return { listDate: null, _id: { $lt: c.id } };
+  return {
+    $or: [
+      { listDate: { $lt: c.listDate } },
+      { listDate: c.listDate, _id: { $lt: c.id } },
+    ],
+  };
+};
 
 /** Who a website order can be credited to: the GTM head and GTM leads — the people who sell. */
 export async function listSellers(actor) {
@@ -102,7 +126,7 @@ export async function listWebsiteOrders(actor, { cursor } = {}) {
   const query = and(
     base,
     pins.length ? { _id: { $nin: pins } } : null,
-    c ? { $or: [{ listDate: { $lt: c.listDate } }, { listDate: c.listDate, _id: { $lt: c.id } }] } : null,
+    afterCursor(c),
   );
   const [rows, pinnedRows] = await Promise.all([
     orderRepository.find(query, {

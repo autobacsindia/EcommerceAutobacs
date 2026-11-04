@@ -1,5 +1,6 @@
 import { STAGE } from './teamWorkflow.js';
 import { amountRange, istRange } from './listQuery.js';
+import { listDateOf } from './orderListDate.js';
 
 /**
  * Search / filter / sort for the team panel's order lists — one reading of the
@@ -51,7 +52,7 @@ function inRange(n, r) {
 export function rowMatches(row, f) {
   if (f.source && row.source !== f.source) return false;
   if (f.eta && !(row.eta?.[ETA_COUNT[f.eta]] > 0)) return false;
-  if (f.placed && !inRange(new Date(row.listDate || row.createdAt).getTime(), f.placed)) return false;
+  if (f.placed && !inRange(listDateOf(row)?.getTime() ?? NaN, f.placed)) return false;
   if (f.amount && !inRange(Number(row.totalAmount), f.amount)) return false;
   if (f.stage && row.summaryStage !== f.stage && !(row.lines || []).some((l) => l.stage === f.stage)) return false;
   if (f.q) {
@@ -76,6 +77,12 @@ export function orderQueryFor(f) {
   const and = [];
   if (f.source === 'sales') and.push({ salesUser: { $type: 'objectId' } });
   if (f.source === 'website') and.push({ salesUser: null });
+  // A date filter compares the stored listDate only. Widening it to also match
+  // paidAt/createdAt for orders written before listDate existed would mean an $or,
+  // which costs an in-memory sort of every matching row (see utils/listQuery.js
+  // afterClause) — so an order that has not been backfilled yet is simply absent
+  // from a date-filtered list until scripts/backfill-order-list-date.js has run.
+  // The in-memory rowMatches above has no such cost and does fall back.
   if (f.placed) and.push({ listDate: f.placed });
   if (f.amount) and.push({ totalAmount: f.amount });
   if (f.q) {
