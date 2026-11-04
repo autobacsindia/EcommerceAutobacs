@@ -144,11 +144,26 @@ describe('PUT /profile — what it refuses', () => {
     expect((await User.findById(victim.user._id).lean()).name).toBe('customer person');
   });
 
-  it("refuses a phone number that is already on another account", async () => {
-    await User.create({ name: 'Guest', email: 'guest@example.com', passwordHash: 'x', phone: '+919876543210', isGuest: true });
+  it("refuses a phone number that is already on another registered account", async () => {
+    await User.create({ name: 'Other', email: 'other@example.com', passwordHash: 'x', phone: '+919876543210' });
     const { token } = await signIn('customer');
-    const res = await put(token, { phone: '98765 43210' }).expect(400);
-    expect(res.body.message).toMatch(/another account/);
+    const res = await put(token, { phone: '98765 43210' }).expect(409);
+    expect(res.body.message).toMatch(/another registered account/);
+  });
+
+  it("a guest record from a past checkout with the same phone does not block it", async () => {
+    await User.create({ name: 'Guest', email: 'guest@example.com', passwordHash: 'x', phone: '9876543210', isGuest: true });
+    const { user, token } = await signIn('customer');
+    await put(token, { phone: '98765 43210' }).expect(200);
+    expect((await User.findById(user._id).lean()).phone).toBe('9876543210');
+  });
+
+  it("re-saving my own number never trips the check, even if someone else shares it", async () => {
+    // Old data can already hold duplicates; I must still be able to change my name.
+    const { token } = await signIn('customer', { phone: '+91 98765 43210' });
+    await User.create({ name: 'Other', email: 'other@example.com', passwordHash: 'x', phone: '9876543210' });
+    const res = await put(token, { name: 'New Name', phone: '9876543210' }).expect(200);
+    expect(res.body.user).toMatchObject({ name: 'New Name', phone: '9876543210' });
   });
 
   it.each([

@@ -10,7 +10,7 @@ import { reactionStage } from '../utils/reactions.js';
  * Team-chat data access (channels, messages, read positions). Access decisions
  * live in services/chatService.js — this layer only reads and writes.
  */
-const SENDER_FIELDS = 'name role staff';
+const SENDER_FIELDS = 'name role staff avatar.url';
 
 const chatRepository = {
   // ── channels ──

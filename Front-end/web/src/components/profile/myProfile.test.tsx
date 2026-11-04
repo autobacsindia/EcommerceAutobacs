@@ -9,6 +9,8 @@ import PersonFace, { initialsOf } from './PersonFace';
 import { centredView, clampView, photoProblem, sourceRect, zoomTo, MAX_PICK_BYTES } from './photoCrop';
 import PanelShell from '@/components/panel/PanelShell';
 import { Avatar } from '@/components/tasks/ui';
+import { ChannelIcon } from '@/components/chat/chatUi';
+import type { ChatChannel } from '@/hooks/queries/useTeamChat';
 
 jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: jest.fn(), put: jest.fn(), delete: jest.fn() } }));
 jest.mock('@/lib/multipartResponse', () => ({ submitMultipart: jest.fn(), parseApiResponse: jest.fn() }));
@@ -164,5 +166,13 @@ describe('faces in the panel', () => {
     await waitFor(() => expect(container.querySelector('img')).toHaveAttribute('src', 'https://img.example.com/u1.jpg'));
     expect(screen.getByTitle('Bala R')).toHaveTextContent('BR');
     expect(get).toHaveBeenCalledWith('/staff/photos');
+  });
+
+  it('a direct message in the chat list shows the other person\'s photo, else initials', () => {
+    const dm = (avatarUrl: string) => ({ kind: 'dm', group: false, name: 'Vyshnav K', partner: { id: 'u9', name: 'Vyshnav K', avatarUrl } }) as unknown as ChatChannel;
+    const { container, rerender } = render(<ChannelIcon channel={dm('https://img.example.com/v.jpg')} />);
+    expect(container.querySelector('img')).toHaveAttribute('src', 'https://img.example.com/v.jpg');
+    rerender(<ChannelIcon channel={dm('')} />);
+    expect(container).toHaveTextContent('VK');
   });
 });
