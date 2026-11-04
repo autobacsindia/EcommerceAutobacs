@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PanelShell from '@/components/panel/PanelShell';
+import { useAuth } from '@/context/AuthContext';
 import { useAdminStats } from '@/hooks/queries/useAdminStats';
 import { formatCurrency } from '@/lib/utils';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -128,6 +129,7 @@ interface AdminLayoutClientProps {
 
 export default function AdminLayoutClient({ children, userName }: AdminLayoutClientProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const pathname = usePathname();
   // Derive collapse state from the section list itself so it never drifts from NAV_SECTIONS
   // (previously hardcoded — carried a stale 'Finance' key that matched no section).
@@ -227,7 +229,8 @@ export default function AdminLayoutClient({ children, userName }: AdminLayoutCli
       hoverRail
       // Tasks wants the room.
       tightPage={pathname === '/admin/tasks' || pathname.startsWith('/admin/tasks/')}
-      user={{ name: userName, role: 'Admin' }}
+      // The live auth user once loaded, so a name or photo change shows without a reload.
+      user={{ name: user?.name || userName, photoUrl: user?.avatarUrl, profileHref: '/admin/profile', role: 'Admin' }}
       onLogout={handleLogout}
       heading={<h2 className="pn-title truncate text-lg text-gray-900 md:text-xl">{pageLabel || 'Admin'}</h2>}
       actions={

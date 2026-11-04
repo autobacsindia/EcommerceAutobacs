@@ -5,11 +5,12 @@ import Img from './Img';
 import { UserIcon } from './icons';
 import { useAuth } from '@/context/AuthContext';
 import { loginHref } from '@/lib/utils';
+import { initialsOf } from '@/components/profile/PersonFace';
 
 /**
  * Nav profile control.
  *  - Signed in WITH a picture  → the user's Cloudinary avatar, links to /profile.
- *  - Signed in WITHOUT a picture → themed user icon, links to /profile.
+ *  - Signed in WITHOUT a picture → their initials, links to /profile.
  *  - Signed out                 → themed user icon, links to /login?redirect=/profile,
  *    so signing in lands on the account they just reached for instead of the home page.
  *
@@ -28,7 +29,7 @@ export default function ProfileAvatar({ className = 'avatar' }: { className?: st
         <Img src={pic} alt={user?.name || 'Profile'} sizes="34px" />
       ) : (
         <span className="avatar-fallback">
-          <UserIcon />
+          {isAuthenticated && user?.name ? <span className="text-[11px] font-bold">{initialsOf(user.name)}</span> : <UserIcon />}
         </span>
       )}
     </Link>

@@ -695,6 +695,7 @@ export async function listAssignees(actor) {
       team: teamOf(p),
       teamLabel: isAdmin(p) ? 'Admin' : STAFF_TEAM_LABELS[teamOf(p)] || '',
       isHead: isHead(p),
+      avatarUrl: p.avatar?.url || '',
       me: same(p._id, actor._id),
     }));
 }

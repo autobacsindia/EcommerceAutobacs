@@ -195,19 +195,19 @@ class UserRepository extends BaseRepository {
 
   /** Everyone who can chat, by name. A handful of rows (rides the role index). */
   async findChatUsers() {
-    return User.find(UserRepository.CHAT_USER_FILTER).select('name role staff').sort({ name: 1 }).lean();
+    return User.find(UserRepository.CHAT_USER_FILTER).select('name role staff avatar.url').sort({ name: 1 }).lean();
   }
 
   /** The chat-eligible subset of `ids`. */
   async findChatUsersByIds(ids) {
     if (!ids?.length) return [];
-    return User.find({ _id: { $in: ids }, ...UserRepository.CHAT_USER_FILTER }).select('name role staff').lean();
+    return User.find({ _id: { $in: ids }, ...UserRepository.CHAT_USER_FILTER }).select('name role staff avatar.url').lean();
   }
 
   /** Names/roles for display (any account — e.g. a DM partner who has since left). */
   async findDisplayByIds(ids) {
     if (!ids?.length) return [];
-    return User.find({ _id: { $in: ids } }).select('name role staff').lean();
+    return User.find({ _id: { $in: ids } }).select('name role staff avatar.url').lean();
   }
 
   /** Name + email for notifying people (chat mentions). Never sent to a browser. */

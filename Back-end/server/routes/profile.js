@@ -2,13 +2,36 @@ import express from "express";
 import User from "../models/User.js";
 import { asyncHandler } from "../middleware/errorMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
-import { validateProfileUpdate } from "../middleware/validationMiddleware.js";
-import { uploadSingle, handleMulterError } from "../middleware/uploadMiddleware.js";
+import { uploadSingle, handleMulterError, validateUploadedFiles } from "../middleware/uploadMiddleware.js";
 import { putPublicAsset } from "../services/storage/publicUploads.js";
 import { deleteHostedImages } from "../services/storage/publicImageDeletes.js";
 import { AddressBookError, normaliseAddressBook } from "../utils/addressBook.js";
+import { normaliseProfileUpdate, phoneVariants, ProfileUpdateError } from "../utils/profileUpdate.js";
+import { STAFF_TEAM_LABELS } from "../config/staff.js";
 
 const router = express.Router();
+
+// What the profile page reads back after a save — no tokens, wallet history or login trail.
+const OWN_PROFILE_FIELDS = 'name email phone role staff.team staff.isHead avatar addresses profile isVerified';
+
+/** The signed-in person's own profile, as the "My profile" page shows it. */
+const ownProfileOf = (u) => ({
+  id: u._id,
+  name: u.name,
+  email: u.email,
+  phone: u.phone || '',
+  role: u.role,
+  // Read-only on the page: set by an admin in the team panel, never here.
+  teamLabel: u.role === 'staff' ? STAFF_TEAM_LABELS[u.staff?.team] ?? null : u.role === 'admin' ? 'Admin' : null,
+  avatar: { url: u.avatar?.url || '' },
+  addresses: u.addresses ?? [],
+  profile: {
+    jobTitle: u.profile?.jobTitle || '',
+    dateOfBirth: u.profile?.dateOfBirth ? u.profile.dateOfBirth.toISOString().slice(0, 10) : '',
+    emergencyContact: { name: u.profile?.emergencyContact?.name || '', phone: u.profile?.emergencyContact?.phone || '' },
+    bio: u.profile?.bio || '',
+  },
+});
 
 // @route   GET /profile
 // @desc    Get current user profile
@@ -25,7 +48,9 @@ router.get("/", protect, asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    user
+    user,
+    // The "My profile" form's shape (dates as YYYY-MM-DD, team as a label).
+    me: ownProfileOf(user),
   });
 }));
 
@@ -64,60 +89,44 @@ router.put("/addresses", protect, asyncHandler(async (req, res) => {
 }));
 
 // @route   PUT /profile
-// @desc    Update user profile
+// @desc    Update my own profile. Allow-listed in utils/profileUpdate.js: role,
+//          team, email, sessionVersion and every other key are ignored even if
+//          sent. Keyed on req.user.id only — there is no :id, so nobody can
+//          address another person's profile through this route.
 // @access  Private
-router.put("/", protect, validateProfileUpdate, asyncHandler(async (req, res) => {
-  const { name, email, addresses } = req.body;
-
+router.put("/", protect, asyncHandler(async (req, res) => {
+  let update;
   try {
-    // Check if email is already taken by another user
-    if (email !== req.user.email) {
-      const existingUser = await User.findOne({ email });
-      if (existingUser && existingUser._id.toString() !== req.user.id) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email is already taken'
-        });
-      }
+    update = normaliseProfileUpdate(req.body, req.user);
+  } catch (err) {
+    // Answered here: the error middleware genericises messages it has not
+    // whitelisted, and "Phone must be a 10-digit mobile number" is the point.
+    if (err instanceof ProfileUpdateError) {
+      return res.status(400).json({ success: false, message: err.message });
     }
-
-    // Update user
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    user.name = name;
-    user.email = email;
-    
-    // Update addresses if provided
-    if (addresses) {
-      user.addresses = addresses;
-    }
-
-    const updatedUser = await user.save();
-
-    res.json({
-      success: true,
-      message: 'Profile updated successfully',
-      user: {
-        id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        addresses: updatedUser.addresses
-      }
-    });
-  } catch (error) {
-    console.error('Profile update error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error while updating profile',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    throw err;
   }
+
+  /*
+    Guest checkout and order lookup find an account by its exact phone string,
+    so a number already on someone else's account must not be claimable here —
+    otherwise their phone-only orders would attach to this account.
+  */
+  if (update.phone) {
+    const taken = await User.exists({ _id: { $ne: req.user.id }, phone: { $in: phoneVariants(update.phone) } });
+    if (taken) {
+      return res.status(400).json({ success: false, message: 'This phone number is already on another account.' });
+    }
+  }
+
+  const ops = {};
+  if (Object.keys(update.set).length) ops.$set = update.set;
+  if (Object.keys(update.unset).length) ops.$unset = update.unset;
+  const user = await User.findByIdAndUpdate(req.user.id, ops, { new: true, runValidators: true })
+    .select(OWN_PROFILE_FIELDS);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+  res.json({ success: true, message: 'Profile updated successfully', user: ownProfileOf(user) });
 }));
 
 export default router;
@@ -130,6 +139,8 @@ router.post(
   protect,
   uploadSingle('avatar'),
   handleMulterError,
+  // Magic bytes + pixel dimensions: the file really is the JPG/PNG/WebP it claims.
+  validateUploadedFiles,
   asyncHandler(async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No image file provided' });

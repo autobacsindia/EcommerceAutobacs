@@ -7,6 +7,7 @@ import Img from './Img';
 import RedesignVehicleMenu from './RedesignVehicleMenu';
 import RedesignNavSearch from './RedesignNavSearch';
 import ProfileAvatar from './ProfileAvatar';
+import { initialsOf } from '@/components/profile/PersonFace';
 import KarmaBadge from '@/components/profile/KarmaBadge';
 import { CheckCircle2, Handshake } from 'lucide-react';
 import { Search, Heart, Cart, Menu, Close, UserIcon, Phone, WhatsApp } from './icons';
@@ -181,7 +182,7 @@ export default function RedesignNav() {
                     <Img src={user.avatarUrl} alt={user?.name || 'Profile'} sizes="34px" />
                   ) : (
                     <span className="avatar-fallback">
-                      <UserIcon />
+                      {user?.name ? <span className="text-[11px] font-bold">{initialsOf(user.name)}</span> : <UserIcon />}
                     </span>
                   )}
                 </span>

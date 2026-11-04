@@ -42,15 +42,3 @@ export const validateUserIdParam = [
   validateRequest
 ];
 
-export const validateProfileUpdate = [
-  body('name').notEmpty().withMessage('Name is required').trim(),
-  body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
-  body('addresses').optional().isArray().withMessage('Addresses must be an array'),
-  body('addresses.*.fullName').optional().notEmpty().withMessage('Full name is required for address'),
-  body('addresses.*.phone').optional().notEmpty().withMessage('Phone is required for address'),
-  body('addresses.*.addressLine1').optional().notEmpty().withMessage('Address line 1 is required'),
-  body('addresses.*.city').optional().notEmpty().withMessage('City is required'),
-  body('addresses.*.state').optional().notEmpty().withMessage('State is required'),
-  body('addresses.*.postalCode').optional().notEmpty().withMessage('Postal code is required'),
-  validateRequest
-];
