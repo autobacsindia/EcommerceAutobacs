@@ -507,6 +507,31 @@ describe('Orders Integration API', () => {
       expect(last.body.pagination).toMatchObject({ currentPage: 3, hasNext: false, hasPrev: true });
     });
 
+    // Regression (2026-11-04): the page opened with sortBy=listDate (paid date) while
+    // the route validator still allowed only createdAt/totalAmount/status, so every
+    // Admin / Marketing Orders load was a 400 — "Couldn't load orders". Tests that
+    // called the controller directly could not see it; this goes through the route.
+    it('accepts exactly what the Orders page sends: sortBy=listDate (its default), newest paid first', async () => {
+      const older = await seedOrder({ status: 'processing', paymentStatus: 'paid' });
+      const newer = await seedOrder({ status: 'processing', paymentStatus: 'paid' });
+      await Order.collection.updateOne({ _id: older._id }, { $set: { listDate: new Date('2026-11-01T00:00:00Z') } });
+      await Order.collection.updateOne({ _id: newer._id }, { $set: { listDate: new Date('2026-11-03T00:00:00Z') } });
+
+      const res = await request(app)
+        .get(`${BASE}/orders/admin/all?page=1&limit=20&sortBy=listDate&sortOrder=desc`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+      expect(res.body.orders.map((o) => String(o._id))).toEqual([String(newer._id), String(older._id)]);
+    });
+
+    it.each(['listDate', 'createdAt', 'totalAmount', 'status'])('every column sort the page offers is accepted: %s', async (sortBy) => {
+      await seedOrder({ status: 'processing', paymentStatus: 'paid' });
+      await request(app)
+        .get(`${BASE}/orders/admin/all?sortBy=${sortBy}&sortOrder=asc`)
+        .set('Authorization', `Bearer ${admin}`)
+        .expect(200);
+    });
+
     it('filters by a single status', async () => {
       await seedOrder({ status: 'processing' });
       await seedOrder({ status: 'delivered' });

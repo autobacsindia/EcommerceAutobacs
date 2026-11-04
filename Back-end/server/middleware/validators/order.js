@@ -244,8 +244,10 @@ export const validateAdminOrderQuery = [
     .withMessage('maxAmount must be a non-negative number'),
   query('sortBy')
     .optional()
-    .isIn(['createdAt', 'totalAmount', 'status'])
-    .withMessage('sortBy must be one of: createdAt, totalAmount, status'),
+    // listDate = the paid date, or the created date while unpaid — the page's default
+    // (utils/orderListDate.js). Keep in step with ADMIN_ORDER_SORT_FIELDS in orderController.
+    .isIn(['listDate', 'createdAt', 'totalAmount', 'status'])
+    .withMessage('sortBy must be one of: listDate, createdAt, totalAmount, status'),
   query('sortOrder')
     .optional()
     .isIn(['asc', 'desc'])
