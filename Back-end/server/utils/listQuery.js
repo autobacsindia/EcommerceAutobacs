@@ -192,8 +192,8 @@ export function compareBySort(sort) {
   all the merged page can need.
 */
 export async function findEachBranch(q, query, { sort, limit }, find) {
-  if (!Array.isArray(query?.$or)) return find(q, { sort, limit });
-  const lists = await Promise.all(orPerBranch(q, query).$or.map((branch) => find(branch, { sort, limit })));
+  if (!Array.isArray(query?.$or)) return find(q, { sort, limit, branch: 0 });
+  const lists = await Promise.all(orPerBranch(q, query).$or.map((branch, i) => find(branch, { sort, limit, branch: i })));
   const seen = new Set();
   return lists.flat().sort(compareBySort(sort)).filter((row) => {
     const id = String(row._id);

@@ -13,7 +13,8 @@ import { amountRange, istRange } from './listQuery.js';
  *   sort   — 'newest' (default) | 'oldest' | 'amount_desc' | 'amount_asc' (the
  *            amount sorts are for the lists read straight from the orders
  *            collection; a work list reads them as newest)
- *   from / to — when the order was placed (YYYY-MM-DD, India time, both days included)
+ *   from / to — the order's list date: when it was paid, or placed while unpaid
+ *            (YYYY-MM-DD, India time, both days included; utils/orderListDate.js)
  *   min / max — the order total, rupees, inclusive
  *   eta    — 'due_today' | 'overdue' | 'none': a parcel in transit whose expected
  *            delivery date is today / has passed / was never set (work lists only)
@@ -50,7 +51,7 @@ function inRange(n, r) {
 export function rowMatches(row, f) {
   if (f.source && row.source !== f.source) return false;
   if (f.eta && !(row.eta?.[ETA_COUNT[f.eta]] > 0)) return false;
-  if (f.placed && !inRange(new Date(row.createdAt).getTime(), f.placed)) return false;
+  if (f.placed && !inRange(new Date(row.listDate || row.createdAt).getTime(), f.placed)) return false;
   if (f.amount && !inRange(Number(row.totalAmount), f.amount)) return false;
   if (f.stage && row.summaryStage !== f.stage && !(row.lines || []).some((l) => l.stage === f.stage)) return false;
   if (f.q) {
@@ -75,7 +76,7 @@ export function orderQueryFor(f) {
   const and = [];
   if (f.source === 'sales') and.push({ salesUser: { $type: 'objectId' } });
   if (f.source === 'website') and.push({ salesUser: null });
-  if (f.placed) and.push({ createdAt: f.placed });
+  if (f.placed) and.push({ listDate: f.placed });
   if (f.amount) and.push({ totalAmount: f.amount });
   if (f.q) {
     for (const w of f.q.split(/\s+/).slice(0, 5)) {

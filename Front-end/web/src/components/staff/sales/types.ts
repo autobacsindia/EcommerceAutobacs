@@ -75,6 +75,10 @@ export type SalesOrder = {
   id: string;
   orderNumber: string;
   createdAt: string;
+  /** When the money arrived; null while unpaid. The list sorts by this, else createdAt. */
+  paidAt?: string | null;
+  /** Pinned by me: on top of page 1 (personal). */
+  pinned?: boolean;
   status: string;
   paymentStatus: string;
   totalAmount: number;

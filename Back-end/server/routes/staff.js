@@ -121,6 +121,7 @@ import { requestPayment, cancelPart, getPaymentRequestPdf } from '../services/sa
 import { setPayDetails, readPayDetailsQr } from '../services/salesPayDetailsService.js';
 import { canSell } from '../config/staff.js';
 import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller } from '../services/orderAttributionService.js';
+import { listPins, pinOrder, unpinOrder } from '../services/orderPinService.js';
 import {
   recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, transferFilterOptions, getBankTransfer,
   editBankTransfer, withdrawBankTransfer, getTransferFile,
@@ -369,6 +370,23 @@ router.post('/sales/orders/:id/cancel', validateOrderIdParam, validateRequest, a
 //         orders (accounts, procurement, operations, sales head). No stage = all.
 router.get('/orders/paid', validatePaidOrdersQuery, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listPaidSalesOrders(req.user, req.query)) });
+}));
+
+// ── Personal order pins (services/orderPinService.js) ───────────────────────
+
+// @route  GET /staff/pins — my pinned order ids, newest pin first, and the cap
+router.get('/pins', asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listPins(req.user)) });
+}));
+
+// @route  POST /staff/orders/:id/pin — keep this order on top of MY lists (max 5)
+router.post('/orders/:id/pin', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await pinOrder(req.user, req.params.id)) });
+}));
+
+// @route  DELETE /staff/orders/:id/pin
+router.delete('/orders/:id/pin', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await unpinOrder(req.user, req.params.id)) });
 }));
 
 // ── Crediting a website order to a salesman (admin, marketing) ──────────────

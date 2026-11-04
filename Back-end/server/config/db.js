@@ -621,6 +621,11 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ PastSale indexes confirmed');
 
+    // Personal order pins (models/OrderPin.js) — same names as the schema.
+    await db.collection('orderpins').createIndex({ user: 1, order: 1 }, { unique: true, name: 'order_pin_user_order', background: true });
+    await db.collection('orderpins').createIndex({ user: 1, pinnedAt: -1 }, { name: 'order_pin_user_recent', background: true });
+    console.log('✓ OrderPin indexes confirmed');
+
     // Staff tasks (models/StaffTask.js, StaffTaskComment.js) — same names as the
     // schemas. Every list and the bell count is one range on one of these; the
     // clientId indexes are what make a double-clicked create or comment land once.

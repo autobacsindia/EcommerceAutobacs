@@ -215,7 +215,11 @@ function order(salesUser, over = {}) {
     ...rest,
   };
 }
-const insertOrders = (rows) => Order.collection.insertMany(rows);
+// Straight to the driver, so the save hook does not run: give each row the list date
+// it would have stamped (utils/orderListDate.js — the paid date, else the created date).
+const insertOrders = (rows) => Order.collection.insertMany(rows.map((r) => ({
+  ...r, listDate: r.listDate ?? r.paidAt ?? r.createdAt ?? new Date(),
+})));
 
 describe('My orders (a seller\'s sales orders)', () => {
   let rep; let other; let head;

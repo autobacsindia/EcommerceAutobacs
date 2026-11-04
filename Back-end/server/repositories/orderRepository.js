@@ -1482,7 +1482,7 @@ class OrderRepository extends BaseRepository {
   }
 
   /** The fields every team view of an order needs — one projection, one place. */
-  static WORKFLOW_SELECT = 'orderNumber createdAt status paymentStatus totalAmount subtotal items '
+  static WORKFLOW_SELECT = 'orderNumber createdAt paidAt listDate status paymentStatus totalAmount subtotal items '
     + 'shippingAddress user salesUser guestEmail shipments cancellations workflow payment spinReward';
 
   /**
@@ -1490,13 +1490,18 @@ class OrderRepository extends BaseRepository {
    * oldest first by default, newest first with `newestFirst` (the team panel's
    * lists). Both directions are served by the partial `team_workflow_open` index.
    */
-  async findOpenWorkflowPage({ after = null, limit = 50, newestFirst = false } = {}) {
+  async findOpenWorkflowPage({ after = null, limit = 50, newestFirst = false, byListDate = false } = {}) {
+    // byListDate: the team lists, on the paid date (utils/orderListDate.js) —
+    // `team_workflow_open_list_date`. Otherwise workflow.enteredAt, for the jobs
+    // that walk the whole queue (chat digests, ETA reminders, team activity).
+    const field = byListDate ? 'listDate' : 'workflow.enteredAt';
     const query = { 'workflow.open': true };
     if (after) {
       const past = newestFirst ? '$lt' : '$gt';
+      const value = byListDate ? after.listDate : after.enteredAt;
       query.$or = [
-        { 'workflow.enteredAt': { [past]: after.enteredAt } },
-        { 'workflow.enteredAt': after.enteredAt, _id: { [past]: after.id } },
+        { [field]: { [past]: value } },
+        { [field]: value, _id: { [past]: after.id } },
       ];
     }
     const dir = newestFirst ? -1 : 1;
@@ -1504,8 +1509,19 @@ class OrderRepository extends BaseRepository {
       .select(OrderRepository.WORKFLOW_SELECT)
       .populate({ path: 'user', select: 'name email phone' })
       .populate({ path: 'salesUser', select: 'name email' })
-      .sort({ 'workflow.enteredAt': dir, _id: dir })
+      .sort({ [field]: dir, _id: dir })
       .limit(limit)
+      .lean();
+  }
+
+  /** Open workflow orders by id (a person's pinned orders, at most a handful). */
+  async findOpenWorkflowByIds(ids) {
+    if (!ids.length) return [];
+    return Order.find({ _id: { $in: ids }, 'workflow.open': true })
+      .select(OrderRepository.WORKFLOW_SELECT)
+      .populate({ path: 'user', select: 'name email phone' })
+      .populate({ path: 'salesUser', select: 'name email' })
+      .limit(ids.length)
       .lean();
   }
 

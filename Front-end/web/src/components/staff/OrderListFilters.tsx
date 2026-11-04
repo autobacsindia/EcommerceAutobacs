@@ -137,7 +137,7 @@ export default function OrderListFilters({ list, summary, shown, sellers = [], c
           <ListSelect label="Salesman" value={v.seller} onChange={(x) => set({ seller: x })} allLabel="Any salesman"
             options={sellers.map((p) => ({ value: p.id, label: p.name }))} />
         )}
-        <ListDateRange label="Ordered on" from={v.from} to={v.to} onChange={(from, to) => set({ from, to })}>
+        <ListDateRange label="Paid / created on" from={v.from} to={v.to} onChange={(from, to) => set({ from, to })}>
           <span>Ordered</span>
         </ListDateRange>
         {has('min') && <ListAmountRange min={v.min} max={v.max} onChange={(min, max) => set({ min, max })} />}

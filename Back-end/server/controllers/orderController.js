@@ -37,6 +37,7 @@ import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import * as Sentry from '@sentry/node';
 import { isSplitPaid, SPLIT_REFUND_MESSAGE } from '../utils/splitPayment.js';
+import { pinnedIds, withoutPinned, inPinOrder } from '../services/orderPinService.js';
 
 /**
  * Project a populated Payment document down to what a client may see.
@@ -2252,9 +2253,10 @@ const ADMIN_PAYMENT_STATUSES = ['pending', 'paid', 'failed', 'refunded', 'cancel
 // by default; they belong to the CRM Leads section and are reachable here only via an
 // explicit `paymentStatus` filter. Nothing is deleted — just hidden from the default view.
 const ORDERS_DEFAULT_PAYMENT_STATUSES = ['pending', 'paid', 'refunded'];
-// Whitelisted sort fields — anything else falls back to createdAt to avoid injecting
-// an arbitrary (and unindexed) sort key.
-const ADMIN_ORDER_SORT_FIELDS = new Set(['createdAt', 'totalAmount', 'status']);
+// Whitelisted sort fields — anything else falls back to listDate (the paid date, or
+// the created date while unpaid: utils/orderListDate.js) to avoid injecting an
+// arbitrary (and unindexed) sort key.
+const ADMIN_ORDER_SORT_FIELDS = new Set(['listDate', 'createdAt', 'totalAmount', 'status']);
 
 /**
  * Normalize a search term for the ORDER-ID lane only.
@@ -2350,8 +2352,9 @@ export const getAllOrdersAdmin = async (req, res) => {
     query.paymentStatus = { $in: ORDERS_DEFAULT_PAYMENT_STATUSES };
   }
 
-  // Created-at range, anchored to the store timezone so a date-only "YYYY-MM-DD"
-  // covers that whole IST calendar day (from 00:00 to 23:59:59.999 IST), not a
+  // List-date range (paid date, or created date while unpaid — the date the list
+  // sorts by), anchored to the store timezone so a date-only "YYYY-MM-DD" covers
+  // that whole IST calendar day (from 00:00 to 23:59:59.999 IST), not a
   // UTC-midnight window that would leak into the neighbouring day.
   const createdAt = {};
   if (req.query.startDate) {
@@ -2362,7 +2365,7 @@ export const getAllOrdersAdmin = async (req, res) => {
     const d = new Date(`${req.query.endDate}T23:59:59.999${STORE_TZ_OFFSET}`);
     if (!isNaN(d.getTime())) createdAt.$lte = d;
   }
-  if (Object.keys(createdAt).length) query.createdAt = createdAt;
+  if (Object.keys(createdAt).length) query.listDate = createdAt;
 
   // Total-amount range (rupees, matching Order.totalAmount and the UI display).
   const amount = {};
@@ -2470,17 +2473,29 @@ export const getAllOrdersAdmin = async (req, res) => {
     query['spinReward.voidedAt'] = null;
   }
 
-  const sortField = ADMIN_ORDER_SORT_FIELDS.has(req.query.sortBy) ? req.query.sortBy : 'createdAt';
+  const sortField = ADMIN_ORDER_SORT_FIELDS.has(req.query.sortBy) ? req.query.sortBy : 'listDate';
   const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
-  const sort = { [sortField]: sortOrder };
+  // _id breaks list-date ties (order_list_date covers both), so two orders paid at
+  // the same moment never swap between pages. The other sorts keep their old shape
+  // and the indexes that already serve them.
+  const sort = sortField === 'listDate' ? { listDate: sortOrder, _id: sortOrder } : { [sortField]: sortOrder };
 
-  const [orders, total] = await Promise.all([
+  // The admin's own pinned orders (services/orderPinService.js) sit on top of
+  // page 1 when they match the filters, and are left out of every page below.
+  const pins = await pinnedIds(req.user);
+  const listQuery = withoutPinned(query, pins);
+
+  const [orders, total, pinnedRows] = await Promise.all([
     // Projected — see ADMIN_LIST_FIELDS. Covers the table, the status control, the
     // refund badge and both CSV exports; `statusHistory` (the heaviest field, and one
     // that grows with every transition) is read by none of them.
-    orderRepository.findAllAdmin(query, { skip, limit, sort, select: ADMIN_LIST_FIELDS }),
-    orderRepository.count(query)
+    orderRepository.findAllAdmin(listQuery, { skip, limit, sort, select: ADMIN_LIST_FIELDS }),
+    orderRepository.count(listQuery),
+    page === 1 && pins.length
+      ? orderRepository.findAllAdmin({ $and: [query, { _id: { $in: pins } }] }, { limit: pins.length, select: ADMIN_LIST_FIELDS })
+      : [],
   ]);
+  const pinned = inPinOrder(pinnedRows, pins).map((o) => ({ ...(o.toObject ? o.toObject() : o), pinned: true }));
 
   const pages = Math.ceil(total / limit);
 
@@ -2500,7 +2515,7 @@ export const getAllOrdersAdmin = async (req, res) => {
       hasNext: page < pages,
       hasPrev: page > 1,
     },
-    orders
+    orders: [...pinned, ...orders]
   });
 };
 

@@ -163,7 +163,8 @@ describe('findEachBranch', () => {
     // ids[2] and ids[3] share an hour: the larger id comes first (newest first).
     const tied = [ids[2], ids[3]].sort((x, y) => (String(x) < String(y) ? 1 : -1));
     expect(rows.map((r) => r._id)).toEqual([ids[0], ids[1], ...tied]);
-    expect(seen).toEqual([[{ a: 1 }, { sort, limit: 4 }], [{ b: 1 }, { sort, limit: 4 }]]);
+    // Each find is told which branch it reads (the list picks that branch's index by it).
+    expect(seen).toEqual([[{ a: 1 }, { sort, limit: 4, branch: 0 }], [{ b: 1 }, { sort, limit: 4, branch: 1 }]]);
   });
 
   it('page 2 carries the cursor into each branch', async () => {
@@ -177,7 +178,7 @@ describe('findEachBranch', () => {
     const q = { a: 1 };
     const find = jest.fn(async () => [row(0, 1)]);
     expect(await findEachBranch(q, q, { sort, limit: 2 }, find)).toEqual([row(0, 1)]);
-    expect(find).toHaveBeenCalledWith(q, { sort, limit: 2 });
+    expect(find).toHaveBeenCalledWith(q, { sort, limit: 2, branch: 0 });
   });
 
   it('compareBySort: oldest first, numbers, and a missing value sorts lowest', () => {
