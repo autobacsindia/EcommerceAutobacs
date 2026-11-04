@@ -29,7 +29,12 @@ export type TaskFilters = {
   /** Only tasks with this tag. */
   tag?: string;
   sort?: TaskSort;
+  /** The team list only: one list of the space (its id), or 'none' for "Other tasks". */
+  list?: string;
 };
+
+/** The list a new task made in this view goes in: the one being shown, if any. */
+export const listOf = (filters: TaskFilters) => (filters.view === 'team' && filters.list && filters.list !== 'none' ? filters.list : undefined);
 
 export type Task = {
   id: string;
@@ -67,6 +72,8 @@ export type Task = {
   order: { id: string; code: string } | null;
   /** Set when the giver chose "own copy each": each person has their own copy. */
   group: { id: string; size: number } | null;
+  /** The list it is filed in (spaces.ts), or null: the space's "Other tasks". */
+  list?: string | null;
   /** The task this is a sub-task of (its number and title; the viewer may not be allowed to open it). */
   parent?: { id: string; code: string; title: string } | null;
   /** On a parent: its sub-tasks that are not archived, and how many of them are done. */

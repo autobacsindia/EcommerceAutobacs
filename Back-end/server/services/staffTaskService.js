@@ -66,6 +66,7 @@ import staffTaskInboxRepository, { INBOX_UNREAD_CAP } from '../repositories/staf
 import orderRepository from '../repositories/orderRepository.js';
 import staffTaskTimeRepository from '../repositories/staffTaskTimeRepository.js';
 import { sendToUsers } from './pushService.js';
+import { listForTask, liveList } from './staffTaskListService.js';
 import { orderNumber } from './invoiceService.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
@@ -154,8 +155,11 @@ const followersOf = (t) => t.followers ?? [];
 const isDoing = (u, t) => peopleOf(t).some((p) => same(u?._id, p.user));
 const isFollowing = (u, t) => followersOf(t).some((p) => same(u?._id, p.user));
 const headOnTask = (u, t) => teamsOf(t).some((team) => headOf(u, team));
+// Like a Google Chat space: everyone in a team sees the team's tasks (seeing,
+// commenting and following — changing one stays with canEdit).
+const teamOnTask = (u, t) => !!teamOf(u) && teamsOf(t).includes(teamOf(u));
 
-export const canSee = (u, t) => isAdmin(u) || isDoing(u, t) || isFollowing(u, t) || same(u?._id, t.createdBy) || headOnTask(u, t);
+export const canSee = (u, t) => isAdmin(u) || isDoing(u, t) || isFollowing(u, t) || same(u?._id, t.createdBy) || teamOnTask(u, t);
 export const canEdit = (u, t) => isAdmin(u) || same(u?._id, t.createdBy) || headOnTask(u, t);
 const canSetStatus = (u, t) => canEdit(u, t) || isDoing(u, t);
 const canReassign = canEdit;
@@ -336,6 +340,7 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
     createdBy: { id: idOf(t.createdBy), name: t.createdByName || '' },
     order: t.order ? { id: idOf(t.order.target), code: t.order.code } : null,
     group: t.group ? { id: idOf(t.group), size: t.groupSize || 1 } : null,
+    list: idOf(t.list),
     // The parent's number and title travel with the sub-task, so a row can say
     // "in T-20 …" even to someone who may not open T-20.
     parent: t.parent ? { id: idOf(t.parent.task), code: `T-${t.parent.number}`, title: t.parent.title || '' } : null,
@@ -598,7 +603,7 @@ async function withTime(rows) {
   return rows.map((r) => ({ ...r, timeSeconds: seconds.get(r.id) ?? 0 }));
 }
 
-export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, priority, tag, q, sort, cursor } = {}) {
+export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, list, priority, tag, q, sort, cursor } = {}) {
   const query = { bucket: state };
   if (view === 'mine') {
     query['assignees.user'] = actor._id;
@@ -609,10 +614,20 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
   } else if (view === 'team') {
     if (isAdmin(actor)) {
       if (team) query.teams = team === 'admin' ? null : team;
-    } else if (isHead(actor)) {
-      query.teams = actor.staff.team;
+    } else if (teamOf(actor)) {
+      query.teams = teamOf(actor);
     } else {
-      throw fail('Only team heads and the admin see the team\'s tasks.', 403);
+      throw fail('Only people in a team see the team\'s tasks.', 403);
+    }
+    // One list of the space, or its "Other tasks" — inside the team chosen above.
+    if (list) {
+      if (!query.teams) throw fail('Pick a team first.', 400);
+      if (list === 'none') {
+        query.list = null;
+      } else {
+        if (!mongoose.isValidObjectId(list)) throw fail('That list no longer exists.', 400);
+        query.list = new mongoose.Types.ObjectId(list);
+      }
     }
     if (assignee) {
       if (!mongoose.isValidObjectId(assignee)) throw fail('Invalid person.', 400);
@@ -791,6 +806,9 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   const shared = input.shared === true || input.shared === 'true';
   const many = people.length > 1 && !shared;
   const rows = many ? people.map((p) => [p]) : [people];
+  // The list must be in a space of every copy made (each copy has its person's team).
+  let list = null;
+  for (const who of rows) list = await listForTask(input.listId, peopleFields(who).teams);
   const keyFor = (who) => (!clientId ? undefined : many ? `${clientId}.${idOf(who[0]._id)}` : clientId);
   const earlier = clientId ? await staffTaskRepository.findByClientIds(actor._id, rows.map(keyFor)) : [];
   const madeFor = new Map(earlier.map((t) => [t.clientId, t]));
@@ -830,6 +848,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         ...(parent && { parent: { task: parent._id, number: parent.number, title: parent.title } }),
         group,
         groupSize: many ? people.length : undefined,
+        list: list?._id ?? null,
         ...placeOf({ status, dueOn, dueTime }),
         clientId: key,
         history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: namesOf(peopleFields(who).assignees) }],
@@ -939,7 +958,7 @@ async function applyUpdate(actor, t, input, req) {
     }
   }
   const willBeArchived = set.archivedAt !== undefined ? !!set.archivedAt : archived;
-  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds'].some(has);
+  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds', 'listId'].some(has);
   if (editing && willBeArchived) throw fail('This task is archived. Restore it first.', 409);
 
   const editable = canEdit(actor, t);
@@ -1012,6 +1031,20 @@ async function applyUpdate(actor, t, input, req) {
       note('assignee', namesOf(before), namesOf(list));
       added = list.filter((p) => !before.some((b) => same(b.user, p.user))).map((p) => p.user);
     }
+  }
+  // The list: a new one sent, or the old one dropped when the task left its team.
+  const teamsNow = set.teams ?? teamsOf(t);
+  if (has('listId')) {
+    const want = await listForTask(input.listId, teamsNow);
+    if (idOf(want?._id) !== idOf(t.list)) {
+      needEdit();
+      const was = await liveList(t.list);
+      set.list = want?._id ?? null;
+      note('list', was?.name || '', want?.name || '');
+    }
+  } else if (t.list && set.teams) {
+    const was = await liveList(t.list);
+    if (!was || !teamsNow.includes(was.team)) { set.list = null; if (was) note('list', was.name, ''); }
   }
 
   if (!entries.length) return shape(t, actor, { full: true });

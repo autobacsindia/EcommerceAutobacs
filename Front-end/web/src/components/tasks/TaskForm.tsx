@@ -3,10 +3,11 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { CalendarDays, CalendarRange, Flag, ListChecks, Loader2, Tag, UserPlus, Users, X } from 'lucide-react';
+import { CalendarDays, CalendarRange, Flag, ListChecks, ListTree, Loader2, Tag, UserPlus, Users, X } from 'lucide-react';
 import TagInput from './TagInput';
 import AssigneePicker from './AssigneePicker';
 import { AvatarStack, DueTimeSelect } from './ui';
+import { ListPicker } from './spaces';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
@@ -146,7 +147,13 @@ export function PeopleField({ people, selected, onChange, copies, onCopies }: {
 }
 
 /** New task, for anyone in the panel (yourself included). */
-export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) => void; onCancel: () => void }) {
+/**
+ * `listTeam` is the space whose lists the form offers (the team being shown, or
+ * the person's own); `defaultListId` starts it in the list on screen.
+ */
+export default function TaskForm({ onDone, onCancel, listTeam, defaultListId }: {
+  onDone: (task: Task) => void; onCancel: () => void; listTeam?: string | null; defaultListId?: string;
+}) {
   const queryClient = useQueryClient();
   const people = useAssignees();
   const choices = people.data?.people ?? [];
@@ -161,6 +168,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
   const [copies, setCopies] = useState(false);
   const many = copies && chosen.length > 1;
   const [order, setOrder] = useState<PickedOrder | null>(null);
+  const [listId, setListId] = useState<string | null>(defaultListId ?? null);
   const [error, setError] = useState('');
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const datesBackwards = !!form.startOn && !!form.dueOn && form.startOn > form.dueOn;
@@ -178,6 +186,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
       startOn: form.startOn || null,
       tags: form.tags,
       orderId: order?.id || null,
+      ...(listId ? { listId } : {}),
       clientId: clientId.current,
     }),
     onSuccess: (res) => {
@@ -259,6 +268,12 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
           />
         </label>
         <OrderPicker value={order} onChange={setOrder} />
+        {listTeam && (
+          <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
+            <span className="flex shrink-0 items-center gap-1"><ListTree aria-hidden className="h-3.5 w-3.5" /> List</span>
+            <ListPicker team={listTeam} value={listId} onChange={setListId} className="rounded-lg border border-gray-200 px-2 py-1" />
+          </div>
+        )}
         {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3">

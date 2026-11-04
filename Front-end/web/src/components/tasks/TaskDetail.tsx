@@ -6,7 +6,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import toast from 'react-hot-toast';
 import {
   AlignLeft, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, Clock, CornerLeftUp, Eye, Flag, Link2,
-  ListChecks, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, Timer as TimerIcon, Trash2, UserPlus, UserRound, Users, X, type LucideIcon,
+  ListChecks, ListTree, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, Timer as TimerIcon, Trash2, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
@@ -23,6 +23,7 @@ import TaskMenu from './TaskMenu';
 import Subtasks from './Subtasks';
 import { TimePanel, TimerButton } from './Timer';
 import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
+import { ListPicker } from './spaces';
 import {
   FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, formatDueDay, formatDueKey, isConflict, isPastDue, newClientId, orderHrefFor, peopleOf,
   type Assignee, type ChecklistItem, type CommentPage, type Person, type Task, type TaskComment, type TaskPriority, type TaskStatus,
@@ -30,7 +31,7 @@ import {
 
 type Patch = Partial<{
   title: string; description: string; priority: TaskPriority; dueOn: string | null; dueTime: string | null; startOn: string | null; tags: string[];
-  orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean;
+  orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean; listId: string | null;
 }>;
 
 const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => string> = {
@@ -44,6 +45,7 @@ const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => 
   start: (h) => `changed the start date from ${h.from === 'none' ? 'none' : formatDueDay(h.from)} to ${h.to === 'none' ? 'none' : formatDueDay(h.to)}`,
   tags: (h) => (h.to === 'none' ? 'removed the tags' : `set the tags to ${h.to}`),
   order: (h) => `changed the order from ${h.from} to ${h.to}`,
+  list: (h) => (h.from && h.to ? `moved it from the list ${h.from} to ${h.to}` : h.to ? `put it in the list ${h.to}` : `took it out of the list ${h.from}`),
   edited: (h) => `edited the ${h.from}`,
   check_added: (h) => `added the step "${h.to}"`,
   check_renamed: (h) => `renamed a step to "${h.to}"`,
@@ -470,6 +472,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
       queryClient.setQueryData(taskKeys.one(id), { task: res.task });
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() });
       queryClient.invalidateQueries({ queryKey: taskKeys.summary() });
+      queryClient.invalidateQueries({ queryKey: taskKeys.spaces() });
       // Archiving takes the sub-tasks along; a sub-task's change moves its parent's count.
       queryClient.invalidateQueries({ queryKey: taskKeys.subtasks(id) });
       if (res.task.parent) {
@@ -638,6 +641,16 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
               ? <Link href={orderHrefFor(base, task.order.id)} className="font-medium text-blue-700 hover:underline">{task.order.code}</Link>
               : <span className="text-gray-400">Empty</span>}
           </Field>
+          {task.team && (
+            <Field label="List" icon={ListTree}>
+              <ListPicker
+                team={task.team}
+                value={task.list}
+                disabled={!task.can.edit || save.isPending}
+                onChange={(listId) => save.mutate({ listId })}
+              />
+            </Field>
+          )}
           <Field label="Given by" icon={UserPlus}>
             <span className="flex min-w-0 items-center gap-2 text-gray-700">
               <Avatar name={task.createdBy.name} id={task.createdBy.id} size="xs" />

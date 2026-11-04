@@ -6,7 +6,7 @@
  *     pages with no repeats or gaps, and keeps the person / search / due filters
  *   - done and archived lists keep their own order whatever `sort` says
  *   - the open list's first page says how many match; later pages do not
- *   - the sort never widens what a person sees (their own, or their team's for a head)
+ *   - the sort never widens what a person sees (their own, or their own team's — never another team's)
  */
 import { jest } from '@jest/globals';
 import mongoose from 'mongoose';
@@ -92,9 +92,14 @@ it('done tasks keep "most recently finished first", whatever the sort', async ()
   expect(done.summary).toBeUndefined();
 });
 
-it('the sort never shows someone else\'s tasks; a head sees the team\'s', async () => {
+it('the sort never shows another team\'s tasks; a member and a head both see their own team\'s', async () => {
   await insert([task(me._id, { title: 'mine' }), task(someoneElse, { title: 'theirs' }), task(oid(), { title: 'other team', team: 'accounts' })]);
   expect(titles(await listTasks(me, { view: 'mine', sort: 'newest' }))).toEqual(['mine']);
   expect(titles(await listTasks(head, { view: 'team', sort: 'oldest' }))).toEqual(['mine', 'theirs']);
-  await expect(listTasks(me, { view: 'team', sort: 'newest' })).rejects.toMatchObject({ statusCode: 403 });
+  // Since Part 3 (team spaces, like Google Chat) a member sees the whole team too — but only that team.
+  expect(titles(await listTasks(me, { view: 'team', sort: 'newest' }))).toEqual(['theirs', 'mine']);
+  // Asking for another team is ignored for anyone but the admin: still only their own.
+  expect(titles(await listTasks(me, { view: 'team', team: 'accounts', sort: 'newest' }))).toEqual(['theirs', 'mine']);
+  const loner = { _id: oid(), role: 'staff', name: 'No team', staff: { active: true, team: null, isHead: false } };
+  await expect(listTasks(loner, { view: 'team', sort: 'newest' })).rejects.toMatchObject({ statusCode: 403 });
 });

@@ -11,7 +11,7 @@ import BulkBar from './BulkBar';
 import TaskMenu from './TaskMenu';
 import { Avatar, AvatarStack, Chip, DuePill, GroupCount, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
 import {
-  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, formatDuration, newClientId, peopleOf,
+  MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, formatDuration, listOf, newClientId, peopleOf,
   type Task, type TaskFilters, type TaskGroupBy, type TaskPriority, type TaskStatus,
 } from './types';
 
@@ -277,8 +277,10 @@ function QuickChips({ extras, onChange }: { extras: QuickExtras; onChange: (patc
  * date, the priority and tags before it is saved. One id per draft: a double
  * Enter or a retried request makes one task.
  */
-export function QuickAdd({ status, assigneeId, label = 'Add task', variant = 'list' }: {
+export function QuickAdd({ status, assigneeId, listId, label = 'Add task', variant = 'list' }: {
   status: TaskStatus; assigneeId?: string; label?: string; variant?: 'list' | 'board';
+  /** Inside one list of a space: the new task goes in it. */
+  listId?: string;
 }) {
   const add = useQuickAdd();
   const [open, setOpen] = useState(false);
@@ -307,7 +309,7 @@ export function QuickAdd({ status, assigneeId, label = 'Add task', variant = 'li
         e.preventDefault();
         const text = title.trim();
         if (!text) return;
-        add.mutate({ title: text, status, assigneeId, extras, clientId: clientId.current }, {
+        add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(listId ? { listId } : {}) }, clientId: clientId.current }, {
           // Ready for the next one; the people and the chips stay, the name clears.
           onSuccess: () => { setTitle(''); clientId.current = newClientId(); },
         });
@@ -359,9 +361,9 @@ function GroupHeading({ g }: { g: TaskGroup }) {
 }
 const PriorityFlagIcon = ({ priority }: { priority: keyof typeof PRIORITY_STYLE }) => <PriorityFlag priority={priority} />;
 
-function Group({ g, onOpen, collapsed, onToggle, quickAddFor, footer, selected, onSelect, onTag, activeTag, countLabel, base }: {
+function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, footer, selected, onSelect, onTag, activeTag, countLabel, base }: {
   g: TaskGroup; onOpen: (id: string) => void; collapsed: boolean; onToggle: () => void; base?: string;
-  quickAddFor?: string | null; footer?: ReactNode; selected: Set<string>; onSelect: (ts: Task[], on: boolean) => void;
+  quickAddFor?: string | null; listId?: string; footer?: ReactNode; selected: Set<string>; onSelect: (ts: Task[], on: boolean) => void;
   onTag?: (tag: string) => void; activeTag?: string; countLabel?: string;
 }) {
   const Chevron = collapsed ? ChevronRight : ChevronDown;
@@ -400,7 +402,7 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, footer, selected, 
             ))}
           </ul>
           {footer}
-          {quickAddFor !== null && g.addStatus && <QuickAdd status={g.addStatus} assigneeId={quickAddFor} />}
+          {quickAddFor !== null && g.addStatus && <QuickAdd status={g.addStatus} assigneeId={quickAddFor} listId={listId} />}
         </div>
       )}
     </section>
@@ -454,6 +456,7 @@ export default function TaskListView({ filters, onOpen, quickAddFor, empty, grou
           collapsed={!!collapsed[g.key]}
           onToggle={() => toggle(g.key)}
           quickAddFor={quickAddFor}
+          listId={listOf(filters)}
           selected={selected}
           onSelect={onSelect}
           onTag={onTag}

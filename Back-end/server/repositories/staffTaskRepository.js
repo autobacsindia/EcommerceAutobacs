@@ -17,7 +17,7 @@ const HISTORY_CAP = 100;
 export const LIST_PROJECTION = Object.freeze({
   number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, dueTime: 1, startOn: 1, tags: 1,
   assignee: 1, assigneeName: 1, team: 1, assignees: 1, teams: 1, followers: 1, createdBy: 1, createdByName: 1,
-  order: 1, group: 1, groupSize: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
+  order: 1, group: 1, groupSize: 1, list: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
   completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
   checklistTotal: { $size: { $ifNull: ['$checklist', []] } },
   checklistDone: { $size: { $filter: { input: { $ifNull: ['$checklist', []] }, cond: '$$this.done' } } },
@@ -64,6 +64,21 @@ const staffTaskRepository = {
     { $set: set, $inc: { rev: 1 }, $push: { history: { $each: entries, $slice: -HISTORY_CAP } } },
     { new: true },
   ).lean(),
+
+  /**
+   * Take every task out of `listIds` (lists just deleted) into "Other tasks",
+   * bumping each one's rev — an edit made against the old list is then refused,
+   * not silently applied on top.
+   */
+  unfile: (listIds, entry) => StaffTask.updateMany(
+    { list: { $in: listIds } },
+    { $set: { list: null }, $inc: { rev: 1 }, $push: { history: { $each: [entry], $slice: -HISTORY_CAP } } },
+  ),
+  /** Open tasks per list in one team's space (null = "Other tasks"), from staff_task_teams. */
+  openCountsByList: (team) => StaffTask.aggregate([
+    { $match: { teams: team, bucket: 'open' } },
+    { $group: { _id: '$list', n: { $sum: 1 } } },
+  ]),
 
   /**
    * Keyset page over one bucket, ordered by (rank, _id). `range` narrows rank

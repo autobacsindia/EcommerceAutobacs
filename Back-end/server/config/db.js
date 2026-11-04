@@ -638,6 +638,10 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftasks').createIndex({ 'assignees.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_assignees', background: true });
     await db.collection('stafftasks').createIndex({ teams: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_teams', background: true });
     await db.collection('stafftasks').createIndex({ 'followers.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_followers', background: true });
+    // One list of a space, or its "Other tasks" (list: null) — models/StaffTaskList.js.
+    await db.collection('stafftasks').createIndex({ teams: 1, list: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_team_list', background: true });
+    await db.collection('stafftasklists').createIndex({ team: 1, archivedAt: 1, order: 1 }, { name: 'staff_task_list_team', background: true });
+    await db.collection('stafftasklists').createIndex({ team: 1, folder: 1, kind: 1, nameKey: 1 }, { unique: true, name: 'staff_task_list_name', background: true });
     await db.collection('stafftasks').createIndex(
       { createdBy: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_task_client_id', background: true }

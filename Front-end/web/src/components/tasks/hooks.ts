@@ -17,6 +17,7 @@ export function listParams(filters: TaskFilters, state: TaskBucket): Record<stri
   if (filters.q?.trim()) p.q = filters.q.trim();
   if (filters.view === 'team' && filters.assignee) p.assignee = filters.assignee;
   if (filters.view === 'team' && filters.team) p.team = filters.team;
+  if (filters.view === 'team' && filters.list) p.list = filters.list;
   if (filters.tag) p.tag = filters.tag;
   if (state === 'open' && filters.sort && filters.sort !== 'due') p.sort = filters.sort;
   return p;
@@ -38,12 +39,13 @@ export function useTaskPages(filters: TaskFilters, state: TaskBucket, enabled = 
   });
 }
 
-/** After any change: every list and the header counts reload. */
+/** After any change: every list, the header counts and the sidebar's list counts reload. */
 export function useRefreshTasks() {
   const queryClient = useQueryClient();
   return () => Promise.all([
     queryClient.invalidateQueries({ queryKey: taskKeys.lists() }),
     queryClient.invalidateQueries({ queryKey: taskKeys.summary() }),
+    queryClient.invalidateQueries({ queryKey: taskKeys.spaces() }),
   ]);
 }
 
@@ -89,7 +91,7 @@ export function useQuickEdit() {
 }
 
 /** What "+ Add task" may set beside the title (the board's chips). */
-export type QuickExtras = { assigneeIds?: string[]; dueOn?: string | null; priority?: TaskPriority; tags?: string[] };
+export type QuickExtras = { assigneeIds?: string[]; dueOn?: string | null; priority?: TaskPriority; tags?: string[]; listId?: string };
 
 /**
  * "+ Add task" inside a status group or board column: a title, Enter, done.
@@ -111,6 +113,7 @@ export function useQuickAdd() {
         ...(extras.dueOn ? { dueOn: extras.dueOn } : {}),
         ...(extras.priority && extras.priority !== 'normal' ? { priority: extras.priority } : {}),
         ...(extras.tags?.length ? { tags: extras.tags } : {}),
+        ...(extras.listId ? { listId: extras.listId } : {}),
         clientId,
       });
     },

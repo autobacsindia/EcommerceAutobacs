@@ -141,7 +141,7 @@ describe('the list', () => {
     head.unmount();
     workspace({ base: '/admin/tasks', canSeeTeam: true });
     const teams = await screen.findByRole('group', { name: 'Teams' });
-    fireEvent.click(within(teams).getByRole('button', { name: /Procurement/ }));
+    fireEvent.click(within(teams).getByRole('button', { name: 'Procurement' }));
     await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=team&state=open&team=procurement'));
     expect(screen.getByRole('heading', { level: 1, name: /Procurement tasks/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'All teams' }));

@@ -113,8 +113,10 @@ describe('making a sub-task', () => {
     const p = await parentTask();
     const s = await sub(p, 'Count Bosch pads');
     await refused(sub(s, 'deeper'), 400, /can’t have sub-tasks/);
-    // Arun does the sub-task and sees it, but did not give the parent: he may not add to it (he cannot see it: 404).
-    await refused(sub(p, 'Arun adds', arun, {}, arun), 404);
+    // Arun is in the parent's team, so he sees it — but did not give it: he may not add to it.
+    await refused(sub(p, 'Arun adds', arun, {}, arun), 403, /add sub-tasks/);
+    // Bala, in another team, does not see it at all.
+    await refused(sub(p, 'Bala adds', bala, {}, bala), 404);
     // Sam follows the parent: he sees it, but following is not editing.
     await tasks.changeFollowers(priya, p.id, { add: [String(sam._id)] });
     await refused(sub(p, 'Sam adds', sam, {}, sam), 403, /add sub-tasks/);

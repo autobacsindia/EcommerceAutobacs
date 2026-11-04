@@ -82,8 +82,8 @@ beforeEach(() => {
   jest.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
-const workspace = (props: Partial<{ base: string; canSeeTeam: boolean }> = {}) =>
-  wrap(<TasksWorkspace base={props.base ?? '/team/tasks'} canSeeTeam={props.canSeeTeam ?? false} />);
+const workspace = (props: Partial<{ base: string; canSeeTeam: boolean; myTeam: string; myTeamLabel: string; isHead: boolean }> = {}) =>
+  wrap(<TasksWorkspace {...props} base={props.base ?? '/team/tasks'} canSeeTeam={props.canSeeTeam ?? false} />);
 
 describe('the Tasks page', () => {
   it('groups open tasks by status, each with "+ Add task"; Complete is folded until opened', async () => {
@@ -127,16 +127,17 @@ describe('the Tasks page', () => {
     await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open&q=T-7'));
   });
 
-  it('who sees what: a member has no team list; a head has "My team"; the admin "All teams" with a person filter', async () => {
+  it('who sees what: no team, no team list; someone in a team has its space; the admin "All teams" with a person filter', async () => {
     serve();
     const { unmount } = workspace();
     await screen.findByText('Call Bosch');
     expect(screen.getByRole('button', { name: 'Assigned to me' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByRole('button', { name: 'My team' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Team' })).toBeNull();
     unmount();
-    const head = workspace({ canSeeTeam: true });
-    expect(await screen.findByRole('button', { name: 'My team' })).toBeInTheDocument();
-    head.unmount();
+    const member = workspace({ canSeeTeam: true, myTeam: 'procurement', myTeamLabel: 'Procurement' });
+    const team = await screen.findByRole('group', { name: 'Team' });
+    expect(within(team).getByRole('button', { name: 'Procurement' })).toBeInTheDocument();
+    member.unmount();
     workspace({ base: '/admin/tasks', canSeeTeam: true });
     fireEvent.click(await screen.findByRole('button', { name: 'All teams' }));
     fireEvent.change(await screen.findByLabelText('Person'), { target: { value: 'u3' } });

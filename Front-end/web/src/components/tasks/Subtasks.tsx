@@ -17,7 +17,7 @@ import {
   type Subtask, type SubtaskList, type Task, type TaskStatus,
 } from './types';
 
-/** After a sub-task changes: its row, its parent (the count), and every list. */
+/** After a sub-task changes: its row, its parent (the count), every list and the side menu counts. */
 function useRefreshSubtasks(parentId: string) {
   const queryClient = useQueryClient();
   return (childId?: string) => Promise.all([
@@ -25,6 +25,7 @@ function useRefreshSubtasks(parentId: string) {
     queryClient.invalidateQueries({ queryKey: taskKeys.one(parentId) }),
     queryClient.invalidateQueries({ queryKey: taskKeys.lists() }),
     queryClient.invalidateQueries({ queryKey: taskKeys.summary() }),
+    queryClient.invalidateQueries({ queryKey: taskKeys.spaces() }),
     ...(childId ? [queryClient.invalidateQueries({ queryKey: taskKeys.one(childId) })] : []),
   ]);
 }

@@ -287,7 +287,8 @@ describe('reading your Inbox', () => {
     expect(item).toMatchObject({ kind: 'assigned', canOpen: true, task: { id: t.id, code: t.code, title: 'Count the Bosch pads — urgent' } });
     expect(item.by).toEqual({ id: String(priya._id), name: 'Priya' });
 
-    await patch(priya, t.id, { assigneeIds: [String(bala._id)], title: 'Secret new name' });
+    // Given to someone in another team: Arun no longer sees it.
+    await patch(priya, t.id, { assigneeIds: [String(sam._id)], title: 'Secret new name' });
     [item] = (await inbox.listInbox(arun)).items;
     expect(item).toMatchObject({ canOpen: false, task: { code: t.code, title: 'Count the Bosch pads' } });
   });

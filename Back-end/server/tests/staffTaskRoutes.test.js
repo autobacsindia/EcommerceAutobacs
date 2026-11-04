@@ -130,7 +130,8 @@ describe('Staff task routes', () => {
   it('refuses what the rules refuse, with the right codes', async () => {
     // A member may give a task to their head (anyone in the panel)…
     expect((await member.session.post('/staff/tasks', { title: 'x', assigneeId: String(head.user._id) })).status).toBe(201);
-    expect((await member.session.get('/staff/tasks?view=team')).status).toBe(403);
+    // …and sees the team's tasks, like a chat space.
+    expect((await member.session.get('/staff/tasks?view=team')).status).toBe(200);
     const own = await member.session.post('/staff/tasks', { title: 'My own' });
     expect(own.status).toBe(201);
     // The head of the member's team sees a member's own task; an outsider does not.
@@ -259,7 +260,7 @@ describe('Staff task routes', () => {
     expect((await head.session.post(`/staff/tasks/${parent.id}/checklist/${step.id}/subtask`, {})).status).toBe(400);
 
     const list = await member.session.get(`/staff/tasks/${parent.id}/subtasks`);
-    expect(list.status).toBe(404); // Arun is on a sub-task, not on the parent
+    expect(list.status).toBe(200); // Arun is on a sub-task, and in the parent's team
     const all = await head.session.get(`/staff/tasks/${parent.id}/subtasks`);
     expect(all.status).toBe(200);
     expect(all.body).toMatchObject({ total: 2, done: 0 });
@@ -326,5 +327,33 @@ describe('Staff task routes', () => {
     expect((await customer.session.get('/staff/tasks')).status).toBe(403);
     expect((await head.session.postNoCsrf('/staff/tasks', { title: 'x' })).status).toBe(403);
     expect(await StaffTask.countDocuments({})).toBe(0);
+  });
+  it('folders and lists over HTTP: the head arranges, the member reads and files nothing; a list filters', async () => {
+    const folder = await head.session.post('/staff/tasks/space/items', { kind: 'folder', name: 'Suppliers' });
+    expect(folder.status).toBe(201);
+    const list = await head.session.post('/staff/tasks/space/items', { kind: 'list', name: 'Bosch orders', folderId: folder.body.item.id, colour: 'red' });
+    expect(list.status).toBe(201);
+    expect((await member.session.post('/staff/tasks/space/items', { kind: 'list', name: 'x' })).status).toBe(403);
+    expect((await head.session.post('/staff/tasks/space/items', { kind: 'list', name: 'Bosch orders', folderId: folder.body.item.id })).status).toBe(409);
+    expect((await head.session.post('/staff/tasks/space/items', { kind: 'nope', name: 'x' })).status).toBe(400);
+
+    const task = await head.session.post('/staff/tasks', { title: 'Call Bosch', assigneeId: String(member.user._id), listId: list.body.item.id });
+    expect(task.status).toBe(201);
+    expect(task.body.task.list).toBe(list.body.item.id);
+
+    const space = await member.session.get('/staff/tasks/space');
+    expect(space.status).toBe(200);
+    expect(space.body.space.folders[0].lists[0]).toMatchObject({ name: 'Bosch orders', open: 1 });
+    expect((await member.session.get('/staff/tasks/space?team=sales')).status).toBe(403);
+    expect((await member.session.get(`/staff/tasks?view=team&list=${list.body.item.id}`)).body.tasks).toHaveLength(1);
+    expect((await member.session.get('/staff/tasks?view=team&list=none')).body.tasks).toHaveLength(0);
+    expect((await member.session.get('/staff/tasks?view=team&list=bogus')).status).toBe(400);
+
+    const renamed = await head.session.patch(`/staff/tasks/space/items/${list.body.item.id}`, { rev: 1, name: 'Bosch' });
+    expect(renamed.body.item.name).toBe('Bosch');
+    expect((await head.session.patch(`/staff/tasks/space/items/${list.body.item.id}`, { name: 'no rev' })).status).toBe(400);
+    const gone = await head.session.del(`/staff/tasks/space/items/${folder.body.item.id}`);
+    expect(gone.body).toMatchObject({ tasksMoved: 1 });
+    expect((await member.session.get('/staff/tasks?view=team&list=none')).body.tasks).toHaveLength(1);
   });
 });
