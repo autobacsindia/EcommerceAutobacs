@@ -25,7 +25,12 @@ import {
   validateTimeAdd,
   validateTimeEntry,
   validateTimeEdit,
+  validateSpaceRead,
+  validateListItemCreate,
+  validateListItemId,
+  validateListItemUpdate,
 } from '../validators/staffTask.validator.js';
+import { getSpace, createListItem, updateListItem, deleteListItem } from '../services/staffTaskListService.js';
 import { listInbox, setInboxState, readAllInbox } from '../services/staffTaskInboxService.js';
 import {
   currentTimer, startTimer, stopTimer, listTime, addTime, editTime, deleteTime,
@@ -106,6 +111,26 @@ router.get('/time/current', asyncHandler(async (req, res) => {
 // @route  POST /staff/tasks/time/stop — stop the caller's timer; `entry` is null when none was running
 router.post('/time/stop', asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await stopTimer(req.user)) });
+}));
+
+// @route  GET /staff/tasks/space?team= — a team's folders and lists, with open-task counts (own team; any for the admin)
+router.get('/space', validateSpaceRead, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, space: await getSpace(req.user, req.query.team) });
+}));
+
+// @route  POST /staff/tasks/space/items { team?, kind: folder|list, name, colour?, folderId? } — head of that team or the admin
+router.post('/space/items', validateListItemCreate, validateRequest, asyncHandler(async (req, res) => {
+  res.status(201).json({ success: true, item: await createListItem(req.user, req.body, req) });
+}));
+
+// @route  PATCH /staff/tasks/space/items/:itemId { rev, name?, colour?, folderId? }
+router.patch('/space/items/:itemId', validateListItemUpdate, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, item: await updateListItem(req.user, req.params.itemId, req.body, req) });
+}));
+
+// @route  DELETE /staff/tasks/space/items/:itemId — its tasks go back to "Other tasks"
+router.delete('/space/items/:itemId', validateListItemId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await deleteListItem(req.user, req.params.itemId, req)) });
 }));
 
 // @route  POST /staff/tasks { title, description?, priority?, dueOn?, assigneeId? | assigneeIds?, orderId?, clientId? }

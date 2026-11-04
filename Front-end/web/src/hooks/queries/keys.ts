@@ -268,6 +268,9 @@ export const taskKeys = {
   /** The time logged on tasks: `times()` is every task's, `time(id)` one task's. */
   times: () => [...taskKeys.all, 'time'] as const,
   time: (id: string) => [...taskKeys.times(), id] as const,
+  /** A team's folders and lists (with open-task counts): `spaces()` is every team's. */
+  spaces: () => [...taskKeys.all, 'space'] as const,
+  space: (team: string) => [...taskKeys.spaces(), team] as const,
 };
 
 /** `/admin/team-activity/*` — the admin's read-only view of the order workflow. */

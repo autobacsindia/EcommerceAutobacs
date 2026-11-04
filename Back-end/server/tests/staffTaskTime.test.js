@@ -166,7 +166,8 @@ describe('the timer', () => {
   it('keeps running for someone taken off the task, under the title it had, and still stops', async () => {
     const a = await give();
     await time.startTimer(arun, a.id, T0);
-    await tasks.updateTask(priya, a.id, { rev: (await raw(a.id)).rev, title: 'Renamed', assigneeId: String(priya._id) }, req);
+    // Given to someone in another team, so Arun no longer sees it at all.
+    await tasks.updateTask(priya, a.id, { rev: (await raw(a.id)).rev, title: 'Renamed', assigneeId: String(sam._id) }, req);
     const { timer } = await time.currentTimer(arun, at(60000));
     expect(timer.task).toMatchObject({ code: a.code, title: 'Count the Bosch pads' });
     expect((await time.currentTimer(priya, at(60000))).timer).toBeNull();

@@ -184,6 +184,12 @@ const StaffTaskSchema = new mongoose.Schema(
      */
     group: { type: mongoose.Schema.Types.ObjectId, default: null },
     groupSize: { type: Number, default: undefined },
+    /**
+     * The list it is filed in (models/StaffTaskList.js) — always one of a team on
+     * the task; null is the space's "Other tasks". Organisation only: it never
+     * decides who sees the task.
+     */
+    list: { type: mongoose.Schema.Types.ObjectId, default: null },
     bucket: { type: String, enum: TASK_BUCKETS, default: 'open', required: true },
     rank: { type: String, required: true },
     rev: { type: Number, default: 1 },
@@ -220,6 +226,8 @@ StaffTaskSchema.index({ bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_all' }
 // one key per entry, so "my tasks" and "my team's tasks" stay one index range.
 StaffTaskSchema.index({ 'assignees.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_assignees' });
 StaffTaskSchema.index({ teams: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_teams' });
+// One list of a team's space (or its "Other tasks", list: null), the same way.
+StaffTaskSchema.index({ teams: 1, list: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_team_list' });
 // "Following": the tasks someone follows, the same way.
 StaffTaskSchema.index({ 'followers.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_followers' });
 // The copies of one task given to several people. Partial: most tasks have no group.

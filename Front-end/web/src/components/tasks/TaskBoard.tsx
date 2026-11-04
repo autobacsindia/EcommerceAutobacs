@@ -13,7 +13,7 @@ import { QuickDate, QuickMove, QuickPeople, QuickPriority } from './CardActions'
 import TaskMenu from './TaskMenu';
 import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
 import { Chip, GroupCount, GroupPill, SkeletonRows } from './ui';
-import { TASK_STATUSES, confirmComplete, isConflict, orderHrefFor, type Task, type TaskFilters, type TaskStatus } from './types';
+import { TASK_STATUSES, confirmComplete, isConflict, listOf, orderHrefFor, type Task, type TaskFilters, type TaskStatus } from './types';
 
 /** How many finished cards the Done column shows; the rest are in the list view. */
 const DONE_SHOWN = 20;
@@ -190,7 +190,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base }:
                 <p className="px-3 pb-2 pt-1 text-xs text-gray-500">Showing the latest {DONE_SHOWN}. The list view has the rest.</p>
               )}
               {col.value !== 'done' && quickAddFor !== null && (
-                <div className="px-2 pb-2 pt-1"><QuickAdd status={col.value} assigneeId={quickAddFor} variant="board" /></div>
+                <div className="px-2 pb-2 pt-1"><QuickAdd status={col.value} assigneeId={quickAddFor} listId={listOf(filters)} variant="board" /></div>
               )}
             </section>
           );

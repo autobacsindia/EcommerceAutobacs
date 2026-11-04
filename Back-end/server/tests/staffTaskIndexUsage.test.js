@@ -35,6 +35,8 @@ const teams = ['sales', 'procurement', 'accounts', 'operations'];
 const ymd = (offset) => new Date(Date.UTC(2026, 9, 27 + offset)).toISOString().slice(0, 10);
 const TODAY = ymd(0);
 let busyTask;
+// Half of procurement's tasks are filed in one list of its space; the rest are "Other tasks".
+const LIST = new mongoose.Types.ObjectId();
 
 beforeAll(async () => {
   await dbHandler.connect();
@@ -58,6 +60,7 @@ beforeEach(async () => {
         createdBy: people[(p + 1) % PEOPLE], status: done ? 'done' : 'todo', priority: 'normal', dueOn,
         bucket: done ? 'done' : 'open', rank: done ? `d${String(9e12 - number).padStart(13, '0')}` : dueOn || '9999-12-31',
         clientId: `client-${number}`,
+        ...(p % 4 === 1 && i % 2 ? { list: LIST } : {}),
       });
     }
   }
@@ -97,6 +100,20 @@ describe('lists are one index range', () => {
   it('a head\'s team', async () => {
     const s = stats(await listExplain({ teams: 'procurement', bucket: 'open' }));
     expect(s.index).toBe('staff_task_teams');
+    expect(s.keys).toBeLessThanOrEqual(s.returned + 1);
+  });
+
+  it('one list of a team\'s space', async () => {
+    const s = stats(await listExplain({ teams: 'procurement', list: LIST, bucket: 'open' }));
+    expect(s.index).toBe('staff_task_team_list');
+    expect(s.returned).toBeGreaterThan(0);
+    expect(s.keys).toBeLessThanOrEqual(s.returned + 1);
+  });
+
+  it('a space\'s "Other tasks" (no list)', async () => {
+    const s = stats(await listExplain({ teams: 'procurement', list: null, bucket: 'open' }));
+    expect(s.index).toBe('staff_task_team_list');
+    expect(s.returned).toBeGreaterThan(0);
     expect(s.keys).toBeLessThanOrEqual(s.returned + 1);
   });
 
@@ -203,5 +220,22 @@ describe('search', () => {
       .sort({ rank: 1, _id: 1 }).limit(51).explain('executionStats'));
     expect(s.index).toBe('staff_task_assignees');
     expect(s.docs).toBeLessThanOrEqual(PER_PERSON);
+  });
+});
+
+describe('the side menu counts', () => {
+  it('a space\'s open counts per list read only that team\'s open keys, never a task', async () => {
+    const ex = await StaffTask.aggregate([
+      { $match: { teams: 'procurement', bucket: 'open' } },
+      { $group: { _id: '$list', n: { $sum: 1 } } },
+    ]).explain('executionStats');
+    const inner = ex.stages ? ex.stages[0].$cursor : ex;
+    const s = stats(inner);
+    const open = await StaffTask.countDocuments({ teams: 'procurement', bucket: 'open' });
+    // Measured: 752 keys for 750 open tasks, 0 documents — finished tasks are skipped
+    // per list inside the index, and the list id comes from the key itself.
+    expect(s.index).toBe('staff_task_team_list');
+    expect(s.docs).toBe(0);
+    expect(s.keys).toBeLessThanOrEqual(open + 3);
   });
 });

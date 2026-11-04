@@ -149,11 +149,13 @@ describe('who gives tasks to whom', () => {
 });
 
 describe('who sees a task', () => {
-  it('the assignee, the giver, their team head and the admin — nobody else', async () => {
+  it('everyone in the task\'s team (like a chat space), the giver and the admin — nobody else', async () => {
     const t = await make(procHead, { assigneeId: String(procA._id) });
-    for (const u of [procA, procHead, admin]) expect((await tasks.getTask(u, t.id)).id).toBe(t.id);
-    // A teammate, another team's head, another team's member: "not found".
-    for (const u of [procB, salesHead, salesA]) await status(404, () => tasks.getTask(u, t.id));
+    for (const u of [procA, procB, procHead, admin]) expect((await tasks.getTask(u, t.id)).id).toBe(t.id);
+    // A teammate sees it but may not change it.
+    expect((await tasks.getTask(procB, t.id)).can).toMatchObject({ edit: false, status: false, comment: true, follow: true });
+    // Another team's head, another team's member: "not found".
+    for (const u of [salesHead, salesA]) await status(404, () => tasks.getTask(u, t.id));
   });
 
   it('the admin\'s own tasks are seen by the admin only', async () => {
@@ -339,7 +341,7 @@ describe('lists', () => {
     expect(await titles('late')).toEqual(['late', 'today']);
   });
 
-  it('team view: a head sees the team, a member is refused, the admin sees all and can narrow', async () => {
+  it('team view: everyone in a team sees the team, only theirs; the admin sees all and can narrow', async () => {
     await make(procHead, { assigneeId: String(procA._id), title: 'p1' });
     await make(procHead, { assigneeId: String(procB._id), title: 'p2' });
     await make(salesHead, { assigneeId: String(salesA._id), title: 's1' });
@@ -348,7 +350,9 @@ describe('lists', () => {
     expect(await titles(procHead, { assignee: String(procB._id) })).toEqual(['p2']);
     expect(await titles(admin)).toEqual(['p1', 'p2', 's1']);
     expect(await titles(admin, { team: 'sales' })).toEqual(['s1']);
-    await status(403, () => tasks.listTasks(procA, { view: 'team' }));
+    expect(await titles(procA)).toEqual(['p1', 'p2']);
+    // A member cannot look into another team by asking for it.
+    expect(await titles(procA, { team: 'sales' })).toEqual(['p1', 'p2']);
   });
 
   it('given by me lists what I handed out', async () => {
@@ -405,7 +409,7 @@ describe('comments', () => {
     const t = await make(procHead, { assigneeId: String(procA._id) });
     await tasks.addComment(procA, t.id, { text: 'Supplier says Friday' });
     await tasks.addComment(procHead, t.id, { text: 'OK' });
-    await status(404, () => tasks.addComment(procB, t.id, { text: 'sneaky' }));
+    await status(404, () => tasks.addComment(salesA, t.id, { text: 'sneaky' }));
     await status(400, () => tasks.addComment(procA, t.id, { text: '  ' }));
     const { comments } = await tasks.listComments(procA, t.id);
     expect(comments.map((c) => [c.by.name, c.text])).toEqual([['Priya', 'OK'], ['Arun', 'Supplier says Friday']]);
@@ -557,8 +561,8 @@ describe('one task for several people', () => {
     expect(forAdmin.siblings.map((s) => [s.assignee.name, s.statusLabel])).toEqual([['Bala', 'Done'], ['Sam', 'To do']]);
     // The procurement head sees their team's copies, not GTM's.
     expect((await tasks.getTask(procHead, a.id)).siblings.map((s) => s.assignee.name)).toEqual(['Bala']);
-    // An assignee sees no one else's copy.
-    expect((await tasks.getTask(procA, a.id)).siblings).toEqual([]);
+    // An assignee sees their teammates' copies (like the head), not other teams'.
+    expect((await tasks.getTask(procA, a.id)).siblings.map((s) => s.assignee.name)).toEqual(['Bala']);
     // A plain task has none.
     expect((await tasks.getTask(procA, (await make(procA)).id)).siblings).toEqual([]);
   });
@@ -597,7 +601,9 @@ describe('checklists', () => {
     await status(403, () => tasks.addChecklistItem(procA, t.id, { text: 'More' }));
     await status(403, () => tasks.updateChecklistItem(procA, t.id, label.id, { text: 'Renamed' }));
     await status(403, () => tasks.removeChecklistItem(procA, t.id, label.id));
-    await status(404, () => tasks.updateChecklistItem(procB, t.id, label.id, { done: true }));
+    // A teammate sees the steps but does not tick them; another team does not see them.
+    await status(403, () => tasks.updateChecklistItem(procB, t.id, label.id, { done: true }));
+    await status(404, () => tasks.updateChecklistItem(salesA, t.id, label.id, { done: true }));
 
     const added = await tasks.addChecklistItem(procHead, t.id, { text: 'Book courier' });
     const renamed = await tasks.updateChecklistItem(procHead, t.id, label.id, { text: 'Print label' });

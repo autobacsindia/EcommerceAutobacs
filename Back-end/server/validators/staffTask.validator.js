@@ -27,6 +27,7 @@ export const validateTaskList = [
   query('assignee').optional().custom(isObjectId).withMessage('Invalid person'),
   query('team').optional().isIn([...STAFF_TEAM_VALUES, 'admin']).withMessage('Invalid team'),
   query('tag').optional().isString().isLength({ max: 60 }).withMessage('Invalid tag'),
+  query('list').optional().custom((v) => v === 'none' || isObjectId(v)).withMessage('Invalid list'),
   query('cursor').optional().isString().isLength({ max: 200 }).withMessage('Invalid page cursor'),
   // due (default) | newest | oldest | updated; anything else reads as due, so an old link still opens.
   query('sort').optional().isString().isLength({ max: 20 }).withMessage('Invalid sort'),
@@ -49,6 +50,7 @@ export const validateTaskCreate = [
   body('checklist').optional().isArray({ max: 30 }).withMessage('A checklist can have at most 30 steps'),
   body('checklist.*').isString().withMessage('Invalid step'),
   optionalId('orderId'),
+  optionalId('listId'),
   optionalId('parentId'),
   body('clientId').optional().isString().isLength({ max: 64 }),
 ];
@@ -70,6 +72,7 @@ export const validateTaskUpdate = [
   body('assigneeIds').optional().isArray({ min: 1, max: 30 }).withMessage('Keep between 1 and 30 people on a task'),
   body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
   optionalId('orderId'),
+  optionalId('listId'),
 ];
 
 export const validateTaskFollowers = [
@@ -182,4 +185,24 @@ export const validateTimeEdit = [
   body('minutes').optional().isInt({ min: 1, max: 24 * 60 }).withMessage('Enter between 1 minute and 24 hours'),
   body('on').optional().isString().withMessage('Pick a date'),
   body('note').optional({ values: 'null' }).isString().isLength({ max: 200 }).withMessage('Keep the note under 200 characters'),
+];
+
+// Folders and lists of a space (services/staffTaskListService.js).
+export const validateSpaceRead = [
+  query('team').optional().isIn(STAFF_TEAM_VALUES).withMessage('Invalid team'),
+];
+export const validateListItemCreate = [
+  body('team').optional().isIn(STAFF_TEAM_VALUES).withMessage('Invalid team'),
+  body('kind').isIn(['folder', 'list']).withMessage('Make a folder or a list'),
+  body('name').isString().withMessage('Give it a name'),
+  body('colour').optional().isString().isLength({ max: 20 }),
+  optionalId('folderId'),
+];
+export const validateListItemId = [param('itemId').custom(isObjectId).withMessage('Invalid folder or list')];
+export const validateListItemUpdate = [
+  ...validateListItemId,
+  body('rev').isInt({ min: 1 }).withMessage('Reload and try again'),
+  body('name').optional().isString(),
+  body('colour').optional().isString().isLength({ max: 20 }),
+  optionalId('folderId'),
 ];

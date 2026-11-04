@@ -92,7 +92,7 @@ export function useDeleteTask() {
 }
 
 /**
- * A copy of the task: same notes, people, dates, priority, tags, order and
+ * A copy of the task: same notes, people, dates, priority, tags, order, list and
  * checklist steps, as a new task with "(copy)" on the title. Sub-tasks,
  * comments, files and time stay with the original, the way ClickUp's quick
  * duplicate works. The whole task is read first — a list row does not carry
@@ -115,6 +115,7 @@ export function useDuplicateTask(onCreated?: (id: string) => void) {
         ...(full.tags?.length ? { tags: full.tags } : {}),
         ...(people.length ? { assigneeIds: people, shared: true } : {}),
         ...(full.order ? { orderId: full.order.id } : {}),
+        ...(full.list ? { listId: full.list } : {}),
         ...(full.parent ? { parentId: full.parent.id } : {}),
         ...(full.checklistItems?.length ? { checklist: full.checklistItems.slice(0, 30).map((c) => c.text) } : {}),
         clientId: newClientId(),
