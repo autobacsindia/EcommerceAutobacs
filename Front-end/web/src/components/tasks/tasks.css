@@ -228,7 +228,7 @@
 .tk-theme .tk-face { color: #fff; }
 
 /* Avatars in a stack overlap, each ringed in the card colour so they read apart. */
-.tk-theme .tk-stack > * + * { margin-left: -6px; }
+.tk-theme .tk-stack > * + * { margin-left: -4px; }
 .tk-theme .tk-stack > * { box-shadow: 0 0 0 2px var(--color-white); }
 
 /* ── Inner menu ───────────────────────────────────────────────────────── */
@@ -238,3 +238,22 @@
   font-weight: 600;
 }
 .tk-theme .tk-menu-item[aria-pressed='true'] svg { color: var(--tk-accent); }
+
+/* ── Link chips in comments and descriptions (links.tsx) ─────────────── */
+.tk-theme .tk-link {
+  border-color: var(--tk-line);
+  background: var(--tk-card-bg);
+  color: var(--color-gray-800);
+  box-shadow: 0 1px 1px rgba(20, 22, 40, 0.04);
+  transition: border-color 0.12s, background-color 0.12s;
+}
+.tk-theme .tk-link:hover { border-color: var(--color-blue-300); background: var(--color-blue-50); }
+.tk-theme .tk-link:focus-visible { outline: 2px solid var(--color-blue-500); outline-offset: 1px; }
+.tk-theme .tk-link-tail { color: var(--color-gray-400); }
+
+/* ── The ⋯ menu on rows and cards (TaskMenu.tsx): shown on hover or focus where there is a mouse, always on touch ── */
+@media (hover: hover) {
+  .tk-theme .tk-more-host .tk-more:not([aria-expanded='true']) { opacity: 0; }
+  .tk-theme .tk-more-host:hover .tk-more,
+  .tk-theme .tk-more-host:focus-within .tk-more { opacity: 1; }
+}

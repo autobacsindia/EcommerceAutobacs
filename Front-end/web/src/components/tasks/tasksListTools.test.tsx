@@ -182,7 +182,7 @@ describe('changing several tasks at once', () => {
     expect(toastError.mock.calls[0][0]).toContain('T-8: Only whoever gave this task can change it.');
   });
 
-  it('adds a tag (cleaned) and archives after a confirm', async () => {
+  it('adds a tag (cleaned) and deletes (to Trash) after a confirm', async () => {
     serve({ list: rows });
     post.mockResolvedValue({ results: [], changed: 1, unchanged: 0, failed: 0 });
     workspace();
@@ -194,9 +194,9 @@ describe('changing several tasks at once', () => {
     fireEvent.submit(input.closest('form')!);
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/tasks/bulk', { items: [{ id: 't3', rev: 2 }], changes: { addTags: ['diwali'] } }));
     (window.confirm as jest.Mock).mockReturnValueOnce(false);
-    fireEvent.click(within(bar).getByRole('button', { name: /Archive/ }));
+    fireEvent.click(within(bar).getByRole('button', { name: /Delete/ }));
     expect(post).toHaveBeenCalledTimes(1);
-    fireEvent.click(within(bar).getByRole('button', { name: /Archive/ }));
+    fireEvent.click(within(bar).getByRole('button', { name: /Delete/ }));
     await waitFor(() => expect(post).toHaveBeenLastCalledWith('/staff/tasks/bulk', { items: [{ id: 't3', rev: 2 }], changes: { archived: true } }));
   });
 

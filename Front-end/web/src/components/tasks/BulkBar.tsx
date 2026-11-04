@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Archive, CalendarClock, CircleDot, Flag, Tag, User, X } from 'lucide-react';
+import { Trash2, CalendarClock, CircleDot, Flag, Tag, User, X } from 'lucide-react';
 import { useAssignees } from './TaskForm';
 import { useBulkUpdate } from './hooks';
 import {
@@ -127,10 +127,10 @@ export default function BulkBar({ tasks, onClear, canChangeAssignee }: { tasks: 
       <button
         type="button"
         disabled={busy}
-        onClick={() => { if (window.confirm(`Archive ${n} task${n === 1 ? '' : 's'}? They can be restored from the task page.`)) apply({ archived: true }); }}
+        onClick={() => { if (window.confirm(`Delete ${n} task${n === 1 ? '' : 's'}? They move to Trash and can be restored from there.`)) apply({ archived: true }); }}
         className={action}
       >
-        <Archive aria-hidden className="h-4 w-4" /> Archive
+        <Trash2 aria-hidden className="h-4 w-4" /> Delete
       </button>
       <button type="button" onClick={onClear} aria-label="Clear selection" title="Clear selection" className="ml-1 rounded-lg p-1.5 hover:bg-white/10"><X className="h-4 w-4" /></button>
     </div>

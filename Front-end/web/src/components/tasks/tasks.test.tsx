@@ -568,15 +568,17 @@ describe('one task', () => {
     await waitFor(() => expect(get.mock.calls.filter((c) => c[0] === '/staff/tasks/t1').length).toBeGreaterThan(1));
   });
 
-  it('archives after a confirm, then offers Restore; an order can be unlinked', async () => {
+  it('deletes from the ⋯ menu (to Trash), then offers Restore; an order can be unlinked', async () => {
     patch.mockResolvedValueOnce({ task: task({ order: null, rev: 4 }) })
       .mockResolvedValueOnce({ task: task({ bucket: 'archived', rev: 5, can: { ...can, edit: false, archive: false, restore: true, comment: false } }) });
     detail(task({ order: { id: 'o1', code: '#51234' } }));
     fireEvent.click(await screen.findByRole('button', { name: 'Unlink the order' }));
     await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, orderId: null }));
-    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
-    expect(await screen.findByText('This task is archived.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Restore/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for T-7' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    await waitFor(() => expect(patch).toHaveBeenLastCalledWith('/staff/tasks/t1', { rev: 4, archived: true }));
+    expect(await screen.findByText('This task is in Trash.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Restore$/ })).toBeInTheDocument();
   });
 
   it('the checklist ticks, adds and removes steps', async () => {

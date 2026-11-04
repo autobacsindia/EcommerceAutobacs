@@ -17,6 +17,7 @@ import {
   COMMENT_FILES_MAX, TASK_FILES_MAX, TASK_FILE_ACCEPT, newClientId,
   type CommentPage, type Task, type TaskComment, type TaskFile,
 } from './types';
+import { Linkified } from './links';
 
 const taskPath = (id: string) => `/staff/tasks/${encodeURIComponent(id)}`;
 
@@ -273,7 +274,7 @@ function CommentItem({ task, c }: { task: Task; c: TaskComment }) {
             </form>
           ) : (
             <>
-              {c.text && <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-gray-800">{withMentions(c.text, c.mentions)}</p>}
+              {c.text && <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-gray-800"><Linkified text={c.text} plain={(s) => withMentions(s, c.mentions)} /></p>}
               {c.files.length > 0 && (
                 <ul className="mt-1.5 flex flex-wrap gap-1.5">{c.files.map((f) => <li key={f.url} className="max-w-full"><FileChip file={f} /></li>)}</ul>
               )}
