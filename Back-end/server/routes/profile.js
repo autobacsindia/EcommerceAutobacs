@@ -5,7 +5,7 @@ import { protect } from "../middleware/authMiddleware.js";
 import { uploadSingle, handleMulterError, validateUploadedFiles } from "../middleware/uploadMiddleware.js";
 import { putPublicAsset } from "../services/storage/publicUploads.js";
 import { deleteHostedImages } from "../services/storage/publicImageDeletes.js";
-import { AddressBookError, normaliseAddressBook } from "../utils/addressBook.js";
+import { AddressBookError, normaliseAddressBook, normalisePhone } from "../utils/addressBook.js";
 import { normaliseProfileUpdate, phoneVariants, ProfileUpdateError } from "../utils/profileUpdate.js";
 import { STAFF_TEAM_LABELS } from "../config/staff.js";
 
@@ -108,14 +108,24 @@ router.put("/", protect, asyncHandler(async (req, res) => {
   }
 
   /*
-    Guest checkout and order lookup find an account by its exact phone string,
-    so a number already on someone else's account must not be claimable here —
-    otherwise their phone-only orders would attach to this account.
+    Guest checkout finds an account by its phone, so a number already on another
+    REGISTERED account must not be claimable here — otherwise that person's
+    phone-only orders could land in this account. Checked only when the number
+    actually changes (re-saving your own number never trips it), and guest
+    records left by past checkouts don't count: they are usually this same
+    person, from before they signed up.
   */
-  if (update.phone) {
-    const taken = await User.exists({ _id: { $ne: req.user.id }, phone: { $in: phoneVariants(update.phone) } });
+  if (update.phone && update.phone !== normalisePhone(req.user.phone)) {
+    const taken = await User.exists({
+      _id: { $ne: req.user.id },
+      isGuest: { $ne: true },
+      phone: { $in: phoneVariants(update.phone) },
+    });
     if (taken) {
-      return res.status(400).json({ success: false, message: 'This phone number is already on another account.' });
+      return res.status(409).json({
+        success: false,
+        message: 'This mobile number is already linked to another registered account. If it is yours, please contact support.',
+      });
     }
   }
 

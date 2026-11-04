@@ -12,7 +12,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { UserRound } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { useAuth } from '@/context/AuthContext';
-import { profileKeys } from '@/hooks/queries/keys';
+import { chatKeys, profileKeys } from '@/hooks/queries/keys';
 import PhotoEditor from './PhotoEditor';
 
 export type MyProfile = {
@@ -91,7 +91,11 @@ export default function StaffProfileForm({ passwordHref }: { passwordHref?: stri
 
   async function photoChanged(url: string) {
     qc.setQueryData<MyProfile>(profileKeys.myProfile(), (p) => (p ? { ...p, avatar: { url } } : p));
-    await qc.invalidateQueries({ queryKey: profileKeys.panelPhotos() });
+    // My face in Tasks and Team Chat (list, messages, people) follows at once.
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: profileKeys.panelPhotos() }),
+      qc.invalidateQueries({ queryKey: chatKeys.all }),
+    ]);
     await refreshUser();
   }
 

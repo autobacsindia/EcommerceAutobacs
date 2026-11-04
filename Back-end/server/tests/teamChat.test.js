@@ -322,6 +322,18 @@ describe('Team chat', () => {
       expect(listed).toMatchObject({ kind: 'dm', name: 'Sam' });
     });
 
+    it("carry the sender's and partner's profile photo, so faces match everywhere", async () => {
+      const photo = 'https://img.example.com/sam.jpg';
+      await User.updateOne({ _id: users.salesMember._id }, { $set: { avatar: { url: photo } } });
+      const { body } = await salesMember.post('/chat/dm', { userId: String(users.accounts._id) });
+      const dm = body.channel.id;
+      await salesMember.post(`/chat/channels/${dm}/messages`, { text: 'hi' });
+      // Read back from the database (not the sender's own echo).
+      expect((await accounts.get(`/chat/channels/${dm}/messages`)).body.messages[0].sender.avatarUrl).toBe(photo);
+      const listed = (await accounts.get('/chat/channels')).body.channels.find((c) => c.id === dm);
+      expect(listed.partner.avatarUrl).toBe(photo);
+    });
+
     it('opening the same DM twice reuses it', async () => {
       const a = await salesMember.post('/chat/dm', { userId: String(users.accounts._id) });
       const b = await accounts.post('/chat/dm', { userId: String(users.salesMember._id) });

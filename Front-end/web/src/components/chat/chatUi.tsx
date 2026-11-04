@@ -157,9 +157,8 @@ export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; si
   }
   if (channel.kind === 'dm') {
     return (
-      <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold ${colourFor(channel.name)}`} aria-hidden="true">
-        {initials(channel.name)}
-      </span>
+      <PersonFace name={channel.name} photoUrl={channel.partner?.avatarUrl} initials={initials(channel.name)}
+        className={`${box} font-bold ${colourFor(channel.name)}`} />
     );
   }
   const Icon = channel.audience === 'teams' ? ArrowLeftRight : channel.audience === 'members' ? Lock : Hash;
