@@ -61,6 +61,7 @@ import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
 import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
 import { assertNoPendingSupplierPayment, openSupplierPaymentFor } from './paymentRequestService.js';
 import { pinnedIds, inPinOrder } from './orderPinService.js';
+import { listDateOf } from '../utils/orderListDate.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -136,7 +137,7 @@ function row(o, view) {
     orderNumber: o.orderNumber || idOf(o._id).slice(-8).toUpperCase(),
     createdAt: o.createdAt,
     paidAt: o.paidAt || null,
-    listDate: o.listDate || o.createdAt,
+    listDate: listDateOf(o),
     enteredAt: o.workflow?.enteredAt || null,
     status: o.status,
     paymentStatus: o.paymentStatus,
@@ -323,14 +324,24 @@ function detail(u, o) {
 
 // Keyed on the list date (utils/orderListDate.js). The `L` tag retires cursors
 // made when the queues paged on workflow.enteredAt: those start the list over.
-const encodeCursor = (date, id) => Buffer.from(`L|${new Date(date).toISOString()}|${id}`).toString('base64url');
+// An order written before listDate existed has none until
+// scripts/backfill-order-list-date.js has run. MongoDB sorts those together,
+// below every real date, so they are one end of the queue and carry the `N`
+// tag — paged through by _id. Encoding must never throw:
+// `new Date(undefined).toISOString()` is a RangeError that 500s the queue.
+const encodeCursor = (date, id) => {
+  const at = date == null ? null : new Date(date);
+  const ok = at && !Number.isNaN(at.getTime());
+  return Buffer.from(ok ? `L|${at.toISOString()}|${id}` : `N||${id}`).toString('base64url');
+};
 function decodeCursor(cursor) {
   if (!cursor) return null;
   try {
     const [tag, iso, id] = Buffer.from(String(cursor), 'base64url').toString().split('|');
-    if (tag !== 'L') return null;
+    if (!['L', 'N'].includes(tag) || !/^[a-f0-9]{24}$/i.test(id || '')) return null;
+    if (tag === 'N') return { at: null, id };
     const at = new Date(iso);
-    if (Number.isNaN(at.getTime()) || !/^[a-f0-9]{24}$/i.test(id || '')) return null;
+    if (Number.isNaN(at.getTime())) return null;
     return { at, id };
   } catch {
     return null;
@@ -353,7 +364,7 @@ export async function listQueue(actor, queue, { cursor, ...filters } = {}) {
   const f = readListFilters(filters);
   const newestFirst = f.sort !== 'oldest';
   const decoded = decodeCursor(cursor);
-  let after = decoded ? { listDate: decoded.at, id: decoded.id } : null;
+  let after = decoded ? { listDate: decoded.at, id: decoded.id } : null;  // listDate null: the undated end
   const orders = [];
   // Pinned orders (personal, services/orderPinService.js): on top of page 1 when
   // they are waiting on this team and pass the filters; never in the scan below.
@@ -396,7 +407,7 @@ export async function listQueue(actor, queue, { cursor, ...filters } = {}) {
     if (orders.length >= PAGE_SIZE) { nextCursor = lastCursor; break; } // page full; more may follow
     if (batch.length < SCAN_BATCH) break;               // reached the end of the queue
     if (scanned >= MAX_SCAN) { nextCursor = lastCursor; break; }        // bounded work per request
-    after = { listDate: last.listDate, id: last._id };
+    after = { listDate: last.listDate ?? null, id: last._id };
   }
 
   return { orders: [...inPinOrder(pinned, pins), ...orders], nextCursor };
