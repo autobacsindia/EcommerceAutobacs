@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
-import { usePasteFiles, usePasteShortcut } from '@/hooks/usePasteFiles';
+import { usePasteFiles } from '@/hooks/usePasteFiles';
+import PasteHint from '@/components/ui/PasteHint';
 import { acceptsFile, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_TOTAL_BYTES, mb, needsShrink, shrinkForUpload } from '@/lib/attachments';
 
 /** Same as the server's per-file limit (config/attachments.js MAX_ATTACHMENT_BYTES). */
@@ -52,7 +53,6 @@ export default function FilePicker({
   wrongType?: (file: File) => string;
 }) {
   const root = useRef<HTMLDivElement>(null);
-  const shortcut = usePasteShortcut();
   const [preparing, setPreparing] = useState(false);
   const takesPdf = accept.includes('application/pdf');
 
@@ -107,8 +107,7 @@ export default function FilePicker({
               onChange={(e) => { const picked = Array.from(e.target.files || []); e.target.value = ''; add(picked); }}
             />
           </label>
-          {/* Phones have no Ctrl+V: the hint is for a mouse and keyboard. */}
-          <span className="hidden text-xs text-gray-500 pointer-fine:inline">or paste a screenshot ({shortcut})</span>
+          <PasteHint />
         </div>
       )}
       {max > 1 && files.length === 0 && (

@@ -17,6 +17,8 @@
  * API secret never touches the frontend.
  */
 import React, { useRef, useState, useCallback, useMemo, useEffect } from 'react';
+import { usePasteFiles } from '@/hooks/usePasteFiles';
+import PasteHint from '@/components/ui/PasteHint';
 import Image from 'next/image';
 import { X, Upload, Star, ArrowLeft, ArrowRight } from 'lucide-react';
 import { IMAGE_ACCEPT, IMAGE_MAX_FILE_MB, IMAGE_MAX_TOTAL_MB, IMAGE_MAX_FILES, validateImageFile } from '@/lib/imageUpload';
@@ -121,6 +123,7 @@ export default function ImageUploader({
   className = '',
 }: ImageUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const zoneRef = useRef<HTMLDivElement>(null);
   const [localPreviews, setLocalPreviews] = useState<LocalPreview[]>([]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -349,10 +352,13 @@ export default function ImageUploader({
     if (!disabled) addFiles(e.dataTransfer.files);
   };
 
+  // A pasted screenshot goes through addFiles too — same type, size and slot checks.
+  usePasteFiles(zoneRef, { accept, hasRoom: !disabled && remaining > 0, take: (files) => { if (!disabled) addFiles(files); } });
+
   const showControls = reorderable && !disabled;
 
   return (
-    <div className={`space-y-3 ${className}`}>
+    <div ref={zoneRef} className={`space-y-3 ${className}`}>
       {label && (
         <label className="block text-sm font-medium text-gray-700">{label}</label>
       )}
@@ -377,6 +383,7 @@ export default function ImageUploader({
         <p className="text-sm text-gray-500">
           Drag &amp; drop or <span className="text-red-600 font-medium">browse</span>
         </p>
+        {!disabled && remaining > 0 && <PasteHint />}
         <p className="text-xs text-gray-500">
           JPG, PNG, WebP · max {maxFileSizeMB} MB each{enforceTotal ? ` · ${maxTotalSizeMB} MB total` : ''} · {Math.max(remaining, 0)} slot{remaining !== 1 ? 's' : ''} remaining
         </p>

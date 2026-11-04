@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Plus, Trash2, ImagePlus, X, Pin } from 'lucide-react';
 import type { StockStatus } from '@/lib/stock';
 import { validateImageFile, IMAGE_ACCEPT, IMAGE_MAX_FILE_MB } from '@/lib/imageUpload';
+import PasteZone from '@/components/ui/PasteZone';
 
 /**
  * Admin editor for a variable product's models (variants). Single-attribute
@@ -277,6 +278,8 @@ export default function VariantsEditor({
                         ) : (
                           <div className="h-12 w-12 rounded border border-dashed border-gray-300" />
                         )}
+                        {/* Narrow table cell: the paste works, the hint is left out. */}
+                        <PasteZone accept={IMAGE_ACCEPT} single hint={false} onFiles={([f]) => pickPhoto(i, f)}>
                         <label className="cursor-pointer text-[11px] text-indigo-700 hover:text-indigo-900">
                           <ImagePlus className="mb-0.5 inline h-3 w-3" /> Add
                           <input
@@ -287,6 +290,7 @@ export default function VariantsEditor({
                           />
                           <span className="block text-[10px] text-gray-400">Using main image</span>
                         </label>
+                        </PasteZone>
                       </div>
                     );
                   })()}

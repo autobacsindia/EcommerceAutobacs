@@ -6,7 +6,9 @@ import toast from 'react-hot-toast';
 import { MessageSquare, Paperclip, Pencil, Send, SmilePlus, Trash2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { submitMultipart, parseApiResponse } from '@/lib/multipartResponse';
-import { MAX_ATTACHMENT_BYTES, mb } from '@/lib/attachments';
+import { acceptsFile, MAX_ATTACHMENT_BYTES, mb } from '@/lib/attachments';
+import { usePasteFiles } from '@/hooks/usePasteFiles';
+import PasteHint from '@/components/ui/PasteHint';
 import { taskKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage } from '@/components/staff/sales/types';
@@ -39,8 +41,11 @@ async function sendForm<T>(path: string, form: FormData): Promise<T> {
 }
 
 /** Keep files the server would take; say why the rest were left out. */
-function pickFiles(incoming: FileList | null, room: number, onError: (msg: string) => void): File[] {
-  const list = Array.from(incoming ?? []);
+function pickFiles(incoming: FileList | File[] | null, room: number, onError: (msg: string) => void): File[] {
+  const all = Array.from(incoming ?? []);
+  const wrong = all.find((f) => !acceptsFile(f, TASK_FILE_ACCEPT));
+  if (wrong) onError(`"${wrong.name}" can't be attached — photos, PDFs, spreadsheets, Word or text files only.`);
+  const list = all.filter((f) => acceptsFile(f, TASK_FILE_ACCEPT));
   const tooBig = list.filter((f) => f.size > MAX_ATTACHMENT_BYTES);
   if (tooBig.length) onError(`"${tooBig[0].name}" is over ${mb(MAX_ATTACHMENT_BYTES)} and was not added.`);
   const fitting = list.filter((f) => f.size <= MAX_ATTACHMENT_BYTES);
@@ -74,6 +79,7 @@ function FileChip({ file, onRemove }: { file: TaskFile; onRemove?: () => void })
 export function TaskFiles({ task }: { task: Task }) {
   const queryClient = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
+  const zone = useRef<HTMLElement>(null);
   const [error, setError] = useState('');
   const files = task.files ?? [];
   const refresh = () => {
@@ -93,10 +99,16 @@ export function TaskFiles({ task }: { task: Task }) {
     onSuccess: refresh,
     onError: (e) => toast.error(errorMessage(e, 'Could not remove the file.')),
   });
+  const addFiles = (incoming: File[]) => {
+    if (!task.can.files || upload.isPending) return;
+    const picked = pickFiles(incoming, TASK_FILES_MAX - files.length, setError);
+    if (picked.length) upload.mutate(picked);
+  };
+  usePasteFiles(zone, { accept: TASK_FILE_ACCEPT, hasRoom: !!task.can.files && !upload.isPending && files.length < TASK_FILES_MAX, take: addFiles });
   if (!files.length && !task.can.files) return null;
 
   return (
-    <section>
+    <section ref={zone}>
       <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-gray-900">
         <Paperclip aria-hidden className="h-4 w-4 text-gray-500" /> Files
         {files.length > 0 && <span className="font-normal text-gray-400">{files.length}</span>}
@@ -120,9 +132,9 @@ export function TaskFiles({ task }: { task: Task }) {
             accept={TASK_FILE_ACCEPT}
             aria-label="Add files to the task"
             onChange={(e) => {
-              const picked = pickFiles(e.target.files, TASK_FILES_MAX - files.length, setError);
+              const picked = Array.from(e.target.files ?? []);
               e.target.value = '';
-              if (picked.length) upload.mutate(picked);
+              addFiles(picked);
             }}
           />
           <button
@@ -133,6 +145,7 @@ export function TaskFiles({ task }: { task: Task }) {
           >
             <Paperclip className="h-4 w-4" /> {upload.isPending ? 'Uploading…' : 'Add files'}
           </button>
+          {files.length < TASK_FILES_MAX && <PasteHint className="ml-3" />}
         </>
       )}
       {error && <p role="alert" className="mt-1 text-sm text-red-600">{error}</p>}
@@ -296,6 +309,7 @@ function CommentBox({ task }: { task: Task }) {
   const queryClient = useQueryClient();
   const box = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const zone = useRef<HTMLFormElement>(null);
   const [text, setText] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [mentioned, setMentioned] = useState<Person[]>([]);
@@ -339,6 +353,12 @@ function CommentBox({ task }: { task: Task }) {
   });
   const ready = (text.trim() || files.length) && !send.isPending;
 
+  const attach = (incoming: File[]) => {
+    const picked = pickFiles(incoming, COMMENT_FILES_MAX - files.length, setError);
+    if (picked.length) setFiles((all) => [...all, ...picked]);
+  };
+  usePasteFiles(zone, { accept: TASK_FILE_ACCEPT, hasRoom: files.length < COMMENT_FILES_MAX, take: attach });
+
   const choose = (p: Person) => {
     if (!at) return;
     const caret = box.current?.selectionStart ?? text.length;
@@ -351,7 +371,7 @@ function CommentBox({ task }: { task: Task }) {
   };
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); if (ready) send.mutate(); }} className="relative mt-4">
+    <form ref={zone} onSubmit={(e) => { e.preventDefault(); if (ready) send.mutate(); }} className="relative mt-4">
       {at && options.length > 0 && (
         <ul role="listbox" aria-label="People to mention" className="absolute bottom-full left-0 z-20 mb-1 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
           {options.map((p, i) => (
@@ -414,9 +434,9 @@ function CommentBox({ task }: { task: Task }) {
             accept={TASK_FILE_ACCEPT}
             aria-label="Attach files to the comment"
             onChange={(e) => {
-              const picked = pickFiles(e.target.files, COMMENT_FILES_MAX - files.length, setError);
+              const picked = Array.from(e.target.files ?? []);
               e.target.value = '';
-              setFiles((all) => [...all, ...picked]);
+              attach(picked);
             }}
           />
           <button type="button" onClick={() => fileInput.current?.click()} aria-label="Attach files" title="Attach files" className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-800">

@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { __resetPasteZones } from '@/hooks/usePasteFiles';
 import ReturnRequestModal from './ReturnRequestModal';
 import { UNBOXING_VIDEO_RULE } from '@/lib/constants';
 
@@ -65,6 +66,7 @@ const uploadTo = async (accept: string, name: string, type: string) => {
 };
 
 beforeEach(() => {
+  __resetPasteZones();
   mockPost.mockReset();
   uploadCount = 0;
   mockPost.mockImplementation(async (url: string) => (url === '/returns/estimate'
@@ -248,5 +250,44 @@ describe('ReturnRequestModal', () => {
     fireEvent.change(fileInputs().find((i) => i.accept === 'video/*')!, { target: { files: [big] } });
     expect(await screen.findByText(/over 100MB\. Upload it to Google Drive or YouTube/)).toBeInTheDocument();
     expect(uploadCount).toBe(0);
+  });
+
+  describe('pasting a screenshot (Ctrl/Cmd+V)', () => {
+    const shot = (size = 10) => new File([new Uint8Array(size)], 'image.png', { type: 'image/png' });
+    const paste = (target: Element, files: File[]) =>
+      fireEvent.paste(target, { clipboardData: { files, items: [], types: ['Files'], getData: () => '' } });
+    const toPhotos = () => {
+      setup();
+      pickFirstItem();
+      next();
+      chooseReason(/Damaged in transit/);
+      describe_();
+      next();
+      return screen.getByText(/Photos \(at least 1, up to 5\)/);
+    };
+
+    it('several screenshots pasted on the photo row are all uploaded, one after another', async () => {
+      const row = toPhotos();
+      expect(screen.getAllByText(/or paste a screenshot/).length).toBeGreaterThan(0);
+      fireEvent.pointerDown(row);
+      paste(row, [shot(), shot()]);
+      await waitFor(() => expect(screen.getAllByText(/screenshot-.*\.png/)).toHaveLength(2));
+      expect(uploadCount).toBe(2);
+    });
+
+    it('a pasted photo over 10MB gets the same message as a chosen one, and is not uploaded', async () => {
+      const row = toPhotos();
+      const big = shot(10 * 1024 * 1024 + 1);
+      fireEvent.pointerDown(row);
+      paste(row, [big]);
+      expect(await screen.findByText('Photo is too large (max 10MB).')).toBeInTheDocument();
+      expect(uploadCount).toBe(0);
+    });
+
+    it('a paste with nothing clicked is not guessed into a row', () => {
+      toPhotos();
+      paste(document.body, [shot()]);
+      expect(uploadCount).toBe(0);
+    });
   });
 });
