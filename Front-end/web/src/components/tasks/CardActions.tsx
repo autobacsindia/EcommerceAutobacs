@@ -16,7 +16,7 @@ import { ArrowRightLeft, CalendarDays, Check, Flag, UserPlus } from 'lucide-reac
 import AssigneePicker, { placePopover } from './AssigneePicker';
 import { useAssignees } from './TaskForm';
 import { AvatarStack, PRIORITY_STYLE, StatusDot } from './ui';
-import { MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, formatDueDay, peopleOf, type Task, type TaskPriority, type TaskStatus } from './types';
+import { MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, formatDue, formatDueTime, peopleOf, type Task, type TaskPriority, type TaskStatus } from './types';
 import type { QuickEdit } from './hooks';
 
 const stop = (e: SyntheticEvent) => e.stopPropagation();
@@ -120,9 +120,10 @@ function CardMenu<V extends string>({ label, title, empty, tone, trigger, option
 export function QuickDate({ t, onSave, busy }: { t: Task; onSave: (patch: QuickEdit) => void; busy: boolean }) {
   const done = t.status === 'done';
   const tone = done ? undefined : t.overdue ? 'late' : t.dueToday ? 'today' : undefined;
-  const text = t.dueOn ? (!done && t.dueToday ? 'Today' : formatDueDay(t.dueOn)) : null;
+  const time = formatDueTime(t.dueTime);
+  const text = t.dueOn ? (!done && t.dueToday ? `Today${time ? ` ${time}` : ''}` : formatDue(t.dueOn, t.dueTime)) : null;
   return (
-    <span title={t.dueOn ? `Due ${formatDueDay(t.dueOn)}` : 'No due date'} data-empty={!t.dueOn || undefined} data-tone={tone} className={`${qa} ${text ? 'px-1.5' : ''}`}>
+    <span title={t.dueOn ? `Due ${formatDue(t.dueOn, t.dueTime)}` : 'No due date'} data-empty={!t.dueOn || undefined} data-tone={tone} className={`${qa} ${text ? 'px-1.5' : ''}`}>
       <CalendarDays aria-hidden className="h-3.5 w-3.5 shrink-0" />
       {text ?? <span className="sr-only">No due date</span>}
       {t.can.edit && (

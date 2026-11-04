@@ -128,6 +128,11 @@ const teamOf = (u) => (isActiveStaff(u) ? u.staff.team : null);
 
 /** Today's IST calendar day, 'YYYY-MM-DD'. */
 export const todayIST = (now = new Date()) => formatIsoDateIST(now);
+const IST_CLOCK = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+/** The IST time now, 'HH:mm' (24-hour) — compared with a task's `dueTime`. */
+export const timeIST = (now = new Date()) => IST_CLOCK.format(now);
+/** A due day and time as one sort key / history value: 'YYYY-MM-DD' or 'YYYY-MM-DD HH:mm'. */
+const dueKey = (dueOn, dueTime) => (dueOn ? (dueTime ? `${dueOn} ${dueTime}` : dueOn) : null);
 
 // ── Rules ───────────────────────────────────────────────────────────────────
 
@@ -156,10 +161,10 @@ const canSetStatus = (u, t) => canEdit(u, t) || isDoing(u, t);
 const canReassign = canEdit;
 
 /** The bucket a task lives in, and its sort key inside it. */
-export function placeOf({ status, dueOn, completedAt, archivedAt }) {
+export function placeOf({ status, dueOn, dueTime, completedAt, archivedAt }) {
   if (archivedAt) return { bucket: 'archived', rank: `a${String(TIME_MAX - new Date(archivedAt).getTime()).padStart(13, '0')}` };
   if (status === 'done') return { bucket: 'done', rank: `d${String(TIME_MAX - new Date(completedAt || Date.now()).getTime()).padStart(13, '0')}` };
-  return { bucket: 'open', rank: dueOn || NO_DUE };
+  return { bucket: 'open', rank: dueKey(dueOn, dueTime) || NO_DUE };
 }
 
 // ── Input ───────────────────────────────────────────────────────────────────
@@ -190,6 +195,13 @@ function cleanDay(raw, what) {
 }
 export const cleanDueOn = (raw) => cleanDay(raw, 'due');
 export const cleanStartOn = (raw) => cleanDay(raw, 'start');
+/** A due time, 'HH:mm' 24-hour IST, or null. */
+export function cleanDueTime(raw) {
+  if (raw == null || raw === '') return null;
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(raw));
+  if (!m) throw fail('Pick a valid due time.', 400);
+  return m[0];
+}
 
 /** A task may start on its due day, never after it. */
 function checkDates(startOn, dueOn) {
@@ -290,8 +302,10 @@ async function loadOrderRef(raw) {
 
 // ── Shape ───────────────────────────────────────────────────────────────────
 
-export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
+export function shape(t, viewer, { full = false, today = todayIST(), now = timeIST() } = {}) {
   const open = t.bucket === 'open';
+  // Late: an earlier day, or today once its time has come.
+  const late = open && !!t.dueOn && (t.dueOn < today || (t.dueOn === today && !!t.dueTime && t.dueTime <= now));
   const archived = t.bucket === 'archived';
   const description = t.description || '';
   return {
@@ -307,9 +321,10 @@ export function shape(t, viewer, { full = false, today = todayIST() } = {}) {
     priority: t.priority,
     priorityLabel: PRIORITY_LABELS[t.priority],
     dueOn: t.dueOn || null,
+    dueTime: t.dueOn ? t.dueTime || null : null,
     startOn: t.startOn || null,
     tags: t.tags || [],
-    overdue: open && !!t.dueOn && t.dueOn < today,
+    overdue: late,
     dueToday: open && t.dueOn === today,
     // The first person, for screens that show one; `assignees` is everyone.
     assignee: { id: idOf(peopleOf(t)[0]?.user), name: peopleOf(t)[0]?.name || '' },
@@ -472,14 +487,14 @@ async function toInboxAll(t, actor, parts) {
 /** The event key of a change: the rev it made is unique to it. */
 const revKey = (t, what) => `t:${idOf(t._id)}:r${t.rev}:${what}`;
 const createdKey = (t) => `t:${idOf(t._id)}:created`;
-const dueText = (t) => (t.dueOn ? `due ${t.dueOn}` : '');
+const dueText = (t) => (t.dueOn ? `due ${dueKey(t.dueOn, t.dueTime)}` : '');
 
 /** "You have a new task" to the people just given it: their Inbox, then a pop-up. */
 async function notifyAssigned(t, actor, ids, key = revKey(t, 'assigned')) {
   await toInbox(t, actor, ids, { kind: 'assigned', key, text: dueText(t) });
   void notifyPeople(t, actor, ids, {
     title: `New task from ${actor.name || 'your team'}`,
-    body: `T-${t.number} · ${t.title}${t.dueOn ? ` · due ${t.dueOn}` : ''}`,
+    body: `T-${t.number} · ${t.title}${t.dueOn ? ` · ${dueText(t)}` : ''}`,
   });
 }
 
@@ -619,12 +634,19 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
   }
 
   const today = todayIST();
+  const now = timeIST();
+  const tomorrow = addDays(today, 1);
+  /*
+    Ranges over `rank` ('YYYY-MM-DD' or 'YYYY-MM-DD HH:mm'), so they stay on the
+    list indexes. Overdue = before today, or today at a time already past: up to
+    'today now', except an untimed 'today' (late only from tomorrow).
+  */
   let range = null;
   if (due && state === 'open') {
-    if (due === 'overdue') range = { $lt: today };
-    else if (due === 'today') range = { $gte: today, $lte: today };
-    else if (due === 'late') range = { $lte: today };
-    else if (due === 'week') range = { $gte: today, $lte: addDays(today, 6) };
+    if (due === 'overdue') range = { $lte: `${today} ${now}`, $ne: today };
+    else if (due === 'today') range = { $gte: today, $lt: tomorrow };
+    else if (due === 'late') range = { $lt: tomorrow };
+    else if (due === 'week') range = { $gte: today, $lt: addDays(today, 7) };
   }
 
   // How many match: the open list's first page only (the done list is folded away).
@@ -641,7 +663,7 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
       find: staffTaskRepository.pageSorted,
     });
     return {
-      tasks: await withTime(items.map((t) => shape(t, actor, { today }))),
+      tasks: await withTime(items.map((t) => shape(t, actor, { today, now }))),
       nextCursor,
       sort,
       ...(counted ? { summary: await counted } : {}),
@@ -652,7 +674,7 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
   const more = rows.length > TASK_PAGE_SIZE;
   const tasks = more ? rows.slice(0, TASK_PAGE_SIZE) : rows;
   return {
-    tasks: await withTime(tasks.map((t) => shape(t, actor, { today }))),
+    tasks: await withTime(tasks.map((t) => shape(t, actor, { today, now }))),
     nextCursor: more ? encodeCursor(tasks[tasks.length - 1]) : null,
     sort: 'due',
     ...(counted ? { summary: await counted } : {}),
@@ -680,17 +702,20 @@ export async function listAssignees(actor) {
 /** The page header: how many of `user`'s open tasks are late, and due today — and unread Inbox lines (capped). */
 export async function summaryFor(user) {
   const today = todayIST();
-  const [late, dueToday, inbox] = await Promise.all([
+  const tomorrow = addDays(today, 1);
+  // Late = earlier days + today's timed tasks whose time has come; "today" = the rest of today's.
+  const [before, lateToday, allToday, inbox] = await Promise.all([
     staffTaskRepository.countDueIn(user._id, { $lt: today }),
-    staffTaskRepository.countDueIn(user._id, { $gte: today, $lte: today }),
+    staffTaskRepository.countDueIn(user._id, { $gt: today, $lte: `${today} ${timeIST()}` }),
+    staffTaskRepository.countDueIn(user._id, { $gte: today, $lt: tomorrow }),
     staffTaskInboxRepository.countUnread(user._id, INBOX_UNREAD_CAP),
   ]);
-  return { late, today: dueToday, inbox };
+  return { late: before + lateToday, today: allToday - lateToday, inbox };
 }
 
 /** The bell: open tasks given to `user` that are overdue or due today. */
 export async function countDueForBell(user) {
-  return staffTaskRepository.countDueBy(user._id, todayIST());
+  return staffTaskRepository.countDueBefore(user._id, addDays(todayIST(), 1));
 }
 
 // ── Write ───────────────────────────────────────────────────────────────────
@@ -748,6 +773,8 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   const description = cleanDescription(input.description);
   const priority = input.priority == null || input.priority === '' ? 'normal' : cleanEnum(input.priority, TASK_PRIORITIES, 'priority');
   const dueOn = cleanDueOn(input.dueOn);
+  const dueTime = cleanDueTime(input.dueTime);
+  if (dueTime && !dueOn) throw fail('Pick a due date before a time.', 400);
   const startOn = cleanStartOn(input.startOn);
   checkDates(startOn, dueOn);
   const tags = cleanTags(input.tags);
@@ -791,6 +818,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         priority,
         status,
         dueOn,
+        dueTime,
         startOn,
         ...(tags.length ? { tags } : {}),
         ...peopleFields(who),
@@ -801,7 +829,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         ...(parent && { parent: { task: parent._id, number: parent.number, title: parent.title } }),
         group,
         groupSize: many ? people.length : undefined,
-        ...placeOf({ status, dueOn }),
+        ...placeOf({ status, dueOn, dueTime }),
         clientId: key,
         history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'created', to: namesOf(peopleFields(who).assignees) }],
       });
@@ -910,7 +938,7 @@ async function applyUpdate(actor, t, input, req) {
     }
   }
   const willBeArchived = set.archivedAt !== undefined ? !!set.archivedAt : archived;
-  const editing = ['title', 'description', 'priority', 'dueOn', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds'].some(has);
+  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds'].some(has);
   if (editing && willBeArchived) throw fail('This task is archived. Restore it first.', 409);
 
   const editable = canEdit(actor, t);
@@ -928,9 +956,22 @@ async function applyUpdate(actor, t, input, req) {
     const priority = cleanEnum(input.priority, TASK_PRIORITIES, 'priority');
     if (priority !== t.priority) { needEdit(); set.priority = priority; note('priority', PRIORITY_LABELS[t.priority], PRIORITY_LABELS[priority]); }
   }
-  if (has('dueOn')) {
-    const dueOn = cleanDueOn(input.dueOn);
-    if (dueOn !== (t.dueOn || null)) { needEdit(); set.dueOn = dueOn; note('due', t.dueOn || 'none', dueOn || 'none'); }
+  if (has('dueOn') || has('dueTime')) {
+    const dueOn = has('dueOn') ? cleanDueOn(input.dueOn) : t.dueOn || null;
+    // A new day keeps the time unless one is sent; no day means no time.
+    let dueTime = has('dueTime') ? cleanDueTime(input.dueTime) : t.dueTime || null;
+    if (!dueOn) {
+      if (has('dueTime') && dueTime) throw fail('Pick a due date before a time.', 400);
+      dueTime = null;
+    }
+    const was = dueKey(t.dueOn, t.dueTime);
+    const next = dueKey(dueOn, dueTime);
+    if (next !== was) {
+      needEdit();
+      if (dueOn !== (t.dueOn || null)) set.dueOn = dueOn;
+      if (dueTime !== (t.dueTime || null)) set.dueTime = dueTime;
+      note('due', was || 'none', next || 'none');
+    }
   }
   if (has('startOn')) {
     const startOn = cleanStartOn(input.startOn);
@@ -977,6 +1018,7 @@ async function applyUpdate(actor, t, input, req) {
   Object.assign(set, placeOf({
     status: set.status ?? t.status,
     dueOn: set.dueOn !== undefined ? set.dueOn : t.dueOn,
+    dueTime: set.dueTime !== undefined ? set.dueTime : t.dueTime,
     completedAt: set.completedAt !== undefined ? set.completedAt : t.completedAt,
     archivedAt: set.archivedAt !== undefined ? set.archivedAt : t.archivedAt,
   }));

@@ -6,15 +6,15 @@ import toast from 'react-hot-toast';
 import { CalendarDays, CalendarRange, Flag, ListChecks, Loader2, Tag, UserPlus, Users, X } from 'lucide-react';
 import TagInput from './TagInput';
 import AssigneePicker from './AssigneePicker';
-import { AvatarStack } from './ui';
+import { AvatarStack, DueTimeSelect } from './ui';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
-import { MAX_ASSIGNEES, TASK_PRIORITIES, isPastDay, newClientId, type Assignee, type Task, type TaskPriority } from './types';
+import { MAX_ASSIGNEES, TASK_PRIORITIES, isPastDue, newClientId, type Assignee, type Task, type TaskPriority } from './types';
 
 /** Shown under a due date that has already passed. */
-export function PastDueWarning({ dueOn }: { dueOn: string }) {
-  if (!isPastDay(dueOn)) return null;
+export function PastDueWarning({ dueOn, dueTime }: { dueOn: string; dueTime?: string | null }) {
+  if (!isPastDue(dueOn, dueTime)) return null;
   return (
     <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
       This due date has already passed, so the task will show as <strong>late</strong> straight away. Pick a later date if that is not what you meant.
@@ -153,7 +153,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
   const me = choices.find((p) => p.me);
   // One id for this form: pressing Create twice (or a retried request) makes one task.
   const clientId = useRef(newClientId());
-  const [form, setForm] = useState({ title: '', description: '', steps: '', priority: 'normal' as TaskPriority, dueOn: '', startOn: '', tags: [] as string[] });
+  const [form, setForm] = useState({ title: '', description: '', steps: '', priority: 'normal' as TaskPriority, dueOn: '', dueTime: null as string | null, startOn: '', tags: [] as string[] });
   // null until the person touches the list: it then starts with just "me" ticked.
   const [picked, setPicked] = useState<string[] | null>(null);
   const chosen = picked ?? (me ? [me.id] : []);
@@ -174,6 +174,7 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
       checklist: form.steps.split('\n').map((l) => l.trim()).filter(Boolean),
       priority: form.priority,
       dueOn: form.dueOn || null,
+      ...(form.dueOn && form.dueTime ? { dueTime: form.dueTime } : {}),
       startOn: form.startOn || null,
       tags: form.tags,
       orderId: order?.id || null,
@@ -226,14 +227,17 @@ export default function TaskForm({ onDone, onCancel }: { onDone: (task: Task) =>
           </label>
           <label className="text-xs font-medium text-gray-500">
             <span className="mb-1 flex items-center gap-1"><CalendarDays aria-hidden className="h-3.5 w-3.5" /> Due date</span>
-            <input type="date" aria-label="Due date" value={form.dueOn} min={form.startOn || undefined} onChange={(e) => set({ dueOn: e.target.value })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+            <input type="date" aria-label="Due date" value={form.dueOn} min={form.startOn || undefined} onChange={(e) => set({ dueOn: e.target.value, ...(e.target.value ? {} : { dueTime: null }) })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+            {form.dueOn && (
+              <DueTimeSelect value={form.dueTime} onChange={(dueTime) => set({ dueTime })} className="mt-1.5 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
+            )}
           </label>
           <label className="text-xs font-medium text-gray-500">
             <span className="mb-1 flex items-center gap-1"><CalendarRange aria-hidden className="h-3.5 w-3.5" /> Start date</span>
             <input type="date" aria-label="Start date" value={form.startOn} max={form.dueOn || undefined} onChange={(e) => set({ startOn: e.target.value })} className="w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm" />
           </label>
         </div>
-        <PastDueWarning dueOn={form.dueOn} />
+        <PastDueWarning dueOn={form.dueOn} dueTime={form.dueTime} />
         {datesBackwards && <p role="alert" className="text-xs font-medium text-red-700">The start date is after the due date.</p>}
         <label className="block text-xs font-medium text-gray-500">
           <span className="mb-1 flex items-center gap-1"><Tag aria-hidden className="h-3.5 w-3.5" /> Tags (optional)</span>

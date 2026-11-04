@@ -15,7 +15,7 @@ const HISTORY_CAP = 100;
   one being forgotten.
 */
 export const LIST_PROJECTION = Object.freeze({
-  number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, startOn: 1, tags: 1,
+  number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, dueTime: 1, startOn: 1, tags: 1,
   assignee: 1, assigneeName: 1, team: 1, assignees: 1, teams: 1, followers: 1, createdBy: 1, createdByName: 1,
   order: 1, group: 1, groupSize: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
   completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
@@ -97,7 +97,8 @@ const staffTaskRepository = {
   /** Open tasks given to `userId` whose due day is in `range` (the page header). */
   countDueIn: (userId, range) => StaffTask.countDocuments({ 'assignees.user': userId, bucket: 'open', rank: range }),
   /** Open tasks given to `userId` that are due on or before `day` (the bell). */
-  countDueBy: (userId, day) => StaffTask.countDocuments({ 'assignees.user': userId, bucket: 'open', rank: { $lte: day } }),
+  /** Open tasks of `userId` due before `bound` (a rank: the next day counts everything due up to the end of today). */
+  countDueBefore: (userId, bound) => StaffTask.countDocuments({ 'assignees.user': userId, bucket: 'open', rank: { $lt: bound } }),
 
   // ── Sub-tasks ──
   /*

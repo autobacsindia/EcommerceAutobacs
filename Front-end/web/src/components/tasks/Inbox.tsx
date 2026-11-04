@@ -10,7 +10,7 @@ import { formatDateTimeIST } from '@/lib/datetime';
 import { errorMessage } from '@/components/staff/sales/types';
 import { timeAgo } from './Comments';
 import { Avatar } from './ui';
-import { formatDueDay, todayIST, unreadLabel, type InboxFilter, type InboxItem, type InboxKind, type InboxPage } from './types';
+import { formatDueKey, todayIST, unreadLabel, type InboxFilter, type InboxItem, type InboxKind, type InboxPage } from './types';
 
 type Pages = InfiniteData<InboxPage, string>;
 
@@ -107,8 +107,8 @@ function detailOf(item: InboxItem) {
   if (item.kind === 'status') return <>to <strong className="font-semibold">{item.text}</strong></>;
   if (KIND[item.kind].quote) return <span className="italic">“{item.text}”</span>;
   // The server writes the day as it is stored ("due 2026-11-20"); say it as the panel does.
-  const due = /^due (\d{4}-\d{2}-\d{2})$/.exec(item.text);
-  if (due) return `Due ${formatDueDay(due[1])}`;
+  const due = /^due (\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?)$/.exec(item.text);
+  if (due) return `Due ${formatDueKey(due[1])}`;
   return item.text;
 }
 

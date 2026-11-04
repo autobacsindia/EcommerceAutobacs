@@ -45,6 +45,8 @@ export type Task = {
   priorityLabel: string;
   /** IST calendar day, YYYY-MM-DD. */
   dueOn: string | null;
+  /** Optional IST time on the due day, 'HH:mm' (24-hour); late from that minute. Never without dueOn. */
+  dueTime?: string | null;
   /** When work should start (never after dueOn), YYYY-MM-DD. */
   startOn: string | null;
   /** Lower-case labels, at most TAGS_MAX. */
@@ -256,6 +258,36 @@ export const todayIST = (now: Date = new Date()) =>
 
 /** A due day that has already gone by (the task would be overdue the moment it is saved). */
 export const isPastDay = (ymd: string, today: string = todayIST()) => !!ymd && ymd < today;
+
+/** The time in India now, 'HH:mm' (24-hour). */
+export const timeIST = (now: Date = new Date()) =>
+  new Date(now.getTime() + (5 * 60 + 30) * 60_000).toISOString().slice(11, 16);
+
+/** A due day (and time) already gone: an earlier day, or today at a time that has come. */
+export const isPastDue = (ymd: string, hhmm?: string | null, now: Date = new Date()) =>
+  !!ymd && (ymd < todayIST(now) || (ymd === todayIST(now) && !!hhmm && hhmm <= timeIST(now)));
+
+/** "5:30 PM", "10 AM" for a 24-hour 'HH:mm'. */
+export function formatDueTime(hhmm: string | null | undefined): string {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const half = h < 12 ? 'AM' : 'PM';
+  const hour = h % 12 || 12;
+  return m ? `${hour}:${String(m).padStart(2, '0')} ${half}` : `${hour} ${half}`;
+}
+
+/** "6 Nov" or "6 Nov, 5:30 PM". */
+export const formatDue = (ymd: string | null, hhmm?: string | null) =>
+  (ymd ? `${formatDueDay(ymd)}${hhmm ? `, ${formatDueTime(hhmm)}` : ''}` : '');
+
+/** A due value as the server writes it in history and the Inbox: 'YYYY-MM-DD' or 'YYYY-MM-DD HH:mm'. */
+export const formatDueKey = (key: string) => {
+  const [ymd, hhmm] = key.split(' ');
+  return formatDue(ymd, hhmm);
+};
+
+/** The times a due time is picked from: every 15 minutes (a time set another way is added to the list). */
+export const DUE_TIMES: string[] = Array.from({ length: 96 }, (_, i) => `${String(Math.floor(i / 4)).padStart(2, '0')}:${String((i % 4) * 15).padStart(2, '0')}`);
 
 /** "15 Jan" / "15 Jan 2027" for a YYYY-MM-DD due day (no timezone shift: it is a day, not an instant). */
 export function formatDueDay(ymd: string | null): string {
