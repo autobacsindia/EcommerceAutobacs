@@ -118,11 +118,20 @@ describe('lists are one index range', () => {
 
 describe('the bell count', () => {
   it('counts on the assignee index without fetching documents', async () => {
-    const explain = await StaffTask.find({ 'assignees.user': people[7], bucket: 'open', rank: { $lte: TODAY } }).explain('executionStats');
+    const explain = await StaffTask.find({ 'assignees.user': people[7], bucket: 'open', rank: { $lt: ymd(1) } }).explain('executionStats');
     const s = stats(explain);
     expect(s.index).toBe('staff_task_assignees');
     expect(s.keys).toBeLessThanOrEqual(s.returned + 1);
-    expect(await staffTaskRepository.countDueBy(people[7], TODAY)).toBe(s.returned);
+    expect(await staffTaskRepository.countDueBefore(people[7], ymd(1))).toBe(s.returned);
+  });
+});
+
+describe('the overdue filter (a due time makes it "before today, or today up to now")', () => {
+  it('stays on the assignee index', async () => {
+    const s = stats(await StaffTask.find({ 'assignees.user': people[7], bucket: 'open', rank: { $lte: `${TODAY} 12:00`, $ne: TODAY } })
+      .sort({ rank: 1, _id: 1 }).explain('executionStats'));
+    expect(s.index).toBe('staff_task_assignees');
+    expect(s.docs).toBeLessThanOrEqual(s.returned + 1);
   });
 });
 

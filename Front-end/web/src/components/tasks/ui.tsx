@@ -11,7 +11,7 @@
  */
 import { CalendarClock, CircleCheck, CircleDashed, CircleDot, Clock3, Flag, X, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { formatDueDay, type Task, type TaskPriority, type TaskStatus } from './types';
+import { DUE_TIMES, formatDue, formatDueTime, type Task, type TaskPriority, type TaskStatus } from './types';
 import './tasks.css';
 
 // ── Status ───────────────────────────────────────────────────────────────────
@@ -125,8 +125,34 @@ export function AvatarStack({ people, max = 3, size = 'xs' }: { people: { id: st
 
 // ── Due date ─────────────────────────────────────────────────────────────────
 
-/** "Late · 21 Oct" (red), "Today" (amber), otherwise the day — or nothing. */
-export function DuePill({ t, empty = null }: { t: Pick<Task, 'dueOn' | 'overdue' | 'dueToday' | 'bucket'>; empty?: ReactNode }) {
+/** What a due date says: "Late · 21 Oct", "Late · 5:30 PM" (earlier today), "Today 5:30 PM", "6 Nov, 10 AM". */
+export function dueLabel(t: Pick<Task, 'dueOn' | 'dueTime' | 'overdue' | 'dueToday' | 'bucket'>): string {
+  if (!t.dueOn) return '';
+  if (t.bucket === 'done') return formatDue(t.dueOn, t.dueTime);
+  const time = formatDueTime(t.dueTime);
+  if (t.overdue) return `Late · ${t.dueToday && time ? time : formatDue(t.dueOn, t.dueTime)}`;
+  if (t.dueToday) return time ? `Today ${time}` : 'Today';
+  return formatDue(t.dueOn, t.dueTime);
+}
+
+/**
+ * A due time, picked from a list (every 15 minutes, like ClickUp): one change
+ * is one save, which a native time box (a save per digit) would not be.
+ */
+export function DueTimeSelect({ value, onChange, className = '', disabled = false, label = 'Due time' }: {
+  value: string | null | undefined; onChange: (v: string | null) => void; className?: string; disabled?: boolean; label?: string;
+}) {
+  const times = value && !DUE_TIMES.includes(value) ? [...DUE_TIMES, value].sort() : DUE_TIMES;
+  return (
+    <select aria-label={label} value={value ?? ''} disabled={disabled} onChange={(e) => onChange(e.target.value || null)} className={className}>
+      <option value="">No time</option>
+      {times.map((t) => <option key={t} value={t}>{formatDueTime(t)}</option>)}
+    </select>
+  );
+}
+
+/** The due date as a pill: red when late, amber today, otherwise quiet — or nothing. */
+export function DuePill({ t, empty = null }: { t: Pick<Task, 'dueOn' | 'dueTime' | 'overdue' | 'dueToday' | 'bucket'>; empty?: ReactNode }) {
   if (!t.dueOn) return <>{empty}</>;
   const tone = t.overdue
     ? 'bg-red-100 text-red-800'
@@ -134,7 +160,7 @@ export function DuePill({ t, empty = null }: { t: Pick<Task, 'dueOn' | 'overdue'
   return (
     <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${t.bucket === 'done' ? 'border border-gray-200 text-gray-400' : tone}`}>
       <CalendarClock aria-hidden className="h-3 w-3" />
-      {t.bucket !== 'done' && t.overdue ? 'Late · ' : ''}{t.bucket !== 'done' && t.dueToday ? 'Today' : formatDueDay(t.dueOn)}
+      {dueLabel(t)}
     </span>
   );
 }

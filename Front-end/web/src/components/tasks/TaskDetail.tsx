@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  AlignLeft, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, CornerLeftUp, Eye, Flag, Link2,
+  AlignLeft, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, Clock, CornerLeftUp, Eye, Flag, Link2,
   ListChecks, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, Timer as TimerIcon, Trash2, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
@@ -22,14 +22,14 @@ import { Linkified } from './links';
 import TaskMenu from './TaskMenu';
 import Subtasks from './Subtasks';
 import { TimePanel, TimerButton } from './Timer';
-import { Avatar, AvatarStack, DuePill, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
+import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import {
-  FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, formatDueDay, isConflict, isPastDay, newClientId, orderHrefFor, peopleOf,
+  FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, formatDueDay, formatDueKey, isConflict, isPastDue, newClientId, orderHrefFor, peopleOf,
   type Assignee, type ChecklistItem, type CommentPage, type Person, type Task, type TaskComment, type TaskPriority, type TaskStatus,
 } from './types';
 
 type Patch = Partial<{
-  title: string; description: string; priority: TaskPriority; dueOn: string | null; startOn: string | null; tags: string[];
+  title: string; description: string; priority: TaskPriority; dueOn: string | null; dueTime: string | null; startOn: string | null; tags: string[];
   orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean;
 }>;
 
@@ -40,7 +40,7 @@ const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => 
   follower_added: (h) => `added ${h.to} as a follower`,
   follower_removed: (h) => `removed ${h.from} as a follower`,
   priority: (h) => `changed priority from ${h.from} to ${h.to}`,
-  due: (h) => `changed the due date from ${h.from === 'none' ? 'none' : formatDueDay(h.from)} to ${h.to === 'none' ? 'none' : formatDueDay(h.to)}`,
+  due: (h) => `changed the due date from ${h.from === 'none' ? 'none' : formatDueKey(h.from)} to ${h.to === 'none' ? 'none' : formatDueKey(h.to)}`,
   start: (h) => `changed the start date from ${h.from === 'none' ? 'none' : formatDueDay(h.from)} to ${h.to === 'none' ? 'none' : formatDueDay(h.to)}`,
   tags: (h) => (h.to === 'none' ? 'removed the tags' : `set the tags to ${h.to}`),
   order: (h) => `changed the order from ${h.from} to ${h.to}`,
@@ -528,8 +528,12 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
     ? <button type="button" onClick={() => onOpen(task.parent!.id)} className="inline-flex min-w-0 items-center gap-1 hover:text-gray-900 hover:underline"><CornerLeftUp aria-hidden className="h-3.5 w-3.5 shrink-0" /><span className="font-mono">{task.parent.code}</span><span className="truncate">{task.parent.title}</span></button>
     : <Link href={`${base}/${task.parent.id}`} className="inline-flex min-w-0 items-center gap-1 hover:text-gray-900 hover:underline"><CornerLeftUp aria-hidden className="h-3.5 w-3.5 shrink-0" /><span className="font-mono">{task.parent.code}</span><span className="truncate">{task.parent.title}</span></Link>);
   const setDue = (value: string) => {
-    if (value && isPastDay(value) && !window.confirm('This date has already passed, so the task will show as late. Use it anyway?')) return;
+    if (value && isPastDue(value, task.dueTime) && !window.confirm('This date has already passed, so the task will show as late. Use it anyway?')) return;
     save.mutate({ dueOn: value || null });
+  };
+  const setDueTime = (value: string | null) => {
+    if (value && task.dueOn && isPastDue(task.dueOn, value) && !window.confirm('This time has already passed, so the task will show as late. Use it anyway?')) return;
+    save.mutate({ dueTime: value });
   };
 
   // Details first; the activity beside them in the window on a wide screen, below them otherwise.
@@ -585,7 +589,17 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
                 label="Due date"
                 min={task.startOn || undefined}
                 onChange={setDue}
-                extra={(task.overdue || task.dueToday) && <DuePill t={task} />}
+                extra={(
+                  <>
+                    {task.dueOn && (
+                      <span className="inline-flex items-center gap-1 text-gray-500">
+                        <Clock aria-hidden className="h-3.5 w-3.5 text-gray-400" />
+                        <DueTimeSelect value={task.dueTime} onChange={setDueTime} disabled={save.isPending} className={quietSelect} />
+                      </span>
+                    )}
+                    {(task.overdue || task.dueToday) && <DuePill t={task} />}
+                  </>
+                )}
               />
             ) : <DuePill t={task} empty={<span className="text-gray-400">Empty</span>} />}
           </Field>

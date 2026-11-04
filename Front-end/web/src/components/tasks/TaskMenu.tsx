@@ -110,7 +110,7 @@ export function useDuplicateTask(onCreated?: (id: string) => void) {
         description: full.description || '',
         ...(full.status === 'in_progress' || full.status === 'waiting' ? { status: full.status } : {}),
         priority: full.priority,
-        ...(full.dueOn ? { dueOn: full.dueOn } : {}),
+        ...(full.dueOn ? { dueOn: full.dueOn, ...(full.dueTime ? { dueTime: full.dueTime } : {}) } : {}),
         ...(full.startOn ? { startOn: full.startOn } : {}),
         ...(full.tags?.length ? { tags: full.tags } : {}),
         ...(people.length ? { assigneeIds: people, shared: true } : {}),

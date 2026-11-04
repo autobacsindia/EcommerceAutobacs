@@ -11,8 +11,9 @@ import mongoose from 'mongoose';
  *   bucket    'open' | 'done' | 'archived' — which list the task is in. Derived
  *             from status + archive on every write, and the leading key of every
  *             list index, so a list never scans another bucket's rows.
- *   rank      the sort key inside a bucket (see rankFor in the service): the due
- *             day for open tasks (no due day sorts last), and newest-finished-first
+ *   rank      the sort key inside a bucket (see placeOf in the service): the due
+ *             day for open tasks ('YYYY-MM-DD', or 'YYYY-MM-DD HH:mm' with a due
+ *             time, so a day's untimed tasks sort first; no due day sorts last), and newest-finished-first
  *             for done ones. One key means one index per list serves both buckets.
  *   rev       bumped on every change; an edit names the rev it was made against, so
  *             two people editing at once cannot silently overwrite each other.
@@ -122,6 +123,12 @@ const StaffTaskSchema = new mongoose.Schema(
     priority: { type: String, enum: TASK_PRIORITIES, default: 'normal', required: true },
     /** IST calendar day, 'YYYY-MM-DD' — a day, not an instant, so "due today" means the same thing to everyone. */
     dueOn: { type: String, default: null },
+    /**
+     * Optional IST time on the due day, 'HH:mm' (24-hour). Never without `dueOn`
+     * (the service refuses it, and clearing the day clears it). With a time the
+     * task is late from that minute; without one, from the next day.
+     */
+    dueTime: { type: String, default: null },
     /** When work should start, same 'YYYY-MM-DD' form. Never after `dueOn` (the service refuses it). */
     startOn: { type: String, default: null },
     /**
