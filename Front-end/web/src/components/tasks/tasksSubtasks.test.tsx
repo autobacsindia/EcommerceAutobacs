@@ -277,12 +277,13 @@ describe('asking first', () => {
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it('archiving a task with sub-tasks says they go with it', async () => {
+  it('deleting a task with sub-tasks says they go with it', async () => {
     serve({ tasks: { t1: parent } });
     confirm.mockReturnValue(false);
     wrap(<TaskDetail id="t1" base="/team/tasks" onClose={() => {}} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Archive' }));
-    expect(confirm).toHaveBeenCalledWith('Archive this task and its 3 sub-tasks? They move to Archived and can be restored together.');
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions for T-20' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    expect(confirm).toHaveBeenCalledWith('Delete T-20 and its 3 sub-tasks? They move to Trash and can be restored together.');
     expect(patch).not.toHaveBeenCalled();
   });
 });
@@ -322,6 +323,6 @@ describe('rows and history', () => {
     wrap(<TaskDetail id="t1" base="/team/tasks" onClose={() => {}} />);
     expect(await screen.findByText(/added the sub-task T-21 Count Bosch pads/)).toBeInTheDocument();
     expect(screen.getByText(/made the step "Count wipers" into the sub-task T-22/)).toBeInTheDocument();
-    expect(screen.getByText(/archived it with T-20/)).toBeInTheDocument();
+    expect(screen.getByText(/moved it to Trash with T-20/)).toBeInTheDocument();
   });
 });

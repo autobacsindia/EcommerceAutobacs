@@ -10,6 +10,7 @@ import { errorMessage } from '@/components/staff/sales/types';
 import { Kbd } from '@/components/panel/shortcuts';
 import { useQuickEdit, useRefreshTasks, useTaskPages, type QuickEdit } from './hooks';
 import { QuickDate, QuickMove, QuickPeople, QuickPriority } from './CardActions';
+import TaskMenu from './TaskMenu';
 import { CompleteButton, QuickAdd, TagList, TaskMeta } from './TaskList';
 import { Chip, GroupCount, GroupPill, SkeletonRows } from './ui';
 import { TASK_STATUSES, confirmComplete, isConflict, orderHrefFor, type Task, type TaskFilters, type TaskStatus } from './types';
@@ -39,7 +40,7 @@ function BoardCard({ t, base, status, onOpen, onMove, moving, onTag, activeTag, 
       aria-label={`Open ${t.code}: ${t.title}`}
       data-late={late || undefined}
       data-dragging={dragging || undefined}
-      className={`tk-card group rounded-lg bg-white px-2.5 py-2 focus:outline-none ${
+      className={`tk-card tk-more-host group rounded-lg bg-white px-2.5 py-2 focus:outline-none ${
         t.can.status ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
       } ${busy ? 'opacity-60' : ''}`}
     >
@@ -79,6 +80,7 @@ function BoardCard({ t, base, status, onOpen, onMove, moving, onTag, activeTag, 
         <QuickPriority t={t} onSave={save} busy={busy} />
         {!t.tags?.length && <span className="tk-qa inline-flex h-6 min-w-6 items-center justify-center rounded-md" data-empty title="No tags"><Tag aria-hidden className="h-3.5 w-3.5" /><span className="sr-only">No tags</span></span>}
         <QuickMove t={t} status={status} onMove={(s) => onMove(t, s)} busy={busy} />
+        {base && <TaskMenu t={t} base={base} onOpen={onOpen} className="ml-auto" />}
       </div>
       {/* Phones and tablets cannot drag: a small picker does the same move. */}
       {t.can.status && (

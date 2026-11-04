@@ -8,6 +8,7 @@ import AssigneePicker from './AssigneePicker';
 import { useAssignees } from './TaskForm';
 import { groupTasks, type TaskGroup } from './grouping';
 import BulkBar from './BulkBar';
+import TaskMenu from './TaskMenu';
 import { Avatar, AvatarStack, Chip, DuePill, GroupCount, GroupPill, PRIORITY_STYLE, PriorityFlag, STATUS_STYLE, SkeletonRows, TagChip } from './ui';
 import {
   MAX_ASSIGNEES, TASK_PRIORITIES, TAGS_MAX, cleanTag, confirmComplete, formatDueDay, formatDuration, newClientId, peopleOf,
@@ -97,6 +98,9 @@ const COLUMNS = 'lg:grid lg:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px] lg:i
 const COLUMNS_ORDER = 'lg:grid lg:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px] lg:items-center lg:gap-3 xl:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px_minmax(0,150px)_96px]';
 /** Tags and order get their own columns only on a wide screen; in between they sit beside the title. */
 const WIDE = 'hidden xl:block';
+/** A column heading with its icon, ClickUp-style. */
+const HEAD = 'items-center gap-1.5 [&>svg]:shrink-0 [&>svg]:text-gray-400 lg:inline-flex';
+const HEAD_WIDE = 'hidden items-center gap-1.5 [&>svg]:shrink-0 [&>svg]:text-gray-400 xl:inline-flex';
 
 function SelectBox({ checked, onChange, label, mixed = false }: { checked: boolean; onChange: (on: boolean) => void; label: string; mixed?: boolean }) {
   return (
@@ -112,9 +116,9 @@ function SelectBox({ checked, onChange, label, mixed = false }: { checked: boole
   );
 }
 
-function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder }: {
+function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder, base }: {
   t: Task; onOpen: (id: string) => void; selected: boolean; onSelect: (on: boolean) => void;
-  onTag?: (tag: string) => void; activeTag?: string; withOrder: boolean;
+  onTag?: (tag: string) => void; activeTag?: string; withOrder: boolean; base?: string;
 }) {
   const move = useSetStatus();
   const open = () => onOpen(t.id);
@@ -131,7 +135,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder }:
       onClick={open}
       onKeyDown={onKey}
       aria-label={`Open ${t.code}: ${t.title}`}
-      className={`group flex cursor-pointer items-start gap-3 border-t border-gray-100 px-3 py-2.5 transition-colors first:border-t-0 lg:min-h-11 lg:py-2 ${withOrder ? COLUMNS_ORDER : COLUMNS} ${
+      className={`tk-more-host group relative flex cursor-pointer items-start gap-3 border-t ${base ? 'pr-10' : ''} border-gray-100 px-3 py-2.5 transition-colors first:border-t-0 lg:min-h-11 lg:py-2 ${withOrder ? COLUMNS_ORDER : COLUMNS} ${
         selected ? 'bg-blue-50' : 'hover:bg-gray-50'
       } focus-visible:bg-blue-50 focus:outline-none`}
     >
@@ -172,6 +176,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder }:
           {t.order && <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700"><Package aria-hidden className="h-3.5 w-3.5" />{t.order.code}</span>}
         </span>
       )}
+      {base && <span className="absolute right-2 top-2 lg:top-1/2 lg:-translate-y-1/2"><TaskMenu t={t} base={base} onOpen={onOpen} /></span>}
     </li>
   );
 }
@@ -354,8 +359,8 @@ function GroupHeading({ g }: { g: TaskGroup }) {
 }
 const PriorityFlagIcon = ({ priority }: { priority: keyof typeof PRIORITY_STYLE }) => <PriorityFlag priority={priority} />;
 
-function Group({ g, onOpen, collapsed, onToggle, quickAddFor, footer, selected, onSelect, onTag, activeTag, countLabel }: {
-  g: TaskGroup; onOpen: (id: string) => void; collapsed: boolean; onToggle: () => void;
+function Group({ g, onOpen, collapsed, onToggle, quickAddFor, footer, selected, onSelect, onTag, activeTag, countLabel, base }: {
+  g: TaskGroup; onOpen: (id: string) => void; collapsed: boolean; onToggle: () => void; base?: string;
   quickAddFor?: string | null; footer?: ReactNode; selected: Set<string>; onSelect: (ts: Task[], on: boolean) => void;
   onTag?: (tag: string) => void; activeTag?: string; countLabel?: string;
 }) {
@@ -381,13 +386,17 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, footer, selected, 
         <div className="tk-sheet overflow-hidden rounded-xl bg-white">
           {g.tasks.length > 0 && (
             <div aria-hidden className={`hidden border-b border-gray-100 bg-gray-50/60 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500 ${withOrder ? COLUMNS_ORDER : COLUMNS}`}>
-              <span /><span className="pl-7">Name</span><span>Assignee</span><span>Due date</span><span>Priority</span>
-              <span className={WIDE}>Tags</span>{withOrder && <span className={WIDE}>Order</span>}
+              <span /><span className="pl-7">Name</span>
+              <span className={HEAD}><Users className="h-3.5 w-3.5" />Assignee</span>
+              <span className={HEAD}><CalendarDays className="h-3.5 w-3.5" />Due date</span>
+              <span className={HEAD}><Flag className="h-3.5 w-3.5" />Priority</span>
+              <span className={HEAD_WIDE}><Tag className="h-3.5 w-3.5" />Tags</span>
+              {withOrder && <span className={HEAD_WIDE}><Package className="h-3.5 w-3.5" />Order</span>}
             </div>
           )}
           <ul>
             {g.tasks.map((t) => (
-              <TaskRow key={t.id} t={t} onOpen={onOpen} selected={selected.has(t.id)} onSelect={(on) => onSelect([t], on)} onTag={onTag} activeTag={activeTag} withOrder={withOrder} />
+              <TaskRow key={t.id} t={t} onOpen={onOpen} selected={selected.has(t.id)} onSelect={(on) => onSelect([t], on)} onTag={onTag} activeTag={activeTag} withOrder={withOrder} base={base} />
             ))}
           </ul>
           {footer}
@@ -404,9 +413,9 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, footer, selected, 
  * at the bottom, and a bar for changing every ticked task at once.
  * `quickAddFor`: who a quick-added task goes to (undefined = me; null = no quick add).
  */
-export default function TaskListView({ filters, onOpen, quickAddFor, empty, groupBy = 'status', onTag, canChangeAssignee = true }: {
+export default function TaskListView({ filters, onOpen, quickAddFor, empty, groupBy = 'status', onTag, canChangeAssignee = true, base }: {
   filters: TaskFilters; onOpen: (id: string) => void; quickAddFor?: string | null; empty: ReactNode;
-  groupBy?: TaskGroupBy; onTag?: (tag: string) => void; canChangeAssignee?: boolean;
+  groupBy?: TaskGroupBy; onTag?: (tag: string) => void; canChangeAssignee?: boolean; base?: string;
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ done: true });
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -449,6 +458,7 @@ export default function TaskListView({ filters, onOpen, quickAddFor, empty, grou
           onSelect={onSelect}
           onTag={onTag}
           activeTag={filters.tag}
+          base={base}
         />
       ))}
       {open.hasNextPage && (
@@ -467,6 +477,7 @@ export default function TaskListView({ filters, onOpen, quickAddFor, empty, grou
           onSelect={onSelect}
           onTag={onTag}
           activeTag={filters.tag}
+          base={base}
           countLabel={collapsed.done ? '…' : undefined}
           footer={
             done.isLoading ? <div className="px-3 py-2"><SkeletonRows rows={2} /></div>

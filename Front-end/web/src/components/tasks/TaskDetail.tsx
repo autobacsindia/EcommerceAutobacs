@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  Archive, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, CornerLeftUp, Eye, Flag, Link2,
-  ListChecks, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, Timer as TimerIcon, UserPlus, UserRound, Users, X, type LucideIcon,
+  AlignLeft, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, CornerLeftUp, Eye, Flag, Link2,
+  ListChecks, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, Timer as TimerIcon, Trash2, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
@@ -18,6 +18,8 @@ import { Activity, TaskFiles, timeAgo } from './Comments';
 import { TagList } from './TaskList';
 import AssigneePicker from './AssigneePicker';
 import { useFollowers } from './hooks';
+import { Linkified } from './links';
+import TaskMenu from './TaskMenu';
 import Subtasks from './Subtasks';
 import { TimePanel, TimerButton } from './Timer';
 import { Avatar, AvatarStack, DuePill, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
@@ -48,7 +50,7 @@ const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => 
   check_removed: (h) => `removed the step "${h.to}"`,
   checked: (h) => `ticked "${h.to}"`,
   unchecked: (h) => `unticked "${h.to}"`,
-  archived: (h) => (h.to ? `archived it ${h.to}` : 'archived it'),
+  archived: (h) => (h.to ? `moved it to Trash ${h.to}` : 'moved it to Trash'),
   restored: (h) => (h.to ? `restored it ${h.to}` : 'restored it'),
   subtask_added: (h) => `added the sub-task ${h.to}`,
   check_to_subtask: (h) => `made the step "${h.from}" into the sub-task ${h.to}`,
@@ -72,8 +74,25 @@ function InlineText({ value, onSave, multiline = false, placeholder, label, clas
 
   if (!canEdit) {
     return value
-      ? <div className={`${className} whitespace-pre-wrap`}>{value}</div>
+      ? <div className={`${className} whitespace-pre-wrap break-words`}>{multiline ? <Linkified text={value} /> : value}</div>
       : null;
+  }
+  // Long text with links: the links open, a click anywhere else (or the pencil) edits.
+  if (draft === null && multiline && value) {
+    return (
+      <div onClick={() => setDraft(value)} className={`${className} group cursor-text rounded-md hover:bg-gray-50`}>
+        <span className="whitespace-pre-wrap break-words"><Linkified text={value} /></span>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setDraft(value); }}
+          aria-label={`Edit ${label}`}
+          title="Edit"
+          className="ml-1 inline-flex rounded p-0.5 align-middle text-gray-300 opacity-0 hover:bg-gray-100 hover:text-gray-600 focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          <Pencil aria-hidden className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
   }
   if (draft === null) {
     return (
@@ -156,7 +175,11 @@ function DateField({ value, label, min, max, onChange, extra }: {
 
 const quietSelect = quietControl;
 
-const firstNames = (people: Person[]) => people.map((p) => p.name.split(' ')[0] || p.name).join(', ');
+/** "Arun, Sam" — and past two people "Arun, Sam +3", so a long team never spills into the next field. */
+const firstNames = (people: Person[]) => {
+  const names = people.map((p) => p.name.split(' ')[0] || p.name);
+  return names.length > 2 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', ');
+};
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
 
 /** Faces and first names: "(A)(S) Arun, Sam". */
@@ -165,7 +188,7 @@ function PeopleLine({ people, empty }: { people: Person[]; empty: string }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-2">
       <AvatarStack people={people} max={5} size="sm" />
-      <span className="truncate">{firstNames(people)}</span>
+      <span className="min-w-0 truncate" title={people.map((p) => p.name).join(', ')}>{firstNames(people)}</span>
     </span>
   );
 }
@@ -500,13 +523,6 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
     if (status === 'done' && !confirmComplete(task)) return;
     save.mutate({ status });
   };
-  const archive = () => {
-    const n = task.subtasks?.total ?? 0;
-    const ask = n
-      ? `Archive this task and its ${n === 1 ? 'sub-task' : `${n} sub-tasks`}? They move to Archived and can be restored together.`
-      : 'Archive this task? It moves to Archived and can be restored.';
-    if (window.confirm(ask)) save.mutate({ archived: true });
-  };
   // The parent, as a way back up: in the window it switches to it; on a page it is a link.
   const parentLink = task.parent && (onOpen
     ? <button type="button" onClick={() => onOpen(task.parent!.id)} className="inline-flex min-w-0 items-center gap-1 hover:text-gray-900 hover:underline"><CornerLeftUp aria-hidden className="h-3.5 w-3.5 shrink-0" /><span className="font-mono">{task.parent.code}</span><span className="truncate">{task.parent.title}</span></button>
@@ -522,7 +538,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
       <header className="space-y-2">
         {archived && (
           <div className="flex items-center justify-between rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700">
-            This task is archived.
+            <span className="flex items-center gap-2"><Trash2 aria-hidden className="h-4 w-4 text-gray-500" /> This task is in Trash.</span>
             {task.can.restore && (
               <button onClick={() => save.mutate({ archived: false })} className="inline-flex items-center gap-1 font-medium text-blue-700"><RotateCcw className="h-4 w-4" /> Restore</button>
             )}
@@ -621,7 +637,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
       {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <section>
-        <h3 className="mb-1 text-sm font-semibold text-gray-900">Description</h3>
+        <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900"><AlignLeft aria-hidden className="h-4 w-4 text-gray-500" /> Description</h3>
         <InlineText
           value={task.description || ''}
           onSave={(description) => save.mutate({ description })}
@@ -654,7 +670,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
                     <Link href={`${base}/${c.id}`} className="flex items-center gap-2 text-blue-700 hover:underline">
                       <Avatar name={c.assignee.name} id={c.assignee.id} size="xs" />{c.assignee.name} <span className="text-xs text-gray-400">{c.code}</span>
                     </Link>
-                    {c.bucket === 'archived' ? <span className="text-xs text-gray-500">Archived</span> : <StatusPill status={c.status} />}
+                    {c.bucket === 'archived' ? <span className="text-xs text-gray-500">In Trash</span> : <StatusPill status={c.status} />}
                   </li>
                 ))}
               </ul>
@@ -674,7 +690,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
   const tools = (
     <>
       <button onClick={copyLink} aria-label="Copy link" title="Copy link" className={iconButton}><Link2 className="h-4 w-4" /></button>
-      {task.can.archive && <button onClick={archive} aria-label="Archive" title="Archive" className={iconButton}><Archive className="h-4 w-4" /></button>}
+      <TaskMenu t={task} base={base} onOpen={onOpen} size="md" className="text-gray-600" />
     </>
   );
 

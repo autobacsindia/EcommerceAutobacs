@@ -161,7 +161,7 @@ export default function AssigneePicker({ trigger, triggerLabel, align = 'left', 
         aria-expanded={open}
         aria-label={triggerLabel}
         title={triggerLabel}
-        className="inline-flex items-center rounded-md disabled:cursor-default"
+        className="inline-flex min-w-0 max-w-full items-center rounded-md disabled:cursor-default"
       >
         {trigger}
       </button>
