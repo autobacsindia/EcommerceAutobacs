@@ -12,7 +12,11 @@
  * The parent drives `uploading`/`error` so the actual upload + validation stays
  * in one place (the shared signed helper) and the API secret never reaches here.
  */
+import { useRef } from 'react';
 import { ImageIcon } from 'lucide-react';
+import { usePasteFiles } from '@/hooks/usePasteFiles';
+import { acceptsFile } from '@/lib/attachments';
+import PasteHint from '@/components/ui/PasteHint';
 import { IMAGE_ACCEPT, IMAGE_MAX_FILE_MB } from '@/lib/imageUpload';
 
 interface SingleImageUploadProps {
@@ -38,6 +42,9 @@ export default function SingleImageUpload({
   disabled = false,
 }: SingleImageUploadProps) {
   const busy = uploading || disabled;
+  const zone = useRef<HTMLDivElement>(null);
+  // A pasted screenshot replaces the image, like choosing a new one.
+  usePasteFiles(zone, { accept: IMAGE_ACCEPT, hasRoom: !busy, take: (files) => { const img = files.find((f) => acceptsFile(f, IMAGE_ACCEPT)); if (!busy && img) onUpload(img); } });
 
   const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -46,7 +53,7 @@ export default function SingleImageUpload({
   };
 
   return (
-    <div>
+    <div ref={zone}>
       <label className="text-sm font-medium text-gray-700 block mb-1">{label}</label>
       {value ? (
         <div className="flex items-start gap-3">
@@ -70,6 +77,7 @@ export default function SingleImageUpload({
             >
               Remove
             </button>
+            {!busy && <PasteHint />}
           </div>
         </div>
       ) : (
@@ -79,6 +87,7 @@ export default function SingleImageUpload({
             {uploading ? 'Uploading…' : <>Click to upload · <span className="text-red-500 font-medium">browse</span></>}
           </span>
           <span className="text-xs text-gray-400">JPG, PNG, WebP · max {IMAGE_MAX_FILE_MB} MB</span>
+          {!busy && <PasteHint />}
           <input type="file" accept={IMAGE_ACCEPT} disabled={busy} className="sr-only" onChange={pick} />
         </label>
       )}

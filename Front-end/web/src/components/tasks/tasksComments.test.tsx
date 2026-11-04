@@ -10,6 +10,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TaskDetail from './TaskDetail';
 import type { Task, TaskComment } from './types';
+import { __resetPasteZones } from '@/hooks/usePasteFiles';
 
 const get = jest.fn();
 const post = jest.fn();
@@ -70,6 +71,7 @@ function open({ one = task(), comments = [] as TaskComment[] } = {}) {
 }
 
 beforeEach(() => {
+  __resetPasteZones();
   [get, post, patch, put, del, submitMultipart].forEach((f) => f.mockReset());
   jest.spyOn(window, 'confirm').mockReturnValue(true);
 });
@@ -230,5 +232,66 @@ describe('files', () => {
     await screen.findByRole('heading', { name: 'Call Bosch' });
     expect(screen.queryByRole('button', { name: /Add files/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /Files/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('pasting a screenshot (Ctrl/Cmd+V)', () => {
+  const shot = (size = 10) => new File([new Uint8Array(size)], 'image.png', { type: 'image/png' });
+  function paste(target: Element, files: File[], text?: string) {
+    const types = [...(files.length ? ['Files'] : []), ...(text != null ? ['text/plain'] : [])];
+    return fireEvent.paste(target, { clipboardData: { files, items: [], types, getData: () => text ?? '' } });
+  }
+
+  it('a screenshot pasted into the comment box is attached, renamed, and posts like a chosen file', async () => {
+    submitMultipart.mockResolvedValue({ ok: true, body: { comment: comment({ id: 'c9' }) } });
+    open();
+    paste(await screen.findByLabelText('Comment'), [shot(), shot()]);
+    const list = screen.getByRole('list', { name: 'Files to send' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    expect(list).toHaveTextContent(/screenshot-\d{2}-\d{2}-\d{2}\.png/);
+    expect(list).not.toHaveTextContent('image.png');
+    fireEvent.click(screen.getByRole('button', { name: 'Post' }));
+    await waitFor(() => expect(submitMultipart).toHaveBeenCalled());
+    expect((submitMultipart.mock.calls[0][2] as FormData).getAll('files')).toHaveLength(2);
+  });
+
+  it('pasting text into the comment box is left to the box', async () => {
+    open();
+    const box = await screen.findByLabelText('Comment');
+    const e = paste(box, [], 'hello');
+    expect(e).toBe(true); // not prevented
+    expect(screen.queryByRole('list', { name: 'Files to send' })).not.toBeInTheDocument();
+  });
+
+  it('a pasted screenshot over 10 MB shows the same message as a chosen one', async () => {
+    open();
+    paste(await screen.findByLabelText('Comment'), [shot(11 * 1024 * 1024)]);
+    expect(screen.getByRole('alert')).toHaveTextContent(/is over 10 MB and was not added/);
+    expect(screen.queryByRole('list', { name: 'Files to send' })).not.toBeInTheDocument();
+  });
+
+  it('a screenshot pasted after clicking the Files section uploads to the task', async () => {
+    submitMultipart.mockResolvedValue({ ok: true, body: { task: task() } });
+    open();
+    const add = await screen.findByRole('button', { name: /Add files/ });
+    fireEvent.pointerDown(add);
+    paste(document.body, [shot()]);
+    await waitFor(() => expect(submitMultipart).toHaveBeenCalledWith('/api/v1/staff/tasks/t1/files', 'POST', expect.any(FormData)));
+    expect(((submitMultipart.mock.calls[0][2] as FormData).get('files') as File).name).toMatch(/^screenshot-.*\.png$/);
+  });
+
+  it('no paste uploads to a task where files may not be added', async () => {
+    open({ one: task({ can: { ...can, files: false } }) });
+    await screen.findByRole('heading', { name: 'Call Bosch' });
+    paste(screen.getByRole('heading', { name: 'Call Bosch' }), [shot()]);
+    expect(submitMultipart).not.toHaveBeenCalled();
+  });
+
+  it('a file type the task does not take is refused with a reason', async () => {
+    open();
+    const exe = new File(['x'], 'tool.exe', { type: 'application/x-msdownload' });
+    fireEvent.change(await screen.findByLabelText('Attach files to the comment'), { target: { files: [exe] } });
+    expect(screen.getByRole('alert')).toHaveTextContent(/can't be attached/);
+    expect(screen.queryByRole('list', { name: 'Files to send' })).not.toBeInTheDocument();
   });
 });

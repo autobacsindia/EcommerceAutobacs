@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import PasteZone from '@/components/ui/PasteZone';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { uploadImageToCloudinary } from '@/lib/cloudinaryUpload';
@@ -307,12 +308,14 @@ export default function AdminPromoBannersPage() {
           </span>
         </p>
 
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          disabled={uploading !== null}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f, slot); }}
-        />
+        <PasteZone accept="image/jpeg,image/png,image/webp" single disabled={uploading !== null} onFiles={([f]) => { void handleUpload(f, slot); }}>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={uploading !== null}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f, slot); }}
+          />
+        </PasteZone>
         {uploading === slot && <p className={hint}>Uploading…</p>}
 
         {img.url && (

@@ -19,6 +19,9 @@ import { staffKeys } from '@/hooks/queries/keys';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import { RETURN_REASON_OPTIONS, RETURN_VIDEO_MAX_MB, isAllowedVideoLink } from '@/lib/constants';
 import { getReturnUploadSignature, uploadReturnFile, type ReturnCredentials, type ReturnResourceType } from '@/lib/returnUploads';
+import { usePasteFiles } from '@/hooks/usePasteFiles';
+import { acceptsFile } from '@/lib/attachments';
+import PasteHint from '@/components/ui/PasteHint';
 import { input, primary, secondary } from './ui';
 
 type Options = {
@@ -58,6 +61,7 @@ function Dialog({ orderId, onClose }: { orderId: string; onClose: () => void }) 
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState('');
   const sigRef = useRef<ReturnCredentials | null>(null);
+  const zone = useRef<HTMLDivElement>(null);
 
   const o = opts.data?.options;
   const chosen = Object.entries(picked);
@@ -78,16 +82,17 @@ function Dialog({ orderId, onClose }: { orderId: string; onClose: () => void }) 
     onSuccess: () => qc.invalidateQueries({ queryKey: staffKeys.returns() }),
   });
 
-  const upload = async (file: File, kind: 'photo' | 'video') => {
+  /** Resolves true once the file is uploaded and listed. `index` names the photo slot. */
+  const upload = async (file: File, kind: 'photo' | 'video', index = photos.length): Promise<boolean> => {
     const max = kind === 'video' ? RETURN_VIDEO_MAX_MB * MB : 10 * MB;
     if (file.size > max) {
       setUploadError(kind === 'video'
         ? `That video is over ${RETURN_VIDEO_MAX_MB}MB. Ask the customer for a Google Drive or YouTube link and paste it below.`
         : `That photo is too large (max ${max / MB}MB).`);
-      return;
+      return false;
     }
     setUploadError('');
-    const slot = kind === 'video' ? 'video' : `photo${photos.length}`;
+    const slot = kind === 'video' ? 'video' : `photo${index}`;
     const resourceType: ReturnResourceType = kind === 'video' ? 'video' : 'image';
     setUploading(kind);
     try {
@@ -99,12 +104,28 @@ function Dialog({ orderId, onClose }: { orderId: string; onClose: () => void }) 
       const ref = await uploadReturnFile(file, creds, resourceType, undefined, slot);
       const up = { publicId: ref.publicId, provider: ref.provider, name: file.name };
       if (kind === 'video') setVideo(up); else setPhotos((p) => [...p, up].slice(0, 5));
+      return true;
     } catch (e) {
       setUploadError((e as Error).message || 'Upload failed. Try again.');
+      return false;
     } finally {
       setUploading(null);
     }
   };
+
+  /** Pasted screenshots: uploaded one after another, as many as still fit (5 photos in all). */
+  const addPastedPhotos = async (files: File[]) => {
+    if (uploading) return;
+    const images = files.filter((f) => acceptsFile(f, 'image/*'));
+    if (!images.length) { setUploadError('Only photos can be pasted here.'); return; }
+    const room = 5 - photos.length;
+    if (room <= 0) { setUploadError('You can add up to 5 photos.'); return; }
+    for (const [i, f] of images.slice(0, room).entries()) {
+      if (!(await upload(f, 'photo', photos.length + i))) return;
+    }
+    if (images.length > room) setUploadError(`Only ${room} more photo${room === 1 ? '' : 's'} fit — the rest were not added.`);
+  };
+  usePasteFiles(zone, { accept: 'image/*', hasRoom: !uploading && photos.length < 5, take: (f) => { void addPastedPhotos(f); } });
 
   const ready = chosen.length > 0 && chosen.every(([, p]) => p.reason) && description.trim() && photos.length > 0
     && (video || linkOk) && (!anyCustomer || unused) && !uploading;
@@ -126,7 +147,7 @@ function Dialog({ orderId, onClose }: { orderId: string; onClose: () => void }) 
   const returnable = o.lines.filter((l) => l.returnableQuantity > 0);
 
   return (
-    <div className="space-y-4 text-sm">
+    <div ref={zone} className="space-y-4 text-sm">
       <p className="text-gray-600">Order {o.orderNumber} · {o.customer}</p>
       {o.repeatReturns > 0 && <p className="text-xs font-semibold text-amber-800">This customer raised {o.repeatReturns} return{o.repeatReturns > 1 ? 's' : ''} in the last 6 months.</p>}
       {!returnable.length && <p className="text-gray-600">Nothing on this order can be returned (not delivered yet, or already returned).</p>}
@@ -186,6 +207,7 @@ function Dialog({ orderId, onClose }: { orderId: string; onClose: () => void }) 
             <input type="file" accept="video/*" className="sr-only" disabled={!!uploading}
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) upload(f, 'video'); }} />
           </label>
+          {photos.length < 5 && <PasteHint className="self-center" />}
         </div>
         {!video && (
           <input

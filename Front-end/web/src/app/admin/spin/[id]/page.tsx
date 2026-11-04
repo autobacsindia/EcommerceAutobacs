@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import PasteZone from '@/components/ui/PasteZone';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import apiClient, { ApiError } from '@/lib/api';
@@ -760,9 +761,11 @@ export default function SpinCampaignDetailPage() {
                     none
                   </div>
                 )}
-                <input type="file" accept="image/*" disabled={uploading}
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadPrizeImage(f); e.target.value = ''; }}
-                  className="text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-200 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-gray-300" />
+                <PasteZone accept="image/*" single disabled={uploading} onFiles={([f]) => { void uploadPrizeImage(f); }}>
+                  <input type="file" accept="image/*" disabled={uploading}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadPrizeImage(f); e.target.value = ''; }}
+                    className="text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-200 file:px-3 file:py-1.5 file:text-sm file:font-medium hover:file:bg-gray-300" />
+                </PasteZone>
                 {uploading && <span className="text-sm text-gray-500">Uploading…</span>}
               </div>
               <p className="mt-1 text-xs text-gray-500">

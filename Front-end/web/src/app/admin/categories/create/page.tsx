@@ -7,6 +7,7 @@ import apiClient from '@/lib/api';
 import { revalidateHome } from '@/lib/revalidateHome';
 import { parseApiResponse, errorMessage, submitMultipart } from '@/lib/multipartResponse';
 import { validateImageFile, IMAGE_ACCEPT, IMAGE_MAX_FILE_MB } from '@/lib/imageUpload';
+import PasteZone from '@/components/ui/PasteZone';
 import SeoPanel, { EMPTY_SEO, type SeoFormValue } from '@/components/admin/SeoPanel';
 import { usePanel } from '@/lib/usePanel';
 
@@ -91,25 +92,28 @@ function CreateCategoryForm() {
     }));
   };
 
+  /** A chosen or pasted image. False when it was rejected. */
+  const takeImage = (file: File): boolean => {
+    // Reject oversized/unsupported files up front so the admin gets a precise
+    // message instead of a multer 400 or an opaque proxy 413 after upload.
+    const problem = validateImageFile(file);
+    if (problem) {
+      setError(problem);
+      return false;
+    }
+    setError(null);
+    // Keep the real File for multipart upload; the blob URL is preview-only.
+    setImagePreview(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    setImageFile(file);
+    return true;
+  };
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // Reject oversized/unsupported files up front so the admin gets a precise
-      // message instead of a multer 400 or an opaque proxy 413 after upload.
-      const problem = validateImageFile(file);
-      if (problem) {
-        setError(problem);
-        e.target.value = '';
-        return;
-      }
-      setError(null);
-      // Keep the real File for multipart upload; the blob URL is preview-only.
-      setImagePreview(prev => {
-        if (prev) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(file);
-      });
-      setImageFile(file);
-    }
+    if (file && !takeImage(file)) e.target.value = '';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -286,7 +290,7 @@ function CreateCategoryForm() {
                     </div>
                   )}
                 </div>
-                <div className="flex-1">
+                <PasteZone accept={IMAGE_ACCEPT} single onFiles={([f]) => { takeImage(f); }} className="flex-1">
                   <input
                     type="file"
                     id="image"
@@ -303,7 +307,7 @@ function CreateCategoryForm() {
                   <p className="mt-1 text-sm text-gray-500">
                     JPG, PNG, WebP up to {IMAGE_MAX_FILE_MB} MB
                   </p>
-                </div>
+                </PasteZone>
               </div>
             </div>
 

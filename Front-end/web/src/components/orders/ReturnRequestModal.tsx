@@ -14,6 +14,9 @@ import {
   type ReturnResourceType,
 } from '@/lib/returnUploads';
 import OrderItemCard from './shared/OrderItemCard';
+import { usePasteFiles } from '@/hooks/usePasteFiles';
+import { acceptsFile } from '@/lib/attachments';
+import PasteHint from '@/components/ui/PasteHint';
 
 interface OrderItem {
   _id: string;
@@ -231,14 +234,15 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
 
   const handleUpload = async (
     file: File, slot: 'video' | 'proof' | 'photo', resourceType: ReturnResourceType, maxBytes: number,
-  ) => {
+    photoIndex = photos.length,
+  ): Promise<boolean> => {
     if (file.size > maxBytes) {
       if (slot === 'video') {
         setError(`This video is over ${RETURN_VIDEO_MAX_MB}MB. Upload it to Google Drive or YouTube and paste the link below.`);
-        return;
+        return false;
       }
       setError(`${slot === 'proof' ? 'Proof of purchase' : 'Photo'} is too large (max ${Math.round(maxBytes / MB)}MB).`);
-      return;
+      return false;
     }
     setError(null);
     try {
@@ -246,9 +250,9 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
         Photo slots are INDEXED server-side (photo0…photo4) so each upload gets a
         key bound to its own slot. Using the count of already-uploaded photos as
         the index is safe because uploads are sequential here — the input is
-        disabled while one is in flight.
+        disabled while one is in flight. Several pasted photos pass their own index.
       */
-      const slotName = slot === 'photo' ? `photo${photos.length}` : slot;
+      const slotName = slot === 'photo' ? `photo${photoIndex}` : slot;
       const creds = await ensureCredentials(slotName, file.type || 'application/octet-stream');
       setUploading({ slot, pct: 0 });
       const res = await uploadReturnFile(
@@ -260,11 +264,24 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
       if (slot === 'video') setVideo(up);
       else if (slot === 'proof') setProof(up);
       else setPhotos((p) => [...p, up].slice(0, 5));
+      return true;
     } catch (e) {
       setError((e as Error).message || 'Upload failed. Please try again.');
+      return false;
     } finally {
       setUploading(null);
     }
+  };
+
+  /** Pasted screenshots: uploaded one after another, as many as still fit (5 in all). */
+  const handlePastedPhotos = async (files: File[]) => {
+    if (uploading) return;
+    const room = 5 - photos.length;
+    if (room <= 0) { setError('You can add up to 5 photos.'); return; }
+    for (const [i, f] of files.slice(0, room).entries()) {
+      if (!(await handleUpload(f, 'photo', 'image', PHOTO_MAX, photos.length + i))) return;
+    }
+    if (files.length > room) setError(`Only ${room} more photo${room === 1 ? '' : 's'} fit — the rest were not added.`);
   };
 
   const handleItemSelect = (item: OrderItem, selected: boolean) => {
@@ -531,7 +548,7 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
               <UploadRow
                 icon={<ImageIcon className="h-5 w-5" />} label="Photos (at least 1, up to 5)" required uploaded={null} accept="image/*"
                 busy={uploading?.slot === 'photo' ? uploading.pct : null} hint="Close-up photos of the item and the problem. Max 10MB each." disabled={photos.length >= 5}
-                onFile={(f) => handleUpload(f, 'photo', 'image', PHOTO_MAX)} onRemove={() => {}} />
+                onFile={(f) => handleUpload(f, 'photo', 'image', PHOTO_MAX)} onPasteFiles={(f) => { void handlePastedPhotos(f); }} onRemove={() => {}} />
               {photos.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {photos.map((p, i) => (
@@ -564,7 +581,9 @@ export default function ReturnRequestModal({ orderId, orderNumber, items, exclud
             <UploadRow
               icon={<FileText className="h-5 w-5" />} label="Invoice (optional)" uploaded={proof} accept="image/*,application/pdf"
               busy={uploading?.slot === 'proof' ? uploading.pct : null} hint="Only if you bought it somewhere other than this website account. Image or PDF, max 15MB."
-              onFile={(f) => handleUpload(f, 'proof', f.type === 'application/pdf' ? 'raw' : 'image', PROOF_MAX)} onRemove={() => setProof(null)} />
+              onFile={(f) => handleUpload(f, 'proof', f.type === 'application/pdf' ? 'raw' : 'image', PROOF_MAX)}
+              onPasteFiles={(f) => { void handleUpload(f[0], 'proof', f[0].type === 'application/pdf' ? 'raw' : 'image', PROOF_MAX); }}
+              onRemove={() => setProof(null)} />
           </div>
         )}
 
@@ -649,15 +668,32 @@ function Row({ k, v }: { k: string; v: string }) {
   return <div className="flex justify-between"><span className="text-ink-muted">{k}</span><span className="text-ink">{v}</span></div>;
 }
 
+/** A row that takes no paste registers this never-mounted ref, so the hook is still called unconditionally. */
+const NO_ZONE: React.RefObject<HTMLDivElement | null> = { current: null };
+
 function UploadRow({
-  icon, label, hint, required, uploaded, accept, busy, disabled, onFile, onRemove,
+  icon, label, hint, required, uploaded, accept, busy, disabled, onFile, onPasteFiles, onRemove,
 }: {
   icon: React.ReactNode; label: string; hint: string; required?: boolean; uploaded: Uploaded | null;
   accept: string; busy: number | null; disabled?: boolean; onFile: (f: File) => void; onRemove: () => void;
+  /** Screenshots pasted (Ctrl/Cmd+V) while this row was clicked or focused — only files `accept` allows. */
+  onPasteFiles?: (files: File[]) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const zone = useRef<HTMLDivElement>(null);
+  const open = !uploaded && busy === null && !disabled;
+  const pasteZone = onPasteFiles ? zone : NO_ZONE;
+  usePasteFiles(pasteZone, {
+    accept,
+    hasRoom: open,
+    take: (files) => {
+      if (!open) return;
+      const ok = files.filter((f) => acceptsFile(f, accept));
+      if (ok.length) onPasteFiles?.(ok);
+    },
+  });
   return (
-    <div className={`border rounded-lg p-4 ${uploaded ? 'border-green-500/40 bg-green-500/5' : 'border-hairline'}`}>
+    <div ref={zone} className={`border rounded-lg p-4 ${uploaded ? 'border-green-500/40 bg-green-500/5' : 'border-hairline'}`}>
       <div className="flex items-center gap-3">
         <div className="text-gold">{icon}</div>
         <div className="flex-1">
@@ -676,6 +712,7 @@ function UploadRow({
             className="text-sm px-3 py-1.5 rounded border border-gold text-gold hover:bg-gold/10 disabled:opacity-40">Upload</button>
         )}
       </div>
+      {onPasteFiles && open && <PasteHint className="mt-1" />}
       {busy !== null && <div className="mt-2 h-1 bg-obsidian-raised rounded overflow-hidden"><div className="h-full bg-gold" style={{ width: `${busy}%` }} /></div>}
       <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }} />
     </div>
