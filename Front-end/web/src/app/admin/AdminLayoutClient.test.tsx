@@ -18,6 +18,7 @@ jest.mock('@/hooks/queries/useAdminStats', () => ({
     },
   }),
 }));
+jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
 jest.mock('@/hooks/queries/useTeamChat', () => ({ useChatUnreadTotal: () => 2 }));
 jest.mock('@/components/notifications/NotificationBell', () => ({ __esModule: true, default: () => <button type="button">Notifications</button> }));
 jest.mock('@/components/notifications/PushPrompt', () => ({ __esModule: true, default: () => null }));

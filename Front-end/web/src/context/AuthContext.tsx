@@ -55,6 +55,8 @@ interface AuthContextType {
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
+  /** Re-read the signed-in user from the server, skipping the cache — after a profile edit. */
+  refreshUser: () => Promise<void>;
   hydrateFromExchange: (rawUser: any) => void;
   clearError: () => void;
   /** Dismiss the session-expired prompt (e.g. user chose to keep browsing as guest). */
@@ -403,6 +405,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     emitAuthLogin();
   }, []);
 
+  const refreshUser = useCallback(() => fetchAndUpdateAuth(), [fetchAndUpdateAuth]);
+
   const value: AuthContextType = {
     user,
     token,
@@ -414,6 +418,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register,
     logout,
     checkAuth,
+    refreshUser,
     hydrateFromExchange,
     clearError,
     dismissSessionExpired,

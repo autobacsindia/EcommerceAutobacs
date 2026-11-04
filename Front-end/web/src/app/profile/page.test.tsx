@@ -202,4 +202,43 @@ describe('ProfilePage', () => {
       expect(mockReplace).toHaveBeenCalledWith('/login?redirect=%2Fprofile')
     );
   });
+  describe('editing my profile', () => {
+    const refreshUser = jest.fn().mockResolvedValue(undefined);
+    beforeEach(() => {
+      (useAuth as jest.Mock).mockReturnValue({ user: mockUser, isAuthenticated: true, isLoading: false, logout: jest.fn(), refreshUser });
+    });
+
+    it('offers a photo upload, and initials when there is no photo', async () => {
+      renderProfile();
+      expect(await screen.findByRole('button', { name: /add photo/i })).toBeInTheDocument();
+      expect(screen.getByText('JD')).toBeInTheDocument();
+    });
+
+    it('never lets the email be edited here', async () => {
+      renderProfile();
+      fireEvent.click(await screen.findByRole('button', { name: /edit profile/i }));
+      expect(screen.queryByDisplayValue('john@example.com')).not.toBeInTheDocument();
+      expect(document.querySelector('input[type="email"]')).toBeNull();
+    });
+
+    it('saves name and phone only — no email, no untouched addresses', async () => {
+      (profileService.updateProfile as jest.Mock).mockResolvedValue({ ...mockProfile, name: 'John D', phone: '9876543210' });
+      renderProfile();
+      await screen.findByText('John Doe');
+      fireEvent.click(screen.getByRole('button', { name: /edit profile/i }));
+      fireEvent.change(await screen.findByDisplayValue('John Doe'), { target: { name: 'name', value: 'John D' } });
+      fireEvent.change(screen.getByPlaceholderText('98765 43210'), { target: { name: 'phone', value: '98765 43210' } });
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+      await waitFor(() => expect(profileService.updateProfile).toHaveBeenCalledWith({ name: 'John D', phone: '98765 43210' }));
+      await waitFor(() => expect(refreshUser).toHaveBeenCalled());
+    });
+
+    it("shows the server's reason when a save is refused", async () => {
+      (profileService.updateProfile as jest.Mock).mockRejectedValue({ rawData: { message: 'Phone must be a 10-digit mobile number.' } });
+      renderProfile();
+      fireEvent.click(await screen.findByRole('button', { name: /edit profile/i }));
+      fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Phone must be a 10-digit mobile number.');
+    });
+  });
 });

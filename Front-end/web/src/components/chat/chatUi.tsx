@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, type RefObject } from 'react';
 import { ArrowLeftRight, FileSpreadsheet, FileText, File as FileIcon, Hash, Image as ImageIcon, Lock, Users, X } from 'lucide-react';
 import type { ChatChannel, ChatPerson } from '@/hooks/queries/useTeamChat';
+import PersonFace from '@/components/profile/PersonFace';
 
 /**
  * A pop-up hanging below its message (⋮ menu, emoji picker) on one of the last
@@ -111,11 +112,7 @@ export function Avatar({
     );
   }
   const name = person?.name ?? '?';
-  const face = (
-    <span className={`grid ${box} shrink-0 place-items-center rounded-full font-bold ${colourFor(name)}`} aria-hidden="true">
-      {initials(name)}
-    </span>
-  );
+  const face = <PersonFace name={name} photoUrl={person?.avatarUrl} initials={initials(name)} className={`${box} font-bold ${colourFor(name)}`} />;
   if (!online) return face;
   return (
     <span className="relative inline-flex shrink-0">

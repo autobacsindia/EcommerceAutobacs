@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useRequireAuth } from '@/lib/hooks/useRequireAuth';
-import { User, Shield, MapPin, Edit, X, Plus, CheckCircle2 } from 'lucide-react';
+import { Shield, MapPin, Edit, X, Plus, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import apiClient from '@/lib/api';
 import profileService from '@/lib/profileService';
@@ -14,12 +14,13 @@ import { Address } from '@/lib/types';
 import KarmaBadge from '@/components/profile/KarmaBadge';
 import RecentOrdersCard from '@/components/profile/RecentOrdersCard';
 import AffiliateCard from '@/components/profile/AffiliateCard';
+import PhotoEditor from '@/components/profile/PhotoEditor';
 
 const inputClass = 'mt-1 block w-full bg-obsidian-raised border border-hairline text-ink placeholder:text-ink-muted rounded-lg p-2 focus:outline-none focus:border-gold font-display text-sm';
 const labelClass = 'block text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em] mb-1';
 
 export default function ProfilePage() {
-  const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, logout, refreshUser } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -46,11 +47,13 @@ export default function ProfilePage() {
   const loading = !enabled || isPending;
   const [isResendingVerification, setIsResendingVerification] = useState(false);
   const [resendMessage, setResendMessage] = useState<string | null>(null);
+  // Email is not editable here — it changes only through a verified flow.
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
+    phone: '',
     addresses: [] as Address[]
   });
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showAddAddress, setShowAddAddress] = useState(false);
   const [newAddress, setNewAddress] = useState<Omit<Address, 'isDefault'>>({
     fullName: '',
@@ -71,7 +74,7 @@ export default function ProfilePage() {
   // edits, so a background refetch while editing is harmless.
   useEffect(() => {
     if (profile && !editing) {
-      setFormData({ name: profile.name, email: profile.email, addresses: profile.addresses });
+      setFormData({ name: profile.name, phone: profile.phone ?? '', addresses: profile.addresses });
     }
   }, [profile, editing]);
 
@@ -101,17 +104,35 @@ export default function ProfilePage() {
 
   const handleCancelEdit = () => {
     setEditing(false);
-    if (profile) setFormData({ name: profile.name, email: profile.email, addresses: profile.addresses });
+    setSaveError(null);
+    if (profile) setFormData({ name: profile.name, phone: profile.phone ?? '', addresses: profile.addresses });
   };
 
   const handleSave = async () => {
+    setSaveError(null);
     try {
-      const updatedProfile = await profileService.updateProfile(formData);
-      queryClient.setQueryData(profileKeys.me(), updatedProfile);
+      // Addresses go only when edited: an old saved address that predates the
+      // PIN/phone rules must not block a simple name or phone change.
+      const addressesChanged = JSON.stringify(formData.addresses) !== JSON.stringify(profile?.addresses ?? []);
+      const updatedProfile = await profileService.updateProfile({
+        name: formData.name,
+        phone: formData.phone,
+        ...(addressesChanged ? { addresses: formData.addresses } : {}),
+      });
+      queryClient.setQueryData(profileKeys.me(), (old: typeof profile) => ({ ...old, ...updatedProfile }));
       setEditing(false);
+      await refreshUser(); // the nav shows the new name
     } catch (error) {
-      console.error('Error updating profile:', error);
+      // The server's sentence ("Phone must be a 10-digit mobile number") — never the profile itself.
+      setSaveError((error as { rawData?: { message?: string } })?.rawData?.message
+        || (error instanceof Error ? error.message : '')
+        || 'Could not save your profile. Please try again.');
     }
+  };
+
+  const handlePhotoChanged = async (url: string) => {
+    queryClient.setQueryData(profileKeys.me(), (old: typeof profile) => (old ? { ...old, avatar: { url } } : old));
+    await refreshUser(); // the nav avatar
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,12 +201,19 @@ export default function ProfilePage() {
 
         {/* Identity header — name, karma, email, verification */}
         <div className="bg-obsidian border border-hairline rounded-lg p-6 mb-6">
-          {/* Avatar + name/email */}
+          {/* Photo — upload, crop to a square, preview */}
+          <div className="mb-5">
+            <PhotoEditor
+              name={profile?.name || user.name}
+              photoUrl={profile?.avatar?.url || user.avatarUrl || ''}
+              onChanged={handlePhotoChanged}
+              faceClassName="bg-obsidian-raised border border-hairline text-gold font-display"
+              buttonClassName="border-hairline text-ink hover:border-gold"
+            />
+          </div>
+          {/* Name/email/phone */}
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
-              <div className="w-20 h-20 bg-obsidian-raised border border-hairline rounded-full flex items-center justify-center shrink-0">
-                <User className="h-10 w-10 text-gold" />
-              </div>
               <div className="min-w-0">
                 <h2 className="text-2xl font-display font-bold text-ink tracking-[-0.01em]">
                   {editing ? (
@@ -201,29 +229,36 @@ export default function ProfilePage() {
                   )}
                 </h2>
                 <p className="text-ink/70 font-display mt-1 flex items-center gap-1.5">
-                  {editing ? (
-                    <input
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      className="bg-transparent border-b border-gold text-ink/70 focus:outline-none font-display text-sm w-full"
-                    />
-                  ) : (
-                    <>
-                      <span className="truncate">{profile?.email}</span>
-                      {verificationStatus?.isVerified && (
-                        <span
-                          className="inline-flex shrink-0 text-green-700"
-                          title={verificationStatus.verifiedAt ? `Email verified on ${new Date(verificationStatus.verifiedAt).toLocaleDateString()}` : 'Email verified'}
-                          aria-label="Email verified"
-                        >
-                          <CheckCircle2 className="h-4 w-4" />
-                        </span>
-                      )}
-                    </>
+                  <span className="truncate">{profile?.email}</span>
+                  {verificationStatus?.isVerified && (
+                    <span
+                      className="inline-flex shrink-0 text-green-700"
+                      title={verificationStatus.verifiedAt ? `Email verified on ${new Date(verificationStatus.verifiedAt).toLocaleDateString()}` : 'Email verified'}
+                      aria-label="Email verified"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                    </span>
                   )}
                 </p>
+                {editing ? (
+                  <label className="mt-2 block">
+                    <span className={labelClass}>Phone</span>
+                    <input
+                      type="tel"
+                      name="phone"
+                      inputMode="tel"
+                      maxLength={16}
+                      autoComplete="tel"
+                      placeholder="98765 43210"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      className={inputClass}
+                    />
+                  </label>
+                ) : (
+                  profile?.phone && <p className="text-ink/70 font-display mt-1 text-sm">{profile.phone}</p>
+                )}
+                {saveError && <p role="alert" className="mt-2 text-sm text-red-600">{saveError}</p>}
               </div>
             </div>
             {!editing && <KarmaBadge />}

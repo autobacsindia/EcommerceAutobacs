@@ -184,6 +184,25 @@ const UserSchema = new mongoose.Schema({
     public_id: { type: String, default: '' },  // Cloudinary public_id (for deletion)
   },
 
+  // "My profile" details a staff member or admin fills in about themselves
+  // (utils/profileUpdate.js is the only writer). Personal data: shown to the
+  // person on their own profile page, never in a list or a log.
+  profile: {
+    type: new mongoose.Schema({
+      jobTitle: { type: String, trim: true, maxlength: 60 },
+      dateOfBirth: { type: Date },
+      emergencyContact: {
+        type: new mongoose.Schema({
+          name: { type: String, trim: true, maxlength: 60 },
+          phone: { type: String, trim: true, maxlength: 20 },
+        }, { _id: false }),
+        default: undefined,
+      },
+      bio: { type: String, trim: true, maxlength: 200 },
+    }, { _id: false }),
+    default: undefined,
+  },
+
   // Karma loyalty points — denormalised running balance (source of truth is KarmaLedger).
   // Separate from `wallet` (refund store credit): karma is earned on delivery and spent at
   // checkout. Mutated only via guarded atomic $inc alongside a KarmaLedger entry.

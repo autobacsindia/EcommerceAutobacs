@@ -96,6 +96,10 @@ export const profileKeys = {
   recentOrders: () => [...profileKeys.all, 'recent-orders'] as const,
   karma: () => [...profileKeys.all, 'karma'] as const,
   karmaHistory: () => [...profileKeys.all, 'karma', 'history'] as const,
+  /** `/profile` in the "My profile" form shape (`me`) — staff and customers. */
+  myProfile: () => [...profileKeys.all, 'my-profile'] as const,
+  /** `/staff/photos` — { userId: photoUrl } for everyone in the panels. */
+  panelPhotos: () => [...profileKeys.all, 'panel-photos'] as const,
 };
 
 export const campaignKeys = {

@@ -167,6 +167,7 @@ const personOf = (u) =>
         team: u.role === 'staff' ? u.staff?.team ?? null : null,
         teamLabel: u.role === 'staff' ? STAFF_TEAM_LABELS[u.staff?.team] ?? null : 'Admin',
         isHead: u.role === 'staff' ? !!u.staff?.isHead : false,
+        avatarUrl: u.avatar?.url || '',
       }
     : null;
 

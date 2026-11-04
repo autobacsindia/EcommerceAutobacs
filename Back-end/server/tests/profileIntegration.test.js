@@ -90,31 +90,29 @@ describe('Profile Integration API', () => {
       expect(user.name).toBe(newName);
     });
 
-    it('should update user email', async () => {
-      const newEmail = 'updated@example.com';
+    it('ignores an email change — email has its own verified flow', async () => {
       const res = await request(app)
         .put('/api/v1/profile')
         .set('Authorization', `Bearer ${accessToken}`)
-        .send({ name: testUser.name, email: newEmail });
+        .send({ name: testUser.name, email: 'updated@example.com' });
 
       expect(res.statusCode).toBe(200);
-      expect(res.body.success).toBe(true);
-      expect(res.body.user.email).toBe(newEmail);
+      expect(res.body.user.email).toBe(testUser.email);
 
       const user = await User.findById(userId);
-      expect(user.email).toBe(newEmail);
+      expect(user.email).toBe(testUser.email);
     });
 
     it('should update user addresses', async () => {
       const addresses = [
         {
           fullName: 'Test User',
-          phone: '1234567890',
+          phone: '9876543210',
           addressLine1: '123 Main St',
-          city: 'New York',
-          state: 'NY',
-          postalCode: '10001',
-          country: 'USA',
+          city: 'Kochi',
+          state: 'Kerala',
+          postalCode: '682001',
+          country: 'India',
           isDefault: true,
         },
       ];
@@ -128,21 +126,6 @@ describe('Profile Integration API', () => {
       expect(res.body.success).toBe(true);
       expect(res.body.user.addresses).toHaveLength(1);
       expect(res.body.user.addresses[0].addressLine1).toBe('123 Main St');
-    });
-
-    it('should fail if email is already taken', async () => {
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(secondUser.password, salt);
-      await User.create({ ...secondUser, passwordHash: hashedPassword });
-
-      const res = await request(app)
-        .put('/api/v1/profile')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ name: testUser.name, email: secondUser.email });
-
-      expect(res.statusCode).toBe(400);
-      expect(res.body.success).toBe(false);
-      expect(res.body.message).toBe('Email is already taken');
     });
   });
 });

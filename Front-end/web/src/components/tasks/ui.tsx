@@ -9,6 +9,7 @@
  * 100 background + 800 text steps, which the panel's dark theme re-maps; dots
  * and flags use mid steps that read on either theme.
  */
+import { usePanelPhotos } from '@/hooks/queries/usePanelPhotos';
 import { CalendarClock, CircleCheck, CircleDashed, CircleDot, Clock3, Flag, X, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { formatDueDay, type Task, type TaskPriority, type TaskStatus } from './types';
@@ -94,13 +95,15 @@ export const colourFor = (key: string) => {
 
 export function Avatar({ name, id, size = 'sm' }: { name: string; id?: string; size?: 'xs' | 'sm' | 'md' }) {
   const dims = size === 'xs' ? 'h-5 w-5 text-[9px]' : size === 'md' ? 'h-8 w-8 text-xs' : 'h-6 w-6 text-[10px]';
+  const photo = usePanelPhotos()[id ?? ''];
   return (
     <span
       title={name}
       style={{ background: colourFor(id || name) }}
-      className={`tk-face inline-flex shrink-0 items-center justify-center rounded-full font-bold tracking-tight ${dims}`}
+      className={`tk-face inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold tracking-tight ${dims}`}
     >
-      {initialsOf(name)}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {photo ? <img src={photo} alt="" className="h-full w-full object-cover" /> : initialsOf(name)}
     </span>
   );
 }

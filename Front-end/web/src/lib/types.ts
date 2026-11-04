@@ -164,7 +164,9 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   role: string;
+  avatar?: { url?: string };
   addresses: Address[];
   createdAt?: string;
   updatedAt?: string;

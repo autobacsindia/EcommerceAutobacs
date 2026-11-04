@@ -100,7 +100,7 @@ export default function TeamLayoutClient({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const unread = useChatUnreadTotal();
   const signOut = async () => {
     await logout();
@@ -123,7 +123,8 @@ export default function TeamLayoutClient({
       homeHref="/team"
       subtitle={`${teamLabel} Team`}
       sections={[{ items }]}
-      user={{ name: userName, role: roleLabel || (isHead ? 'Team head' : 'Team member') }}
+      // The live auth user once loaded, so a name or photo change shows without a reload.
+      user={{ name: user?.name || userName, photoUrl: user?.avatarUrl, profileHref: '/team/profile', role: roleLabel || (isHead ? 'Team head' : 'Team member') }}
       footer={canChangePassword && (
         <Link href={PASSWORD_PATH} className="pn-side-link inline-flex items-center gap-1.5 text-xs">
           <KeyRound className="h-3.5 w-3.5" aria-hidden="true" /> Change password

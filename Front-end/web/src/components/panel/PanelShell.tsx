@@ -7,6 +7,7 @@ import { ChevronRight, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Pin, PinOff,
 import type { LucideIcon } from 'lucide-react';
 import PushPrompt from '@/components/notifications/PushPrompt';
 import PanelThemeSwitch from './PanelThemeSwitch';
+import PersonFace from '@/components/profile/PersonFace';
 import './panel.css';
 
 export type PanelNavItem = {
@@ -63,7 +64,8 @@ export default function PanelShell({
   heading: ReactNode;
   /** Right side of the top bar. */
   actions?: ReactNode;
-  user: { name: string; role?: ReactNode };
+  /** `profileHref` makes the sidebar's name card a link to "My profile". */
+  user: { name: string; role?: ReactNode; photoUrl?: string; profileHref?: string };
   /** Extra links in the sidebar footer (change password). */
   footer?: ReactNode;
   onLogout: () => void;
@@ -82,6 +84,16 @@ export default function PanelShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const userCard = (
+    <>
+      <PersonFace name={user.name} photoUrl={user.photoUrl} className="pn-avatar h-9 w-9 text-xs font-bold" />
+      <div className="min-w-0">
+        <p className="pn-side-name truncate text-sm font-semibold">{user.name}</p>
+        {user.role && <p className="pn-side-muted truncate text-xs">{user.role}</p>}
+        {user.profileHref && <p className="pn-side-muted truncate text-[11px] underline-offset-2">My profile</p>}
+      </div>
+    </>
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [peek, setPeek] = useState(false);
@@ -219,15 +231,13 @@ export default function PanelShell({
 
         <div className={`pn-side-line border-t p-3 ${rail ? 'md:px-2' : ''}`}>
           <div className={`pn-user rounded-xl p-2.5 ${rail ? 'md:hidden' : ''}`}>
-            <div className="flex items-center gap-3">
-              <span aria-hidden="true" className="pn-avatar grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold">
-                {initials(user.name)}
-              </span>
-              <div className="min-w-0">
-                <p className="pn-side-name truncate text-sm font-semibold">{user.name}</p>
-                {user.role && <p className="pn-side-muted truncate text-xs">{user.role}</p>}
-              </div>
-            </div>
+            {user.profileHref ? (
+              <Link href={user.profileHref} title="My profile" className="flex items-center gap-3 rounded-lg hover:opacity-90">
+                {userCard}
+              </Link>
+            ) : (
+              <div className="flex items-center gap-3">{userCard}</div>
+            )}
             {footer && <div className="mt-2 border-t border-white/10 pt-2">{footer}</div>}
           </div>
           <button
@@ -267,9 +277,4 @@ export default function PanelShell({
       </div>
     </div>
   );
-}
-
-function initials(name: string) {
-  const parts = name.trim().split(/[\s@._-]+/).filter(Boolean);
-  return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '·';
 }

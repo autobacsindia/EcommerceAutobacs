@@ -93,6 +93,7 @@ import {
   resetCompanyPassword,
   getMemberPassword,
   changeOwnPassword,
+  listPanelPhotos,
 } from '../services/staffService.js';
 import {
   generateTokenPair as generateSessionTokenPair,
@@ -166,6 +167,11 @@ router.use('/returns', staffReturnRoutes);
 router.get('/me', (req, res) => {
   res.json({ success: true, staff: describeStaff(req.user), isAdmin: req.user.role === 'admin' });
 });
+
+// @route  GET /staff/photos — { userId: photoUrl } for everyone in the panels who has one.
+router.get('/photos', asyncHandler(async (_req, res) => {
+  res.json({ success: true, photos: await listPanelPhotos() });
+}));
 
 // @route  POST /staff/password { currentPassword, newPassword } — change my own password.
 // Email (invite) staff only; a company account's password is the admin's to change.

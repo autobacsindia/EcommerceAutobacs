@@ -837,14 +837,14 @@ describe('the page header', () => {
 describe('AvatarStack', () => {
   it('shows up to three faces, then "+n", and names everyone', () => {
     const people = ['Arun', 'Bala', 'Chitra', 'Dev', 'Esha'].map((name, i) => ({ id: `u${i}`, name }));
-    render(<AvatarStack people={people} />);
+    wrap(<AvatarStack people={people} />);
     const stack = screen.getByRole('img', { name: 'Arun, Bala, Chitra, Dev, Esha' });
     expect(within(stack).getByText('+2')).toHaveAttribute('title', 'Dev, Esha');
     expect(within(stack).getAllByTitle(/^(Arun|Bala|Chitra)$/)).toHaveLength(3);
   });
 
   it('renders nothing for nobody', () => {
-    const { container } = render(<AvatarStack people={[]} />);
+    const { container } = wrap(<AvatarStack people={[]} />);
     expect(container).toBeEmptyDOMElement();
   });
 });

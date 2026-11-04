@@ -582,3 +582,15 @@ export async function getMemberPassword(actor, userId, req) {
   return { password, reason: password ? null : 'not_saved' };
 }
 
+
+/**
+ * Everyone in the panels who has a profile photo, as { userId: url } — one small
+ * read the Tasks screens use to put faces on the names their tasks already carry.
+ * Panel-only (routes/staff.js sits behind staffOrAdmin); a handful of rows.
+ */
+export async function listPanelPhotos() {
+  const people = await userRepository.findChatUsers();
+  const photos = {};
+  for (const p of people) if (p.avatar?.url) photos[String(p._id)] = p.avatar.url;
+  return photos;
+}

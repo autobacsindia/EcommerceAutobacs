@@ -17,6 +17,8 @@ export interface ChatPerson {
   team: string | null;
   teamLabel: string | null;
   isHead: boolean;
+  /** Profile photo, or '' / absent for initials. */
+  avatarUrl?: string;
   /** Their status ("On leave till Fri"), when set and not yet expired. From /chat/people only. */
   status?: ChatStatus | null;
 }
