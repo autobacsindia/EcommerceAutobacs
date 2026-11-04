@@ -21,13 +21,15 @@ class BaseRepository {
       sort = { createdAt: -1 },
       populate = [],
       select = null,
-      session = null
+      session = null,
+      hint = null
     } = options;
 
     let q = this.model.find(query).lean();
 
     if (session) q = q.session(session);
     if (select)  q = q.select(select);
+    if (hint)    q = q.hint(hint);
 
     populate.forEach(pop => {
       q = q.populate(pop.path, pop.select);

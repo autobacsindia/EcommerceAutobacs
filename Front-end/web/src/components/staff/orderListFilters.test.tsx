@@ -43,7 +43,7 @@ describe('work lists', () => {
 
     fireEvent.change(screen.getByLabelText('Stage'), { target: { value: 'to_ship' } });
     fireEvent.change(screen.getByLabelText('Sold by'), { target: { value: 'website' } });
-    fireEvent.change(screen.getByLabelText('Ordered on: from'), { target: { value: '2026-10-01' } });
+    fireEvent.change(screen.getByLabelText('Paid / created on: from'), { target: { value: '2026-10-01' } });
     fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'oldest' } });
     await waitFor(() => expect(lastList()).toBe('/staff/work?queue=procurement&q=hilux+kochi&step=to_ship&source=website&from=2026-10-01&sort=oldest'));
     expect(await screen.findByText('No orders match — try fewer words or clear the filters.')).toBeInTheDocument();

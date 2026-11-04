@@ -49,6 +49,9 @@ jest.mock('lucide-react', () => ({
   Filter: () => <span>FilterIcon</span>,
   CheckSquare: () => <span>CheckSquareIcon</span>,
   Square: () => <span>SquareIcon</span>,
+  // PinButton (personal order pins)
+  Pin: () => <span>PinIcon</span>,
+  PinOff: () => <span>PinOffIcon</span>,
   // Icons used by ConfirmStatusChangeModal
   X: () => <span>XIcon</span>,
   AlertCircle: () => <span>AlertCircleIcon</span>,
@@ -146,6 +149,11 @@ describe('AdminOrdersPage', () => {
     });
     // Mock put for status update
     (apiClient.put as jest.Mock).mockResolvedValue({ success: true });
+  });
+
+  it('opens sorted by the paid date (listDate), newest first', async () => {
+    renderPage();
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('sortBy=listDate&sortOrder=desc')));
   });
 
   it('renders orders table after fetch', async () => {

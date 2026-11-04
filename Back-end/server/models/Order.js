@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { offlineRefundFields } from "./shared/offlineRefundFields.js";
 import { PARCEL_STEP_VALUES, MAX_STEP_NOTE } from "../utils/parcelSteps.js";
+import { stampListDate } from "../utils/orderListDate.js";
 
 const OrderSchema = new mongoose.Schema({
   user: {
@@ -111,6 +112,10 @@ const OrderSchema = new mongoose.Schema({
     }, { _id: false }),
     default: undefined,
   },
+  // When the money arrived, and the date every staff list sorts by (paidAt, or
+  // createdAt while unpaid). Kept by the pre-save hook — utils/orderListDate.js.
+  paidAt: { type: Date, default: undefined },
+  listDate: { type: Date, default: undefined },
   offlinePayment: {
     type: new mongoose.Schema({
       method: { type: String, enum: ["bank_transfer"], required: true },
@@ -1113,6 +1118,27 @@ OrderSchema.index(
   { paymentStatus: 1, createdAt: -1, _id: -1 },
   { partialFilterExpression: { 'workflow.enteredAt': { $type: 'date' } }, name: 'team_workflow_paid' }
 );
+// Staff lists by list date (paid date, or created date while unpaid) — the
+// listDate twins of the three createdAt indexes above, plus the admin list and
+// the open work queues. Built by scripts/backfill-order-list-date.js (prod runs
+// autoIndex off). The createdAt ones stay until $indexStats shows them unused.
+OrderSchema.index(
+  { salesUser: 1, listDate: -1, _id: -1 },
+  { partialFilterExpression: { salesUser: { $type: 'objectId' } }, name: 'staff_sales_by_list_date' }
+);
+OrderSchema.index(
+  { paymentStatus: 1, listDate: -1, _id: -1 },
+  { partialFilterExpression: { salesUser: { $type: 'objectId' } }, name: 'staff_sales_by_payment_list_date' }
+);
+OrderSchema.index(
+  { paymentStatus: 1, listDate: -1, _id: -1 },
+  { partialFilterExpression: { 'workflow.enteredAt': { $type: 'date' } }, name: 'team_workflow_paid_list_date' }
+);
+OrderSchema.index(
+  { 'workflow.open': 1, listDate: 1, _id: 1 },
+  { partialFilterExpression: { 'workflow.open': true }, name: 'team_workflow_open_list_date' }
+);
+OrderSchema.index({ listDate: -1, _id: -1 }, { name: 'order_list_date' });
 
 // SINGLE-FIELD indexes for specific lookups
 // Declared retroactively from $indexStats (2026-08-21): these were hand-built in
@@ -1168,6 +1194,13 @@ OrderSchema.index(
   Declared only in db.js because it carries an explicit name — see models/SpinResult.js
   for why a named index declared in both places aborts the whole verification pass.
 */
+
+// Paid date + list date (utils/orderListDate.js): every save, so no path that
+// marks an order paid can leave it listed under its created date.
+OrderSchema.pre('save', function(next) {
+  stampListDate(this);
+  next();
+});
 
 // Pre-save middleware to add initial status to history
 OrderSchema.pre('save', function(next) {

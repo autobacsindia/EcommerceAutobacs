@@ -79,10 +79,10 @@ describe('reading the filters', () => {
     expect(rowMatches(row, readListFilters({ max: '1499' }))).toBe(false);
   });
 
-  it('the Mongo query carries the placed-on and amount ranges', () => {
+  it('the Mongo query carries the list-date (paid date) and amount ranges', () => {
     const q = orderQueryFor(readListFilters({ from: '2026-10-01', min: '100' }));
     expect(q.$and).toEqual(expect.arrayContaining([
-      { createdAt: { $gte: new Date('2026-09-30T18:30:00.000Z') } },
+      { listDate: { $gte: new Date('2026-09-30T18:30:00.000Z') } },
       { totalAmount: { $gte: 100 } },
     ]));
   });
@@ -153,11 +153,12 @@ describe('search, filter and sort on the team lists', () => {
   const IST_1_OCT = new Date('2026-10-01T06:00:00.000Z'); // 11:30 on 1 Oct, India time
   const IST_2_OCT = new Date('2026-10-02T06:00:00.000Z');
 
-  it('work list: ordered-on dates (India time) and the order total narrow it', async () => {
+  it('work list: paid-on dates (India time) and the order total narrow it', async () => {
     const p = await staff('procurement');
     const { a, b, c } = await three();
-    await setRaw(a, { createdAt: IST_1_OCT });
-    await setRaw(b, { createdAt: IST_2_OCT, totalAmount: 4000 });
+    // The date range reads the list date — the paid date (utils/orderListDate.js).
+    await setRaw(a, { createdAt: IST_1_OCT, paidAt: IST_1_OCT, listDate: IST_1_OCT });
+    await setRaw(b, { createdAt: IST_2_OCT, paidAt: IST_2_OCT, listDate: IST_2_OCT, totalAmount: 4000 });
     expect(idsOf(await wf.listQueue(p, 'procurement', { from: '2026-10-01', to: '2026-10-01' }))).toEqual([a]);
     expect(idsOf(await wf.listQueue(p, 'procurement', { from: '2026-10-01', to: '2026-10-02' }))).toEqual([b, a]);
     expect(idsOf(await wf.listQueue(p, 'procurement', { min: '4000', max: '4000' }))).toEqual([b]);
@@ -170,8 +171,8 @@ describe('search, filter and sort on the team lists', () => {
   it('paid list: dates, total range, amount sorts, and a count with the total on the first page', async () => {
     const acc = await staff('accounts');
     const { a, b, c } = await three();
-    await setRaw(a, { totalAmount: 9000, createdAt: IST_1_OCT });
-    await setRaw(b, { totalAmount: 4000, createdAt: IST_2_OCT });
+    await setRaw(a, { totalAmount: 9000, createdAt: IST_1_OCT, paidAt: IST_1_OCT, listDate: IST_1_OCT });
+    await setRaw(b, { totalAmount: 4000, createdAt: IST_2_OCT, paidAt: IST_2_OCT, listDate: IST_2_OCT });
     const all = await listPaidSalesOrders(acc, { stage: 'processing' });
     expect(all.summary).toEqual({ count: 3, capped: false, total: 20000 });
     expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', sort: 'amount_desc' }))).toEqual([a, c, b]);

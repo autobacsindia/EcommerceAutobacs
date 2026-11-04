@@ -23,6 +23,7 @@ import type { ShipmentSummary } from '@/lib/orderFulfilment';
 import { getRefundBadge } from '@/lib/refundBadge';
 import { usePanel } from '@/lib/usePanel';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
+import PinButton from '@/components/staff/PinButton';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -63,6 +64,10 @@ interface Order {
   salesUser?: { _id: string; name?: string } | null;
   orderNumber: string;
   createdAt: string;
+  /** When the money arrived — the date the list sorts by; absent while unpaid. */
+  paidAt?: string | null;
+  /** Pinned by me: on top of page 1 (personal). */
+  pinned?: boolean;
   status: string;
   paymentStatus?: string;
   /** Razorpay offer at checkout — the customer paid less than totalAmount. */
@@ -128,7 +133,8 @@ interface OrdersResponse {
   };
 }
 
-type SortField = 'createdAt' | 'totalAmount' | 'status';
+// listDate = the paid date, or the created date while unpaid (the default).
+type SortField = 'listDate' | 'totalAmount' | 'status';
 type SortOrder = 'asc' | 'desc';
 
 /** Numbered pagination navigator for the admin orders table (light theme). */
@@ -205,7 +211,7 @@ function AdminOrdersPageInner() {
   */
   const [currentPage, setCurrentPage] = useState(
     () => Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1));
-  const [sortField, setSortField] = useState<SortField>('createdAt');
+  const [sortField, setSortField] = useState<SortField>('listDate');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [pageSize, setPageSize] = useState(20);
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
@@ -780,7 +786,7 @@ function AdminOrdersPageInner() {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Date
-                  <SortIcon field="createdAt" />
+                  <SortIcon field="listDate" />
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Items
@@ -806,7 +812,7 @@ function AdminOrdersPageInner() {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {orders.map((order) => (
-                <tr key={order._id} className="hover:bg-gray-50">
+                <tr key={order._id} className={order.pinned ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <input
                       type="checkbox"
@@ -816,8 +822,9 @@ function AdminOrdersPageInner() {
                     />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="flex items-center gap-1 text-sm font-medium text-gray-900">
                       #{order.orderNumber || order._id.slice(-8)}
+                      <PinButton orderId={order._id} pinned={!!order.pinned} />
                     </div>
                     <OrderTypeTag type="purchase" className="mt-1" />
                   </td>
@@ -835,11 +842,13 @@ function AdminOrdersPageInner() {
                     />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
+                    {/* The paid date is the date of the sale; unpaid orders show when they were created. */}
+                    <div className="text-xs text-gray-400">{order.paidAt ? 'Paid' : 'Created'}</div>
                     <div className="text-sm text-gray-500">
-                      {formatDateIST(order.createdAt)}
+                      {formatDateIST(order.paidAt || order.createdAt)}
                     </div>
                     <div className="text-xs text-gray-400">
-                      {formatTimeIST(order.createdAt, '')}
+                      {formatTimeIST(order.paidAt || order.createdAt, '')}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">

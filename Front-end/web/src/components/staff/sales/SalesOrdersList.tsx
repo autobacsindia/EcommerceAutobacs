@@ -15,6 +15,7 @@ import { STAGE_TONE } from '@/components/staff/work/types';
 import OrderListFilters, { useOrderListParams } from '@/components/staff/OrderListFilters';
 import { errorMessage, quotationHref, rupees, type SalesFilterOptions, type SalesOrder, type SalesOrderPage } from './types';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
+import PinButton from '@/components/staff/PinButton';
 
 type Mode = 'sales' | 'paid';
 /** Which half of the paid list to show: still being worked, or handed over. */
@@ -74,12 +75,13 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
 
   const a = order.shippingAddress;
   return (
-    <li className="rounded-xl border border-gray-200 bg-white">
+    <li className={`rounded-xl border bg-white ${order.pinned ? 'border-amber-300' : 'border-gray-200'}`}>
+      <div className="flex items-start">
       <button
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 p-4 text-left"
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 p-4 text-left"
       >
         <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
           <p className="text-sm font-semibold text-gray-900">
@@ -87,7 +89,8 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
             <OrderTypeTag type="purchase" className="ml-2 align-middle" />
           </p>
           <p className="text-xs text-gray-500">
-            {formatDateTimeIST(order.createdAt)}
+            {/* The paid date is the date of the sale (and what the list sorts by). */}
+            {order.paidAt ? `Paid ${formatDateTimeIST(order.paidAt)}` : `Created ${formatDateTimeIST(order.createdAt)}`}
             {showSeller ? (order.salesPerson ? ` · by ${order.salesPerson}` : order.source === 'website' ? ' · Website order' : '') : ''}
             {` · ${order.items.length} item${order.items.length === 1 ? '' : 's'}`}
           </p>
@@ -96,6 +99,8 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
         <span className="ml-auto text-right text-sm font-bold text-gray-900 sm:ml-0 sm:w-28">{rupees(order.totalAmount)}</span>
         <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
+      <PinButton orderId={order.id} pinned={!!order.pinned} className="mr-3 mt-3" />
+      </div>
 
       {open && !unpaid && order.status !== 'cancelled' && (
         // Paid: the shared team view (items, stock, parcels + supplier photos, refunds, history).

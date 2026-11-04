@@ -26,7 +26,11 @@ export type WorkRow = {
   id: string;
   orderNumber: string;
   createdAt: string;
+  /** When the money arrived — the date the list sorts by (null on older rows). */
+  paidAt?: string | null;
   enteredAt: string | null;
+  /** Pinned by me: on top of page 1 (personal). */
+  pinned?: boolean;
   status: string;
   paymentStatus: string;
   totalAmount: number;

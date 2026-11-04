@@ -37,6 +37,7 @@ import { readListFilters, orderQueryFor } from '../utils/orderListFilters.js';
 import { and, findEachBranch, isObjectId, keysetPage, plainQuery } from '../utils/listQuery.js';
 import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
 import { paymentSummary, retireAllParts } from './salesPaymentService.js';
+import { pinnedIds, withoutPinned, inPinOrder } from './orderPinService.js';
 import { shapePayDetails } from '../utils/salesPayDetails.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
@@ -61,20 +62,27 @@ const toRupees = (v) => {
   The first page also says how many match and what they add up to.
 */
 export const ORDER_LIST_SORTS = Object.freeze({
-  newest: { field: 'createdAt', dir: -1, type: 'date' },
-  oldest: { field: 'createdAt', dir: 1, type: 'date' },
+  // The list date: when the order was paid, or created while unpaid (utils/orderListDate.js).
+  newest: { field: 'listDate', dir: -1, type: 'date' },
+  oldest: { field: 'listDate', dir: 1, type: 'date' },
   amount_desc: { field: 'totalAmount', dir: -1, type: 'number' },
   amount_asc: { field: 'totalAmount', dir: 1, type: 'number' },
 });
 const SUMMARY_CAP = 1000;
 
-async function page(query, { cursor, sortName = 'newest', includePayment = false }) {
+/*
+  Pinned orders (services/orderPinService.js) come first on page 1, newest pin
+  first, read with the list's own query so a pin never shows what the list would
+  not. Every page leaves them out of the keyset read, so none repeats further down.
+*/
+async function page(query, { cursor, sortName = 'newest', includePayment = false, actor = null, hints = [] }) {
+  const pins = await pinnedIds(actor);
   const populate = [
     { path: 'user', select: 'name email phone' },
     { path: 'salesUser', select: 'name' },
   ];
   if (includePayment) populate.push({ path: 'payment', select: 'gatewayPaymentId method status amount createdAt' });
-  return keysetPage({
+  const result = await keysetPage({
     query,
     sorts: ORDER_LIST_SORTS,
     sortName: ORDER_LIST_SORTS[sortName] ? sortName : 'newest',
@@ -82,16 +90,59 @@ async function page(query, { cursor, sortName = 'newest', includePayment = false
     pageSize: PAGE_SIZE,
     // A list whose query is an $or of index-backed branches (the paid list, date
     // sorts) reads each branch on its own, in order, and merges the two.
-    find: (q, opts) => findEachBranch(q, query, opts, (one, { sort, limit }) => orderRepository.find(one, {
+    find: (q, opts) => findEachBranch(unpinned(q, query, pins), query, opts, (one, { sort, limit, branch }) => findHinted(one, {
       limit,
       sort,
-      select: 'orderNumber createdAt status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
-        + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
-        + 'bankTransferPendingAt offlinePayment salesHold subtotal salesDiscount',
+      select: LIST_SELECT,
       populate,
-    })),
+    }, ORDER_LIST_SORTS[sortName]?.field === 'listDate' ? hints[branch] : null)),
     count: (q) => orderRepository.listSummary(q, SUMMARY_CAP),
   });
+  if (cursor || !pins.length) return result;
+  const pinnedRows = await orderRepository.find(and(query, { _id: { $in: pins } }), {
+    limit: pins.length, select: LIST_SELECT, populate,
+  });
+  return { ...result, pinned: inPinOrder(pinnedRows, pins) };
+}
+
+/*
+  The list-date indexes, named. Each has a createdAt twin with the same equality
+  prefix (still used by the admin seller filter and team activity), and on a small
+  result set MongoDB's trial run can pick the twin and sort in memory, so date
+  sorts name theirs. If one is not built yet (the migration has not run) the read
+  goes ahead unhinted rather than failing: slower, never wrong.
+*/
+const LIST_DATE_INDEX = Object.freeze({
+  sales: 'staff_sales_by_list_date',
+  salesPaid: 'staff_sales_by_payment_list_date',
+  workflowPaid: 'team_workflow_paid_list_date',
+});
+
+async function findHinted(query, options, hint) {
+  if (!hint) return orderRepository.find(query, options);
+  try {
+    return await orderRepository.find(query, { ...options, hint });
+  } catch (err) {
+    if (!/hint/i.test(String(err?.message))) throw err;
+    console.warn(`[orders] index ${hint} missing — run scripts/backfill-order-list-date.js --apply`);
+    return orderRepository.find(query, options);
+  }
+}
+
+const LIST_SELECT = 'orderNumber createdAt paidAt listDate status paymentStatus totalAmount items shippingAddress user salesUser guestEmail '
+  + 'paymentLinkId paymentLinkUrl paymentLinkExpiresAt paymentParts payment workflow shipments cancellations '
+  + 'bankTransferPendingAt offlinePayment salesHold subtotal salesDiscount';
+
+/**
+ * keysetPage's read `q` with the pinned orders left out, keeping `query` as
+ * `$and[0]` so findEachBranch still splits an $or list into its index branches.
+ */
+function unpinned(q, query, pins) {
+  if (!pins.length) return q;
+  const notPinned = { _id: { $nin: pins } };
+  if (q === query) return { $and: [query, notPinned] };
+  if (Array.isArray(q?.$and) && q.$and[0] === query) return { $and: [...q.$and, notPinned] };
+  return withoutPinned(q, pins);
 }
 
 const linkState = (o, now = Date.now()) => {
@@ -109,6 +160,7 @@ function shape(o) {
     id: String(o._id),
     orderNumber: o.orderNumber || String(o._id).slice(-8).toUpperCase(),
     createdAt: o.createdAt,
+    paidAt: o.paidAt || null,
     status: o.status,
     paymentStatus: o.paymentStatus,
     totalAmount: o.totalAmount,
@@ -320,6 +372,12 @@ export async function createSalesOrder(actor, input, req) {
 
 const UNPAID = { status: 'awaiting_payment', paymentStatus: 'pending' };
 
+/** A list page's rows: pinned orders (page 1 only) on top, marked, then the page. */
+const listRows = (items, pinned) => [
+  ...pinned.map((o) => ({ ...shape(o), pinned: true })),
+  ...items.map(shape),
+];
+
 /**
  * Sales: own orders (member) or every sales-panel order (head).
  *
@@ -354,8 +412,8 @@ export async function listSalesOrders(actor, params = {}) {
     PAID_FILTER[paid] ?? null,
     orderQueryFor(f),
   );
-  const { items, ...rest } = await page(query, { cursor, sortName: f.sort });
-  return { ...rest, orders: items.map(shape), scope: isSalesHead(actor) ? 'team' : 'mine' };
+  const { items, pinned = [], ...rest } = await page(query, { cursor, sortName: f.sort, actor, hints: [LIST_DATE_INDEX.sales] });
+  return { ...rest, orders: listRows(items, pinned), scope: isSalesHead(actor) ? 'team' : 'mine' };
 }
 
 /** "Paid" / "Not paid yet" on a seller's list. Cancelled and refunded orders are in neither. */
@@ -421,11 +479,12 @@ export async function listPaidSalesOrders(actor, params = {}) {
   // Amount sorts have no index either way and sort in memory; for them the nested
   // shape measured about twice as fast (one index read, no merging of branches).
   const byAmount = ORDER_LIST_SORTS[f.sort]?.field === 'totalAmount';
-  const { items, ...rest } = await page(
+  const { items, pinned = [], ...rest } = await page(
     byAmount ? and(common, { $or: branches }) : { $or: branches.map((b) => and(b, common)) },
-    { cursor, sortName: f.sort, includePayment: true },
+    // Hints follow `branches`: sales-panel orders, then workflow orders.
+    { cursor, sortName: f.sort, includePayment: true, actor, hints: [LIST_DATE_INDEX.salesPaid, LIST_DATE_INDEX.workflowPaid] },
   );
-  return { ...rest, orders: items.map(shape) };
+  return { ...rest, orders: listRows(items, pinned) };
 }
 
 /**

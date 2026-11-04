@@ -25,6 +25,8 @@ import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { orderNumber } from './invoiceService.js';
+import { pinnedIds, inPinOrder } from './orderPinService.js';
+import { and } from '../utils/listQuery.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -43,15 +45,17 @@ function assertMay(actor) {
   if (!mayAttribute(actor)) throw fail('Only admin and marketing can credit a website order to a salesman.', 403);
 }
 
-// ── Cursor (keyset on createdAt desc, _id desc) ─────────────────────────────
-const encodeCursor = (o) => Buffer.from(`${new Date(o.createdAt).toISOString()}|${o._id}`).toString('base64url');
+// ── Cursor (keyset on listDate desc, _id desc — the paid date, utils/orderListDate.js)
+// The `L` tag retires cursors made when this list paged on createdAt.
+const encodeCursor = (o) => Buffer.from(`L|${new Date(o.listDate).toISOString()}|${o._id}`).toString('base64url');
 function decodeCursor(cursor) {
   if (!cursor) return null;
   try {
-    const [iso, id] = Buffer.from(String(cursor), 'base64url').toString().split('|');
-    const createdAt = new Date(iso);
-    if (Number.isNaN(createdAt.getTime()) || !/^[a-f0-9]{24}$/i.test(id || '')) return null;
-    return { createdAt, id };
+    const [tag, iso, id] = Buffer.from(String(cursor), 'base64url').toString().split('|');
+    if (tag !== 'L') return null;
+    const listDate = new Date(iso);
+    if (Number.isNaN(listDate.getTime()) || !/^[a-f0-9]{24}$/i.test(id || '')) return null;
+    return { listDate, id };
   } catch {
     return null;
   }
@@ -72,6 +76,7 @@ const shapeRow = (o) => ({
   id: idOf(o._id),
   orderNumber: orderNumber(o),
   createdAt: o.createdAt,
+  paidAt: o.paidAt || null,
   totalAmount: o.totalAmount,
   status: o.status,
   customer: o.shippingAddress?.fullName || o.user?.name || '',
@@ -84,29 +89,44 @@ const shapeRow = (o) => ({
 });
 
 /**
- * Paid website orders, newest first, credited or not (so a wrong credit can be
- * fixed). Rides the `team_workflow_paid` partial index: every paid order enters
- * the team workflow the moment its payment confirms (orderStatusService).
+ * Paid website orders, newest paid first, credited or not (so a wrong credit can
+ * be fixed). Rides the `team_workflow_paid_list_date` partial index: every paid
+ * order enters the team workflow the moment its payment confirms (orderStatusService).
+ * The viewer's pinned orders (services/orderPinService.js) come first on page 1.
  */
 export async function listWebsiteOrders(actor, { cursor } = {}) {
   assertMay(actor);
   const base = { paymentStatus: 'paid', 'workflow.enteredAt': { $type: 'date' }, source: 'web' };
+  const pins = await pinnedIds(actor);
   const c = decodeCursor(cursor);
-  const query = c
-    ? { $and: [base, { $or: [{ createdAt: { $lt: c.createdAt } }, { createdAt: c.createdAt, _id: { $lt: c.id } }] }] }
-    : base;
-  const rows = await orderRepository.find(query, {
-    limit: PAGE_SIZE + 1,
-    sort: { createdAt: -1, _id: -1 },
-    select: ROW_SELECT,
-    populate: ROW_POPULATE,
-  });
+  const query = and(
+    base,
+    pins.length ? { _id: { $nin: pins } } : null,
+    c ? { $or: [{ listDate: { $lt: c.listDate } }, { listDate: c.listDate, _id: { $lt: c.id } }] } : null,
+  );
+  const [rows, pinnedRows] = await Promise.all([
+    orderRepository.find(query, {
+      limit: PAGE_SIZE + 1,
+      sort: { listDate: -1, _id: -1 },
+      select: ROW_SELECT,
+      populate: ROW_POPULATE,
+    }),
+    c || !pins.length ? [] : orderRepository.find(and(base, { _id: { $in: pins } }), {
+      limit: pins.length, select: ROW_SELECT, populate: ROW_POPULATE,
+    }),
+  ]);
   const hasMore = rows.length > PAGE_SIZE;
   const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
-  return { orders: items.map(shapeRow), nextCursor: hasMore ? encodeCursor(items[items.length - 1]) : null };
+  return {
+    orders: [
+      ...inPinOrder(pinnedRows, pins).map((o) => ({ ...shapeRow(o), pinned: true })),
+      ...items.map(shapeRow),
+    ],
+    nextCursor: hasMore ? encodeCursor(items[items.length - 1]) : null,
+  };
 }
 
-const ROW_SELECT = 'orderNumber wpId createdAt totalAmount status paymentStatus source items.name items.quantity '
+const ROW_SELECT = 'orderNumber wpId createdAt paidAt listDate totalAmount status paymentStatus source items.name items.quantity '
   + 'shippingAddress.fullName shippingAddress.city shippingAddress.state user salesUser salesAttribution';
 const ROW_POPULATE = [{ path: 'user', select: 'name' }, { path: 'salesUser', select: 'name' }];
 

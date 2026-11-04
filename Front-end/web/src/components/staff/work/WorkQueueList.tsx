@@ -7,6 +7,7 @@ import { ChevronDown, Loader2, RefreshCw } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
+import PinButton from '@/components/staff/PinButton';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import WorkOrderPanel from './WorkOrderPanel';
 import { STAGE_TONE, type WorkQueue, type WorkRow } from './types';
@@ -25,16 +26,17 @@ const EMPTY: Record<WorkQueue, string> = {
 function Row({ order }: { order: WorkRow }) {
   const [open, setOpen] = useState(false);
   return (
-    <li className="rounded-xl border border-gray-200 bg-white">
+    <li className={`rounded-xl border bg-white ${order.pinned ? 'border-amber-300' : 'border-gray-200'}`}>
+      <div className="flex items-start">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
-        className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 p-4 text-left">
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 p-4 text-left">
         <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
           <p className="text-sm font-semibold text-gray-900">
             {order.customer.name || 'Customer'} <span className="font-normal text-gray-500">· {order.orderNumber}</span>
             <OrderTypeTag type="purchase" className="ml-2 align-middle" />
           </p>
           <p className="text-xs text-gray-500">
-            Paid {formatDateTimeIST(order.enteredAt || order.createdAt)} · {order.soldBy}{order.city ? ` · ${order.city}` : ''}
+            Paid {formatDateTimeIST(order.paidAt || order.enteredAt || order.createdAt)} · {order.soldBy}{order.city ? ` · ${order.city}` : ''}
           </p>
           <p className="mt-1 truncate text-xs text-gray-600">
             {order.lines.map((l) => `${l.name}${l.variantLabel ? ` (${l.variantLabel})` : ''} × ${l.quantity}`).join(', ')}
@@ -49,6 +51,8 @@ function Row({ order }: { order: WorkRow }) {
         <span className="ml-auto text-right text-sm font-bold text-gray-900 sm:ml-0 sm:w-28">{rupees(order.totalAmount)}</span>
         <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
+      <PinButton orderId={order.id} pinned={!!order.pinned} className="mr-3 mt-3" />
+      </div>
       {open && <div className="border-t border-gray-100 p-4"><WorkOrderPanel orderId={order.id} /></div>}
     </li>
   );

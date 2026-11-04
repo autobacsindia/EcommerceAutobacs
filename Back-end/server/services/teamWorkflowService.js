@@ -60,6 +60,7 @@ import { PARCEL_STEP_VALUES, PARCEL_STEP_LABELS, TRACKING_EVENT_STATUS, MAX_PARC
 import { owesGoodie, variantDisplayName } from '../utils/orderLines.js';
 import { WORKFLOW_CHAT_JOB } from './chatBusinessUpdates.js';
 import { assertNoPendingSupplierPayment, openSupplierPaymentFor } from './paymentRequestService.js';
+import { pinnedIds, inPinOrder } from './orderPinService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -134,6 +135,8 @@ function row(o, view) {
     id: idOf(o._id),
     orderNumber: o.orderNumber || idOf(o._id).slice(-8).toUpperCase(),
     createdAt: o.createdAt,
+    paidAt: o.paidAt || null,
+    listDate: o.listDate || o.createdAt,
     enteredAt: o.workflow?.enteredAt || null,
     status: o.status,
     paymentStatus: o.paymentStatus,
@@ -318,11 +321,14 @@ function detail(u, o) {
 
 // ── Cursor (keyset) ─────────────────────────────────────────────────────────────
 
-const encodeCursor = (date, id) => Buffer.from(`${new Date(date).toISOString()}|${id}`).toString('base64url');
+// Keyed on the list date (utils/orderListDate.js). The `L` tag retires cursors
+// made when the queues paged on workflow.enteredAt: those start the list over.
+const encodeCursor = (date, id) => Buffer.from(`L|${new Date(date).toISOString()}|${id}`).toString('base64url');
 function decodeCursor(cursor) {
   if (!cursor) return null;
   try {
-    const [iso, id] = Buffer.from(String(cursor), 'base64url').toString().split('|');
+    const [tag, iso, id] = Buffer.from(String(cursor), 'base64url').toString().split('|');
+    if (tag !== 'L') return null;
     const at = new Date(iso);
     if (Number.isNaN(at.getTime()) || !/^[a-f0-9]{24}$/i.test(id || '')) return null;
     return { at, id };
@@ -334,7 +340,7 @@ function decodeCursor(cursor) {
 // ── Reads ──────────────────────────────────────────────────────────────────────
 
 /**
- * One team's work queue, newest first (what the teams asked for). Reads only OPEN orders (indexed), works out
+ * One team's work queue, newest paid first (what the teams asked for). Reads only OPEN orders (indexed), works out
  * each one's current stages, and keeps the ones waiting on this team. An order that
  * turns out to have nothing left (an admin finished it from the admin panel) is
  * closed on the way past, so the queue heals itself.
@@ -347,13 +353,27 @@ export async function listQueue(actor, queue, { cursor, ...filters } = {}) {
   const f = readListFilters(filters);
   const newestFirst = f.sort !== 'oldest';
   const decoded = decodeCursor(cursor);
-  let after = decoded ? { enteredAt: decoded.at, id: decoded.id } : null;
+  let after = decoded ? { listDate: decoded.at, id: decoded.id } : null;
   const orders = [];
+  // Pinned orders (personal, services/orderPinService.js): on top of page 1 when
+  // they are waiting on this team and pass the filters; never in the scan below.
+  const pins = await pinnedIds(actor);
+  const pinSet = new Set(pins.map(String));
+  const pinned = [];
+  if (!decoded && pins.length) {
+    for (const o of await orderRepository.findOpenWorkflowByIds(pins)) {
+      const view = workflowView(o);
+      if (!view?.open || !view.needs.includes(q.team)) continue;
+      if (q.team === 'sales' && !can.decide(actor, o)) continue;
+      const r = row(o, view);
+      if (rowMatches(r, f)) pinned.push({ ...r, pinned: true });
+    }
+  }
   let scanned = 0;
   let nextCursor = null;
 
   for (;;) {
-    const batch = await orderRepository.findOpenWorkflowPage({ after, limit: SCAN_BATCH, newestFirst });
+    const batch = await orderRepository.findOpenWorkflowPage({ after, limit: SCAN_BATCH, newestFirst, byListDate: true });
     let last = null;
     for (const o of batch) {
       scanned += 1;
@@ -365,20 +385,21 @@ export async function listQueue(actor, queue, { cursor, ...filters } = {}) {
       }
       if (!view.needs.includes(q.team)) continue;
       if (q.team === 'sales' && !can.decide(actor, o)) continue;
+      if (pinSet.has(idOf(o._id))) continue;
       const r = row(o, view);
       if (!rowMatches(r, f)) continue;
       orders.push(r);
       if (orders.length >= PAGE_SIZE) break;
     }
     if (!last) break;                                   // nothing more at all
-    const lastCursor = encodeCursor(last.workflow.enteredAt, idOf(last._id));
+    const lastCursor = encodeCursor(last.listDate, idOf(last._id));
     if (orders.length >= PAGE_SIZE) { nextCursor = lastCursor; break; } // page full; more may follow
     if (batch.length < SCAN_BATCH) break;               // reached the end of the queue
     if (scanned >= MAX_SCAN) { nextCursor = lastCursor; break; }        // bounded work per request
-    after = { enteredAt: last.workflow.enteredAt, id: last._id };
+    after = { listDate: last.listDate, id: last._id };
   }
 
-  return { orders, nextCursor };
+  return { orders: [...inPinOrder(pinned, pins), ...orders], nextCursor };
 }
 
 /** One order in full, if this person may see it. */
