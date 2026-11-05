@@ -1587,6 +1587,61 @@ class OrderRepository extends BaseRepository {
   }
 
   /** One order with everything a team view needs (lean). */
+  /**
+   * Orders a staff member may link an expense to, matched by what they can see on
+   * screen: the short number ("#DD97FE16" or a WooCommerce number), the full id,
+   * or the customer's name / phone / email. Only orders in the team workflow
+   * (paid), newest first, bounded: a picker, not a report.
+   * Walks team_workflow_paid_list_date (paymentStatus, listDate) — the query repeats
+   * its partial filter so the planner may use it (tests/orderLookupIndexUsage.test.js).
+   */
+  async findForPaymentLink(term, { limit = 8, maxTimeMS = 3000, explain = false } = {}) {
+    const raw = String(term || '').trim().slice(0, 80);
+    if (raw.length < 2) return [];
+    const or = [];
+    const idTerm = raw.replace(/^#+/, '').replace(/\s+/g, '');
+    if (mongoose.Types.ObjectId.isValid(idTerm) && idTerm.length === 24) {
+      or.push({ _id: new mongoose.Types.ObjectId(idTerm) });
+    } else if (/^[a-fA-F0-9]{4,24}$/.test(idTerm)) {
+      or.push({ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: `${idTerm}$`, options: 'i' } } });
+    }
+    if (/^\d{1,9}$/.test(idTerm)) or.push({ wpId: Number(idTerm) });
+    const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    or.push({ 'shippingAddress.fullName': new RegExp(escaped, 'i') });
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length >= 6) or.push({ 'shippingAddress.phone': new RegExp(`${digits}$`) });
+    const userIds = await userRepository.findIdsByNameOrEmail(raw, { limit: 200 });
+    if (userIds.length) or.push({ user: { $in: userIds } });
+    const build = (hinted) => {
+      const q = Order.find({
+        paymentStatus: { $in: ['paid', 'refunded'] },
+        'workflow.enteredAt': { $type: 'date' },
+        $or: or,
+      })
+        .select('_id wpId createdAt totalAmount shippingAddress.fullName user')
+        .populate('user', 'name')
+        // Newest paid first — the team lists' order. A merge of the two paymentStatus
+        // ranges of team_workflow_paid_list_date, so a hit stops at the page size.
+        .sort({ listDate: -1, _id: -1 })
+        .limit(Math.min(Math.max(1, limit), 20))
+        .maxTimeMS(maxTimeMS);
+      // Pinned: left alone the planner picks either twin index and adds a blocking
+      // sort, reading every paid order even when the first page matches at once.
+      return hinted ? q.hint('team_workflow_paid_list_date') : q;
+    };
+    // `explain` is for tests/orderLookupIndexUsage.test.js (the plan, measured).
+    const run = (q) => (explain ? q.explain('executionStats') : q.lean());
+    try {
+      return await run(build(true));
+    } catch (err) {
+      // The index is built by a script (prod runs autoIndex off): if it is missing,
+      // a hint is an error — answer without it rather than fail the picker.
+      if (!/hint/i.test(String(err?.message))) throw err;
+      console.warn('[orders] team_workflow_paid_list_date missing — order lookup ran unhinted');
+      return run(build(false));
+    }
+  }
+
   async findForWorkflow(orderId) {
     return Order.findById(orderId)
       .select(OrderRepository.WORKFLOW_SELECT)

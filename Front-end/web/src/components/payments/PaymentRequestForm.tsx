@@ -5,8 +5,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import {
-  errorMessage, getExpenseOptions, getRequest, paymentKeys, postForm, rupees, type PaymentRequest,
+  errorMessage, getExpenseOptions, getRequest, money, paymentKeys, postForm, type OrderMatch, type PaymentRequest,
 } from './api';
+import OrderPicker from './OrderPicker';
 import FilePicker from './FilePicker';
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
 import { MAX_ATTACHMENTS, PHOTO_ONLY, PHOTO_OR_PDF } from '@/lib/attachments';
@@ -31,7 +32,13 @@ export type SupplierContext = {
    * the deal's items and refuses an amount past the agreed total; these numbers
    * only guide the person typing.
    */
-  deal?: { id: string; agreedTotal: number; leftToAsk: number; paid: number };
+  deal?: { id: string; agreedTotal: number; leftToAsk: number; paid: number; currency: string };
+  /**
+   * Made to order, in one step: the supplier deal (total agreed, completion date)
+   * and its advance, saved together — or neither. The advance-paid date is not
+   * typed: it is the day the admin pays it.
+   */
+  setUpDeal?: boolean;
 };
 
 /**
@@ -56,8 +63,11 @@ export default function PaymentRequestForm({
   onCancel?: () => void;
 }) {
   const [category, setCategory] = useState('');
-  const [currency, setCurrency] = useState('INR');
-  const [foreignAmount, setForeignAmount] = useState('');
+  // A part of a supplier deal is in the deal's currency; it cannot be changed here.
+  const [currency, setCurrency] = useState(supplier?.deal?.currency || 'INR');
+  const [agreedTotal, setAgreedTotal] = useState('');
+  const [completionDate, setCompletionDate] = useState('');
+  const [linked, setLinked] = useState<OrderMatch | null>(null);
   const [itemIds, setItemIds] = useState<string[]>(supplier ? supplier.lines.map((l) => l.itemId) : []);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -73,17 +83,23 @@ export default function PaymentRequestForm({
   const [error, setError] = useState('');
   const [filling, setFilling] = useState(false);
 
-  // An expense: this team's own options and currencies, from the server.
+  // The team's options and currencies, from the server. A supplier payment is
+  // procurement's (an admin raising one names the team; staff get their own).
   const optionsQ = useQuery({
-    queryKey: paymentKeys.options('mine'),
-    queryFn: () => getExpenseOptions(),
-    enabled: !supplier,
+    queryKey: paymentKeys.options(supplier ? 'procurement' : 'mine'),
+    queryFn: () => getExpenseOptions(supplier ? 'procurement' : undefined),
     staleTime: 10 * 60 * 1000,
   });
   const options = optionsQ.data?.options;
   const chosen = options?.categories.find((c) => c.value === category) ?? options?.categories[0];
   const noteRequired = !supplier && (chosen?.noteRequired ?? true);
-  const foreign = !supplier && currency !== (options?.baseCurrency ?? 'INR');
+  const base = options?.baseCurrency ?? 'INR';
+  const foreign = currency !== base;
+  const setup = Boolean(supplier?.setUpDeal);
+  const deal = supplier?.deal;
+  // The currency can be chosen everywhere except a deal part (fixed to the deal's).
+  const chooseCurrency = !deal && Boolean(options && options.currencies.length > 1);
+  const unit = foreign ? currency : '₹';
   const codeKind: BankCodeKind = codeChoice ?? (foreign ? 'swift' : 'ifsc');
 
   /** Refill from the previous payment: its saved supplier, or the details typed then. */
@@ -120,13 +136,19 @@ export default function PaymentRequestForm({
     if (supplier && itemIds.length === 0) { setError('Choose the item(s) this payment is for.'); return; }
     if (!picked && method === 'upi' && !payee.upiId.trim() && qr.length === 0) { setError('Enter their UPI ID, or attach their payment QR.'); return; }
     if (!supplier && !chosen) { setError('The options are still loading — try again in a moment.'); return; }
+    if (setup && Number(amount) > Number(agreedTotal)) { setError(`The advance cannot be more than the agreed total (${money(Number(agreedTotal), currency)}).`); return; }
     const codeProblem = !picked && method === 'bank' ? bankCodeProblem(codeKind, payee[codeKind]) : '';
     if (codeProblem) { setError(codeProblem); return; }
     const form = new FormData();
     // A foreign bill sends only what was billed: the rupees are recorded when it is paid.
-    if (foreign) {
-      form.append('currency', currency);
-      form.append('foreignAmount', foreignAmount);
+    form.append('currency', currency);
+    if (setup) {
+      form.append('agreedTotal', agreedTotal);
+      form.append('advance', amount);
+      form.append('completionDate', completionDate);
+      form.append('note', description.trim());
+    } else if (foreign) {
+      form.append('foreignAmount', amount);
     } else {
       form.append('amount', amount);
     }
@@ -138,18 +160,20 @@ export default function PaymentRequestForm({
       : { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ...bankCodePayload(codeKind, payee[codeKind]), bankName: payee.bankName.trim(), phone: payee.phone.trim() }));
     if (supplier) {
       form.append('orderId', supplier.orderId);
-      if (supplier.deal) form.append('dealId', supplier.deal.id);
+      if (deal) form.append('dealId', deal.id);
       else form.append('itemIds', JSON.stringify(itemIds));
       if (!picked && saveSupplier) form.append('saveSupplier', 'true');
     } else {
       form.append('category', chosen!.value);
-      if (orderLink) form.append('orderId', orderLink.orderId);
+      const link = orderLink?.orderId ?? linked?.id;
+      if (link) form.append('orderId', link);
     }
     for (const f of bills) form.append('bill', f);
     for (const f of qr) form.append('qr', f);
     setBusy(true);
     try {
-      const res = await postForm<{ request: PaymentRequest }>(supplier ? '/payment-requests/supplier' : '/payment-requests/expenses', form);
+      const endpoint = setup ? '/payment-requests/deals' : supplier ? '/payment-requests/supplier' : '/payment-requests/expenses';
+      const res = await postForm<{ request: PaymentRequest }>(endpoint, form);
       onDone(res.request);
     } catch (err) {
       setError(errorMessage(err, 'Could not send the request. Please try again.'));
@@ -163,21 +187,27 @@ export default function PaymentRequestForm({
   return (
     <form onSubmit={submit} className="space-y-4 rounded-xl border border-gray-200 bg-white p-5" aria-label={supplier ? 'Supplier payment request' : 'Expense request'}>
       <div>
-        <h3 className="text-base font-semibold text-gray-900">{supplier?.deal ? 'Request next supplier payment' : supplier ? 'Request supplier payment' : orderLink ? `Expense for order ${orderLink.orderNumber}` : 'New expense request'}</h3>
-        <p className="text-xs text-gray-500">Accounts approves it, then the admin pays it. You can follow it in Payments and in team chat.</p>
+        <h3 className="text-base font-semibold text-gray-900">{setup ? 'Made to order — pay in parts' : deal ? 'Request next supplier payment' : supplier ? 'Request supplier payment' : orderLink ? `Expense for order ${orderLink.orderNumber}` : 'New expense request'}</h3>
+        <p className="text-xs text-gray-500">
+          {setup
+            ? 'Enter the supplier, the total agreed with them, the advance and when they will finish. The advance goes to accounts to approve; the date it is paid is recorded by itself.'
+            : 'Accounts approves it, then the admin pays it. You can follow it in Payments and in team chat.'}
+        </p>
       </div>
 
       {supplier ? (
         <div className="rounded-lg bg-gray-50 p-3 text-sm">
           <p className="text-gray-700">Order <strong>{supplier.orderNumber}</strong> · {supplier.customer} · sale closed by {supplier.closedBy}</p>
-          {supplier.deal ? (
+          {deal || setup ? (
             <div className="mt-2">
               <p className={label}>For</p>
               <p className="text-gray-800">{supplier.lines.map((l) => l.name).join(', ')}</p>
-              <p className="mt-1 text-gray-700">
-                Agreed with supplier <strong>{rupees(supplier.deal.agreedTotal)}</strong> · paid {rupees(supplier.deal.paid)} ·{' '}
-                <strong>up to {rupees(supplier.deal.leftToAsk)}</strong> can be asked for now.
-              </p>
+              {deal && (
+                <p className="mt-1 text-gray-700">
+                  Agreed with supplier <strong>{money(deal.agreedTotal, deal.currency)}</strong> · paid {money(deal.paid, deal.currency)} ·{' '}
+                  <strong>up to {money(deal.leftToAsk, deal.currency)}</strong> can be asked for now.
+                </p>
+              )}
             </div>
           ) : (
           <fieldset className="mt-2">
@@ -209,41 +239,59 @@ export default function PaymentRequestForm({
               </select>
             )}
           </div>
-          {options && options.currencies.length > 1 && (
-            <div>
-              <label className={label} htmlFor="pr-currency">Currency</label>
-              <select id="pr-currency" className={input} value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                {options.currencies.map((c) => <option key={c.code} value={c.code}>{c.code} — {c.label}</option>)}
-              </select>
+          {!orderLink && (
+            <div className="sm:col-span-2">
+              <label className={label} htmlFor="pr-order">Order (optional)</label>
+              <OrderPicker id="pr-order" picked={linked} onPick={setLinked} />
+              <p className="mt-1 text-xs text-gray-500">If this cost was for a customer’s order, link it — it then shows on that order.</p>
             </div>
           )}
         </div>
       )}
 
-      {foreign && (
-        <div className="rounded-lg bg-gray-50 p-3">
-          <div className="sm:w-1/2 sm:pr-1.5">
-            <label className={label} htmlFor="pr-foreign">Bill amount ({currency})</label>
-            <input id="pr-foreign" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={foreignAmount} onChange={(e) => setForeignAmount(e.target.value)} placeholder="e.g. 22950" />
+      <div className="grid gap-3 sm:grid-cols-2">
+        {chooseCurrency && options && (
+          <div>
+            <label className={label} htmlFor="pr-currency">Currency</label>
+            <select id="pr-currency" className={input} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {options.currencies.map((c) => <option key={c.code} value={c.code}>{c.code} — {c.label}</option>)}
+            </select>
           </div>
-          <p className="mt-2 text-sm text-gray-700">
-            Accounts approves it in {currency}. The rupee amount is what the bank actually debits — the admin records it when paying.
-          </p>
+        )}
+        {setup && (
+          <div>
+            <label className={label} htmlFor="pr-total">Total agreed with supplier ({unit})</label>
+            <input id="pr-total" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={agreedTotal} onChange={(e) => setAgreedTotal(e.target.value)} placeholder="e.g. 29000" />
+          </div>
+        )}
+        <div>
+          <label className={label} htmlFor="pr-amount">{setup ? `Advance now (${unit})` : foreign ? `Bill amount (${currency})` : 'Amount (₹)'}</label>
+          <input id="pr-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)}
+            placeholder={deal ? `e.g. 10000 (at most ${deal.leftToAsk})` : setup ? 'e.g. 10000' : foreign ? 'e.g. 22950' : 'e.g. 1250'} />
+          {deal && (
+            <button type="button" className="mt-1 text-xs font-medium text-blue-700 hover:underline" onClick={() => setAmount(String(deal.leftToAsk))}>
+              Pay the full balance ({money(deal.leftToAsk, deal.currency)})
+            </button>
+          )}
+          {setup && Number(agreedTotal) > 0 && Number(amount) > 0 && Number(amount) <= Number(agreedTotal) && (
+            <p className="mt-1 text-xs text-gray-600">Balance after the advance: {money(Number(agreedTotal) - Number(amount), currency)}</p>
+          )}
         </div>
+        {setup && (
+          <div>
+            <label className={label} htmlFor="pr-completion">Supplier finishes making it on</label>
+            <input id="pr-completion" type="date" className={input} required value={completionDate} onChange={(e) => setCompletionDate(e.target.value)} />
+          </div>
+        )}
+      </div>
+
+      {foreign && (
+        <p className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+          Accounts approves it in {currency}. The rupee amount is what the bank actually debits — the admin records it when paying.
+        </p>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {!foreign && (
-          <div>
-            <label className={label} htmlFor="pr-amount">Amount (₹)</label>
-            <input id="pr-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={supplier?.deal ? `e.g. 10000 (at most ${supplier.deal.leftToAsk})` : 'e.g. 1250'} />
-            {supplier?.deal && (
-              <button type="button" className="mt-1 text-xs font-medium text-blue-700 hover:underline" onClick={() => setAmount(String(supplier.deal!.leftToAsk))}>
-                Pay the full balance ({rupees(supplier.deal.leftToAsk)})
-              </button>
-            )}
-          </div>
-        )}
         {!picked && (
           <div>
             <label className={label} htmlFor="pr-payee">{supplier ? 'Supplier' : 'Pay to'}</label>
@@ -319,7 +367,7 @@ export default function PaymentRequestForm({
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />} Send for approval
+          {busy && <Loader2 className="h-4 w-4 animate-spin" />} {setup ? 'Save and send advance for approval' : 'Send for approval'}
         </button>
         {onCancel && <button type="button" onClick={onCancel} className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>}
       </div>

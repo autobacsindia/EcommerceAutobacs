@@ -15,8 +15,8 @@ import mongoose from 'mongoose';
  * `reservedPaise` is the one stored sum, and it exists only as a lock: the total
  * of the live (not declined / cancelled) requests on the deal, moved with a
  * conditional $inc so two people raising a payment at the same moment cannot
- * together ask for more than the agreed total. Paise (integers) so repeated
- * adds never drift the way rupee floats do.
+ * together ask for more than the agreed total. Hundredths of the deal's
+ * currency (integers) so repeated adds never drift the way floats do.
  *
  * Optional: most orders never have one, and their supplier payments work as before.
  */
@@ -39,6 +39,10 @@ const SupplierDealSchema = new mongoose.Schema(
     itemNames: [{ type: String }],
     supplierName: { type: String, required: true, maxlength: 120 },
 
+    // The currency the supplier is paid in (INR, THB, USD…). Every part is raised in it.
+    // Absent on deals from before foreign deals: rupees.
+    currency: { type: String, default: 'INR', maxlength: 3 },
+    // Hundredths of `currency` (paise for ₹, satang for THB, cents for USD) — integers.
     agreedPaise: { type: Number, required: true, min: 100 },
     reservedPaise: { type: Number, default: 0, min: 0 },
 

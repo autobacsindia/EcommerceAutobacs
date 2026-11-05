@@ -124,6 +124,11 @@ const mayEdit = (u, r) => EDITABLE.includes(r.status) && (
     || (isActiveStaff(u) && u.staff.isHead === true && u.staff.team === r.team)))
 );
 
+/** Who may link / unlink an expense to an order: who raised it, their team head, accounts, the admin. */
+const mayLinkOrder = (u, r) => seesAll(u)
+  || idOf(r.requestedBy) === idOf(u?._id)
+  || (isActiveStaff(u) && u.staff.isHead === true && u.staff.team === r.team);
+
 /** May `user` see this request? */
 const canSee = (user, req) => seesAll(user) || (isActiveStaff(user) && user.staff.team === req.team);
 
@@ -185,7 +190,7 @@ function cleanMoney(team, input, current = null) {
   const was = current ? (current.currency || BASE_CURRENCY) : null;
   const currency = filled(input.currency) ? String(input.currency).trim().toUpperCase() : (was || BASE_CURRENCY);
   if (currency !== was && !isCurrencyAllowed(team, currency)) {
-    throw fail(currency === BASE_CURRENCY ? 'Choose the currency.' : `${STAFF_TEAM_LABELS[team] || team} expenses are claimed in rupees (₹).`, 400);
+    throw fail(`${currency.slice(0, 8)} is not a currency we pay in — choose one from the list.`, 400);
   }
   if (currency === BASE_CURRENCY) {
     const amount = filled(input.amount) || !current ? cleanAmount(input.amount) : current.amount;
@@ -201,6 +206,28 @@ function cleanMoney(team, input, current = null) {
     return { amount: current.amount, currency, foreignAmount, fxRate: current.fxRate ?? null };
   }
   return { amount: 0, currency, foreignAmount, fxRate: null };
+}
+
+/**
+ * The money on a supplier payment. A part of a supplier deal is always in the
+ * deal's currency (whatever the browser sent); any other supplier payment may be
+ * in any currency on the list. A foreign amount may arrive as `foreignAmount` or,
+ * from the one amount box, as `amount`.
+ */
+function supplierMoney(input, deal, current = null) {
+  const currency = deal
+    ? (deal.currency || BASE_CURRENCY)
+    : (filled(input.currency) ? String(input.currency).trim().toUpperCase() : (current?.currency || BASE_CURRENCY));
+  if (deal && current && (current.currency || BASE_CURRENCY) !== currency) {
+    throw fail(`This part of the supplier deal is paid in ${currency}.`, 400);
+  }
+  if (deal && filled(input.currency) && String(input.currency).trim().toUpperCase() !== currency) {
+    throw fail(`This supplier deal is in ${currency} — every part is raised in ${currency}.`, 400);
+  }
+  const typed = currency === BASE_CURRENCY
+    ? { currency, amount: input.amount }
+    : { currency, foreignAmount: filled(input.foreignAmount) ? input.foreignAmount : input.amount };
+  return cleanMoney(STAFF_TEAMS.PROCUREMENT, typed, current);
 }
 
 /** A foreign bill whose rupees are not recorded yet (raised without a rate, not paid). */
@@ -321,7 +348,7 @@ async function tellChat(req, action, text, { mentionAdmins = false, mentionReque
 }
 
 const what = (r) => (r.kind === 'supplier'
-  ? `supplier payment ${r.number} — ${inr(r.amount)} to ${r.payee.name}${r.orderNumber ? ` for ${r.orderNumber}` : ''}`
+  ? `supplier payment ${r.number} — ${moneyText(r)} to ${r.payee.name}${r.orderNumber ? ` for ${r.orderNumber}` : ''}`
   : `${categoryLabel(r.category)} expense ${r.number} — ${moneyText(r)} to ${r.payee.name}`);
 
 // ── Shapes ───────────────────────────────────────────────────────────────────
@@ -383,6 +410,8 @@ export function shape(r, viewer) {
       hold: mayHold(viewer) && r.status === 'approved',
       cancel: r.status === 'submitted' && (idOf(r.requestedBy) === idOf(viewer?._id) || isHeadOfTeam || isAdmin(viewer)),
       edit: mayEdit(viewer, r),
+      // Which order an expense was for: any status (no money changes).
+      linkOrder: r.kind === 'expense' && mayLinkOrder(viewer, r),
       // After paying: the admin may correct how it was paid, the reference and the screenshots.
       editPayment: mayPay(viewer) && r.status === 'paid',
     },
@@ -477,10 +506,11 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   if (!deal) {
     // Paid in parts: every payment for the item goes through its deal, so the agreed total holds.
     const [dealt] = (await deals.forOrder(actor, idOf(order._id))).filter((d) => d.itemIds.some((id) => wanted.includes(id)));
-    if (dealt) throw fail(`This item is paid in parts (agreed ${inr(dealt.agreedTotal)} with ${dealt.supplierName}) — raise the next part from its supplier deal.`, 409);
+    if (dealt) throw fail(`This item is paid in parts (agreed ${deals.moneyOf(Math.round(dealt.agreedTotal * 100), dealt.currency)} with ${dealt.supplierName}) — raise the next part from its supplier deal.`, 409);
   }
 
-  const amount = cleanAmount(input.amount);
+  const money = supplierMoney(input, deal);
+  const { amount } = money;
   const { payee, supplierId, bankNotice } = await supplierPayee(actor, input, req);
   const description = String(input.description || '').trim().slice(0, 2000);
   const { files, kinds } = filesFrom(uploaded);
@@ -488,7 +518,8 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
 
   // The lock on the agreed total, taken last, just before saving, and given back if
   // anything after it fails: no overpaying, even with two people at once.
-  const amountPaise = toPaise(amount);
+  // In hundredths of the deal's currency (the deal and its parts share one).
+  const amountPaise = toPaise(deals.unitsOf(money));
   const before = deal ? await deals.reserve(deal._id, amountPaise) : null;
   let stored;
   let doc;
@@ -509,6 +540,9 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     requestedBy: actor._id,
     requestedByName: actor.name || '',
     amount,
+    currency: money.currency,
+    foreignAmount: money.foreignAmount,
+    fxRate: money.fxRate,
     category: 'supplier',
     description,
     payee,
@@ -526,13 +560,13 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     bankNotice,
     ...(deal ? { deal: deal._id, part: deals.partFor(before, amountPaise) } : {}),
     files: stored,
-    history: [entry(actor, 'submitted', deal ? `${deals.PART_LABELS[deals.partFor(before, amountPaise)]} of the agreed ${inr(before.agreedPaise / 100)}` : '')],
+    history: [entry(actor, 'submitted', deal ? `${deals.PART_LABELS[deals.partFor(before, amountPaise)]} of the agreed ${deals.moneyOf(before.agreedPaise, before.currency)}` : '')],
   });
   } catch (err) {
     if (deal) await deals.release(deal._id, amountPaise, 'request failed to save');
     throw err;
   }
-  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', amount, orderId: idOf(order._id), ...(deal ? { dealId: idOf(deal._id), part: doc.part } : {}) });
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', amount, currency: money.currency, foreignAmount: money.foreignAmount, orderId: idOf(order._id), ...(deal ? { dealId: idOf(deal._id), part: doc.part } : {}) });
   // The items now read "Payment Pending" until the admin pays (then "Ordered From
   // Supplier") or the request is cancelled / declined (then back where they were).
   // The request is the record; if marking a line fails, it is logged, and the
@@ -548,6 +582,43 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const warn = bankNotice ? ` ⚠️ This supplier's bank details were changed on ${new Date(bankNotice.at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} by ${bankNotice.byName || 'someone'} — confirm them with the supplier before paying.` : '';
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} — ${doc.itemNames.join(', ')}. Raised by ${doc.requestedByName}. Accounts: please approve or decline.${warn}`);
   return shape(doc, actor);
+}
+
+/**
+ * Made to order, in one step: the supplier deal (supplier, currency, agreed total,
+ * completion date) AND its advance request, saved together. If the advance cannot
+ * be raised, the deal just made is withdrawn (marked cancelled, never deleted), so
+ * a failed save leaves nothing half done.
+ *
+ * There is no start date to type: the day the advance is paid is when the
+ * supplier starts (supplierDealService.dealView).
+ */
+export async function createDealWithAdvance(actor, input, uploaded, req) {
+  if (!isAdmin(actor) && !onTeam(actor, STAFF_TEAMS.PROCUREMENT)) {
+    throw fail('Only procurement sets up a supplier deal.', 403);
+  }
+  if (!filled(input.completionDate)) throw fail('Enter the date the supplier will finish making it.', 400);
+  const supplierName = input.supplierId
+    ? (await suppliers.payeeFor(input.supplierId)).payee.name
+    : cleanPayee(input.payee).name;
+  // Checked before anything is saved; the lock in createSupplierRequest is what holds under a race.
+  const currency = deals.cleanCurrency(input.currency);
+  const agreed = deals.cleanAgreed(input.agreedTotal, currency);
+  const advance = supplierMoney({ currency, amount: input.advance }, { currency });
+  if (toPaise(deals.unitsOf(advance)) > agreed) {
+    throw fail(`The advance cannot be more than the agreed total (${deals.moneyOf(agreed, currency)}).`, 400);
+  }
+  const deal = await deals.create(actor, {
+    orderId: input.orderId, itemIds: input.itemIds, supplierName, currency,
+    agreedTotal: input.agreedTotal, completionDate: input.completionDate, note: input.note,
+  }, req);
+  try {
+    const request = await createSupplierRequest(actor, { ...input, dealId: deal.id, amount: input.advance, foreignAmount: undefined, currency }, uploaded, req);
+    return { deal: await deals.dealById(actor, deal.id), request };
+  } catch (err) {
+    await deals.discard(deal.id, `advance not raised: ${err.message}`);
+    throw err;
+  }
 }
 
 /**
@@ -587,7 +658,7 @@ async function supplierPayee(actor, input, req) {
 /** After a supplier request is paid / cancelled / declined: move its order lines to match. Never throws. */
 async function followOnOrder(r, actor, outcome) {
   // A declined / cancelled part gives its share of the agreed total back.
-  if (r.deal && outcome !== 'paid') await deals.release(r.deal, toPaise(r.amount), `${r.number} ${outcome}`);
+  if (r.deal && outcome !== 'paid') await deals.release(r.deal, toPaise(deals.unitsOf(r)), `${r.number} ${outcome}`);
   if (r.kind !== 'supplier' || !r.order) return;
   try {
     const wf = await import('./teamWorkflowService.js');
@@ -747,10 +818,11 @@ export async function update(actor, id, input = {}, req) {
   }
   const isExpense = r0.kind === 'expense';
   const before = { currency: r0.currency || BASE_CURRENCY, foreignAmount: r0.foreignAmount ?? null, fxRate: r0.fxRate ?? null };
-  // A supplier payment is rupees; an expense may be a foreign bill (worked out in cleanMoney).
+  // Either kind may be a foreign bill (worked out in cleanMoney). A deal part stays
+  // in its deal's currency.
   const money = isExpense
     ? cleanMoney(r0.team, input, { amount: r0.amount, ...before })
-    : { amount: filled(input.amount) ? cleanAmount(input.amount) : r0.amount, ...before };
+    : supplierMoney(input, r0.deal ? { currency: before.currency } : null, { amount: r0.amount, ...before });
   const { amount } = money;
   const description = input.description != null ? String(input.description).trim().slice(0, 2000) : r0.description || '';
   let { category } = r0;
@@ -791,15 +863,18 @@ export async function update(actor, id, input = {}, req) {
   const backToAccounts = r0.status !== 'submitted' && moneyChanged;
   const note = changes.join(', ') + (backToAccounts ? ' — back to accounts to approve again' : '');
   // A deal part's new amount must still fit the agreed total: move the lock by the difference first.
-  const delta = r0.deal ? toPaise(amount) - toPaise(r0.amount) : 0;
+  // In hundredths of the deal's currency.
+  const wasUnits = toPaise(deals.unitsOf(r0));
+  const nowUnits = toPaise(deals.unitsOf(money));
+  const delta = r0.deal ? nowUnits - wasUnits : 0;
   let part = r0.part || '';
   if (delta > 0) {
     const before = await deals.reserve(r0.deal, delta);
-    part = deals.partFor({ ...before, reservedPaise: before.reservedPaise - toPaise(r0.amount) }, toPaise(amount));
+    part = deals.partFor({ ...before, reservedPaise: before.reservedPaise - wasUnits }, nowUnits);
   } else if (delta < 0) {
     // Named against the other parts: what is asked for besides this one.
     const now = await deals.dealForPayment(r0.deal, r0.order);
-    part = deals.partFor({ ...now, reservedPaise: now.reservedPaise - toPaise(r0.amount) }, toPaise(amount));
+    part = deals.partFor({ ...now, reservedPaise: now.reservedPaise - wasUnits }, nowUnits);
   }
   const r = await paymentRequestRepository.transitionInSession(id, [r0.status], { updatedAt: r0.updatedAt }, {
     amount, currency: money.currency, foreignAmount: money.foreignAmount, fxRate: money.fxRate,
@@ -1017,6 +1092,49 @@ export async function get(actor, id) {
   return shape(await loadVisible(actor, id), actor);
 }
 
+// ── Linking an expense to an order ───────────────────────────────────────────
+
+/**
+ * Orders to link an expense to, for the picker: number, customer, total, date.
+ * Any active staff member (anyone who raises expenses); no phone or address leaves
+ * the server — only what identifies the order on screen.
+ */
+export async function orderLookup(actor, q) {
+  if (!seesAll(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
+  const rows = await orderRepository.findForPaymentLink(q);
+  return rows.map((o) => ({
+    id: idOf(o._id),
+    // The number the team panel shows (and the link stores): the end of the id.
+    number: `#${idOf(o._id).slice(-8).toUpperCase()}`,
+    customer: o.shippingAddress?.fullName || o.user?.name || '',
+    total: o.totalAmount ?? null,
+    createdAt: o.createdAt,
+  }));
+}
+
+/**
+ * Link an expense to an order, change it, or remove it (`orderId` null / '').
+ * Allowed at any status — no money changes, it only says which order the cost was
+ * for. A supplier payment's order is fixed: it pays for that order's items.
+ * Compare-and-set on the version read; logged in the history and the audit log.
+ */
+export async function linkOrder(actor, id, { orderId } = {}, req) {
+  const r0 = await loadVisible(actor, id);
+  if (r0.kind !== 'expense') throw fail("A supplier payment's order cannot be changed — it pays for that order's items.", 400);
+  if (!mayLinkOrder(actor, r0)) throw fail('Only whoever raised it, their team head or accounts can link it to an order.', 403);
+  const link = await expenseOrderLink(orderId);
+  const was = r0.orderNumber || '';
+  const now = link.orderNumber || '';
+  if (String(r0.order || '') === String(link.order || '')) return shape(r0, actor);
+  const note = !now ? `order ${was} removed` : was ? `order ${was} → ${now}` : `linked to order ${now}`;
+  const r = await paymentRequestRepository.transitionInSession(id, [r0.status], { updatedAt: r0.updatedAt }, {
+    order: link.order || null, orderNumber: now,
+  }, entry(actor, 'edited', note), {}, undefined);
+  if (!r) throw fail(MOVED, 409);
+  auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'order', from: was, to: now });
+  return shape(r, actor);
+}
+
 /** Supplier requests for an order, for the procurement order panel. */
 export async function forOrder(actor, orderId) {
   if (!seesAll(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
@@ -1026,7 +1144,8 @@ export async function forOrder(actor, orderId) {
     id: idOf(r._id), number: r.number, status: r.status, statusLabel: STATUS_LABELS[r.status],
     kind: r.kind, categoryLabel: r.kind === 'expense' ? categoryLabel(r.category) : 'Supplier', team: r.team,
     dealId: r.deal ? idOf(r.deal) : null, part: r.part || '', partLabel: deals.PART_LABELS[r.part] || '',
-    amount: r.amount, itemIds: (r.itemIds || []).map(idOf), itemNames: r.itemNames || [],
+    amount: r.amount, currency: r.currency || BASE_CURRENCY, foreignAmount: r.foreignAmount ?? null, rupeesPending: rupeesPending(r),
+    itemIds: (r.itemIds || []).map(idOf), itemNames: r.itemNames || [],
     payee: r.payee?.name || '', paidAt: r.payment?.paidAt || null, createdAt: r.createdAt,
     requestedByName: r.requestedByName || '',
     // Shown as an Edit button on the product line (the edit itself re-checks).
@@ -1183,6 +1302,11 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   const notReady = rows.filter((r) => r.kind !== 'supplier' || !TO_PAY.includes(r.status));
   if (notReady.length) {
     throw fail(`${notReady.map((r) => r.number).join(', ')} ${notReady.length === 1 ? 'is' : 'are'} not waiting to be paid — refresh the list.`, 409);
+  }
+  // One transfer carries one rupee debit; a foreign bill needs its own (markPaid records it).
+  const foreign = rows.filter((r) => (r.currency || BASE_CURRENCY) !== BASE_CURRENCY);
+  if (foreign.length) {
+    throw fail(`${foreign.map((r) => r.number).join(', ')} ${foreign.length === 1 ? 'is a foreign-currency bill' : 'are foreign-currency bills'} — pay ${foreign.length === 1 ? 'it' : 'each'} on its own and record the rupees the bank debited.`, 400);
   }
   if (new Set(rows.map((r) => payKeyOf(r.payee, idOf(r._id)))).size !== 1) {
     throw fail('These payments go to different accounts — pay one supplier at a time.', 400);

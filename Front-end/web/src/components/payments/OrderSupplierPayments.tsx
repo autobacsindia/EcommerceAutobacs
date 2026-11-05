@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Banknote, Factory, FileText, Pencil } from 'lucide-react';
 import type { WorkOrder } from '@/components/staff/work/types';
 import apiClient from '@/lib/api-client';
-import { paymentKeys, rupees, slipHref, STATUS_TONE, type OrderPayment, type OrderPayments, type SupplierDeal } from './api';
+import { paymentKeys, paymentMoney, slipHref, STATUS_TONE, type OrderPayment, type OrderPayments, type SupplierDeal } from './api';
 import SupplierDealCard, { SetUpDealForm } from './SupplierDealCard';
 import PaymentRequestForm from './PaymentRequestForm';
 import PaymentRequestDetail from './PaymentRequestDetail';
@@ -53,7 +53,12 @@ export default function LineSupplierPayment({ order, line, requests, deals = [] 
     return <SupplierDealCard order={order} deal={deal} requests={requests} />;
   }
   if (settingUp) {
-    return <SetUpDealForm order={order} line={line} onCancel={() => setSettingUp(false)} onDone={() => { setSettingUp(false); refresh(); }} />;
+    return <SetUpDealForm order={order} line={line} onCancel={() => setSettingUp(false)} onDone={() => {
+      setSettingUp(false);
+      refresh();
+      // The advance was raised with the deal: the line now reads "Payment Pending".
+      qc.invalidateQueries({ predicate: (query) => JSON.stringify(query.queryKey).includes(order.id) });
+    }} />;
   }
 
   if (!mine.length && !canRaise) return null;
@@ -64,7 +69,7 @@ export default function LineSupplierPayment({ order, line, requests, deals = [] 
           <Banknote className="h-4 w-4 text-emerald-700" />
           <button type="button" onClick={() => setOpen({ id: r.id, edit: false })} className="font-medium text-blue-700 hover:underline">{r.number}</button>
           <OrderTypeTag type="procurement" />
-          <span className="text-gray-700">{rupees(r.amount)} to {r.payee}</span>
+          <span className="text-gray-700">{paymentMoney(r)} to {r.payee}</span>
           <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
           {r.canEdit && (
             <button type="button" onClick={() => setOpen({ id: r.id, edit: true })} aria-label={`Edit ${r.number}`}
@@ -142,7 +147,7 @@ export function OrderOtherPayments({ order, requests }: { order: WorkOrder; requ
           {expenses.map((r) => (
             <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
               <button type="button" onClick={() => setOpen(r.id)} className="font-medium text-blue-700 hover:underline">{r.number}</button>
-              <span className="text-gray-700">{r.categoryLabel} · {rupees(r.amount)} to {r.payee}</span>
+              <span className="text-gray-700">{r.categoryLabel} · {paymentMoney(r)} to {r.payee}</span>
               {r.requestedByName && <span className="text-xs text-gray-500">by {r.requestedByName}</span>}
               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[r.status]}`}>{r.statusLabel}</span>
               <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-gray-600 hover:underline">

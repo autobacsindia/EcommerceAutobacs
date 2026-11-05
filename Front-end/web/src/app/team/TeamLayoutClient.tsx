@@ -43,7 +43,9 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
     );
     if (isHead) nav.push(paid, delivered);
   }
-  if (team === 'procurement') nav.push({ href: '/team/procurement', label: 'Orders', icon: PackageSearch }, paid, delivered);
+  // Procurement: one "Orders" item, with "To do" and "All in progress" tabs (the
+  // latter is the "Order processing" list) — two items for one job confused people.
+  if (team === 'procurement') nav.push({ href: '/team/procurement', label: 'Orders', icon: PackageSearch }, delivered);
   if (team === 'accounts') nav.push({ href: '/team/refunds', label: 'Refunds', icon: Wallet }, paid, delivered);
   if (team === 'operations') nav.push({ href: '/team/deliveries', label: 'Deliveries', icon: Truck }, paid, delivered);
   if (team === 'marketing') nav.push(...MARKETING_AREAS.map(({ href, label, icon }) => ({ href, label, icon })));
