@@ -3,7 +3,8 @@
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CornerLeftUp, Flag, ListChecks, MessageSquare, Network, Package, Plus, Tag, Timer as TimerIcon, UserPlus, Users, X } from 'lucide-react';
 import { errorMessage } from '@/components/staff/sales/types';
-import { useQuickAdd, useSetStatus, useTaskPages, type QuickExtras } from './hooks';
+import { useQuickAdd, useQuickEdit, useSetStatus, useTaskPages, type QuickEdit, type QuickExtras } from './hooks';
+import { QuickDate, QuickPeople, QuickPriority } from './CardActions';
 import AssigneePicker from './AssigneePicker';
 import { useAssignees } from './TaskForm';
 import { groupTasks, type TaskGroup } from './grouping';
@@ -39,7 +40,7 @@ export function CompleteButton({ t, onToggle, busy }: { t: Task; onToggle: () =>
 }
 /** The tick's ring takes the status colour, so a row says where it stands at a glance. */
 const STATUS_RING: Record<TaskStatus, string> = {
-  todo: 'border-gray-300', in_progress: 'border-sky-500', waiting: 'border-amber-500', done: 'border-emerald-500',
+  todo: 'border-gray-300', in_progress: 'border-sky-500', done: 'border-emerald-500',
 };
 
 /**
@@ -93,9 +94,9 @@ export function TagList({ tags, onTag, activeTag, max = 2 }: { tags: string[]; o
   One grid for the column headings and every row, so the columns line up. Below
   `lg` a row is the title with its facts on a second line instead.
 */
-const COLUMNS = 'lg:grid lg:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px] lg:items-center lg:gap-3 xl:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px_minmax(0,170px)]';
+const COLUMNS = 'lg:grid lg:grid-cols-[24px_minmax(0,1fr)_140px_116px_96px] lg:items-center lg:gap-3 xl:grid-cols-[24px_minmax(0,1fr)_140px_116px_96px_minmax(0,170px)]';
 /** The same, with an Order column — only for a group where some task has an order. */
-const COLUMNS_ORDER = 'lg:grid lg:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px] lg:items-center lg:gap-3 xl:grid-cols-[24px_minmax(0,1fr)_132px_104px_88px_minmax(0,150px)_96px]';
+const COLUMNS_ORDER = 'lg:grid lg:grid-cols-[24px_minmax(0,1fr)_140px_116px_96px] lg:items-center lg:gap-3 xl:grid-cols-[24px_minmax(0,1fr)_140px_116px_96px_minmax(0,150px)_96px]';
 /** Tags and order get their own columns only on a wide screen; in between they sit beside the title. */
 const WIDE = 'hidden xl:block';
 /** A column heading with its icon, ClickUp-style. */
@@ -121,6 +122,9 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder, b
   onTag?: (tag: string) => void; activeTag?: string; withOrder: boolean; base?: string;
 }) {
   const move = useSetStatus();
+  const edit = useQuickEdit();
+  const busy = move.isPending || edit.isPending;
+  const save = (patch: QuickEdit) => edit.mutate({ t, patch });
   const open = () => onOpen(t.id);
   const onKey = (e: KeyboardEvent) => {
     if (e.target !== e.currentTarget) return;
@@ -155,21 +159,19 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder, b
             </span>
           </div>
           {/* Phones and tablets: the columns, folded into one line. */}
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 lg:hidden">
-            <AvatarStack people={peopleOf(t)} />
-            <DuePill t={t} />
-            {t.priority !== 'normal' && <PriorityFlag priority={t.priority} withLabel />}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 lg:hidden">
+            <QuickPeople t={t} onSave={save} busy={busy} variant="cell" />
+            <QuickDate t={t} onSave={save} busy={busy} variant="cell" />
+            {(t.priority !== 'normal' || t.can.edit) && <QuickPriority t={t} onSave={save} busy={busy} variant="cell" />}
             <TagList tags={t.tags} onTag={onTag} activeTag={activeTag} />
             {t.order && <Chip tone="bg-sky-100 text-sky-800"><Package aria-hidden className="h-3 w-3" />{t.order.code}</Chip>}
           </div>
         </div>
       </div>
-      <span className="hidden min-w-0 items-center gap-2 lg:flex" title={peopleOf(t).map((p) => p.name).join(', ')}>
-        <AvatarStack people={peopleOf(t)} size="sm" />
-        {peopleOf(t).length === 1 && <span className="truncate text-xs text-gray-700">{t.assignee.name.split(' ')[0]}</span>}
-      </span>
-      <span className="hidden lg:block"><DuePill t={t} empty={<span className="text-xs text-gray-300">—</span>} /></span>
-      <span className="hidden lg:block"><PriorityFlag priority={t.priority} withLabel /></span>
+      {/* Like ClickUp's list: who, when and how urgent change right here, no need to open the task. */}
+      <span className="hidden min-w-0 items-center lg:flex"><QuickPeople t={t} onSave={save} busy={busy} variant="cell" /></span>
+      <span className="hidden min-w-0 items-center lg:flex"><QuickDate t={t} onSave={save} busy={busy} variant="cell" /></span>
+      <span className="hidden min-w-0 items-center lg:flex"><QuickPriority t={t} onSave={save} busy={busy} variant="cell" /></span>
       <span className={`${WIDE} min-w-0`}><TagList tags={t.tags} onTag={onTag} activeTag={activeTag} /></span>
       {withOrder && (
         <span className={`${WIDE} truncate`}>

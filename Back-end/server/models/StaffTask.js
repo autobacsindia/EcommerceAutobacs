@@ -7,7 +7,9 @@ import mongoose from 'mongoose';
  * services/staffTaskService.js. In short: the admin gives tasks to anyone, a team
  * head to people in their own team, a member only to themselves.
  *
- *   status    to do → in progress → waiting → done   (any order; done can be reopened)
+ *   status    to do → in progress → done   (any order; done can be reopened).
+ *             'waiting' is retired (2026-11, like ClickUp): old rows keep it on disk,
+ *             read as in progress, and become in progress on their next change.
  *   bucket    'open' | 'done' | 'archived' — which list the task is in. Derived
  *             from status + archive on every write, and the leading key of every
  *             list index, so a list never scans another bucket's rows.
@@ -111,6 +113,10 @@ const PersonSchema = new mongoose.Schema(
 );
 
 export const TASK_STATUSES = Object.freeze(['todo', 'in_progress', 'waiting', 'done']);
+/** What anyone may pick. 'waiting' stays in TASK_STATUSES only so old rows still validate. */
+export const TASK_PICKABLE_STATUSES = Object.freeze(['todo', 'in_progress', 'done']);
+/** The status a task is shown with: a retired 'waiting' reads as in progress. */
+export const shownStatus = (status) => (status === 'waiting' ? 'in_progress' : status);
 export const TASK_PRIORITIES = Object.freeze(['urgent', 'high', 'normal', 'low']);
 export const TASK_BUCKETS = Object.freeze(['open', 'done', 'archived']);
 

@@ -15,16 +15,23 @@ import { createPortal } from 'react-dom';
 import { ArrowRightLeft, CalendarDays, Check, Flag, UserPlus } from 'lucide-react';
 import AssigneePicker, { placePopover } from './AssigneePicker';
 import { useAssignees } from './TaskForm';
-import { AvatarStack, PRIORITY_STYLE, StatusDot } from './ui';
+import { AvatarStack, DuePill, PRIORITY_STYLE, StatusDot } from './ui';
 import { MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, formatDue, formatDueTime, peopleOf, type Task, type TaskPriority, type TaskStatus } from './types';
 import type { QuickEdit } from './hooks';
 
 const stop = (e: SyntheticEvent) => e.stopPropagation();
 const qa = 'tk-qa relative inline-flex h-6 min-w-6 shrink-0 items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-md px-1 text-[11px] font-semibold';
+/**
+ * The same actions as a List column (like ClickUp's): the value as it reads in
+ * the row, the whole cell a button with a soft hover, no box around it.
+ */
+const cellClass = 'tk-cell relative -mx-1.5 inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-md px-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 disabled:opacity-60';
+/** Where a quick action sits: a board card (small square buttons) or a List column. */
+export type QuickVariant = 'card' | 'cell';
 
 /** A short menu in a pop-over beside its button (a portal, so a scrolling column never cuts it off). */
-function CardMenu<V extends string>({ label, title, empty, tone, trigger, options, value, onPick, disabled }: {
-  label: string; title: string; empty?: boolean; tone?: string; trigger: ReactNode; disabled?: boolean;
+function CardMenu<V extends string>({ label, title, empty, tone, trigger, options, value, onPick, disabled, variant = 'card' }: {
+  label: string; title: string; empty?: boolean; tone?: string; trigger: ReactNode; disabled?: boolean; variant?: QuickVariant;
   options: { value: V; label: string; icon: ReactNode }[]; value: V; onPick: (v: V) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -78,9 +85,9 @@ function CardMenu<V extends string>({ label, title, empty, tone, trigger, option
         aria-expanded={open}
         aria-label={label}
         title={title}
-        data-empty={empty || undefined}
-        data-tone={tone}
-        className={qa}
+        data-empty={(variant === 'card' && empty) || undefined}
+        data-tone={variant === 'card' ? tone : undefined}
+        className={variant === 'card' ? qa : cellClass}
       >
         {trigger}
       </button>
@@ -117,8 +124,32 @@ function CardMenu<V extends string>({ label, title, empty, tone, trigger, option
 }
 
 /** Due date: the day (red when late, amber today); a click opens the date picker. */
-export function QuickDate({ t, onSave, busy }: { t: Task; onSave: (patch: QuickEdit) => void; busy: boolean }) {
+export function QuickDate({ t, onSave, busy, variant = 'card' }: { t: Task; onSave: (patch: QuickEdit) => void; busy: boolean; variant?: QuickVariant }) {
   const done = t.status === 'done';
+  const picker = t.can.edit && (
+    <input
+      type="date"
+      aria-label={`Due date for ${t.code}`}
+      value={t.dueOn ?? ''}
+      disabled={busy}
+      onClick={(e) => {
+        e.stopPropagation();
+        // Opens the calendar from anywhere on the button (not only its corner icon).
+        try { e.currentTarget.showPicker?.(); } catch { /* older browser: the field still takes typing */ }
+      }}
+      onKeyDown={stop}
+      onChange={(e) => { if ((e.target.value || null) !== t.dueOn) onSave({ dueOn: e.target.value || null }); }}
+      className="tk-qa-date absolute inset-0 h-full! min-h-0! w-full cursor-pointer opacity-0"
+    />
+  );
+  if (variant === 'cell') {
+    return (
+      <span title={t.dueOn ? `Due ${formatDue(t.dueOn, t.dueTime)}` : 'No due date'} className={`${cellClass} ${t.can.edit ? 'cursor-pointer' : 'hover:bg-transparent'}`}>
+        <DuePill t={t} empty={<span className="inline-flex items-center gap-1 text-gray-300"><CalendarDays aria-hidden className="h-3.5 w-3.5" /><span className="sr-only">No due date</span>—</span>} />
+        {picker}
+      </span>
+    );
+  }
   const tone = done ? undefined : t.overdue ? 'late' : t.dueToday ? 'today' : undefined;
   const time = formatDueTime(t.dueTime);
   const text = t.dueOn ? (!done && t.dueToday ? `Today${time ? ` ${time}` : ''}` : formatDue(t.dueOn, t.dueTime)) : null;
@@ -126,22 +157,7 @@ export function QuickDate({ t, onSave, busy }: { t: Task; onSave: (patch: QuickE
     <span title={t.dueOn ? `Due ${formatDue(t.dueOn, t.dueTime)}` : 'No due date'} data-empty={!t.dueOn || undefined} data-tone={tone} className={`${qa} ${text ? 'px-1.5' : ''}`}>
       <CalendarDays aria-hidden className="h-3.5 w-3.5 shrink-0" />
       {text ?? <span className="sr-only">No due date</span>}
-      {t.can.edit && (
-        <input
-          type="date"
-          aria-label={`Due date for ${t.code}`}
-          value={t.dueOn ?? ''}
-          disabled={busy}
-          onClick={(e) => {
-            e.stopPropagation();
-            // Opens the calendar from anywhere on the button (not only its corner icon).
-            try { e.currentTarget.showPicker?.(); } catch { /* older browser: the field still takes typing */ }
-          }}
-          onKeyDown={stop}
-          onChange={(e) => { if ((e.target.value || null) !== t.dueOn) onSave({ dueOn: e.target.value || null }); }}
-          className="tk-qa-date absolute inset-0 h-full! min-h-0! w-full cursor-pointer opacity-0"
-        />
-      )}
+      {picker}
     </span>
   );
 }
@@ -153,11 +169,14 @@ const PRIORITY_OPTIONS = TASK_PRIORITIES.map((p) => ({
 }));
 
 /** Priority: a coloured flag when raised; "normal" is the empty state. */
-export function QuickPriority({ t, onSave, busy }: { t: Task; onSave: (patch: QuickEdit) => void; busy: boolean }) {
+export function QuickPriority({ t, onSave, busy, variant = 'card' }: { t: Task; onSave: (patch: QuickEdit) => void; busy: boolean; variant?: QuickVariant }) {
   const s = PRIORITY_STYLE[t.priority];
-  const flag = <Flag aria-hidden className={`h-3.5 w-3.5 ${t.priority === 'normal' ? '' : s.flag}`} fill={t.priority === 'urgent' || t.priority === 'high' ? 'currentColor' : 'none'} />;
-  const name = <span className="sr-only">{s.label} priority</span>;
+  const cell = variant === 'cell';
+  const flag = <Flag aria-hidden className={`h-3.5 w-3.5 ${t.priority === 'normal' && !cell ? '' : s.flag}`} fill={t.priority === 'urgent' || t.priority === 'high' ? 'currentColor' : 'none'} />;
+  // A column says the word; a card keeps it for screen readers.
+  const name = cell ? <span>{s.label}</span> : <span className="sr-only">{s.label} priority</span>;
   if (!t.can.edit) {
+    if (cell) return <span title={`${s.label} priority`} className="inline-flex items-center gap-1.5 text-xs text-gray-700">{flag}{name}</span>;
     return <span title={`${s.label} priority`} data-empty={t.priority === 'normal' || undefined} className={qa}>{flag}{name}</span>;
   }
   return (
@@ -169,6 +188,7 @@ export function QuickPriority({ t, onSave, busy }: { t: Task; onSave: (patch: Qu
       options={PRIORITY_OPTIONS}
       value={t.priority}
       disabled={busy}
+      variant={variant}
       onPick={(priority) => onSave({ priority })}
     />
   );
@@ -196,12 +216,22 @@ export function QuickMove({ t, status, onMove, busy }: { t: Task; status: TaskSt
 }
 
 /** Who does it: the faces; whoever may reassign gets the people picker. Saved once, when it closes. */
-export function QuickPeople({ t, onSave, busy }: { t: Task; onSave: (patch: QuickEdit) => void; busy: boolean }) {
+export function QuickPeople({ t, onSave, busy, variant = 'card' }: { t: Task; onSave: (patch: QuickEdit) => void; busy: boolean; variant?: QuickVariant }) {
   const people = peopleOf(t);
   const choices = useAssignees().data?.people ?? [];
   const ids = people.map((p) => p.id);
   const [draft, setDraft] = useState<string[] | null>(null);
-  if (!t.can.reassign || !choices.length) return <AvatarStack people={people} size="sm" />;
+  const cell = variant === 'cell';
+  // In a column, one person also gets their first name, as ClickUp shows it.
+  const faces = (
+    <>
+      <AvatarStack people={people} size="sm" />
+      {cell && people.length === 1 && <span className="truncate text-xs text-gray-700">{people[0].name.split(' ')[0]}</span>}
+    </>
+  );
+  if (!t.can.reassign || !choices.length) {
+    return cell ? <span className="inline-flex min-w-0 items-center gap-1.5" title={people.map((p) => p.name).join(', ')}>{faces}</span> : <AvatarStack people={people} size="sm" />;
+  }
   const done = () => {
     const next = draft;
     setDraft(null);
@@ -221,9 +251,9 @@ export function QuickPeople({ t, onSave, busy }: { t: Task; onSave: (patch: Quic
         triggerLabel={`Who does ${t.code}`}
         disabled={busy}
         trigger={(
-          <span className="group/people inline-flex items-center gap-1 rounded-md p-0.5 hover:bg-gray-100">
-            <AvatarStack people={people} size="sm" />
-            <UserPlus aria-hidden className="hidden h-3.5 w-3.5 text-gray-400 opacity-0 md:block transition-opacity group-hover/people:opacity-100 group-focus-visible/people:opacity-100" />
+          <span className={`group/people inline-flex min-w-0 items-center gap-1 rounded-md hover:bg-gray-100 ${cell ? 'min-h-8 px-1.5 -mx-1.5' : 'p-0.5'}`} title={people.map((p) => p.name).join(', ')}>
+            {faces}
+            <UserPlus aria-hidden className="hidden h-3.5 w-3.5 shrink-0 text-gray-400 opacity-0 md:block transition-opacity group-hover/people:opacity-100 group-focus-visible/people:opacity-100" />
           </span>
         )}
       />

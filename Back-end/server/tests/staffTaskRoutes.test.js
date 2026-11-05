@@ -197,7 +197,7 @@ describe('Staff task routes', () => {
     expect((await member.session.get('/staff/tasks?sort=updated')).body.sort).toBe('updated');
 
     const res = await head.session.post('/staff/tasks/bulk', {
-      items: [{ id: a.id, rev: a.rev }, { id: b.id, rev: b.rev }], changes: { status: 'waiting', priority: 'high' },
+      items: [{ id: a.id, rev: a.rev }, { id: b.id, rev: b.rev }], changes: { status: 'in_progress', priority: 'high' },
     });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ changed: 2, failed: 0 });
@@ -208,6 +208,10 @@ describe('Staff task routes', () => {
     expect((await head.session.post('/staff/tasks/bulk', { items: [], changes: { priority: 'low' } })).status).toBe(400);
     expect((await head.session.post('/staff/tasks/bulk', { items: [{ id: 'nope', rev: 1 }], changes: { priority: 'low' } })).status).toBe(400);
     expect((await head.session.post('/staff/tasks/bulk', { items: [{ id: a.id, rev: 1 }], changes: { status: 'finished' } })).status).toBe(400);
+    // 'waiting' is retired (like ClickUp): nobody can pick it any more.
+    expect((await head.session.post('/staff/tasks/bulk', { items: [{ id: a.id, rev: 1 }], changes: { status: 'waiting' } })).status).toBe(400);
+    expect((await head.session.patch(`/staff/tasks/${a.id}`, { rev: 1, status: 'waiting' })).status).toBe(400);
+    expect((await head.session.post('/staff/tasks', { title: 'x', status: 'waiting' })).status).toBe(400);
     expect((await head.session.postNoCsrf('/staff/tasks/bulk', { items: [{ id: a.id, rev: 1 }], changes: { priority: 'low' } })).status).toBe(403);
     expect((await request(app).post(`${BASE}/staff/tasks/bulk`).send({})).status).toBe(403);
   });

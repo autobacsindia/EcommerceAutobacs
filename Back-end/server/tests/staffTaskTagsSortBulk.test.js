@@ -236,7 +236,7 @@ describe('bulk changes', () => {
   it('a task changed by someone else meanwhile is refused; the rest still change', async () => {
     const a = await make(procHead, { assigneeId: String(procA._id) });
     const b = await make(procHead, { assigneeId: String(procA._id) });
-    await tasks.updateTask(procA, a.id, { rev: a.rev, status: 'waiting' }, req);
+    await tasks.updateTask(procA, a.id, { rev: a.rev, status: 'in_progress' }, req);
     const res = await bulk(procHead, [a, b], { priority: 'high' });
     expect(res.results.find((r) => r.id === a.id)).toMatchObject({ ok: false, status: 409 });
     expect(res.results.find((r) => r.id === b.id)).toMatchObject({ ok: true, changed: true });

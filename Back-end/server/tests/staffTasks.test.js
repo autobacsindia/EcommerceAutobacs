@@ -243,11 +243,43 @@ describe('changing a task', () => {
   it('records who changed what, newest first', async () => {
     const t = await make(procHead, { assigneeId: String(procA._id) });
     const a = await tasks.updateTask(procHead, t.id, { rev: t.rev, priority: 'urgent', dueOn: day(1) }, req);
-    const b = await tasks.updateTask(procA, t.id, { rev: a.rev, status: 'waiting' }, req);
+    const b = await tasks.updateTask(procA, t.id, { rev: a.rev, status: 'in_progress' }, req);
     expect(b.history.map((h) => [h.action, h.by])).toEqual([
       ['status', 'Arun'], ['due', 'Priya'], ['priority', 'Priya'], ['created', 'Priya'],
     ]);
     expect(b.history[2]).toMatchObject({ from: 'Normal', to: 'Urgent' });
+  });
+
+  it('an old "waiting" task reads as in progress and becomes in progress on its next change', async () => {
+    const t = await make(procHead, { assigneeId: String(procA._id) });
+    // As stored before 'waiting' was retired.
+    await StaffTask.updateOne({ _id: t.id }, { $set: { status: 'waiting' } });
+    const seen = await tasks.getTask(procA, t.id);
+    expect(seen).toMatchObject({ status: 'in_progress', statusLabel: 'In progress' });
+    // Asking for what it already shows is no change at all.
+    const same = await tasks.updateTask(procA, t.id, { rev: seen.rev, status: 'in_progress' }, req);
+    expect(same.rev).toBe(seen.rev);
+    // Any real change stores it as in progress too, with no made-up status line in the history.
+    const next = await tasks.updateTask(procHead, t.id, { rev: seen.rev, priority: 'high' }, req);
+    expect((await StaffTask.findById(t.id).lean()).status).toBe('in_progress');
+    expect(next.history[0]).toMatchObject({ action: 'priority' });
+    expect(next.history.some((h) => h.action === 'status')).toBe(false);
+    // Moving it on works as usual.
+    const done = await tasks.updateTask(procA, t.id, { rev: next.rev, status: 'done' }, req);
+    expect(done.history[0]).toMatchObject({ action: 'status', from: 'In progress', to: 'Done' });
+  });
+
+  it('an old "waiting" task moved straight to done says it was in progress', async () => {
+    const t = await make(procHead, { assigneeId: String(procA._id) });
+    await StaffTask.updateOne({ _id: t.id }, { $set: { status: 'waiting' } });
+    const done = await tasks.updateTask(procA, t.id, { rev: t.rev, status: 'done' }, req);
+    expect(done.history[0]).toMatchObject({ action: 'status', from: 'In progress', to: 'Done' });
+  });
+
+  it('nobody can pick "waiting" any more', async () => {
+    const t = await make(procHead, { assigneeId: String(procA._id) });
+    await status(400, () => tasks.updateTask(procA, t.id, { rev: t.rev, status: 'waiting' }, req));
+    await status(400, () => tasks.createTask(procHead, { title: 'x', status: 'waiting' }, req));
   });
 
   it('an unchanged save is a no-op, not a new revision', async () => {

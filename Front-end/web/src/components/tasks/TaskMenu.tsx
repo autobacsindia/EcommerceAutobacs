@@ -108,7 +108,7 @@ export function useDuplicateTask(onCreated?: (id: string) => void) {
       return apiClient.post<{ task: Task }>('/staff/tasks', {
         title,
         description: full.description || '',
-        ...(full.status === 'in_progress' || full.status === 'waiting' ? { status: full.status } : {}),
+        ...(full.status === 'in_progress' ? { status: full.status } : {}),
         priority: full.priority,
         ...(full.dueOn ? { dueOn: full.dueOn, ...(full.dueTime ? { dueTime: full.dueTime } : {}) } : {}),
         ...(full.startOn ? { startOn: full.startOn } : {}),

@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { MessageSquare, Paperclip, Pencil, Send, SmilePlus, Trash2, X } from 'lucide-react';
+import { Download, MessageSquare, Paperclip, Pencil, Send, SmilePlus, Trash2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { submitMultipart, parseApiResponse } from '@/lib/multipartResponse';
 import { acceptsFile, MAX_ATTACHMENT_BYTES, mb } from '@/lib/attachments';
@@ -54,20 +54,41 @@ function pickFiles(incoming: FileList | File[] | null, room: number, onError: (m
   return fitting.slice(0, Math.max(room, 0));
 }
 
+/** The address that saves a file instead of opening it (the server answers it as an attachment). */
+export const downloadUrl = (url: string) => `${url}${url.includes('?') ? '&' : '?'}download=1`;
+
+/**
+ * One file: its picture or kind, its name (opens it to view), its size, and a
+ * download button. A file still waiting to be sent (`url` "#") has no address yet,
+ * so it only shows and can be taken off.
+ */
 function FileChip({ file, onRemove }: { file: TaskFile; onRemove?: () => void }) {
+  const saved = file.url !== '#';
+  const iconButton = 'grid h-7 w-7 shrink-0 place-items-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-800 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600';
   return (
-    <span className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-gray-200 bg-white py-1 pl-1.5 pr-1 text-xs">
+    <span className="group/file inline-flex max-w-full items-center gap-2 rounded-xl border border-gray-200 bg-white py-1 pl-1 pr-1 text-xs shadow-xs transition-colors hover:border-gray-300">
       {file.kind === 'image' ? (
         // eslint-disable-next-line @next/next/no-img-element -- private, cookie-authenticated bytes; next/image cannot fetch them
-        <img src={file.url} alt="" className="h-8 w-8 rounded object-cover" />
+        <img src={file.url} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
       ) : (
-        <FileKindIcon mime={file.mime} className="h-5 w-5 text-gray-500" />
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-gray-50"><FileKindIcon mime={file.mime} className="h-5 w-5 text-gray-500" /></span>
       )}
-      <a href={file.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate font-medium text-gray-800 hover:underline">{file.name}</a>
-      <span className="shrink-0 text-gray-400">{fileSize(file.size)}</span>
+      <span className="flex min-w-0 flex-col">
+        {saved ? (
+          <a href={file.url} target="_blank" rel="noopener noreferrer" title={`Open ${file.name}`} className="min-w-0 truncate font-medium text-gray-800 hover:underline">{file.name}</a>
+        ) : (
+          <span className="min-w-0 truncate font-medium text-gray-800">{file.name}</span>
+        )}
+        <span className="text-[11px] text-gray-400">{fileSize(file.size)}</span>
+      </span>
+      {saved && (
+        <a href={downloadUrl(file.url)} download={file.name} aria-label={`Download ${file.name}`} title="Download" className={iconButton}>
+          <Download aria-hidden className="h-4 w-4" />
+        </a>
+      )}
       {onRemove && (
-        <button type="button" onClick={onRemove} aria-label={`Remove ${file.name}`} className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
-          <X className="h-3.5 w-3.5" />
+        <button type="button" onClick={onRemove} aria-label={`Remove ${file.name}`} title="Remove" className={iconButton}>
+          <X className="h-4 w-4" />
         </button>
       )}
     </span>

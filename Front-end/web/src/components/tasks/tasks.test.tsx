@@ -308,11 +308,13 @@ describe('the board', () => {
 
   it('shows each job in its status column, and remembers the choice', async () => {
     await board(
-      [task(), task({ id: 't2', code: 'T-8', title: 'Chase supplier', status: 'waiting', statusLabel: 'Waiting' })],
+      [task(), task({ id: 't2', code: 'T-8', title: 'Chase supplier', status: 'in_progress', statusLabel: 'In progress' })],
       [task({ id: 't3', code: 'T-9', title: 'Old job', status: 'done', statusLabel: 'Done', bucket: 'done' })],
     );
     await waitFor(() => expect(within(col('To do')).getByText('Call Bosch')).toBeInTheDocument());
-    expect(within(col('Waiting')).getByText('Chase supplier')).toBeInTheDocument();
+    expect(within(col('In progress')).getByText('Chase supplier')).toBeInTheDocument();
+    // Like ClickUp: three columns, no "Waiting".
+    expect(screen.queryByRole('region', { name: 'Waiting' })).toBeNull();
     expect(await within(col('Complete')).findByText('Old job')).toBeInTheDocument();
     expect(localStorage.getItem('tasks-view-mode')).toBe('board');
   });
@@ -345,10 +347,12 @@ describe('the board', () => {
   });
 
   it('on a phone, "Move to" on the card does the same move', async () => {
-    patch.mockResolvedValue({ task: task({ status: 'waiting', rev: 4 }) });
+    patch.mockResolvedValue({ task: task({ status: 'in_progress', rev: 4 }) });
     await board([task()]);
-    fireEvent.change(await screen.findByLabelText('Move T-7'), { target: { value: 'waiting' } });
-    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'waiting' }));
+    const pick = await screen.findByLabelText('Move T-7');
+    expect([...(pick as HTMLSelectElement).options].map((o) => o.value)).not.toContain('waiting');
+    fireEvent.change(pick, { target: { value: 'in_progress' } });
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'in_progress' }));
   });
 
   it('a task in both the open and the done list (just ticked) shows once, where the done list has it', async () => {
@@ -564,7 +568,7 @@ describe('one task', () => {
   it('a stale save says so and reloads the task', async () => {
     patch.mockRejectedValue({ status: 409, rawData: { message: 'Someone changed this task just now.' } });
     detail(task());
-    fireEvent.change(await screen.findByLabelText('Status'), { target: { value: 'waiting' } });
+    fireEvent.change(await screen.findByLabelText('Status'), { target: { value: 'in_progress' } });
     expect(await screen.findByRole('alert')).toHaveTextContent('Someone changed this task just now.');
     await waitFor(() => expect(get.mock.calls.filter((c) => c[0] === '/staff/tasks/t1').length).toBeGreaterThan(1));
   });
@@ -751,11 +755,12 @@ describe('the board card quick buttons', () => {
   });
 
   it('move to: the menu moves the card like a drag does', async () => {
-    patch.mockResolvedValue({ task: task({ status: 'waiting', rev: 4 }) });
+    patch.mockResolvedValue({ task: task({ status: 'in_progress', rev: 4 }) });
     const card = await board([task()]);
     fireEvent.click(within(card).getByRole('button', { name: 'Move T-7 to' }));
-    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Waiting' }));
-    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'waiting' }));
+    expect(screen.queryByRole('menuitemradio', { name: 'Waiting' })).toBeNull();
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'In progress' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, status: 'in_progress' }));
   });
 
   it('people: tick someone and close — ONE shared task with both people, saved once', async () => {
@@ -813,6 +818,49 @@ describe('the board card quick buttons', () => {
   it('the admin\'s card opens that exact order', async () => {
     const card = await board([task({ order: { id: 'o9', code: '#10482' } })], { base: '/admin/tasks', canSeeTeam: true });
     expect(within(card).getByRole('link', { name: /#10482/ })).toHaveAttribute('href', '/admin/orders?order=o9');
+  });
+});
+
+describe('the list rows edit in place, like the board (and ClickUp)', () => {
+  // The row draws its columns twice — a wide-screen set and a phone line, one hidden by CSS — so take the first.
+  const row = async (list: Task[]) => {
+    serve({ list });
+    localStorage.setItem('tasks-view-mode', 'list');
+    workspace();
+    return screen.findByRole('button', { name: `Open ${list[0].code}: ${list[0].title}` });
+  };
+  const opened = () => replace.mock.calls.some((c) => String(c[0]).includes('task='));
+
+  it('assignees: tick someone in the row, close — saved once with the revision, the task never opens', async () => {
+    patch.mockResolvedValue({ task: task({ rev: 4 }) });
+    const r = await row([task()]);
+    fireEvent.click(within(r).getAllByRole('button', { name: 'Who does T-7' })[0]);
+    const list = await screen.findByRole('listbox', { name: 'Assignees' });
+    fireEvent.click(within(list).getByRole('option', { name: /Bala/ }));
+    fireEvent.mouseDown(document.body);
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, assigneeIds: ['u2', 'u3'] }));
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(opened()).toBe(false);
+  });
+
+  it('due date and priority change from the row too', async () => {
+    patch.mockResolvedValue({ task: task({ rev: 4 }) });
+    const r = await row([task()]);
+    fireEvent.change(within(r).getAllByLabelText('Due date for T-7')[0], { target: { value: '2026-11-20' } });
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, dueOn: '2026-11-20' }));
+    fireEvent.click(within(r).getAllByRole('button', { name: 'Priority of T-7' })[0]);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Urgent' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, priority: 'urgent' }));
+    expect(opened()).toBe(false);
+  });
+
+  it('without the right to change it, the row shows who, when and how urgent, with no buttons', async () => {
+    const r = await row([task({ can: { ...can, edit: false, reassign: false, status: false } })]);
+    expect(within(r).queryByRole('button', { name: 'Who does T-7' })).toBeNull();
+    expect(within(r).queryByLabelText('Due date for T-7')).toBeNull();
+    expect(within(r).queryByRole('button', { name: 'Priority of T-7' })).toBeNull();
+    expect(within(r).getAllByText('High').length).toBeGreaterThan(0);
+    expect(within(r).getAllByRole('img', { name: 'Arun' }).length).toBeGreaterThan(0);
   });
 });
 

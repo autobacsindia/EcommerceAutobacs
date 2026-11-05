@@ -10,7 +10,7 @@
  * and flags use mid steps that read on either theme.
  */
 import { usePanelPhotos } from '@/hooks/queries/usePanelPhotos';
-import { CalendarClock, CircleCheck, CircleDashed, CircleDot, Clock3, Flag, X, type LucideIcon } from 'lucide-react';
+import { CalendarClock, CircleCheck, CircleDashed, CircleDot, Flag, X, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { DUE_TIMES, formatDue, formatDueTime, type Task, type TaskPriority, type TaskStatus } from './types';
 import './tasks.css';
@@ -20,7 +20,6 @@ import './tasks.css';
 export const STATUS_STYLE: Record<TaskStatus, { dot: string; pill: string; bar: string; label: string }> = {
   todo: { dot: 'bg-gray-400', pill: 'bg-gray-100 text-gray-700', bar: 'border-t-gray-400', label: 'To do' },
   in_progress: { dot: 'bg-sky-500', pill: 'bg-sky-100 text-sky-800', bar: 'border-t-sky-500', label: 'In progress' },
-  waiting: { dot: 'bg-amber-500', pill: 'bg-amber-100 text-amber-800', bar: 'border-t-amber-500', label: 'Waiting' },
   done: { dot: 'bg-emerald-500', pill: 'bg-emerald-100 text-emerald-800', bar: 'border-t-emerald-500', label: 'Complete' },
 };
 
@@ -34,7 +33,6 @@ export const STATUS_STYLE: Record<TaskStatus, { dot: string; pill: string; bar: 
 const STATUS_SELECT: Record<TaskStatus, string> = {
   todo: 'bg-gray-100! text-gray-700!',
   in_progress: 'bg-sky-100! text-sky-800!',
-  waiting: 'bg-amber-100! text-amber-800!',
   done: 'bg-emerald-100! text-emerald-800!',
 };
 export const statusSelectClass = (status: TaskStatus) =>
@@ -208,9 +206,9 @@ export function TagChip({ tag, onClick, onRemove, active = false }: {
  * (`.tk-pill` in tasks.css; the Tailwind tone is the fallback outside Tasks),
  * anything else neutral.
  */
-/** The icon in a status pill: an empty ring to do, a dot in progress, a clock waiting, a tick done. */
+/** The icon in a status pill: an empty ring to do, a dot in progress, a tick done. */
 const STATUS_ICON: Record<TaskStatus, LucideIcon> = {
-  todo: CircleDashed, in_progress: CircleDot, waiting: Clock3, done: CircleCheck,
+  todo: CircleDashed, in_progress: CircleDot, done: CircleCheck,
 };
 
 export function GroupPill({ status, children }: { status?: TaskStatus; children: ReactNode }) {

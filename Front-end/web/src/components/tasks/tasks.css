@@ -36,7 +36,6 @@
   /* Solid status pills: white text on each is ≥5:1. */
   --tk-st-todo: #656f7d;           /* 5.1:1 */
   --tk-st-in_progress: #2563eb;    /* 5.2:1 */
-  --tk-st-waiting: #b45309;        /* 5.0:1 */
   --tk-st-done: #047857;           /* 5.5:1 */
   --tk-st-ink: #fff;
   /* "To do" is the quiet one: dark ink on a light chip. */
@@ -145,7 +144,6 @@
   box-shadow: 0 1px 0 rgba(20, 22, 40, 0.08);
 }
 .tk-theme .tk-pill[data-status='in_progress'] { background: var(--tk-st-in_progress); }
-.tk-theme .tk-pill[data-status='waiting'] { background: var(--tk-st-waiting); }
 .tk-theme .tk-pill[data-status='done'] { background: var(--tk-st-done); }
 /* "To do" is a quiet pill: a light chip with dark ink, the way an empty status reads. */
 .tk-theme .tk-pill[data-status='todo'] {
@@ -156,7 +154,6 @@
 /* The count beside a pill takes the status colour. */
 .tk-theme .tk-count { color: var(--tk-st-todo-ink); }
 .tk-theme .tk-count[data-status='in_progress'] { color: var(--tk-st-in_progress); }
-.tk-theme .tk-count[data-status='waiting'] { color: var(--tk-st-waiting); }
 .tk-theme .tk-count[data-status='done'] { color: var(--tk-st-done); }
 
 /* ── Edge to edge ─────────────────────────────────────────────────────── */

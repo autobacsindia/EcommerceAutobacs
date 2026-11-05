@@ -262,6 +262,9 @@ describe('Task comments: mentions, edit/delete, reactions, files, pop-ups', () =
       expect(got.headers['content-type']).toMatch('image/png');
       expect(got.headers['cache-control']).toMatch('private');
       expect((await outsider.session.raw(file.url)).status).toBe(404);
+      // A comment's file downloads under its own name too.
+      const saved = await head.session.raw(`${file.url}?download=1`);
+      expect(saved.headers['content-disposition']).toBe(`attachment; filename="photo.png"; filename*=UTF-8''photo.png`);
     });
 
     it('a file with no words can be posted; once its comment is deleted, the file is no longer served', async () => {
@@ -303,6 +306,23 @@ describe('Task comments: mentions, edit/delete, reactions, files, pop-ups', () =
       expect((await member.session.raw(file.url)).status).toBe(404);
       // Removing it again is the same result, not an error.
       expect((await head.session.del(`/staff/tasks/${taskId}/files/${file.url.split('/').pop()}`)).status).toBe(200);
+    });
+
+    it('a file opens to view by default, and ?download=1 saves it under the name it was uploaded with', async () => {
+      const added = await member.session.upload(`/staff/tasks/${taskId}/files`, { files: [png("Bill (Pune) ₹10482's.png")] });
+      const [file] = added.body.task.files;
+      const view = await head.session.raw(file.url);
+      expect(view.status).toBe(200);
+      expect(view.headers['content-disposition']).toMatch(/^inline; filename="/);
+      const saved = await head.session.raw(`${file.url}?download=1`);
+      expect(saved.status).toBe(200);
+      expect(saved.headers['content-disposition']).toMatch(/^attachment; filename="[\w.-]+"; filename\*=UTF-8''/);
+      // It downloads under the name the task shows, and no quote or bracket is left raw in the header.
+      const encoded = saved.headers['content-disposition'].split("filename*=UTF-8''")[1];
+      expect(decodeURIComponent(encoded)).toBe(file.name);
+      expect(encoded).not.toMatch(/['()]/);
+      // Downloading is reading: someone who cannot see the task still gets a 404.
+      expect((await outsider.session.raw(`${file.url}?download=1`)).status).toBe(404);
     });
 
     it('an outsider can neither add nor read task files', async () => {
