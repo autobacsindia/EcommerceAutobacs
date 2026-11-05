@@ -1,6 +1,6 @@
 import Redis from 'ioredis';
 import * as Sentry from '@sentry/node';
-import { redisTransportOptions } from '../utils/redisTransport.js';
+import { redisTransportOptions, redisRetryStrategy } from '../utils/redisTransport.js';
 
 let redisClient = null;
 let redisDownSince = null;
@@ -16,10 +16,8 @@ if (process.env.REDIS_URL) {
       lazyConnect: true,
       connectTimeout: 5000,
       commandTimeout: 2000,
-      retryStrategy: (times) => {
-        if (times > 3) return null;
-        return Math.min(times * 100, 3000);
-      },
+      // Never give up reconnecting — see redisRetryStrategy.
+      retryStrategy: redisRetryStrategy,
       ...redisTransportOptions(process.env.REDIS_URL),
     });
 

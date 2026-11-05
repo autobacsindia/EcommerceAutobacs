@@ -11,7 +11,7 @@
  */
 
 import Redis from 'ioredis';
-import { redisTransportOptions } from '../../utils/redisTransport.js';
+import { redisTransportOptions, redisRetryStrategy } from '../../utils/redisTransport.js';
 import * as Sentry from '@sentry/node';
 
 const RATE_LIMIT_REDIS_URL = process.env.QUEUE_REDIS_URL || process.env.REDIS_URL;
@@ -30,10 +30,8 @@ if (RATE_LIMIT_REDIS_URL) {
       lazyConnect: true,
       connectTimeout: 5000,
       commandTimeout: 2000,
-      retryStrategy: (times) => {
-        if (times > 3) return null;
-        return Math.min(times * 100, 3000);
-      },
+      // Never give up reconnecting — see redisRetryStrategy.
+      retryStrategy: redisRetryStrategy,
       ...redisTransportOptions(RATE_LIMIT_REDIS_URL),
     });
 
