@@ -114,17 +114,26 @@ router.put("/", protect, asyncHandler(async (req, res) => {
     actually changes (re-saving your own number never trips it), and guest
     records left by past checkouts don't count: they are usually this same
     person, from before they signed up.
+
+    Staff and admins are only blocked by another staff/admin login. Their own
+    old shop or test-order customer accounts routinely carry the same number,
+    and they already see every order in the panel, so a customer account with
+    that number gives them nothing they don't have.
   */
   if (update.phone && update.phone !== normalisePhone(req.user.phone)) {
+    const isTeam = req.user.role === 'staff' || req.user.role === 'admin';
     const taken = await User.exists({
       _id: { $ne: req.user.id },
       isGuest: { $ne: true },
+      ...(isTeam ? { role: { $in: ['staff', 'admin'] } } : {}),
       phone: { $in: phoneVariants(update.phone) },
     });
     if (taken) {
       return res.status(409).json({
         success: false,
-        message: 'This mobile number is already linked to another registered account. If it is yours, please contact support.',
+        message: isTeam
+          ? 'This mobile number is already on another team member\'s login. Please check the number, or ask an admin.'
+          : 'This mobile number is already linked to another registered account. If it is yours, please contact support.',
       });
     }
   }
