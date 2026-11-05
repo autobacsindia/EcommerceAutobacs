@@ -16,6 +16,7 @@ import { hasCancellations } from '@/lib/orderFulfilment';
 import { variantDisplayName } from '@/lib/orderLines';
 import type { ShipmentSummary } from '@/lib/orderFulfilment';
 import { PaymentStatusTag } from '@/components/orders/PaymentSummary';
+import { formatRupees } from '@/lib/formatRupees';
 
 interface Order {
   _id: string;
@@ -349,7 +350,7 @@ export default function OrdersPage() {
                           <span className="text-ink/70 font-display">
                             {variantDisplayName(product?.name, item.variantLabel, 'Unknown Product')} × {item.quantity}
                           </span>
-                          <span className="text-ink-muted font-display">₹{(item.price * item.quantity).toFixed(2)}</span>
+                          <span className="text-ink-muted font-display">{formatRupees((item.price * item.quantity), { exact: true })}</span>
                         </div>
                       );
                     })}
@@ -365,11 +366,11 @@ export default function OrdersPage() {
                   <div>
                     <span className="text-ink-muted font-display text-sm">Total Amount: </span>
                     <span className="text-2xl font-display font-bold text-gold">
-                      ₹{order.totalAmount.toFixed(2)}
+                      {formatRupees(order.totalAmount, { exact: true })}
                     </span>
                     {order.gatewayOffer?.discount ? (
                       <p className="text-sm text-ink-muted font-display">
-                        You paid ₹{order.gatewayOffer.amountPaid.toFixed(2)} · ₹{order.gatewayOffer.discount.toFixed(2)} Razorpay offer
+                        You paid {formatRupees(order.gatewayOffer.amountPaid, { exact: true })} · {formatRupees(order.gatewayOffer.discount, { exact: true })} Razorpay offer
                       </p>
                     ) : null}
                     <div className="mt-2"><PaymentStatusTag paymentStatus={order.paymentStatus} /></div>

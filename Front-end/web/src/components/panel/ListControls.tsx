@@ -10,7 +10,7 @@ import { Search, X } from 'lucide-react';
  * the pieces it needs; they look and behave the same everywhere.
  */
 
-export const listField = 'rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
+export const listField = 'max-w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 
 /** The search box. Typing is local; the list reloads once the person pauses (not on every key). */
 export function ListSearch({ value, onChange, placeholder, label }: {

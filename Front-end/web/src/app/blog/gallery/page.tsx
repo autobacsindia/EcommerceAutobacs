@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Image as ImageIcon, X, ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 interface GalleryItem {
   _id: string;
@@ -128,7 +129,8 @@ function GalleryContent() {
                 className="group aspect-square relative overflow-hidden rounded-lg bg-obsidian-raised focus:outline-none focus:ring-2 focus:ring-gold"
               >
                 <img
-                  src={item.thumbnail || item.url}
+                  {...r2ImgProps(item.thumbnail || item.url, '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw')}
+                  onError={(e) => { retryWithoutSrcSet(e.currentTarget); }}
                   alt={item.title}
                   loading="lazy"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

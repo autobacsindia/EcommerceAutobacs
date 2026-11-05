@@ -189,7 +189,7 @@ function PeopleLine({ people, empty }: { people: Person[]; empty: string }) {
   if (!people.length) return <span className="text-gray-400">{empty}</span>;
   return (
     <span className="inline-flex min-w-0 items-center gap-2">
-      <AvatarStack people={people} max={5} size="sm" />
+      <span className="shrink-0"><AvatarStack people={people} max={5} size="sm" /></span>
       <span className="min-w-0 truncate" title={people.map((p) => p.name).join(', ')}>{firstNames(people)}</span>
     </span>
   );
@@ -228,7 +228,7 @@ function AssigneesField({ task, choices, saving, onSave }: {
       trigger={(
         <span className="inline-flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 hover:bg-gray-50">
           <PeopleLine people={shown.map((id) => byId.get(id)).filter((p): p is Person => !!p)} empty="Nobody yet" />
-          <UserPlus aria-hidden className="h-3.5 w-3.5 text-gray-400" />
+          <UserPlus aria-hidden className="h-3.5 w-3.5 shrink-0 text-gray-400" />
         </span>
       )}
     />
@@ -278,7 +278,7 @@ function FollowersField({ task, choices, onGone }: { task: Task; choices: Assign
           trigger={(
             <span className="inline-flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 hover:bg-gray-50">
               <PeopleLine people={shown} empty="Nobody" />
-              <UserPlus aria-hidden className="h-3.5 w-3.5 text-gray-400" />
+              <UserPlus aria-hidden className="h-3.5 w-3.5 shrink-0 text-gray-400" />
             </span>
           )}
         />

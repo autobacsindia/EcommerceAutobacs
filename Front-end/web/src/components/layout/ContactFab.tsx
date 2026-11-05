@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Phone } from 'lucide-react';
+import { LifeBuoy, MessageCircle, Phone, X } from 'lucide-react';
 import { capture } from '@/lib/analytics';
 import { SITE_URL } from '@/lib/siteUrl';
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL, whatsappLink } from '@/lib/contactInfo';
@@ -36,20 +38,40 @@ function WhatsAppIcon({ className }: { className?: string }) {
  * On a product page the WhatsApp message carries the page link, so the sales
  * team knows which product the customer is asking about. On phones the stack
  * sits above the product page's sticky Add-to-cart bar instead of covering it.
+ *
+ * Phones get ONE "Contact us" button that opens WhatsApp, Call and Help. Four
+ * separate floating controls (this pair, the help tab and the chat launcher)
+ * covered product photos, titles and the empty-cart text on a 375px screen.
+ * Desktop keeps both buttons visible, as before.
  */
 export default function ContactFab() {
   const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  // A new page closes the menu — it must not follow the customer around.
+  useEffect(() => { setOpen(false); }, [pathname]);
   if (isSuppressed(pathname)) return null;
 
   const onProduct = isProductPage(pathname);
   const message = onProduct
     ? `Hi Autobacs India! I have a question about this product: ${SITE_URL}${pathname}`
     : 'Hi Autobacs India! I have a question.';
+  // Hidden on phones until the Contact button opens them; always shown from md up.
+  const item = open ? 'flex' : 'hidden md:flex';
+  const ring = 'shadow-xl shadow-black/30 ring-[3px] ring-white transition-transform hover:scale-105 focus:outline-none focus-visible:ring-[#6fdc9c]';
 
   return (
     <div
-      className={`fixed right-4 z-40 flex flex-col gap-3 md:bottom-28 ${onProduct ? 'bottom-44' : 'bottom-24'}`}
+      className={`fixed right-4 z-40 flex flex-col items-end gap-3 md:bottom-28 ${onProduct ? 'bottom-44' : 'bottom-24'}`}
     >
+      <Link
+        href="/contact"
+        aria-label="Help and contact page"
+        title="Help"
+        onClick={() => capture('contact_click', { channel: 'help', path: pathname })}
+        className={`${open ? 'flex' : 'hidden'} h-12 w-12 items-center justify-center rounded-full bg-[#121414] text-[#fff] md:hidden ${ring}`}
+      >
+        <LifeBuoy className="h-5 w-5" />
+      </Link>
       <a
         href={whatsappLink(message)}
         target="_blank"
@@ -57,7 +79,7 @@ export default function ContactFab() {
         aria-label="Chat with us on WhatsApp"
         title="Chat on WhatsApp"
         onClick={() => capture('contact_click', { channel: 'whatsapp', path: pathname })}
-        className="flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#25D366] text-[#fff] shadow-xl shadow-black/30 ring-[3px] ring-white transition-transform hover:scale-105 focus:outline-none focus-visible:ring-[#6fdc9c]"
+        className={`${item} h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#25D366] text-[#fff] ${ring}`}
       >
         <WhatsAppIcon className="h-6 w-6 md:h-7 md:w-7" />
       </a>
@@ -66,10 +88,19 @@ export default function ContactFab() {
         aria-label={`Call us on ${SUPPORT_PHONE_DISPLAY}`}
         title={`Call ${SUPPORT_PHONE_DISPLAY}`}
         onClick={() => capture('contact_click', { channel: 'call', path: pathname })}
-        className="flex h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] shadow-xl shadow-black/30 ring-[3px] ring-white transition-transform hover:scale-105 hover:bg-[#0b6b3c] focus:outline-none focus-visible:ring-[#6fdc9c]"
+        className={`${item} h-12 w-12 md:h-14 md:w-14 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] hover:bg-[#0b6b3c] ${ring}`}
       >
         <Phone className="h-5 w-5 md:h-6 md:w-6" />
       </a>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={open ? 'Close contact options' : 'Contact us'}
+        onClick={() => setOpen((v) => !v)}
+        className={`flex h-12 w-12 items-center justify-center rounded-full bg-[#0a5c33] text-[#fff] md:hidden ${ring}`}
+      >
+        {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
+      </button>
     </div>
   );
 }

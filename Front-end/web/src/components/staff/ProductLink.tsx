@@ -40,12 +40,15 @@ export default function ProductLink({
       onClick={(e) => e.stopPropagation()}
       title="Open on the website (new tab)"
       {...(decorative ? { tabIndex: -1, 'aria-hidden': true } : {})}
-      className={decorative ? `block shrink-0 ${className}` : `hover:underline hover:decoration-gray-400 underline-offset-2 ${className}`}
+      className={decorative ? `block shrink-0 ${className}` : `relative hover:underline hover:decoration-gray-400 underline-offset-2 ${className}`}
     >
       {children}
       {!decorative && (
         <>
           <ExternalLink aria-hidden="true" className="ml-1 inline h-3 w-3 shrink-0 align-[-1px] text-gray-400" />
+          {/* `relative` on the link keeps this absolutely-positioned label inside a
+              scrolling table; without it the label escaped and made the whole admin
+              page scroll sideways on phones (Reviews: 540px on a 375px screen). */}
           <span className="sr-only"> (opens on the website in a new tab)</span>
         </>
       )}

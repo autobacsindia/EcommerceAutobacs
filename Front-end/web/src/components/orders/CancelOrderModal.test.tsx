@@ -125,12 +125,12 @@ describe('CancelOrderModal — refund wording', () => {
 
   it('shows the order total on a full cancel of a paid order', () => {
     renderModal({ hasPayment: true });
-    expect(screen.getByText(/Refund amount: ₹1500\.00/)).toBeInTheDocument();
+    expect(screen.getByText(/Refund amount: ₹1,500/)).toBeInTheDocument();
   });
 
   it('does not promise the full total on a partial cancel', () => {
     renderModal({ hasPayment: true, scope: 'partial', cancellableUnits: 1 });
-    expect(screen.queryByText(/₹1500\.00/)).toBeNull();
+    expect(screen.queryByText(/₹1,500/)).toBeNull();
     expect(screen.getByText(/the price of the cancelled items/)).toBeInTheDocument();
   });
 });

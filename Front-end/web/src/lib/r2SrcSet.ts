@@ -52,3 +52,39 @@ export function r2SrcSet(
 
   return candidates.length > 0 ? candidates.join(', ') : undefined;
 }
+
+/**
+ * Props for a plain `<img>` showing a possibly-R2 image: `src` plus, when the
+ * URL is a rewritable R2 original, a `srcSet`/`sizes` pair so phones download
+ * a small variant instead of the original (blog covers: 2.1 MB → 76 KB at
+ * w640). For any other URL it is just `{ src }` — unchanged behaviour.
+ *
+ * Pair it with `retryWithoutSrcSet` in `onError`: a variant that is missing
+ * (an image uploaded before variants existed) then falls back to the original
+ * instead of showing a broken picture.
+ */
+export function r2ImgProps(
+  src: string,
+  sizes: string,
+  widths: readonly number[] = LADDER,
+): { src: string; srcSet?: string; sizes?: string } {
+  const srcSet = r2SrcSet(src, widths);
+  return srcSet ? { src, srcSet, sizes } : { src };
+}
+
+/**
+ * onError helper: if the failing <img> was choosing from a srcSet, drop the
+ * srcSet once and load the plain `src` (the original) instead. Returns true
+ * when it retried, so the caller should NOT treat this error as final; false
+ * when there was nothing to retry (then show the caller's own placeholder).
+ * Idempotent via a data flag, so a dead original can't loop.
+ */
+export function retryWithoutSrcSet(img: HTMLImageElement | null | undefined): boolean {
+  if (!img || img.dataset.r2Retried || !img.getAttribute('srcset')) return false;
+  img.dataset.r2Retried = 'true';
+  const original = img.getAttribute('src');
+  img.removeAttribute('srcset');
+  img.removeAttribute('sizes');
+  if (original) img.src = original;
+  return true;
+}

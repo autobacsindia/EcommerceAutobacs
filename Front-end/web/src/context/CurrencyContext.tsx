@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { formatRupees } from '@/lib/formatRupees';
 
 type Currency = 'INR' | 'USD';
 
@@ -65,14 +66,7 @@ export function CurrencyProvider({ children }: CurrencyProviderProps) {
     if (currency === 'INR') {
       // Paise are printed only when the value actually has them, so an exact-formatted
       // whole-rupee figure is indistinguishable from an ordinary one.
-      const hasPaise = Math.round(price * 100) % 100 !== 0;
-      const digits = options?.exact && hasPaise ? 2 : 0;
-      return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        maximumFractionDigits: digits,
-        minimumFractionDigits: digits,
-      }).format(price);
+      return formatRupees(price, { exact: options?.exact });
     } else {
       // Convert INR to USD
       const priceInUSD = price / exchangeRate;

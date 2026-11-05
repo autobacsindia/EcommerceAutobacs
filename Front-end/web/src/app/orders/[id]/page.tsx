@@ -43,6 +43,8 @@ import {
 import { GatewayOfferRows, PaymentStatusTag } from '@/components/orders/PaymentSummary';
 import type { GatewayOffer } from '@/components/orders/PaymentSummary';
 import type { ItemFulfilmentState } from '@/lib/orderFulfilment';
+import { formatRupees } from '@/lib/formatRupees';
+import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 interface OrderDetail {
   _id: string;
@@ -680,7 +682,7 @@ export default function OrderDetailPage() {
           <div className="bg-gold/10 border border-gold/30 rounded-lg p-6 mb-6">
             <h2 className="font-display font-bold text-gold uppercase tracking-wide mb-4">Refund Information</h2>
             <div className="grid md:grid-cols-3 gap-4">
-              <div><p className="text-xs text-gold/70 font-display mb-1">Refund Amount</p><p className="text-xl font-display font-bold text-gold">₹{(order.refundDetails.amount || 0).toFixed(2)}</p></div>
+              <div><p className="text-xs text-gold/70 font-display mb-1">Refund Amount</p><p className="text-xl font-display font-bold text-gold">{formatRupees((order.refundDetails.amount || 0), { exact: true })}</p></div>
               <div><p className="text-xs text-gold/70 font-display mb-1">Status</p><p className="text-ink/70 font-display font-bold">{order.refundDetails.status.toUpperCase()}</p></div>
               <div><p className="text-xs text-gold/70 font-display mb-1">Method</p><p className="text-ink/70 font-display font-bold">{(order.refundDetails.refundMethod || '').replace(/_/g, ' ').toUpperCase()}</p></div>
             </div>
@@ -798,15 +800,15 @@ export default function OrderDetailPage() {
             </div>
             <div className="font-display text-sm space-y-2">
               {/* Before GST, so Subtotal + Tax − Discount (+ Shipping) = Total. */}
-              <div className="flex justify-between"><span className="text-ink-muted">Subtotal (before GST)</span><span className="text-ink/70">{order.subtotalBeforeTax != null ? `₹${order.subtotalBeforeTax.toFixed(2)}` : '—'}</span></div>
-              <div className="flex justify-between"><span className="text-ink-muted">Shipping</span><span className="text-ink/70">{(order.shippingCost || 0) > 0 ? `₹${order.shippingCost.toFixed(2)}` : 'Extra — paid on delivery'}</span></div>
-              <div className="flex justify-between"><span className="text-ink-muted">Tax</span><span className="text-ink/70">₹{(order.tax || 0).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-ink-muted">Subtotal (before GST)</span><span className="text-ink/70">{order.subtotalBeforeTax != null ? formatRupees(order.subtotalBeforeTax, { exact: true }) : '—'}</span></div>
+              <div className="flex justify-between"><span className="text-ink-muted">Shipping</span><span className="text-ink/70">{(order.shippingCost || 0) > 0 ? formatRupees(order.shippingCost, { exact: true }) : 'Extra — paid on delivery'}</span></div>
+              <div className="flex justify-between"><span className="text-ink-muted">Tax</span><span className="text-ink/70">{formatRupees((order.tax || 0), { exact: true })}</span></div>
               {(order.discount || 0) > 0 && (
-                <div className="flex justify-between"><span className="text-ink-muted">{order.salesDiscount?.percent ? `Discount (${order.salesDiscount.percent}%)` : 'Discount'}</span><span className="text-green-700">-₹{(order.discount || 0).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-ink-muted">{order.salesDiscount?.percent ? `Discount (${order.salesDiscount.percent}%)` : 'Discount'}</span><span className="text-green-700">-{formatRupees((order.discount || 0), { exact: true })}</span></div>
               )}
               <div className="flex justify-between border-t border-hairline pt-3 mt-3">
                 <span className="font-display text-ink tracking-[-0.01em]">Total</span>
-                <span className="text-xl font-display font-bold text-gold">₹{(order.totalAmount || 0).toFixed(2)}</span>
+                <span className="text-xl font-display font-bold text-gold">{formatRupees((order.totalAmount || 0), { exact: true })}</span>
               </div>
               <GatewayOfferRows offer={order.gatewayOffer} />
             </div>
@@ -887,7 +889,7 @@ export default function OrderDetailPage() {
                         if (status === 'completed') {
                           return (
                             <span className="text-green-700 font-bold">
-                              ₹{(paise / 100).toFixed(2)} refunded
+                              {formatRupees((paise / 100), { exact: true })} refunded
                             </span>
                           );
                         }
@@ -896,14 +898,14 @@ export default function OrderDetailPage() {
                           // this and needs to know it has not arrived.
                           return (
                             <span className="text-red-600 font-bold">
-                              ₹{(paise / 100).toFixed(2)} refund failed — our team is on it
+                              {formatRupees((paise / 100), { exact: true })} refund failed — our team is on it
                             </span>
                           );
                         }
                         // pending / processing — genuinely on its way.
                         return (
                           <span className="text-gold font-bold">
-                            ₹{(paise / 100).toFixed(2)} refund on its way
+                            {formatRupees((paise / 100), { exact: true })} refund on its way
                           </span>
                         );
                       })()}
@@ -947,7 +949,7 @@ export default function OrderDetailPage() {
                 <div key={item._id || index} className="flex gap-4 border-b border-hairline pb-4 last:border-b-0">
                   <div className="w-20 h-20 bg-obsidian-raised border border-hairline rounded-lg overflow-hidden shrink-0">
                     {productImage ? (
-                      <img src={productImage} alt={productName} className="w-full h-full object-cover" />
+                      <img {...r2ImgProps(productImage, '96px')} onError={(e) => { retryWithoutSrcSet(e.currentTarget); }} alt={productName} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <Package className="h-8 w-8 text-ink-muted" />
@@ -973,7 +975,7 @@ export default function OrderDetailPage() {
                       <p className="text-[12px] uppercase tracking-[0.12em] text-gold mt-1 font-semibold">{item.variantLabel}</p>
                     )}
                     <p className="text-ink-muted font-display text-xs mt-1">Qty: {item.quantity}</p>
-                    <p className="text-ink-muted font-display text-xs">₹{(item.price || 0).toFixed(2)} each</p>
+                    <p className="text-ink-muted font-display text-xs">{formatRupees((item.price || 0), { exact: true })} each</p>
                     {/*
                       Cancelled units on this line.
 
@@ -1007,7 +1009,7 @@ export default function OrderDetailPage() {
                     )}
                   </div>
                   <div className="text-right flex flex-col items-end gap-2 shrink-0">
-                    <p className="font-display font-bold text-gold">₹{((item.price || 0) * (item.quantity || 0)).toFixed(2)}</p>
+                    <p className="font-display font-bold text-gold">{formatRupees(((item.price || 0) * (item.quantity || 0)), { exact: true })}</p>
                     {product?._id && (
                       <button onClick={() => handleBuyAgain(item)} disabled={addingToCart === item._id} className="flex items-center gap-1 text-[15px] text-gold hover:text-obsidian hover:bg-gold border border-gold/30 px-2 py-1 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-display font-bold">
                         {addingToCart === item._id ? <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> : <ShoppingCart className="h-3 w-3" />}
@@ -1058,7 +1060,7 @@ export default function OrderDetailPage() {
               <div key="spin-reward" className="flex gap-4 border-b border-hairline pb-4 last:border-b-0">
                 <div className="w-20 h-20 bg-gold/10 border border-gold/30 rounded-lg overflow-hidden shrink-0">
                   {line.image ? (
-                    <img src={line.image} alt={line.name ?? 'Free gift'} className="w-full h-full object-cover" />
+                    <img {...r2ImgProps(line.image, '96px')} onError={(e) => { retryWithoutSrcSet(e.currentTarget); }} alt={line.name ?? 'Free gift'} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-3xl">🎁</div>
                   )}

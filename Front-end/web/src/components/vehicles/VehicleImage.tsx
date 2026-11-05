@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { cloudinarySrcSet, CARD_WIDTHS } from '@/lib/cloudinarySrcSet';
+import { r2SrcSet, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 /**
  * A vehicle photo, or — when the vehicle has none, or it fails to load — a branded
@@ -30,7 +31,7 @@ export default function VehicleImage({
   useEffect(() => {
     setFailed(false);
     const img = ref.current;
-    if (img && img.complete && img.naturalWidth === 0) setFailed(true);
+    if (img && img.complete && img.naturalWidth === 0 && !retryWithoutSrcSet(img)) setFailed(true);
   }, [src]);
 
   if (!src || failed) {
@@ -59,12 +60,14 @@ export default function VehicleImage({
     <img
       ref={ref}
       src={src}
-      srcSet={cloudinarySrcSet(src, CARD_WIDTHS)}
+      // R2 first: the catalog lives there and cloudinarySrcSet() returns undefined
+      // for R2 URLs, so vehicle cards shipped 1.8 MB originals (w384 = 24 KB).
+      srcSet={r2SrcSet(src) ?? cloudinarySrcSet(src, CARD_WIDTHS)}
       sizes={sizes}
       alt={alt}
       loading="lazy"
       decoding="async"
-      onError={() => setFailed(true)}
+      onError={(e) => { if (!retryWithoutSrcSet(e.currentTarget)) setFailed(true); }}
       className={className}
     />
   );

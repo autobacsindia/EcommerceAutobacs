@@ -97,11 +97,11 @@ describe('checkout review step totals', () => {
     await screen.findByText('Review Your Cart');
 
     await waitFor(() => {
-      expect(screen.getByText('−₹7188.00')).toBeInTheDocument();
+      expect(screen.getByText('−₹7,188')).toBeInTheDocument();
     }, { timeout: 3000 });
 
-    expect(screen.getByText('₹82662.00')).toBeInTheDocument();   // server total
-    expect(screen.getByText('₹12609.15')).toBeInTheDocument();   // server tax, not total/1.18
+    expect(screen.getByText('₹82,662')).toBeInTheDocument();   // server total
+    expect(screen.getByText('₹12,609.15')).toBeInTheDocument();   // server tax, not total/1.18
 
     /*
       ₹89,850 legitimately appears twice — as the line price and as the pre-discount
@@ -109,8 +109,8 @@ describe('checkout review step totals', () => {
       own arithmetic used to print. Assert on the total row specifically.
     */
     const total = screen.getByText('Total').parentElement!;
-    expect(total).toHaveTextContent('₹82662.00');
-    expect(total).not.toHaveTextContent('₹89850.00');
+    expect(total).toHaveTextContent('₹82,662');
+    expect(total).not.toHaveTextContent('₹89,850');
   });
 
   /*
@@ -122,7 +122,7 @@ describe('checkout review step totals', () => {
     render(<CheckoutPage />);
     const labels = await screen.findAllByText('Subtotal (before GST)', {}, { timeout: 3000 });
     await waitFor(() => {
-      expect(labels[0].nextElementSibling).toHaveTextContent('₹77240.85');
+      expect(labels[0].nextElementSibling).toHaveTextContent('₹77,240.85');
     }, { timeout: 3000 });
   });
 

@@ -15,18 +15,18 @@ export default function WorkflowsPage() {
   ];
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold mb-8">Production Workflows & Process Visualization</h1>
+    <div className="p-4 sm:p-8">
+      <h1 className="mb-8 text-2xl font-bold sm:text-3xl">Production Workflows & Process Visualization</h1>
 
       {/* Workflow Tabs */}
-      <div className="mb-8 flex gap-4">
+      <div className="mb-8 flex flex-wrap gap-2 sm:gap-4">
         {workflows.map((workflow) => {
           const Icon = workflow.icon;
           return (
             <button
               key={workflow.id}
               onClick={() => setSelectedWorkflow(workflow.id)}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition ${
+              className={`flex items-center gap-2 px-4 py-2.5 sm:px-6 sm:py-3 rounded-lg font-medium transition ${
                 selectedWorkflow === workflow.id
                   ? 'bg-blue-600 text-white'
                   : 'bg-white text-gray-700 hover:bg-gray-50'
@@ -122,7 +122,7 @@ function ProductLifecycleFlow() {
           const Icon = stage.icon;
           return (
             <div key={index}>
-              <div className="flex items-start gap-6">
+              <div className="flex items-start gap-3 sm:gap-6">
                 {/* Stage Number & Icon */}
                 <div className="flex flex-col items-center">
                   <div className={`${stage.color} w-12 h-12 rounded-full flex items-center justify-center text-white font-bold`}>
@@ -134,11 +134,11 @@ function ProductLifecycleFlow() {
                 </div>
 
                 {/* Stage Content */}
-                <div className="flex-1 pb-8">
-                  <div className="bg-gray-50 rounded-lg p-6 border-l-4" style={{ borderColor: stage.color.replace('bg-', '#') }}>
-                    <div className="flex items-center gap-3 mb-3">
+                <div className="min-w-0 flex-1 pb-8">
+                  <div className="bg-gray-50 rounded-lg p-4 sm:p-6 border-l-4" style={{ borderColor: stage.color.replace('bg-', '#') }}>
+                    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
                       <Icon className="h-6 w-6 text-gray-700" />
-                      <h3 className="text-xl font-bold text-gray-900">{stage.title}</h3>
+                      <h3 className="min-w-0 break-words text-lg font-bold text-gray-900 sm:text-xl">{stage.title}</h3>
                       <span className={`${stage.color} text-white text-xs px-3 py-1 rounded-full`}>
                         {stage.status}
                       </span>
@@ -163,7 +163,7 @@ function ProductLifecycleFlow() {
       </div>
 
       {/* Key Metrics */}
-      <div className="mt-12 grid grid-cols-3 gap-6">
+      <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
         <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
           <div className="text-blue-600 text-sm font-medium mb-1">Average Time to Activate</div>
           <div className="text-3xl font-bold text-blue-900">2-3 days</div>
@@ -464,7 +464,7 @@ function InventoryManagementFlow() {
       <div className="mb-12">
         <h3 className="text-xl font-bold mb-4">Inventory Events & Automated Actions</h3>
         <div className="grid grid-cols-2 gap-6">
-          <div className="bg-red-50 rounded-lg p-6 border-l-4 border-red-500">
+          <div className="bg-red-50 rounded-lg p-4 sm:p-6 border-l-4 border-red-500">
             <h4 className="font-bold text-red-900 mb-3">Critical Events</h4>
             <div className="space-y-2">
               <div className="flex items-start gap-2">
@@ -491,7 +491,7 @@ function InventoryManagementFlow() {
             </div>
           </div>
 
-          <div className="bg-green-50 rounded-lg p-6 border-l-4 border-green-500">
+          <div className="bg-green-50 rounded-lg p-4 sm:p-6 border-l-4 border-green-500">
             <h4 className="font-bold text-green-900 mb-3">Optimization Actions</h4>
             <div className="space-y-2">
               <div className="flex items-start gap-2">

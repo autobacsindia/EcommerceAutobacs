@@ -9,7 +9,7 @@
  * "not applicable" at the call site, which is why it went unnoticed; these tests
  * assert the R2 branch produces real candidates.
  */
-import { r2SrcSet } from './r2SrcSet';
+import { r2SrcSet, r2ImgProps, retryWithoutSrcSet } from './r2SrcSet';
 import { LADDER } from './imageLoader';
 
 const R2 = 'https://img.autobacsindia.com';
@@ -66,5 +66,43 @@ describe('r2SrcSet', () => {
   test('yields no srcSet when the image host is not configured', () => {
     delete process.env.NEXT_PUBLIC_IMAGE_BASE_URL;
     expect(r2SrcSet(ORIGINAL)).toBeUndefined();
+  });
+});
+
+describe('r2ImgProps', () => {
+  test('R2 original → src stays the original, plus srcSet and sizes', () => {
+    const p = r2ImgProps(ORIGINAL, '96px');
+    expect(p.src).toBe(ORIGINAL);
+    expect(p.sizes).toBe('96px');
+    expect(p.srcSet).toContain('/variants/autobacs/site/roavion-primary-trimmed/w128 128w');
+  });
+
+  test('non-R2 URL → only src, no srcSet/sizes (unchanged behaviour)', () => {
+    expect(r2ImgProps('https://example.com/a.jpg', '96px')).toEqual({ src: 'https://example.com/a.jpg' });
+    expect(r2ImgProps('', '96px')).toEqual({ src: '' });
+  });
+});
+
+describe('retryWithoutSrcSet', () => {
+  const make = (srcset?: string) => {
+    const img = document.createElement('img');
+    img.setAttribute('src', ORIGINAL);
+    if (srcset) { img.setAttribute('srcset', srcset); img.setAttribute('sizes', '96px'); }
+    return img;
+  };
+
+  test('a missing variant falls back to the original exactly once', () => {
+    const img = make(r2SrcSet(ORIGINAL));
+    expect(retryWithoutSrcSet(img)).toBe(true);
+    expect(img.getAttribute('srcset')).toBeNull();
+    expect(img.getAttribute('sizes')).toBeNull();
+    expect(img.getAttribute('src')).toBe(ORIGINAL);
+    // The original also failing is final — no loop.
+    expect(retryWithoutSrcSet(img)).toBe(false);
+  });
+
+  test('no srcSet → nothing to retry, caller shows its placeholder', () => {
+    expect(retryWithoutSrcSet(make())).toBe(false);
+    expect(retryWithoutSrcSet(null)).toBe(false);
   });
 });

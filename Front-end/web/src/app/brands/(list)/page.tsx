@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Tag, RefreshCw } from 'lucide-react';
 import apiClient from '@/lib/api';
 import StorePageHeader from '@/components/store/StorePageHeader';
+import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 interface Brand {
   id?: string;
@@ -159,10 +160,10 @@ function BrandLogo({ name, logo }: { name: string; logo?: string }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={logo}
+      {...r2ImgProps(logo, '160px')}
       alt={name}
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={(e) => { if (!retryWithoutSrcSet(e.currentTarget)) setFailed(true); }}
       className="max-h-full max-w-full object-contain transition-transform duration-300 group-hover:scale-105"
     />
   );

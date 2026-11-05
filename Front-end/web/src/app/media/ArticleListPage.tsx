@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, Calendar, Eye, Tag, ChevronLeft, ChevronRight, Newspaper, BookOpen } from 'lucide-react';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { articleHref } from '@/lib/articleRoutes';
+import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 interface Article {
   _id: string;
@@ -249,7 +250,8 @@ function ArticleCard({ article, colorClasses }: { article: Article; colorClasses
     >
       {article.coverImage ? (
         <img
-          src={article.coverImage}
+          {...r2ImgProps(article.coverImage, '(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 400px')}
+          onError={(e) => { retryWithoutSrcSet(e.currentTarget); }}
           alt={article.title}
           loading="lazy"
           className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"

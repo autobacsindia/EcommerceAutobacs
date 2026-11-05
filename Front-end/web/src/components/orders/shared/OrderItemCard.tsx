@@ -1,6 +1,8 @@
 'use client';
 
 import { Package } from 'lucide-react';
+import { formatRupees } from '@/lib/formatRupees';
+import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 interface OrderItem {
   _id: string;
@@ -71,7 +73,8 @@ export default function OrderItemCard({
       <div className="w-20 h-20 bg-obsidian-raised rounded-lg overflow-hidden flex-shrink-0">
         {productImage ? (
           <img
-            src={productImage}
+            {...r2ImgProps(productImage, '80px')}
+            onError={(e) => { retryWithoutSrcSet(e.currentTarget); }}
             alt={productName}
             className="w-full h-full object-cover"
           />
@@ -86,7 +89,7 @@ export default function OrderItemCard({
       <div className="flex-1 min-w-0">
         <h4 className="font-semibold text-ink truncate">{productName}</h4>
         <p className="text-sm text-ink-muted mt-1">
-          Price: ₹{unitPrice.toFixed(2)} each
+          Price: {formatRupees(unitPrice, { exact: true })} each
         </p>
         
         {/* Quantity Display/Selector */}
@@ -135,11 +138,11 @@ export default function OrderItemCard({
       {/* Total Price */}
       <div className="text-right">
         <p className="font-bold text-lg text-ink">
-          ₹{(unitPrice * (mode === 'quantity' ? selectedQuantity : item.quantity)).toFixed(2)}
+          {formatRupees((unitPrice * (mode === 'quantity' ? selectedQuantity : item.quantity)), { exact: true })}
         </p>
         {mode === 'quantity' && (
           <p className="text-xs text-ink-muted mt-1">
-            {selectedQuantity} × ₹{unitPrice.toFixed(2)}
+            {selectedQuantity} × {formatRupees(unitPrice, { exact: true })}
           </p>
         )}
       </div>

@@ -6,6 +6,7 @@ import { Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { profileKeys } from '@/hooks/queries/keys';
+import { formatRupees } from '@/lib/formatRupees';
 
 interface LedgerEntry {
   _id: string;
@@ -102,7 +103,7 @@ export default function KarmaBadge() {
               <p className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Karma Points</p>
               <p className="text-xl font-display font-bold text-ink">{balance}</p>
             </div>
-            <p className="text-xs text-ink-muted font-display">≈ ₹{(balance * pointValue).toFixed(2)}</p>
+            <p className="text-xs text-ink-muted font-display">≈ {formatRupees((balance * pointValue), { exact: true })}</p>
           </div>
           {entries === undefined ? (
             <p className="text-ink-muted font-display text-sm">Loading…</p>

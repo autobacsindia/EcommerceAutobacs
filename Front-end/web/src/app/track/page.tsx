@@ -148,7 +148,7 @@ function TrackOrderPageInner() {
                       onKeyPress={handleKeyPress}
                       placeholder="Enter tracking number"
                       autoFocus
-                      className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent ${
+                      className={`min-w-0 flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-gold focus:border-transparent ${
                         validationError || error ? 'border-red-300' : 'border-hairline'
                       }`}
                       disabled={loading}
@@ -156,7 +156,7 @@ function TrackOrderPageInner() {
                     <button
                       onClick={() => handleTrackingSubmit()}
                       disabled={loading || !trackingNumber.trim()}
-                      className="px-6 py-3 bg-gold text-white font-medium rounded-lg hover:bg-gold disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2"
+                      className="shrink-0 px-4 sm:px-6 py-3 bg-gold text-white font-medium rounded-lg hover:bg-gold disabled:bg-obsidian-deep disabled:text-ink-muted disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2"
                       aria-label="Track order"
                     >
                       {loading ? 'Tracking...' : 'Track'}
