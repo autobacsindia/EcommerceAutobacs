@@ -131,3 +131,41 @@ it('every team page gets the hover menu (icon strip), not just Tasks', () => {
   }
   pathname = '/team';
 });
+
+/* ── Refunds: one Accounts menu item, two tabs (owner-approved 2026-11-05) ─── */
+
+const menuLabels = (team: string, isHead = false, canSell = false) => {
+  const { unmount } = render(
+    <TeamLayoutClient userName="Kim" team={team} teamLabel={team} isHead={isHead} canSell={canSell}>
+      <p>panel content</p>
+    </TeamLayoutClient>,
+  );
+  const links = Array.from(document.querySelectorAll('#panel-menu a'))
+    .map((a) => ({ href: a.getAttribute('href'), label: a.textContent?.trim() }))
+    // The panel title and Dashboard both point at /team; profile carries the name.
+    .filter((l) => !['/team', '/team/profile', '/team/password'].includes(l.href || ''));
+  unmount();
+  return links;
+};
+
+it('accounts gets one "Refunds" item plus "Returns", and no "Return refunds" or "Refund approvals"', () => {
+  pathname = '/team';
+  const links = menuLabels('accounts');
+  expect(links).toContainEqual({ href: '/team/refunds', label: 'Refunds' });
+  expect(links).toContainEqual({ href: '/team/returns', label: 'Returns' });
+  expect(links.map((l) => l.href)).not.toContain('/team/return-refunds');
+  expect(links.map((l) => l.label)).not.toEqual(expect.arrayContaining(['Return refunds']));
+  expect(links.map((l) => l.label)).not.toEqual(expect.arrayContaining(['Refund approvals']));
+  expect(links.filter((l) => l.href === '/team/refunds')).toHaveLength(1);
+});
+
+it('the other teams\' menus are exactly as before the Refunds change', () => {
+  pathname = '/team';
+  const labels = (team: string, isHead = false, canSell = false) => menuLabels(team, isHead, canSell).map((l) => l.label);
+  expect(labels('sales', false, true)).toEqual(['Team chat', 'Tasks', 'New quotation', 'Payment first', 'Quotations', 'My orders', 'Customer decisions', 'Returns', 'Bank transfers', 'Past sales', 'Payments', 'My team', 'Help']);
+  expect(labels('sales', true, true)).toEqual(['Team chat', 'Tasks', 'New quotation', 'Payment first', 'Quotations', 'Team orders', 'Customer decisions', 'Order processing', 'Delivered', 'Returns', 'Bank transfers', 'Past sales', 'Payments', 'My team', 'Help']);
+  expect(labels('sales', false, false)).toEqual(['Team chat', 'Tasks', 'Payments', 'My team', 'Help']);
+  expect(labels('procurement')).toEqual(['Team chat', 'Tasks', 'Orders', 'Order processing', 'Delivered', 'Returns', 'Payments', 'Suppliers', 'My team', 'Help']);
+  expect(labels('operations')).toEqual(['Team chat', 'Tasks', 'Deliveries', 'Order processing', 'Delivered', 'Returns', 'Payments', 'My team', 'Help']);
+  expect(labels('marketing')).toEqual(['Team chat', 'Tasks', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Leads', 'Consultations', 'Payments', 'My team', 'Help']);
+});

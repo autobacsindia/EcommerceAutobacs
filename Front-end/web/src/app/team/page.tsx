@@ -49,7 +49,7 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
       return [{ href: '/team/procurement', title: 'Orders', text: 'Check stock for each paid order, record the supplier, upload the supplier\'s photo when dispatched.', icon: PackageSearch }, PAID, DELIVERED];
     case 'accounts':
       return [
-        { href: '/team/refunds', title: 'Refund approvals', text: 'Approve refunds for out-of-stock items. An admin then pays them.', icon: Wallet },
+        { href: '/team/refunds', title: 'Refunds', text: 'Cancelled orders to approve, and returned items to pay back.', icon: Wallet },
         { href: '/team/bank-transfers', title: 'Bank transfers', text: 'A customer paid by bank transfer: check the bank, then confirm (the order is paid) or reject.', icon: Landmark },
         PAID, DELIVERED,
       ];
