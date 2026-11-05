@@ -133,6 +133,12 @@ const PaymentRequestSchema = new mongoose.Schema(
       default: null,
     },
 
+    // A supplier payment that is one part of a made-to-order deal (models/SupplierDeal.js):
+    // 'advance' (the first part), 'part', or 'balance' (the part that completes the
+    // agreed total). Worked out by the server from the deal, never sent by the client.
+    deal: { type: mongoose.Schema.Types.ObjectId, ref: 'SupplierDeal', default: null },
+    part: { type: String, enum: ['advance', 'part', 'balance', ''], default: '' },
+
     files: { type: [FileSchema], default: [] },
 
     // Filled when accounts records the payment.
@@ -177,6 +183,12 @@ PaymentRequestSchema.index({ updatedAt: -1 }, { name: 'payment_request_updated' 
 PaymentRequestSchema.index(
   { order: 1, status: 1 },
   { name: 'payment_request_order', partialFilterExpression: { order: { $type: 'objectId' } } }
+);
+
+// A supplier deal's parts (supplierDealService: paid / waiting / balance).
+PaymentRequestSchema.index(
+  { deal: 1, createdAt: 1 },
+  { name: 'payment_request_deal', partialFilterExpression: { deal: { $type: 'objectId' } } }
 );
 
 export default mongoose.models.PaymentRequest || mongoose.model('PaymentRequest', PaymentRequestSchema);

@@ -60,7 +60,50 @@ export type OrderPayment = {
   /** The viewer may still edit it (the requester or their team head while it waits for accounts; the admin until paid). */
   canEdit?: boolean;
   itemIds: string[]; itemNames: string[]; payee: string; paidAt: string | null; createdAt: string;
+  /** 'supplier' (for items) or 'expense' (linked to the order from its page). */
+  kind?: 'supplier' | 'expense';
+  categoryLabel?: string;
+  team?: string;
+  requestedByName?: string;
+  /** One part of a supplier deal: Advance / Part payment / Balance. */
+  dealId?: string | null;
+  part?: '' | 'advance' | 'part' | 'balance';
+  partLabel?: string;
 };
+
+/**
+ * A made-to-order item paid to its supplier in parts. Every number is worked out
+ * by the server from the deal's payments (balance due = agreed − paid); the page
+ * only shows them.
+ */
+export type SupplierDeal = {
+  id: string;
+  status: 'open' | 'cancelled';
+  itemIds: string[];
+  itemNames: string[];
+  supplierName: string;
+  agreedTotal: number;
+  paid: number;
+  /** Raised or approved, not yet paid. */
+  waiting: number;
+  balanceDue: number;
+  /** The most the next payment may be. */
+  leftToAsk: number;
+  fullyPaid: boolean;
+  /** 'YYYY-MM-DD' or ''. */
+  startDate: string;
+  completionDate: string;
+  createdByName: string;
+  createdAt: string;
+  payments: {
+    id: string; number: string; part: string; partLabel: string; amount: number;
+    status: PaymentStatus; statusLabel: string; createdAt: string; approvedAt: string | null; paidAt: string | null;
+  }[];
+  history: { at: string; byName: string; action: string; note: string }[];
+  can: { raise: boolean; edit: boolean; remove: boolean };
+};
+
+export type OrderPayments = { requests: OrderPayment[]; deals: SupplierDeal[] };
 
 /**
  * What a team may claim an expense for, and in which currencies. The server's

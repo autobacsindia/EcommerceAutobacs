@@ -112,7 +112,8 @@ describe('PUT /orders/:id/cancel on a partially shipped order', () => {
     expect(mockCancellationService.cancelLines).toHaveBeenCalledWith(
       'order-1',
       expect.objectContaining({ lines: [{ itemId: 'i2', quantity: 2 }] }),
-      { userId: 'u1' },
+      // byCustomer: a refusal (e.g. a supplier advance already paid) is worded for the customer.
+      { userId: 'u1', byCustomer: true },
     );
     // The whole-order transition must NOT also run.
     expect(mockOrderStatusService.updateOrderStatus).not.toHaveBeenCalled();

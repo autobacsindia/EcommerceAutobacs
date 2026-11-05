@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Loader2, Paperclip, QrCode } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import {
-  errorMessage, getExpenseOptions, getRequest, paymentKeys, postForm, type PaymentRequest,
+  errorMessage, getExpenseOptions, getRequest, paymentKeys, postForm, rupees, type PaymentRequest,
 } from './api';
 import FilePicker from './FilePicker';
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
@@ -26,6 +26,12 @@ export type SupplierContext = {
   closedBy: string;
   /** Lines that can be paid for now (in stock / ordered, not shipped). */
   lines: { itemId: string; name: string }[];
+  /**
+   * One part of a supplier deal (made to order, paid in parts). The server pays
+   * the deal's items and refuses an amount past the agreed total; these numbers
+   * only guide the person typing.
+   */
+  deal?: { id: string; agreedTotal: number; leftToAsk: number; paid: number };
 };
 
 /**
@@ -36,9 +42,12 @@ export type SupplierContext = {
 export default function PaymentRequestForm({
   supplier,
   sameAs,
+  orderLink,
   onDone,
   onCancel,
 }: {
+  /** An expense raised from an order's page: linked to that order, which then shows it. */
+  orderLink?: { orderId: string; orderNumber: string };
   /** Present for a supplier payment; absent for an expense. */
   supplier?: SupplierContext;
   /** The last supplier payment on this order: offers "Same supplier as …" to refill it. */
@@ -129,10 +138,12 @@ export default function PaymentRequestForm({
       : { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ...bankCodePayload(codeKind, payee[codeKind]), bankName: payee.bankName.trim(), phone: payee.phone.trim() }));
     if (supplier) {
       form.append('orderId', supplier.orderId);
-      form.append('itemIds', JSON.stringify(itemIds));
+      if (supplier.deal) form.append('dealId', supplier.deal.id);
+      else form.append('itemIds', JSON.stringify(itemIds));
       if (!picked && saveSupplier) form.append('saveSupplier', 'true');
     } else {
       form.append('category', chosen!.value);
+      if (orderLink) form.append('orderId', orderLink.orderId);
     }
     for (const f of bills) form.append('bill', f);
     for (const f of qr) form.append('qr', f);
@@ -152,13 +163,23 @@ export default function PaymentRequestForm({
   return (
     <form onSubmit={submit} className="space-y-4 rounded-xl border border-gray-200 bg-white p-5" aria-label={supplier ? 'Supplier payment request' : 'Expense request'}>
       <div>
-        <h3 className="text-base font-semibold text-gray-900">{supplier ? 'Request supplier payment' : 'New expense request'}</h3>
+        <h3 className="text-base font-semibold text-gray-900">{supplier?.deal ? 'Request next supplier payment' : supplier ? 'Request supplier payment' : orderLink ? `Expense for order ${orderLink.orderNumber}` : 'New expense request'}</h3>
         <p className="text-xs text-gray-500">Accounts approves it, then the admin pays it. You can follow it in Payments and in team chat.</p>
       </div>
 
       {supplier ? (
         <div className="rounded-lg bg-gray-50 p-3 text-sm">
           <p className="text-gray-700">Order <strong>{supplier.orderNumber}</strong> · {supplier.customer} · sale closed by {supplier.closedBy}</p>
+          {supplier.deal ? (
+            <div className="mt-2">
+              <p className={label}>For</p>
+              <p className="text-gray-800">{supplier.lines.map((l) => l.name).join(', ')}</p>
+              <p className="mt-1 text-gray-700">
+                Agreed with supplier <strong>{rupees(supplier.deal.agreedTotal)}</strong> · paid {rupees(supplier.deal.paid)} ·{' '}
+                <strong>up to {rupees(supplier.deal.leftToAsk)}</strong> can be asked for now.
+              </p>
+            </div>
+          ) : (
           <fieldset className="mt-2">
             <legend className={label}>For</legend>
             {supplier.lines.map((l) => (
@@ -169,6 +190,7 @@ export default function PaymentRequestForm({
               </label>
             ))}
           </fieldset>
+          )}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
@@ -214,7 +236,12 @@ export default function PaymentRequestForm({
         {!foreign && (
           <div>
             <label className={label} htmlFor="pr-amount">Amount (₹)</label>
-            <input id="pr-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="e.g. 1250" />
+            <input id="pr-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={supplier?.deal ? `e.g. 10000 (at most ${supplier.deal.leftToAsk})` : 'e.g. 1250'} />
+            {supplier?.deal && (
+              <button type="button" className="mt-1 text-xs font-medium text-blue-700 hover:underline" onClick={() => setAmount(String(supplier.deal!.leftToAsk))}>
+                Pay the full balance ({rupees(supplier.deal.leftToAsk)})
+              </button>
+            )}
           </div>
         )}
         {!picked && (

@@ -49,6 +49,8 @@ import {
   and, amountOf, amountRange, isObjectId, istRange, keysetPage, plainQuery, searchClauses, searchWords,
 } from '../utils/listQuery.js';
 import * as suppliers from './supplierService.js';
+import * as deals from './supplierDealService.js';
+import { toPaise } from '../utils/money.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
@@ -357,6 +359,10 @@ export function shape(r, viewer) {
       accountNumber: full ? r.payee?.accountNumber || '' : maskAccount(r.payee?.accountNumber),
     },
     order: r.order ? { id: idOf(r.order), number: r.orderNumber } : null,
+    // One part of a made-to-order deal (advance / part / balance), or ''.
+    dealId: r.deal ? idOf(r.deal) : null,
+    part: r.part || '',
+    partLabel: deals.PART_LABELS[r.part] || '',
     itemNames: r.itemNames || [],
     customer: r.customer || null,
     closedBy: r.closedBy || '',
@@ -401,12 +407,15 @@ export async function createExpense(actor, input, uploaded, req) {
   const { amount } = money;
   const payee = cleanPayee(input.payee);
 
+  const link = await expenseOrderLink(input.orderId);
+
   const { files, kinds } = filesFrom(uploaded);
   requireUpiOrQr(payee, kinds);
   const stored = await storeFiles(files, kinds, actor);
   const doc = await paymentRequestRepository.create({
     number: await nextNumber(),
     kind: 'expense',
+    ...link,
     status: 'submitted',
     team,
     requestedBy: actor._id,
@@ -415,9 +424,22 @@ export async function createExpense(actor, input, uploaded, req) {
     files: stored,
     history: [entry(actor, 'submitted')],
   });
-  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'expense', amount, team, currency: money.currency, foreignAmount: money.foreignAmount });
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'expense', amount, team, currency: money.currency, foreignAmount: money.foreignAmount, ...(link.order ? { orderId: idOf(link.order) } : {}) });
   await tellChat(doc, 'submitted', `🧾 New ${what(doc)} from ${doc.requestedByName} (${STAFF_TEAM_LABELS[team]}). Accounts: please approve or decline.`);
   return shape(doc, actor);
+}
+
+/**
+ * An expense raised from an order's page (a courier charge, packing, a site visit
+ * for that customer): linked to the order so the order shows it. Optional; the
+ * order must exist. The link is shown, never summed into the customer's money.
+ */
+async function expenseOrderLink(orderId) {
+  if (orderId == null || orderId === '') return {};
+  if (!/^[a-f0-9]{24}$/i.test(String(orderId))) throw fail('That order was not found.', 400);
+  const order = await orderRepository.findForWorkflow(orderId);
+  if (!order) throw fail('That order was not found.', 400);
+  return { order: order._id, orderNumber: orderNumber(order) };
 }
 
 /**
@@ -432,7 +454,11 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const view = order && workflowView(order);
   if (!view) throw fail('Order not found in the team workflow.', 404);
 
-  const wanted = [...new Set((Array.isArray(input.itemIds) ? input.itemIds : [input.itemIds]).filter(Boolean).map(String))];
+  // A part of a supplier deal pays for the deal's items — whatever the client sent.
+  const deal = input.dealId ? await deals.dealForPayment(input.dealId, order._id) : null;
+  const wanted = deal
+    ? deal.itemIds.map(idOf)
+    : [...new Set((Array.isArray(input.itemIds) ? input.itemIds : [input.itemIds]).filter(Boolean).map(String))];
   if (!wanted.length) throw fail('Choose the item(s) this payment is for.', 400);
   const payable = new Set(view.lines.filter((l) => l.stage === STAGE.TO_SHIP || l.stage === STAGE.WITH_SUPPLIER).map((l) => l.itemId));
   // An item still at its stock check can be paid for too: raising the payment IS
@@ -448,6 +474,11 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const open = await paymentRequestRepository.findOpenForOrder(order._id);
   const busy = open.find((r) => (r.itemIds || []).some((id) => wanted.includes(idOf(id))));
   if (busy) throw fail(`${busy.number} for this item is already ${STATUS_LABELS[busy.status].toLowerCase()}.`, 409);
+  if (!deal) {
+    // Paid in parts: every payment for the item goes through its deal, so the agreed total holds.
+    const [dealt] = (await deals.forOrder(actor, idOf(order._id))).filter((d) => d.itemIds.some((id) => wanted.includes(id)));
+    if (dealt) throw fail(`This item is paid in parts (agreed ${inr(dealt.agreedTotal)} with ${dealt.supplierName}) — raise the next part from its supplier deal.`, 409);
+  }
 
   const amount = cleanAmount(input.amount);
   const { payee, supplierId, bankNotice } = await supplierPayee(actor, input, req);
@@ -455,10 +486,22 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   const { files, kinds } = filesFrom(uploaded);
   requireUpiOrQr(payee, kinds);
 
-  const stored = await storeFiles(files, kinds, actor);
+  // The lock on the agreed total, taken last, just before saving, and given back if
+  // anything after it fails: no overpaying, even with two people at once.
+  const amountPaise = toPaise(amount);
+  const before = deal ? await deals.reserve(deal._id, amountPaise) : null;
+  let stored;
+  let doc;
+  try {
+    stored = await storeFiles(files, kinds, actor);
+  } catch (err) {
+    if (deal) await deals.release(deal._id, amountPaise, 'files failed');
+    throw err;
+  }
 
   const items = (order.items || []).filter((i) => wanted.includes(idOf(i._id)));
-  const doc = await paymentRequestRepository.create({
+  try {
+  doc = await paymentRequestRepository.create({
     number: await nextNumber(),
     kind: 'supplier',
     status: 'submitted',
@@ -481,10 +524,15 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     closedBy: order.salesUser ? `GTM lead: ${order.salesUser.name || 'GTM'}` : 'Website',
     supplier: supplierId,
     bankNotice,
+    ...(deal ? { deal: deal._id, part: deals.partFor(before, amountPaise) } : {}),
     files: stored,
-    history: [entry(actor, 'submitted')],
+    history: [entry(actor, 'submitted', deal ? `${deals.PART_LABELS[deals.partFor(before, amountPaise)]} of the agreed ${inr(before.agreedPaise / 100)}` : '')],
   });
-  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', amount, orderId: idOf(order._id) });
+  } catch (err) {
+    if (deal) await deals.release(deal._id, amountPaise, 'request failed to save');
+    throw err;
+  }
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', amount, orderId: idOf(order._id), ...(deal ? { dealId: idOf(deal._id), part: doc.part } : {}) });
   // The items now read "Payment Pending" until the admin pays (then "Ordered From
   // Supplier") or the request is cancelled / declined (then back where they were).
   // The request is the record; if marking a line fails, it is logged, and the
@@ -538,6 +586,8 @@ async function supplierPayee(actor, input, req) {
 
 /** After a supplier request is paid / cancelled / declined: move its order lines to match. Never throws. */
 async function followOnOrder(r, actor, outcome) {
+  // A declined / cancelled part gives its share of the agreed total back.
+  if (r.deal && outcome !== 'paid') await deals.release(r.deal, toPaise(r.amount), `${r.number} ${outcome}`);
   if (r.kind !== 'supplier' || !r.order) return;
   try {
     const wf = await import('./teamWorkflowService.js');
@@ -560,9 +610,22 @@ async function loadVisible(actor, id) {
 
 const MOVED = 'This request has just been updated by someone else. Refresh to see where it is now.';
 
+/**
+ * A deal part commits money to a made-to-order item; once the order is cancelled
+ * there is nothing to make. Refuse to approve or pay it — decline it instead.
+ */
+async function assertDealOrderLive(r) {
+  if (!r.deal || !r.order) return;
+  const order = await orderRepository.findForWorkflow(idOf(r.order));
+  const cancelled = !order || order.status === 'cancelled'
+    || (order.cancellations || []).some((c) => (c.lines || []).some((l) => (r.itemIds || []).map(idOf).includes(idOf(l.itemId))));
+  if (cancelled) throw fail('This order (or the item) was cancelled — decline this supplier payment instead.', 409);
+}
+
 export async function approve(actor, id, { note } = {}, req) {
-  await loadVisible(actor, id);   // 404s a request this person may not see
+  const r0 = await loadVisible(actor, id);   // 404s a request this person may not see
   if (!mayDecide(actor)) throw fail('Only accounts (or an admin) approves payments.', 403);
+  await assertDealOrderLive(r0);
   const r = await paymentRequestRepository.transition(id, ['submitted'],
     { status: 'approved', approvedBy: actor._id, approvedAt: new Date(), decisionNote: String(note || '').slice(0, 1000) },
     entry(actor, 'approved', note));
@@ -617,6 +680,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   const now = new Date();
   const txAt = cleanTransactionAt(transactionAt, now.getTime());
   const r0 = await loadVisible(actor, id);
+  if (r0.status === 'submitted') await assertDealOrderLive(r0);
   const isForeign = Boolean(foreignLine(r0));
   let priced = null;
   if (isForeign && filled(rupees)) {
@@ -726,12 +790,30 @@ export async function update(actor, id, input = {}, req) {
   const moneyChanged = amount !== r0.amount || fxChanged || payee.name !== r0.payee.name || payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x');
   const backToAccounts = r0.status !== 'submitted' && moneyChanged;
   const note = changes.join(', ') + (backToAccounts ? ' — back to accounts to approve again' : '');
+  // A deal part's new amount must still fit the agreed total: move the lock by the difference first.
+  const delta = r0.deal ? toPaise(amount) - toPaise(r0.amount) : 0;
+  let part = r0.part || '';
+  if (delta > 0) {
+    const before = await deals.reserve(r0.deal, delta);
+    part = deals.partFor({ ...before, reservedPaise: before.reservedPaise - toPaise(r0.amount) }, toPaise(amount));
+  } else if (delta < 0) {
+    // Named against the other parts: what is asked for besides this one.
+    const now = await deals.dealForPayment(r0.deal, r0.order);
+    part = deals.partFor({ ...now, reservedPaise: now.reservedPaise - toPaise(r0.amount) }, toPaise(amount));
+  }
   const r = await paymentRequestRepository.transitionInSession(id, [r0.status], { updatedAt: r0.updatedAt }, {
     amount, currency: money.currency, foreignAmount: money.foreignAmount, fxRate: money.fxRate,
     description, category, payee, supplier, bankNotice,
+    ...(r0.deal ? { part } : {}),
     ...(backToAccounts ? { status: 'submitted', approvedBy: null, approvedAt: null, decisionNote: '' } : {}),
   }, entry(actor, 'edited', note), {}, undefined);
-  if (!r) throw fail(MOVED, 409);
+  if (!r) {
+    // Lost the race: put the lock back where it was.
+    if (delta > 0) await deals.release(r0.deal, delta, `${r0.number} edit lost a race`);
+    throw fail(MOVED, 409);
+  }
+  // A smaller amount gives its share back only once the edit has landed.
+  if (delta < 0) await deals.release(r0.deal, -delta, `${r0.number} edited`);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'edited', fields: changes, backToAccounts });
   await tellChat(r, 'edited', `✏️ ${actor.name || 'Someone'} edited ${what(r)}: ${note}.`, { mentionAdmins: false, mentionRequester: idOf(r.requestedBy) !== idOf(actor._id) });
   return shape(r, actor);
@@ -942,8 +1024,11 @@ export async function forOrder(actor, orderId) {
   const rows = await paymentRequestRepository.findForOrder(orderId);
   return rows.map((r) => ({
     id: idOf(r._id), number: r.number, status: r.status, statusLabel: STATUS_LABELS[r.status],
+    kind: r.kind, categoryLabel: r.kind === 'expense' ? categoryLabel(r.category) : 'Supplier', team: r.team,
+    dealId: r.deal ? idOf(r.deal) : null, part: r.part || '', partLabel: deals.PART_LABELS[r.part] || '',
     amount: r.amount, itemIds: (r.itemIds || []).map(idOf), itemNames: r.itemNames || [],
     payee: r.payee?.name || '', paidAt: r.payment?.paidAt || null, createdAt: r.createdAt,
+    requestedByName: r.requestedByName || '',
     // Shown as an Edit button on the product line (the edit itself re-checks).
     canEdit: mayEdit(actor, r),
   }));
@@ -980,6 +1065,9 @@ export async function assertNoPendingSupplierPayment(orderId, itemIds) {
   if (pending) {
     throw fail(`Supplier payment ${pending.number} is ${STATUS_LABELS[pending.status].toLowerCase()} — ship once it is paid.`, 409);
   }
+  // Made to order and paid in parts: the balance too.
+  const unpaid = await deals.unpaidBalanceReason(orderId, itemIds);
+  if (unpaid) throw fail(unpaid, 409);
 }
 
 /** The open (not paid, cancelled or declined) supplier payment covering any of these items, if one exists. */

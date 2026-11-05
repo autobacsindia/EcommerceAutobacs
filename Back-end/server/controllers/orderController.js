@@ -855,7 +855,7 @@ export const cancelOrder = async (req, res) => {
           reason: reason || 'customer_request',
           notes,
         },
-        { userId: req.user.id },
+        { userId: req.user.id, byCustomer: !isAdmin },
       );
       if (!result.success) {
         return res.status(400).json({ success: false, message: result.message });

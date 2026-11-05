@@ -626,6 +626,21 @@ export async function ensureCriticalIndexes() {
     await db.collection('orderpins').createIndex({ user: 1, pinnedAt: -1 }, { name: 'order_pin_user_recent', background: true });
     console.log('✓ OrderPin indexes confirmed');
 
+    // Supplier deals (models/SupplierDeal.js) and their part payments — same names
+    // as the schemas. supplier_deal_open_item is what stops two open deals sharing
+    // an item when two people set one up at once; payment_request_deal serves the
+    // deal's paid / waiting / balance sums on every order panel load.
+    await db.collection('supplierdeals').createIndex({ order: 1, createdAt: -1 }, { name: 'supplier_deal_order', background: true });
+    await db.collection('supplierdeals').createIndex(
+      { order: 1, itemIds: 1 },
+      { unique: true, partialFilterExpression: { status: 'open' }, name: 'supplier_deal_open_item', background: true }
+    );
+    await db.collection('paymentrequests').createIndex(
+      { deal: 1, createdAt: 1 },
+      { partialFilterExpression: { deal: { $type: 'objectId' } }, name: 'payment_request_deal', background: true }
+    );
+    console.log('✓ SupplierDeal indexes confirmed');
+
     // Staff tasks (models/StaffTask.js, StaffTaskComment.js) — same names as the
     // schemas. Every list and the bell count is one range on one of these; the
     // clientId indexes are what make a double-clicked create or comment land once.

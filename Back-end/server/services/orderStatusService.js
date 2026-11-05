@@ -4,6 +4,7 @@
  */
 
 import mongoose from 'mongoose';
+import { advanceBlockReason } from './supplierAdvanceGuard.js';
 import { initialWorkflow } from '../utils/teamWorkflow.js';
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
@@ -220,6 +221,14 @@ class OrderStatusService {
       const validation = this.validateTransition(currentStatus, newStatus, isAdmin);
       if (!validation.valid) {
         throw new Error(validation.message);
+      }
+
+      // A made-to-order item with a supplier advance approved or paid cannot be
+      // cancelled (owner decision 2026-11-05) — for the customer or an admin.
+      if (newStatus === 'cancelled' && currentStatus !== 'awaiting_payment') {
+        const byCustomer = (cancelledBy || (isAdmin ? 'admin' : 'customer')) === 'customer';
+        const blocked = await advanceBlockReason(order._id, [], { customer: byCustomer });
+        if (blocked) return { success: false, blocked: 'supplier_advance', message: blocked };
       }
 
       // Validate reason if provided
