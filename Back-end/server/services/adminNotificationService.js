@@ -51,6 +51,35 @@ const adminRecipients = () => {
   return [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))].filter((to) => !isCareersMailbox(to));
 };
 
+/** Default inbox for new consultation requests (sales leads). */
+export const DEFAULT_CONSULTATION_RECIPIENT = 'sales@autobacsindia.com';
+
+/**
+ * Where "new consultation request" alerts go. Consultations are sales leads,
+ * so they go to the sales inbox, not the shared admin list that also gets
+ * order / payment / cancellation / review alerts.
+ *
+ *   CONSULTATION_NOTIFICATION_EMAILS=sales@autobacsindia.com,owner@autobacsindia.com
+ *
+ * Unset or blank → sales@autobacsindia.com. Same clean-up as adminRecipients
+ * (trim, lower-case de-dupe, careers mailbox removed). If nothing usable is left,
+ * fall back to the admin list so a lead is never silently dropped.
+ */
+const consultationRecipients = () => {
+  const raw = (process.env.CONSULTATION_NOTIFICATION_EMAILS || '').trim() || DEFAULT_CONSULTATION_RECIPIENT;
+  const seen = new Set();
+  const list = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((to) => {
+      const key = to.toLowerCase();
+      if (!to || seen.has(key) || isCareersMailbox(to)) return false;
+      seen.add(key);
+      return true;
+    });
+  return list.length ? list : adminRecipients();
+};
+
 /** Public site base, trailing slash trimmed (for admin/product deep-links). */
 const appUrl = () => (process.env.FRONTEND_URL || 'https://autobacsindia.com').replace(/\/$/, '');
 
@@ -219,7 +248,8 @@ export const emailAdminReviewAlert = async (reviewId) => {
 };
 
 /**
- * Notify the support inbox that a customer submitted a consultation request.
+ * Notify the sales inbox that a customer submitted a consultation request
+ * (see consultationRecipients).
  *
  * @param {string} consultationId
  * @returns {Promise<{status: 'sent'|'skipped-disabled'|'not-found'}>}
@@ -269,7 +299,7 @@ export const emailAdminConsultationAlert = async (consultationId) => {
 
   const html = renderEmail(subject, intro, htmlRows, 'Manage consultations', adminLink);
 
-  return sendToAdmins({ subject, text, html }, `consultation ${consultationId}`);
+  return sendToInboxes(consultationRecipients(), { subject, text, html }, `consultation ${consultationId}`);
 };
 
 /**

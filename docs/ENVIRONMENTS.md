@@ -92,6 +92,7 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 | `CLOUDINARY_*` | dev cloud / `dev/` folder | prod | don't pollute prod media |
 | `ZEPTOMAIL_SEND_MAIL_TOKEN` | token (+ `EMAIL_REDIRECT_TO`), or disabled | prod token | dev sends must not hit sender reputation or real customers |
 | `EMAIL_FROM_ADDRESS` / `EMAIL_FROM_NAME` / `EMAIL_WELCOME_FROM_*` | `noreply@` / `info@autobacsindia.com` | same | must be on the domain verified in ZeptoMail |
+| `CONSULTATION_NOTIFICATION_EMAILS` | unset (→ `sales@autobacsindia.com`) | unset, or the sales inbox(es) | where "new consultation request" alerts go; separate from `ADMIN_NOTIFICATION_EMAILS` (orders/payments/reviews), so changing one never moves the other |
 | `CAREERS_NOTIFICATION_EMAILS` / `CAREERS_FROM_EMAIL` | unset | the careers mailbox | the careers mailbox gets **employment email only** — job-application alerts go there, every store email skips it (`utils/careersMailbox.js`) |
 | `SENTRY_DSN` / `SENTRY_ENVIRONMENT` | unset / `development` | prod DSN / `production` | keep dev noise out of prod |
 | `SLACK_WEBHOOK_URL` | **unset locally** | prod webhook | dev 5xx must not page the team |
