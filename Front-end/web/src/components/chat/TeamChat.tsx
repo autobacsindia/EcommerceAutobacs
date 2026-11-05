@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ArrowLeft, ChevronDown, MessagesSquare } from 'lucide-react';
+import { ArrowLeft, CheckCheck, ChevronDown, MessagesSquare } from 'lucide-react';
 import ChatSidebar from './ChatSidebar';
 import { firstToOpen, homeList, listWhen, totalPeopleUnread } from './chatList';
 import { useSSE } from '@/hooks/useSSE';
@@ -643,9 +643,12 @@ export default function TeamChat() {
           {isLoading && (
             <ul className="space-y-3 px-3 py-2" aria-label="Loading conversations">
               {[0, 1, 2, 3, 4].map((i) => (
-                <li key={i} className="flex animate-pulse items-center gap-3">
-                  <span className="h-10 w-10 rounded-full bg-gray-200" />
-                  <span className="h-3 flex-1 rounded bg-gray-200" />
+                <li key={i} className="flex items-center gap-4">
+                  <span className="gc-shimmer h-10 w-10 shrink-0 rounded-full" />
+                  <span className="flex-1 space-y-2">
+                    <span className="gc-shimmer block h-3 w-2/5 rounded-full" />
+                    <span className="gc-shimmer block h-2.5 w-4/5 rounded-full" />
+                  </span>
                 </li>
               ))}
             </ul>
@@ -660,6 +663,9 @@ export default function TeamChat() {
           )}
           {!isLoading && show === 'unread' && !active.length && (
             <div className="px-4 py-10 text-center">
+              <span className="gc-hero mx-auto mb-3 grid h-16 w-16 place-items-center rounded-full" aria-hidden="true">
+                <CheckCheck className="h-7 w-7 text-blue-600" />
+              </span>
               <p className="text-[15px] font-medium text-gray-800">You’re all caught up</p>
               <p className="mt-1 text-sm text-gray-500">Nobody is waiting for a reply.</p>
               <button type="button" onClick={() => setShow('all')} className="mt-3 text-sm font-medium text-blue-700 hover:underline">Show all chats</button>
@@ -706,8 +712,10 @@ export default function TeamChat() {
         />
       ) : (
         <div className="gc-card gc-pane hidden flex-1 flex-col items-center justify-center gap-2 rounded-2xl px-6 text-center xl:flex">
-          <MessagesSquare className="h-8 w-8 text-gray-400" aria-hidden="true" />
-          <p className="text-base font-medium text-gray-800">Pick a chat to read it here</p>
+          <span className="gc-hero mb-2 grid h-24 w-24 place-items-center rounded-full" aria-hidden="true">
+            <MessagesSquare className="h-10 w-10 text-blue-600" strokeWidth={1.75} />
+          </span>
+          <p className="text-[18px] font-normal text-gray-900">Pick a chat to read it here</p>
           <p className="max-w-xs text-sm text-gray-500">Tip: press <Kbd>{mod}</Kbd> <Kbd>K</Kbd> to find any person or space by name.</p>
         </div>
       )}

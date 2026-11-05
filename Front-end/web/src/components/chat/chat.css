@@ -177,3 +177,89 @@
 @media (prefers-reduced-motion: reduce) {
   .gc-fold, .gc-caret, .gc-switch, .gc-switch > span, .gc-fab, .gc-nav-item, .gc-nav-head, .gc-icon-btn { transition: none; }
 }
+
+/* ---- Premium polish: tiles, dividers, tabs, composer, pop-ups, loading ---- */
+
+/* Space / team / group tiles: a soft tint with a deep ink of the same hue. A chat
+   between two teams is split corner to corner in both teams' colours. */
+.gc-tile { background: var(--t-bg); color: var(--t-ink); }
+.gc-tile[data-hue2] { background: linear-gradient(135deg, var(--t-bg) 50%, var(--t2-bg) 50%); }
+.gc-theme { 
+  --tile-blue: #d3e3fd;   --ink-blue: #0842a0;
+  --tile-green: #c4eed0;  --ink-green: #0d652d;
+  --tile-amber: #ffe3a3;  --ink-amber: #6d4600;
+  --tile-violet: #e9ddff; --ink-violet: #5b2bb5;
+  --tile-rose: #ffd8e4;   --ink-rose: #8c1d40;
+  --tile-teal: #c2ede6;   --ink-teal: #00574b;
+  --tile-slate: #e1e5ec;  --ink-slate: #444c57;
+}
+[data-theme='dark'] .gc-theme {
+  --tile-blue: #1c3a6e;   --ink-blue: #c2d7fb;
+  --tile-green: #143f25;  --ink-green: #a8e6bb;
+  --tile-amber: #4a3510;  --ink-amber: #ffd88a;
+  --tile-violet: #33255a; --ink-violet: #d6c5ff;
+  --tile-rose: #4d1f2e;   --ink-rose: #ffc2d5;
+  --tile-teal: #0e3d37;   --ink-teal: #9fe3d6;
+  --tile-slate: #2a2f37;  --ink-slate: #c8ced8;
+}
+.gc-tile[data-hue='blue']   { --t-bg: var(--tile-blue);   --t-ink: var(--ink-blue); }
+.gc-tile[data-hue='green']  { --t-bg: var(--tile-green);  --t-ink: var(--ink-green); }
+.gc-tile[data-hue='amber']  { --t-bg: var(--tile-amber);  --t-ink: var(--ink-amber); }
+.gc-tile[data-hue='violet'] { --t-bg: var(--tile-violet); --t-ink: var(--ink-violet); }
+.gc-tile[data-hue='rose']   { --t-bg: var(--tile-rose);   --t-ink: var(--ink-rose); }
+.gc-tile[data-hue='teal']   { --t-bg: var(--tile-teal);   --t-ink: var(--ink-teal); }
+.gc-tile[data-hue='slate']  { --t-bg: var(--tile-slate);  --t-ink: var(--ink-slate); }
+.gc-tile[data-hue2='blue']   { --t2-bg: var(--tile-blue); }
+.gc-tile[data-hue2='green']  { --t2-bg: var(--tile-green); }
+.gc-tile[data-hue2='amber']  { --t2-bg: var(--tile-amber); }
+.gc-tile[data-hue2='violet'] { --t2-bg: var(--tile-violet); }
+.gc-tile[data-hue2='rose']   { --t2-bg: var(--tile-rose); }
+.gc-tile[data-hue2='teal']   { --t2-bg: var(--tile-teal); }
+.gc-tile[data-hue2='slate']  { --t2-bg: var(--tile-slate); }
+/* On the open (blue) row the tile keeps its own colours. */
+.gc-nav-item[aria-current] .gc-tile { color: var(--t-ink); }
+
+/* The date between days: a small floating card. */
+.gc-day { background: var(--gc-card); box-shadow: var(--gc-card-shadow); }
+[data-theme='dark'] .gc-theme .gc-day { background: var(--gc-hover); }
+
+/* Conversation tabs: a rounded blue bar under the open one. */
+.gc-tab::after {
+  content: ''; position: absolute; left: 12px; right: 12px; bottom: 0; height: 3px;
+  border-radius: 3px 3px 0 0; background: var(--color-blue-600);
+  transform: scaleX(0); transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+.gc-tab[aria-selected='true']::after { transform: scaleX(1); }
+
+/* The message box: grey at rest; white and lifted while you type. */
+.gc-compose { transition: background-color 0.18s, box-shadow 0.18s; }
+.gc-compose:focus-within { background: var(--gc-card); box-shadow: 0 1px 3px rgba(60, 64, 67, 0.2), 0 4px 12px rgba(60, 64, 67, 0.12), inset 0 0 0 1px var(--color-blue-500); }
+[data-theme='dark'] .gc-theme .gc-compose:focus-within { box-shadow: inset 0 0 0 1px var(--color-blue-500); }
+.gc-send:not(:disabled) { box-shadow: 0 1px 2px rgba(11, 87, 208, 0.3); }
+
+/* The message's hover bar: a floating pill. */
+.gc-toolbar { background: var(--gc-card); box-shadow: var(--gc-fab-shadow); }
+
+/* Big round illustration behind an empty state. */
+.gc-hero { background: radial-gradient(circle at 30% 25%, var(--color-blue-50), var(--color-blue-100)); }
+
+/* Pop-ups: a softly blurred backdrop and a quick rise. */
+.gc-scrim { backdrop-filter: blur(2px); animation: gc-fade 0.16s ease-out; }
+.gc-sheet { animation: gc-rise 0.22s cubic-bezier(0.2, 0, 0, 1); }
+@keyframes gc-fade { from { opacity: 0; } }
+@keyframes gc-rise { from { opacity: 0; transform: translateY(12px) scale(0.98); } }
+
+/* Loading rows: a gentle sweep instead of a blink. */
+.gc-shimmer {
+  background: linear-gradient(90deg, var(--color-gray-200) 0%, var(--color-gray-100) 50%, var(--color-gray-200) 100%);
+  background-size: 200% 100%; animation: gc-sweep 1.3s ease-in-out infinite;
+}
+@keyframes gc-sweep { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+/* A conversation opening fades in, so switching chats feels smooth, not jumpy. */
+.gc-open { animation: gc-fade 0.18s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gc-scrim, .gc-sheet, .gc-shimmer, .gc-open { animation: none; }
+  .gc-tab::after, .gc-compose { transition: none; }
+}
