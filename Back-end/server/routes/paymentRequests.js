@@ -6,6 +6,7 @@ import {
   concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, uploadPaymentProof, handleAttachmentError,
 } from '../middleware/uploadMiddleware.js';
 import * as pr from '../services/paymentRequestService.js';
+import * as deals from '../services/supplierDealService.js';
 import { renderPaymentSlip } from '../services/paymentSlipService.js';
 
 /**
@@ -40,14 +41,14 @@ router.get('/expense-options', asyncHandler(async (req, res) => {
   res.json({ success: true, options: pr.expenseOptions(req.user, req.query) });
 }));
 
-// POST /payment-requests/expenses — multipart: team?, category, description, payee(JSON), bill, qr,
+// POST /payment-requests/expenses — multipart: team?, orderId? (link to an order), category, description, payee(JSON), bill, qr,
 //   and amount (rupees) — or currency + foreignAmount + fxRate for a foreign bill
 router.post('/expenses', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError, asyncHandler(async (req, res) => {
   const request = await pr.createExpense(req.user, { ...req.body, payee: json(req.body.payee, {}) }, req.files || {}, req);
   res.status(201).json({ success: true, request });
 }));
 
-// POST /payment-requests/supplier — multipart: orderId, itemIds(JSON), amount, description, payee(JSON), bill, qr
+// POST /payment-requests/supplier — multipart: orderId, itemIds(JSON) | dealId, amount, description, payee(JSON), bill, qr
 router.post('/supplier', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError, asyncHandler(async (req, res) => {
   const request = await pr.createSupplierRequest(req.user, {
     ...req.body, payee: json(req.body.payee, {}), itemIds: json(req.body.itemIds, req.body.itemIds),
@@ -55,9 +56,27 @@ router.post('/supplier', concurrentUploadGuard, attachmentSizeGuard, uploadPayme
   res.status(201).json({ success: true, request });
 }));
 
-// GET /payment-requests/order/:orderId — supplier requests for one order
+// GET /payment-requests/order/:orderId — one order's payments (supplier + linked expenses) and supplier deals
 router.get('/order/:orderId', asyncHandler(async (req, res) => {
-  res.json({ success: true, requests: await pr.forOrder(req.user, req.params.orderId) });
+  const [requests, supplierDeals] = await Promise.all([
+    pr.forOrder(req.user, req.params.orderId),
+    deals.forOrder(req.user, req.params.orderId),
+  ]);
+  res.json({ success: true, requests, deals: supplierDeals });
+}));
+
+// ── Supplier deals: made-to-order items paid in parts (services/supplierDealService.js) ──
+// POST /payment-requests/deals { orderId, itemIds, supplierName, agreedTotal, startDate?, completionDate?, note? }
+router.post('/deals', asyncHandler(async (req, res) => {
+  res.status(201).json({ success: true, deal: await deals.create(req.user, req.body, req) });
+}));
+// PUT /payment-requests/deals/:id { agreedTotal?, startDate?, completionDate?, note } — note (the reason) required
+router.put('/deals/:id', asyncHandler(async (req, res) => {
+  res.json({ success: true, deal: await deals.update(req.user, req.params.id, req.body, req) });
+}));
+// POST /payment-requests/deals/:id/remove { note? } — only while nothing is asked for on it
+router.post('/deals/:id/remove', asyncHandler(async (req, res) => {
+  res.json({ success: true, deal: await deals.remove(req.user, req.params.id, req.body, req) });
 }));
 
 // GET /payment-requests/to-pay/suppliers?q=&method=bank|upi&sort=oldest|total_desc|count_desc|name — one row per account

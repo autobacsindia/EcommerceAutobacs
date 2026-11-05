@@ -11,7 +11,7 @@ import CustomerBankCard from '@/components/staff/sales/CustomerBankCard';
 import { whatsappNumber } from '@/components/staff/sales/PaymentLinkCard';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import { STAGE_TONE, PARCEL_STEP_OPTIONS, type LineAction, type ParcelStepStatus, type WorkOrder } from './types';
-import LineSupplierPayment, { useOrderSupplierPayments } from '@/components/payments/OrderSupplierPayments';
+import LineSupplierPayment, { OrderOtherPayments, useOrderSupplierPayments } from '@/components/payments/OrderSupplierPayments';
 import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
 import ParcelEta from './ParcelEta';
@@ -245,7 +245,7 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                 {line.stage && <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STAGE_TONE[line.stage]}`}>{line.stageLabel}</span>}
               </div>
               {line.actions.length > 0 && lineButtons(line)}
-              <LineSupplierPayment order={o} line={line} requests={supplierPayments.data?.requests ?? []} />
+              <LineSupplierPayment order={o} line={line} requests={supplierPayments.data?.requests ?? []} deals={supplierPayments.data?.deals ?? []} />
               {noteFor?.itemId === line.itemId && (
                 <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); act.mutate({ path: `/lines/${line.itemId}/refund`, body: { approve: false, note: note.trim() } }); }}>
                   <textarea className={input} rows={2} required maxLength={500} placeholder="Why are you sending it back? (sales will see this)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Reason" />
@@ -259,6 +259,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
           ))}
         </ul>
       </div>
+
+      <OrderOtherPayments order={o} requests={supplierPayments.data?.requests ?? []} />
 
       {o.canDispatchOwn && (
         <OwnStockForm key={`own-${o.lines.map((l) => `${l.itemId}:${l.stage}`).join('|')}`} order={o} onShipped={done} onError={setError} />

@@ -35,6 +35,7 @@ import paymentRepository from '../repositories/paymentRepository.js';
 import { applyCancellationRefundSideEffectsOnce } from './cancellationRefundSideEffects.js';
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import orderStatusService from './orderStatusService.js';
+import { advanceBlockReason } from './supplierAdvanceGuard.js';
 import razorpayService from './razorpayService.js';
 import { refundableForLines, remainingRefundable } from './refundMathService.js';
 import {
@@ -103,7 +104,7 @@ class CancellationService {
    * @returns {Promise<{success: boolean, message: string, order?, cancellation?, refund?}>}
    */
   async cancelLines(orderId, payload = {}, opts = {}) {
-    const { userId, repairCancelledOrder = false } = opts;
+    const { userId, repairCancelledOrder = false, byCustomer = false } = opts;
 
     for (let attempt = 0; attempt < MAX_PUSH_ATTEMPTS; attempt += 1) {
       const order = await orderRepository.findById(orderId);
@@ -124,6 +125,14 @@ class CancellationService {
 
       const check = validateProposedCancellation(order, { lines });
       if (!check.valid) return { success: false, message: check.message };
+
+      // A made-to-order item with a supplier advance approved or paid cannot be
+      // cancelled (owner decision 2026-11-05). A repair records refunds for lines
+      // already cancelled, so it is not a new cancellation and is not blocked.
+      if (!repairing) {
+        const blocked = await advanceBlockReason(order._id, lines.map((l) => l.itemId), { customer: byCustomer });
+        if (blocked) return { success: false, blocked: 'supplier_advance', message: blocked };
+      }
 
       const willBeFull = this._isFullAfter(order, lines);
       const planned = this._plannedRefund(order, lines);

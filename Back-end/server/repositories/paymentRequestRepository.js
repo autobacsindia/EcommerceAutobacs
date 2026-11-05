@@ -46,14 +46,33 @@ const paymentRequestRepository = {
   },
 
   /** Supplier requests for an order that are not finished (served by payment_request_order). */
+  /** The parts raised on these supplier deals (served by payment_request_deal). */
+  // `$type` repeats the partial index's filter: without it the planner may not pick the index.
+  findForDeals: (dealIds) => PaymentRequest.find({ deal: { $in: dealIds, $type: 'objectId' } })
+    .select('number status amount part deal createdAt approvedAt payment.paidAt payment.transactionAt')
+    .lean(),
+
+  /** A live one-off (not part of a deal) supplier request covering any of these items. */
+  findLivePlainSupplier: (orderId, itemIds, statuses) => PaymentRequest.findOne({
+    order: { $eq: orderId, $type: 'objectId' }, kind: 'supplier', deal: null, status: { $in: statuses }, itemIds: { $in: itemIds },
+  }).select('number').lean(),
+
+  /** A deal part with money committed (approved / on hold / paid) on these items, or any item. */
+  findCommittedDealPart: (orderId, itemIds, statuses) => PaymentRequest.findOne({
+    order: { $eq: orderId, $type: 'objectId' }, deal: { $type: 'objectId' }, status: { $in: statuses },
+    ...(itemIds.length ? { itemIds: { $in: itemIds } } : {}),
+  }).select('number status').lean(),
+
+  // Supplier requests only: an expense linked to the order (a courier charge) never holds its items.
   findOpenForOrder: (orderId) => PaymentRequest.find({
-    order: orderId, status: { $in: ['submitted', 'approved', 'on_hold'] },
+    order: { $eq: orderId, $type: 'objectId' }, kind: 'supplier', status: { $in: ['submitted', 'approved', 'on_hold'] },
   }).select('number status itemIds').lean(),
 
   /** Every supplier request for an order, for the order panel. */
-  findForOrder: (orderId) => PaymentRequest.find({ order: orderId })
+  findForOrder: (orderId) => PaymentRequest.find({ order: { $eq: orderId, $type: 'objectId' } })
     .sort({ createdAt: -1 })
-    .select('number status amount itemIds itemNames payee.name payment createdAt requestedBy')
+    .limit(200) // bounded: one order's payments, far above any real order
+    .select('number status kind category team amount itemIds itemNames payee.name payment createdAt requestedBy requestedByName deal part')
     .lean(),
 
   /**
