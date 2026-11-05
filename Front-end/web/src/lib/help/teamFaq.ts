@@ -37,7 +37,7 @@ export const TEAM_HELP: TeamHelpSection[] = [
     items: [
       {
         question: 'What is on my menu?',
-        answer: 'Each team sees its own tools. Everyone has the Dashboard, Team chat, Tasks, Payments (for expenses), My team and this Help page. GTM sees the selling tools, procurement sees Orders and Suppliers, accounts sees Refund approvals and Bank transfers, and operations sees Deliveries.',
+        answer: 'Each team sees its own tools. Everyone has the Dashboard, Team chat, Tasks, Payments (for expenses), My team and this Help page. GTM sees the selling tools, procurement sees Orders and Suppliers, accounts sees Refunds and Bank transfers, and operations sees Deliveries.',
       },
       {
         question: 'How do I check something on the website?',
@@ -175,9 +175,9 @@ export const TEAM_HELP: TeamHelpSection[] = [
         links: [{ label: 'Payments', href: '/team/payments' }],
       },
       {
-        question: 'How do refund approvals work?',
-        answer: 'These are refunds the customer asked for. Once you approve, the item is cancelled and the refund goes out to the customer. If sending fails, you can retry it from the order.',
-        links: [{ label: 'Refund approvals', href: '/team/refunds' }],
+        question: 'How do refunds work?',
+        answer: 'Refunds has two tabs. Cancelled orders: the customer cancelled before delivery — once you approve, the item is cancelled and the refund goes out. If sending fails, you can retry it from the order. Returned items: the return passed inspection — send the customer the amount the system worked out, once.',
+        links: [{ label: 'Refunds', href: '/team/refunds' }],
       },
       {
         question: 'How do I confirm a bank transfer?',
