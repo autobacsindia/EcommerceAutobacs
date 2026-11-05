@@ -340,22 +340,44 @@ class CacheService {
 
   async revalidateWithLock(key, fn, ttl, tags) {
     const lockKey = `${key}:lock`;
-    const lockValue = await this.acquireLock(lockKey, 5000);
+    let lockValue;
+    try {
+      lockValue = await this.acquireLock(lockKey, 5000);
+    } catch (error) {
+      // Redis is away: skip the background refresh, the stale copy already served.
+      console.warn('[CacheService] Revalidation skipped, lock unavailable:', error.message);
+      return;
+    }
     if (!lockValue) return;
     try {
       const result = await fn();
       await this.set(key, result, ttl, tags);
     } finally {
-      await this.releaseLock(lockKey, lockValue);
+      await this.safeReleaseLock(lockKey, lockValue);
     }
   }
 
+  /**
+   * Cache-aside with a stampede lock. FAILS OPEN: if Redis cannot take the lock
+   * (connection closed, timeout), the value is computed from the source and
+   * returned uncached. Losing the cache may make a page slower, never make it
+   * fail — on 2026-11-05 the lock command's rejection escaped here and GET
+   * /products returned 500 for ~3 minutes during a Redis move.
+   */
   async getWithLock(key, fn, ttl, tags = [], lockTimeout = 5000) {
     const cached = await this.get(key);
     if (cached) return cached;
 
     const lockKey = `${key}:lock`;
-    const lockValue = await this.acquireLock(lockKey, lockTimeout);
+    let lockValue;
+    try {
+      lockValue = await this.acquireLock(lockKey, lockTimeout);
+    } catch (error) {
+      this.metrics.errors++;
+      this.metrics.fallbackToDB++;
+      console.warn('[CacheService] Lock unavailable, serving uncached:', error.message);
+      return fn();
+    }
 
     if (!lockValue) {
       this.metrics.stampedePrevented++;
@@ -373,7 +395,17 @@ class CacheService {
       return result;
     } finally {
       this.stopLockHeartbeat(lockKey);
+      await this.safeReleaseLock(lockKey, lockValue);
+    }
+  }
+
+  /** releaseLock that never throws: the lock has a PX expiry, so a release lost
+   *  to a Redis outage only means it expires on its own a few seconds later. */
+  async safeReleaseLock(lockKey, lockValue) {
+    try {
       await this.releaseLock(lockKey, lockValue);
+    } catch (error) {
+      console.warn('[CacheService] Lock release failed (expires on its own):', error.message);
     }
   }
 
@@ -460,12 +492,20 @@ class CacheService {
 
   async tryBecomeCleanupLeader() {
     if (redisClient) {
-      const acquired = await redisClient.set(
-        CACHE_CONFIG.CLEANUP_LEADER_KEY,
-        this.instanceId,
-        'EX', CACHE_CONFIG.CLEANUP_LEADER_TTL,
-        'NX'
-      );
+      let acquired;
+      try {
+        acquired = await redisClient.set(
+          CACHE_CONFIG.CLEANUP_LEADER_KEY,
+          this.instanceId,
+          'EX', CACHE_CONFIG.CLEANUP_LEADER_TTL,
+          'NX'
+        );
+      } catch (error) {
+        // Redis away: stay non-leader and retry on the next 15-minute tick. Called
+        // from the constructor and a timer, so a throw here was an unhandled rejection.
+        console.warn('[CacheService] Cleanup leader election skipped:', error.message);
+        return;
+      }
       this.isCleanupLeader = (acquired === 'OK');
       if (this.isCleanupLeader) {
         this.metrics.leaderElectionWins++;

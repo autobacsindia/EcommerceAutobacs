@@ -16,3 +16,26 @@ export function redisTransportOptions(url) {
     tls: String(url).startsWith('rediss://') ? {} : undefined,
   };
 }
+
+/** Longest wait between reconnect attempts. Short enough that a Redis that
+ *  comes back is picked up within seconds. */
+export const REDIS_RETRY_MAX_DELAY_MS = 2000;
+
+/**
+ * ioredis `retryStrategy` shared by the app's long-lived clients: back off, but
+ * NEVER give up.
+ *
+ * Returning null (the old `times > 3 ? null : …`) tells ioredis to stop for good.
+ * On 2026-11-05 a ~40 s Redis-Cache region move left both API replicas with a
+ * permanently closed connection — sessions, cache and guest checkout failing
+ * until the processes were restarted by hand. Commands still fail fast while
+ * Redis is away (maxRetriesPerRequest / commandTimeout on each client); only the
+ * background reconnect keeps going.
+ *
+ * @param {number} times  1-based count of consecutive failed attempts
+ * @returns {number} delay in ms before the next attempt
+ */
+export function redisRetryStrategy(times) {
+  const n = Math.max(1, Number(times) || 1);
+  return Math.min(n * 100, REDIS_RETRY_MAX_DELAY_MS);
+}
