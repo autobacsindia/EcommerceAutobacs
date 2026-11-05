@@ -427,6 +427,7 @@ function CartPageContent() {
                             <button
                               onClick={() => handleQuantityChange(item.product._id, item.quantity - 1, item.variantId)}
                               disabled={item.quantity <= 1 || updatingItem === uid}
+                              aria-label="Decrease quantity"
                               className="p-2 text-ink/70 hover:bg-obsidian-raised disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               <Minus className="h-4 w-4" />
@@ -437,6 +438,7 @@ function CartPageContent() {
                             <button
                               onClick={() => handleQuantityChange(item.product._id, item.quantity + 1, item.variantId)}
                               disabled={item.product.stock === 'out' || updatingItem === uid}
+                              aria-label="Increase quantity"
                               className="p-2 text-ink/70 hover:bg-obsidian-raised disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               <Plus className="h-4 w-4" />

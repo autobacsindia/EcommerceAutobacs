@@ -66,8 +66,8 @@ describe('LoginPage', () => {
   it('renders login form correctly', () => {
     render(<LoginPage />);
     
-    expect(screen.getByText('Sign in')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Email or mobile phone number/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Sign In' })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Email or username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Password/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Continue/i })).toBeInTheDocument();
     expect(screen.getByText('Google')).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('LoginPage', () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Enter your email')).toBeInTheDocument();
+      expect(screen.getByText('Enter your email or username')).toBeInTheDocument();
       expect(screen.getByText('Enter your password')).toBeInTheDocument();
     });
     
@@ -91,8 +91,10 @@ describe('LoginPage', () => {
   it('validates email format', async () => {
     render(<LoginPage />);
     
-    const emailInput = screen.getByLabelText(/Email or mobile phone number/i);
-    fireEvent.change(emailInput, { target: { value: 'invalid-email' } });
+    const emailInput = screen.getByLabelText(/Email or username/i);
+    // Must contain '@' to be judged as an email: without one it's a staff
+    // username, and 'invalid-email' is a perfectly valid username.
+    fireEvent.change(emailInput, { target: { value: 'invalid@email' } });
     
     const submitButton = screen.getByRole('button', { name: /Continue/i });
     fireEvent.click(submitButton);
@@ -107,7 +109,7 @@ describe('LoginPage', () => {
   it('calls login and redirects on success', async () => {
     render(<LoginPage />);
     
-    const emailInput = screen.getByLabelText(/Email or mobile phone number/i);
+    const emailInput = screen.getByLabelText(/Email or username/i);
     const passwordInput = screen.getByLabelText(/Password/i);
     
     fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
@@ -143,7 +145,7 @@ describe('LoginPage', () => {
 
     render(<LoginPage />);
     
-    const emailInput = screen.getByLabelText(/Email or mobile phone number/i);
+    const emailInput = screen.getByLabelText(/Email or username/i);
     fireEvent.change(emailInput, { target: { value: 'new@example.com' } });
     
     expect(mockClearError).toHaveBeenCalled();

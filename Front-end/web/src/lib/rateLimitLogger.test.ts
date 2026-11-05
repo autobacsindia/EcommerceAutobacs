@@ -24,13 +24,27 @@ describe('RateLimitLogger', () => {
         ipAddress
       });
       
-      // Check that it logs to console
-      expect(consoleLogSpy).toHaveBeenCalledWith('[Rate Limit Event]', expect.objectContaining({
-        endpoint,
-        retryAfter
-      }));
+      // Console output is suppressed under NODE_ENV=test (and production).
+      expect(consoleLogSpy).not.toHaveBeenCalled();
 
       consoleLogSpy.mockRestore();
+    });
+
+    it('logs to the console in development', () => {
+      const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
+      const env = process.env as Record<string, string | undefined>;
+      const originalEnv = env.NODE_ENV;
+      env.NODE_ENV = 'development';
+      try {
+        rateLimitLogger.logEvent('/api/test', 5);
+        expect(consoleLogSpy).toHaveBeenCalledWith('[Rate Limit Event]', expect.objectContaining({
+          endpoint: '/api/test',
+          retryAfter: 5
+        }));
+      } finally {
+        env.NODE_ENV = originalEnv;
+        consoleLogSpy.mockRestore();
+      }
     });
 
     it('should limit stored events to MAX_EVENTS', () => {

@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@/test-utils/renderWithProviders';
 import AdminProductsPage from './page';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
@@ -11,12 +12,16 @@ jest.mock('@/lib/api');
 jest.mock('next/navigation', () => ({
   // lib/usePanel reads the path to pick admin vs the marketing panel.
   usePathname: () => '/admin/products',
-  useRouter: () => ({ push: jest.fn() }),
-  useSearchParams: () => ({ get: () => null }),
+  // The page mirrors filters/page into the URL with router.replace.
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 // Mock icons
+// Spread the real set so child components (e.g. ExportProductsButton) still get
+// their icons; override only the ones these tests query by testid.
 jest.mock('lucide-react', () => ({
+  ...jest.requireActual('lucide-react'),
   Plus: () => <span data-testid="icon-plus">Plus</span>,
   Edit: () => <span data-testid="icon-edit">Edit</span>,
   Trash2: () => <span data-testid="icon-trash">Trash</span>,
@@ -51,7 +56,7 @@ describe('AdminProductsPage', () => {
   });
 
   it('renders products table after fetch', async () => {
-    render(<AdminProductsPage />);
+    renderWithProviders(<AdminProductsPage />);
 
     expect(screen.getByText('Loading...')).toBeInTheDocument();
 
@@ -67,7 +72,7 @@ describe('AdminProductsPage', () => {
 
   it('handles search input with debounce', async () => {
     jest.useFakeTimers();
-    render(<AdminProductsPage />);
+    renderWithProviders(<AdminProductsPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Product 1')).toBeInTheDocument();
@@ -91,10 +96,16 @@ describe('AdminProductsPage', () => {
   });
 
   it('handles delete product', async () => {
-    render(<AdminProductsPage />);
+    renderWithProviders(<AdminProductsPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Product 1')).toBeInTheDocument();
+    });
+
+    // After the delete the page invalidates and refetches the list; a real
+    // server would no longer return the deleted product.
+    (apiClient.get as jest.Mock).mockResolvedValue({
+      ...mockProducts, count: 1, total: 1, products: [mockProducts.products[1]],
     });
 
     const deleteButtons = screen.getAllByTestId('icon-trash');
@@ -118,7 +129,7 @@ describe('AdminProductsPage', () => {
     };
     (apiClient.get as jest.Mock).mockResolvedValue(pagedMock);
 
-    render(<AdminProductsPage />);
+    renderWithProviders(<AdminProductsPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Product 1')).toBeInTheDocument();

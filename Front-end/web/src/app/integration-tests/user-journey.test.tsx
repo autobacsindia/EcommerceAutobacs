@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { renderWithProviders } from '@/test-utils/renderWithProviders';
 import '@testing-library/jest-dom';
-import ProductsPageClient from '@/app/products/(list)/page';
+// page.tsx is now an async Server Component; the interactive listing is ProductsClient.
+import ProductsPageClient from '@/app/products/(list)/ProductsClient';
 import ProductDetailClientPage from '@/app/products/[slug]/ClientPage';
 import CartPage from '@/app/cart/page';
 import CheckoutPage from '@/app/checkout/page';
@@ -101,6 +103,19 @@ jest.mock('@/components/products/ProductGrid', () => {
     );
   };
 });
+
+// The redesigned listing renders StoreProductCard per product.
+jest.mock('@/components/products/redesign/StoreProductCard', () => {
+  return function MockStoreProductCard({ product }: any) {
+    const router = require('next/navigation').useRouter();
+    return (
+      <div data-testid={`product-card-${product._id}`} onClick={() => router.push(`/products/${product._id}`)}>
+        <h3>{product.name}</h3>
+      </div>
+    );
+  };
+});
+jest.mock('@/components/products/redesign/Filters', () => () => <div data-testid="product-filters">Filters</div>);
 
 jest.mock('@/components/products/ProductFilters', () => () => <div data-testid="product-filters">Filters</div>);
 jest.mock('@/components/vehicles/VehicleFilterSidebar', () => () => <div data-testid="vehicle-filter">Vehicle Filter</div>);
@@ -224,10 +239,17 @@ describe('User Journey Integration Flow', () => {
     
     // Setup API mocks
     (apiClient.get as jest.Mock).mockImplementation((url) => {
-      if (url.startsWith('/products/p1')) return Promise.resolve({ product: mockProductDetail });
+      if (url.startsWith('/products/p1') || url.startsWith('/products/slug/p1')) {
+        return Promise.resolve({ product: mockProductDetail });
+      }
       if (url.startsWith('/products')) return Promise.resolve({ 
         products: mockProducts, 
         pagination: { total: 2, pages: 1, currentPage: 1, count: 2 } 
+      });
+      // Server price check run before an order is placed.
+      if (url.startsWith('/cart/validate')) return Promise.resolve({
+        success: true, isValid: true, subtotal: 100, tax: 18, total: 118,
+        items: [{ productId: 'p1', quantity: 1, unitPrice: 100 }],
       });
       if (url.startsWith('/cart')) return Promise.resolve({ items: [], total: 0 });
       // Return empty addresses to trigger address form
@@ -242,6 +264,12 @@ describe('User Journey Integration Flow', () => {
       if (url.startsWith('/product-questions')) return Promise.resolve({ questions: [] });
       return Promise.resolve({});
     });
+
+    // Checkout's cart step POSTs a server stock check before it lets you continue.
+    (apiClient.post as jest.Mock).mockImplementation(async (url: string) =>
+      typeof url === 'string' && url.includes('validate')
+        ? { success: true, isValid: true, validationErrors: [] }
+        : { success: true, order: { _id: 'order_123', totalAmount: 118 } });
 
     (apiClient.put as jest.Mock).mockImplementation((url) => {
       if (url.startsWith('/profile')) return Promise.resolve({ success: true });
@@ -278,22 +306,22 @@ describe('User Journey Integration Flow', () => {
     // This is a simplified simulation of routing
     if (currentPath.startsWith('/products/p1')) {
       return { 
-        ...render(<ProductDetailClientPage slug="p1" />),
+        ...renderWithProviders(<ProductDetailClientPage slug="p1" />),
         mockPush: pushMock 
       };
     } else if (currentPath === '/cart') {
       return { 
-        ...render(<CartPage />),
+        ...renderWithProviders(<CartPage />),
         mockPush: pushMock 
       };
     } else if (currentPath === '/checkout') {
       return { 
-        ...render(<CheckoutPage />),
+        ...renderWithProviders(<CheckoutPage />),
         mockPush: pushMock 
       };
     } else {
       return { 
-        ...render(<ProductsPageClient />),
+        ...renderWithProviders(<ProductsPageClient />),
         mockPush: pushMock 
       };
     }
@@ -322,9 +350,7 @@ describe('User Journey Integration Flow', () => {
       expect(screen.getByText(/Description 1/i)).toBeInTheDocument();
     });
     
-    await waitFor(() => {
-      expect(screen.getByText('Add to Cart')).toBeInTheDocument();
-    });
+    expect(await screen.findByRole('button', { name: /add to cart/i })).toBeInTheDocument();
   });
 
   it('adds product to cart from detail page', async () => {
@@ -332,18 +358,15 @@ describe('User Journey Integration Flow', () => {
     currentPath = '/products/p1';
     renderApp();
 
-    await waitFor(() => {
-      const btn = screen.getByText('Add to Cart');
-      expect(btn).toBeInTheDocument();
-      expect(btn).not.toBeDisabled();
-    });
+    const btn = await screen.findByRole('button', { name: /add to cart/i });
+    expect(btn).not.toBeDisabled();
 
     // Action: Click Add to Cart
-    fireEvent.click(screen.getByText('Add to Cart'));
+    fireEvent.click(btn);
 
-    // Assert: Check Cart Context called
+    // Assert: product id, qty, display snapshot, and no variant (simple product).
     await waitFor(() => {
-      expect(mockAddToCart).toHaveBeenCalledWith('p1', 1);
+      expect(mockAddToCart).toHaveBeenCalledWith('p1', 1, expect.objectContaining({ name: 'Test Product 1' }), null);
     });
   });
 
@@ -364,7 +387,7 @@ describe('User Journey Integration Flow', () => {
   it('completes checkout flow successfully', async () => {
     // Setup: Start at Checkout Page
     currentPath = '/checkout';
-    renderApp();
+    const { mockPush } = renderApp();
 
     // Verify we are on Checkout page
     await screen.findByText(/Checkout/i);
@@ -398,8 +421,8 @@ describe('User Journey Integration Flow', () => {
     await screen.findByText(/Payment Method/i);
     await screen.findByTestId('payment-method-selector');
 
-    // Select COD
-    fireEvent.click(screen.getByText(/Cash on Delivery/i));
+    // Razorpay is the only payment method (COD was removed).
+    fireEvent.click(screen.getByText(/^Razorpay$/));
     
     // Click "Continue to Review"
     const reviewBtn = await screen.findByText(/Continue to Review/i);
@@ -409,13 +432,17 @@ describe('User Journey Integration Flow', () => {
     await screen.findByText(/Review Your Order/i);
     await screen.findByText(/Order Summary/i);
 
-    // Click "Place Order"
+    // Click "Place Order" — gated on accepting the Terms.
+    fireEvent.click(screen.getByRole('checkbox', { name: /accept the Terms and Conditions/i }));
     const placeOrderBtn = await screen.findByText(/Place Order/i);
     fireEvent.click(placeOrderBtn);
 
-    // 5. Success/Confirmation
-    // Wait for async order creation
-    await screen.findByText(/Order Placed Successfully/i);
-    await screen.findByText(/Order ID: #order_123/i);
+    // 5. Success: the order is created server-side, the (mocked) Razorpay window
+    // reports success, and the page hands off to the dedicated success page.
+    await waitFor(() => {
+      expect(apiClient.post).toHaveBeenCalledWith('/orders', expect.objectContaining({ paymentMethod: 'razorpay' }));
+      expect(mockPush).toHaveBeenCalledWith('/order/order_123/success');
+    });
+    expect(mockClearCart).toHaveBeenCalled();
   });
 });

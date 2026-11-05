@@ -1,9 +1,19 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@/test-utils/renderWithProviders';
 import CartPage from './page';
 import '@testing-library/jest-dom';
 
 // Mocks
+// Cart page boundaries (auth, server quote, campaign) — keep the test offline.
+jest.mock('@/context/AuthContext', () => require('@/test-utils/cartPageMocks').authGuestMock);
+jest.mock('@/hooks/useCheckoutQuote', () => require('@/test-utils/cartPageMocks').checkoutQuoteIdleMock);
+jest.mock('@/hooks/queries/useCampaign', () => require('@/test-utils/cartPageMocks').campaignNoneMock);
+jest.mock('@/lib/api', () => ({
+  __esModule: true,
+  default: { get: jest.fn(() => Promise.resolve({ success: true, coupons: [] })), post: jest.fn() },
+}));
+
 jest.mock('next/link', () => {
   return ({ children, href }: { children: React.ReactNode; href: string }) => {
     return <a href={href}>{children}</a>;
@@ -11,6 +21,7 @@ jest.mock('next/link', () => {
 });
 
 jest.mock('lucide-react', () => ({
+  ...jest.requireActual('lucide-react'),
   Trash2: () => <span data-testid="icon-trash">Trash</span>,
   Plus: () => <span data-testid="icon-plus">Plus</span>,
   Minus: () => <span data-testid="icon-minus">Minus</span>,
@@ -70,14 +81,14 @@ describe('CartPage Component', () => {
   });
 
   it('renders cart items correctly', () => {
-    render(<CartPage />);
+    renderWithProviders(<CartPage />);
     expect(screen.getByText('Test Product')).toBeInTheDocument();
     expect(screen.getByText(/₹100/)).toBeInTheDocument();
     // Assuming quantity input or display is present
   });
 
   it('handles remove item', async () => {
-    render(<CartPage />);
+    renderWithProviders(<CartPage />);
     const removeIcon = screen.getByTestId('icon-trash');
     const removeButton = removeIcon.closest('button');
     expect(removeButton).toBeInTheDocument();
@@ -86,13 +97,14 @@ describe('CartPage Component', () => {
       fireEvent.click(removeButton);
       expect(global.confirm).toHaveBeenCalled();
       await waitFor(() => {
-        expect(mockRemoveFromCart).toHaveBeenCalledWith('1');
+        // Second arg is the variant id (undefined for a simple product).
+        expect(mockRemoveFromCart).toHaveBeenCalledWith('1', undefined);
       });
     }
   });
 
   it('handles update quantity', async () => {
-    render(<CartPage />);
+    renderWithProviders(<CartPage />);
     const plusIcon = screen.getByTestId('icon-plus');
     const plusButton = plusIcon.closest('button');
     expect(plusButton).toBeInTheDocument();
@@ -100,7 +112,7 @@ describe('CartPage Component', () => {
     if (plusButton) {
       fireEvent.click(plusButton);
       await waitFor(() => {
-        expect(mockUpdateQuantity).toHaveBeenCalledWith('1', 3);
+        expect(mockUpdateQuantity).toHaveBeenCalledWith('1', 3, undefined);
       });
     }
 
@@ -111,13 +123,13 @@ describe('CartPage Component', () => {
     if (minusButton) {
       fireEvent.click(minusButton);
       await waitFor(() => {
-        expect(mockUpdateQuantity).toHaveBeenCalledWith('1', 1);
+        expect(mockUpdateQuantity).toHaveBeenCalledWith('1', 1, undefined);
       });
     }
   });
 
   it('handles clear cart', async () => {
-    render(<CartPage />);
+    renderWithProviders(<CartPage />);
     const clearButton = screen.getByText(/clear cart/i); // Adjust text if needed
     fireEvent.click(clearButton);
     expect(global.confirm).toHaveBeenCalled();

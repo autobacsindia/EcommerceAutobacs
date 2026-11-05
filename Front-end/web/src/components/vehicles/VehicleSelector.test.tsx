@@ -1,4 +1,5 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { renderWithProviders } from '@/test-utils/renderWithProviders';
 import VehicleSelector from './VehicleSelector';
 import apiClient from '@/lib/api';
 
@@ -29,12 +30,12 @@ describe('VehicleSelector Component', () => {
   it('renders loading skeleton initially', () => {
     // Delay resolution to check loading state
     (apiClient.get as jest.Mock).mockReturnValue(new Promise(() => {}));
-    render(<VehicleSelector onVehicleSelect={mockOnVehicleSelect} />);
+    renderWithProviders(<VehicleSelector onVehicleSelect={mockOnVehicleSelect} />);
     expect(screen.getByTestId('vehicle-skeleton')).toBeInTheDocument();
   });
 
   it('fetches and renders makes on mount', async () => {
-    render(<VehicleSelector onVehicleSelect={mockOnVehicleSelect} />);
+    renderWithProviders(<VehicleSelector onVehicleSelect={mockOnVehicleSelect} />);
 
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: /make/i })).toBeInTheDocument();
@@ -51,7 +52,7 @@ describe('VehicleSelector Component', () => {
   });
 
   it('fetches models when a make is selected', async () => {
-    render(<VehicleSelector onVehicleSelect={mockOnVehicleSelect} />);
+    renderWithProviders(<VehicleSelector onVehicleSelect={mockOnVehicleSelect} />);
 
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: /make/i })).toBeInTheDocument();
@@ -75,7 +76,7 @@ describe('VehicleSelector Component', () => {
   });
 
   it('calls onVehicleSelect when both make and model are selected', async () => {
-    render(<VehicleSelector onVehicleSelect={mockOnVehicleSelect} />);
+    renderWithProviders(<VehicleSelector onVehicleSelect={mockOnVehicleSelect} />);
 
     // Select Make
     await waitFor(() => {
@@ -98,7 +99,7 @@ describe('VehicleSelector Component', () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     (apiClient.get as jest.Mock).mockRejectedValue(new Error('API Error'));
 
-    render(<VehicleSelector onVehicleSelect={mockOnVehicleSelect} />);
+    renderWithProviders(<VehicleSelector onVehicleSelect={mockOnVehicleSelect} />);
 
     await waitFor(() => {
       expect(screen.getByText('Failed to load vehicle makes')).toBeInTheDocument();

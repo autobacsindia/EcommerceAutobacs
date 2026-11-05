@@ -54,13 +54,8 @@ describe('AccessibleErrorBoundary - Accessibility', () => {
       throw new Error('Test error');
     };
 
-    render(
-      <AccessibleErrorBoundary feature="test">
-        <TestComponent />
-      </AccessibleErrorBoundary>
-    );
-
-    // Button should be accessible
+    // a11yTests.button renders the tree itself; a second render here would
+    // put two retry buttons in the document and make getByRole ambiguous.
     await a11yTests.button(
       <AccessibleErrorBoundary feature="test">
         <TestComponent />
@@ -124,8 +119,12 @@ describe('Keyboard Navigation', () => {
   });
 
   test('should support Enter key for retry', async () => {
+    // Throws on first render only, so the retry has something healthy to
+    // re-render. A child that always throws would just re-show the fallback.
+    let shouldThrow = true;
     const TestComponent = () => {
-      throw new Error('Test error');
+      if (shouldThrow) throw new Error('Test error');
+      return <p>Recovered</p>;
     };
 
     const { container, getByRole } = render(
@@ -133,6 +132,7 @@ describe('Keyboard Navigation', () => {
         <TestComponent />
       </AccessibleErrorBoundary>
     );
+    shouldThrow = false;
 
     // Get the retry button
     const retryButton = getByRole('button', { name: 'Try again' });
@@ -145,11 +145,16 @@ describe('Keyboard Navigation', () => {
     // Error boundary should have reset (alert should be gone)
     const alert = container.querySelector('[role="alert"]');
     expect(alert).toBeNull();
+    expect(container).toHaveTextContent('Recovered');
   });
 
   test('should support Space key for retry', async () => {
+    // Throws on first render only, so the retry has something healthy to
+    // re-render. A child that always throws would just re-show the fallback.
+    let shouldThrow = true;
     const TestComponent = () => {
-      throw new Error('Test error');
+      if (shouldThrow) throw new Error('Test error');
+      return <p>Recovered</p>;
     };
 
     const { container, getByRole } = render(
@@ -157,6 +162,7 @@ describe('Keyboard Navigation', () => {
         <TestComponent />
       </AccessibleErrorBoundary>
     );
+    shouldThrow = false;
 
     // Get the retry button
     const retryButton = getByRole('button', { name: 'Try again' });

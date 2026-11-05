@@ -8,6 +8,8 @@ import { useRouter } from 'next/navigation';
 // Mock dependencies
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
+  // The page reads ?redirect=, ?reason= and ?offer= from the URL.
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 jest.mock('@/context/AuthContext', () => ({
@@ -52,7 +54,7 @@ describe('LoginPage Integration', () => {
     
     await waitFor(() => {
       // Check for validation messages - exact text might vary, checking for content
-      // Based on code: errors.email = 'Enter your email'
+      // Based on code: errors.email = 'Enter your email or username'
       // errors.password = 'Enter your password'
       expect(screen.getByText(/enter your email/i)).toBeInTheDocument();
       expect(screen.getByText(/enter your password/i)).toBeInTheDocument();
@@ -64,7 +66,8 @@ describe('LoginPage Integration', () => {
   it('validates email format', async () => {
     render(<LoginPage />);
     
-    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'invalid-email' } });
+    // Needs an '@' to be judged as an email; without one it's a valid staff username.
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'invalid@email' } });
     fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'password123' } });
     
     fireEvent.click(screen.getByRole('button', { name: /continue/i }));
