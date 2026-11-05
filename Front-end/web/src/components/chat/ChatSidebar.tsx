@@ -11,7 +11,7 @@
  * storage can be missing, so every read and write is guarded).
  */
 import { useEffect, useState } from 'react';
-import { AtSign, ChevronDown, ChevronsUpDown, House, Keyboard, MessageSquarePlus, MessagesSquare, Plus, Search, Star } from 'lucide-react';
+import { AtSign, ChevronsUpDown, Play, House, Keyboard, MessageSquarePlus, MessagesSquare, Plus, Search, Star } from 'lucide-react';
 import { notifyOf, type ChatChannel } from '@/hooks/queries/useTeamChat';
 import { ChannelIcon, OnlineDot } from './chatUi';
 import { channelTitle } from './QuickSwitcher';
@@ -125,7 +125,10 @@ export default function ChatSidebar({
             title={opts.hint}
             className="gc-nav-head flex h-8 min-w-0 flex-1 items-center gap-1 rounded-full pl-1.5 pr-3 text-left text-sm font-medium text-gray-900"
           >
-            <ChevronDown className={`gc-caret h-4 w-4 shrink-0 text-gray-600 ${open ? '' : '-rotate-90'}`} aria-hidden="true" />
+            {/* A small solid triangle, as Google's: ▸ folded, ▾ open. */}
+            <span className="grid h-5 w-5 shrink-0 place-items-center" aria-hidden="true">
+              <Play className={`gc-caret h-2 w-2 fill-current text-gray-700 ${open ? 'rotate-90' : ''}`} />
+            </span>
             <span className="min-w-0 flex-1 truncate">{label}</span>
             {!!opts.count && (
               <span className="shrink-0 text-xs font-bold text-gray-900" aria-label={`${opts.count} unread in ${label}`}>{cap(opts.count)}</span>

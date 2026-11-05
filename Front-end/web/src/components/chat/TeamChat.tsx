@@ -235,7 +235,7 @@ function NewSpaceDialog({ meId, onClose, onCreated }: { meId: string; onClose: (
  * arrive over SSE, and every read and write is permission-checked by the API —
  * this component only hides what the server would refuse anyway.
  */
-export default function TeamChat() {
+export default function TeamChat({ fontClassName = '' }: { fontClassName?: string } = {}) {
   const canChat = useCanChat();
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -499,10 +499,10 @@ export default function TeamChat() {
             <ChannelIcon channel={c} size="lg" />
             {c.kind === 'dm' && !c.group && c.partner && online.has(c.partner.id) && <OnlineDot />}
           </span>
-          <span className="gc-sep min-w-0 flex-1 py-3">
+          <span className="gc-sep min-w-0 flex-1 py-[11px]">
             <span className="flex items-baseline gap-2">
               {/* The round "#" icon already says it is a space, so the name drops its "#". */}
-              <span className={`min-w-0 flex-1 truncate text-[15px] ${waiting ? 'font-bold text-gray-900' : active ? 'font-semibold text-gray-900' : 'text-gray-900'}`}>
+              <span className={`min-w-0 flex-1 truncate text-base ${waiting ? 'font-bold text-gray-900' : 'text-gray-900'}`}>
                 {c.kind === 'space' ? channelTitle(c).replace(/^#/, '') : channelTitle(c)}
               </span>
               {level !== 'all' && (
@@ -515,7 +515,7 @@ export default function TeamChat() {
               )}
             </span>
             <span className="mt-0.5 flex items-center gap-2">
-              <span className={`min-w-0 flex-1 truncate text-[13px] ${waiting ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>{line}</span>
+              <span className={`min-w-0 flex-1 truncate text-sm ${waiting ? 'font-bold text-gray-900' : 'text-gray-700'}`}>{line}</span>
               {waiting ? (
                 <span className="shrink-0 rounded-full bg-blue-700 px-1.5 text-[11px] font-bold leading-[18px] text-white"
                   aria-label={level === 'mentions' ? `${fromPeople} unread mentions` : `${fromPeople} unread`}>
@@ -575,7 +575,7 @@ export default function TeamChat() {
     // so the bell's drop-down is never drawn behind the chat.
     <div
       ref={box}
-      className="gc-theme relative isolate -m-4 flex h-[calc(100dvh-3.5rem)] min-h-[320px] overflow-hidden md:-m-6 lg:-m-8 lg:gap-2 lg:py-2 lg:pr-2"
+      className={`${fontClassName} gc-theme relative isolate -m-4 flex h-[calc(100dvh-3.5rem)] min-h-[320px] overflow-hidden md:-m-6 lg:-m-8 lg:gap-2 lg:py-2 lg:pr-2`}
     >
       <aside
         className={`${navClass} w-full min-w-0 shrink-0 flex-col bg-[var(--gc-page)] lg:w-[272px] ${listHidden ? 'lg:hidden' : 'lg:flex'}`}
