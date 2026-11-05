@@ -151,7 +151,7 @@ export default function AssigneePicker({ trigger, triggerLabel, align = 'left', 
   }, [open, align]);
 
   return (
-    <div ref={wrap} className="relative inline-flex">
+    <div ref={wrap} className="relative inline-flex min-w-0 max-w-full">
       <button
         ref={button}
         type="button"

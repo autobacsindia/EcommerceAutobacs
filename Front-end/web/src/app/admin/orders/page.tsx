@@ -150,13 +150,13 @@ function OrdersPagination({
   if (totalPages <= 1) return null;
 
   const pages = getPageNumbers(currentPage, totalPages);
-  const base = 'min-w-9 px-3 py-2 rounded-lg border text-sm font-medium transition-colors';
+  const base = 'min-w-9 whitespace-nowrap px-3 py-2 rounded-lg border text-sm font-medium transition-colors';
   const inactive = `${base} bg-white border-gray-300 text-gray-700 hover:bg-gray-50`;
   const active = `${base} bg-blue-600 border-blue-600 text-white`;
   const disabled = `${base} bg-white border-gray-200 text-gray-300 cursor-not-allowed`;
 
   return (
-    <nav className="mt-6 flex items-center justify-center gap-2" aria-label="Orders pagination">
+    <nav className="mt-6 flex flex-wrap items-center justify-center gap-2" aria-label="Orders pagination">
       <button
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage <= 1}
@@ -683,9 +683,9 @@ function AdminOrdersPageInner() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Orders Management</h1>
+    <div className="p-4 sm:p-8">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold sm:text-3xl">Orders Management</h1>
         <div className="flex gap-2">
           <button
             onClick={() => refetch()}
@@ -744,7 +744,7 @@ function AdminOrdersPageInner() {
             </select>
           </label>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2">
             <span>Per page:</span>
             <select

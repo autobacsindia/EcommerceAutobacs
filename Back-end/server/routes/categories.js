@@ -14,6 +14,7 @@ import { putPublicAsset } from "../services/storage/publicUploads.js";
 import { deleteHostedImages } from "../services/storage/publicImageDeletes.js";
 import categoryMappingService from "../services/categoryMappingService.js";
 import { normalizeSeo } from "../utils/seo.js";
+import { categoryProductCounts } from "../utils/categoryTree.js";
 
 const router = express.Router();
 
@@ -89,42 +90,13 @@ router.get("/admin/all", protect, adminOrMarketing, asyncHandler(async (req, res
     return res.json({ success: true, count: categories.length, categories });
   }
 
-  // Direct distinct product id sets per category (products tagged exactly here).
-  const directIds = new Map(grouped.map((c) => [String(c._id), new Set(c.ids.map(String))]));
-
-  // Roll counts up the tree so a parent's badge reflects what "View products"
-  // shows (the whole subtree, since the search filter expands a category to all
-  // its descendants). We UNION product id sets rather than summing counts, so a
-  // product tagged with both a hub and a descendant is counted once — matching
-  // the storefront facet (SearchService.getFacets) and the distinct listing
-  // total. O(N) in-memory over the parent pointers we already loaded.
-  const childrenOf = new Map();
-  for (const c of categories) {
-    const parentId = c.parent?._id ? String(c.parent._id) : (c.parent ? String(c.parent) : null);
-    if (!parentId) continue;
-    if (!childrenOf.has(parentId)) childrenOf.set(parentId, []);
-    childrenOf.get(parentId).push(String(c._id));
-  }
-
-  const subtreeMemo = new Map();
-  const inProgress = new Set();
-  const subtreeIds = (id) => {
-    if (subtreeMemo.has(id)) return subtreeMemo.get(id);
-    if (inProgress.has(id)) return new Set(); // guard against any pre-existing cycle
-    inProgress.add(id);
-    const union = new Set(directIds.get(id) || []);
-    for (const childId of (childrenOf.get(id) || [])) {
-      for (const pid of subtreeIds(childId)) union.add(pid);
-    }
-    inProgress.delete(id);
-    subtreeMemo.set(id, union);
-    return union;
-  };
+  // Direct + subtree (union) counts — see utils/categoryTree.js.
+  const counts = categoryProductCounts(categories, grouped);
 
   const withCounts = categories.map((c) => ({
     ...c,
-    productCount: directIds.get(String(c._id))?.size || 0,
-    totalProductCount: subtreeIds(String(c._id)).size,
+    productCount: counts.direct(c._id),
+    totalProductCount: counts.total(c._id),
   }));
 
   res.set('Cache-Control', 'private, no-store');
@@ -139,13 +111,26 @@ router.get("/admin/all", protect, adminOrMarketing, asyncHandler(async (req, res
 // @desc    Lightweight slug+updatedAt list for sitemap generation
 // @access  Public
 // NOTE: must precede the dynamic "/:id" route so "sitemap" isn't captured as an id.
+//
+// Only categories that have at least one active product, directly or in a
+// subcategory. /categories/:slug renders 200 for an empty category, so without
+// this the sitemap submitted ~51 "no products" pages (e.g. fog-lamp) — thin
+// content we were asking Google to crawl. Same rule as /brands/sitemap.
 router.get("/sitemap", cacheMiddleware('static-data'), asyncHandler(async (_req, res) => {
-  const categories = await categoryRepository
-    .find({ isActive: true })
-    .select('slug updatedAt')
-    .sort({ updatedAt: -1 })
-    .lean();
-  res.json({ categories });
+  const [categories, grouped] = await Promise.all([
+    categoryRepository
+      .find({ isActive: true })
+      .select('slug updatedAt parent')
+      .sort({ updatedAt: -1 })
+      .lean(),
+    productRepository.distinctActiveIdsByCategory(),
+  ]);
+  const counts = categoryProductCounts(categories, grouped);
+  res.json({
+    categories: categories
+      .filter((c) => counts.total(c._id) > 0)
+      .map(({ _id, slug, updatedAt }) => ({ _id, slug, updatedAt })),
+  });
 }));
 
 // @route   GET /categories/:id

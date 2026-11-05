@@ -80,6 +80,13 @@ describe('legal links: one document, one name, one route', () => {
     )
   })
 
+  it('/account and /my-account send signed-in users to /profile, not a 404', () => {
+    const config = fs.readFileSync(NEXT_CONFIG, 'utf8')
+    expect(fs.existsSync(path.join(SRC_DIR, 'app', 'account', 'page.tsx'))).toBe(false)
+    expect(config).toMatch(/source:\s*'\/account',\s*destination:\s*'\/profile'/)
+    expect(config).toMatch(/source:\s*'\/my-account',\s*destination:\s*'\/profile'/)
+  })
+
   it('the storefront footer carries a Legal column', () => {
     // Before this, Terms and Privacy were reachable ONLY from /login and
     // /register — i.e. never from a page a signed-in shopper was actually on.

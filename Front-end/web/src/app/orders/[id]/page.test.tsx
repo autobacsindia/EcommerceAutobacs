@@ -178,8 +178,8 @@ describe('OrderDetailPage', () => {
     renderPage();
 
     const label = await screen.findByText('Subtotal (before GST)');
-    expect(label.nextElementSibling).toHaveTextContent('₹133305.08');
-    expect(screen.getByText('Tax').nextElementSibling).toHaveTextContent('₹23994.92');
+    expect(label.nextElementSibling).toHaveTextContent('₹1,33,305.08');
+    expect(screen.getByText('Tax').nextElementSibling).toHaveTextContent('₹23,994.92');
   });
 
   it('handles buy again', async () => {
@@ -461,7 +461,7 @@ describe('OrderDetailPage', () => {
       await waitFor(() => screen.getByText('Cancelled Items'));
 
       // ₹80.00 refunded — NOT the ₹100 list value of 2 × ₹50.
-      expect(screen.getByText(/₹80\.00 refunded/)).toBeInTheDocument();
+      expect(screen.getByText(/₹80 refunded/)).toBeInTheDocument();
     });
 
     /*
@@ -513,7 +513,7 @@ describe('OrderDetailPage', () => {
       renderPage();
       await waitFor(() => screen.getByText('Cancelled Items'));
 
-      expect(screen.getByText(/₹80\.00 refund on its way/)).toBeInTheDocument();
+      expect(screen.getByText(/₹80 refund on its way/)).toBeInTheDocument();
     });
 
     // "Not shipped yet" beside "Cancelled" reads as though something is still coming.

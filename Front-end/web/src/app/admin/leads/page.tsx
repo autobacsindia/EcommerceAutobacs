@@ -363,7 +363,7 @@ export default function AdminLeadsPage() {
 
         {/* Second row: date range + follow-up-due + clear */}
         <div className="flex w-full flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
-          <label className="flex items-center gap-2 text-sm text-gray-600">
+          <label className="flex flex-wrap items-center gap-2 text-sm text-gray-600">
             Created
             <input type="date" value={createdFrom} onChange={(e) => setCreatedFrom(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm" />
             <span className="text-gray-400">to</span>

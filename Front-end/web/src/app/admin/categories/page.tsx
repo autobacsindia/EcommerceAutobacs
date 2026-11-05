@@ -121,42 +121,42 @@ export default function AdminCategoriesPage() {
               <img
                 src={category.image.url}
                 alt={category.image.alt || category.name}
-                className="h-10 w-10 rounded-md object-cover mr-3"
+                className="h-10 w-10 shrink-0 rounded-md object-cover mr-3"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
             ) : (
-              <div className="h-10 w-10 rounded-md bg-gray-200 flex items-center justify-center mr-3">
+              <div className="h-10 w-10 shrink-0 rounded-md bg-gray-200 flex items-center justify-center mr-3">
                 <FolderOpen className="h-5 w-5 text-gray-500" />
               </div>
             )}
             <div className="min-w-0">
-              <h3 className="text-base font-semibold text-gray-900 group-hover:text-blue-600">
+              <h3 className="break-words text-base font-semibold text-gray-900 group-hover:text-blue-600">
                 {category.name}
-                <span className="ml-2 text-xs font-normal text-gray-400">
+                <span className="ml-2 whitespace-nowrap text-xs font-normal text-gray-400">
                   {kidCount} subcategor{kidCount === 1 ? 'y' : 'ies'}
                 </span>
               </h3>
               {category.description && (
                 <p className="text-gray-500 text-sm mt-1 truncate">{category.description}</p>
               )}
-              <div className="flex items-center mt-1 flex-wrap gap-y-1">
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${category.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                   {category.isActive ? 'Active' : 'Inactive'}
                 </span>
                 {category.isFeatured && (
-                  <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
                     <Star className="h-3 w-3 fill-current" /> Featured
                   </span>
                 )}
                 <span
-                  className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
                   title={(category.totalProductCount ?? 0) !== (category.productCount ?? 0)
                     ? `${category.productCount ?? 0} directly, ${category.totalProductCount ?? 0} including subcategories`
                     : 'Products in this category'}
                 >
                   {category.totalProductCount ?? category.productCount ?? 0} product{(category.totalProductCount ?? category.productCount ?? 0) === 1 ? '' : 's'}
                 </span>
-                <span className="ml-2 text-xs text-gray-400">Order: {category.order}</span>
+                <span className="text-xs text-gray-400">Order: {category.order}</span>
               </div>
             </div>
           </Link>

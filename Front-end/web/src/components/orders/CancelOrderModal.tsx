@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { X, AlertCircle, CheckCircle } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS, CANCELLATION_REASONS } from '@/lib/constants';
+import { formatRupees } from '@/lib/formatRupees';
 
 interface CancelOrderModalProps {
   orderId: string;
@@ -135,7 +136,7 @@ export default function CancelOrderModal({
               <div className="bg-gold/10 border border-gold/40 rounded-lg p-4 mb-6">
                 <p className="text-sm font-medium text-gold mb-2">Refund Information</p>
                 <p className="text-sm text-gold">
-                  A refund of ₹{success.refundAmount.toFixed(2)} will be processed to your original payment method 
+                  A refund of {formatRupees(success.refundAmount, { exact: true })} will be processed to your original payment method 
                   {success.refundTimeline && ` within ${success.refundTimeline}`}.
                 </p>
               </div>
@@ -280,7 +281,7 @@ export default function CancelOrderModal({
                     server — the order total would promise money that is not coming. */}
                 <p>
                   • Refund amount:{' '}
-                  {isPartial ? 'the price of the cancelled items' : `₹${totalAmount.toFixed(2)}`}
+                  {isPartial ? 'the price of the cancelled items' : formatRupees(totalAmount, { exact: true })}
                 </p>
                 <p>• Refund method: Original payment method</p>
                 <p>• Estimated timeline: 3-5 business days</p>

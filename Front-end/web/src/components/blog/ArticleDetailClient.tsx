@@ -11,6 +11,7 @@ import AuthorCard from '@/components/blog/AuthorCard';
 import ArticleNavigation from '@/components/blog/ArticleNavigation';
 import CommentSection from '@/components/blog/CommentSection';
 import { articleHref, articleListHref, tagHref } from '@/lib/articleRoutes';
+import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 interface Article {
   _id: string;
@@ -150,7 +151,8 @@ export default function ArticleDetailClient({ article, related }: Props) {
             <article className="bg-obsidian rounded-xl border border-hairline overflow-hidden">
               {article.coverImage && (
                 <img
-                  src={article.coverImage}
+                  {...r2ImgProps(article.coverImage, '(max-width: 1024px) 100vw, 900px')}
+                  onError={(e) => { retryWithoutSrcSet(e.currentTarget); }}
                   alt={article.title}
                   className="w-full h-auto max-h-[70vh] object-contain bg-obsidian-deep"
                 />
@@ -263,7 +265,8 @@ export default function ArticleDetailClient({ article, related }: Props) {
                       >
                         {r.coverImage ? (
                           <img
-                            src={r.coverImage}
+                            {...r2ImgProps(r.coverImage, '64px')}
+                            onError={(e) => { retryWithoutSrcSet(e.currentTarget); }}
                             alt={r.title}
                             className="w-16 h-14 object-cover rounded-md shrink-0"
                           />

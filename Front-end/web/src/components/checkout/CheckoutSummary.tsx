@@ -7,6 +7,7 @@ import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useCart } from '@/context/CartContext';
 import { useCheckoutQuote, type CheckoutQuote, type QuoteItem } from '@/hooks/useCheckoutQuote';
+import { formatRupees } from '@/lib/formatRupees';
 
 interface KarmaInfo {
   balance: number;
@@ -21,7 +22,7 @@ interface Props {
   onChange: (state: { couponCode?: string; redeemKarmaPoints: number; quote: CheckoutQuote | null }) => void;
 }
 
-const money = (n: number) => `₹${(n ?? 0).toFixed(2)}`;
+const money = (n: number) => formatRupees((n ?? 0), { exact: true });
 
 /**
  * Checkout order-summary with coupon application + karma redemption. The breakdown

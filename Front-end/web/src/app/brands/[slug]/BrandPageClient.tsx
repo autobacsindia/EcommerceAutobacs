@@ -12,6 +12,7 @@ import Pagination from '@/components/layout/Pagination';
 import apiClient from '@/lib/api';
 import { brandProductsPath } from '@/lib/brandProducts';
 import { normalizeProductsResponse } from '@/lib/categoryProducts';
+import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 interface ProductImage {
   url: string;
@@ -132,7 +133,7 @@ function BrandView({ slug, initialBrand, initialProducts, searchParams }: BrandV
             <span className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-xl border border-hairline bg-white p-2">
               {brand.logo && !logoFailed ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={brand.logo} alt="" className="max-h-full max-w-full object-contain" onError={() => setLogoFailed(true)} />
+                <img {...r2ImgProps(brand.logo, '128px')} alt="" className="max-h-full max-w-full object-contain" onError={(e) => { if (!retryWithoutSrcSet(e.currentTarget)) setLogoFailed(true); }} />
               ) : (
                 <span className="font-display text-2xl font-bold text-gold">{brand.name?.charAt(0)}</span>
               )}

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { formatRupees } from '@/lib/formatRupees';
 
 interface LedgerEntry {
   _id: string;
@@ -53,7 +54,7 @@ export default function KarmaCard() {
           <div>
             <p className="text-[12px] font-display font-bold text-ink-muted uppercase tracking-[0.12em]">Karma Points</p>
             <p className="text-2xl font-display font-bold text-ink">{balance}</p>
-            <p className="text-xs text-ink-muted font-display">≈ ₹{(balance * pointValue).toFixed(2)} value</p>
+            <p className="text-xs text-ink-muted font-display">≈ {formatRupees((balance * pointValue), { exact: true })} value</p>
           </div>
         </div>
         <button

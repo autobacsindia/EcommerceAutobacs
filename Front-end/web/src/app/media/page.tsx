@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { API_ENDPOINTS } from '@/lib/constants';
 import './press.css';
+import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 // ── Press card shape (from /media/press) ────────────────────────────────────
 interface PressCard {
@@ -82,7 +83,7 @@ function PressCardEl({ card, index }: { card: PressCard; index: number }) {
       <span className="abi-title">{card.headline}</span>
       <span className="abi-figure">
         {card.image?.trim()
-          ? <img src={card.image.trim()} alt={`${card.publication} feature on Autobacs India`} loading="lazy" />
+          ? <img {...r2ImgProps(card.image.trim(), '(max-width: 768px) 100vw, 33vw')} onError={(e) => { retryWithoutSrcSet(e.currentTarget); }} alt={`${card.publication} feature on Autobacs India`} loading="lazy" />
           : <span className="abi-figure-empty">{card.publication}</span>}
       </span>
       <span className="abi-excerpt">{card.excerpt}</span>

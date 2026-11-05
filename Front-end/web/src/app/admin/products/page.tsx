@@ -239,7 +239,7 @@ function AdminProductsPageInner() {
     <div className="p-4 md:p-6 w-full">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <h1 className="text-2xl md:text-3xl font-bold">Products Management</h1>
-        <div className="flex items-start gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           {/* Bulk export/import are admin-only on the API; marketing edits product by product. */}
           {canManage && <ExportProductsButton />}
           {canManage && (
@@ -451,12 +451,12 @@ function AdminProductsPageInner() {
       </div>
 
       {/* Pagination Controls */}
-      <div className="mt-6 flex items-center justify-between">
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-gray-700">
           Showing {(currentPage - 1) * limit + 1} to {Math.min(currentPage * limit, totalCount)} of {totalCount} products
           {isFetching && <span className="ml-2 text-gray-400">· updating…</span>}
         </div>
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => handlePageChange(currentPage - 1)}
             disabled={currentPage === 1 || isFetching}

@@ -180,7 +180,7 @@ export default function AdminStockRequestsPage() {
       </div>
 
       {/* Status tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="mb-6 flex flex-wrap gap-2">
         {(['pending', 'notified', 'cancelled'] as Status[]).map((s) => (
           <button
             key={s}

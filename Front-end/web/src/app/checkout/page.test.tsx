@@ -168,7 +168,7 @@ describe('CheckoutPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Review Your Cart')).toBeInTheDocument();
       expect(screen.getByText('Test Item')).toBeInTheDocument();
-      expect(screen.getAllByText(/100.00/).length).toBeGreaterThan(0); 
+      expect(screen.getAllByText(/₹100\b/).length).toBeGreaterThan(0);
     });
   });
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Video, Play, ChevronLeft, ChevronRight } from 'lucide-react';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 interface VideoItem {
   _id: string;
@@ -127,7 +128,7 @@ function VideosContent() {
               >
                 <div className="relative h-48 bg-obsidian-raised overflow-hidden">
                   {video.thumbnail ? (
-                    <img src={video.thumbnail} alt={video.title} loading="lazy" className="w-full h-full object-cover" />
+                    <img {...r2ImgProps(video.thumbnail, '(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw')} onError={(e) => { retryWithoutSrcSet(e.currentTarget); }} alt={video.title} loading="lazy" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-obsidian-deep">
                       <Video className="h-12 w-12 text-ink-muted" />

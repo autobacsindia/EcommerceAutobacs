@@ -34,6 +34,7 @@ import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 import CheckoutSummary from '@/components/checkout/CheckoutSummary';
 import { useCheckoutQuote, type CheckoutQuote } from '@/hooks/useCheckoutQuote';
+import { formatRupees } from '@/lib/formatRupees';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
 
@@ -714,21 +715,22 @@ function CheckoutPageContent() {
         </div>
 
         {/* Progress Steps */}
-        <div className="flex items-center justify-center mb-12">
+        {/* Fits a 320px phone: circles shrink and connectors flex, so all four steps stay on screen. */}
+        <div className="mx-auto mb-12 flex w-full max-w-xl items-start">
           {steps.map((step, index) => {
             const Icon = step.icon;
             const isActive = step.id === currentStep;
             const isCompleted = steps.findIndex(s => s.id === currentStep) > index;
             return (
-              <div key={step.id} className="flex items-center">
-                <div className="flex flex-col items-center">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-gold text-white' : isCompleted ? 'bg-green-500/20 border border-green-500/50 text-green-700' : 'bg-obsidian-raised border border-hairline text-ink-muted'}`}>
+              <div key={step.id} className={`flex min-w-0 items-center ${index < steps.length - 1 ? 'flex-1' : ''}`}>
+                <div className="flex shrink-0 flex-col items-center">
+                  <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-gold text-white' : isCompleted ? 'bg-green-500/20 border border-green-500/50 text-green-700' : 'bg-obsidian-raised border border-hairline text-ink-muted'}`}>
                     <Icon className="h-5 w-5" />
                   </div>
-                  <span className={`text-xs mt-2 font-display font-bold uppercase tracking-widest ${isActive ? 'text-gold' : isCompleted ? 'text-green-700' : 'text-ink-muted'}`}>{step.label}</span>
+                  <span className={`text-[10px] sm:text-xs mt-2 font-display font-bold uppercase tracking-wider sm:tracking-widest ${isActive ? 'text-gold' : isCompleted ? 'text-green-700' : 'text-ink-muted'}`}>{step.label}</span>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className={`w-16 sm:w-24 h-px mx-2 sm:mx-4 ${isCompleted ? 'bg-green-500/50' : 'bg-obsidian-raised'}`} />
+                  <div className={`mb-6 h-px min-w-3 flex-1 mx-1.5 sm:mx-4 ${isCompleted ? 'bg-green-500/50' : 'bg-obsidian-raised'}`} />
                 )}
               </div>
             );
@@ -775,7 +777,7 @@ function CheckoutPageContent() {
                     )}
                     <p className="text-ink-muted font-display text-xs mt-0.5">Qty: {item.quantity}</p>
                   </div>
-                  <p className="font-display font-bold text-gold">₹{((item.price ?? item.product.price) * item.quantity).toFixed(2)}</p>
+                  <p className="font-display font-bold text-gold">{formatRupees(((item.price ?? item.product.price) * item.quantity), { exact: true })}</p>
                 </div>
               ))}
             </div>
@@ -786,13 +788,13 @@ function CheckoutPageContent() {
                   {/* Before GST, so the rows add up to the Total (see cart/page.tsx). */}
                   <span className="text-ink-muted font-display">Subtotal (before GST)</span>
                   <span className="text-ink/70 font-display">
-                    {reviewQuote?.subtotalBeforeTax != null ? `₹${reviewQuote.subtotalBeforeTax.toFixed(2)}` : '—'}
+                    {reviewQuote?.subtotalBeforeTax != null ? formatRupees(reviewQuote.subtotalBeforeTax, { exact: true }) : '—'}
                   </span>
                 </div>
                 {reviewQuote && reviewQuote.couponDiscount > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gold font-display">Discount ({reviewQuote.appliedCoupon?.code})</span>
-                    <span className="text-gold font-display">−₹{reviewQuote.couponDiscount.toFixed(2)}</span>
+                    <span className="text-gold font-display">−{formatRupees(reviewQuote.couponDiscount, { exact: true })}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
@@ -802,7 +804,7 @@ function CheckoutPageContent() {
                 <div className="flex justify-between text-sm">
                   <span className="text-ink-muted font-display">Tax (18% GST)</span>
                   <span className="text-ink/70 font-display">
-                    {reviewQuote ? `₹${reviewQuote.tax.toFixed(2)}` : '—'}
+                    {reviewQuote ? formatRupees(reviewQuote.tax, { exact: true }) : '—'}
                   </span>
                 </div>
               </div>
@@ -813,7 +815,7 @@ function CheckoutPageContent() {
                       undiscounted total while the quote is in flight is what made checkout
                       contradict the cart the shopper had just left. */}
                   {reviewQuote
-                    ? `₹${reviewQuote.totalAmount.toFixed(2)}`
+                    ? formatRupees(reviewQuote.totalAmount, { exact: true })
                     : reviewQuoteLoading ? 'Working it out…' : '—'}
                 </span>
               </div>
@@ -1111,22 +1113,22 @@ function CheckoutPageContent() {
                       <div className="flex justify-between text-sm">
                         <span className="text-ink-muted font-display">Previous total</span>
                         <span className="text-ink-muted font-display line-through">
-                          ₹{(cart?.total || 0).toFixed(2)}
+                          {formatRupees((cart?.total || 0), { exact: true })}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-ink-muted font-display">Subtotal before GST (updated)</span>
                         <span className="text-ink/70 font-display">
-                          {serverValidation.subtotalBeforeTax != null ? `₹${serverValidation.subtotalBeforeTax.toFixed(2)}` : '—'}
+                          {serverValidation.subtotalBeforeTax != null ? formatRupees(serverValidation.subtotalBeforeTax, { exact: true }) : '—'}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-ink-muted font-display">Tax (18% GST)</span>
-                        <span className="text-ink/70 font-display">₹{serverValidation.tax.toFixed(2)}</span>
+                        <span className="text-ink/70 font-display">{formatRupees(serverValidation.tax, { exact: true })}</span>
                       </div>
                       <div className="flex justify-between border-t border-hairline pt-2">
                         <span className="font-display text-ink tracking-[-0.01em] text-sm">New Total</span>
-                        <span className="text-lg font-display font-bold text-gold">₹{serverValidation.total.toFixed(2)}</span>
+                        <span className="text-lg font-display font-bold text-gold">{formatRupees(serverValidation.total, { exact: true })}</span>
                       </div>
                     </div>
                     <div className="flex gap-3">
@@ -1138,7 +1140,7 @@ function CheckoutPageContent() {
                         {loading || isRazorpayProcessing ? (
                           <><Loader2 className="h-4 w-4 animate-spin" /><span>Processing...</span></>
                         ) : (
-                          `Confirm & Pay ₹${(pricing.quote?.totalAmount ?? serverValidation.total).toFixed(2)}`
+                          `Confirm & Pay ${formatRupees((pricing.quote?.totalAmount ?? serverValidation.total), { exact: true })}`
                         )}
                       </button>
                       <button

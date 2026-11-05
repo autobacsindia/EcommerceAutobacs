@@ -437,7 +437,7 @@ export default function AdminReviewsPage() {
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-900 max-w-xs truncate">
                           {review.title && <div className="font-medium">{review.title}</div>}
-                          <div className="text-gray-500">{review.comment}</div>
+                          <div className="max-w-xs break-words text-gray-500">{review.comment}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
