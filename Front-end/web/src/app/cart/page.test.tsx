@@ -1,10 +1,20 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@/test-utils/renderWithProviders';
 import CartPage from './page';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import { toast } from 'react-hot-toast';
 
 // Mock Hooks
+// Cart page boundaries (auth, server quote, campaign) — keep the test offline.
+jest.mock('@/context/AuthContext', () => require('@/test-utils/cartPageMocks').authGuestMock);
+jest.mock('@/hooks/useCheckoutQuote', () => require('@/test-utils/cartPageMocks').checkoutQuoteIdleMock);
+jest.mock('@/hooks/queries/useCampaign', () => require('@/test-utils/cartPageMocks').campaignNoneMock);
+jest.mock('@/lib/api', () => ({
+  __esModule: true,
+  default: { get: jest.fn(() => Promise.resolve({ success: true, coupons: [] })), post: jest.fn() },
+}));
+
 jest.mock('@/context/CartContext', () => ({
   useCart: jest.fn(),
 }));
@@ -60,7 +70,7 @@ describe('CartPage Component', () => {
       clearCart: mockClearCart,
     });
 
-    render(<CartPage />);
+    renderWithProviders(<CartPage />);
     expect(screen.getByTestId('skeleton-loader')).toBeInTheDocument();
   });
 
@@ -73,9 +83,9 @@ describe('CartPage Component', () => {
       clearCart: mockClearCart,
     });
 
-    render(<CartPage />);
+    renderWithProviders(<CartPage />);
     expect(screen.getByText('Your cart is empty')).toBeInTheDocument();
-    expect(screen.getByText('Add some products to get started!')).toBeInTheDocument();
+    expect(screen.getByText(/Nothing here yet/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Browse Products/i })).toHaveAttribute('href', '/products');
   });
 
@@ -105,7 +115,7 @@ describe('CartPage Component', () => {
       clearCart: mockClearCart,
     });
 
-    render(<CartPage />);
+    renderWithProviders(<CartPage />);
     expect(screen.getByText('Test Product')).toBeInTheDocument();
     expect(screen.getByText('$100 each')).toBeInTheDocument();
     
@@ -137,14 +147,15 @@ describe('CartPage Component', () => {
 
       (global.confirm as jest.Mock).mockReturnValue(true);
   
-      render(<CartPage />);
+      renderWithProviders(<CartPage />);
       
       const removeBtn = screen.getByRole('button', { name: /Remove item/i });
       fireEvent.click(removeBtn);
 
       expect(global.confirm).toHaveBeenCalledWith('Remove this item from cart?');
       await waitFor(() => {
-          expect(mockRemoveFromCart).toHaveBeenCalledWith('p1');
+          // Second arg is the variant id (undefined for a simple product).
+          expect(mockRemoveFromCart).toHaveBeenCalledWith('p1', undefined);
           expect(toast.success).toHaveBeenCalledWith('Item removed from cart');
       });
   });
@@ -167,13 +178,13 @@ describe('CartPage Component', () => {
         clearCart: mockClearCart,
       });
   
-      render(<CartPage />);
+      renderWithProviders(<CartPage />);
       
       const increaseBtn = screen.getByRole('button', { name: /Increase quantity/i });
       fireEvent.click(increaseBtn);
 
       await waitFor(() => {
-          expect(mockUpdateQuantity).toHaveBeenCalledWith('p1', 2);
+          expect(mockUpdateQuantity).toHaveBeenCalledWith('p1', 2, undefined);
       });
   });
 
@@ -195,13 +206,13 @@ describe('CartPage Component', () => {
         clearCart: mockClearCart,
       });
   
-      render(<CartPage />);
+      renderWithProviders(<CartPage />);
       
       const decreaseBtn = screen.getByRole('button', { name: /Decrease quantity/i });
       fireEvent.click(decreaseBtn);
 
       await waitFor(() => {
-          expect(mockUpdateQuantity).toHaveBeenCalledWith('p1', 1);
+          expect(mockUpdateQuantity).toHaveBeenCalledWith('p1', 1, undefined);
       });
   });
 
@@ -225,7 +236,7 @@ describe('CartPage Component', () => {
 
       (global.confirm as jest.Mock).mockReturnValue(true);
   
-      render(<CartPage />);
+      renderWithProviders(<CartPage />);
       
       const clearBtn = screen.getByRole('button', { name: /Clear Cart/i });
       fireEvent.click(clearBtn);

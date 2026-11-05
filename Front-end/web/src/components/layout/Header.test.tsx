@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithProviders } from '@/test-utils/renderWithProviders';
 import Header from './Header';
 import '@testing-library/jest-dom';
 
@@ -73,14 +74,18 @@ describe('Header Component', () => {
     mockAuthLoading = false;
   });
 
-  it('renders loading skeleton when auth is loading', () => {
+  it('does not block the header on auth loading', () => {
+    // The header renders its full chrome immediately; the only placeholder is
+    // EnvironmentAwareComponent's pre-hydration fallback, not auth state.
     mockAuthLoading = true;
-    render(<Header navCategories={navCats} />);
-    expect(screen.getByTestId('skeleton-loader')).toBeInTheDocument();
+    renderWithProviders(<Header navCategories={navCats} />);
+    expect(screen.getByTestId('brand-logo')).toBeInTheDocument();
+    expect(screen.getByTestId('search-suggestions')).toBeInTheDocument();
+    expect(screen.queryByTestId('skeleton-loader')).not.toBeInTheDocument();
   });
 
   it('renders correctly for guest user', () => {
-    render(<Header navCategories={navCats} />);
+    renderWithProviders(<Header navCategories={navCats} />);
     expect(screen.getByTestId('brand-logo')).toBeInTheDocument();
     expect(screen.getByText('Login')).toBeInTheDocument();
     expect(screen.queryByText('Logout')).not.toBeInTheDocument();
@@ -90,7 +95,7 @@ describe('Header Component', () => {
   it('renders correctly for authenticated user', () => {
     mockIsAuthenticated = true;
     mockUser = { name: 'John Doe' };
-    render(<Header navCategories={navCats} />);
+    renderWithProviders(<Header navCategories={navCats} />);
     
     expect(screen.getByText('John Doe')).toBeInTheDocument();
     expect(screen.getByText('Logout')).toBeInTheDocument();
@@ -99,14 +104,14 @@ describe('Header Component', () => {
 
   it('handles logout', () => {
     mockIsAuthenticated = true;
-    render(<Header navCategories={navCats} />);
+    renderWithProviders(<Header navCategories={navCats} />);
     
     fireEvent.click(screen.getByText('Logout'));
     expect(mockLogout).toHaveBeenCalled();
   });
 
   it('toggles mobile search', () => {
-    render(<Header navCategories={navCats} />);
+    renderWithProviders(<Header navCategories={navCats} />);
     const toggleButton = screen.getByLabelText('Toggle search');
     fireEvent.click(toggleButton);
     // Since we can't easily assert the state change effect without deeper DOM inspection of conditional rendering (which might be mocked out or hidden),
@@ -115,7 +120,7 @@ describe('Header Component', () => {
   });
 
   it('renders navigation links', () => {
-    render(<Header navCategories={navCats} />);
+    renderWithProviders(<Header navCategories={navCats} />);
     // The data-driven category labels plus the trailing static Offers link.
     expectedNavLabels.forEach(label => {
       expect(screen.getByText(label)).toBeInTheDocument();

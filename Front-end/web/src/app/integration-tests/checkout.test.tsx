@@ -36,6 +36,27 @@ jest.mock('@/lib/services/orderService', () => ({
   verifyPayment: jest.fn(),
 }));
 
+// Funnel analytics — not under test here; keep them inert.
+jest.mock('@/lib/analytics', () => ({
+  trackBeginCheckout: jest.fn(),
+  trackPurchase: jest.fn(),
+  trackViewCart: jest.fn(),
+  trackCheckoutStep: jest.fn(),
+  trackAddPaymentInfo: jest.fn(),
+  trackCheckoutAbandoned: jest.fn(),
+}));
+
+// CheckoutSummary owns the real server quote request; stub it to report "no quote yet".
+jest.mock('@/components/checkout/CheckoutSummary', () => {
+  const ReactMod = require('react');
+  return function MockCheckoutSummary({ onChange }: any) {
+    ReactMod.useEffect(() => {
+      onChange({ couponCode: undefined, redeemKarmaPoints: 0, quote: null });
+    }, [onChange]);
+    return <div data-testid="checkout-summary" />;
+  };
+});
+
 // Mock PaymentMethodSelector
 jest.mock('@/components/checkout/PaymentMethodSelector', () => {
   return function MockPaymentMethodSelector({ selectedMethod, onSelect }: { selectedMethod: string, onSelect: (method: string) => void }) {
@@ -76,8 +97,28 @@ describe('Checkout Page Integration', () => {
       isProcessing: false
     });
     
-    // Mock profile fetch
-    (apiClient.get as jest.Mock).mockResolvedValue({ success: true, user: { addresses: [] } });
+    // apiClient.get serves two endpoints here: the profile (saved addresses) and
+    // /cart/validate, the server stock/price check. Answering both with the profile
+    // payload makes the stock check "fail" and disables Continue to Shipping.
+    (apiClient.get as jest.Mock).mockImplementation(async (url: string) => {
+      if (typeof url === 'string' && url.includes('/cart/validate')) {
+        return {
+          success: true,
+          isValid: true,
+          subtotal: 100,
+          tax: 18,
+          total: 118,
+          items: [{ productId: 'p1', quantity: 1, unitPrice: 100 }],
+        };
+      }
+      return { success: true, user: { addresses: [] } };
+    });
+    // The cart step also POSTs a server stock check; Continue to Shipping stays
+    // disabled unless it reports the cart valid.
+    (apiClient.post as jest.Mock).mockImplementation(async (url: string) =>
+      typeof url === 'string' && url.includes('validate')
+        ? { success: true, isValid: true, validationErrors: [] }
+        : { success: true, order: { _id: 'order_123', totalAmount: 118 } });
     
     // Mock createOrder
     (orderService.createOrder as jest.Mock).mockResolvedValue({ 
@@ -153,6 +194,8 @@ describe('Checkout Page Integration', () => {
     
     expect(screen.getByText('123 Main St')).toBeInTheDocument();
     
+    // Order placement is gated on accepting the Terms.
+    fireEvent.click(screen.getByRole('checkbox', { name: /accept the Terms and Conditions/i }));
     fireEvent.click(screen.getByText('Place Order'));
     
     // Should trigger payment processing (Razorpay by default)

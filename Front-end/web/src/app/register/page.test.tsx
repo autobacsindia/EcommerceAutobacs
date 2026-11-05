@@ -10,6 +10,8 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: mockPush,
   }),
+  // The page reads ?redirect= and ?offer= from the URL.
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 // Mock AuthContext
@@ -29,6 +31,7 @@ jest.mock('@/lib/utils/navigation', () => ({
 
 // Mock icons
 jest.mock('lucide-react', () => ({
+  ...jest.requireActual('lucide-react'),
   Loader2: () => <span data-testid="loader">Loading...</span>,
   AlertCircle: () => <span data-testid="alert-icon">!</span>,
 }));
@@ -52,6 +55,9 @@ describe('RegisterPage', () => {
   const mockRegister = jest.fn();
   const mockClearError = jest.fn();
 
+  // Restore real timers even if a fake-timer test fails midway.
+  afterEach(() => jest.useRealTimers());
+
   beforeEach(() => {
     jest.clearAllMocks();
     // Default mock implementation
@@ -65,7 +71,7 @@ describe('RegisterPage', () => {
   it('renders register form correctly', () => {
     render(<RegisterPage />);
     
-    expect(screen.getByText('Create account')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Create Account' })).toBeInTheDocument();
     expect(screen.getByLabelText(/Your name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Email$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Password$/i)).toBeInTheDocument();
@@ -124,6 +130,8 @@ describe('RegisterPage', () => {
   });
 
   it('calls register and redirects on success', async () => {
+    // The page shows a "check your email" confirmation, then redirects after 2s.
+    jest.useFakeTimers();
     render(<RegisterPage />);
     
     fireEvent.change(screen.getByLabelText(/Your name/i), { target: { value: 'Test User' } });
@@ -137,6 +145,10 @@ describe('RegisterPage', () => {
     });
 
     expect(mockRegister).toHaveBeenCalledWith('Test User', 'test@example.com', 'password123');
+    expect(screen.getByText(/Account created!/)).toBeInTheDocument();
+    expect(mockPush).not.toHaveBeenCalled();
+
+    act(() => { jest.advanceTimersByTime(2000); });
     expect(mockPush).toHaveBeenCalledWith('/');
   });
 

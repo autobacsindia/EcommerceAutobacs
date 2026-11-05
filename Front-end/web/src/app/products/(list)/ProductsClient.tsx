@@ -67,7 +67,8 @@ function ProductsPageInner({ initialData, initialParams }: ProductsClientProps) 
   // Fire the analytics list-view event once per distinct params — but only when
   // the data is FRESH for those params, not the keepPreviousData placeholder
   // from the prior query (otherwise itemCount would be the previous page's).
-  const lastTrackedKey = useRef<string>('');
+  // null, not '': a bare /products URL serialises to '' and would read as "already tracked".
+  const lastTrackedKey = useRef<string | null>(null);
   useEffect(() => {
     if (!isSuccess || isPlaceholderData) return;
     if (lastTrackedKey.current === spString) return;

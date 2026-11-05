@@ -21,10 +21,14 @@ jest.mock('next/navigation', () => ({
   usePathname: () => '/admin/products',
   useRouter: jest.fn(),
   useParams: jest.fn(),
+  // ?returnTo= — the list view to go back to after saving.
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 // Mock icons
+// Spread the real set so child components get the icons they need.
 jest.mock('lucide-react', () => ({
+  ...jest.requireActual('lucide-react'),
   ArrowLeft: () => <span data-testid="icon-arrow-left">ArrowLeft</span>,
   Upload: () => <span data-testid="icon-upload">Upload</span>,
   Plus: () => <span data-testid="icon-plus">Plus</span>,
@@ -34,6 +38,23 @@ jest.mock('lucide-react', () => ({
 
 // Mock URL.createObjectURL
 global.URL.createObjectURL = jest.fn(() => 'blob:mock-url');
+
+/** Minimal Response stand-in: jsdom has no fetch/Response globals. */
+const fetchResponse = (body: unknown, status = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  headers: new Map<string, string>(),
+  json: async () => body,
+  text: async () => JSON.stringify(body),
+});
+const mockFetch = jest.fn();
+
+/** The FormData body of the multipart PUT that saved the product. */
+const savedForm = (): FormData => {
+  const call = mockFetch.mock.calls.find(([, init]) => init?.method === 'PUT');
+  if (!call) throw new Error('No PUT request was made');
+  return call[1].body as FormData;
+};
 
 describe('EditProductPage', () => {
   const mockPush = jest.fn();
@@ -98,6 +119,24 @@ describe('EditProductPage', () => {
     
     (apiClient.put as jest.Mock).mockResolvedValue({ success: true });
     window.alert = jest.fn();
+
+    // The page loads the product from the admin-fetch endpoint and saves it as a
+    // multipart PUT, both through the browser's fetch rather than apiClient.
+    mockFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === `/api/v1/products/${mockProductId}/admin-fetch`) {
+        return Promise.resolve(fetchResponse({ product: mockProduct }));
+      }
+      if (url === `/api/v1/products/${mockProductId}` && init?.method === 'PUT') {
+        return Promise.resolve(fetchResponse({ success: true, product: mockProduct }));
+      }
+      return Promise.resolve(fetchResponse({}));
+    });
+    global.fetch = mockFetch as unknown as typeof fetch;
+  });
+
+  afterAll(() => {
+    // jsdom has no fetch of its own; don't leak the mock into other suites.
+    delete (global as { fetch?: unknown }).fetch;
   });
 
   it('renders form populated with product data', async () => {
@@ -106,7 +145,8 @@ describe('EditProductPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/Product Name/i)).toHaveValue('Existing Product');
       expect(screen.getByLabelText(/Price/i)).toHaveValue(150);
-      expect(screen.getByLabelText(/Category/i)).toHaveValue('cat1');
+      // Categories are a multi-select; each selected one renders as a removable chip.
+      expect(screen.getByRole('button', { name: 'Remove Category 1' })).toBeInTheDocument();
     });
   });
 
@@ -143,13 +183,11 @@ describe('EditProductPage', () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(apiClient.put).toHaveBeenCalledWith(`/products/${mockProductId}`, expect.objectContaining({
-        name: 'Updated Product',
-        price: 180,
-      }));
+      expect(window.alert).toHaveBeenCalledWith('Product updated successfully');
     });
-    
-    expect(window.alert).toHaveBeenCalledWith('Product updated successfully');
+    const form = savedForm();
+    expect(form.get('name')).toBe('Updated Product');
+    expect(form.get('price')).toBe('180');
     expect(mockPush).toHaveBeenCalledWith('/admin/products');
   });
 
@@ -175,6 +213,6 @@ describe('EditProductPage', () => {
     fireEvent.click(submitButton);
 
     expect(window.alert).toHaveBeenCalledWith('Offer End Date must be after Offer Start Date');
-    expect(apiClient.put).not.toHaveBeenCalled();
+    expect(mockFetch.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
   });
 });

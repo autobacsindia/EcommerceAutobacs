@@ -104,15 +104,18 @@ describe('ProductCard Component', () => {
     });
   });
 
-  it('redirects to login if not authenticated when adding to cart', async () => {
+  it('lets a guest add to cart without redirecting to login', async () => {
+    // Guest carts are session-based, so adding no longer requires sign-in.
     mockIsAuthenticated = false;
     render(<ProductCard product={mockProduct as any} />);
     
     const addButton = screen.getByRole('button', { name: /add/i });
     fireEvent.click(addButton);
     
-    expect(mockRouterPush).toHaveBeenCalledWith('/login');
-    expect(mockAddToCart).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockAddToCart).toHaveBeenCalledWith('123', 1);
+    });
+    expect(mockRouterPush).not.toHaveBeenCalledWith('/login');
   });
   
   it('displays out of stock badge when stock is 0', () => {

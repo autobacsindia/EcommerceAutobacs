@@ -1,6 +1,7 @@
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@/test-utils/renderWithProviders';
 import '@testing-library/jest-dom';
 import Header from '@/components/layout/Header';
 import ProductCard from '@/components/products/ProductCard';
@@ -95,7 +96,7 @@ describe('Integration: Add to Cart Flow', () => {
     name: 'Test Product',
     price: 100,
     description: 'Test Description',
-    images: [{ url: 'test-image.jpg', alt: 'Test Product' }],
+    images: [{ url: '/test-image.jpg', alt: 'Test Product' }],
     category: { _id: 'cat-1', name: 'Category', slug: 'category', isActive: true, order: 1 },
     brand: 'Brand',
     stock: 'in' as const,
@@ -133,7 +134,7 @@ describe('Integration: Add to Cart Flow', () => {
     });
 
     // 2. Render the application shell (Header + ProductCard)
-    render(
+    renderWithProviders(
       <CartProvider>
         <div className="min-h-screen flex flex-col">
           <Header navCategories={[]} />
@@ -154,7 +155,8 @@ describe('Integration: Add to Cart Flow', () => {
     expect(cartLink).toBeInTheDocument();
     // Wait for initial cart fetch to complete
     await waitFor(() => {
-      expect(apiClient.get).toHaveBeenCalledWith(API_ENDPOINTS.CART);
+      // The cart load is abortable (unmount / auth change cancels it).
+      expect(apiClient.get).toHaveBeenCalledWith(API_ENDPOINTS.CART, expect.objectContaining({ signal: expect.anything() }));
     });
 
     // 4. User adds item to cart

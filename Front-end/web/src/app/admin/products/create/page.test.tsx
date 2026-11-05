@@ -48,6 +48,26 @@ jest.mock('lucide-react', () => {
   );
 });
 
+// The description is a rich-text editor; a plain textarea stands in for it so the
+// test can type into it without a contenteditable implementation in jsdom.
+jest.mock('@/components/ui/RichTextEditor', () => ({
+  __esModule: true,
+  default: ({ value, onChange }: { value: string; onChange: (html: string) => void }) => (
+    <textarea aria-label="Description" value={value} onChange={(e) => onChange(e.target.value)} />
+  ),
+}));
+
+// The page saves via a raw multipart POST (submitMultipart); stub only that call
+// and keep the real response parsing.
+const mockSubmitMultipart = jest.fn();
+jest.mock('@/lib/multipartResponse', () => ({
+  ...jest.requireActual('@/lib/multipartResponse'),
+  submitMultipart: (...args: unknown[]) => mockSubmitMultipart(...args),
+}));
+
+// Homepage ISR revalidation is fire-and-forget; keep it off the network.
+jest.mock('@/lib/revalidateHome', () => ({ revalidateHome: jest.fn() }));
+
 // Mock URL.createObjectURL
 global.URL.createObjectURL = jest.fn(() => 'blob:mock-url');
 
@@ -87,6 +107,11 @@ describe('CreateProductPage', () => {
     });
     
     (apiClient.post as jest.Mock).mockResolvedValue({ success: true });
+    mockSubmitMultipart.mockResolvedValue({
+      ok: true,
+      status: 201,
+      text: async () => JSON.stringify({ success: true }),
+    });
     window.alert = jest.fn();
   });
 
@@ -95,7 +120,7 @@ describe('CreateProductPage', () => {
 
     await waitFor(() => {
       expect(screen.getByLabelText(/Product Name/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Category/i)).toBeInTheDocument();
+      expect(screen.getByLabelText('Categories')).toBeInTheDocument();
       expect(screen.getByText('Toyota Corolla')).toBeInTheDocument();
     });
   });
@@ -140,24 +165,25 @@ describe('CreateProductPage', () => {
 
     // Fill required fields
     fireEvent.change(screen.getByLabelText(/Product Name/i), { target: { value: 'Test Product' } });
-    fireEvent.change(screen.getByLabelText(/Description/i), { target: { value: 'Test Description' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Test Description' } });
     fireEvent.change(screen.getByLabelText(/Price/i), { target: { value: '100' } });
-    fireEvent.change(screen.getByLabelText(/Stock Quantity/i), { target: { value: '10' } });
+    // Stock is the coarse in/low/out enum, not a quantity.
+    fireEvent.change(screen.getByLabelText(/Stock Status/i), { target: { value: 'low' } });
 
     const submitButton = screen.getByRole('button', { name: /Create Product/i });
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(apiClient.post).toHaveBeenCalledWith('/products', expect.objectContaining({
-        name: 'Test Product',
-        description: 'Test Description',
-        price: 100,
-        stock: 10,
-        isActive: true
-      }));
+      expect(window.alert).toHaveBeenCalledWith('Product created successfully');
     });
-    
-    expect(window.alert).toHaveBeenCalledWith('Product created successfully');
+
+    expect(mockSubmitMultipart).toHaveBeenCalledWith('/api/v1/products', 'POST', expect.any(FormData));
+    const form = mockSubmitMultipart.mock.calls[0][2] as FormData;
+    expect(form.get('name')).toBe('Test Product');
+    expect(form.get('description')).toBe('Test Description');
+    expect(form.get('price')).toBe('100');
+    expect(form.get('stock')).toBe('low');
+    expect(form.get('isActive')).toBe('true');
     expect(mockPush).toHaveBeenCalledWith('/admin/products');
   });
 
@@ -170,7 +196,7 @@ describe('CreateProductPage', () => {
 
     fireEvent.click(screen.getByText('Add Feature'));
     
-    const featureInputs = screen.getAllByPlaceholderText('Feature description');
+    const featureInputs = screen.getAllByPlaceholderText(/Advanced Foam Cell Technology/);
     expect(featureInputs).toHaveLength(2); // Initial 1 + Added 1
 
     fireEvent.change(featureInputs[1], { target: { value: 'New Feature' } });
@@ -178,14 +204,15 @@ describe('CreateProductPage', () => {
   });
 
   it('handles image selection', async () => {
-    renderWithClient(<CreateProductPage />);
+    const { container } = renderWithClient(<CreateProductPage />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Select Images')).toBeInTheDocument();
+      expect(screen.getByText('Upload product images')).toBeInTheDocument();
     });
 
     const file = new File(['(⌐□_□)'], 'chucknorris.png', { type: 'image/png' });
-    const input = screen.getByLabelText('Select Images');
+    // ImageUploader's file input is visually hidden behind a drop zone.
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     
     fireEvent.change(input, { target: { files: [file] } });
 
