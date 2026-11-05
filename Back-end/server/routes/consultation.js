@@ -47,7 +47,7 @@ router.post("/", asyncHandler(async (req, res) => {
     notes: notes || "",
   });
 
-  // Notify the support inbox of the new consultation lead — best-effort, async.
+  // Notify the sales inbox (CONSULTATION_NOTIFICATION_EMAILS) of the new lead — best-effort, async.
   enqueueNotification("send-admin-consultation-alert", { consultationId: consultation._id.toString() });
 
   // Surface the consultation in the Sales CRM as a warm lead (best-effort).

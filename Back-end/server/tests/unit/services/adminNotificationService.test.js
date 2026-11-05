@@ -55,6 +55,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   delete process.env.ADMIN_NOTIFICATION_EMAIL;
   delete process.env.ADMIN_NOTIFICATION_EMAILS;
+  delete process.env.CONSULTATION_NOTIFICATION_EMAILS;
   delete process.env.CAREERS_NOTIFICATION_EMAILS;
   delete process.env.CAREERS_FROM_EMAIL;
   process.env.FRONTEND_URL = 'https://autobacsindia.com';
@@ -159,12 +160,74 @@ describe('emailAdminConsultationAlert', () => {
 
     expect(result).toEqual({ status: 'sent' });
     const arg = mockSendEmail.mock.calls[0][0];
-    expect(arg.to).toBe('support@autobacsindia.com');
+    expect(arg.to).toBe('sales@autobacsindia.com');
     expect(arg.subject).toContain('Ravi');
     expect(arg.subject).toContain('Toyota Fortuner');
     expect(arg.text).toContain('Suspension Setup');
     expect(arg.html).toContain('https://wa.me/919895257905');
     expect(arg.html).toContain('/admin/consultation');
+  });
+
+  test('goes to sales@ by default, not the admin list', async () => {
+    process.env.ADMIN_NOTIFICATION_EMAILS = 'info@autobacsindia.com';
+    mockConsultFindById.mockResolvedValue(makeConsult());
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminConsultationAlert('c1');
+    expect(mockSendEmail.mock.calls.map(([m]) => m.to)).toEqual(['sales@autobacsindia.com']);
+  });
+
+  test('blank CONSULTATION_NOTIFICATION_EMAILS still means sales@', async () => {
+    process.env.CONSULTATION_NOTIFICATION_EMAILS = '  ';
+    mockConsultFindById.mockResolvedValue(makeConsult());
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminConsultationAlert('c1');
+    expect(mockSendEmail.mock.calls.map(([m]) => m.to)).toEqual(['sales@autobacsindia.com']);
+  });
+
+  test('CONSULTATION_NOTIFICATION_EMAILS overrides it (trimmed, deduped)', async () => {
+    process.env.ADMIN_NOTIFICATION_EMAILS = 'info@autobacsindia.com';
+    process.env.CONSULTATION_NOTIFICATION_EMAILS = ' leads@autobacsindia.com, owner@autobacsindia.com ,Leads@AutobacsIndia.com,';
+    mockConsultFindById.mockResolvedValue(makeConsult());
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminConsultationAlert('c1');
+    expect(mockSendEmail.mock.calls.map(([m]) => m.to)).toEqual(['leads@autobacsindia.com', 'owner@autobacsindia.com']);
+  });
+
+  test('never goes to the careers mailbox; if that empties the list, falls back to the admin list', async () => {
+    process.env.ADMIN_NOTIFICATION_EMAILS = 'info@autobacsindia.com';
+    process.env.CAREERS_FROM_EMAIL = 'careers@autobacsindia.com';
+    process.env.CONSULTATION_NOTIFICATION_EMAILS = 'careers@autobacsindia.com';
+    mockConsultFindById.mockResolvedValue(makeConsult());
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminConsultationAlert('c1');
+    expect(mockSendEmail.mock.calls.map(([m]) => m.to)).toEqual(['info@autobacsindia.com']);
+  });
+
+  test('a provider failure still throws, so the queue retries it', async () => {
+    mockConsultFindById.mockResolvedValue(makeConsult());
+    mockSendEmail.mockResolvedValue({ success: false, error: 'provider 500' });
+
+    await expect(emailAdminConsultationAlert('c1')).rejects.toThrow(/consultation c1 → sales@autobacsindia.com/);
+  });
+
+  test('paid-order and review alerts still go to the admin list, not the consultation list', async () => {
+    process.env.ADMIN_NOTIFICATION_EMAILS = 'info@autobacsindia.com';
+    process.env.CONSULTATION_NOTIFICATION_EMAILS = 'sales@autobacsindia.com';
+    mockOrderFindById.mockResolvedValue(makeOrder());
+    mockReviewFindById.mockReturnValue(query({
+      _id: 'rev1', rating: 5, title: 'Good', comment: 'Fine', isVerifiedPurchase: false,
+      product: { _id: 'p1', name: 'Brake Pads', slug: 'brake-pads' },
+      user: { _id: 'u1', name: 'Asha', email: 'asha@example.com' },
+    }));
+    mockSendEmail.mockResolvedValue({ success: true });
+
+    await emailAdminOrderPlacedAlert('o1');
+    await emailAdminReviewAlert('rev1');
+    expect(mockSendEmail.mock.calls.map(([m]) => m.to)).toEqual(['info@autobacsindia.com', 'info@autobacsindia.com']);
   });
 
   test('returns not-found when the consultation is missing', async () => {
