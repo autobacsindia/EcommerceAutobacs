@@ -557,11 +557,7 @@ export default function MessageItem({
   return (
     <div id={messageDomId(m.id)} className="scroll-mt-24">
       {newDay && (
-        <div className="my-5 flex items-center gap-3 text-xs font-medium text-gray-600">
-          <span className="h-px flex-1 bg-gray-200/80" />
-          <span className="gc-day rounded-full px-3.5 py-1">{dayLabel(m.createdAt)}</span>
-          <span className="h-px flex-1 bg-gray-200/80" />
-        </div>
+        <div className="my-4 text-center text-xs font-medium text-gray-600">{dayLabel(m.createdAt)}</div>
       )}
       <div
         ref={row}

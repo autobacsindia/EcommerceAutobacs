@@ -157,12 +157,12 @@ const teamHue = (team: string | undefined): TileHue => (team && TEAM_HUE[team]) 
 export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; size?: 'xs' | 'sm' | 'md' | 'lg' }) {
   const box = size === 'lg' ? 'h-10 w-10 text-sm' : size === 'md' ? 'h-9 w-9 text-sm' : size === 'xs' ? 'h-6 w-6 text-[10px]' : 'h-7 w-7 text-[11px]';
   const glyph = size === 'xs' ? 'h-3 w-3' : size === 'sm' ? 'h-3.5 w-3.5' : 'h-[18px] w-[18px]';
-  // People are round faces; spaces, team pairs and groups are rounded squares in
-  // a soft colour, so the shape alone says "person" or "space". A team keeps the
-  // same colour everywhere; a chat between two teams shows both, split corner to corner.
+  // Spaces, team pairs and groups are round icons in a soft colour, as Google
+  // Chat's are. A team keeps the same colour everywhere; a chat between two teams
+  // shows both, split corner to corner.
   const tile = (hue: TileHue, Icon: typeof Hash, hue2?: TileHue) => (
     <span
-      className={`gc-tile grid ${box} shrink-0 place-items-center ${size === 'xs' ? 'rounded-[7px]' : size === 'sm' ? 'rounded-lg' : 'rounded-xl'}`}
+      className={`gc-tile grid ${box} shrink-0 place-items-center rounded-full`}
       data-hue={hue}
       data-hue2={hue2}
       aria-hidden="true"

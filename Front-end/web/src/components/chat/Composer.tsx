@@ -377,14 +377,14 @@ export default function Composer({
         )}
         {/* One rounded bar: the text first, then the tools and the send arrow on
             the right — `order` moves the text box without changing tab order. */}
-        <div className="gc-field gc-compose flex items-end gap-0.5 rounded-[26px] py-1 pl-1.5 pr-1.5">
+        <div className="gc-field gc-compose flex items-end gap-0.5 rounded-[26px] py-1 pl-1.5 pr-1.5 focus-within:shadow-[inset_0_0_0_1px_var(--color-gray-300)]">
           <div className="relative order-0 shrink-0">
             <button
               type="button"
               onClick={() => setShowMore((v) => !v)}
               aria-expanded={showMore}
               aria-haspopup="menu"
-              className={`grid h-9 w-9 place-items-center rounded-full hover:bg-gray-200 hover:text-gray-800 ${showMore ? 'bg-gray-200 text-gray-900' : 'text-gray-600'}`}
+              className={`gc-plus grid h-9 w-9 place-items-center rounded-full ${showMore ? 'is-open' : ''}`}
               aria-label="Add a photo, file or order"
               title="Add a photo, file or order"
             >
@@ -485,7 +485,7 @@ export default function Composer({
           <button
             type="submit"
             disabled={!text.trim() && !files.length}
-            className="gc-send order-4 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-600 text-white transition-[background-color,transform,color] hover:bg-blue-700 active:scale-95 disabled:bg-transparent disabled:text-gray-400"
+            className="order-4 grid h-9 w-9 shrink-0 place-items-center rounded-full text-blue-600 transition-[background-color,transform] hover:bg-blue-100 active:scale-95 disabled:text-gray-400 disabled:hover:bg-transparent"
             aria-label="Send message"
           >
             <SendHorizontal className="h-5 w-5" />

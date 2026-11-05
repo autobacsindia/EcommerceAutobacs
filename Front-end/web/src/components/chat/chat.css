@@ -153,8 +153,8 @@
 .gc-fold { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.22s cubic-bezier(0.2, 0, 0, 1), opacity 0.18s; }
 .gc-fold[data-open='false'] { grid-template-rows: 0fr; opacity: 0; }
 
+/* Cards sit flat on the page colour, as Google Chat's: no shadow, just white. */
 .gc-pane { box-shadow: none; }
-@media (min-width: 1024px) { .gc-pane { box-shadow: var(--gc-card-shadow); } }
 
 /* Thin Google-style scrollbars that only darken on hover. */
 .gc-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
@@ -219,9 +219,6 @@
 /* On the open (blue) row the tile keeps its own colours. */
 .gc-nav-item[aria-current] .gc-tile { color: var(--t-ink); }
 
-/* The date between days: a small floating card. */
-.gc-day { background: var(--gc-card); box-shadow: var(--gc-card-shadow); }
-[data-theme='dark'] .gc-theme .gc-day { background: var(--gc-hover); }
 
 /* Conversation tabs: a rounded blue bar under the open one. */
 .gc-tab::after {
@@ -231,11 +228,11 @@
 }
 .gc-tab[aria-selected='true']::after { transform: scaleX(1); }
 
-/* The message box: grey at rest; white and lifted while you type. */
-.gc-compose { transition: background-color 0.18s, box-shadow 0.18s; }
-.gc-compose:focus-within { background: var(--gc-card); box-shadow: 0 1px 3px rgba(60, 64, 67, 0.2), 0 4px 12px rgba(60, 64, 67, 0.12), inset 0 0 0 1px var(--color-blue-500); }
-[data-theme='dark'] .gc-theme .gc-compose:focus-within { box-shadow: inset 0 0 0 1px var(--color-blue-500); }
-.gc-send:not(:disabled) { box-shadow: 0 1px 2px rgba(11, 87, 208, 0.3); }
+/* The message box: one quiet grey bar, as Google's; a hairline while you type. */
+.gc-compose { background: var(--gc-compose); transition: box-shadow 0.15s; }
+/* "Add" (+): a round tinted button at the start of the bar. */
+.gc-plus { background: var(--gc-selected); color: var(--gc-selected-ink); transition: background-color 0.15s; }
+.gc-plus:hover, .gc-plus.is-open { background: color-mix(in srgb, var(--gc-selected) 80%, var(--color-blue-600)); }
 
 /* The message's hover bar: a floating pill. */
 .gc-toolbar { background: var(--gc-card); box-shadow: var(--gc-fab-shadow); }
@@ -261,5 +258,17 @@
 
 @media (prefers-reduced-motion: reduce) {
   .gc-scrim, .gc-sheet, .gc-shimmer, .gc-open { animation: none; }
-  .gc-tab::after, .gc-compose { transition: none; }
+  .gc-tab::after, .gc-compose, .gc-plus { transition: none; }
 }
+
+/* ---- Classic Google type: Roboto inside the chat only, regular-weight titles ---- */
+.gc-theme {
+  font-family: var(--font-gc), Roboto, var(--font-dm-sans), Arial, sans-serif;
+  --gc-compose: #f0f4f9;
+  -webkit-font-smoothing: antialiased;
+}
+[data-theme='dark'] .gc-theme { --gc-compose: #262a31; }
+/* The panel's titles are Montserrat bold; Google's chat titles are regular. */
+.gc-theme .pn-title { font-family: inherit; font-weight: 400; letter-spacing: 0; font-size: 18px; }
+/* Fields and buttons don't inherit fonts by default. */
+.gc-theme button, .gc-theme input, .gc-theme textarea { font-family: inherit; }
