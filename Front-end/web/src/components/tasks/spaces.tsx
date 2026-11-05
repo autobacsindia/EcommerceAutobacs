@@ -50,6 +50,11 @@ export function useSpace(team: string | null | undefined, enabled = true) {
     queryFn: () => apiClient.get<{ space: Space }>(`/staff/tasks/space?team=${encodeURIComponent(team || '')}`).then((r) => r.space),
     enabled: !!team && enabled,
     staleTime: 60_000,
+    // Another team's space is a 403 by design: asking again cannot change that.
+    retry: (count, e) => {
+      const status = (e as unknown as { status?: number })?.status;
+      return count < 1 && !(status && status < 500);
+    },
   });
 }
 
@@ -389,13 +394,18 @@ export function SpaceTree({ team, label, expanded, onToggle, isCurrent, active, 
  * The list a task is in, as a picker (or plain text for someone who may not
  * move it). Only the lists of the task's own team's space are offered.
  */
-export function ListPicker({ team, value, onChange, disabled, label = 'List', className = '' }: {
-  team: string | null | undefined; value: string | null | undefined; onChange: (listId: string | null) => void;
+export function ListPicker({ team, teamLabel, value, onChange, disabled, label = 'List', className = '' }: {
+  team: string | null | undefined; teamLabel?: string; value: string | null | undefined; onChange: (listId: string | null) => void;
   disabled?: boolean; label?: string; className?: string;
 }) {
   const space = useSpace(team);
   const s = space.data;
-  if (!team || !s) return null;
+  if (!team) return null;
+  if (!s) {
+    if (space.isPending) return <span className="text-sm text-gray-400">…</span>;
+    // Another team's space is not shown to this person: say where the task is, plainly.
+    return <span className="text-sm text-gray-500">{value ? `In a ${teamLabel || 'team'} list` : 'No list'}</span>;
+  }
   const known = allLists(s);
   const current = known.find((l) => l.id === value);
   if (!known.length && !value) return <span className="text-sm text-gray-400">No lists in {s.teamLabel} yet</span>;
@@ -407,7 +417,8 @@ export function ListPicker({ team, value, onChange, disabled, label = 'List', cl
         disabled={disabled}
         onChange={(e) => onChange(e.target.value || null)}
         aria-label={label}
-        className="min-w-0 max-w-full truncate rounded-md border border-transparent bg-transparent py-0.5 pr-6 text-sm text-gray-800 hover:border-gray-200 disabled:cursor-default disabled:hover:border-transparent"
+        // `!`: the panel styles every select with a white box (globals.css); a quiet inline picker has to win that.
+        className={`min-w-0 max-w-full truncate rounded-md border-transparent! bg-transparent! py-0.5 text-sm text-gray-800 ${disabled ? 'cursor-default appearance-none pr-1' : 'pr-6 hover:border-gray-200!'}`}
       >
         <option value="">Other tasks (no list)</option>
         {s.folders.map((f) => (f.lists.length ? (

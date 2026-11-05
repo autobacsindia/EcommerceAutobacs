@@ -645,6 +645,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
             <Field label="List" icon={ListTree}>
               <ListPicker
                 team={task.team}
+                teamLabel={task.teamLabel}
                 value={task.list}
                 disabled={!task.can.edit || save.isPending}
                 onChange={(listId) => save.mutate({ listId })}

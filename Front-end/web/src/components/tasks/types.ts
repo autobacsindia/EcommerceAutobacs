@@ -6,7 +6,8 @@
  * hide what would be refused.
  */
 
-export type TaskStatus = 'todo' | 'in_progress' | 'waiting' | 'done';
+/** Like ClickUp: to do, in progress, complete. ('waiting' was retired; the server shows old ones as in progress.) */
+export type TaskStatus = 'todo' | 'in_progress' | 'done';
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskBucket = 'open' | 'done' | 'archived';
 export type TaskView = 'mine' | 'following' | 'created' | 'team';
@@ -225,7 +226,6 @@ export type BulkResult = {
 export const TASK_STATUSES: { value: TaskStatus; label: string }[] = [
   { value: 'todo', label: 'To do' },
   { value: 'in_progress', label: 'In progress' },
-  { value: 'waiting', label: 'Waiting' },
   { value: 'done', label: 'Complete' },
 ];
 
@@ -239,7 +239,6 @@ export const TASK_PRIORITIES: { value: TaskPriority; label: string }[] = [
 export const STATUS_BADGE: Record<TaskStatus, string> = {
   todo: 'bg-gray-100 text-gray-700',
   in_progress: 'bg-sky-100 text-sky-800',
-  waiting: 'bg-amber-100 text-amber-800',
   done: 'bg-green-100 text-green-800',
 };
 

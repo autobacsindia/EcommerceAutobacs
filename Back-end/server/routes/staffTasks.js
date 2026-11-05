@@ -255,13 +255,29 @@ router.delete('/:id/files/:name', validateTaskFileName, validateRequest, asyncHa
   res.json({ success: true, task: await removeTaskFileFrom(req.user, req.params.id, req.params.name) });
 }));
 
-// @route  GET /staff/tasks/:id/files/:name — a file's bytes (task or comment), for people who see the task
+/**
+ * A Content-Disposition header: an ASCII fallback from the stored name (its
+ * upload-time prefix dropped) plus the original name, UTF-8 encoded (RFC 6266),
+ * so "बिल 10482.pdf" downloads as itself and nothing can break out of the quotes.
+ */
+function contentDisposition(type, storedName, originalName) {
+  const ascii = String(storedName).replace(/^\d+-[a-z0-9]+-/, '').replace(/[^\w.-]+/g, '_');
+  const header = `${type}; filename="${ascii}"`;
+  if (!originalName) return header;
+  // encodeURIComponent leaves ' ( ) * as they are; RFC 5987 does not allow them.
+  const encoded = encodeURIComponent(originalName).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `${header}; filename*=UTF-8''${encoded}`;
+}
+
+// @route  GET /staff/tasks/:id/files/:name — a file's bytes (task or comment), for people who see the task.
+// ?download=1 asks for a download (saved under the name it was uploaded with) instead of viewing it.
 router.get('/:id/files/:name', validateTaskFileName, validateRequest, asyncHandler(async (req, res) => {
-  const { buffer, mime, inline } = await readFileOf(req.user, req.params.id, req.params.name);
+  const { buffer, mime, inline, name } = await readFileOf(req.user, req.params.id, req.params.name);
+  const download = req.query.download === '1';
   res.set({
     'Content-Type': mime,
     'Content-Length': buffer.length,
-    'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${String(req.params.name).replace(/^\d+-[a-z0-9]+-/, '').replace(/[^\w.-]+/g, '_')}"`,
+    'Content-Disposition': contentDisposition(inline && !download ? 'inline' : 'attachment', req.params.name, name),
     'X-Content-Type-Options': 'nosniff',
     // The bytes never change; private so no shared cache keeps them.
     'Cache-Control': 'private, max-age=86400',

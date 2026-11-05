@@ -227,6 +227,26 @@ describe('files', () => {
     await waitFor(() => expect(submitMultipart).toHaveBeenCalledWith('/api/v1/staff/tasks/t1/files', 'POST', expect.any(FormData)));
   });
 
+  it('every saved file has a download button (task files and comment files); a file not yet sent has none', async () => {
+    open({
+      one: task({ files: [
+        { url: '/api/v1/staff/tasks/t1/files/1-ab-bill.pdf', name: 'bill.pdf', mime: 'application/pdf', size: 2048, kind: 'file', canRemove: false },
+        { url: '/api/v1/staff/tasks/t1/files/2-cd-photo.jpg', name: 'photo.jpg', mime: 'image/jpeg', size: 4096, kind: 'image', canRemove: false },
+      ] }),
+      comments: [comment({ id: 'c1', files: [{ url: '/api/v1/staff/tasks/t1/files/3-ef-quote.pdf', name: 'quote.pdf', mime: 'application/pdf', size: 1024, kind: 'file' }] })],
+    });
+    const bill = await screen.findByRole('link', { name: 'Download bill.pdf' });
+    expect(bill).toHaveAttribute('href', '/api/v1/staff/tasks/t1/files/1-ab-bill.pdf?download=1');
+    expect(bill).toHaveAttribute('download', 'bill.pdf');
+    expect(screen.getByRole('link', { name: 'Download photo.jpg' })).toHaveAttribute('href', '/api/v1/staff/tasks/t1/files/2-cd-photo.jpg?download=1');
+    // The name itself still opens it to view, in a new tab.
+    expect(screen.getByRole('link', { name: 'bill.pdf' })).toHaveAttribute('target', '_blank');
+    expect(await screen.findByRole('link', { name: 'Download quote.pdf' })).toHaveAttribute('href', '/api/v1/staff/tasks/t1/files/3-ef-quote.pdf?download=1');
+
+    fireEvent.change(await screen.findByLabelText('Attach files to the comment'), { target: { files: [pdf()] } });
+    expect(within(screen.getByRole('list', { name: 'Files to send' })).queryByRole('link', { name: /Download/ })).toBeNull();
+  });
+
   it('someone who may not add files sees no add button, and no Files section when there are none', async () => {
     open({ one: task({ can: { ...can, files: false } }) });
     await screen.findByRole('heading', { name: 'Call Bosch' });

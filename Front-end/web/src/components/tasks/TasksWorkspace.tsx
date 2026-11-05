@@ -272,7 +272,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
     return () => window.removeEventListener('keydown', onKey);
   }, [openId]);
 
-  const control = 'h-8 rounded-full border border-gray-200 bg-white pl-3 pr-7 text-[13px] font-medium text-gray-700 shadow-[0_1px_1px_rgba(20,22,40,0.03)] hover:border-gray-300 hover:bg-gray-50';
+  const control = 'h-8 w-full min-w-0 truncate rounded-full border sm:w-auto border-gray-200 bg-white pl-3 pr-7 text-[13px] font-medium text-gray-700 shadow-[0_1px_1px_rgba(20,22,40,0.03)] hover:border-gray-300 hover:bg-gray-50';
   const help = useHelp();
   const space = SPACES.find((sp) => sp.value === team);
   const spaceData = useSpace(spaceTeam, !!list).data;
@@ -319,7 +319,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
       {/* Which tasks: a menu flush down the side on a wide screen, a row of chips on a phone. */}
       <nav
         aria-label="Task lists"
-        className="tk-side relative flex gap-1.5 overflow-x-auto border-b px-3 py-2.5 [scrollbar-width:none] md:px-5 lg:sticky lg:top-14 lg:h-[calc(100dvh-3.5rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-2 lg:py-3"
+        className="tk-side relative flex gap-1.5 overflow-x-auto border-b px-3 py-2.5 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] lg:[mask-image:none] md:px-5 lg:sticky lg:top-14 lg:h-[calc(100dvh-3.5rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-2 lg:py-3"
       >
         <p className="hidden items-center gap-2 px-2 pb-3 lg:flex">
           <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm"><ListTodo aria-hidden className="h-3.5 w-3.5" /></span>
@@ -476,23 +476,24 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
             />
             <span className="pointer-events-none absolute right-2 hidden sm:block"><Kbd>/</Kbd></span>
           </label>
-          {!inTrash && <div className="-mx-3 flex min-w-0 basis-full items-center gap-2 overflow-x-auto px-3 [scrollbar-width:none] sm:mx-0 sm:basis-auto sm:flex-wrap sm:overflow-visible sm:px-0">
+          {/* Phones: two even columns, everything in view (no hidden sideways scroll); wider: one wrapping row. */}
+          {!inTrash && <div className="grid min-w-0 basis-full grid-cols-2 items-center gap-2 sm:flex sm:basis-auto sm:flex-wrap">
           {layout === 'list' && (
-            <label className="inline-flex shrink-0 items-center gap-1" title="Group by">
+            <label className="flex min-w-0 items-center gap-1 sm:inline-flex sm:shrink-0" title="Group by">
               <Layers aria-hidden className="h-4 w-4 text-gray-400" />
               <select value={groupBy} onChange={(e) => setGroupBy(asGroup(e.target.value))} aria-label="Group by" className={control}>
                 {TASK_GROUPINGS.map((g) => <option key={g.value} value={g.value}>Group: {g.label}</option>)}
               </select>
             </label>
           )}
-          <label className="inline-flex shrink-0 items-center gap-1" title="Order">
+          <label className="flex min-w-0 items-center gap-1 sm:inline-flex sm:shrink-0" title="Order">
             <ArrowDownUp aria-hidden className="h-4 w-4 text-gray-400" />
             <select value={sort} onChange={(e) => setList({ sort: e.target.value })} aria-label="Sort" className={control}>
               {TASK_SORTS.map((o) => <option key={o.value} value={o.value}>Sort: {o.label}</option>)}
             </select>
           </label>
           {view === 'team' && (
-            <label className="inline-flex shrink-0 items-center gap-1">
+            <label className="flex min-w-0 items-center gap-1 sm:inline-flex sm:shrink-0">
               <User aria-hidden className="h-4 w-4 text-gray-400" />
               <select value={assignee} onChange={(e) => setList({ assignee: e.target.value })} aria-label="Person" className={control}>
                 <option value="">Everyone</option>
@@ -500,14 +501,14 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
               </select>
             </label>
           )}
-          <label className="inline-flex shrink-0 items-center gap-1">
+          <label className="flex min-w-0 items-center gap-1 sm:inline-flex sm:shrink-0">
             <Flag aria-hidden className="h-4 w-4 text-gray-400" />
             <select value={priority} onChange={(e) => setList({ priority: e.target.value })} aria-label="Priority filter" className={control}>
               <option value="">Any priority</option>
               {TASK_PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
           </label>
-          <div className="flex shrink-0 gap-0.5 rounded-full border border-gray-200 bg-white p-0.5" role="group" aria-label="Due date">
+          <div className="col-span-2 flex shrink-0 gap-0.5 rounded-full border border-gray-200 bg-white p-0.5 sm:col-span-1" role="group" aria-label="Due date">
             {DUES.map((d) => {
               const on = due === d.value || (d.value === 'overdue' && due === 'late');
               return (
@@ -515,21 +516,21 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
                   key={d.value || 'any'}
                   aria-pressed={on}
                   onClick={() => setDue(d.value)}
-                  className={`h-7 whitespace-nowrap rounded-full px-2.5 text-[13px] font-medium transition ${on ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
+                  className={`h-7 flex-1 whitespace-nowrap rounded-full px-2.5 text-[13px] font-medium transition sm:flex-none ${on ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'}`}
                 >
                   {d.label}
                 </button>
               );
             })}
           </div>
-          {due === 'late' && <span className="shrink-0 whitespace-nowrap text-xs text-gray-500">(late or due today)</span>}
+          {due === 'late' && <span className="col-span-2 shrink-0 whitespace-nowrap text-xs text-gray-500">(late or due today)</span>}
           {tag && (
-            <span className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-blue-50 pl-2 pr-1 text-sm font-medium text-blue-800">
+            <span className="col-span-2 inline-flex h-8 shrink-0 items-center gap-1 justify-self-start rounded-lg bg-blue-50 pl-2 pr-1 text-sm font-medium text-blue-800">
               <Tag aria-hidden className="h-3.5 w-3.5" /> {tag}
               <button onClick={() => setList({ tag: '' })} aria-label={`Stop filtering by ${tag}`} className="rounded p-0.5 hover:bg-blue-100"><X className="h-3.5 w-3.5" /></button>
             </span>
           )}
-          {narrowed && <button onClick={clear} className="shrink-0 whitespace-nowrap text-sm font-medium text-blue-700 hover:underline">Clear all</button>}
+          {narrowed && <button onClick={clear} className="col-span-2 shrink-0 justify-self-start whitespace-nowrap text-sm font-medium text-blue-700 hover:underline">Clear all</button>}
           </div>}
         </div>
         {counted && !inTrash && <ListResultLine count={counted.count} capped={counted.capped} noun={['open task', 'open tasks']} />}

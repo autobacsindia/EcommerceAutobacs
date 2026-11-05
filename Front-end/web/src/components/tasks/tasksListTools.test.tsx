@@ -74,12 +74,14 @@ describe('grouping', () => {
   const t = (id: string, over: Partial<Task>) => task({ id, code: `T-${id}`, ...over });
   const today = '2026-11-02';
 
-  it('by status: in progress, waiting, to do — empty ones kept unless asked; order inside kept', () => {
+  it('by status: in progress, then to do (no "Waiting", like ClickUp) — empty ones kept unless asked; order inside kept', () => {
     const rows = [t('1', { status: 'todo' }), t('2', { status: 'in_progress' }), t('3', { status: 'todo' })];
     expect(groupTasks(rows, 'status', { today }).map((g) => [g.label, g.tasks.map((x) => x.id)]))
-      .toEqual([['In progress', ['2']], ['Waiting', []], ['To do', ['1', '3']]]);
-    expect(groupTasks(rows, 'status', { today, hideEmpty: true }).map((g) => g.label)).toEqual(['In progress', 'To do']);
-    expect(groupTasks(rows, 'status', { today })[2].addStatus).toBe('todo');
+      .toEqual([['In progress', ['2']], ['To do', ['1', '3']]]);
+    const todoOnly = [t('1', { status: 'todo' })];
+    expect(groupTasks(todoOnly, 'status', { today }).map((g) => [g.label, g.tasks.length])).toEqual([['In progress', 0], ['To do', 1]]);
+    expect(groupTasks(todoOnly, 'status', { today, hideEmpty: true }).map((g) => g.label)).toEqual(['To do']);
+    expect(groupTasks(rows, 'status', { today })[1].addStatus).toBe('todo');
   });
 
   it('by priority (most urgent first), by person (by name), or not at all', () => {

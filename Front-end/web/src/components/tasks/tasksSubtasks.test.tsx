@@ -125,10 +125,10 @@ describe('the task window', () => {
 
   it('previous / next and J / K follow the list on screen, stop at the ends, and never fire while typing', async () => {
     const a = task({ id: 'a', code: 'T-1', title: 'Alpha', status: 'in_progress' });
-    const b = task({ id: 'b', code: 'T-2', title: 'Bravo', status: 'waiting' });
+    const b = task({ id: 'b', code: 'T-2', title: 'Bravo', status: 'todo' });
     const c = task({ id: 'c', code: 'T-3', title: 'Charlie', status: 'todo' });
-    // The server pages by due day; the list shows In progress, Waiting, To do — that order counts.
-    serve({ list: [c, b, a], tasks: { a, b, c } });
+    // The server pages by due day; the list shows In progress, then To do — that order counts.
+    serve({ list: [b, c, a], tasks: { a, b, c } });
     workspace();
     const win = await openTask('Bravo');
     expect(await within(win).findByText('2 of 3')).toBeInTheDocument();

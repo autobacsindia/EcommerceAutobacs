@@ -256,7 +256,14 @@ const staffTaskRepository = {
     { new: true, projection: { clientId: 0, edits: 0 } },
   ).lean(),
   /** Is `publicId` a file on a comment of this task that has not been deleted? Rides { task, _id }. */
-  hasLiveCommentFile: async (taskId, publicId) => !!(await StaffTaskComment.exists({ task: taskId, deletedAt: null, 'attachments.publicId': publicId })),
+  /** The file (its name) on a live comment of the task, or null when no live comment carries it. */
+  liveCommentFile: async (taskId, publicId) => {
+    const c = await StaffTaskComment.findOne(
+      { task: taskId, deletedAt: null, 'attachments.publicId': publicId },
+      { 'attachments.$': 1 },
+    ).lean();
+    return c?.attachments?.[0] || null;
+  },
 
   // ── Files on the task (never bump `rev`: adding a file must not block someone's edit) ──
   /**

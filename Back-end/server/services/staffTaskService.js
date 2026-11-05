@@ -70,7 +70,7 @@ import { listForTask, liveList } from './staffTaskListService.js';
 import { orderNumber } from './invoiceService.js';
 import { formatIsoDateIST } from '../utils/datetime.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
-import { TASK_STATUSES, TASK_PRIORITIES } from '../models/StaffTask.js';
+import { TASK_PICKABLE_STATUSES, TASK_PRIORITIES, shownStatus } from '../models/StaffTask.js';
 import { keysetPage } from '../utils/listQuery.js';
 import { normalizeEmoji } from '../utils/reactions.js';
 import {
@@ -320,8 +320,8 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
     ...(full
       ? { description }
       : { summary: description.length > SUMMARY_MAX ? `${description.slice(0, SUMMARY_MAX - 1)}…` : description }),
-    status: t.status,
-    statusLabel: STATUS_LABELS[t.status],
+    status: shownStatus(t.status),
+    statusLabel: STATUS_LABELS[shownStatus(t.status)],
     priority: t.priority,
     priorityLabel: PRIORITY_LABELS[t.priority],
     dueOn: t.dueOn || null,
@@ -543,7 +543,7 @@ async function siblingsOf(actor, t) {
     .filter((r) => !same(r._id, t._id) && canSee(actor, r))
     .map((r) => ({
       id: idOf(r._id), code: `T-${r.number}`, assignee: { id: idOf(r.assignee), name: r.assigneeName || '' },
-      status: r.status, statusLabel: STATUS_LABELS[r.status], bucket: r.bucket,
+      status: shownStatus(r.status), statusLabel: STATUS_LABELS[shownStatus(r.status)], bucket: r.bucket,
     }));
 }
 
@@ -796,7 +796,7 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   const tags = cleanTags(input.tags);
   const checklist = cleanChecklist(input.checklist);
   // "+ Add task" inside a status group starts the task in that group (never Done).
-  const status = input.status == null || input.status === '' ? 'todo' : cleanEnum(input.status, ['todo', 'in_progress', 'waiting'], 'status');
+  const status = input.status == null || input.status === '' ? 'todo' : cleanEnum(input.status, ['todo', 'in_progress'], 'status');
   const rawIds = Array.isArray(input.assigneeIds) && input.assigneeIds.length ? input.assigneeIds : [input.assigneeId].filter(Boolean);
   const people = await loadAssignees(actor, rawIds);
   const order = await loadOrderRef(input.orderId);
@@ -1010,12 +1010,12 @@ async function applyUpdate(actor, t, input, req) {
     if (idOf(order?.target) !== idOf(t.order?.target)) { needEdit(); set.order = order; note('order', t.order?.code || 'none', order?.code || 'none'); }
   }
   if (has('status')) {
-    const status = cleanEnum(input.status, TASK_STATUSES, 'status');
-    if (status !== t.status) {
+    const status = cleanEnum(input.status, TASK_PICKABLE_STATUSES, 'status');
+    if (status !== shownStatus(t.status)) {
       if (!canSetStatus(actor, t)) throw fail('Only the person doing this task, whoever gave it, the team head or the admin can move it.', 403);
       set.status = status;
       set.completedAt = status === 'done' ? now : null;
-      note('status', STATUS_LABELS[t.status], STATUS_LABELS[status]);
+      note('status', STATUS_LABELS[shownStatus(t.status)], STATUS_LABELS[status]);
     }
   }
   let added = [];
@@ -1048,6 +1048,8 @@ async function applyUpdate(actor, t, input, req) {
   }
 
   if (!entries.length) return shape(t, actor, { full: true });
+  // A retired 'waiting' becomes what it was already shown as, on its next change.
+  if (t.status === 'waiting' && !set.status) set.status = 'in_progress';
 
   Object.assign(set, placeOf({
     status: set.status ?? t.status,
@@ -1120,7 +1122,7 @@ function bulkTags(t, add, remove) {
 /** Would `input` change nothing on `t`? Then a retried bulk change is a success, not a conflict. */
 function changesNothing(t, input) {
   const has = (k) => input[k] !== undefined;
-  return (!has('status') || input.status === t.status)
+  return (!has('status') || input.status === shownStatus(t.status))
     && (!has('priority') || input.priority === t.priority)
     && (!has('dueOn') || input.dueOn === (t.dueOn || null))
     && (!has('assigneeId') || (peopleOf(t).length === 1 && same(input.assigneeId, peopleOf(t)[0].user)))
@@ -1153,7 +1155,7 @@ export async function bulkUpdate(actor, { items, changes } = {}, req) {
   if (!given.length) throw fail('Pick what to change.', 400);
   if (given.includes('archived') && given.length > 1) throw fail('Archive or restore on its own, not with other changes.', 400);
   const base = {};
-  if (c.status !== undefined) base.status = cleanEnum(c.status, TASK_STATUSES, 'status');
+  if (c.status !== undefined) base.status = cleanEnum(c.status, TASK_PICKABLE_STATUSES, 'status');
   if (c.priority !== undefined) base.priority = cleanEnum(c.priority, TASK_PRIORITIES, 'priority');
   if (c.dueOn !== undefined) base.dueOn = cleanDueOn(c.dueOn);
   if (c.assigneeId !== undefined) base.assigneeId = (await loadAssignee(actor, c.assigneeId))._id;
@@ -1668,8 +1670,10 @@ export async function readFileOf(actor, id, name) {
   const t = await loadVisible(actor, id);
   if (!isTaskFileName(name)) throw fail('File not found.', 404);
   const publicId = `${taskFolder(idOf(t._id))}/${name}`;
-  const listed = (t.files || []).some((f) => f.publicId === publicId)
-    || await staffTaskRepository.hasLiveCommentFile(t._id, publicId);
-  if (!listed) throw fail('File not found.', 404);
-  return readTaskFile(idOf(t._id), name);
+  const own = (t.files || []).find((f) => f.publicId === publicId)
+    || await staffTaskRepository.liveCommentFile(t._id, publicId);
+  if (!own) throw fail('File not found.', 404);
+  const file = await readTaskFile(idOf(t._id), name);
+  // The name it was uploaded with, for a download's file name.
+  return { ...file, name: own.name || null };
 }

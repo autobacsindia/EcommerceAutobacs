@@ -194,6 +194,23 @@ describe('a task\'s list', () => {
     await waitFor(() => expect(spaceReads()).toBeGreaterThan(before));
   });
 
+  it('a task from a team whose lists this person cannot see says "No list" (or that it is in one), never a blank line', async () => {
+    serve({ one: task() });
+    const base = get.getMockImplementation()!;
+    get.mockImplementation((url: string) => (url.startsWith('/staff/tasks/space') ? Promise.reject({ status: 403 }) : base(url)));
+    detail(task());
+    expect(await screen.findByText('No list')).toBeInTheDocument();
+    expect(get.mock.calls.filter((c) => (c[0] as string).startsWith('/staff/tasks/space'))).toHaveLength(1);
+  });
+
+  it('...and one filed in a list there says so', async () => {
+    serve({ one: task({ list: 'l9' }) });
+    const base = get.getMockImplementation()!;
+    get.mockImplementation((url: string) => (url.startsWith('/staff/tasks/space') ? Promise.reject({ status: 403 }) : base(url)));
+    detail(task());
+    expect(await screen.findByText('In a Procurement list')).toBeInTheDocument();
+  });
+
   it('someone who may not change the task sees the list but cannot move it', async () => {
     serve({ one: task({ list: 'l1', can: { ...can, edit: false } }) });
     detail(task());

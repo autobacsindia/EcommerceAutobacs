@@ -9,7 +9,7 @@
 import { body, param, query } from 'express-validator';
 import mongoose from 'mongoose';
 import { STAFF_TEAM_VALUES } from '../config/staff.js';
-import { TASK_STATUSES, TASK_PRIORITIES } from '../models/StaffTask.js';
+import { TASK_PICKABLE_STATUSES, TASK_PRIORITIES } from '../models/StaffTask.js';
 import { INBOX_STATES } from '../models/StaffTaskInbox.js';
 
 const isObjectId = (v) => mongoose.Types.ObjectId.isValid(v);
@@ -37,7 +37,7 @@ export const validateTaskCreate = [
   body('title').isString().withMessage('Give the task a title'),
   body('description').optional().isString(),
   body('priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
-  body('status').optional().isIn(['todo', 'in_progress', 'waiting']).withMessage('Invalid status'),
+  body('status').optional().isIn(['todo', 'in_progress']).withMessage('Invalid status'),
   body('dueOn').optional({ values: 'null' }).isString(),
   body('dueTime').optional({ values: 'null' }).isString().withMessage('Invalid due time'),
   body('startOn').optional({ values: 'null' }).isString(),
@@ -61,7 +61,7 @@ export const validateTaskUpdate = [
   body('title').optional().isString(),
   body('description').optional().isString(),
   body('priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
-  body('status').optional().isIn(TASK_STATUSES).withMessage('Invalid status'),
+  body('status').optional().isIn(TASK_PICKABLE_STATUSES).withMessage('Invalid status'),
   body('dueOn').optional({ values: 'null' }).isString(),
   body('dueTime').optional({ values: 'null' }).isString().withMessage('Invalid due time'),
   body('startOn').optional({ values: 'null' }).isString(),
@@ -88,7 +88,7 @@ export const validateTaskBulk = [
   body('items.*.id').custom(isObjectId).withMessage('Invalid task id'),
   body('items.*.rev').isInt({ min: 1 }).withMessage('Reload the tasks and try again'),
   body('changes').isObject().withMessage('Pick what to change'),
-  body('changes.status').optional().isIn(TASK_STATUSES).withMessage('Invalid status'),
+  body('changes.status').optional().isIn(TASK_PICKABLE_STATUSES).withMessage('Invalid status'),
   body('changes.priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
   body('changes.dueOn').optional({ values: 'null' }).isString(),
   body('changes.assigneeId').optional().custom(isObjectId).withMessage('Invalid person'),

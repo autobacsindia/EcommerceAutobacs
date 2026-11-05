@@ -194,7 +194,7 @@ describe('moving a shared task', () => {
 
   it('a stale move is refused and sends nothing', async () => {
     const t = await sharedTask();
-    await tasks.updateTask(procA, t.id, { rev: t.rev, status: 'waiting' }, req);
+    await tasks.updateTask(procA, t.id, { rev: t.rev, status: 'in_progress' }, req);
     await settle();
     pushes.length = 0;
     await refused(tasks.updateTask(salesA, t.id, { rev: t.rev, status: 'done' }, req), 409);
