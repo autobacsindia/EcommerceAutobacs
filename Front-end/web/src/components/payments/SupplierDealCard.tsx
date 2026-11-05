@@ -6,7 +6,7 @@ import { CalendarClock, Factory, FileText, Pencil, Plus, Trash2 } from 'lucide-r
 import type { WorkOrder } from '@/components/staff/work/types';
 import apiClient from '@/lib/api-client';
 import { formatDateIST } from '@/lib/datetime';
-import { errorMessage, paymentKeys, rupees, slipHref, STATUS_TONE, type OrderPayment, type SupplierDeal } from './api';
+import { errorMessage, money, paymentKeys, rupees, slipHref, STATUS_TONE, type OrderPayment, type SupplierDeal } from './api';
 import PaymentRequestForm from './PaymentRequestForm';
 
 type Line = WorkOrder['lines'][number];
@@ -34,70 +34,31 @@ function useRefresh(orderId: string) {
 }
 
 /**
- * Set up a supplier deal for a made-to-order item: the total agreed with the
- * supplier and their dates. The payments (advance, balance) are raised from the
- * deal afterwards, each approved by accounts and paid by the admin as usual.
+ * Made to order, in one step: supplier (saved or typed, with how to pay them),
+ * currency, total agreed, advance now and completion date. The server saves the
+ * deal and the advance request together, or neither. The day the advance is paid
+ * is recorded by itself (it is when the supplier starts).
  */
 export function SetUpDealForm({ order, line, onDone, onCancel }: { order: WorkOrder; line: Line; onDone: () => void; onCancel: () => void }) {
-  const [form, setForm] = useState({ supplierName: line.supplierName || '', agreedTotal: '', startDate: '', completionDate: '', note: '' });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError('');
-    try {
-      await apiClient.post('/payment-requests/deals', { orderId: order.id, itemIds: [line.itemId], ...form });
-      onDone();
-    } catch (err) {
-      setError(errorMessage(err, 'Could not set up the supplier deal.'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
-    <form onSubmit={submit} className="space-y-3 rounded-xl border border-gray-200 bg-white p-4" aria-label="Set up supplier deal">
-      <div>
-        <h3 className="text-base font-semibold text-gray-900">Paid in parts — {lineName(line)}</h3>
-        <p className="text-xs text-gray-500">For an item the supplier makes for this order: enter the total agreed with them and their dates. Then raise the advance, and the balance when it is ready.</p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <label className={label} htmlFor="deal-supplier">Supplier</label>
-          <input id="deal-supplier" className={input} required minLength={2} maxLength={120} value={form.supplierName} onChange={set('supplierName')} placeholder="Who is making it" />
-        </div>
-        <div>
-          <label className={label} htmlFor="deal-total">Agreed total with supplier (₹)</label>
-          <input id="deal-total" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={form.agreedTotal} onChange={set('agreedTotal')} placeholder="e.g. 29000" />
-        </div>
-        <div>
-          <label className={label} htmlFor="deal-start">Manufacturing start</label>
-          <input id="deal-start" type="date" className={input} value={form.startDate} onChange={set('startDate')} />
-        </div>
-        <div>
-          <label className={label} htmlFor="deal-end">Completion date</label>
-          <input id="deal-end" type="date" className={input} min={form.startDate || undefined} value={form.completionDate} onChange={set('completionDate')} />
-        </div>
-      </div>
-      <div>
-        <label className={label} htmlFor="deal-note">Note (optional)</label>
-        <input id="deal-note" className={input} maxLength={500} value={form.note} onChange={set('note')} placeholder="e.g. quote number, colour, size" />
-      </div>
-      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      <div className="flex gap-2">
-        <button type="submit" disabled={busy} className={primary}>Save deal</button>
-        <button type="button" onClick={onCancel} className={secondary}>Cancel</button>
-      </div>
-    </form>
+    <PaymentRequestForm
+      supplier={{
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        customer: order.customer.name,
+        closedBy: closedByOf(order),
+        lines: [{ itemId: line.itemId, name: lineName(line) }],
+        setUpDeal: true,
+      }}
+      onCancel={onCancel}
+      onDone={onDone}
+    />
   );
 }
 
-/** Change the agreed total or the dates — a reason is required and kept in the history. */
+/** Change the agreed total or the completion date — a reason is required and kept in the history. */
 function EditDealForm({ deal, onDone, onCancel }: { deal: SupplierDeal; onDone: () => void; onCancel: () => void }) {
-  const [form, setForm] = useState({ agreedTotal: String(deal.agreedTotal), startDate: deal.startDate, completionDate: deal.completionDate, note: '' });
+  const [form, setForm] = useState({ agreedTotal: String(deal.agreedTotal), completionDate: deal.completionDate, note: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
@@ -119,19 +80,15 @@ function EditDealForm({ deal, onDone, onCancel }: { deal: SupplierDeal; onDone: 
 
   return (
     <form onSubmit={submit} className="space-y-3 rounded-lg border border-gray-200 bg-white p-3" aria-label="Change supplier deal">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className={label} htmlFor="deal-edit-total">Agreed total (₹)</label>
+          <label className={label} htmlFor="deal-edit-total">Agreed total ({deal.currency === 'INR' ? '₹' : deal.currency})</label>
           <input id="deal-edit-total" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={form.agreedTotal} onChange={set('agreedTotal')} />
-          {asked > 0 && <p className="mt-1 text-xs text-gray-500">At least {rupees(asked)} (already asked for)</p>}
-        </div>
-        <div>
-          <label className={label} htmlFor="deal-edit-start">Manufacturing start</label>
-          <input id="deal-edit-start" type="date" className={input} value={form.startDate} onChange={set('startDate')} />
+          {asked > 0 && <p className="mt-1 text-xs text-gray-500">At least {money(asked, deal.currency)} (already asked for)</p>}
         </div>
         <div>
           <label className={label} htmlFor="deal-edit-end">Completion date</label>
-          <input id="deal-edit-end" type="date" className={input} min={form.startDate || undefined} value={form.completionDate} onChange={set('completionDate')} />
+          <input id="deal-edit-end" type="date" className={input} min={deal.startDate || undefined} value={form.completionDate} onChange={set('completionDate')} />
         </div>
       </div>
       <div>
@@ -176,11 +133,11 @@ export default function SupplierDealCard({ order, deal, requests }: { order: Wor
         <Factory className="h-4 w-4 text-indigo-700" />
         <p className="font-semibold text-gray-900">Made to order · {deal.supplierName}</p>
         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${deal.fullyPaid ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-900'}`}>
-          {deal.fullyPaid ? 'Supplier paid in full' : `Balance due ${rupees(deal.balanceDue)}`}
+          {deal.fullyPaid ? 'Supplier paid in full' : `Balance due ${money(deal.balanceDue, deal.currency)}`}
         </span>
         {deal.can.edit && mode === 'view' && (
           <button type="button" onClick={() => setMode('edit')} className="ml-auto inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
-            <Pencil className="h-3 w-3" /> Change total / dates
+            <Pencil className="h-3 w-3" /> Change total / date
           </button>
         )}
         {deal.can.remove && mode === 'view' && (
@@ -192,10 +149,10 @@ export default function SupplierDealCard({ order, deal, requests }: { order: Wor
 
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {[
-          ['Supplier cost', rupees(deal.agreedTotal)],
-          ['Paid so far', rupees(deal.paid)],
-          ['Waiting', rupees(deal.waiting)],
-          ['Balance due', rupees(deal.balanceDue)],
+          ['Supplier cost', money(deal.agreedTotal, deal.currency)],
+          ['Paid so far', money(deal.paid, deal.currency)],
+          ['Waiting', money(deal.waiting, deal.currency)],
+          ['Balance due', money(deal.balanceDue, deal.currency)],
         ].map(([k, v]) => (
           <div key={k} className="rounded-lg bg-white px-3 py-2">
             <dt className="text-xs text-gray-500">{k}</dt>
@@ -206,8 +163,10 @@ export default function SupplierDealCard({ order, deal, requests }: { order: Wor
 
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-gray-700">
         <CalendarClock className="h-4 w-4 text-gray-500" />
-        <span>Manufacturing start: <strong>{dayText(deal.startDate)}</strong></span>
+        {/* Not typed: the day the advance was paid, recorded with the payment. */}
+        <span>Advance paid on: <strong>{deal.startDate ? dayText(deal.startDate) : 'not paid yet'}</strong></span>
         <span>Completion: <strong>{dayText(deal.completionDate)}</strong></span>
+        {deal.currency !== 'INR' && deal.rupeesPaid > 0 && <span className="text-xs text-gray-600">{rupees(deal.rupeesPaid)} debited so far</span>}
         {dateChanges.length > 0 && <span className="text-xs text-amber-800">changed {dateChanges.length}×</span>}
       </p>
 
@@ -216,7 +175,10 @@ export default function SupplierDealCard({ order, deal, requests }: { order: Wor
           {deal.payments.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-1.5">
               <span className="font-medium text-gray-900">{p.partLabel}</span>
-              <span className="text-gray-700">{rupees(p.amount)}</span>
+              <span className="text-gray-700">
+                {money(p.amount, deal.currency)}
+                {deal.currency !== 'INR' && p.rupees != null && <span className="text-xs text-gray-500"> ({rupees(p.rupees)} debited)</span>}
+              </span>
               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[p.status]}`}>{p.statusLabel}</span>
               <span className="text-xs text-gray-500">
                 {p.number} · raised {formatDateIST(p.createdAt)}
@@ -259,7 +221,7 @@ export default function SupplierDealCard({ order, deal, requests }: { order: Wor
             customer: order.customer.name,
             closedBy: closedByOf(order),
             lines: order.lines.filter((l) => deal.itemIds.includes(l.itemId)).map((l) => ({ itemId: l.itemId, name: lineName(l) })),
-            deal: { id: deal.id, agreedTotal: deal.agreedTotal, leftToAsk: deal.leftToAsk, paid: deal.paid },
+            deal: { id: deal.id, agreedTotal: deal.agreedTotal, leftToAsk: deal.leftToAsk, paid: deal.paid, currency: deal.currency },
           }}
           sameAs={previous ? { id: previous.id, name: previous.payee } : undefined}
           onCancel={() => setMode('view')}

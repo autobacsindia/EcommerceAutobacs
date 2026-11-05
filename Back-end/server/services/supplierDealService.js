@@ -28,12 +28,33 @@ import { STAFF_TEAMS } from '../config/staff.js';
 import { workflowView, STAGE } from '../utils/teamWorkflow.js';
 import { variantDisplayName } from '../utils/orderLines.js';
 import { toPaise, fromPaise } from '../utils/money.js';
+import { BASE_CURRENCY, isCurrencyAllowed } from '../config/expenseCategories.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 const isObjectId = (v) => /^[a-f0-9]{24}$/i.test(String(v));
 
 export const MAX_DEAL_RUPEES = 10000000; // ₹1 crore: the same typo guard as a payment request
+export const MAX_DEAL_FOREIGN = 1000000000; // a foreign total: the same guard as a foreign bill
+
+/*
+  CURRENCY. A deal is agreed in one currency (₹, THB, USD…) and every part is
+  raised in it. `agreedPaise` / `reservedPaise` are hundredths of THAT currency
+  (satang for THB, cents for USD) — the names predate foreign deals. A foreign
+  part's rupees are known only once it is paid (the admin records the bank debit),
+  so the limits and the balance count in the deal's currency; the rupees actually
+  debited are shown beside them.
+*/
+const currencyOf = (x) => (x?.currency && x.currency !== BASE_CURRENCY ? x.currency : BASE_CURRENCY);
+/** What a request is worth in its own (= the deal's) currency. */
+export const unitsOf = (r) => (currencyOf(r) === BASE_CURRENCY ? Number(r.amount) || 0 : Number(r.foreignAmount) || 0);
+/** "₹29,000" / "THB 29,400" from hundredths. */
+export const moneyOf = (minor, currency = BASE_CURRENCY) => {
+  const n = fromPaise(minor).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  return currency === BASE_CURRENCY ? `₹${n}` : `${currency} ${n}`;
+};
+/** 'YYYY-MM-DD' in India for a moment. */
+const istDay = (d) => (d ? new Date(new Date(d).getTime() + 330 * 60000).toISOString().slice(0, 10) : '');
 export const LIVE_STATUSES = Object.freeze(['submitted', 'approved', 'on_hold', 'paid']);
 const WAITING = new Set(['submitted', 'approved', 'on_hold']);
 /** The most deals one order's panel reads — far above any real order (one per item). */
@@ -61,13 +82,21 @@ const entry = (actor, action, note = '') => ({
 
 // ── Input checks ───────────────────────────────────────────────────────────────
 
-/** Agreed total in rupees → paise. ₹1 … ₹1 crore, at most two decimals. */
-export function cleanAgreed(value) {
+/** Agreed total → hundredths of the deal's currency. At least 1, at most two decimals, typo-guarded. */
+export function cleanAgreed(value, currency = BASE_CURRENCY) {
   const s = String(value ?? '').trim();
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) throw fail('Enter the agreed supplier total in rupees (e.g. 29000).', 400);
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) throw fail('Enter the total agreed with the supplier (e.g. 29000).', 400);
   const n = Number(s);
-  if (!(n >= 1) || n > MAX_DEAL_RUPEES) throw fail('The agreed total must be between ₹1 and ₹1 crore.', 400);
+  const max = currency === BASE_CURRENCY ? MAX_DEAL_RUPEES : MAX_DEAL_FOREIGN;
+  if (!(n >= 1) || n > max) throw fail(currency === BASE_CURRENCY ? 'The agreed total must be between ₹1 and ₹1 crore.' : 'That total looks too large — check it.', 400);
   return toPaise(n);
+}
+
+/** The deal's currency, from the team's list (the same list as the expense form). */
+export function cleanCurrency(value) {
+  const c = String(value || BASE_CURRENCY).trim().toUpperCase();
+  if (!isCurrencyAllowed(STAFF_TEAMS.PROCUREMENT, c)) throw fail('Choose a currency from the list.', 400);
+  return c;
 }
 
 /** A calendar day 'YYYY-MM-DD', or '' (not given yet). */
@@ -88,7 +117,6 @@ function checkDates(startDate, completionDate) {
   }
 }
 
-const inr = (paise) => `₹${fromPaise(paise).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const dayText = (s) => (s ? new Date(`${s}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'not set');
 
 // ── Views (the numbers, worked out from the requests) ───────────────────────────
@@ -96,11 +124,18 @@ const dayText = (s) => (s ? new Date(`${s}T00:00:00Z`).toLocaleDateString('en-IN
 /** A deal and its requests → what the order page shows. Pure: tested directly. */
 export function dealView(deal, requests = [], viewer = null) {
   const mine = requests.filter((r) => idOf(r.deal) === idOf(deal._id));
+  const currency = currencyOf(deal);
   let paid = 0;
   let waiting = 0;
+  let rupeesPaid = 0;
+  let advancePaidAt = null;
   for (const r of mine) {
-    if (r.status === 'paid') paid += toPaise(r.amount);
-    else if (WAITING.has(r.status)) waiting += toPaise(r.amount);
+    if (r.status === 'paid') {
+      paid += toPaise(unitsOf(r));
+      rupeesPaid += toPaise(r.amount);
+      const at = r.payment?.transactionAt || r.payment?.paidAt || null;
+      if (at && (!advancePaidAt || new Date(at) < new Date(advancePaidAt))) advancePaidAt = at;
+    } else if (WAITING.has(r.status)) waiting += toPaise(unitsOf(r));
   }
   const agreed = deal.agreedPaise;
   const open = deal.status === 'open';
@@ -112,13 +147,18 @@ export function dealView(deal, requests = [], viewer = null) {
     itemIds: (deal.itemIds || []).map(idOf),
     itemNames: deal.itemNames || [],
     supplierName: deal.supplierName,
+    // Every figure below is in this currency; `rupeesPaid` is what the bank actually debited.
+    currency,
+    rupeesPaid: fromPaise(rupeesPaid),
     agreedTotal: fromPaise(agreed),
     paid: fromPaise(paid),
     waiting: fromPaise(waiting),
     balanceDue: fromPaise(Math.max(0, agreed - paid)),
     leftToAsk: fromPaise(leftToAsk),
     fullyPaid: paid >= agreed,
-    startDate: deal.startDate || '',
+    // The first payment's date: the supplier starts once the advance is in.
+    advancePaidAt,
+    startDate: deal.startDate || istDay(advancePaidAt),
     completionDate: deal.completionDate || '',
     createdByName: deal.createdByName || '',
     createdAt: deal.createdAt,
@@ -128,7 +168,9 @@ export function dealView(deal, requests = [], viewer = null) {
       number: r.number,
       part: r.part || '',
       partLabel: PART_LABELS[r.part] || 'Payment',
-      amount: r.amount,
+      // In the deal's currency; `rupees` is the bank debit once a foreign part is paid (null before).
+      amount: unitsOf(r),
+      rupees: currency === BASE_CURRENCY ? r.amount : (Number(r.amount) > 0 ? r.amount : null),
       status: r.status,
       statusLabel: STATUS_LABELS[r.status] || r.status,
       createdAt: r.createdAt,
@@ -170,6 +212,11 @@ async function viewOf(deal, actor) {
   return dealView(deal, await requestsFor([deal._id]), actor);
 }
 
+/** One deal as the order page shows it (after a one-step set-up). */
+export async function dealById(actor, id) {
+  return viewOf(await loadDeal(id), actor);
+}
+
 // ── Set up / change / remove ─────────────────────────────────────────────────
 
 /** Stages at which a supplier can still be making the item. */
@@ -195,7 +242,8 @@ export async function create(actor, input = {}, req) {
   const plain = await paymentRequestRepository.findLivePlainSupplier(order._id, wanted, LIVE_STATUSES);
   if (plain) throw fail(`${plain.number} already pays the supplier for this item. A deal can only be set up before the first payment.`, 409);
 
-  const agreedPaise = cleanAgreed(input.agreedTotal);
+  const currency = cleanCurrency(input.currency);
+  const agreedPaise = cleanAgreed(input.agreedTotal, currency);
   const supplierName = String(input.supplierName || '').trim().replace(/\s+/g, ' ').slice(0, 120);
   if (supplierName.length < 2) throw fail('Enter the supplier making it.', 400);
   const startDate = cleanDay(input.startDate, 'manufacturing start date');
@@ -212,14 +260,15 @@ export async function create(actor, input = {}, req) {
       itemIds: items.map((i) => i._id),
       itemNames: items.map((i) => variantDisplayName(i.name, i.variantLabel)),
       supplierName,
+      currency,
       agreedPaise,
       startDate,
       completionDate,
       createdBy: actor._id,
       createdByName: actor.name || '',
       history: [entry(actor, 'created', [
-        `Agreed ${inr(agreedPaise)} with ${supplierName}`,
-        `start ${dayText(startDate)}, completion ${dayText(completionDate)}`,
+        `Agreed ${moneyOf(agreedPaise, currency)} with ${supplierName}`,
+        startDate ? `start ${dayText(startDate)}, completion ${dayText(completionDate)}` : `completion ${dayText(completionDate)}`,
         note,
       ].filter(Boolean).join(' — '))],
     });
@@ -228,7 +277,7 @@ export async function create(actor, input = {}, req) {
     if (err?.code === 11000) throw fail('A supplier deal for this item already exists. Refresh the order.', 409);
     throw err;
   }
-  auditLogger.logAction(req, 'CREATE', 'SupplierDeal', deal._id, { orderId: idOf(order._id), agreed: fromPaise(agreedPaise) });
+  auditLogger.logAction(req, 'CREATE', 'SupplierDeal', deal._id, { orderId: idOf(order._id), agreed: fromPaise(agreedPaise), currency });
   return viewOf(deal, actor);
 }
 
@@ -245,13 +294,14 @@ export async function update(actor, id, input = {}, req) {
   const reason = String(input.note || '').trim();
   if (reason.length < 3) throw fail('Say why it changed (e.g. supplier delayed by a week).', 400);
 
-  const agreedPaise = input.agreedTotal != null && input.agreedTotal !== '' ? cleanAgreed(input.agreedTotal) : d0.agreedPaise;
+  const cur = currencyOf(d0);
+  const agreedPaise = input.agreedTotal != null && input.agreedTotal !== '' ? cleanAgreed(input.agreedTotal, cur) : d0.agreedPaise;
   const startDate = input.startDate !== undefined ? cleanDay(input.startDate, 'manufacturing start date') : d0.startDate || '';
   const completionDate = input.completionDate !== undefined ? cleanDay(input.completionDate, 'completion date') : d0.completionDate || '';
   checkDates(startDate, completionDate);
 
   const changes = [];
-  if (agreedPaise !== d0.agreedPaise) changes.push(`agreed total ${inr(d0.agreedPaise)} → ${inr(agreedPaise)}`);
+  if (agreedPaise !== d0.agreedPaise) changes.push(`agreed total ${moneyOf(d0.agreedPaise, cur)} → ${moneyOf(agreedPaise, cur)}`);
   if (startDate !== (d0.startDate || '')) changes.push(`start ${dayText(d0.startDate)} → ${dayText(startDate)}`);
   if (completionDate !== (d0.completionDate || '')) changes.push(`completion ${dayText(d0.completionDate)} → ${dayText(completionDate)}`);
   if (!changes.length) return viewOf(d0, actor);
@@ -263,7 +313,7 @@ export async function update(actor, id, input = {}, req) {
   if (!deal) {
     const now = await loadDeal(id);
     if (now.reservedPaise > agreedPaise) {
-      throw fail(`${inr(now.reservedPaise)} is already asked for or paid — the agreed total cannot be less than that.`, 409);
+      throw fail(`${moneyOf(now.reservedPaise, cur)} is already asked for or paid — the agreed total cannot be less than that.`, 409);
     }
     throw fail('This deal was just changed by someone else. Refresh to see it.', 409);
   }
@@ -281,6 +331,19 @@ export async function remove(actor, id, { note } = {}, req) {
   if (!deal) throw fail('A deal with a payment raised on it cannot be removed — decline or cancel that payment first.', 409);
   auditLogger.logAction(req, 'UPDATE', 'SupplierDeal', deal._id, { change: 'removed' });
   return { id: idOf(deal._id), status: deal.status };
+}
+
+/**
+ * Undo a deal created a moment ago whose advance could not be raised (one-step
+ * set-up): marked cancelled — never deleted — and only while nothing is reserved.
+ */
+export async function discard(dealId, reason) {
+  try {
+    await supplierDealRepository.updateIf(dealId, { status: 'open', reservedPaise: 0 },
+      { $set: { status: 'cancelled' }, $push: { history: { at: new Date(), action: 'discarded', note: String(reason || '').slice(0, 1000) } } });
+  } catch (err) {
+    console.error(`[SupplierDeal] ${idOf(dealId)}: could not discard:`, err.message);
+  }
 }
 
 // ── For paymentRequestService: the lock on the agreed total ─────────────────────
@@ -308,8 +371,8 @@ export async function reserve(dealId, amountPaise) {
   if (!now || now.status !== 'open') throw fail('This supplier deal was removed.', 409);
   const left = Math.max(0, now.agreedPaise - now.reservedPaise);
   throw fail(left
-    ? `That is more than the agreed total. Only ${inr(left)} of ${inr(now.agreedPaise)} is left to pay.`
-    : `The agreed ${inr(now.agreedPaise)} is already fully asked for — nothing is left to pay.`, 409);
+    ? `That is more than the agreed total. Only ${moneyOf(left, currencyOf(now))} of ${moneyOf(now.agreedPaise, currencyOf(now))} is left to pay.`
+    : `The agreed ${moneyOf(now.agreedPaise, currencyOf(now))} is already fully asked for — nothing is left to pay.`, 409);
 }
 
 /** Give back a reservation (the request was declined / cancelled, or failed to save). Never throws. */
@@ -344,7 +407,7 @@ export async function unpaidBalanceReason(orderId, itemIds = []) {
   for (const d of deals) {
     const v = dealView(d, requests);
     if (!v.fullyPaid) {
-      return `The supplier balance of ${inr(toPaise(v.balanceDue))} (of ${inr(d.agreedPaise)} agreed) is not paid yet — ship once it is paid.`;
+      return `The supplier balance of ${moneyOf(toPaise(v.balanceDue), v.currency)} (of ${moneyOf(d.agreedPaise, v.currency)} agreed) is not paid yet — ship once it is paid.`;
     }
   }
   return null;

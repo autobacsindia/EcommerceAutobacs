@@ -148,11 +148,13 @@ describe('Expense options per team, and foreign-currency bills', () => {
   });
 
   describe('GET /payment-requests/expense-options', () => {
-    it('gives each person their own team’s options; currencies only to procurement', async () => {
+    it('gives each person their own team’s options; every team gets every currency', async () => {
       const opsRes = await ops.session.get('/payment-requests/expense-options');
       expect(opsRes.status).toBe(200);
       expect(opsRes.body.options.categories.map((c) => c.value)).toEqual(['fuel', 'food', 'travel', 'other']);
-      expect(opsRes.body.options.currencies).toEqual([{ code: 'INR', label: 'Indian rupee (₹)' }]);
+      // Every team pays in any currency on the list (owner, 2026-11-05), rupees first.
+      expect(opsRes.body.options.currencies[0]).toEqual({ code: 'INR', label: 'Indian rupee (₹)' });
+      expect(opsRes.body.options.currencies.map((c) => c.code)).toEqual(expect.arrayContaining(['THB', 'USD']));
       // A staff member cannot ask for another team's list.
       const sneaky = await ops.session.get('/payment-requests/expense-options?team=procurement');
       expect(sneaky.body.options.team).toBe('operations');
@@ -314,10 +316,13 @@ describe('Expense options per team, and foreign-currency bills', () => {
       }
     });
 
-    it('other teams claim in rupees only', async () => {
+    it('every team may claim a foreign bill; an unknown currency is refused', async () => {
       const res = await expense(ops.session, { category: 'fuel', amount: undefined, currency: 'THB', foreignAmount: 100 });
-      expect(res.status).toBe(400);
-      expect(res.body.message).toMatch(/claimed in rupees/);
+      expect(res.status).toBe(201);
+      expect(res.body.request).toMatchObject({ currency: 'THB', foreignAmount: 100, amount: 0, rupeesPending: true });
+      const bad = await expense(ops.session, { category: 'fuel', amount: undefined, currency: 'XYZ', foreignAmount: 100 });
+      expect(bad.status).toBe(400);
+      expect(bad.body.message).toMatch(/XYZ is not a currency we pay in/);
       expect((await expense(ops.session, { category: 'fuel', currency: 'INR' })).status).toBe(201);
     });
 

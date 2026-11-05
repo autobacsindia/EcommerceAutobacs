@@ -157,6 +157,9 @@ export default function SupplierPayQueue({ canPay }: { canPay: boolean }) {
   const summary = q.data?.summary;
   return (
     <div className="space-y-3">
+      <p className="text-xs text-gray-500">
+        Rupee payments only. A supplier bill in another currency (THB, USD…) is paid on its own from Payments, where you record the rupees the bank debited.
+      </p>
       <div role="search" aria-label="Search supplier payments" className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <ListSearch value={v.q} onChange={(text) => set({ q: text.trim() })} label="Search suppliers to pay"

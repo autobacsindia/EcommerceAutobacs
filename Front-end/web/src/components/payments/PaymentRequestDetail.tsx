@@ -2,15 +2,16 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, Loader2, Paperclip, Pencil, X } from 'lucide-react';
+import { FileText, Link2, Loader2, Paperclip, Pencil, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
 import {
-  actOn, amountText, bankCode, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
+  actOn, amountText, bankCode, linkOrder, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import EditPaymentRequest from './EditPaymentRequest';
 import EditPaidPayment from './EditPaidPayment';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
+import OrderPicker from './OrderPicker';
 
 /** The server takes up to three payment screenshots per payment. */
 const MAX_PROOFS = MAX_ATTACHMENTS;
@@ -31,6 +32,60 @@ function Row({ k, v }: { k: string; v?: string | null }) {
     <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">
       <dt className="text-gray-500">{k}</dt>
       <dd className="break-words text-gray-900">{v}</dd>
+    </div>
+  );
+}
+
+/**
+ * Which order an expense was for: "Link to order" when none, else the order with
+ * Change / Remove. Any status — it changes no money; the server keeps it in the
+ * history. A supplier payment's order is fixed and shown as a plain row.
+ */
+function OrderLinkRow({ r, onSaved }: { r: PaymentRequest; onSaved: (next: PaymentRequest, was: string | null) => void }) {
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<OrderMatch | null>(null);
+  const [error, setError] = useState('');
+  const save = useMutation({
+    mutationFn: async (orderId: string | null) => (await linkOrder(r.id, orderId)).request,
+    onSuccess: (next) => { onSaved(next, r.order?.id ?? null); setPicking(false); setPicked(null); setError(''); },
+    onError: (e) => setError(errorMessage(e, 'Could not change the order. Refresh and try again.')),
+  });
+  const may = Boolean(r.can.linkOrder);
+  if (!r.order && !may) return null;
+  const small = 'inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium hover:bg-gray-50 disabled:opacity-50';
+  return (
+    <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">
+      <dt className="text-gray-500">Order</dt>
+      <dd className="space-y-2 text-gray-900">
+        {!picking && (
+          <div className="flex flex-wrap items-center gap-2">
+            {r.order ? <span className="font-medium">{r.order.number}</span> : <span className="text-gray-500">Not linked to an order</span>}
+            {may && (
+              <button type="button" onClick={() => setPicking(true)} className={`${small} text-blue-700`}>
+                <Link2 className="h-3 w-3" /> {r.order ? 'Change' : 'Link to order'}
+              </button>
+            )}
+            {may && r.order && (
+              <button type="button" disabled={save.isPending} onClick={() => { if (window.confirm(`Remove order ${r.order!.number} from ${r.number}?`)) save.mutate(null); }} className={`${small} text-red-700`}>
+                <X className="h-3 w-3" /> Remove
+              </button>
+            )}
+          </div>
+        )}
+        {picking && (
+          <div className="space-y-2 rounded-lg border border-gray-200 p-2">
+            <OrderPicker id={`link-${r.id}`} picked={picked} onPick={setPicked} autoFocus />
+            <div className="flex gap-2">
+              <button type="button" disabled={!picked || save.isPending} onClick={() => picked && save.mutate(picked.id)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                {save.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Link {picked ? picked.number : 'order'}
+              </button>
+              <button type="button" onClick={() => { setPicking(false); setPicked(null); setError(''); }} className="rounded-lg px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-100">Cancel</button>
+            </div>
+          </div>
+        )}
+        {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
+      </dd>
     </div>
   );
 }
@@ -104,7 +159,13 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
             )}
             <dl>
               <Row k="Raised by" v={`${r.requestedBy} · ${formatDateTimeIST(r.createdAt)}`} />
-              <Row k="Order" v={r.order?.number} />
+              {r.kind === 'expense' ? (
+                <OrderLinkRow r={r} onSaved={(next, was) => {
+                  // The order it left no longer lists it.
+                  if (was) qc.invalidateQueries({ queryKey: paymentKeys.forOrder(was) });
+                  done(next);
+                }} />
+              ) : <Row k="Order" v={r.order?.number} />}
               <Row k="Items" v={r.itemNames.join(', ')} />
               <Row k="Customer" v={r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.city].filter(Boolean).join(' · ') : null} />
               <Row k="Sale closed by" v={r.closedBy} />

@@ -66,9 +66,14 @@ router.get('/order/:orderId', asyncHandler(async (req, res) => {
 }));
 
 // ── Supplier deals: made-to-order items paid in parts (services/supplierDealService.js) ──
-// POST /payment-requests/deals { orderId, itemIds, supplierName, agreedTotal, startDate?, completionDate?, note? }
-router.post('/deals', asyncHandler(async (req, res) => {
-  res.status(201).json({ success: true, deal: await deals.create(req.user, req.body, req) });
+// POST /payment-requests/deals — multipart, one step: the deal AND its advance request.
+//   orderId, itemIds(JSON), currency, agreedTotal, advance, completionDate, note?, description?,
+//   supplierId | payee(JSON) (+ saveSupplier), bill, qr. Both are saved, or neither.
+router.post('/deals', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentRequestFiles, handleAttachmentError, asyncHandler(async (req, res) => {
+  const out = await pr.createDealWithAdvance(req.user, {
+    ...req.body, payee: json(req.body.payee, {}), itemIds: json(req.body.itemIds, req.body.itemIds),
+  }, req.files || {}, req);
+  res.status(201).json({ success: true, ...out });
 }));
 // PUT /payment-requests/deals/:id { agreedTotal?, startDate?, completionDate?, note } — note (the reason) required
 router.put('/deals/:id', asyncHandler(async (req, res) => {
@@ -92,6 +97,11 @@ router.get('/to-pay/suppliers/:groupId', asyncHandler(async (req, res) => {
 // POST /payment-requests/pay-batch — multipart: ids(JSON), expectedTotal, method, reference, note?, proof
 router.post('/pay-batch', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await pr.payBatch(req.user, req.body, req.files || [], req)) });
+}));
+
+// GET /payment-requests/order-lookup?q= — orders to link an expense to (number, customer, total, date)
+router.get('/order-lookup', asyncHandler(async (req, res) => {
+  res.json({ success: true, orders: await pr.orderLookup(req.user, String(req.query.q || '')) });
 }));
 
 // GET /payment-requests/:id
@@ -145,6 +155,11 @@ router.post('/:id/pay', concurrentUploadGuard, attachmentSizeGuard, uploadPaymen
 router.put('/:id/payment', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError, asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.editPayment(req.user, req.params.id, req.body, req.files || [], req) });
 }));
+// POST /payment-requests/:id/order { orderId | null } — link an expense to an order, change or remove it
+router.post('/:id/order', asyncHandler(async (req, res) => {
+  res.json({ success: true, request: await pr.linkOrder(req.user, req.params.id, req.body, req) });
+}));
+
 router.post('/:id/cancel', asyncHandler(async (req, res) => {
   res.json({ success: true, request: await pr.cancel(req.user, req.params.id, req.body, req) });
 }));

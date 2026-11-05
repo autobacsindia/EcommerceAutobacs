@@ -49,7 +49,7 @@ const paymentRequestRepository = {
   /** The parts raised on these supplier deals (served by payment_request_deal). */
   // `$type` repeats the partial index's filter: without it the planner may not pick the index.
   findForDeals: (dealIds) => PaymentRequest.find({ deal: { $in: dealIds, $type: 'objectId' } })
-    .select('number status amount part deal createdAt approvedAt payment.paidAt payment.transactionAt')
+    .select('number status amount currency foreignAmount part deal createdAt approvedAt payment.paidAt payment.transactionAt')
     .lean(),
 
   /** A live one-off (not part of a deal) supplier request covering any of these items. */
@@ -72,7 +72,7 @@ const paymentRequestRepository = {
   findForOrder: (orderId) => PaymentRequest.find({ order: { $eq: orderId, $type: 'objectId' } })
     .sort({ createdAt: -1 })
     .limit(200) // bounded: one order's payments, far above any real order
-    .select('number status kind category team amount itemIds itemNames payee.name payment createdAt requestedBy requestedByName deal part')
+    .select('number status kind category team amount currency foreignAmount itemIds itemNames payee.name payment createdAt requestedBy requestedByName deal part')
     .lean(),
 
   /**
@@ -80,7 +80,10 @@ const paymentRequestRepository = {
    * first, for the "To pay, by supplier" view. Bounded: the open queue is small,
    * and `limit` caps it (index payment_request_status).
    */
-  findSupplierToPay: (limit) => PaymentRequest.find({ status: { $in: ['approved', 'on_hold'] }, kind: 'supplier' })
+  // Rupee requests only: a foreign bill is paid on its own, with the bank's rupee debit
+  // (one transfer cannot carry several different debits). `$in` with null keeps
+  // requests from before currencies existed (no field at all).
+  findSupplierToPay: (limit) => PaymentRequest.find({ status: { $in: ['approved', 'on_hold'] }, kind: 'supplier', currency: { $in: ['INR', null] } })
     .sort({ createdAt: 1, _id: 1 })
     .limit(limit)
     .select('-history -files.publicId -files.provider')

@@ -161,40 +161,47 @@ describe('Supplier deals — advance and balance', () => {
     ops = await makeUser('Omar', 'staff', staff('operations'));
   });
 
-  /** A paid order and a ₹29,000 deal on its first item. */
+  /**
+   * A paid order and, in one step, a ₹29,000 deal on its first item with its
+   * ₹10,000 advance raised (waiting for accounts).
+   */
   async function withDeal(over = {}) {
     const order = await paidOrder();
     const id = String(order._id);
     const kit = String(order.items[0]._id);
     const mat = String(order.items[1]._id);
-    const res = await procurement.session.post('/payment-requests/deals', {
-      orderId: id, itemIds: [kit], supplierName: 'Kochi Fabricators', agreedTotal: 29000,
-      startDate: '2026-11-08', completionDate: '2026-11-20', ...over,
+    const res = await procurement.session.form('/payment-requests/deals', {
+      orderId: id, itemIds: [kit], payee: { ...BANK, name: 'Kochi Fabricators' }, currency: 'INR', agreedTotal: 29000, advance: 10000,
+      completionDate: '2026-11-20', ...over,
     });
     expect(res.status).toBe(201);
-    return { order, id, kit, mat, deal: res.body.deal };
+    return { order, id, kit, mat, deal: res.body.deal, adv: res.body.request };
   }
-  const raisePart = (s, id, dealId, amount) => s.form('/payment-requests/supplier', { orderId: id, dealId, amount, payee: BANK });
+  const raisePart = (s, id, dealId, amount, extra = {}) => s.form('/payment-requests/supplier', { orderId: id, dealId, amount, payee: BANK, ...extra });
   const dealOf = async (s, id) => (await s.get(`/payment-requests/order/${id}`)).body.deals[0];
-  const approveAndPay = async (prId) => {
+  const approveAndPay = async (prId, pay = {}) => {
     expect((await accounts.session.post(`/payment-requests/${prId}/approve`)).status).toBe(200);
-    expect((await admin.session.form(`/payment-requests/${prId}/pay`, { method: 'bank', reference: 'UTR1234' })).status).toBe(200);
+    const res = await admin.session.form(`/payment-requests/${prId}/pay`, { method: 'bank', reference: 'UTR1234', ...pay });
+    expect(res.status).toBe(200);
+    return res.body.request;
   };
+  const istToday = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
 
-  it('the owner\'s example: ₹10,000 advance, then the ₹19,000 balance, worked out by the server', async () => {
-    const { id, deal } = await withDeal();
-    expect(deal).toMatchObject({ agreedTotal: 29000, paid: 0, balanceDue: 29000, leftToAsk: 29000, startDate: '2026-11-08', completionDate: '2026-11-20' });
-
-    const adv = await raisePart(procurement.session, id, deal.id, 10000);
-    expect(adv.status).toBe(201);
-    expect(adv.body.request).toMatchObject({ part: 'advance', partLabel: 'Advance', dealId: deal.id, amount: 10000 });
+  it('the owner\'s example in one step: supplier, ₹29,000 total, ₹10,000 advance, completion date', async () => {
+    const { id, deal, adv } = await withDeal();
+    // Saved together: the deal and its advance.
+    expect(deal).toMatchObject({ supplierName: 'Kochi Fabricators', currency: 'INR', agreedTotal: 29000, paid: 0, waiting: 10000, balanceDue: 29000, leftToAsk: 19000, completionDate: '2026-11-20' });
+    expect(adv).toMatchObject({ part: 'advance', partLabel: 'Advance', dealId: deal.id, amount: 10000, status: 'submitted' });
+    // No start date is typed: it is the day the advance is paid.
+    expect(deal.startDate).toBe('');
+    expect(deal.advancePaidAt).toBeNull();
     let d = await dealOf(procurement.session, id);
-    expect(d).toMatchObject({ paid: 0, waiting: 10000, balanceDue: 29000, leftToAsk: 19000 });
     expect(d.can.raise).toBe(false); // one part in flight at a time
 
-    await approveAndPay(adv.body.request.id);
+    await approveAndPay(adv.id);
     d = await dealOf(procurement.session, id);
-    expect(d).toMatchObject({ paid: 10000, waiting: 0, balanceDue: 19000, leftToAsk: 19000, fullyPaid: false });
+    expect(d).toMatchObject({ paid: 10000, waiting: 0, balanceDue: 19000, leftToAsk: 19000, fullyPaid: false, startDate: istToday() });
+    expect(d.advancePaidAt).toBeTruthy();
     expect(d.can.raise).toBe(true);
 
     const bal = await raisePart(procurement.session, id, deal.id, 19000);
@@ -208,45 +215,58 @@ describe('Supplier deals — advance and balance', () => {
   });
 
   it('refuses a part that would pay more than the agreed total', async () => {
-    const { id, deal } = await withDeal();
-    const adv = await raisePart(procurement.session, id, deal.id, 10000);
-    await approveAndPay(adv.body.request.id);
+    const { id, deal, adv } = await withDeal();
+    await approveAndPay(adv.id);
     const over = await raisePart(procurement.session, id, deal.id, 19000.01);
     expect(over.status).toBe(409);
     expect(over.body.message).toMatch(/₹19,000 of ₹29,000 is left/);
     expect(await PaymentRequest.countDocuments({ deal: deal.id })).toBe(1);
-    // A first part over the total too.
-    const fresh = await withDeal();
-    expect((await raisePart(procurement.session, fresh.id, fresh.deal.id, 29001)).status).toBe(409);
+  });
+
+  it('an advance above the total, or a deal that cannot be saved, leaves nothing behind', async () => {
+    const order = await paidOrder();
+    const id = String(order._id);
+    const kit = String(order.items[0]._id);
+    const body = { orderId: id, itemIds: [kit], payee: BANK, currency: 'INR', agreedTotal: 29000, advance: 29001, completionDate: '2026-11-20' };
+    const over = await procurement.session.form('/payment-requests/deals', body);
+    expect(over.status).toBe(400);
+    expect(over.body.message).toMatch(/advance cannot be more than the agreed total \(₹29,000\)/);
+    // Fails after the deal is saved (no payee details): the deal is withdrawn, not left half done.
+    const noPayee = await procurement.session.form('/payment-requests/deals', { ...body, advance: 10000, payee: { name: 'Kochi Fabricators', method: 'bank' } });
+    expect(noPayee.status).toBe(400);
+    expect(await PaymentRequest.countDocuments({})).toBe(0);
+    expect(await SupplierDeal.countDocuments({ status: 'open' })).toBe(0);
+    expect((await procurement.session.get(`/payment-requests/order/${id}`)).body.deals).toEqual([]);
+    // …so the item is free for a proper one.
+    expect((await procurement.session.form('/payment-requests/deals', { ...body, advance: 10000 })).status).toBe(201);
   });
 
   it('two parts raised at the same moment cannot together exceed the total', async () => {
-    const { id, deal } = await withDeal();
+    const { id, deal, adv } = await withDeal();
+    expect((await procurement.session.post(`/payment-requests/${adv.id}/cancel`)).status).toBe(200);
     const results = await Promise.all([
       raisePart(procurement.session, id, deal.id, 20000),
       raisePart(procurement.session, id, deal.id, 20000),
     ]);
     expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
-    expect(await PaymentRequest.countDocuments({ deal: deal.id })).toBe(1);
+    expect(await PaymentRequest.countDocuments({ deal: deal.id, status: 'submitted' })).toBe(1);
     expect((await SupplierDeal.findById(deal.id).lean()).reservedPaise).toBe(2000000);
   });
 
   it('a double-clicked approval approves once', async () => {
-    const { id, deal } = await withDeal();
-    const prId = (await raisePart(procurement.session, id, deal.id, 10000)).body.request.id;
-    const clicks = await Promise.all([1, 2, 3].map(() => accounts.session.post(`/payment-requests/${prId}/approve`)));
+    const { adv } = await withDeal();
+    const clicks = await Promise.all([1, 2, 3].map(() => accounts.session.post(`/payment-requests/${adv.id}/approve`)));
     expect(clicks.filter((r) => r.status === 200)).toHaveLength(1);
-    const r = await PaymentRequest.findById(prId).lean();
+    const r = await PaymentRequest.findById(adv.id).lean();
     expect(r.history.filter((h) => h.action === 'approved')).toHaveLength(1);
   });
 
   it('a declined or cancelled part gives its share back', async () => {
-    const { id, deal } = await withDeal();
-    const a = (await raisePart(procurement.session, id, deal.id, 10000)).body.request.id;
-    expect((await accounts.session.post(`/payment-requests/${a}/decline`, { note: 'Wrong amount' })).status).toBe(200);
+    const { id, deal, adv } = await withDeal();
+    expect((await accounts.session.post(`/payment-requests/${adv.id}/decline`, { note: 'Wrong amount' })).status).toBe(200);
     expect(await dealOf(procurement.session, id)).toMatchObject({ waiting: 0, leftToAsk: 29000 });
     // Declining twice (a retry) does not give it back twice.
-    await accounts.session.post(`/payment-requests/${a}/decline`, { note: 'Wrong amount' });
+    await accounts.session.post(`/payment-requests/${adv.id}/decline`, { note: 'Wrong amount' });
     expect((await SupplierDeal.findById(deal.id).lean()).reservedPaise).toBe(0);
 
     const b = (await raisePart(procurement.session, id, deal.id, 12000)).body;
@@ -256,46 +276,57 @@ describe('Supplier deals — advance and balance', () => {
   });
 
   it('editing a part\'s amount keeps the total honest', async () => {
-    const { id, deal } = await withDeal();
-    const prId = (await raisePart(procurement.session, id, deal.id, 10000)).body.request.id;
-    expect((await procurement.session.put(`/payment-requests/${prId}`, { amount: 30000 })).status).toBe(409);
-    const ok = await procurement.session.put(`/payment-requests/${prId}`, { amount: 29000 });
+    const { deal, adv } = await withDeal();
+    expect((await procurement.session.put(`/payment-requests/${adv.id}`, { amount: 30000 })).status).toBe(409);
+    const ok = await procurement.session.put(`/payment-requests/${adv.id}`, { amount: 29000 });
     expect(ok.status).toBe(200);
     expect(ok.body.request.part).toBe('balance');
     expect((await SupplierDeal.findById(deal.id).lean()).reservedPaise).toBe(2900000);
-    const down = await procurement.session.put(`/payment-requests/${prId}`, { amount: 8000 });
+    const down = await procurement.session.put(`/payment-requests/${adv.id}`, { amount: 8000 });
     expect(down.body.request.part).toBe('advance');
     expect((await SupplierDeal.findById(deal.id).lean()).reservedPaise).toBe(800000);
+    // A deal part stays in the deal's currency.
+    expect((await procurement.session.put(`/payment-requests/${adv.id}`, { currency: 'THB', amount: 8000 })).status).toBe(400);
   });
 
   it('who sets it up, and what it refuses', async () => {
     const order = await paidOrder();
     const id = String(order._id);
     const kit = String(order.items[0]._id);
-    const body = { orderId: id, itemIds: [kit], supplierName: 'Kochi Fabricators', agreedTotal: 29000 };
-    expect((await accounts.session.post('/payment-requests/deals', body)).status).toBe(403);
-    expect((await ops.session.post('/payment-requests/deals', body)).status).toBe(403);
-    expect((await procurement.session.post('/payment-requests/deals', { ...body, agreedTotal: 'abc' })).status).toBe(400);
-    expect((await procurement.session.post('/payment-requests/deals', { ...body, agreedTotal: 0 })).status).toBe(400);
-    expect((await procurement.session.post('/payment-requests/deals', { ...body, startDate: '2026-11-20', completionDate: '2026-11-08' })).status).toBe(400);
-    expect((await procurement.session.post('/payment-requests/deals', { ...body, itemIds: [String(new mongoose.Types.ObjectId())] })).status).toBe(400);
-    expect((await procurement.session.post('/payment-requests/deals', body)).status).toBe(201);
-    // One open deal per item — also at the same moment (unique index).
-    expect((await procurement.session.post('/payment-requests/deals', body)).status).toBe(409);
+    const body = { orderId: id, itemIds: [kit], payee: BANK, currency: 'INR', agreedTotal: 29000, advance: 10000, completionDate: '2026-11-20' };
+    const post = (s, over = {}) => s.form('/payment-requests/deals', { ...body, ...over });
+    expect((await post(accounts.session)).status).toBe(403);
+    expect((await post(ops.session)).status).toBe(403);
+    expect((await post(procurement.session, { agreedTotal: 'abc' })).status).toBe(400);
+    expect((await post(procurement.session, { agreedTotal: 0 })).status).toBe(400);
+    expect((await post(procurement.session, { advance: 0 })).status).toBe(400);
+    expect((await post(procurement.session, { completionDate: '' })).status).toBe(400);
+    expect((await post(procurement.session, { completionDate: '2026-02-30' })).status).toBe(400);
+    expect((await post(procurement.session, { currency: 'XYZ' })).status).toBe(400);
+    expect((await post(procurement.session, { itemIds: [String(new mongoose.Types.ObjectId())] })).status).toBe(400);
+    expect(await SupplierDeal.countDocuments({ status: 'open' })).toBe(0);
+    expect(await PaymentRequest.countDocuments({})).toBe(0);
+    expect((await post(procurement.session)).status).toBe(201);
+    // One open deal per item.
+    expect((await post(procurement.session)).status).toBe(409);
+    expect(await PaymentRequest.countDocuments({})).toBe(1);
   });
 
   it('one way to pay per item: a deal item takes no one-off payment, and vice versa', async () => {
-    const { id, kit, mat } = await withDeal();
+    const { id, kit, mat, adv } = await withDeal();
+    // Even with no part in flight, the item is paid through its deal.
+    expect((await procurement.session.post(`/payment-requests/${adv.id}/cancel`)).status).toBe(200);
     const plain = await procurement.session.form('/payment-requests/supplier', { orderId: id, itemIds: [kit], amount: 5000, payee: BANK });
     expect(plain.status).toBe(409);
     expect(plain.body.message).toMatch(/paid in parts/);
     expect((await procurement.session.form('/payment-requests/supplier', { orderId: id, itemIds: [mat], amount: 500, payee: BANK })).status).toBe(201);
-    expect((await procurement.session.post('/payment-requests/deals', { orderId: id, itemIds: [mat], supplierName: 'X Co', agreedTotal: 900 })).status).toBe(409);
+    expect((await procurement.session.form('/payment-requests/deals', {
+      orderId: id, itemIds: [mat], payee: BANK, agreedTotal: 900, advance: 100, completionDate: '2026-11-20',
+    })).status).toBe(409);
   });
 
-  it('changing the total or dates needs a reason, is kept in history, and never drops below what is asked for', async () => {
-    const { id, deal } = await withDeal();
-    await raisePart(procurement.session, id, deal.id, 10000);
+  it('changing the total or completion date needs a reason, is kept in history, and never drops below what is asked for', async () => {
+    const { deal } = await withDeal();
     expect((await procurement.session.put(`/payment-requests/deals/${deal.id}`, { completionDate: '2026-11-27' })).status).toBe(400);
     const late = await procurement.session.put(`/payment-requests/deals/${deal.id}`, { completionDate: '2026-11-27', note: 'Supplier delayed a week' });
     expect(late.status).toBe(200);
@@ -310,18 +341,16 @@ describe('Supplier deals — advance and balance', () => {
   });
 
   it('a deal can be removed only while nothing is asked for on it', async () => {
-    const { id, deal } = await withDeal();
-    const prId = (await raisePart(procurement.session, id, deal.id, 10000)).body.request.id;
+    const { id, deal, adv } = await withDeal();
     expect((await procurement.session.post(`/payment-requests/deals/${deal.id}/remove`)).status).toBe(409);
-    await procurement.session.post(`/payment-requests/${prId}/cancel`);
+    await procurement.session.post(`/payment-requests/${adv.id}/cancel`);
     expect((await procurement.session.post(`/payment-requests/deals/${deal.id}/remove`, { note: 'set up by mistake' })).status).toBe(200);
     expect((await procurement.session.get(`/payment-requests/order/${id}`)).body.deals).toEqual([]);
   });
 
   it('the item ships only once the balance is paid', async () => {
-    const { id, kit, mat, deal } = await withDeal();
-    const adv = (await raisePart(procurement.session, id, deal.id, 10000)).body.request.id;
-    await approveAndPay(adv);
+    const { id, kit, mat, deal, adv } = await withDeal();
+    await approveAndPay(adv.id);
     await expect(assertNoPendingSupplierPayment(id, [kit])).rejects.toMatchObject({ statusCode: 409, message: expect.stringMatching(/balance of ₹19,000/) });
     await expect(wf.shipWithProof(procurement.user, id, { itemIds: [kit] }, photo, req)).rejects.toMatchObject({ statusCode: 409 });
     // The other item is not part of the deal.
@@ -331,18 +360,77 @@ describe('Supplier deals — advance and balance', () => {
     await expect(wf.shipWithProof(procurement.user, id, { itemIds: [kit] }, photo, req)).resolves.toBeTruthy();
   });
 
+  describe('a deal in a foreign currency (THB)', () => {
+    const thb = { currency: 'THB', agreedTotal: 29400, advance: 10000 };
+
+    it('is agreed, raised, approved and checked in baht; the rupees are what the bank debited', async () => {
+      const { id, kit, deal, adv } = await withDeal(thb);
+      expect(deal).toMatchObject({ currency: 'THB', agreedTotal: 29400, waiting: 10000, leftToAsk: 19400 });
+      // Approved in baht — no guessed rupee figure.
+      expect(adv).toMatchObject({ currency: 'THB', foreignAmount: 10000, amount: 0, rupeesPending: true, part: 'advance' });
+      expect((await accounts.session.post(`/payment-requests/${adv.id}/approve`)).status).toBe(200);
+      // Paying needs the rupee debit.
+      expect((await admin.session.form(`/payment-requests/${adv.id}/pay`, { method: 'bank', reference: 'UTR1' })).status).toBe(400);
+      const paid = await admin.session.form(`/payment-requests/${adv.id}/pay`, { method: 'bank', reference: 'UTR1', rupees: 24300 });
+      expect(paid.status).toBe(200);
+      expect(paid.body.request).toMatchObject({ amount: 24300, foreignAmount: 10000, currency: 'THB' });
+
+      let d = await dealOf(procurement.session, id);
+      // The deal still counts in baht; the rupees are shown beside.
+      expect(d).toMatchObject({ currency: 'THB', paid: 10000, balanceDue: 19400, leftToAsk: 19400, rupeesPaid: 24300, startDate: istToday() });
+      expect(d.payments[0]).toMatchObject({ amount: 10000, rupees: 24300 });
+
+      // Overpay is checked in baht.
+      const over = await raisePart(procurement.session, id, deal.id, 19400.01);
+      expect(over.status).toBe(409);
+      expect(over.body.message).toMatch(/THB 19,400 of THB 29,400 is left/);
+      // A part in another currency than the deal's is refused.
+      expect((await raisePart(procurement.session, id, deal.id, 19400, { currency: 'INR' })).status).toBe(400);
+      await expect(assertNoPendingSupplierPayment(id, [kit])).rejects.toMatchObject({ message: expect.stringMatching(/THB 19,400/) });
+
+      const bal = await raisePart(procurement.session, id, deal.id, 19400);
+      expect(bal.status).toBe(201);
+      expect(bal.body.request).toMatchObject({ currency: 'THB', foreignAmount: 19400, part: 'balance' });
+      expect((await SupplierDeal.findById(deal.id).lean()).reservedPaise).toBe(2940000);
+      // A declined foreign part gives back its baht.
+      expect((await accounts.session.post(`/payment-requests/${bal.body.request.id}/decline`, { note: 'Wrong' })).status).toBe(200);
+      expect((await SupplierDeal.findById(deal.id).lean()).reservedPaise).toBe(1000000);
+      const bal2 = (await raisePart(procurement.session, id, deal.id, 19400)).body.request.id;
+      await approveAndPay(bal2, { rupees: 47100 });
+      d = await dealOf(procurement.session, id);
+      expect(d).toMatchObject({ paid: 29400, balanceDue: 0, fullyPaid: true, rupeesPaid: 71400 });
+    });
+
+    it('a foreign supplier bill is paid on its own, never in a batch transfer', async () => {
+      const { adv } = await withDeal(thb);
+      expect((await accounts.session.post(`/payment-requests/${adv.id}/approve`)).status).toBe(200);
+      const groups = (await admin.session.get('/payment-requests/to-pay/suppliers')).body;
+      expect(JSON.stringify(groups)).not.toMatch(adv.number);
+      const batch = await admin.session.form('/payment-requests/pay-batch', { ids: [adv.id], expectedTotal: 0, method: 'bank', reference: 'UTR9' });
+      expect(batch.status).toBe(400);
+      expect(batch.body.message).toMatch(/foreign-currency bill/);
+    });
+
+    it('a one-off supplier payment may be in any currency too', async () => {
+      const order = await paidOrder();
+      const res = await procurement.session.form('/payment-requests/supplier', {
+        orderId: String(order._id), itemIds: [String(order.items[1]._id)], currency: 'USD', amount: 120, payee: BANK,
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.request).toMatchObject({ currency: 'USD', foreignAmount: 120, amount: 0, rupeesPending: true });
+    });
+  });
+
   describe('cancelling an order with a supplier advance', () => {
     it('is allowed while the advance only waits for accounts', async () => {
-      const { id, deal } = await withDeal();
-      await raisePart(procurement.session, id, deal.id, 10000);
+      const { id } = await withDeal();
       const res = await orderStatusService.updateOrderStatus(id, 'cancelled', { isAdmin: true, reason: 'customer_request', cancelledBy: 'admin' });
       expect(res.success).toBe(true);
     });
 
     it('is blocked once accounts approved it — whole order, per line, customer and admin', async () => {
-      const { id, kit, mat, deal } = await withDeal();
-      const prId = (await raisePart(procurement.session, id, deal.id, 10000)).body.request.id;
-      expect((await accounts.session.post(`/payment-requests/${prId}/approve`)).status).toBe(200);
+      const { id, kit, mat, adv } = await withDeal();
+      expect((await accounts.session.post(`/payment-requests/${adv.id}/approve`)).status).toBe(200);
 
       const whole = await orderStatusService.updateOrderStatus(id, 'cancelled', { isAdmin: true, reason: 'customer_request', cancelledBy: 'admin' });
       expect(whole).toMatchObject({ success: false, blocked: 'supplier_advance' });
@@ -361,9 +449,8 @@ describe('Supplier deals — advance and balance', () => {
     });
 
     it('is blocked through the admin status endpoint, and stays blocked once paid', async () => {
-      const { id, deal } = await withDeal();
-      const prId = (await raisePart(procurement.session, id, deal.id, 10000)).body.request.id;
-      await approveAndPay(prId);
+      const { id, adv } = await withDeal();
+      await approveAndPay(adv.id);
       const res = await admin.session.put(`/orders/${id}/status`, { status: 'cancelled', reason: 'customer_request' });
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(res.body.message).toMatch(/Supplier advance already paid/);
@@ -371,13 +458,12 @@ describe('Supplier deals — advance and balance', () => {
     });
 
     it('a deal part on a cancelled order cannot be approved', async () => {
-      const { id, deal } = await withDeal();
-      const prId = (await raisePart(procurement.session, id, deal.id, 10000)).body.request.id;
+      const { id, adv } = await withDeal();
       expect((await orderStatusService.updateOrderStatus(id, 'cancelled', { isAdmin: true, reason: 'customer_request', cancelledBy: 'admin' })).success).toBe(true);
-      const res = await accounts.session.post(`/payment-requests/${prId}/approve`);
+      const res = await accounts.session.post(`/payment-requests/${adv.id}/approve`);
       expect(res.status).toBe(409);
       expect(res.body.message).toMatch(/decline this supplier payment/);
-      expect((await accounts.session.post(`/payment-requests/${prId}/decline`, { note: 'Order cancelled' })).status).toBe(200);
+      expect((await accounts.session.post(`/payment-requests/${adv.id}/decline`, { note: 'Order cancelled' })).status).toBe(200);
     });
   });
 
@@ -394,6 +480,79 @@ describe('Supplier deals — advance and balance', () => {
       expect(list[0]).toMatchObject({ kind: 'expense', itemIds: [], status: 'submitted' });
       // An open expense on the order is not a supplier payment: the item still ships.
       await expect(assertNoPendingSupplierPayment(id, [kit])).resolves.toBeUndefined();
+    });
+
+    it('finds an order by its short number, customer name or phone — and returns no address or phone', async () => {
+      const order = await paidOrder();
+      const id = String(order._id);
+      const short = id.slice(-8).toUpperCase();
+      const look = async (q) => (await ops.session.get(`/payment-requests/order-lookup?q=${encodeURIComponent(q)}`)).body.orders;
+      for (const q of [`#${short}`, short.toLowerCase(), id, 'ravi kum', '98123 45678']) {
+        const found = await look(q);
+        expect([q, found.map((o) => o.id)]).toEqual([q, [id]]);
+      }
+      const [o] = await look(`#${short}`);
+      expect(o).toEqual({ id, number: `#${short}`, customer: 'Ravi Kumar', total: 52000, createdAt: expect.any(String) });
+      // The old website number finds it too; it reads as the panel's number (the link stores that one).
+      await Order.updateOne({ _id: order._id }, { $set: { wpId: 10495 } });
+      expect(await look('10495')).toEqual([expect.objectContaining({ id, number: `#${short}` })]);
+      expect(await look('nobody-like-this')).toEqual([]);
+      expect(await look('a')).toEqual([]); // too short to search
+      // An unpaid order is not in the team workflow: not offered.
+      const unpaid = await Order.create({ user: new mongoose.Types.ObjectId(), items: [{ product: new mongoose.Types.ObjectId(), name: 'X', price: 1, quantity: 1 }], shippingAddress: { fullName: 'Ravi Kumar', phone: '9812345678', addressLine1: '1', city: 'K', state: 'K', postalCode: '682001' }, subtotal: 1, totalAmount: 1, status: 'awaiting_payment', paymentStatus: 'pending' });
+      expect((await look('ravi')).map((x) => x.id)).not.toContain(String(unpaid._id));
+      const customer = await makeUser('Cara', 'customer');
+      expect((await customer.session.get('/payment-requests/order-lookup?q=ravi')).status).toBe(403);
+    });
+
+    it('links, changes and removes the order on an expense — at any status, kept in history', async () => {
+      const a = await paidOrder();
+      const b = await paidOrder();
+      const res = await expense(ops.session, { description: 'Fuel for a delivery' });
+      const prId = res.body.request.id;
+      expect(res.body.request.order).toBeNull();
+      expect(res.body.request.can.linkOrder).toBe(true);
+      const link = (s, orderId) => s.post(`/payment-requests/${prId}/order`, { orderId });
+
+      const linked = await link(ops.session, String(a._id));
+      expect(linked.status).toBe(200);
+      expect(linked.body.request.order).toMatchObject({ id: String(a._id) });
+      expect((await procurement.session.get(`/payment-requests/order/${a._id}`)).body.requests.map((r) => r.id)).toEqual([prId]);
+
+      // Paid already: still linkable — no money changes.
+      expect((await accounts.session.post(`/payment-requests/${prId}/approve`)).status).toBe(200);
+      expect((await admin.session.form(`/payment-requests/${prId}/pay`, { method: 'upi', reference: 'UPI1' })).status).toBe(200);
+      const moved = await link(accounts.session, String(b._id));
+      expect(moved.status).toBe(200);
+      expect(moved.body.request.status).toBe('paid');
+      expect((await procurement.session.get(`/payment-requests/order/${a._id}`)).body.requests).toEqual([]);
+      expect((await procurement.session.get(`/payment-requests/order/${b._id}`)).body.requests).toHaveLength(1);
+
+      const removed = await link(ops.session, null);
+      expect(removed.body.request.order).toBeNull();
+      const hist = (await PaymentRequest.findById(prId).lean()).history.map((h) => h.note);
+      expect(hist).toEqual(expect.arrayContaining([
+        expect.stringMatching(/^linked to order #/), expect.stringMatching(/^order #\w+ → #\w+$/), expect.stringMatching(/^order #\w+ removed$/),
+      ]));
+      // A retry of the same link changes nothing.
+      const again = await link(ops.session, null);
+      expect(again.status).toBe(200);
+      expect((await PaymentRequest.findById(prId).lean()).history).toHaveLength(hist.length);
+    });
+
+    it('who may link an expense, and what is refused', async () => {
+      const order = await paidOrder();
+      const prId = (await expense(ops.session, { description: 'Fuel for a delivery' })).body.request.id;
+      const otherOps = await makeUser('Olu', 'staff', staff('operations'));
+      const opsHead = await makeUser('Oona', 'staff', staff('operations', true));
+      expect((await otherOps.session.post(`/payment-requests/${prId}/order`, { orderId: String(order._id) })).status).toBe(403);
+      expect((await procurement.session.post(`/payment-requests/${prId}/order`, { orderId: String(order._id) })).status).toBe(404);
+      expect((await opsHead.session.post(`/payment-requests/${prId}/order`, { orderId: String(order._id) })).status).toBe(200);
+      expect((await ops.session.post(`/payment-requests/${prId}/order`, { orderId: String(new mongoose.Types.ObjectId()) })).status).toBe(400);
+      // A supplier payment's order is fixed.
+      const sup = await procurement.session.form('/payment-requests/supplier', { orderId: String(order._id), itemIds: [String(order.items[1]._id)], amount: 500, payee: BANK });
+      expect(sup.body.request.can.linkOrder).toBe(false);
+      expect((await admin.session.post(`/payment-requests/${sup.body.request.id}/order`, { orderId: null })).status).toBe(400);
     });
 
     it('refuses an order that does not exist', async () => {

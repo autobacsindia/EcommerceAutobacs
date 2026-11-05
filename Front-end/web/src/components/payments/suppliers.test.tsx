@@ -211,7 +211,7 @@ describe('editing a payment request', () => {
     fireEvent.change(screen.getByLabelText('Details'), { target: { value: 'Invoice 77' } });
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
     await waitFor(() => expect(put).toHaveBeenCalledWith('/payment-requests/r1', {
-      amount: '1200', description: 'Invoice 77', payee: { name: 'Kumar', method: 'upi', upiId: '', phone: '' },
+      amount: '1200', currency: 'INR', description: 'Invoice 77', payee: { name: 'Kumar', method: 'upi', upiId: '', phone: '' },
     }));
     expect(onDone).toHaveBeenCalled();
   });
@@ -223,7 +223,7 @@ describe('editing a payment request', () => {
     expect(screen.getByText(/sends it back to accounts/)).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('option', { name: /ARB Supplies/ }));
     fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
-    await waitFor(() => expect(put).toHaveBeenCalledWith('/payment-requests/r1', { amount: '1000', description: '', supplierId: 's1' }));
+    await waitFor(() => expect(put).toHaveBeenCalledWith('/payment-requests/r1', { amount: '1000', currency: 'INR', description: '', supplierId: 's1' }));
   });
 });
 

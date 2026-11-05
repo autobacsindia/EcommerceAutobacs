@@ -19,7 +19,7 @@ export type PaymentRequest = {
   /** Rupees — what is paid and totalled. 0 while `rupeesPending`. */
   amount: number;
   /**
-   * A foreign bill (procurement imports): its currency and amount. `fxRate` is the
+   * A foreign bill (any team, and supplier payments): its currency and amount. `fxRate` is the
    * rate the rupees came to — typed on older requests, worked out from the bank
    * debit on newer ones once paid. 'INR' / null otherwise.
    */
@@ -50,13 +50,24 @@ export type PaymentRequest = {
   decisionNote: string;
   history: { at: string; byName: string; role: string; action: string; note: string }[];
   createdAt: string;
-  can: { approve: boolean; decline: boolean; pay: boolean; hold: boolean; cancel: boolean; edit?: boolean; editPayment?: boolean };
+  can: {
+    approve: boolean; decline: boolean; pay: boolean; hold: boolean; cancel: boolean; edit?: boolean; editPayment?: boolean;
+    /** An expense: may link it to an order, change or remove the link (any status — no money changes). */
+    linkOrder?: boolean;
+  };
+  /** One part of a supplier deal: its currency is the deal's and cannot change. */
+  dealId?: string | null;
   /** The requester may edit until then (null for admins, or once it can no longer be edited). */
   editableUntil?: string | null;
 };
 
 export type OrderPayment = {
-  id: string; number: string; status: PaymentStatus; statusLabel: string; amount: number;
+  id: string; number: string; status: PaymentStatus; statusLabel: string;
+  /** Rupees (0 while `rupeesPending`). A foreign bill's own amount is `foreignAmount` in `currency`. */
+  amount: number;
+  currency?: string;
+  foreignAmount?: number | null;
+  rupeesPending?: boolean;
   /** The viewer may still edit it (the requester or their team head while it waits for accounts; the admin until paid). */
   canEdit?: boolean;
   itemIds: string[]; itemNames: string[]; payee: string; paidAt: string | null; createdAt: string;
@@ -82,6 +93,9 @@ export type SupplierDeal = {
   itemIds: string[];
   itemNames: string[];
   supplierName: string;
+  /** Every amount on the deal is in this currency (INR, THB…); `rupeesPaid` is what the bank debited. */
+  currency: string;
+  rupeesPaid: number;
   agreedTotal: number;
   paid: number;
   /** Raised or approved, not yet paid. */
@@ -90,13 +104,17 @@ export type SupplierDeal = {
   /** The most the next payment may be. */
   leftToAsk: number;
   fullyPaid: boolean;
-  /** 'YYYY-MM-DD' or ''. */
+  /** When the first payment (the advance) was paid — the supplier starts then. null until paid. */
+  advancePaidAt: string | null;
+  /** 'YYYY-MM-DD' or '': the day the advance was paid (set by the server, not typed). */
   startDate: string;
   completionDate: string;
   createdByName: string;
   createdAt: string;
   payments: {
-    id: string; number: string; part: string; partLabel: string; amount: number;
+    id: string; number: string; part: string; partLabel: string;
+    /** In the deal's currency. `rupees`: the bank debit (null for a foreign part not yet paid). */
+    amount: number; rupees: number | null;
     status: PaymentStatus; statusLabel: string; createdAt: string; approvedAt: string | null; paidAt: string | null;
   }[];
   history: { at: string; byName: string; action: string; note: string }[];
@@ -160,6 +178,7 @@ export const paymentKeys = {
   forOrder: (orderId: string) => [...paymentKeys.all, 'order', orderId] as const,
   options: (team: string) => [...paymentKeys.all, 'options', team] as const,
   filterOptions: () => [...paymentKeys.all, 'filter-options'] as const,
+  orderLookup: (q: string) => [...paymentKeys.all, 'order-lookup', q] as const,
 };
 
 export const slipHref = (id: string) => `/api/v1/payment-requests/${encodeURIComponent(id)}/slip`;
@@ -181,6 +200,24 @@ export const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : ''
 
 export const rupees = (n: number) =>
   `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`;
+
+/** An amount in its currency: "₹29,000" or "THB 29,400". */
+export const money = (n: number, currency = 'INR') => (!currency || currency === 'INR'
+  ? rupees(n)
+  : `${currency} ${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })}`);
+
+/** What a payment on an order reads as: "₹1,250", "THB 10,000 (₹24,300 debited)" or "THB 10,000". */
+export const paymentMoney = (r: { amount: number; currency?: string; foreignAmount?: number | null }) => (r.currency && r.currency !== 'INR' && r.foreignAmount != null
+  ? `${money(r.foreignAmount, r.currency)}${r.amount > 0 ? ` (${rupees(r.amount)} debited)` : ''}`
+  : rupees(r.amount));
+
+/** An order to link an expense to — only what identifies it on screen. */
+export type OrderMatch = { id: string; number: string; customer: string; total: number | null; createdAt: string };
+export const lookupOrders = (q: string) =>
+  apiClient.get<{ orders: OrderMatch[] }>(`/payment-requests/order-lookup?q=${encodeURIComponent(q)}`);
+/** Link an expense to an order, change it, or remove it (null). */
+export const linkOrder = (id: string, orderId: string | null) =>
+  apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${encodeURIComponent(id)}/order`, { orderId });
 
 /** Multipart POST (the JSON client can't send files), with the same CSRF header it uses. */
 export async function postForm<T>(endpoint: string, form: FormData, method: 'POST' | 'PUT' = 'POST'): Promise<T> {

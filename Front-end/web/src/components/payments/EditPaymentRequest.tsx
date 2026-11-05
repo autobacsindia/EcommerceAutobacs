@@ -39,7 +39,6 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   const optionsQ = useQuery({
     queryKey: paymentKeys.options(r.team),
     queryFn: () => getExpenseOptions(r.team),
-    enabled: isExpense,
     staleTime: 10 * 60 * 1000,
   });
   const options = optionsQ.data?.options;
@@ -51,7 +50,9 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   const currencyChoices = currencies.some((c) => c.code === (r.currency || 'INR'))
     ? currencies
     : [{ code: r.currency || 'INR', label: '' }, ...currencies];
-  const foreign = isExpense && currency !== 'INR';
+  const foreign = currency !== 'INR';
+  // A part of a supplier deal stays in the deal's currency.
+  const currencyLocked = Boolean(r.dealId);
   const [method, setMethod] = useState<'upi' | 'bank'>(r.payee.method);
   const [payee, setPayee] = useState({
     name: r.payee.name, upiId: r.payee.upiId || '', accountName: r.payee.accountName || '',
@@ -72,8 +73,8 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     if (codeProblem) { setError(codeProblem); return; }
     const body: Record<string, unknown> = { description: description.trim() };
     // A foreign bill sends only what was billed: its rupees are recorded when it is paid.
-    if (foreign) Object.assign(body, { currency, foreignAmount });
-    else Object.assign(body, isExpense ? { currency, amount } : { amount });
+    if (foreign) Object.assign(body, currencyLocked ? { foreignAmount } : { currency, foreignAmount });
+    else Object.assign(body, currencyLocked ? { amount } : { currency, amount });
     if (isExpense) body.category = category;
     if (picked) body.supplierId = picked.id;
     else if (!(method === 'bank' && masked)) {
@@ -109,7 +110,7 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
               {teamCategories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select></div>
         )}
-        {isExpense && currencyChoices.length > 1 && (
+        {!currencyLocked && currencyChoices.length > 1 && (
           <div><label className={label} htmlFor="ed-currency">Currency</label>
             <select id="ed-currency" className={input} value={currency} onChange={(e) => setCurrency(e.target.value)}>
               {currencyChoices.map((c) => <option key={c.code} value={c.code}>{c.label ? `${c.code} — ${c.label}` : c.code}</option>)}

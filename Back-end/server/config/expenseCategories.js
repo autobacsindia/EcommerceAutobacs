@@ -102,8 +102,14 @@ export const EXPENSE_CURRENCIES = Object.freeze([
 ]);
 export const BASE_CURRENCY = 'INR';
 
-/** Teams that pay in foreign currency (imports). Everyone else claims in rupees. */
-const FOREIGN_CURRENCY_TEAMS = Object.freeze(['procurement']);
+/*
+  Every team may pay in any currency on the list (owner decision 2026-11-05: "every
+  amount box has the currencies — we do not pay only in rupees"). It was
+  procurement only. A foreign bill is approved in its own currency and its rupees
+  are recorded when paid (the bank debit), the same for every team.
+  Money the CUSTOMER pays or gets back (quotes, refunds) is rupees only and does
+  not use this list.
+*/
 
 /** Rate guard: rupees for ONE unit. A won is ~₹0.06, a pound ~₹110; a bank debit implying a rate outside this is a typo. */
 export const MIN_FX_RATE = 0.0001;
@@ -131,9 +137,7 @@ const ALL_LABELS = Object.freeze(Object.assign(
 /** The readable name of any category ever stored — new, old, or 'supplier'. Unknown values show as stored. */
 export const categoryLabel = (value) => ALL_LABELS[value] || String(value || '');
 
-export const currenciesFor = (team) => (FOREIGN_CURRENCY_TEAMS.includes(team)
-  ? EXPENSE_CURRENCIES
-  : EXPENSE_CURRENCIES.filter((x) => x.code === BASE_CURRENCY));
+export const currenciesFor = () => EXPENSE_CURRENCIES;
 
 export const isCurrencyAllowed = (team, code) => currenciesFor(team).some((x) => x.code === code);
 
