@@ -158,6 +158,28 @@ describe('PUT /profile — what it refuses', () => {
     expect((await User.findById(user._id).lean()).phone).toBe('9876543210');
   });
 
+  it("a staff member can add their number even if their old customer account has it", async () => {
+    // Real case: the imported shop account and test orders carry the staff member's own phone.
+    await User.create({ name: 'Old shop account', email: 'old@example.com', passwordHash: 'x', phone: '9876543210' });
+    const { user, token } = await signIn('staff', { staff: { team: 'sales' } });
+    await put(token, { phone: '98765 43210' }).expect(200);
+    expect((await User.findById(user._id).lean()).phone).toBe('9876543210');
+  });
+
+  it.each(['staff', 'admin'])("a staff member cannot take a number already on another %s's login", async (role) => {
+    await User.create({ name: 'Colleague', email: 'colleague@example.com', passwordHash: 'x', phone: '9876543210', role, ...(role === 'staff' ? { staff: { team: 'accounts' } } : {}) });
+    const { user, token } = await signIn('staff', { staff: { team: 'sales' } });
+    const res = await put(token, { phone: '9876543210' }).expect(409);
+    expect(res.body.message).toMatch(/another team member/);
+    expect((await User.findById(user._id).lean()).phone).toBeUndefined();
+  });
+
+  it("a customer is still blocked by a staff member's number", async () => {
+    await User.create({ name: 'Staffer', email: 'staffer@example.com', passwordHash: 'x', phone: '9876543210', role: 'staff', staff: { team: 'sales' } });
+    const { token } = await signIn('customer');
+    await put(token, { phone: '9876543210' }).expect(409);
+  });
+
   it("re-saving my own number never trips the check, even if someone else shares it", async () => {
     // Old data can already hold duplicates; I must still be able to change my name.
     const { token } = await signIn('customer', { phone: '+91 98765 43210' });
