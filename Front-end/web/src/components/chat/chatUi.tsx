@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, type RefObject } from 'react';
-import { ArrowLeftRight, FileSpreadsheet, FileText, File as FileIcon, Hash, Image as ImageIcon, Lock, Users, X } from 'lucide-react';
+import { ArrowLeftRight, Building2, FileSpreadsheet, FileText, File as FileIcon, Hash, Image as ImageIcon, Lock, Users, X } from 'lucide-react';
 import type { ChatChannel, ChatPerson } from '@/hooks/queries/useTeamChat';
 import PersonFace from '@/components/profile/PersonFace';
 
@@ -143,30 +143,46 @@ export function TeamBadge({ person }: { person: ChatPerson | null }) {
   );
 }
 
+/** Soft tile colours (chat.css `.gc-tile`), each with a light and a dark pair. */
+const TILE_HUES = ['blue', 'green', 'amber', 'violet', 'rose', 'teal'] as const;
+type TileHue = (typeof TILE_HUES)[number] | 'slate';
+const TEAM_HUE: Record<string, TileHue> = { sales: 'blue', procurement: 'amber', accounts: 'violet', operations: 'teal', marketing: 'rose' };
+function hueOfName(name: string): TileHue {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return TILE_HUES[hash % TILE_HUES.length];
+}
+const teamHue = (team: string | undefined): TileHue => (team && TEAM_HUE[team]) || (team ? hueOfName(team) : 'slate');
+
 export function ChannelIcon({ channel, size = 'sm' }: { channel: ChatChannel; size?: 'xs' | 'sm' | 'md' | 'lg' }) {
   const box = size === 'lg' ? 'h-10 w-10 text-sm' : size === 'md' ? 'h-9 w-9 text-sm' : size === 'xs' ? 'h-6 w-6 text-[10px]' : 'h-7 w-7 text-[11px]';
-  // People keep their colour (a face you recognise); spaces and team pairs are a
-  // calm grey circle, so the list is not a wall of coloured tiles.
-  const quiet = `grid ${box} shrink-0 place-items-center rounded-full bg-gray-200/70 text-gray-600`;
-  if (channel.kind === 'dm' && channel.group) {
-    return (
-      <span className={quiet} aria-hidden="true">
-        <Users className="h-3.5 w-3.5" />
-      </span>
-    );
-  }
+  const glyph = size === 'xs' ? 'h-3 w-3' : size === 'sm' ? 'h-3.5 w-3.5' : 'h-[18px] w-[18px]';
+  // People are round faces; spaces, team pairs and groups are rounded squares in
+  // a soft colour, so the shape alone says "person" or "space". A team keeps the
+  // same colour everywhere; a chat between two teams shows both, split corner to corner.
+  const tile = (hue: TileHue, Icon: typeof Hash, hue2?: TileHue) => (
+    <span
+      className={`gc-tile grid ${box} shrink-0 place-items-center ${size === 'xs' ? 'rounded-[7px]' : size === 'sm' ? 'rounded-lg' : 'rounded-xl'}`}
+      data-hue={hue}
+      data-hue2={hue2}
+      aria-hidden="true"
+    >
+      <Icon className={glyph} strokeWidth={2.25} />
+    </span>
+  );
+  if (channel.kind === 'dm' && channel.group) return tile(hueOfName(channel.name), Users);
   if (channel.kind === 'dm') {
     return (
       <PersonFace name={channel.name} photoUrl={channel.partner?.avatarUrl} initials={initials(channel.name)}
         className={`${box} font-bold ${colourFor(channel.name)}`} />
     );
   }
-  const Icon = channel.audience === 'teams' ? ArrowLeftRight : channel.audience === 'members' ? Lock : Hash;
-  return (
-    <span className={quiet} aria-hidden="true">
-      <Icon className="h-3.5 w-3.5" />
-    </span>
-  );
+  const [kind, a, b] = (channel.key ?? '').split(':');
+  if (channel.audience === 'teams') return tile(teamHue(kind === 'pair' ? a : undefined), ArrowLeftRight, teamHue(kind === 'pair' ? b : undefined));
+  if (channel.audience === 'all') return tile('blue', Building2);
+  if (channel.audience === 'members') return tile(hueOfName(channel.name), Lock);
+  if (kind === 'team') return tile(teamHue(a), Hash);
+  return tile(hueOfName(channel.name), Hash);
 }
 
 /** Centre-screen on desktop, bottom sheet on phones. Closes on Escape. */
@@ -186,12 +202,12 @@ export function Dialog({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="gc-scrim fixed inset-0 z-50 flex items-end justify-center bg-black/35 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Close" onClick={onClose} />
-      <div className="relative max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl">
+      <div className="gc-sheet relative max-h-[85vh] w-full max-w-md overflow-y-auto rounded-t-[28px] bg-white p-6 shadow-2xl sm:rounded-[28px]">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" aria-label="Close">
+          <h2 className="text-[22px] font-normal text-gray-900">{title}</h2>
+          <button type="button" onClick={onClose} className="gc-icon-btn -mr-2 rounded-full p-2 text-gray-600" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>

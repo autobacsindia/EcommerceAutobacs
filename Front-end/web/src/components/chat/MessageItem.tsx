@@ -557,10 +557,10 @@ export default function MessageItem({
   return (
     <div id={messageDomId(m.id)} className="scroll-mt-24">
       {newDay && (
-        <div className="my-4 flex items-center gap-3 text-xs font-medium text-gray-500">
-          <span className="h-px flex-1 bg-gray-200" />
-          <span className="rounded-full border border-gray-200 bg-white px-3 py-0.5">{dayLabel(m.createdAt)}</span>
-          <span className="h-px flex-1 bg-gray-200" />
+        <div className="my-5 flex items-center gap-3 text-xs font-medium text-gray-600">
+          <span className="h-px flex-1 bg-gray-200/80" />
+          <span className="gc-day rounded-full px-3.5 py-1">{dayLabel(m.createdAt)}</span>
+          <span className="h-px flex-1 bg-gray-200/80" />
         </div>
       )}
       <div
@@ -736,7 +736,7 @@ export default function MessageItem({
             data-testid="message-actions"
             // A pick closes the bar on a touch screen; what it opened (picker, menu) stays.
             onClick={() => setActionsOpen(false)}
-            className={`absolute -top-3.5 right-3 z-10 items-center gap-0.5 rounded-xl border border-gray-200 bg-white p-0.5 shadow-lg focus-within:flex group-hover:flex ${
+            className={`gc-toolbar absolute -top-4 right-3 z-10 items-center gap-0.5 rounded-full bg-white p-1 focus-within:flex group-hover:flex ${
               actionsOpen ? 'flex' : 'hidden'
             }`}
           >

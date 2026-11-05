@@ -377,7 +377,7 @@ export default function Composer({
         )}
         {/* One rounded bar: the text first, then the tools and the send arrow on
             the right — `order` moves the text box without changing tab order. */}
-        <div className="gc-field flex items-end gap-0.5 rounded-[26px] py-1 pl-1.5 pr-1.5 transition-shadow focus-within:shadow-[0_0_0_2px_var(--color-blue-500)]">
+        <div className="gc-field gc-compose flex items-end gap-0.5 rounded-[26px] py-1 pl-1.5 pr-1.5">
           <div className="relative order-0 shrink-0">
             <button
               type="button"
@@ -485,7 +485,7 @@ export default function Composer({
           <button
             type="submit"
             disabled={!text.trim() && !files.length}
-            className="order-4 grid h-9 w-9 shrink-0 place-items-center rounded-full text-blue-600 transition-[background-color,transform] hover:bg-blue-100 active:scale-95 disabled:text-gray-400 disabled:hover:bg-transparent"
+            className="gc-send order-4 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-600 text-white transition-[background-color,transform,color] hover:bg-blue-700 active:scale-95 disabled:bg-transparent disabled:text-gray-400"
             aria-label="Send message"
           >
             <SendHorizontal className="h-5 w-5" />

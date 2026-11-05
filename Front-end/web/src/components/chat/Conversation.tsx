@@ -445,8 +445,8 @@ export default function Conversation({
     // min-w-0: without it this pane grows to its widest child (the pinned bar, the
     // header icons) and every message is clipped on a phone, Send off-screen.
     <div className="relative flex h-full min-h-0 min-w-0 flex-1">
-      <section className="gc-card gc-pane flex h-full min-h-0 min-w-0 flex-1 flex-col lg:rounded-2xl" aria-label={`Conversation ${title}`}>
-        <header className="border-b border-gray-200/70 px-3 pt-2.5 sm:px-5 sm:pt-3">
+      <section className="gc-card gc-pane gc-open flex h-full min-h-0 min-w-0 flex-1 flex-col lg:rounded-2xl" aria-label={`Conversation ${title}`}>
+        <header className="border-b border-gray-200/80 px-3 pt-2.5 sm:px-5 sm:pt-3">
           <div className="flex items-center gap-2 sm:gap-3">
             <button type="button" onClick={onBack} className="-ml-1.5 shrink-0 rounded-lg p-2 text-gray-600 hover:bg-gray-100 lg:hidden" aria-label="Back to channels">
               <ArrowLeft className="h-5 w-5" />
@@ -500,7 +500,7 @@ export default function Conversation({
               </button>
             </div>
           </div>
-          <div className="-mx-1 mt-2 flex gap-1 overflow-x-auto pb-2 [scrollbar-width:none]" role="tablist" aria-label="Conversation sections">
+          <div className="-mx-1 mt-1 flex gap-1 overflow-x-auto [scrollbar-width:none]" role="tablist" aria-label="Conversation sections">
             {([
               'messages',
               ...(hasUpdatesTab ? (['updates'] as const) : []),
@@ -513,8 +513,9 @@ export default function Conversation({
                 role="tab"
                 aria-selected={tab === key}
                 onClick={() => setTab(key)}
-                className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] transition-colors ${
-                  tab === key ? 'bg-[var(--gc-selected)] font-semibold text-[var(--gc-selected-ink)]' : 'font-medium text-gray-600 hover:bg-[var(--gc-hover)] hover:text-gray-900'
+                // Underlined tabs, as Google's: the open one in blue with a rounded bar under it.
+                className={`gc-tab relative shrink-0 whitespace-nowrap rounded-t-lg px-3.5 pb-2.5 pt-2 text-[13px] font-medium transition-colors ${
+                  tab === key ? 'text-blue-700' : 'text-gray-600 hover:bg-[var(--gc-hover)] hover:text-gray-900'
                 }`}
               >
                 {key === 'messages' ? 'Chat' : key === 'updates' ? 'Order updates' : key === 'files' ? 'Files' : 'Members'}
@@ -543,7 +544,12 @@ export default function Conversation({
               <div ref={scroller} onScroll={onScroll} className="relative h-full overflow-y-auto px-2 py-3 sm:px-4" aria-live="polite">
                 {tab === 'messages' && isFetchingNextPage && <p className="py-2 text-center text-xs text-gray-500">Loading older messages…</p>}
                 {tab === 'messages' && !hasNextPage && !isLoading && visible.length > 0 && (
-                  <p className="py-3 text-center text-xs text-gray-400">This is the beginning of {title}</p>
+                  <div className="flex flex-col items-center gap-2 pb-4 pt-6 text-center">
+                    {channel.kind === 'dm' && !channel.group
+                      ? <Avatar person={channel.partner} />
+                      : <ChannelIcon channel={channel} size="lg" />}
+                    <p className="text-xs text-gray-500">This is the beginning of {title}</p>
+                  </div>
                 )}
                 {isLoading && <p className="py-10 text-center text-sm text-gray-500">Loading messages…</p>}
                 {isError && (
@@ -575,9 +581,9 @@ export default function Conversation({
                 {visible.map((m, i) => (
                   <div key={m.id}>
                   {tab === 'messages' && m.id === firstNewId && (
-                    <div data-new-messages role="separator" aria-label="New messages" className="my-2 flex items-center gap-3 text-xs font-bold text-blue-700">
-                      <span className="h-px flex-1 bg-blue-400" />
-                      New messages
+                    <div data-new-messages role="separator" aria-label="New messages" className="gc-new my-3 flex items-center gap-2 text-[11px] font-semibold text-blue-700">
+                      <span className="h-px flex-1 bg-blue-500" />
+                      <span className="rounded-full bg-blue-50 px-2.5 py-0.5 ring-1 ring-inset ring-blue-200">New messages</span>
                     </div>
                   )}
                   {tab === 'updates' && unreadFrom !== null && activityOf(m) > unreadFrom && (
