@@ -13,6 +13,8 @@ import { loginHref } from '@/lib/utils';
 import { SUPPORT_PHONE_TEL, whatsappLink } from '@/lib/contactInfo';
 import VehiclePicker from './VehiclePicker';
 import StoreSearch from './StoreSearch';
+import { useFestival } from '@/components/festival/FestivalThemeContext';
+import { festivalVars } from '@/components/festival/festivalStyle';
 import './store.css';
 
 /** A department link: the home page passes StoreCategory, other pages the nav list. */
@@ -47,6 +49,8 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
   const accountHref = isAuthenticated ? '/profile' : loginHref('/profile');
   const cartLabel = itemCount > 0 ? `Cart, ${itemCount} item${itemCount === 1 ? '' : 's'}` : 'Cart';
 
+  // Festival pill at the front of the bar (null outside the admin festival window).
+  const festival = useFestival();
   const barLinks = [
     { label: "Today's Deals", href: '/offers' },
     ...categories.slice(0, 9).map((c) => ({ label: c.name, href: c.href })),
@@ -94,6 +98,11 @@ export default function StoreHeader({ categories }: { categories: HeaderCategory
           <span className="sh-bar-burger" aria-hidden="true"><span /><span /><span /></span> All
         </button>
         <span className="sh-bar-sep" aria-hidden="true" />
+        {festival && (
+          <Link href="/offers" className="sh-bar-fx" style={festivalVars(festival.tokens)} data-testid="festive-nav">
+            <span aria-hidden="true">{festival.tokens.icons.lamp}</span> {festival.tokens.home.navLabel}
+          </Link>
+        )}
         {barLinks.map((l) => (
           <Link key={l.label} href={l.href} className={isActive(l.href) ? 'is-active' : undefined} aria-current={isActive(l.href) ? 'page' : undefined}>
             {l.label}

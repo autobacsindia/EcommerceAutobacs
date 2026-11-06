@@ -34,6 +34,27 @@ export interface FestivalThemeTokens {
     /** Followed by the live countdown, e.g. "Diwali offers end in 04:10:03". */
     countdownLabel: string;
   };
+  /**
+   * Words for the festive home page (components/home/store/FestiveHome.tsx).
+   * Every number on that page comes from the live catalogue; only words live here.
+   */
+  home: {
+    /** Gold pill at the front of the green department bar; links to /offers. */
+    navLabel: string;
+    heroEyebrow: string;
+    /** Headline, split so the middle part takes the gold accent. */
+    heroTitle: [before: string, accent: string, after: string];
+    heroSubtitle: string;
+    heroCta: string;
+    dealsTitle: string;
+    dealsSubtitle: string;
+    giftTitle: string;
+    giftSubtitle: string;
+    /** Titles for the gift budget bands, cheapest first. */
+    giftTiers: [string, string, string];
+    wishTitle: string;
+    wishSubtitle: string;
+  };
 }
 
 export const FESTIVAL_THEMES: Record<string, FestivalThemeTokens> = {
@@ -55,6 +76,21 @@ export const FESTIVAL_THEMES: Record<string, FestivalThemeTokens> = {
       dealBadge: 'Diwali Deal',
       orderConfirmed: 'Happy Diwali! Your order is confirmed 🪔',
       countdownLabel: 'Diwali offers end in',
+    },
+    home: {
+      navLabel: 'Diwali Sale',
+      heroEyebrow: 'The Diwali Sale',
+      heroTitle: ['Light up ', 'every drive', ' this Diwali'],
+      heroSubtitle:
+        'Festive prices on suspension, body kits, lighting and interiors — shop by your car and see only what fits. Upgrade your own, or gift one to someone you love.',
+      heroCta: 'Shop Diwali Deals',
+      dealsTitle: 'Diwali Deals',
+      dealsSubtitle: 'The biggest festive savings — M.R.P. shown on every deal',
+      giftTitle: 'Gift for your car this Diwali',
+      giftSubtitle: 'Thoughtful upgrades at every budget, for your own car or someone special',
+      giftTiers: ['Little sparkles', 'Festive upgrades', 'The grand gift'],
+      wishTitle: 'Happy Diwali from Team Roavion',
+      wishSubtitle: 'May your roads be bright and every drive be safe.',
     },
   },
 };
