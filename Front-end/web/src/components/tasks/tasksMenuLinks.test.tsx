@@ -1,6 +1,6 @@
 /**
  * Links with logos, the ⋯ menu (duplicate, delete, restore), Trash, and the
- * fixes that came with them: "Assigned to me" after "Today & overdue", and a
+ * fixes that came with them: "My tasks" after "Today & overdue", and a
  * long list of people that must not spill into the next field.
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -108,15 +108,15 @@ describe('links in task text', () => {
 });
 
 describe('fixes', () => {
-  it('"Assigned to me" after "Today & overdue" drops the Late filter (it used to look dead)', async () => {
+  it('"My tasks" after "Today & overdue" drops the Late filter (it used to look dead)', async () => {
     serve();
     workspace();
     const nav = await screen.findByRole('navigation', { name: 'Task lists' });
     fireEvent.click(await within(nav).findByRole('button', { name: /Today & overdue/ }));
     await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open&due=late'));
     get.mockClear();
-    fireEvent.click(within(nav).getByRole('button', { name: 'Assigned to me' }));
-    await waitFor(() => expect(within(nav).getByRole('button', { name: 'Assigned to me' })).toHaveAttribute('aria-pressed', 'true'));
+    fireEvent.click(within(nav).getByRole('button', { name: 'My tasks' }));
+    await waitFor(() => expect(within(nav).getByRole('button', { name: 'My tasks' })).toHaveAttribute('aria-pressed', 'true'));
     expect(screen.getByRole('button', { name: 'Any date' })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -174,7 +174,7 @@ describe('the ⋯ menu', () => {
 });
 
 describe('Trash', () => {
-  it('lists deleted tasks (the ones I gave out) and restores one against its revision', async () => {
+  it('lists deleted tasks (the ones I assigned) and restores one against its revision', async () => {
     const gone = task({ bucket: 'archived', archivedAt: '2026-11-04T05:00:00Z', can: { ...can, archive: false, restore: true } });
     serve({ archived: [gone] });
     patch.mockResolvedValue({ task: task({ rev: 5 }) });

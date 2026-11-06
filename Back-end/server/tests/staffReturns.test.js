@@ -728,3 +728,163 @@ describe('team chat (which also pushes to phones)', () => {
     expect(sales[0].text).toMatch(/please call them/);
   });
 });
+
+/*
+  Editing a raised return (owner, 2026-11-06). What must hold:
+    - money is never typed: the refund is recomputed from the ORDER's price, quantity
+      only goes down, and a sent price field is ignored
+    - who: the person who raised it, operations, admin — never accounts or another seller
+    - locked once the refund is with Accounts (processing / completed)
+    - every edit is one History line naming who and what (old → new)
+    - saving the same edit twice writes once; a stale form is refused, not merged
+    - the Accounts refund queue shows the new amount
+*/
+describe('editing a raised return', () => {
+  const raise = async (o, raiser, items) => svc.raiseReturn(raiser, {
+    orderId: String(o.order._id), items, description: 'Wrong model sent', images: PHOTOS, video: VIDEO,
+  }, req(raiser));
+  const edits = async (id) => (await ReturnRequest.findById(id).lean()).timeline.filter((t) => /^Edited by/.test(t.note));
+
+  it('lowering the quantity lowers the refund from the order price, and History says who and what', async () => {
+    const o = await deliveredOrder();
+    const lead = await person('sales');
+    const r = await raise(o, lead, [{ itemId: o.mat, quantity: 2, reason: 'wrong_item' }]);
+    const before = (await ReturnRequest.findById(r.id).lean()).refund.finalAmount;
+    expect(before).toBeGreaterThan(0);
+
+    const out = await svc.editReturn(lead, r.id, {
+      updatedAt: r.updatedAt, lines: [{ key: o.mat, quantity: 1, unitPrice: 1, price: 99999 }],
+    }, req(lead));
+
+    const saved = await ReturnRequest.findById(r.id).lean();
+    expect(saved.items[0].quantity).toBe(1);
+    expect(saved.items[0].unitPrice).toBe(1000); // the order's price, never the client's
+    expect(saved.refund.finalAmount).toBeCloseTo(before / 2, 2);
+    expect(out.refund.amount).toBeCloseTo(before / 2, 2);
+    const [line] = await edits(r.id);
+    expect(line.note).toMatch(new RegExp(`^Edited by ${lead.name}: Floor mat: quantity 2 → 1 \\(refund ₹`));
+    expect(String(line.updatedBy)).toBe(String(lead._id));
+  });
+
+  it('saving the same edit twice writes one History line; a stale form is refused', async () => {
+    const o = await deliveredOrder();
+    const lead = await person('sales');
+    const r = await raise(o, lead, [{ itemId: o.mat, quantity: 2, reason: 'wrong_item' }]);
+    const first = await svc.editReturn(lead, r.id, { description: 'Wrong colour sent' }, req(lead));
+    await svc.editReturn(lead, r.id, { description: 'Wrong colour sent' }, req(lead)); // double-click
+    expect(await edits(r.id)).toHaveLength(1);
+
+    // A form opened before the first save carries the old version.
+    await expect(svc.editReturn(lead, r.id, { updatedAt: r.updatedAt, description: 'Something else' }, req(lead)))
+      .rejects.toMatchObject({ statusCode: 409 });
+    expect(first.updatedAt).not.toEqual(r.updatedAt);
+    expect((await ReturnRequest.findById(r.id).lean()).problemDescription).toBe('Wrong colour sent');
+  });
+
+  it('quantity only goes down — never up, never to zero', async () => {
+    const o = await deliveredOrder();
+    const lead = await person('sales');
+    const r = await raise(o, lead, [{ itemId: o.mat, quantity: 1, reason: 'wrong_item' }]);
+    await expect(svc.editReturn(lead, r.id, { lines: [{ key: o.mat, quantity: 2 }] }, req(lead))).rejects.toMatchObject({ statusCode: 400 });
+    await expect(svc.editReturn(lead, r.id, { lines: [{ key: o.mat, quantity: 0 }] }, req(lead))).rejects.toMatchObject({ statusCode: 400 });
+    expect(await edits(r.id)).toHaveLength(0);
+  });
+
+  it('who: the raiser, operations, admin — never accounts, procurement or another seller', async () => {
+    const o = await deliveredOrder();
+    const lead = await person('sales');
+    const r = await raise(o, lead, [{ itemId: o.mat, quantity: 2, reason: 'wrong_item' }]);
+    const otherHead = await person('sales', { isHead: true }); // can SEE every return, but didn't raise this one
+    await forbidden(svc.editReturn(otherHead, r.id, { description: 'x y' }, req(otherHead)));
+    await forbidden(svc.editReturn(await person('accounts'), r.id, { description: 'x y' }, req()));
+    await forbidden(svc.editReturn(await person('procurement'), r.id, { description: 'x y' }, req()));
+    const ops = await person('operations');
+    await svc.editReturn(ops, r.id, { description: 'Edited by ops' }, req(ops));
+    const boss = await admin();
+    await svc.editReturn(boss, r.id, { description: 'Edited by admin' }, req(boss));
+    expect(await edits(r.id)).toHaveLength(2);
+    expect((await svc.getReturn(otherHead, r.id)).can.edit).toBe(false);
+    expect((await svc.getReturn(lead, r.id)).can.edit).toBe(true);
+  });
+
+  it('the reason changes only before approval, and a customer reason needs the declaration', async () => {
+    const o = await deliveredOrder();
+    const lead = await person('sales');
+    const r = await raise(o, lead, [{ itemId: o.mat, quantity: 2, reason: 'wrong_item' }]);
+    await expect(svc.editReturn(lead, r.id, { lines: [{ key: o.mat, reason: 'changed_mind' }] }, req(lead)))
+      .rejects.toMatchObject({ statusCode: 400 });
+    await svc.editReturn(lead, r.id, { unusedDeclared: true, lines: [{ key: o.mat, reason: 'changed_mind' }] }, req(lead));
+    const saved = await ReturnRequest.findById(r.id).lean();
+    expect(saved.items[0]).toMatchObject({ reason: 'changed_mind', fault: { claimed: 'customer', confirmed: null } });
+    expect(saved.unusedDeclaredAt).toBeTruthy();
+
+    const ops = await person('operations');
+    await svc.reviewReturn(ops, r.id, { decision: 'approve' }, req(ops));
+    await expect(svc.editReturn(lead, r.id, { lines: [{ key: o.mat, reason: 'wrong_item' }] }, req(lead)))
+      .rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('an item comes off the return only until it reaches us, and one always stays', async () => {
+    const o = await deliveredOrder();
+    const lead = await person('sales');
+    const r = await raise(o, lead, [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }, { itemId: o.mat, quantity: 2, reason: 'wrong_item' }]);
+    await expect(svc.editReturn(lead, r.id, { lines: [{ key: o.cam, remove: true }, { key: o.mat, remove: true }] }, req(lead)))
+      .rejects.toMatchObject({ statusCode: 400 });
+    await svc.editReturn(lead, r.id, { lines: [{ key: o.cam, remove: true }] }, req(lead));
+    const saved = await ReturnRequest.findById(r.id).lean();
+    expect(saved.items.map((i) => String(i.orderItemId))).toEqual([o.mat]);
+    expect((await edits(r.id))[0].note).toMatch(/Dash cam taken off the return/);
+
+    const two = await passedReturn(o, { lines: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }] });
+    await expect(svc.editReturn(two.ops, two.id, { lines: [{ key: o.cam, remove: true }] }, req(two.ops)))
+      .rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('is locked once the refund is with Accounts — even if it started after the form opened', async () => {
+    const o = await deliveredOrder();
+    const { id, ops } = await passedReturn(o, { lines: [{ itemId: o.mat, quantity: 2, reason: 'wrong_item' }] });
+    const view = await svc.getReturn(ops, id);
+    expect(view.can.edit).toBe(true);
+    await ReturnRequest.updateOne({ _id: id }, { $set: { 'refund.status': 'processing' } });
+    await expect(svc.editReturn(ops, id, { updatedAt: view.updatedAt, lines: [{ key: o.mat, quantity: 1 }] }, req(ops)))
+      .rejects.toMatchObject({ statusCode: 409, message: svc.REFUND_LOCKED_MESSAGE });
+    const after = await svc.getReturn(ops, id);
+    expect(after.can.edit).toBe(false);
+    expect(after.editLock).toBe(svc.REFUND_LOCKED_MESSAGE);
+
+    const o2 = await deliveredOrder();
+    const sent = await passedReturn(o2, { lines: [{ itemId: o2.mat, quantity: 2, reason: 'wrong_item' }] });
+    const accounts = await person('accounts');
+    await svc.sendRefund(accounts, sent.id, req(accounts, {}, { id: sent.id }));
+    await expect(svc.editReturn(sent.ops, sent.id, { description: 'Too late' }, req(sent.ops)))
+      .rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('the Accounts refund queue shows the new amount after an edit at inspection', async () => {
+    const o = await deliveredOrder();
+    const { id, ops } = await passedReturn(o, { lines: [{ itemId: o.mat, quantity: 2, reason: 'wrong_item' }] });
+    const accounts = await person('accounts');
+    const row = async () => (await svc.listReturns(accounts, { queue: 'refund' })).returns.find((x) => x.id === id);
+    const before = (await row()).refund.amount;
+    const previewBefore = (await svc.refundPreviewFor(accounts, id)).preview.refundNow;
+    await svc.editReturn(ops, id, { lines: [{ key: o.mat, quantity: 1 }] }, req(ops));
+    expect((await row()).refund.amount).toBeCloseTo(before / 2, 2);
+    // The send screen prices the same lines from the order — the amount Accounts sends.
+    expect((await svc.refundPreviewFor(accounts, id)).preview.refundNow).toBeCloseTo(previewBefore / 2, 2);
+  });
+
+  it('photos: add and remove, but never the last one; history names it', async () => {
+    const o = await deliveredOrder();
+    const lead = await person('sales');
+    const r = await raise(o, lead, [{ itemId: o.mat, quantity: 2, reason: 'wrong_item' }]);
+    await expect(svc.editReturn(lead, r.id, { evidence: { keepImages: [] } }, req(lead))).rejects.toMatchObject({ statusCode: 400 });
+    await svc.editReturn(lead, r.id, {
+      evidence: { keepImages: [], newImages: [{ publicId: 'autobacs/returns/n2/photo-1.jpg' }], videoLink: 'https://youtu.be/abc123' },
+    }, req(lead));
+    const saved = await ReturnRequest.findById(r.id).lean();
+    expect(saved.images.map((i) => i.publicId)).toEqual(['autobacs/returns/n2/photo-1.jpg']);
+    expect(saved.video).toBeNull();
+    expect(saved.videoLink).toBe('https://youtu.be/abc123');
+    expect((await edits(r.id))[0].note).toMatch(/1 photo added; 1 photo removed; unboxing video replaced/);
+  });
+});

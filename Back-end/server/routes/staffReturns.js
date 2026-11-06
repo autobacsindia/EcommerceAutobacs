@@ -7,6 +7,7 @@
  * runs through the SAME code as the admin route (services/returnRefundService.js).
  *
  *   raise                                  canSell, operations, admin
+ *   edit                                   who raised it, operations, admin (until the refund starts)
  *   review, pickup, received, inspect      operations, admin
  *   direct-to-supplier, supplier claims    procurement, admin
  *   refund                                 accounts (≤ ₹25,000), accounts head, admin
@@ -20,7 +21,7 @@ import {
 } from '../middleware/uploadMiddleware.js';
 import { validateReturnRefundBody } from '../middleware/validators/returnRefund.js';
 import {
-  validateReturnList, validateOwedList, validateReturnId, validateOrderParam, validateReturnFile, validateRaise,
+  validateReturnList, validateOwedList, validateReturnId, validateOrderParam, validateReturnFile, validateRaise, validateEdit,
   validateUploadTargets, validateReview, validatePickup, validateNote, validateRequiredNote, validateInspection,
   validateSupplierCheck, validateClaimOpen, validateClaimAnswer, validateClaimShipBack, validateClaimCheck,
   validateClaimPromise, validateClaimMoney,
@@ -72,6 +73,12 @@ router.get('/:id', validateReturnId, validateRequest, asyncHandler(async (req, r
 }));
 
 // @route  GET /staff/returns/:id/files/:fileId — an attached photo/PDF (private)
+// @route  PATCH /staff/returns/:id { updatedAt, description?, unusedDeclared?, lines?[{key, quantity?, reason?, remove?}], evidence? }
+//         The raiser, operations or admin; locked once the refund is with Accounts.
+router.patch('/:id', validateEdit, validateRequest, asyncHandler(async (req, res) => {
+  ok(res, await returnService.editReturn(req.user, req.params.id, req.body, req));
+}));
+
 router.get('/:id/files/:fileId', validateReturnFile, validateRequest, asyncHandler(async (req, res) => {
   const { buffer, contentType, name } = await returnService.getStaffFile(req.user, req.params.id, req.params.fileId);
   res.setHeader('Content-Type', contentType);

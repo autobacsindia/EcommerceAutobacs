@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useReturnAction } from './useReturnAction';
-import { AlertTriangle, Camera, FileText, Loader2, Video } from 'lucide-react';
+import { AlertTriangle, Camera, FileText, Loader2, Lock, Pencil, Video } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
@@ -17,6 +17,7 @@ import FilePicker from '@/components/payments/FilePicker';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import ReturnRefundBox from './ReturnRefundBox';
 import SupplierClaims from './SupplierClaims';
+import EditReturnForm from './EditReturnForm';
 import { DISPOSITION_OPTIONS, FAULT_LABEL, FAULT_TONE, type ReturnDetail, type ReturnFault } from './types';
 import { danger, input, primary, secondary } from './ui';
 
@@ -320,6 +321,7 @@ function InspectionForm({ r }: { r: ReturnDetail }) {
 // ── The panel ─────────────────────────────────────────────────────────────────────
 
 export default function ReturnPanel({ id, showRefund = false }: { id: string; showRefund?: boolean }) {
+  const [editing, setEditing] = useState(false);
   const q = useQuery({
     queryKey: staffKeys.returnOne(id),
     queryFn: () => apiClient.get<Res>(`/staff/returns/${id}`),
@@ -369,6 +371,14 @@ export default function ReturnPanel({ id, showRefund = false }: { id: string; sh
       {r.courier?.trackingNumber && (
         <p className="text-xs text-gray-600">Pickup: {r.courier.provider} · AWB {r.courier.trackingNumber}{r.courier.bookedAt ? ` · ${formatDateIST(r.courier.bookedAt)}` : ''}{r.pickupAttempts ? ` · ${r.pickupAttempts} failed attempt${r.pickupAttempts > 1 ? 's' : ''}` : ''}</p>
       )}
+
+      {editing && r.can.edit ? (
+        <EditReturnForm r={r} onDone={() => setEditing(false)} />
+      ) : r.can.edit ? (
+        <button type="button" className={secondary} onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" /> Edit return</button>
+      ) : r.editLock ? (
+        <p className="flex items-center gap-1.5 text-xs text-gray-500"><Lock className="h-3.5 w-3.5" /> {r.editLock}</p>
+      ) : null}
 
       {r.can.review && <ReviewForm r={r} />}
       {(r.can.pickup || r.can.droppedAtStore || r.can.received) && <PickupForm r={r} />}

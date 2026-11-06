@@ -110,11 +110,11 @@ describe('the Tasks page', () => {
     fireEvent.click(dueNow);
     await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=mine&state=open&due=late'));
     expect(dueNow).toHaveAttribute('aria-pressed', 'true');
-    expect(within(nav).getByRole('button', { name: 'Assigned to me' })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(nav).getByRole('button', { name: 'My tasks' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('heading', { level: 1, name: /Today & overdue/ })).toBeInTheDocument();
     fireEvent.click(dueNow);
     await waitFor(() => expect(dueNow).toHaveAttribute('aria-pressed', 'false'));
-    expect(within(nav).getByRole('button', { name: 'Assigned to me' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(nav).getByRole('button', { name: 'My tasks' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('searches after a short pause, and "/" jumps to the search box', async () => {
@@ -131,7 +131,7 @@ describe('the Tasks page', () => {
     serve();
     const { unmount } = workspace();
     await screen.findByText('Call Bosch');
-    expect(screen.getByRole('button', { name: 'Assigned to me' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'My tasks' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByRole('group', { name: 'Team' })).toBeNull();
     unmount();
     const member = workspace({ canSeeTeam: true, myTeam: 'procurement', myTeamLabel: 'Procurement' });
@@ -208,12 +208,12 @@ describe('the Tasks page', () => {
     serve({ summary: { late: 0, today: 0 } });
     workspace({ canSeeTeam: true });
     const nav = await screen.findByRole('navigation', { name: 'Task lists' });
-    expect(screen.getByRole('heading', { level: 1, name: 'Assigned to me' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'My tasks' })).toBeInTheDocument();
     // Nothing due: "Today & overdue" carries no count.
     expect(within(nav).getByRole('button', { name: 'Today & overdue' })).toBeInTheDocument();
-    fireEvent.click(within(nav).getByRole('button', { name: 'I gave out' }));
-    expect(screen.getByRole('heading', { level: 1, name: 'I gave out' })).toBeInTheDocument();
-    expect(within(nav).getByRole('button', { name: 'I gave out' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(within(nav).getByRole('button', { name: 'Assigned by me' }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Assigned by me' })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: 'Assigned by me' })).toHaveAttribute('aria-pressed', 'true');
     await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=created&state=open'));
   });
 
@@ -244,6 +244,10 @@ describe('the Tasks page', () => {
     // A member (no team view) is told they can give tasks to anyone, too.
     expect(screen.getByText(/yourself or anyone in the panel/)).toBeInTheDocument();
     expect(screen.queryByText(/Team heads and the admin can give/)).toBeNull();
+    // It names the menu items by their current names (owner, 2026-11-06).
+    const help = screen.getByText('How tasks work').closest('aside') as HTMLElement;
+    expect(help).toHaveTextContent(/find it under My tasks; the tasks you gave to others are under Assigned by me/);
+    expect(help).not.toHaveTextContent(/Assigned to me|I gave out/);
     fireEvent.click(screen.getByRole('button', { name: 'Hide how tasks work' }));
     expect(screen.queryByText('How tasks work')).toBeNull();
     unmount();
@@ -272,7 +276,7 @@ describe('search, filters and sort in the address', () => {
     workspace();
     await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=created&state=open&priority=high&q=bosch&sort=oldest'));
     expect(screen.getByLabelText('Search tasks')).toHaveValue('bosch');
-    expect(screen.getByRole('button', { name: 'I gave out' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Assigned by me' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Clear all' }));
     await waitFor(() => expect(addressBar.search).toBe('view=created&sort=oldest'));
     expect(screen.getByLabelText('Search tasks')).toHaveValue('');
@@ -865,7 +869,7 @@ describe('the list rows edit in place, like the board (and ClickUp)', () => {
 });
 
 describe('the page header', () => {
-  it('shows where you are: Tasks › My work › the list; "Tasks" goes back to Assigned to me', async () => {
+  it('shows where you are: Tasks › My work › the list; "Tasks" goes back to My tasks', async () => {
     serve();
     addressBar.reset('/team/tasks', 'view=following');
     workspace();
@@ -875,6 +879,15 @@ describe('the page header', () => {
     expect(within(crumbs).getByText('Following')).toHaveAttribute('aria-current', 'page');
     fireEvent.click(within(crumbs).getByRole('button', { name: 'Tasks' }));
     await waitFor(() => expect(replace).toHaveBeenCalled());
+  });
+
+  it('the breadcrumb and page title use the new names: My tasks, Assigned by me', async () => {
+    serve();
+    addressBar.reset('/team/tasks', 'view=created');
+    workspace();
+    const crumbs = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(crumbs).getByText('Assigned by me')).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('heading', { level: 1, name: 'Assigned by me' })).toBeInTheDocument();
   });
 
   it('a team head\'s team list sits under "Team"', async () => {

@@ -270,3 +270,6 @@ export default {
   RETURN_REASON_LABELS,
   suggestedRestockingRupees,
 };
+
+/** At most this many customer photos on one return (raise and edit alike). */
+export const RETURN_MAX_PHOTOS = 5;
