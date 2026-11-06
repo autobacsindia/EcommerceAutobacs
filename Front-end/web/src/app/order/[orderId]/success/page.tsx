@@ -10,6 +10,7 @@ import { buildPurchasePayload, itemName } from './purchase';
 import PurchaseTracker from './PurchaseTracker';
 import SpinSection from '@/components/spin/SpinSection';
 import ConversionFallback from './ConversionFallback';
+import OrderCelebration from '@/components/festival/OrderCelebration';
 import { formatLongDateIST } from '@/lib/datetime';
 
 // Transactional, per-user page — never index it.
@@ -114,6 +115,15 @@ export default async function OrderSuccessPage({
         purchase={purchase}
         metaItems={metaItems}
         metaValue={order.totalAmount}
+        paymentStatus={order.paymentStatus}
+        orderStatus={order.status}
+      />
+
+      {/* Festival fireworks + greeting: once per order, only when the server says
+          PAID. Null outside a festival. Never blocks the receipt below. */}
+      <OrderCelebration
+        key={`celebrate-${order._id}`}
+        orderId={order._id}
         paymentStatus={order.paymentStatus}
         orderStatus={order.status}
       />

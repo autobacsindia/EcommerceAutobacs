@@ -103,6 +103,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/blog', label: 'Blog', icon: SquarePen },
       { href: '/admin/promo-banners', label: 'Promo Banner', icon: Megaphone },
+      { href: '/admin/festival-theme', label: 'Festival Theme', icon: Sparkles },
       { href: '/admin/media', label: 'Media', icon: Images },
       { href: '/admin/careers', label: 'Careers', icon: GraduationCap },
       { href: '/admin/seo', label: 'Pages SEO', icon: Globe },

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Img from '../redesign/Img';
 import { useCurrency } from '@/context/CurrencyContext';
 import { discountPct, type StoreProduct } from './storeData';
+import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
 
 /** Five stars, filled to the rating (rounded to the half). */
 export function Stars({ rating, size = 14 }: { rating: number; size?: number }) {
@@ -37,6 +38,7 @@ export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: str
           <div className="st-deal-line">
             <span className="st-off">-{off}%</span>
             <span className="st-deal-label">{p.offerEndDate ? 'Limited time deal' : 'Deal'}</span>
+            <FestivalDealBadge />
           </div>
         )}
         <div className="st-name">{p.name}</div>

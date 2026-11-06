@@ -3,6 +3,7 @@
 import type { StockStatus } from '@/lib/stock';
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import apiClient from '@/lib/api';
+import { emitCartAddIntent } from '@/lib/festival/events';
 import { AUTH_LOGIN_EVENT } from '@/lib/api-client';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { useAuth } from './AuthContext';
@@ -215,6 +216,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addToCart = async (productId: string, quantity: number = 1, snapshot?: OptimisticProduct, variantId?: string | null) => {
     const previousCart = cart;
     const vId = variantId ?? null;
+
+    // Festival effect hook (sparks + lamp to the cart). A synchronous, fire-and-
+    // forget DOM event: nothing here awaits it, and the cart number below still
+    // comes from the optimistic line and then the server response.
+    emitCartAddIntent();
 
     // Optimistic update: reflect the add immediately so the cart badge responds on
     // tap instead of after the ~1s server round-trip. Lines are keyed by product +

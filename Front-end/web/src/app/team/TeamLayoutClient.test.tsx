@@ -167,5 +167,5 @@ it('the other teams\' menus are exactly as before the Refunds change', () => {
   expect(labels('sales', false, false)).toEqual(['Team chat', 'Tasks', 'Payments', 'My team', 'Help']);
   expect(labels('procurement')).toEqual(['Team chat', 'Tasks', 'Orders', 'Delivered', 'Returns', 'Payments', 'Suppliers', 'My team', 'Help']);
   expect(labels('operations')).toEqual(['Team chat', 'Tasks', 'Deliveries', 'Order processing', 'Delivered', 'Returns', 'Payments', 'My team', 'Help']);
-  expect(labels('marketing')).toEqual(['Team chat', 'Tasks', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Leads', 'Consultations', 'Payments', 'My team', 'Help']);
+  expect(labels('marketing')).toEqual(['Team chat', 'Tasks', 'Products', 'Brands', 'Categories', 'Vehicles', 'Orders', 'Blog & media', 'Page SEO', 'Coupons', 'Campaigns', 'Spin to win', 'Promo banners', 'Festival theme', 'Leads', 'Consultations', 'Payments', 'My team', 'Help']);
 });

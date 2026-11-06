@@ -1,4 +1,4 @@
-import { BookOpen, Globe, Ticket, Megaphone, Gift, Image as ImageIcon, Target, MessageSquareText, ShoppingBag, Tag, FolderTree, Car, ReceiptText } from 'lucide-react';
+import { BookOpen, Sparkles, Globe, Ticket, Megaphone, Gift, Image as ImageIcon, Target, MessageSquareText, ShoppingBag, Tag, FolderTree, Car, ReceiptText } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MARKETING_BASE } from '@/lib/usePanel';
 
@@ -23,6 +23,7 @@ export const MARKETING_AREAS: MarketingArea[] = [
   { href: `${MARKETING_BASE}/campaigns`, label: 'Campaigns', text: 'Festive and member campaigns: offers, product tiers and results.', icon: Megaphone },
   { href: `${MARKETING_BASE}/spin`, label: 'Spin to win', text: 'Spin campaigns, prizes and winners.', icon: Gift },
   { href: `${MARKETING_BASE}/promo-banners`, label: 'Promo banners', text: 'The offer strip across the top of the website.', icon: ImageIcon },
+  { href: `${MARKETING_BASE}/festival-theme`, label: 'Festival theme', text: 'Diwali sparks, fireworks and countdown — on/off with start and end dates.', icon: Sparkles },
   { href: `${MARKETING_BASE}/leads`, label: 'Leads', text: 'Every enquiry from ads and the website, and where each one is up to.', icon: Target },
   { href: `${MARKETING_BASE}/consultation`, label: 'Consultations', text: 'Specialist consultation requests from the website.', icon: MessageSquareText },
 ];

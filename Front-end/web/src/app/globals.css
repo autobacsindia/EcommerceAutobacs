@@ -579,3 +579,79 @@ textarea::placeholder {
     cursor: not-allowed;
   }
 }
+
+/* ── Festival theme (src/components/festival) ─────────────────────────────
+   Lives in the global sheet on purpose: as its own file it was one more
+   render-blocking CSS request on every page (measured: PDP lab LCP +1s). */
+/* Festival decoration. Static by default; motion only when the visitor allows it. */
+
+/* Toran: a fixed-height strip so its space is in the SSR HTML (no CLS). */
+.fx-toran {
+  position: relative;
+  height: 24px;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  background: var(--fx-primary);
+}
+.fx-toran::before { /* the gold string the flowers hang from */
+  content: '';
+  position: absolute; left: 0; right: 0; top: 4px; height: 2px;
+  background: var(--fx-accent);
+}
+.fx-toran-row {
+  display: flex; justify-content: space-around;
+  font-size: 15px; line-height: 1; padding-top: 3px;
+}
+.fx-toran-item { display: inline-block; transform-origin: 50% 0; }
+@media (max-width: 640px) {
+  .fx-toran { height: 20px; }
+  .fx-toran-row { font-size: 12px; }
+  .fx-toran-item:nth-child(n + 15) { display: none; }
+}
+
+/* Countdown strip: fixed height, tabular digits so the width never jumps. */
+.fx-countdown {
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  height: 32px; padding: 0 12px;
+  background: var(--fx-primary); color: var(--fx-on-primary);
+  font-size: 13px; font-weight: 700; letter-spacing: 0.01em;
+}
+.fx-countdown-time { font-variant-numeric: tabular-nums; min-width: 8ch; color: var(--fx-accent); }
+
+/* Deal badge. */
+.fx-deal-badge {
+  display: inline-flex; align-items: center; gap: 0.25em;
+  padding: 1px 8px; border-radius: 999px;
+  background: var(--fx-primary, #7a1f0f); color: var(--fx-on-primary, #fff6dc);
+  font-size: 11px; font-weight: 800; line-height: 18px; white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fx-toran-item { animation: fx-sway 3.2s ease-in-out infinite; }
+  .fx-toran-item:nth-child(2n) { animation-delay: -1.6s; }
+  .fx-toran-item:nth-child(3n) { animation-duration: 4s; }
+}
+@keyframes fx-sway {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(6deg); }
+}
+
+/* Rangoli accent behind home section headings while a festival is live.
+   Absolutely positioned behind the text: no size or position change, so no CLS. */
+html[data-festival] .st-h2,
+html[data-festival] .st-h3 { position: relative; isolation: isolate; }
+html[data-festival] .st-h2::before,
+html[data-festival] .st-h3::before {
+  content: '';
+  position: absolute; z-index: -1;
+  left: -10px; top: 50%; width: 34px; height: 34px; margin-top: -17px;
+  border-radius: 50%;
+  opacity: 0.28;
+  pointer-events: none;
+  background:
+    radial-gradient(circle, var(--fx-accent) 0 4px, transparent 4.5px),
+    repeating-conic-gradient(var(--fx-accent) 0 15deg, var(--fx-primary) 15deg 30deg);
+  -webkit-mask: radial-gradient(circle, #000 0 16px, transparent 17px);
+  mask: radial-gradient(circle, #000 0 16px, transparent 17px);
+}
