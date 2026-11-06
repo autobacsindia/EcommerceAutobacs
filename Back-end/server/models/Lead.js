@@ -168,6 +168,17 @@ LeadSchema.index({ status: 1, updatedAt: -1 });
 // (The 'All' assignment view has no assignedRep equality and still blocking-sorts —
 // inherent, and far less frequent than the default pool view.)
 LeadSchema.index({ assignedRep: 1, leadScore: -1, createdAt: -1 });
+/*
+  The GTM leads sheet (/team/leads, services/teamLeadService.js) pages by keyset on
+  [sort field, _id]. Without these every page read every open lead and sorted it in
+  memory — measured on 30,000 leads: 20,000 read per page; with them, 21–61.
+  The existing { assignedRep, leadScore, createdAt } index serves the admin list's
+  sort and cannot serve an _id tie-breaker. tests/teamLeadIndexes.test.js guards this.
+*/
+LeadSchema.index({ leadScore: -1, _id: -1 }); // All, by score
+LeadSchema.index({ assignedRep: 1, leadScore: -1, _id: -1 }); // Free / Mine / a person, by score
+LeadSchema.index({ createdAt: -1, _id: -1 }); // newest first
+LeadSchema.index({ updatedAt: -1, _id: -1 }); // recently active
 LeadSchema.index({ primarySource: 1 });
 LeadSchema.index({ hasPurchased: 1 });
 LeadSchema.index({ reopenCount: 1 }); // "reopened / returning" segment filter
