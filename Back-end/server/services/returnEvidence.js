@@ -10,7 +10,7 @@
  */
 
 import AppError from '../utils/AppError.js';
-import { VIDEO_MAX_MB } from '../config/returnPolicy.js';
+import { VIDEO_MAX_MB, RETURN_MAX_PHOTOS } from '../config/returnPolicy.js';
 import {
   RETURNS_FOLDER_BASE,
   generateReturnUploadSignature,
@@ -34,7 +34,7 @@ export const MB = 1024 * 1024;
 export const VIDEO_MAX_BYTES = VIDEO_MAX_MB * MB;
 export const PROOF_MAX_BYTES = 15 * MB;
 export const PHOTO_MAX_BYTES = 10 * MB;
-export const MAX_PHOTOS = 5;
+export const MAX_PHOTOS = RETURN_MAX_PHOTOS;
 
 export const VIDEO_FORMATS = ['mp4', 'mov', 'webm', 'm4v', 'ogv', 'ogg', '3gp', '3gpp', 'avi', 'mkv', 'quicktime', 'x-matroska', 'mpeg', 'mpg'];
 export const IMAGE_FORMATS = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];

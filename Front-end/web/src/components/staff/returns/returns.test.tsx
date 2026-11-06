@@ -7,7 +7,10 @@ import { tabsFor, type ReturnDetail } from './types';
 
 const get = jest.fn();
 const post = jest.fn();
-jest.mock('@/lib/api-client', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a) } }));
+const patch = jest.fn();
+jest.mock('@/lib/api-client', () => ({ __esModule: true, default: {
+  get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), patch: (...a: unknown[]) => patch(...a),
+} }));
 jest.mock('@/lib/http/tokenManager', () => ({
   tokenManager: { ensureCsrfToken: jest.fn().mockResolvedValue(undefined), getHeaders: () => ({ 'Content-Type': 'application/json' }) },
 }));
@@ -28,14 +31,14 @@ const base: ReturnDetail = {
   status: 'pending', stage: 'Check 1 — evidence', origin: 'customer', destination: null, supplierName: null, pickupMode: null,
   pickupAttempts: 0, refund: { status: 'pending', amount: 0 }, claims: [], createdAt: '2026-10-30T05:00:00Z', ageDays: 0,
   problemDescription: 'Wrong model', raisedBy: null, customerContact: { name: 'Ravi', phone: '9876543210', email: '' }, seller: 'Website',
-  lines: [{ orderItemId: 'l1', name: 'Dash cam', quantity: 1, unitPrice: 9000, reason: 'wrong_item', reasonLabel: 'Wrong item shipped', fault: { claimed: 'ours', confirmed: null, note: null } }],
+  lines: [{ key: 'l1', orderItemId: 'l1', name: 'Dash cam', quantity: 1, unitPrice: 9000, reason: 'wrong_item', reasonLabel: 'Wrong item shipped', fault: { claimed: 'ours', confirmed: null, note: null } }],
   evidence: { video: null, proofOfPurchase: null, images: [{ url: 'https://x/p.jpg' }] }, files: [],
   destinationOptions: { default: 'warehouse', suppliers: ['Ram Traders'] }, courier: null, pickup: null, pickupAttemptsList: [],
   inspection: null, rejectionReason: null, refundDetail: null, refundRoute: 'gateway', supplierClaims: [], repeatReturns: 1, timeline: [],
   can: { review: true, pickup: false, droppedAtStore: false, received: false, supplierCheck: false, inspect: false, refund: false, supplierClaims: false, supplierMoney: false },
 };
 
-beforeEach(() => { get.mockReset(); post.mockReset(); upload.mockReset(); });
+beforeEach(() => { get.mockReset(); post.mockReset(); patch.mockReset(); upload.mockReset(); });
 
 describe('tabs per team', () => {
   it('gives each team the steps it owns, and never the others', () => {
@@ -236,5 +239,54 @@ describe('raise a return', () => {
       videoLink: 'https://drive.google.com/file/d/abc/view',
     })));
     expect(await screen.findByText(/Return R9 raised/)).toBeInTheDocument();
+  });
+});
+
+describe('editing a raised return', () => {
+  const editable: ReturnDetail = {
+    ...base,
+    updatedAt: '2026-11-06T05:00:00.000Z',
+    lines: [
+      { ...base.lines[0], quantity: 2, unitPrice: 4600, name: 'Grill logo' },
+      { key: 'l2', orderItemId: 'l2', name: 'Floor mat', quantity: 1, unitPrice: 1000, reason: 'wrong_item', reasonLabel: 'Wrong item shipped', fault: { claimed: 'ours', confirmed: null, note: null } },
+    ],
+    can: { ...base.can, review: false, edit: true, editReason: true, editRemoveLine: true },
+  };
+
+  it('sends only what changed, against the version it opened — never a price', async () => {
+    get.mockResolvedValue({ success: true, return: editable });
+    patch.mockResolvedValue({ success: true, return: editable });
+    wrap(<ReturnPanel id="r1" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Edit return/ }));
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled(); // nothing changed yet
+    // Quantity can only go down: the choices stop at what was raised.
+    const qty = screen.getByLabelText('How many Grill logo');
+    expect([...(qty as HTMLSelectElement).options].map((o) => o.value)).toEqual(['2', '1']);
+    fireEvent.change(qty, { target: { value: '1' } });
+    fireEvent.click(screen.getAllByLabelText('Take this item off the return')[1]);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/returns/r1', {
+      updatedAt: '2026-11-06T05:00:00.000Z',
+      lines: [{ key: 'l1', quantity: 1 }, { key: 'l2', remove: true }],
+    }));
+    expect(JSON.stringify(patch.mock.calls[0][1])).not.toMatch(/price|amount/i);
+  });
+
+  it('a customer reason needs the declaration; the last photo cannot be removed', async () => {
+    get.mockResolvedValue({ success: true, return: editable });
+    wrap(<ReturnPanel id="r1" />);
+    fireEvent.click(await screen.findByRole('button', { name: /Edit return/ }));
+    fireEvent.change(screen.getByLabelText('Reason for Grill logo'), { target: { value: 'changed_mind' } });
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(/unused, not installed/));
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Remove customer photo 1' })).toBeDisabled();
+  });
+
+  it('shows why it is locked once the refund is with Accounts', async () => {
+    get.mockResolvedValue({ success: true, return: { ...editable, can: { ...editable.can, edit: false }, editLock: "The refund is already with Accounts — this return can't be changed now." } });
+    wrap(<ReturnPanel id="r1" />);
+    expect(await screen.findByText(/The refund is already with Accounts/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Edit return/ })).toBeNull();
   });
 });

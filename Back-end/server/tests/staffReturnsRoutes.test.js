@@ -144,6 +144,19 @@ it('runs one return from raise to refund, with the inspection photo uploaded and
   }).expect(201);
   const id = raised.body.return.id;
 
+  // Edit (PATCH): bad shapes are refused before anything runs; accounts may not edit;
+  // the raiser may. The edit lands in History.
+  expect((await request(app).patch(`${BASE}/staff/returns/${id}`).set(as(seller))
+    .send({ lines: [{ key: itemId, quantity: 0 }] })).status).toBe(400);
+  expect((await request(app).patch(`${BASE}/staff/returns/${id}`).set(as(seller))
+    .send({ updatedAt: 'yesterday' })).status).toBe(400);
+  expect((await request(app).patch(`${BASE}/staff/returns/${id}`).set(as(accounts))
+    .send({ description: 'Changed by accounts' })).status).toBe(403);
+  const edited = await request(app).patch(`${BASE}/staff/returns/${id}`).set(as(seller))
+    .send({ updatedAt: raised.body.return.updatedAt, description: 'Wrong colour sent — black, not grey' }).expect(200);
+  expect(edited.body.return.problemDescription).toBe('Wrong colour sent — black, not grey');
+  expect(edited.body.return.timeline.at(-1).note).toMatch(/^Edited by .+: problem text changed$/);
+
   // Sales can never approve.
   expect((await request(app).post(`${BASE}/staff/returns/${id}/review`).set(as(seller)).send({ decision: 'approve' })).status).toBe(403);
   await request(app).post(`${BASE}/staff/returns/${id}/review`).set(as(ops))
@@ -175,6 +188,9 @@ it('runs one return from raise to refund, with the inspection photo uploaded and
   const refunded = await request(app).post(`${BASE}/staff/returns/${id}/refund`).set(as(accounts))
     .send({ finalAmount: 1, amount: 1 }).expect(200);
   expect(refunded.body.refund).toMatchObject({ amount: 5000, status: 'completed' });
+  // Once the refund has gone out, the return is locked.
+  const locked = await request(app).patch(`${BASE}/staff/returns/${id}`).set(as(seller)).send({ description: 'Too late' });
+  expect(locked.status).toBe(409);
   expect(razorpayService.refundPayment).toHaveBeenCalledWith(`pay_${orderId}`, 500000, expect.any(Object));
 
   const bell = await request(app).get(`${BASE}/notifications/summary`).set(as(accounts)).expect(200);

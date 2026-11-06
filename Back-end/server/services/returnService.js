@@ -58,6 +58,7 @@ import {
   SUPPLIER_SETTLEMENT_KINDS,
   SUPPLIER_MONEY_METHODS,
   RETURN_REASON_LABELS,
+  RETURN_MAX_PHOTOS as MAX_RETURN_PHOTOS,
   claimedFaultFor,
   effectiveFault,
   windowDaysFor,
@@ -1535,7 +1536,8 @@ export async function getReturn(actor, id) {
       email: rr.user?.email || order?.guestEmail || '',
     },
     seller: order?.salesUser?.name || (order?.salesUser ? 'Sales team' : 'Website'),
-    lines: (rr.items || []).map((i) => ({
+    lines: (rr.items || []).map((i, n) => ({
+      key: idOf(i.orderItemId) || String(n),
       orderItemId: idOf(i.orderItemId) || null,
       name: variantDisplayName(i.product?.name, i.variantLabel),
       quantity: i.quantity,
@@ -1573,11 +1575,223 @@ export async function getReturn(actor, id) {
         && !['processing', 'completed'].includes(rr.refund?.status),
       supplierClaims: can.procurement(actor),
       supplierMoney: can.accounts(actor),
+      edit: mayEdit(actor, rr) && !editBlock(rr),
+      editReason: rr.status === 'pending',
+      editRemoveLine: LINE_REMOVABLE_STATUSES.includes(rr.status),
     },
+    // Why Edit is closed (shown on the card); null when it is open or not this person's.
+    editLock: mayEdit(actor, rr) ? editBlock(rr) : null,
+    updatedAt: rr.updatedAt,
   };
 }
 
+// ── Editing a return (owner, 2026-11-06) ────────────────────────────────────────
+
+/** Statuses a return can still be edited in — the refund decides the rest (below). */
+export const EDITABLE_RETURN_STATUSES = Object.freeze(['pending', 'approved', 'courier_booked', 'received']);
+/** Lines can be dropped only until the item is back with us — then inspection decides. */
+const LINE_REMOVABLE_STATUSES = Object.freeze(['pending', 'approved', 'courier_booked']);
+const REFUND_LOCKED = Object.freeze(['processing', 'completed']);
+export const REFUND_LOCKED_MESSAGE = 'The refund is already with Accounts — this return can\'t be changed now.';
+
+/** May this person edit this return? The one who raised it, operations, admin. */
+const mayEdit = (u, rr) => can.operations(u) || (can.raise(u) && idOf(rr.raisedBy) === idOf(u?._id));
+
+/** Why editing is closed for this return, or null when it is open. */
+function editBlock(rr) {
+  if (REFUND_LOCKED.includes(rr.refund?.status)) return REFUND_LOCKED_MESSAGE;
+  if (!EDITABLE_RETURN_STATUSES.includes(rr.status)) return `This return is ${rr.status.replace('_', ' ')} and can no longer be changed.`;
+  return null;
+}
+
+const rupees = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const assetId = (a) => (a?.publicId ? String(a.publicId) : '');
+
+/**
+ * The evidence after an edit. Kept photos are matched against what the return already
+ * holds (never re-trusted from the client); anything NEW is verified exactly like at
+ * raise. Nothing that was there can be taken away without a replacement — the evidence
+ * rule (≥1 photo, the video or its link) stays met on every return that met it.
+ */
+async function editedEvidence(rr, ev) {
+  if (!ev || typeof ev !== 'object') return null;
+  const had = rr.images || [];
+  // Kept photos are named by their position in the return's own list (the order the
+  // view shows them in), so no storage key ever goes to the browser.
+  const keep = Array.isArray(ev.keepImages) ? new Set(ev.keepImages.map(Number)) : null;
+  const kept = had.filter((_, i) => !keep || keep.has(i)).map(plain);
+  const added = await verifyPhotos(ev.newImages);
+  const images = [...kept, ...added];
+  if (images.length > MAX_RETURN_PHOTOS) throw fail(`Up to ${MAX_RETURN_PHOTOS} photos.`, 400);
+  if (had.length > 0 && images.length === 0) throw fail('Keep at least one photo the customer sent.', 400);
+
+  let video = rr.video ? plain(rr.video) : null;
+  let videoLink = rr.videoLink || null;
+  if (ev.video) {
+    video = await verifyVideo(ev.video);
+    videoLink = null;
+  } else if (typeof ev.videoLink === 'string' && ev.videoLink.trim()) {
+    const link = verifyVideoLink(ev.videoLink);
+    if (!link) throw fail('Paste a Google Drive or YouTube link for the video.', 400);
+    if (link !== videoLink) { videoLink = link; video = null; }
+  }
+  const proofOfPurchase = ev.proofOfPurchase ? await verifyProof(ev.proofOfPurchase) : (rr.proofOfPurchase ? plain(rr.proofOfPurchase) : null);
+
+  const changes = [];
+  const removedPhotos = had.length - kept.length;
+  if (added.length) changes.push(`${added.length} photo${added.length > 1 ? 's' : ''} added`);
+  if (removedPhotos) changes.push(`${removedPhotos} photo${removedPhotos > 1 ? 's' : ''} removed`);
+  if (assetId(video) !== assetId(rr.video) || (videoLink || null) !== (rr.videoLink || null)) changes.push('unboxing video replaced');
+  if (assetId(proofOfPurchase) !== assetId(rr.proofOfPurchase)) changes.push('proof of purchase replaced');
+  if (!changes.length) return null;
+  return { set: { images, video, videoLink, proofOfPurchase }, changes };
+}
+
+/**
+ * The lines after an edit. Quantity only ever goes DOWN (so the refund can only go
+ * down — the price is the order's and never typed by staff); a line can be dropped
+ * while the item is still on its way; the reason can change only before review, and
+ * then every gate a new return's reason faces applies again.
+ */
+function editedLines(rr, order, products, input) {
+  const wanted = Array.isArray(input.lines) ? input.lines : null;
+  if (!wanted) return null;
+  const byKey = new Map(wanted.map((w) => [String(w?.key ?? ''), w]));
+  const changes = [];
+  const lines = [];
+  rr.items.forEach((item, i) => {
+    const key = idOf(item.orderItemId) || String(i);
+    const w = byKey.get(key) || byKey.get(String(i));
+    if (!w) { lines.push(plain(item)); return; }
+    const orderLine = matchOrderLine(order.items, { itemId: item.orderItemId, product: item.product, variantId: item.variantId });
+    // The order's own line name when the catalogue product is gone — History must say what changed.
+    const name = variantDisplayName(products?.get(idOf(item.product))?.name || orderLine?.name || 'Item', item.variantLabel);
+    if (w.remove === true) {
+      if (!LINE_REMOVABLE_STATUSES.includes(rr.status)) throw fail('An item can be taken off the return only until it reaches us. After that, inspection decides.', 409);
+      changes.push(`${name} taken off the return`);
+      return;
+    }
+    const next = plain(item);
+    if (w.quantity != null) {
+      const qty = Math.floor(Number(w.quantity));
+      if (!Number.isFinite(qty) || qty < 1) throw fail(`Enter how many of "${name}" are coming back (at least 1).`, 400);
+      if (qty > item.quantity) throw fail(`The quantity of "${name}" can only go down. To return more, raise a new return.`, 400);
+      if (qty !== item.quantity) { changes.push(`${name}: quantity ${item.quantity} → ${qty}`); next.quantity = qty; }
+    }
+    if (w.reason != null && w.reason !== item.reason) {
+      if (rr.status !== 'pending') throw fail('The reason can only be changed before the return is approved. Operations can change whose fault it is at inspection.', 409);
+      if (!RETURN_REASONS.includes(w.reason)) throw fail(`Choose a return reason for "${name}".`, 400);
+      const fault = claimedFaultFor(w.reason);
+      if (fault === 'customer') {
+        const deliveredAt = orderLine ? lineDeliveredAt(order, orderLine) : null;
+        const windowDays = windowDaysFor(fault);
+        if (deliveredAt && daysSince(deliveredAt) > windowDays) {
+          throw fail(`"${name}" is past the ${windowDays}-day window for the customer's own reason.`, 400);
+        }
+        if (products?.get(idOf(item.product))?.returnPolicy?.returnable === false) {
+          throw fail(`"${name}" can't be returned for the customer's own reason (it is on the non-returnable list).`, 400);
+        }
+        if (!rr.unusedDeclaredAt && input.unusedDeclared !== true) {
+          throw fail('A return for the customer\'s own reason needs the item unused, not installed, and in its original box — tick the declaration.', 400);
+        }
+      }
+      changes.push(`${name}: reason "${RETURN_REASON_LABELS[item.reason] || item.reason}" → "${RETURN_REASON_LABELS[w.reason]}"`);
+      next.reason = w.reason;
+      next.fault = { claimed: fault, confirmed: null, changedBy: null, changedAt: null, note: null };
+    }
+    lines.push(next);
+  });
+  if (!changes.length) return null;
+  if (lines.length === 0) throw fail('At least one item has to stay on the return. To drop all of it, reject the return instead.', 400);
+  return { lines, changes };
+}
+
+/**
+ * Edit a return staff already raised: the problem text, the evidence, and the lines
+ * (quantity down, drop a line, the reason before review). Money is never typed: the
+ * refund is recomputed from the ORDER's prices, so an edit can only lower it, and the
+ * send step still caps it at what is left to refund on the order.
+ *
+ * Locked once the refund is processing/completed (or the return is closed). The write
+ * is a compare-and-set on status + updatedAt + refund status, so it can't land on top
+ * of a refund Accounts just started or another person's edit. Saving with nothing
+ * changed writes nothing — a double-click adds no second History line.
+ */
+export async function editReturn(actor, id, input = {}, req = null) {
+  const rr = await loadVisible(actor, id);
+  if (!mayEdit(actor, rr)) throw fail('Only the person who raised this return, operations or admin can edit it.', 403);
+  const blocked = editBlock(rr);
+  if (blocked) throw fail(blocked, 409);
+  if (input.updatedAt && new Date(input.updatedAt).getTime() !== new Date(rr.updatedAt).getTime()) {
+    throw fail(RACE, 409);
+  }
+
+  const set = {};
+  const changes = [];
+
+  if (input.description != null) {
+    const description = trimmed(input.description, 2000);
+    if (!description) throw fail('Describe the problem in a line or two.', 400);
+    if (description !== rr.problemDescription) {
+      set.problemDescription = description;
+      changes.push('problem text changed');
+    }
+  }
+
+  let lineEdit = null;
+  if (Array.isArray(input.lines)) {
+    const order = await orderRepository.findForReturn(rr.order);
+    if (!order) throw fail('The order for this return no longer exists.', 404);
+    const products = await returnProducts(order);
+    lineEdit = editedLines(rr, order, products, input);
+    if (lineEdit) {
+      await assertEmiAllowsReturn(order, lineEdit.lines);
+      const before = rr.refund?.finalAmount || 0;
+      const { grossRupees, netRupees, discountShareRupees } = refundableForLines(order, lineEdit.lines);
+      set.items = lineEdit.lines;
+      set['refund.productValue'] = netRupees;
+      set['refund.listValue'] = grossRupees;
+      set['refund.discountShare'] = discountShareRupees;
+      set['refund.finalAmount'] = netRupees;
+      if (lineEdit.lines.some((l) => claimedFaultFor(l.reason) === 'customer') && !rr.unusedDeclaredAt) set.unusedDeclaredAt = new Date();
+      const money = netRupees !== before ? ` (refund ${rupees(before)} → ${rupees(netRupees)})` : '';
+      changes.push(...lineEdit.changes.map((c, i) => (i === lineEdit.changes.length - 1 ? `${c}${money}` : c)));
+    }
+  }
+
+  const evidence = await editedEvidence(rr, input.evidence);
+  if (evidence) {
+    Object.assign(set, evidence.set);
+    changes.push(...evidence.changes);
+  }
+
+  if (!changes.length) return getReturn(actor, id);
+
+  const note = `Edited by ${actorName(actor)}: ${changes.join('; ')}`;
+  const done = await returnRequestRepository.transitionIf(id, {
+    status: rr.status,
+    updatedAt: rr.updatedAt,
+    'refund.status': { $nin: REFUND_LOCKED },
+  }, {
+    $set: set,
+    $push: { timeline: timelineEntry(rr.status, note, actor) },
+  });
+  if (!done) {
+    const now = await returnRequestRepository.findById(id).select('refund.status status').lean();
+    throw fail(now && REFUND_LOCKED.includes(now.refund?.status) ? REFUND_LOCKED_MESSAGE : RACE, 409);
+  }
+
+  /*
+    No order-status roll-up: an edit only ever takes units OFF a return, so it can never
+    make the order fully returned. (An order already rolled up to `returned` stays there;
+    `returned` orders remain returnable, so the units left with the customer are not lost.)
+  */
+  auditLogger.logAction(req, 'RETURN_EDIT', 'ReturnRequest', done._id, { changes, by: actorName(actor) });
+  return getReturn(actor, id);
+}
+
 export default {
+  editReturn,
   createCustomerReturn, estimateForCustomer, raiseReturn, raiseOptions, evidenceUploadTargets, reviewReturn, bookPickup, markDroppedAtStore, markReceived,
   recordPickupFailed, recordSupplierCheck, recordInspection, refundPreviewFor, sendRefund, openSupplierClaims,
   openSupplierClaim, recordSupplierAnswer, recordShipBack, recordClaimCheck, promiseSettlement, confirmSupplierMoney,

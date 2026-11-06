@@ -54,6 +54,8 @@ export interface ReturnDetail extends ReturnRow {
   customerContact: { name: string; phone: string; email: string };
   seller: string;
   lines: {
+    /** The handle an edit names the line by (the order line id, or its position). */
+    key: string;
     orderItemId: string | null;
     name: string;
     quantity: number;
@@ -86,7 +88,13 @@ export interface ReturnDetail extends ReturnRow {
   can: {
     review: boolean; pickup: boolean; droppedAtStore: boolean; received: boolean; supplierCheck: boolean;
     inspect: boolean; refund: boolean; supplierClaims: boolean; supplierMoney: boolean;
+    /** Edit is open to this person (the raiser, operations, admin) and the refund hasn't started. */
+    edit?: boolean; editReason?: boolean; editRemoveLine?: boolean;
   };
+  /** Why Edit is closed for someone who could otherwise edit (e.g. the refund is with Accounts). */
+  editLock?: string | null;
+  /** The version the edit form saves against — a stale form is refused, not merged. */
+  updatedAt?: string;
 }
 
 export interface RefundPreview {

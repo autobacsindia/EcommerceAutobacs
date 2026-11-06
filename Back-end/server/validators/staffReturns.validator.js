@@ -75,6 +75,28 @@ export const validateRaise = [
   ...assetRef('proofOfPurchase'),
 ];
 
+// PATCH /:id — edit a raised return. Every field optional; the service decides what may
+// change in the return's current state. No price or amount field exists on purpose.
+export const validateEdit = [
+  ...validateReturnId,
+  body('updatedAt').optional().isISO8601().withMessage('Invalid version'),
+  body('description').optional().isString().trim().isLength({ min: 1, max: 2000 }).withMessage('Describe the problem (up to 2000 characters)'),
+  body('unusedDeclared').optional().isBoolean().withMessage('Invalid declaration'),
+  body('lines').optional().isArray({ min: 1, max: 50 }).withMessage('Invalid items'),
+  body('lines.*.key').isString().isLength({ min: 1, max: 40 }).withMessage('Invalid item'),
+  body('lines.*.quantity').optional().isInt({ min: 1, max: 1000 }).withMessage('Quantity must be at least 1'),
+  body('lines.*.reason').optional().isIn(RETURN_REASONS).withMessage('Choose a reason for each item'),
+  body('lines.*.remove').optional().isBoolean().withMessage('Invalid choice'),
+  body('evidence').optional().isObject().withMessage('Invalid evidence'),
+  body('evidence.keepImages').optional().isArray({ max: 5 }).withMessage('Up to 5 photos'),
+  body('evidence.keepImages.*').optional().isInt({ min: 0, max: 20 }).withMessage('Invalid photo'),
+  body('evidence.newImages').optional().isArray({ max: 5 }).withMessage('Up to 5 photos'),
+  body('evidence.newImages.*.publicId').optional().isString().isLength({ max: 300 }).withMessage('Invalid upload'),
+  ...assetRef('evidence.video'),
+  body('evidence.videoLink').optional({ nullable: true }).isString().isLength({ max: 500 }).withMessage('Invalid video link'),
+  ...assetRef('evidence.proofOfPurchase'),
+];
+
 export const validateUploadTargets = [
   body('files').optional().isArray({ max: 10 }).withMessage('Too many files'),
 ];
