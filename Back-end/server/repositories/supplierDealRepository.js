@@ -7,6 +7,8 @@ import SupplierDeal from '../models/SupplierDeal.js';
 const supplierDealRepository = {
   create: async (doc) => (await SupplierDeal.create(doc)).toObject(),
   findById: (id) => SupplierDeal.findById(id).lean(),
+  /** Several deals by id (a page of payments' deals). Bounded by the caller's page. */
+  findByIds: (ids) => SupplierDeal.find({ _id: { $in: ids } }).lean(),
 
   /** Open deals on an order (optionally only those covering `itemIds`), oldest first. Served by supplier_deal_order. */
   findOpenForOrder: (orderId, itemIds = [], limit = 50) => SupplierDeal.find({

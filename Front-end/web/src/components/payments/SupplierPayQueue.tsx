@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronLeft, Loader2, Paperclip } from 'lucide-react';
 import { errorMessage, paymentKeys, postForm, rupees, toLocalInput, fromLocalInput } from './api';
+import { DealLine } from './DealSummary';
 import FilePicker from './FilePicker';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import { getPayGroup, listPayGroups, payQueueKeys, sumRupees } from './suppliers';
@@ -93,7 +94,7 @@ function GroupDetail({ id, canPay, onBack }: { id: string; canPay: boolean; onBa
                       onChange={(e) => setTicked(e.target.checked ? [...ticked, r.id] : ticked.filter((x) => x !== r.id))} />}</td>
                     <td className="p-3"><span className="font-medium text-gray-900">{r.number}</span><span className="block text-xs text-gray-500">{formatDateIST(r.createdAt)} · {r.requestedBy}</span>
                       {r.bankNotice && <span className="mt-1 flex items-center gap-1 text-xs text-amber-700"><AlertTriangle className="h-3 w-3" /> Bank details changed recently</span>}</td>
-                    <td className="p-3">{r.order?.number} · {r.itemNames.join(', ')}</td>
+                    <td className="p-3">{r.order?.number} · {r.itemNames.join(', ')}{r.deal && <DealLine d={r.deal} />}</td>
                     <td className="p-3">{r.customer?.name}</td>
                     <td className="p-3">{r.statusLabel}{r.status === 'on_hold' && r.decisionNote ? <span className="block text-xs text-gray-500">{r.decisionNote}</span> : null}</td>
                     <td className="p-3 text-right font-semibold">{rupees(r.amount)}</td>

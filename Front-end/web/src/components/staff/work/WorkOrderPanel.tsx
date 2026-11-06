@@ -18,6 +18,7 @@ import ParcelEta from './ParcelEta';
 import OrderJourney from '@/components/orders/OrderJourney';
 import RaiseReturnButton from '@/components/staff/returns/RaiseReturnDialog';
 import FilePicker from '@/components/payments/FilePicker';
+import { money } from '@/components/payments/api';
 import { MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD, PHOTO_OR_PDF } from '@/lib/attachments';
 
 type OrderResponse = { success: boolean; order: WorkOrder };
@@ -94,6 +95,13 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState('');
   const supplierPayments = useOrderSupplierPayments(orderId);
+  // Made-to-order items whose supplier balance is unpaid cannot ship yet (the server
+  // refuses the whole parcel): the ship form shows why instead of offering them.
+  const heldBack = new Map<string, string>();
+  for (const d of supplierPayments.data?.deals ?? []) {
+    if (d.fullyPaid) continue;
+    for (const id of d.itemIds) heldBack.set(id, `Supplier balance ${money(d.balanceDue, d.currency)} not paid yet`);
+  }
   const [editParcel, setEditParcel] = useState<string | null>(null);
   const [parcelFix, setParcelFix] = useState({ courier: '', tracking: '' });
   const [parcelFiles, setParcelFiles] = useState<File[]>([]);
@@ -268,7 +276,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
 
       {o.canShip && (
         // Keyed on the lines' stages so the form starts fresh whenever the order moves.
-        <ShipForm key={o.lines.map((l) => `${l.itemId}:${l.stage}`).join('|')} order={o} onShipped={done} onError={setError} />
+        <ShipForm key={`${o.lines.map((l) => `${l.itemId}:${l.stage}`).join('|')}#${[...heldBack.keys()].join('|')}`}
+          order={o} held={heldBack} onShipped={done} onError={setError} />
       )}
 
       {/* Parcels */}
@@ -471,8 +480,11 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
  * case; untick to send part now. Items not stock-checked yet may go too: the server
  * records them in stock. Out-of-stock and refunded items never show here.
  */
-function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: (r: OrderResponse) => void; onError: (m: string) => void }) {
-  const shippable = order.lines.filter((l) => l.actions.includes('ship') && l.unshipped > 0);
+function ShipForm({ order, held, onShipped, onError }: { order: WorkOrder; held: Map<string, string>; onShipped: (r: OrderResponse) => void; onError: (m: string) => void }) {
+  const offered = order.lines.filter((l) => l.actions.includes('ship') && l.unshipped > 0);
+  // Ready to go now; the rest wait for their supplier balance (shown, not tickable).
+  const shippable = offered.filter((l) => !held.has(l.itemId));
+  const waiting = offered.filter((l) => held.has(l.itemId));
   const [selected, setSelected] = useState<string[]>(shippable.map((l) => l.itemId));
   const [files, setFiles] = useState<File[]>([]);
   const [courier, setCourier] = useState('');
@@ -500,11 +512,27 @@ function ShipForm({ order, onShipped, onError }: { order: WorkOrder; onShipped: 
     }
   }
 
-  if (!shippable.length) return null;
+  if (!offered.length) return null;
+  const heldNote = waiting.length > 0 && (
+    <ul className="space-y-0.5 text-xs text-amber-900" aria-label="Waiting for the supplier balance">
+      {waiting.map((l) => (
+        <li key={l.itemId}>{l.name}{l.variantLabel ? ` — ${l.variantLabel}` : ''}: {held.get(l.itemId)} — ship once it is paid.</li>
+      ))}
+    </ul>
+  );
+  if (!shippable.length) {
+    return (
+      <div className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-4">
+        <p className="flex items-center gap-2 font-semibold text-gray-900"><Truck className="h-4 w-4" /> Ready to dispatch — from the supplier</p>
+        {heldNote}
+      </div>
+    );
+  }
   return (
     <form onSubmit={submit} className="space-y-3 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
       <p className="flex items-center gap-2 font-semibold text-gray-900"><Truck className="h-4 w-4" /> Ready to dispatch — from the supplier</p>
       <p className="text-xs text-gray-600">Add the supplier&apos;s photo or the courier receipt and it is marked dispatched. Items from our own warehouse: press &ldquo;Our warehouse&rdquo; on the item instead.</p>
+      {heldNote}
       {shippable.length > 1 && (
         <fieldset className="space-y-1">
           <legend className="mb-1 text-xs font-medium text-gray-700">Items in this parcel</legend>

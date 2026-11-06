@@ -35,7 +35,7 @@ import paymentRepository from '../repositories/paymentRepository.js';
 import { applyCancellationRefundSideEffectsOnce } from './cancellationRefundSideEffects.js';
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import orderStatusService from './orderStatusService.js';
-import { advanceBlockReason } from './supplierAdvanceGuard.js';
+import { advanceBlockReason, withdrawWaitingSupplierPayments } from './supplierAdvanceGuard.js';
 import razorpayService from './razorpayService.js';
 import { refundableForLines, remainingRefundable } from './refundMathService.js';
 import {
@@ -193,6 +193,8 @@ class CancellationService {
       // call, so the userId is passed through — unlike the shipment roll-up, whose
       // caller records the action itself.
       await this._syncOrderStatus(updated, userId, payload.reason, payload.notes);
+      // A supplier payment still waiting for accounts on an item now fully cancelled is withdrawn.
+      await withdrawWaitingSupplierPayments(updated, `item cancelled (${payload.reason || 'no reason given'})`);
 
       return {
         success: true,

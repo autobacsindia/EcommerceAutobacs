@@ -50,6 +50,7 @@ import {
 } from '../utils/listQuery.js';
 import * as suppliers from './supplierService.js';
 import * as deals from './supplierDealService.js';
+import { itemsCancelled } from './supplierAdvanceGuard.js';
 import { toPaise } from '../utils/money.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
@@ -118,10 +119,18 @@ const mayHold = (u) => mayDecide(u) || mayPay(u);
   financial records and are never edited.
 */
 const EDITABLE = Object.freeze(['submitted', 'approved', 'on_hold']);
+/*
+  Who may edit (owner decision 2026-11-06, "edit everywhere for what we created"):
+  whoever raised it, their team head, or the admin — until it is PAID. Once accounts
+  has approved it, any change to the money or to who is paid sends it back to accounts
+  to approve again (update → backToAccounts); a wording-only change stays approved.
+  A paid request is locked: a wrong amount is corrected with a new entry, and the
+  admin can still correct the payment record (editPayment).
+*/
 const mayEdit = (u, r) => EDITABLE.includes(r.status) && (
   isAdmin(u)
-  || (r.status === 'submitted' && (idOf(r.requestedBy) === idOf(u?._id)
-    || (isActiveStaff(u) && u.staff.isHead === true && u.staff.team === r.team)))
+  || idOf(r.requestedBy) === idOf(u?._id)
+  || (isActiveStaff(u) && u.staff.isHead === true && u.staff.team === r.team)
 );
 
 /** Who may link / unlink an expense to an order: who raised it, their team head, accounts, the admin. */
@@ -682,21 +691,25 @@ async function loadVisible(actor, id) {
 const MOVED = 'This request has just been updated by someone else. Refresh to see where it is now.';
 
 /**
- * A deal part commits money to a made-to-order item; once the order is cancelled
- * there is nothing to make. Refuse to approve or pay it — decline it instead.
+ * A supplier payment pays for an order's items; once the order (or every item the
+ * payment covers) is cancelled there is nothing to buy. Refuse to approve or pay it —
+ * decline it instead. One-off payments too, not only deal parts: an approved one-off
+ * payment could otherwise still be paid after the customer's order was cancelled.
+ * An item with only some units cancelled is still live (supplierAdvanceGuard.itemsCancelled).
  */
-async function assertDealOrderLive(r) {
-  if (!r.deal || !r.order) return;
-  const order = await orderRepository.findForWorkflow(idOf(r.order));
-  const cancelled = !order || order.status === 'cancelled'
-    || (order.cancellations || []).some((c) => (c.lines || []).some((l) => (r.itemIds || []).map(idOf).includes(idOf(l.itemId))));
-  if (cancelled) throw fail('This order (or the item) was cancelled — decline this supplier payment instead.', 409);
+async function orderGone(r) {
+  if (r.kind !== 'supplier' || !r.order) return false;
+  return itemsCancelled(await orderRepository.findForWorkflow(idOf(r.order)), r.itemIds);
+}
+
+async function assertOrderLive(r) {
+  if (await orderGone(r)) throw fail(`${r.number}: this order (or the item) was cancelled — decline this supplier payment instead.`, 409);
 }
 
 export async function approve(actor, id, { note } = {}, req) {
   const r0 = await loadVisible(actor, id);   // 404s a request this person may not see
   if (!mayDecide(actor)) throw fail('Only accounts (or an admin) approves payments.', 403);
-  await assertDealOrderLive(r0);
+  await assertOrderLive(r0);
   const r = await paymentRequestRepository.transition(id, ['submitted'],
     { status: 'approved', approvedBy: actor._id, approvedAt: new Date(), decisionNote: String(note || '').slice(0, 1000) },
     entry(actor, 'approved', note));
@@ -707,11 +720,14 @@ export async function approve(actor, id, { note } = {}, req) {
 }
 
 export async function decline(actor, id, { note } = {}, req) {
-  await loadVisible(actor, id);   // 404s a request this person may not see
+  const r0 = await loadVisible(actor, id);   // 404s a request this person may not see
   if (!mayDecide(actor)) throw fail('Only accounts (or an admin) declines payments.', 403);
   const reason = String(note || '').trim();
   if (reason.length < 3) throw fail('Say why it is declined — the requester sees this.', 400);
-  const r = await paymentRequestRepository.transition(id, ['submitted', 'on_hold'],
+  // An approved supplier payment whose order was cancelled can no longer be paid
+  // (assertOrderLive), so it may be declined straight away — no money has moved.
+  const from = r0.status === 'approved' && await orderGone(r0) ? ['approved'] : ['submitted', 'on_hold'];
+  const r = await paymentRequestRepository.transition(id, from,
     { status: 'declined', decisionNote: reason.slice(0, 1000) }, entry(actor, 'declined', reason));
   if (!r) throw fail(MOVED, 409);
   auditLogger.logAction(req, 'UPDATE', 'PaymentRequest', id, { change: 'declined' });
@@ -751,7 +767,7 @@ export async function markPaid(actor, id, { method, reference, note, transaction
   const now = new Date();
   const txAt = cleanTransactionAt(transactionAt, now.getTime());
   const r0 = await loadVisible(actor, id);
-  if (r0.status === 'submitted') await assertDealOrderLive(r0);
+  await assertOrderLive(r0);
   const isForeign = Boolean(foreignLine(r0));
   let priced = null;
   if (isForeign && filled(rupees)) {
@@ -814,7 +830,7 @@ export async function update(actor, id, input = {}, req) {
   if (!mayEdit(actor, r0)) {
     throw fail(!EDITABLE.includes(r0.status)
       ? 'A paid, declined or cancelled request cannot be edited.'
-      : 'Only whoever raised it (or their team head) can edit it while it waits for accounts. Ask an admin to change it now.', 403);
+      : 'Only whoever raised it, their team head or the admin can edit it.', 403);
   }
   const isExpense = r0.kind === 'expense';
   const before = { currency: r0.currency || BASE_CURRENCY, foreignAmount: r0.foreignAmount ?? null, fxRate: r0.fxRate ?? null };
@@ -1055,7 +1071,7 @@ export async function list(actor, params = {}) {
     query: listQuery(actor, filters), sorts: LIST_SORTS, sortName: name, cursor: filters.cursor, pageSize: PAGE_SIZE,
     find: paymentRequestRepository.page, count: (q) => paymentRequestRepository.summary(q, SUMMARY_CAP),
   });
-  return { ...page, requests: items.map((r) => shape(r, actor)) };
+  return { ...page, requests: await withDeals(items, (r) => shape(r, actor)) };
 }
 
 /**
@@ -1088,8 +1104,43 @@ export async function listFilterOptions(actor) {
   };
 }
 
+/** One payment's deal summary (supplierDealService.partSummary), or null. Never throws: it is extra. */
+async function dealSummaryOf(r) {
+  try {
+    return (await deals.summariesFor([r])).get(idOf(r._id)) || null;
+  } catch (err) {
+    console.error(`[PaymentRequest] ${r.number}: deal summary unavailable:`, err.message);
+    return null;
+  }
+}
+
+/** Shaped rows with their deal summaries attached (`deal`), in two reads for the whole page. */
+async function withDeals(rows, toRow) {
+  let sums = new Map();
+  try {
+    sums = await deals.summariesFor(rows);
+  } catch (err) {
+    console.error('[PaymentRequest] deal summaries unavailable:', err.message);
+  }
+  return rows.map((r) => {
+    const row = toRow(r);
+    if (r.deal) row.deal = sums.get(idOf(r._id)) || null;
+    return row;
+  });
+}
+
 export async function get(actor, id) {
-  return shape(await loadVisible(actor, id), actor);
+  const r = await loadVisible(actor, id);
+  const out = shape(r, actor);
+  // Its order (or every item it pays for) was cancelled: say so, and offer decline, not pay.
+  if (OPEN_STATUSES.includes(r.status) && await orderGone(r)) {
+    out.orderCancelled = true;
+    out.can = { ...out.can, approve: false, pay: false, decline: mayDecide(actor) };
+  }
+  // A part of a made-to-order deal: what it is part of (agreed total, paid before,
+  // balance after, dates) — worked out from the deal, so every screen agrees.
+  if (r.deal) out.deal = await dealSummaryOf(r);
+  return out;
 }
 
 // ── Linking an expense to an order ───────────────────────────────────────────
@@ -1168,7 +1219,8 @@ export async function getFile(actor, id, fileId) {
 
 /** For the PDF: the full record, for someone allowed to see it. */
 export async function loadForSlip(actor, id) {
-  return loadVisible(actor, id);
+  const r = await loadVisible(actor, id);
+  return r.deal ? { ...r, dealSummary: await dealSummaryOf(r) } : r;
 }
 
 // ── Shipping guard (teamWorkflowService.shipWithProof) ──────────────────────────
@@ -1272,7 +1324,7 @@ export async function supplierPayGroup(actor, groupId) {
     name: rows[rows.length - 1].payee.name,
     destination: destinationLabel(rows[0].payee),
     total: round2(rows.reduce((n, r) => n + r.amount, 0)),
-    requests: rows.map((r) => shape(r, actor)),
+    requests: await withDeals(rows, (r) => shape(r, actor)),
   };
 }
 
@@ -1311,6 +1363,8 @@ export async function payBatch(actor, { ids, expectedTotal, method, reference, n
   if (new Set(rows.map((r) => payKeyOf(r.payee, idOf(r._id)))).size !== 1) {
     throw fail('These payments go to different accounts — pay one supplier at a time.', 400);
   }
+  // One cancelled order refuses the whole transfer, before any money is recorded.
+  for (const r of rows) await assertOrderLive(r);
   const total = round2(rows.reduce((n, r) => n + r.amount, 0));
   if (round2(expectedTotal) !== total) {
     throw fail(`The total is now ${inr(total)}, not ${inr(round2(expectedTotal) || 0)} — refresh and check before paying.`, 409);

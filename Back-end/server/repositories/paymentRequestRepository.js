@@ -50,6 +50,7 @@ const paymentRequestRepository = {
   // `$type` repeats the partial index's filter: without it the planner may not pick the index.
   findForDeals: (dealIds) => PaymentRequest.find({ deal: { $in: dealIds, $type: 'objectId' } })
     .select('number status amount currency foreignAmount part deal createdAt approvedAt payment.paidAt payment.transactionAt')
+    .limit(2000) // bounded: ≤ a page of deals × their parts (one part in flight at a time)
     .lean(),
 
   /** A live one-off (not part of a deal) supplier request covering any of these items. */
