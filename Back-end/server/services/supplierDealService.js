@@ -47,7 +47,9 @@ export const MAX_DEAL_FOREIGN = 1000000000; // a foreign total: the same guard a
 */
 const currencyOf = (x) => (x?.currency && x.currency !== BASE_CURRENCY ? x.currency : BASE_CURRENCY);
 /** What a request is worth in its own (= the deal's) currency. */
-export const unitsOf = (r) => (currencyOf(r) === BASE_CURRENCY ? Number(r.amount) || 0 : Number(r.foreignAmount) || 0);
+// The bill: the money moved plus any supplier credit used on it (models/PaymentRequest.js `credit`).
+export const unitsOf = (r) => (currencyOf(r) === BASE_CURRENCY ? Number(r.amount) || 0 : Number(r.foreignAmount) || 0)
+  + (Number(r.credit?.amount) || 0);
 /** "₹29,000" / "THB 29,400" from hundredths. */
 export const moneyOf = (minor, currency = BASE_CURRENCY) => {
   const n = fromPaise(minor).toLocaleString('en-IN', { maximumFractionDigits: 2 });

@@ -79,6 +79,8 @@ export default function PaymentRequestForm({
   const [qr, setQr] = useState<File[]>([]);
   const [picked, setPicked] = useState<Supplier | null>(null);
   const [saveSupplier, setSaveSupplier] = useState(false);
+  // Supplier credit to take off this bill (what the picked supplier owes us, same currency).
+  const [creditToUse, setCreditToUse] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [filling, setFilling] = useState(false);
@@ -101,6 +103,9 @@ export default function PaymentRequestForm({
   const chooseCurrency = !deal && Boolean(options && options.currencies.length > 1);
   const unit = foreign ? currency : '₹';
   const codeKind: BankCodeKind = codeChoice ?? (foreign ? 'swift' : 'ifsc');
+  // What the picked supplier owes us in this bill's currency (the server re-checks under a lock).
+  const available = supplier && picked ? (picked.credit || []).find((b) => b.currency === currency && b.owed > 0) : undefined;
+  const creditNum = available && Number(creditToUse) > 0 ? Number(creditToUse) : 0;
 
   /** Refill from the previous payment: its saved supplier, or the details typed then. */
   async function fillSame() {
@@ -155,7 +160,8 @@ export default function PaymentRequestForm({
     form.append('description', description.trim());
     // A saved supplier is sent by id: the server copies its details itself.
     if (picked) form.append('supplierId', picked.id);
-    else form.append('payee', JSON.stringify(method === 'upi'
+    if (picked && creditNum > 0) form.append('creditToUse', String(creditNum));
+    if (!picked) form.append('payee', JSON.stringify(method === 'upi'
       ? { name: payee.name.trim(), method, upiId: payee.upiId.trim(), phone: payee.phone.trim() }
       : { name: payee.name.trim(), method, accountName: payee.accountName.trim(), accountNumber: payee.accountNumber.replace(/\s+/g, ''), ...bankCodePayload(codeKind, payee[codeKind]), bankName: payee.bankName.trim(), phone: payee.phone.trim() }));
     if (supplier) {
@@ -311,7 +317,26 @@ export default function PaymentRequestForm({
       {supplier && picked && (
         <div>
           <span className={label}>Saved supplier</span>
-          <SupplierPicker picked={picked} onPick={setPicked} />
+          <SupplierPicker picked={picked} onPick={(p) => { setPicked(p); setCreditToUse(''); }} />
+          {available && (
+            <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" aria-label="Supplier credit">
+              <p>{picked.name} owes us <strong>{available.owedText}</strong>. Use some of it on this bill?</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-emerald-800" htmlFor="pr-credit">Credit to use ({unit})</label>
+                <input id="pr-credit" className={`${input} max-w-[10rem]`} inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={creditToUse}
+                  onChange={(e) => setCreditToUse(e.target.value)} placeholder="0" />
+                <button type="button" className="text-xs font-medium text-emerald-800 hover:underline"
+                  onClick={() => setCreditToUse(String(Math.max(0, Math.min(available.owed, Number(amount) > 0 ? Math.round(Number(amount) * 100 - 1) / 100 : available.owed))))}>
+                  Use as much as possible
+                </button>
+              </div>
+              {creditNum > 0 && Number(amount) > 0 && (
+                <p className="mt-2">
+                  Bill {money(Number(amount), currency)} − credit {money(creditNum, currency)} = <strong>transfer {money(Math.round((Number(amount) - creditNum) * 100) / 100, currency)}</strong>
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

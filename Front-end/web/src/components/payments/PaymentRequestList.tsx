@@ -9,7 +9,7 @@ import {
   ListAmountRange, ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect, listField,
 } from '@/components/panel/ListControls';
 import {
-  amountText, categoryName, errorMessage, foreignBill, getListFilterOptions, listRequests, paymentKeys, rupees, STATUS_TONE,
+  amountText, categoryName, errorMessage, foreignBill, getListFilterOptions, listRequests, money, paymentKeys, rupees, STATUS_TONE,
 } from './api';
 import PaymentRequestDetail from './PaymentRequestDetail';
 import { DealLine } from './DealSummary';
@@ -180,6 +180,7 @@ export default function PaymentRequestList({
                     {r.partLabel && <span className="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">{r.partLabel}</span>}
                   </p>
                   {r.deal && <DealLine d={r.deal} />}
+                  {r.credit && <p className="text-xs text-emerald-800">{money(r.credit.amount, r.currency)} from supplier credit</p>}
                   <p className="truncate text-xs text-gray-500">
                     {r.teamLabel} · {r.requestedBy} · {formatDateIST(r.createdAt)}{r.order ? ` · ${r.order.number}` : ''}
                     {r.payment?.reference ? ` · Ref ${r.payment.reference}` : ''}

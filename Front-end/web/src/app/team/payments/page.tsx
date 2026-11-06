@@ -9,6 +9,7 @@ import PaymentRequestForm from '@/components/payments/PaymentRequestForm';
 import PaymentRequestList from '@/components/payments/PaymentRequestList';
 import { paymentKeys } from '@/components/payments/api';
 import SubscriptionList from '@/components/payments/subscriptions/SubscriptionList';
+import SupplierCreditTab from '@/components/payments/SupplierCredit';
 import { STAFF_TEAM_OPTIONS } from '@/lib/staffTeams';
 import { useListParams } from '@/lib/hooks/useListParams';
 
@@ -48,9 +49,12 @@ function TeamPayments() {
   const { values } = useListParams({ tab: 'requests' });
   const router = useRouter();
   const pathname = usePathname();
-  const tab = values.tab === 'subs' ? 'subs' : 'requests';
+  // Supplier credit (what suppliers owe us): accounts approves, procurement proposes.
+  const seesCredit = isAccounts || team === 'procurement';
+  const tab = values.tab === 'subs' ? 'subs' : values.tab === 'credit' && seesCredit ? 'credit' : 'requests';
   // Each tab has its own search and filters; switching starts the other one clean.
-  const show = (t: 'requests' | 'subs') => router.replace(`${pathname}${t === 'subs' ? '?tab=subs' : ''}`, { scroll: false });
+  const show = (t: 'requests' | 'subs' | 'credit') => router.replace(`${pathname}${t === 'requests' ? '' : `?tab=${t}`}`, { scroll: false });
+  const tabs = [['requests', 'Requests'], ['subs', 'Subscriptions & dues'], ...(seesCredit ? [['credit', 'Supplier credit']] : [])] as ['requests' | 'subs' | 'credit', string][];
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -60,6 +64,8 @@ function TeamPayments() {
           <p className="text-sm text-gray-500">
             {tab === 'subs'
               ? 'Tools, subscriptions and bills, and when each is next due.'
+              : tab === 'credit'
+              ? 'What suppliers owe us — refunds for cancelled orders, less what they paid back or we used on their next payment.'
               : isAccounts
               ? 'Approve or decline every request — from any team. The admin pays what you approve, and records the reference and screenshot.'
               : 'Every request goes to accounts to approve, then to the admin to pay. Download the slip or receipt at any stage.'}
@@ -73,7 +79,7 @@ function TeamPayments() {
       </div>
 
       <div role="tablist" aria-label="Payments view" className="flex flex-wrap gap-2">
-        {([['requests', 'Requests'], ['subs', 'Subscriptions & dues']] as const).map(([t, text]) => (
+        {tabs.map(([t, text]) => (
           <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => { if (t !== tab) { setAdding(false); setNotice(''); show(t); } }}
             className={`rounded-full px-3 py-1.5 text-sm font-medium ${tab === t ? 'bg-gray-900 text-white' : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'}`}>
             {text}
@@ -89,6 +95,8 @@ function TeamPayments() {
             : undefined}
         />
       )}
+
+      {tab === 'credit' && <SupplierCreditTab />}
 
       {tab === 'requests' && notice && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p>}
       {tab === 'requests' && adding && (

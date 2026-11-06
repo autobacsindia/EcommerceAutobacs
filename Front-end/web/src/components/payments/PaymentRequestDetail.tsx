@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Link2, Loader2, Paperclip, Pencil, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
 import {
-  actOn, amountText, bankCode, linkOrder, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
+  actOn, amountText, bankCode, linkOrder, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import EditPaymentRequest from './EditPaymentRequest';
@@ -13,6 +13,7 @@ import EditPaidPayment from './EditPaidPayment';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import OrderPicker from './OrderPicker';
 import DealSummaryBox from './DealSummary';
+import { SupplierRefundLine } from './SupplierCredit';
 
 /** The server takes up to three payment screenshots per payment. */
 const MAX_PROOFS = MAX_ATTACHMENTS;
@@ -151,7 +152,15 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                 ? <p className="text-sm text-gray-700">Rupee amount: what the bank debits — recorded when paid.</p>
                 : foreignBill(r) && <p className="text-sm text-gray-700">Bill: {foreignBill(r)}</p>}
               <p className="text-sm text-gray-600">to {r.payee.name}</p>
+              {r.credit && r.bill != null && (
+                <p className="mt-1 text-sm text-emerald-800" aria-label="Supplier credit used">
+                  Bill {money(r.bill, r.currency)} − supplier credit {money(r.credit.amount, r.currency)} = transfer {money(Math.round((r.bill - r.credit.amount) * 100) / 100, r.currency)}
+                </p>
+              )}
             </div>
+            {r.supplierRefund && (
+              <SupplierRefundLine requestId={r.id} refund={r.supplierRefund} currency={r.currency || 'INR'} bill={r.bill ?? (r.currency !== 'INR' ? r.foreignAmount ?? 0 : r.amount)} />
+            )}
 
             {r.orderCancelled && (
               <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
