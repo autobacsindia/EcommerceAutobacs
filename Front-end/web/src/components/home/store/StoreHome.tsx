@@ -5,6 +5,8 @@ import BrandStrip from './BrandStrip';
 import TrustStrip from './TrustStrip';
 import ReviewStrip from './ReviewStrip';
 import { discountPct, type StoreHomeData, type StoreProduct } from './storeData';
+import { DealsShelf, FestiveHero, FestiveSwitch, FestiveWish, GiftSection, type FestiveHeroPhoto } from './FestiveHome';
+import { buildGiftTiers } from './giftTiers';
 import './store.css';
 
 /**
@@ -108,6 +110,24 @@ export function buildSlides(data: StoreHomeData): BannerSlide[] {
 }
 
 /**
+ * Inputs for the festive hero, from the same live data and the same featured-
+ * first photo choice as the normal banners. Photos come from the deals banner
+ * when there is one (so a "-X%" tag is always the product's real discount),
+ * otherwise from the first banner.
+ */
+export function buildFestiveHero(data: StoreHomeData, slides: BannerSlide[]) {
+  const source = slides.find((s) => s.id === 'deals') ?? slides[0];
+  const offByHref = new Map(data.deals.map((p) => [p.href, discountPct(p)]));
+  const photos: FestiveHeroPhoto[] = (source?.images ?? []).map((img) => ({ ...img, off: offByHref.get(img.href) ?? 0 }));
+  return {
+    photos,
+    maxOff: data.deals.reduce((m, p) => Math.max(m, discountPct(p)), 0),
+    dealsTotal: data.deals.length ? data.dealsTotal : 0,
+    categoryCount: data.categories.length,
+  };
+}
+
+/**
  * The light, Amazon-style store home page: dark header (for the white logo), green
  * category bar, offers carousel with overlapping category cards, then product
  * shelves — every one from live data, empty shelves skipped.
@@ -118,22 +138,24 @@ export default function StoreHome({ data }: { data: StoreHomeData }) {
   // every other page. The home page used to render its own copies and rely on
   // the layout hiding its versions on '/'; on Vercel the ISR-regenerated home
   // page rendered BOTH, so customers saw two headers and two footers.
+  const slides = buildSlides(data);
+  const giftTiers = buildGiftTiers([data.deals, data.featured, data.bestSellers, data.newArrivals]);
   return (
     <div className="sh sh-theme">
       <main className="sh-main">
         {/* The page's one H1, for search engines and screen readers; the banner
             titles below are the visible headlines. */}
         <h1 className="sh-sr-only">Roavion by Autobacs India — car parts, accessories and upgrades online</h1>
-        <HeroBanners slides={buildSlides(data)} />
+        {/* While the admin festival theme is live the banner carousel gives way to
+            the festive hero; everything else stays where customers expect it. */}
+        <FestiveSwitch
+          festive={<FestiveHero {...buildFestiveHero(data, slides)} />}
+          normal={<HeroBanners slides={slides} />}
+        />
         <div className="sh-content">
           <CategoryCards categories={data.categories} deals={data.deals} />
-          <ProductRow
-            id="sh-deals"
-            title="Today's Deals"
-            subtitle="Real savings on genuine parts — M.R.P. shown on every deal"
-            href="/offers"
-            products={data.deals}
-          />
+          <DealsShelf products={data.deals} />
+          <GiftSection tiers={giftTiers} />
           <ProductRow
             id="sh-best"
             title="Best Sellers"
@@ -161,6 +183,7 @@ export default function StoreHome({ data }: { data: StoreHomeData }) {
           />
           <BrandStrip brands={data.brands} />
           <ReviewStrip reviews={data.reviews} />
+          <FestiveWish />
         </div>
       </main>
     </div>

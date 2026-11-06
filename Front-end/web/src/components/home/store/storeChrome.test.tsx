@@ -9,6 +9,7 @@ import StoreFooter from './StoreFooter';
 import ShopByVehicleCard from './ShopByVehicleCard';
 import ConditionalHeader from '@/components/layout/ConditionalHeader';
 import HelpWidget from '@/components/layout/HelpWidget';
+import { FestivalThemeProvider } from '@/components/festival/FestivalThemeContext';
 
 const push = jest.fn();
 let pathname = '/products';
@@ -94,6 +95,33 @@ describe('StoreHeader department bar', () => {
     fireEvent.change(screen.getByLabelText('Search products'), { target: { value: 'winch' } });
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
     expect(push).toHaveBeenCalledWith('/products/search?q=winch');
+  });
+});
+
+describe('StoreHeader festival pill', () => {
+  const HOUR = 3600_000;
+  const theme = {
+    themeKey: 'diwali', live: true,
+    startsAt: new Date(Date.now() - HOUR).toISOString(), endsAt: new Date(Date.now() + HOUR).toISOString(),
+  };
+
+  it('shows the Diwali Sale pill only while the festival is live', () => {
+    pathname = '/';
+    const { unmount } = render(
+      <FestivalThemeProvider theme={theme} initialLive><StoreHeader categories={cats} /></FestivalThemeProvider>,
+    );
+    expect(screen.getByTestId('festive-nav')).toHaveAttribute('href', '/offers');
+    expect(screen.getByTestId('festive-nav')).toHaveTextContent('Diwali Sale');
+    unmount();
+
+    render(<FestivalThemeProvider theme={null} initialLive={false}><StoreHeader categories={cats} /></FestivalThemeProvider>);
+    expect(screen.queryByTestId('festive-nav')).not.toBeInTheDocument();
+  });
+
+  it('never shows on the checkout path', () => {
+    pathname = '/checkout';
+    render(<FestivalThemeProvider theme={theme} initialLive><StoreHeader categories={cats} /></FestivalThemeProvider>);
+    expect(screen.queryByTestId('festive-nav')).not.toBeInTheDocument();
   });
 });
 
