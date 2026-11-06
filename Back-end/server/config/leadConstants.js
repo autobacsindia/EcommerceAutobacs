@@ -17,6 +17,11 @@ export const SOURCE_TYPES = [
 
 export const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'won', 'lost'];
 
+// Team leads sheet: a lead someone is following up on with nothing logged for this
+// many days gets a "No update for N days" tag. It is NOT released automatically —
+// the GTM head decides (taking a lead away mid-deal surprises people).
+export const LEAD_QUIET_DAYS = 7;
+
 export const TERMINAL_LEAD_STATUSES = ['won', 'lost'];
 
 // Active (workable) statuses — a live lead a rep can still move. The pool/nurture

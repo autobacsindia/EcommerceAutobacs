@@ -21,6 +21,11 @@ class SalesRepRepository extends BaseRepository {
    * (so leads already assigned to "Rahul" keep crediting Rahul). A name taken by
    * a DIFFERENT login gets the email appended to stay unique.
    */
+  /** The profile tied to a staff login, or null (never creates one). */
+  async findByUser(userId) {
+    return SalesRep.findOne({ user: userId }).select('name user').lean();
+  }
+
   async findOrCreateForUser(user) {
     const existing = await SalesRep.findOne({ user: user._id });
     if (existing) return existing;

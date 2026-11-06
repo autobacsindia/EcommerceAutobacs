@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, Landmark } from 'lucide-react';
+import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, Landmark, Contact } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MARKETING_AREAS } from './marketingAreas';
@@ -33,9 +33,12 @@ const DELIVERED: Shortcut = {
 function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolean): Shortcut[] {
   switch (team) {
     case 'sales': {
-      // GTM executives and customer support have no tools yet (see COMING_SOON).
-      if (!canSell) return [];
+      // Everyone in GTM sees the leads sheet; the head and leads take leads from it.
+      const leads: Shortcut = { href: '/team/leads', title: 'Leads', text: 'People who almost bought or asked for help. Press Follow up to make one yours — everyone sees who has which lead.', icon: Contact };
+      // GTM executives and customer support: the leads sheet only, for now.
+      if (!canSell) return [leads];
       const list: Shortcut[] = [
+        leads,
         { href: '/team/sales/new', title: 'New quotation', text: 'For a customer on the phone or WhatsApp: pick products or add custom items, give offer prices, share the quotation PDF.', icon: PlusCircle },
         { href: '/team/sales/quotations', title: 'Quotations', text: 'Edit, share or cancel a quotation — and when the client agrees, create the order and send the payment link (split if needed).', icon: FileText },
         { href: '/team/sales', title: isHead ? 'Team orders' : 'My orders', text: 'Payment, stock, the supplier\'s photo and tracking — and a button to send them to the customer.', icon: ReceiptText },
@@ -67,7 +70,7 @@ export default function TeamDashboardPage() {
   const staff = user?.staff;
   const canSell = staff?.canSell ?? staff?.team === 'sales';
   const items = staff?.team === 'sales' && !canSell
-    ? [`Your ${staff.roleLabel || 'GTM'} tools are being set up. Team chat is ready to use now.`]
+    ? [`More ${staff.roleLabel || 'GTM'} tools are being set up. Leads and Team chat are ready to use now.`]
     : (staff && COMING_SOON[staff.team]) || [];
   const shortcuts = shortcutsFor(staff?.team, !!staff?.isHead, canSell);
 

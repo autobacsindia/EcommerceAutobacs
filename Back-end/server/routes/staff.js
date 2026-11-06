@@ -58,6 +58,7 @@ import {
 import staffTaskRoutes from './staffTasks.js';
 import pastSaleRoutes from './pastSales.js';
 import staffReturnRoutes from './staffReturns.js';
+import staffLeadRoutes from './staffLeads.js';
 import {
   uploadProofPhotos, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPayDetailsQr,
 } from '../middleware/uploadMiddleware.js';
@@ -163,6 +164,9 @@ router.use('/past-sales', pastSaleRoutes);
 
 // Returns (routes/staffReturns.js) — raise, review, pickup, inspect, refund, supplier claims.
 router.use('/returns', staffReturnRoutes);
+
+// The GTM leads sheet (routes/staffLeads.js) — see, follow up, release, reassign.
+router.use('/leads', staffLeadRoutes);
 
 // @route  GET /staff/me — the caller's team profile (null for an admin)
 router.get('/me', (req, res) => {

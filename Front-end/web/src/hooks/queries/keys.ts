@@ -230,6 +230,11 @@ export const staffKeys = {
   suppliersOwe: (params: Record<string, string> = {}) => [...staffKeys.returns(), 'owed', params] as const,
   returnOptions: (orderId: string) => [...staffKeys.returns(), 'options', orderId] as const,
   /** A customer's saved bank account, as seen from one quotation / order (masked). */
+  /** The GTM leads sheet — invalidate `leads()` after a follow-up, release or reassign. */
+  leads: () => [...staffKeys.all, 'leads'] as const,
+  leadList: (params: Record<string, string> = {}) => [...staffKeys.leads(), 'list', params] as const,
+  leadOne: (id: string) => [...staffKeys.leads(), 'one', id] as const,
+  leadPeople: () => [...staffKeys.leads(), 'people'] as const,
   customerBanks: () => [...staffKeys.all, 'customer-bank'] as const,
   customerBank: (kind: string, id: string) => [...staffKeys.customerBanks(), kind, id] as const,
 };

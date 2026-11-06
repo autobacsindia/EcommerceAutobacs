@@ -80,6 +80,75 @@ class LeadRepository extends BaseRepository {
     return Lead.findById(leadId);
   }
 
+  // ── Team panel (/team/leads) ───────────────────────────────────────────────
+  // The GTM leads sheet. Every write below is a compare-and-set on the owner the
+  // caller saw, so two people acting at once can never both win or log a history
+  // line that describes a state the lead was not in.
+
+  static TEAM_FIELDS = {
+    name: 1, email: 1, phone: 1, primarySource: 1, 'sources.type': 1, 'sources.snapshot': 1, 'sources.capturedAt': 1,
+    status: 1, leadScore: 1, hasPurchased: 1, reopenCount: 1, assignedRep: 1, assignedAt: 1,
+    lastContactedAt: 1, nextFollowUpAt: 1, createdAt: 1, updatedAt: 1,
+    // Only the newest history line: enough for "last update" and the quiet tag.
+    activities: { $slice: -1 },
+  };
+
+  /** One keyset page of the team sheet (lean rows, owner name + login populated). */
+  async teamPage(query, { sort, limit }) {
+    return Lead.find(query, LeadRepository.TEAM_FIELDS)
+      .sort(sort).limit(limit)
+      .populate('assignedRep', 'name user')
+      .lean();
+  }
+
+  /** One lead for the team panel, with its whole history (newest `historyLimit` lines). */
+  async teamDetail(leadId, historyLimit = 50) {
+    return Lead.findById(leadId, { ...LeadRepository.TEAM_FIELDS, activities: { $slice: -historyLimit } })
+      .populate('assignedRep', 'name user')
+      .populate('activities.by', 'name')
+      .populate('activities.rep', 'name')
+      .lean();
+  }
+
+  /**
+   * Follow up: give an UNCLAIMED, OPEN lead to `repId`. Compare-and-set on
+   * `assignedRep: null` — of two simultaneous clicks exactly one matches.
+   * @returns the updated lead, or null when it was not free (or not open).
+   */
+  async claimForTeam(leadId, { repId, actorId, openStatuses }) {
+    const now = new Date();
+    return Lead.findOneAndUpdate(
+      { _id: leadId, assignedRep: null, status: { $in: openStatuses } },
+      {
+        $set: { assignedRep: repId, assignedTo: actorId, assignedAt: now },
+        $push: { activities: { type: 'claim', by: actorId, rep: repId, at: now, notes: 'Following up', meta: { via: 'team' } } },
+      },
+      { new: true, projection: { _id: 1 } }
+    ).lean();
+  }
+
+  /**
+   * Move a lead from `fromRepId` (null = free) to `toRepId` (null = free again),
+   * only if it is still with `fromRepId`. Logs one `assignment` line.
+   * @returns the updated lead, or null when the owner changed meanwhile.
+   */
+  async moveOwner(leadId, { fromRepId, toRepId, actorId, notes, action }) {
+    const now = new Date();
+    return Lead.findOneAndUpdate(
+      { _id: leadId, assignedRep: fromRepId },
+      {
+        $set: { assignedRep: toRepId, assignedTo: toRepId ? actorId : null, assignedAt: toRepId ? now : null },
+        $push: {
+          activities: {
+            type: 'assignment', by: actorId, rep: toRepId, at: now, notes,
+            meta: { via: 'team', action, fromRepId, toRepId },
+          },
+        },
+      },
+      { new: true, projection: { _id: 1 } }
+    ).lean();
+  }
+
   /** Status counts for list tab badges. */
   async statusCounts(baseQuery = {}) {
     const rows = await Lead.aggregate([
