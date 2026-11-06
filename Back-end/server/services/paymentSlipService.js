@@ -36,6 +36,22 @@ const dayText = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN
  * The deal lines on a slip (paymentRequestService.loadForSlip → supplierDealService.partSummary):
  * the full picture, not just this payment. Exported for tests.
  */
+/**
+ * Supplier credit used on this payment: the bill, the credit, what is transferred.
+ * Exported for tests.
+ */
+export function creditRows(r) {
+  const used = Number(r?.credit?.amount) || 0;
+  if (!used) return [];
+  const cur = r.currency || BASE_CURRENCY;
+  const moved = cur === BASE_CURRENCY ? Number(r.amount) || 0 : Number(r.foreignAmount) || 0;
+  return [
+    ['Bill', dealMoney(Math.round((moved + used) * 100) / 100, cur)],
+    ['Supplier credit used', `− ${dealMoney(used, cur)} (refund they owed us)`],
+    ['Transfer', dealMoney(moved, cur)],
+  ];
+}
+
 export function dealRows(d) {
   if (!d) return [];
   const cur = d.currency;
@@ -112,6 +128,19 @@ export async function renderPaymentSlip(r) {
       doc.font(FONT_BOLD).fontSize(22).fillColor(C.ink).text(pending ? foreignMoney(r) : money(r.amount), L + 16, y + 26, { lineBreak: false });
       doc.font(FONT).fontSize(8.6).fillColor(C.body).text(pending ? 'Rupee amount: what the bank debits, recorded when paid' : rupeesInWords(r.amount), L + 200, y + 34, { width: R - L - 216, align: 'right' });
       y += 80;
+
+      // Supplier credit: the amount above is what is transferred; say why it is less than the bill.
+      const credits = creditRows(r);
+      if (credits.length) {
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor(C.brand).text('SUPPLIER CREDIT USED', L, y, { characterSpacing: 1.2 });
+        let yy = doc.y + 4;
+        for (const [k, v] of credits) {
+          doc.font(FONT).fontSize(8.2).fillColor(C.muted).text(k, L, yy, { width: 110 });
+          doc.font(k === 'Transfer' ? FONT_BOLD : FONT).fontSize(9).fillColor(C.ink).text(v, L + 112, yy, { width: R - L - 112 });
+          yy = Math.max(doc.y, yy + 12) + 3;
+        }
+        y = yy + 12;
+      }
 
       // Made to order, paid in parts: the whole deal, so the slip is never just "THB 10,000".
       const rows = dealRows(r.dealSummary);

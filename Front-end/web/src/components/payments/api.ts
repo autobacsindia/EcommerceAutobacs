@@ -68,6 +68,12 @@ export type PaymentRequest = {
   deal?: DealSummary | null;
   /** Its order (or every item it pays for) was cancelled: it can only be declined. */
   orderCancelled?: boolean;
+  /** Supplier credit used on it: the bill = what is transferred + this. */
+  credit?: { amount: number; entryId?: string } | null;
+  /** The bill before credit (null when no credit was used). */
+  bill?: number | null;
+  /** Paid, and the customer cancelled the items since: the refund the supplier owes. */
+  supplierRefund?: SupplierRefund | null;
   /** The requester may edit until then (null for admins, or once it can no longer be edited). */
   editableUntil?: string | null;
 };
@@ -91,6 +97,16 @@ export type OrderPayment = {
   dealId?: string | null;
   part?: '' | 'advance' | 'part' | 'balance' | 'full';
   partLabel?: string;
+  credit?: { amount: number } | null;
+  supplierRefund?: SupplierRefund | null;
+};
+
+/** A paid supplier payment whose items were cancelled: the refund claim on it (Back-end supplierLedgerService). */
+export type SupplierRefund = {
+  claim: { id: string; status: 'pending' | 'approved'; amount: number; currency: string } | null;
+  canClaim: boolean;
+  /** Paid to a saved supplier — a refund can only be claimed from one. */
+  savedSupplier: boolean;
 };
 
 /**

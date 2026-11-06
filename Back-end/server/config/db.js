@@ -641,6 +641,18 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ SupplierDeal indexes confirmed');
 
+    // Supplier credit (models/SupplierLedgerEntry.js) — same names as the schema.
+    // supplier_ledger_key is the idempotency guard (one row per cause: a double-click
+    // or retry saves once); it must exist before the first write, so it is built here.
+    await db.collection('supplier_ledger').createIndex({ key: 1 }, { unique: true, name: 'supplier_ledger_key', background: true });
+    await db.collection('supplier_ledger').createIndex({ supplier: 1, createdAt: -1, _id: -1 }, { name: 'supplier_ledger_supplier', background: true });
+    await db.collection('supplier_ledger').createIndex({ status: 1, createdAt: -1, _id: -1 }, { name: 'supplier_ledger_status', background: true });
+    await db.collection('supplier_ledger').createIndex(
+      { paymentRequest: 1, kind: 1 },
+      { partialFilterExpression: { paymentRequest: { $type: 'objectId' } }, name: 'supplier_ledger_request', background: true }
+    );
+    console.log('✓ SupplierLedger indexes confirmed');
+
     // Staff tasks (models/StaffTask.js, StaffTaskComment.js) — same names as the
     // schemas. Every list and the bell count is one range on one of these; the
     // clientId indexes are what make a double-clicked create or comment land once.

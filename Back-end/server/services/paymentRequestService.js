@@ -51,7 +51,8 @@ import {
 import * as suppliers from './supplierService.js';
 import * as deals from './supplierDealService.js';
 import { itemsCancelled } from './supplierAdvanceGuard.js';
-import { toPaise } from '../utils/money.js';
+import * as credit from './supplierLedgerService.js';
+import { toPaise, fromPaise } from '../utils/money.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
@@ -239,6 +240,21 @@ function supplierMoney(input, deal, current = null) {
   return cleanMoney(STAFF_TEAMS.PROCUREMENT, typed, current);
 }
 
+/**
+ * The money moved when supplier credit pays part of the bill: the bill less the
+ * credit, in the bill's own field (rupees: `amount`; a foreign bill: `foreignAmount`).
+ * Something must still be transferred.
+ */
+function netOfCredit(money, creditPaise) {
+  if (!creditPaise) return money;
+  const field = money.currency === BASE_CURRENCY ? 'amount' : 'foreignAmount';
+  const billPaise = toPaise(money[field]);
+  if (creditPaise >= billPaise) {
+    throw fail(`The bill (${deals.moneyOf(billPaise, money.currency)}) must be more than the supplier credit used on it (${deals.moneyOf(creditPaise, money.currency)}).`, 400);
+  }
+  return { ...money, [field]: fromPaise(billPaise - creditPaise) };
+}
+
 /** A foreign bill whose rupees are not recorded yet (raised without a rate, not paid). */
 export const rupeesPending = (r) => Boolean(r?.currency && r.currency !== BASE_CURRENCY && !(Number(r.amount) > 0));
 
@@ -403,6 +419,9 @@ export function shape(r, viewer) {
     customer: r.customer || null,
     closedBy: r.closedBy || '',
     supplier: r.supplier ? { id: idOf(r.supplier) } : null,
+    // Supplier credit used: the bill = what is transferred + this.
+    credit: r.credit?.amount ? { amount: r.credit.amount, entryId: idOf(r.credit.entry) } : null,
+    bill: r.credit?.amount ? deals.unitsOf(r) : null,
     bankNotice: r.bankNotice?.at ? { at: r.bankNotice.at, byName: r.bankNotice.byName || '' } : null,
     files: (r.files || []).map((f) => ({ id: idOf(f._id), kind: f.kind, name: f.name, contentType: f.contentType, bytes: f.bytes })),
     payment: r.status === 'paid' ? r.payment : null,
@@ -518,9 +537,16 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     if (dealt) throw fail(`This item is paid in parts (agreed ${deals.moneyOf(Math.round(dealt.agreedTotal * 100), dealt.currency)} with ${dealt.supplierName}) — raise the next part from its supplier deal.`, 409);
   }
 
-  const money = supplierMoney(input, deal);
-  const { amount } = money;
+  const bill = supplierMoney(input, deal);
   const { payee, supplierId, bankNotice } = await supplierPayee(actor, input, req);
+  // Supplier credit (services/supplierLedgerService.js): the bill stays the bill (the
+  // deal counts it in full); only what is transferred is less. Re-checked under the
+  // supplier's lock when it is saved.
+  const creditPaise = Number(input.creditToUse) > 0
+    ? await credit.checkCreditUse({ supplierId, currency: bill.currency, creditInput: input.creditToUse, billPaise: toPaise(deals.unitsOf(bill)) })
+    : 0;
+  const money = netOfCredit(bill, creditPaise);
+  const { amount } = money;
   const description = String(input.description || '').trim().slice(0, 2000);
   const { files, kinds } = filesFrom(uploaded);
   requireUpiOrQr(payee, kinds);
@@ -528,7 +554,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
   // The lock on the agreed total, taken last, just before saving, and given back if
   // anything after it fails: no overpaying, even with two people at once.
   // In hundredths of the deal's currency (the deal and its parts share one).
-  const amountPaise = toPaise(deals.unitsOf(money));
+  const amountPaise = toPaise(deals.unitsOf(bill));
   const before = deal ? await deals.reserve(deal._id, amountPaise) : null;
   let stored;
   let doc;
@@ -541,7 +567,8 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
 
   const items = (order.items || []).filter((i) => wanted.includes(idOf(i._id)));
   try {
-  doc = await paymentRequestRepository.create({
+  const fields = {
+    _id: new mongoose.Types.ObjectId(),
     number: await nextNumber(),
     kind: 'supplier',
     status: 'submitted',
@@ -569,13 +596,23 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     bankNotice,
     ...(deal ? { deal: deal._id, part: deals.partFor(before, amountPaise) } : {}),
     files: stored,
-    history: [entry(actor, 'submitted', deal ? `${deals.PART_LABELS[deals.partFor(before, amountPaise)]} of the agreed ${deals.moneyOf(before.agreedPaise, before.currency)}` : '')],
-  });
+    history: [entry(actor, 'submitted', [
+      deal ? `${deals.PART_LABELS[deals.partFor(before, amountPaise)]} of the agreed ${deals.moneyOf(before.agreedPaise, before.currency)}` : '',
+      creditPaise ? `bill ${deals.moneyOf(amountPaise, money.currency)} − ${deals.moneyOf(creditPaise, money.currency)} supplier credit` : '',
+    ].filter(Boolean).join('; '))],
+  };
+  doc = creditPaise
+    // The credit row and the request land together or not at all.
+    ? await paymentRequestRepository.inTransaction(async (session) => {
+      const used = await credit.useCredit(session, { supplierId, currency: money.currency, creditPaise, request: fields, actor });
+      return paymentRequestRepository.create({ ...fields, credit: { amount: fromPaise(creditPaise), entry: used._id } }, session);
+    })
+    : await paymentRequestRepository.create(fields);
   } catch (err) {
     if (deal) await deals.release(deal._id, amountPaise, 'request failed to save');
     throw err;
   }
-  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', amount, currency: money.currency, foreignAmount: money.foreignAmount, orderId: idOf(order._id), ...(deal ? { dealId: idOf(deal._id), part: doc.part } : {}) });
+  auditLogger.logAction(req, 'CREATE', 'PaymentRequest', doc._id, { kind: 'supplier', amount, currency: money.currency, foreignAmount: money.foreignAmount, ...(creditPaise ? { creditPaise } : {}), orderId: idOf(order._id), ...(deal ? { dealId: idOf(deal._id), part: doc.part } : {}) });
   // The items now read "Payment Pending" until the admin pays (then "Ordered From
   // Supplier") or the request is cancelled / declined (then back where they were).
   // The request is the record; if marking a line fails, it is logged, and the
@@ -668,6 +705,8 @@ async function supplierPayee(actor, input, req) {
 async function followOnOrder(r, actor, outcome) {
   // A declined / cancelled part gives its share of the agreed total back.
   if (r.deal && outcome !== 'paid') await deals.release(r.deal, toPaise(deals.unitsOf(r)), `${r.number} ${outcome}`);
+  // …and any supplier credit it used goes back to the supplier's balance (once).
+  if (r.credit?.amount && outcome !== 'paid') await credit.restoreCredit(r, `${r.number} ${outcome}`);
   if (r.kind !== 'supplier' || !r.order) return;
   try {
     const wf = await import('./teamWorkflowService.js');
@@ -836,9 +875,19 @@ export async function update(actor, id, input = {}, req) {
   const before = { currency: r0.currency || BASE_CURRENCY, foreignAmount: r0.foreignAmount ?? null, fxRate: r0.fxRate ?? null };
   // Either kind may be a foreign bill (worked out in cleanMoney). A deal part stays
   // in its deal's currency.
-  const money = isExpense
+  // With supplier credit, the amount typed is the BILL; the credit used stays as it was.
+  const creditPaise = toPaise(r0.credit?.amount || 0);
+  const billBefore = !creditPaise ? before
+    : before.currency === BASE_CURRENCY ? before : { ...before, foreignAmount: fromPaise(toPaise(r0.foreignAmount) + creditPaise) };
+  const billAmount = creditPaise && before.currency === BASE_CURRENCY ? fromPaise(toPaise(r0.amount) + creditPaise) : r0.amount;
+  const billMoney = isExpense
     ? cleanMoney(r0.team, input, { amount: r0.amount, ...before })
-    : supplierMoney(input, r0.deal ? { currency: before.currency } : null, { amount: r0.amount, ...before });
+    : supplierMoney(input, r0.deal || creditPaise ? { currency: before.currency } : null, { amount: billAmount, ...billBefore });
+  const money = creditPaise ? { ...netOfCredit(billMoney, creditPaise), credit: r0.credit } : billMoney;
+  // An unchanged foreign bill keeps its stored rupees/rate (cleanMoney), not a recomputed net.
+  if (creditPaise && money.currency !== BASE_CURRENCY && billMoney.foreignAmount === billBefore.foreignAmount) {
+    Object.assign(money, { foreignAmount: before.foreignAmount, amount: r0.amount, fxRate: before.fxRate });
+  }
   const { amount } = money;
   const description = input.description != null ? String(input.description).trim().slice(0, 2000) : r0.description || '';
   let { category } = r0;
@@ -864,6 +913,9 @@ export async function update(actor, id, input = {}, req) {
     if (payKeyOf(payee, 'x') !== payKeyOf(r0.payee, 'x')) { supplier = null; bankNotice = null; }
   }
   requireUpiOrQr(payee, (r0.files || []).map((f) => f.kind));
+  if (creditPaise && idOf(supplier) !== idOf(r0.supplier)) {
+    throw fail(`${r0.number} uses ${deals.moneyOf(creditPaise, before.currency)} of ${r0.payee?.name || 'this supplier'}'s credit, so the supplier cannot change. Cancel it and raise a new payment instead.`, 409);
+  }
 
   const changes = [];
   // A foreign bill without rupees yet has no rupee amount to compare: its bill line says it.
@@ -1140,6 +1192,11 @@ export async function get(actor, id) {
   // A part of a made-to-order deal: what it is part of (agreed total, paid before,
   // balance after, dates) — worked out from the deal, so every screen agrees.
   if (r.deal) out.deal = await dealSummaryOf(r);
+  // Paid, and the customer cancelled the items since: the supplier owes us a refund.
+  if (r.kind === 'supplier' && r.status === 'paid' && await orderGone(r)) {
+    const claim = (await credit.claimsFor([r._id])).get(idOf(r._id)) || null;
+    out.supplierRefund = { claim, canClaim: !claim && credit.mayPropose(actor), savedSupplier: Boolean(r.supplier) };
+  }
   return out;
 }
 
@@ -1191,6 +1248,17 @@ export async function forOrder(actor, orderId) {
   if (!seesAll(actor) && !isActiveStaff(actor)) throw fail('Not authorized.', 403);
   if (!/^[a-f0-9]{24}$/i.test(String(orderId))) return [];
   const rows = await paymentRequestRepository.findForOrder(orderId);
+  // A paid supplier payment for items the customer cancelled: the supplier owes us a
+  // refund — procurement raises it from here (services/supplierLedgerService.js).
+  const paidSupplier = rows.filter((r) => r.kind === 'supplier' && r.status === 'paid');
+  const [order, claims] = paidSupplier.length
+    ? await Promise.all([orderRepository.findForWorkflow(orderId), credit.claimsFor(paidSupplier.map((r) => r._id))])
+    : [null, new Map()];
+  const refundOf = (r) => {
+    if (r.kind !== 'supplier' || r.status !== 'paid' || !itemsCancelled(order, r.itemIds)) return null;
+    const claim = claims.get(idOf(r._id)) || null;
+    return { claim, canClaim: !claim && credit.mayPropose(actor), savedSupplier: Boolean(r.supplier) };
+  };
   return rows.map((r) => ({
     id: idOf(r._id), number: r.number, status: r.status, statusLabel: STATUS_LABELS[r.status],
     kind: r.kind, categoryLabel: r.kind === 'expense' ? categoryLabel(r.category) : 'Supplier', team: r.team,
@@ -1201,6 +1269,9 @@ export async function forOrder(actor, orderId) {
     requestedByName: r.requestedByName || '',
     // Shown as an Edit button on the product line (the edit itself re-checks).
     canEdit: mayEdit(actor, r),
+    credit: r.credit?.amount ? { amount: r.credit.amount } : null,
+    // Paid, and the items were cancelled since: null, or the refund claim (if any).
+    supplierRefund: refundOf(r),
   }));
 }
 

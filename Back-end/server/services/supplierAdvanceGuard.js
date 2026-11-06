@@ -65,7 +65,7 @@ export function itemsCancelled(order, itemIds = []) {
 }
 
 /** Units of a request in its own currency (rupees, or the foreign bill), as hundredths. */
-const unitsPaise = (r) => toPaise((r.currency && r.currency !== 'INR') ? Number(r.foreignAmount) || 0 : Number(r.amount) || 0);
+const unitsPaise = (r) => toPaise(((r.currency && r.currency !== 'INR') ? Number(r.foreignAmount) || 0 : Number(r.amount) || 0) + (Number(r.credit?.amount) || 0));
 
 /**
  * After an order (or some of its items) is cancelled: supplier payments for those
@@ -92,6 +92,11 @@ export async function withdrawWaitingSupplierPayments(order, note = 'Order cance
         { at: new Date(), byName: 'System', role: 'system', action: 'cancelled', note: `Withdrawn automatically — ${note}`.slice(0, 1000) });
       if (!done) continue; // decided a moment ago: theirs to finish
       if (done.deal) await supplierDealRepository.release(done.deal, unitsPaise(done));
+      if (done.credit?.amount) {
+        // Lazy: supplierLedgerService imports this module.
+        const { restoreCredit } = await import('./supplierLedgerService.js');
+        await restoreCredit(done, `${done.number} withdrawn — ${note}`);
+      }
       withdrawn.push(done.number);
     }
   } catch (err) {

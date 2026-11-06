@@ -5,11 +5,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Banknote, Factory, FileText, Pencil } from 'lucide-react';
 import type { WorkOrder } from '@/components/staff/work/types';
 import apiClient from '@/lib/api-client';
-import { paymentKeys, paymentMoney, slipHref, STATUS_TONE, type OrderPayment, type OrderPayments, type SupplierDeal } from './api';
+import { money, paymentKeys, paymentMoney, slipHref, STATUS_TONE, type OrderPayment, type OrderPayments, type SupplierDeal } from './api';
 import SupplierDealCard, { SetUpDealForm } from './SupplierDealCard';
 import PaymentRequestForm from './PaymentRequestForm';
 import PaymentRequestDetail from './PaymentRequestDetail';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
+import { SupplierRefundLine } from './SupplierCredit';
 
 type Line = WorkOrder['lines'][number];
 const live = (r: OrderPayment) => r.status !== 'declined' && r.status !== 'cancelled';
@@ -65,7 +66,8 @@ export default function LineSupplierPayment({ order, line, requests, deals = [] 
   return (
     <div className="space-y-2">
       {mine.map((r) => (
-        <div key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
+        <div key={r.id} className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm">
           <Banknote className="h-4 w-4 text-emerald-700" />
           <button type="button" onClick={() => setOpen({ id: r.id, edit: false })} className="font-medium text-blue-700 hover:underline">{r.number}</button>
           <OrderTypeTag type="procurement" />
@@ -80,6 +82,12 @@ export default function LineSupplierPayment({ order, line, requests, deals = [] 
           <a href={slipHref(r.id)} target="_blank" rel="noopener noreferrer" className={`${r.canEdit ? '' : 'ml-auto '}inline-flex items-center gap-1 text-xs text-gray-600 hover:underline`}>
             <FileText className="h-3.5 w-3.5" /> {r.status === 'paid' ? 'Receipt' : 'Slip'}
           </a>
+          {r.credit && <span className="w-full text-xs text-emerald-800">{money(r.credit.amount, r.currency)} of it from supplier credit</span>}
+        </div>
+        {r.supplierRefund && (
+          <SupplierRefundLine requestId={r.id} refund={r.supplierRefund} currency={r.currency || 'INR'}
+            bill={Math.round(((r.currency && r.currency !== 'INR' ? r.foreignAmount ?? 0 : r.amount) + (r.credit?.amount || 0)) * 100) / 100} />
+        )}
         </div>
       ))}
       {canRaise && !raising && (

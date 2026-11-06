@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import {
-  categoryName, errorMessage, getExpenseOptions, paymentKeys, type PaymentRequest,
+  categoryName, errorMessage, getExpenseOptions, money, paymentKeys, type PaymentRequest,
 } from './api';
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
 import { SupplierSuggestions, payLine } from './SupplierPicker';
@@ -30,11 +30,13 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
   onCancel: () => void;
 }) {
   // A foreign bill not yet paid has no rupee amount: empty, should it be switched to rupees.
-  const [amount, setAmount] = useState(r.rupeesPending ? '' : String(r.amount));
+  // Supplier credit used: the amounts typed here are the BILL; the credit comes off it (server-side).
+  const creditUsed = r.credit?.amount || 0;
+  const [amount, setAmount] = useState(r.rupeesPending ? '' : String(creditUsed && r.bill != null && (r.currency || 'INR') === 'INR' ? r.bill : r.amount));
   const [description, setDescription] = useState(r.description || '');
   const [category, setCategory] = useState(r.category);
   const [currency, setCurrency] = useState(r.currency || 'INR');
-  const [foreignAmount, setForeignAmount] = useState(r.foreignAmount != null ? String(r.foreignAmount) : '');
+  const [foreignAmount, setForeignAmount] = useState(r.foreignAmount != null ? String(creditUsed && r.bill != null ? r.bill : r.foreignAmount) : '');
   const isExpense = r.kind === 'expense';
   const optionsQ = useQuery({
     queryKey: paymentKeys.options(r.team),
@@ -52,7 +54,7 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     : [{ code: r.currency || 'INR', label: '' }, ...currencies];
   const foreign = currency !== 'INR';
   // A part of a supplier deal stays in the deal's currency.
-  const currencyLocked = Boolean(r.dealId);
+  const currencyLocked = Boolean(r.dealId || r.credit);
   const [method, setMethod] = useState<'upi' | 'bank'>(r.payee.method);
   const [payee, setPayee] = useState({
     name: r.payee.name, upiId: r.payee.upiId || '', accountName: r.payee.accountName || '',
@@ -100,8 +102,9 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
       )}
       <div className="grid gap-3 sm:grid-cols-2">
         {!foreign && (
-          <div><label className={label} htmlFor="ed-amount">Amount (₹)</label>
-            <input id="ed-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
+          <div><label className={label} htmlFor="ed-amount">{creditUsed ? 'Bill amount (₹)' : 'Amount (₹)'}</label>
+            <input id="ed-amount" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            {creditUsed > 0 && <p className="mt-1 text-xs text-emerald-800">{money(creditUsed, 'INR')} supplier credit comes off — transfer {money(Math.max(0, Math.round((Number(amount) - creditUsed) * 100) / 100), 'INR')}</p>}</div>
         )}
         {isExpense && (
           <div><label className={label} htmlFor="ed-cat">What for</label>
@@ -121,7 +124,8 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
       {foreign && (
         <div className="rounded-lg bg-gray-50 p-3">
           <div className="sm:w-1/2 sm:pr-1.5"><label className={label} htmlFor="ed-foreign">Bill amount ({currency})</label>
-            <input id="ed-foreign" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={foreignAmount} onChange={(e) => setForeignAmount(e.target.value)} /></div>
+            <input id="ed-foreign" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={foreignAmount} onChange={(e) => setForeignAmount(e.target.value)} />
+            {creditUsed > 0 && <p className="mt-1 text-xs text-emerald-800">{money(creditUsed, currency)} supplier credit comes off — transfer {money(Math.max(0, Math.round((Number(foreignAmount) - creditUsed) * 100) / 100), currency)}</p>}</div>
           <p className="mt-2 text-sm text-gray-700">The rupee amount is what the bank debits — the admin records it when paying.</p>
         </div>
       )}

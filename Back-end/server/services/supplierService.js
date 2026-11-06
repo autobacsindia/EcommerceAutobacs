@@ -152,7 +152,9 @@ async function load(id, opts) {
 
 export async function get(actor, id) {
   if (!maySeeSuppliers(actor)) throw fail('Not authorized.', 403);
-  return shape(await load(id, { account: mayEditSuppliers(actor) }), actor);
+  const s = await load(id, { account: mayEditSuppliers(actor) });
+  const { balancesForSuppliers } = await import('./supplierLedgerService.js');
+  return { ...shape(s, actor), credit: (await balancesForSuppliers([s._id])).get(String(s._id)) || [] };
 }
 
 export const SUPPLIER_SORTS = Object.freeze({
@@ -205,7 +207,10 @@ export async function list(actor, params = {}) {
     query: supplierQuery(f), sorts: SUPPLIER_SORTS, sortName, cursor: f.after, pageSize: PAGE_SIZE,
     find: supplierRepository.page, count: (q) => supplierRepository.summary(q, SUMMARY_CAP),
   });
-  return { ...page, suppliers: items.map((s) => shape(s, actor)), nextAfter: nextCursor };
+  // What each supplier owes us (supplier credit): one aggregate for the page.
+  const { balancesForSuppliers } = await import('./supplierLedgerService.js');
+  const owed = await balancesForSuppliers(items.map((s) => s._id));
+  return { ...page, suppliers: items.map((s) => ({ ...shape(s, actor), credit: owed.get(String(s._id)) || [] })), nextAfter: nextCursor };
 }
 
 /**
