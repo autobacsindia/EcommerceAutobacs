@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, Download, Maximize2, Minimize2, Search, Users, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, Download, Search, Users, X } from 'lucide-react';
 import { chatKeys } from '@/hooks/queries/keys';
 import {
   readUpdatesSeqOf,
@@ -135,8 +135,6 @@ export default function Conversation({
   online,
   onSearch,
   initialTab,
-  expanded = false,
-  onToggleExpand,
   openThread = null,
 }: {
   channel: ChatChannel;
@@ -154,9 +152,6 @@ export default function Conversation({
   onSearch?: () => void;
   /** From the link (?t=updates — an order-update pop-up); otherwise chosen by what is unread. */
   initialTab?: 'messages' | 'updates';
-  /** Desktop: the conversation takes the whole chat area (the lists hide). */
-  expanded?: boolean;
-  onToggleExpand?: () => void;
   /**
    * Open this thread (a mention picked from the Mentions list was a reply).
    * `n` changes on every pick, so picking the same thread again reopens it.
@@ -475,18 +470,6 @@ export default function Conversation({
                   title={`Search in ${title}`}
                 >
                   <Search className="h-4 w-4" />
-                </button>
-              )}
-              {onToggleExpand && (
-                <button
-                  type="button"
-                  onClick={onToggleExpand}
-                  aria-pressed={expanded}
-                  className="hidden rounded-full p-2 text-gray-600 hover:bg-gray-100 lg:block"
-                  aria-label={expanded ? 'Show the conversation list' : 'Expand the conversation'}
-                  title={expanded ? 'Show the conversation list' : 'Expand'}
-                >
-                  {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </button>
               )}
               <button

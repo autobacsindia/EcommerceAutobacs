@@ -27,9 +27,8 @@ jest.mock('@/hooks/useSSE', () => ({ useSSE: () => undefined }));
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'me', name: 'Sana', role: 'staff' } }) }));
 jest.mock('./Conversation', () => ({
   __esModule: true,
-  default: ({ channel, expanded, onToggleExpand, openThread }: { channel: ChatChannel; expanded?: boolean; onToggleExpand?: () => void; openThread?: { id: string } | null }) => (
+  default: ({ channel, openThread }: { channel: ChatChannel; openThread?: { id: string } | null }) => (
     <section aria-label={`Conversation ${channel.name}`} data-thread={openThread?.id ?? ''}>
-      <button type="button" onClick={onToggleExpand} aria-pressed={expanded}>Expand</button>
     </section>
   ),
 }));
@@ -147,14 +146,13 @@ describe('the chat screen', () => {
   const rowNames = () => within(screen.getByRole('list', { name: 'Chats, newest first' }))
     .getAllByRole('button').map((b) => b.querySelector('.truncate')?.textContent);
 
-  it('the left side sorts chats into Direct messages, Groups, Spaces and Between teams', () => {
+  it('the left side sorts chats into Direct messages, Spaces and Between teams (no separate Groups)', () => {
     setWidth(1440);
     query = 'c=c1';
     render(<TeamChat />);
     const names = (name: string) => within(section(name)).queryAllByRole('button').map((b) => b.textContent);
     expect(names('Direct messages')).toEqual([expect.stringMatching(/Priya$/)]);
-    expect(names('Groups')).toEqual([]);
-    expect(within(section('Groups')).getByText(/pick a few people/)).toBeInTheDocument();
+    expect(within(list()).queryByRole('list', { name: 'Groups' })).toBeNull();
     expect(names('Spaces').map((n) => n?.replace(/\d+$/, ''))).toEqual(['gtm', 'company', 'procurement']);
     expect(names('Between teams')).toEqual(['GTM & Procurement']);
     // The open conversation is highlighted in its section.
@@ -266,17 +264,32 @@ describe('the chat screen', () => {
     expect(rowNames()).toEqual(['gtm', 'company']);
   });
 
-  it('Expand hides the sections and Home on a computer; pressing it again brings them back', () => {
+  it('the handle between the lists and the chat widens the chat, remembers it, and brings the lists back', () => {
     setWidth(1440);
     query = 'c=c1';
+    localStorage.clear();
     render(<TeamChat />);
-    expect(list().className).toContain('lg:flex');
-    expect(home().className).not.toContain('xl:hidden');
-    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
-    expect(list().className).toContain('lg:hidden');
-    expect(home().className).toContain('xl:hidden');
-    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
-    expect(list().className).toContain('lg:flex');
+    const handle = () => screen.getByRole('button', { name: /chat list/ });
+    expect(handle()).toHaveAttribute('aria-expanded', 'true');
+    expect(list()).not.toHaveAttribute('data-collapsed');
+    fireEvent.click(handle());
+    expect(handle()).toHaveAccessibleName('Show the chat list');
+    expect(handle()).toHaveAttribute('aria-expanded', 'false');
+    expect(list()).toHaveAttribute('data-collapsed', 'true');
+    expect(home()).toHaveAttribute('data-collapsed', 'true');
+    expect(localStorage.getItem('roavion-chat-wide:me')).toBe('1');
+    fireEvent.click(handle());
+    expect(list()).not.toHaveAttribute('data-collapsed');
+    expect(localStorage.getItem('roavion-chat-wide:me')).toBeNull();
+  });
+
+  it('a saved wide choice is used the next time chat opens', () => {
+    setWidth(1440);
+    query = 'c=c1';
+    localStorage.setItem('roavion-chat-wide:me', '1');
+    render(<TeamChat />);
+    expect(list()).toHaveAttribute('data-collapsed', 'true');
+    localStorage.clear();
   });
 
   it('has a "New chat" button and a "Search messages" field, and no unexplained "Jump" button', () => {
