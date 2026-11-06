@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import PromoBanner from './PromoBanner';
+import FestivalCountdown from '@/components/festival/FestivalCountdown';
 import { useRewardRibbonClaimsSlot } from '@/hooks/useRewardRibbon';
 import type { PromoBanner as PromoBannerData } from '@/lib/promoBanner';
 
@@ -50,5 +51,13 @@ export default function ConditionalPromoBanner({ banner }: { banner: PromoBanner
 
   if (hide || rewardRibbonShowing) return null;
 
-  return <PromoBanner banner={banner} />;
+  // The festival countdown rides directly under the banner, with the same
+  // placement rules (never on /cart or checkout). Null when no festival is live
+  // or it has no end date.
+  return (
+    <>
+      <PromoBanner banner={banner} />
+      <FestivalCountdown />
+    </>
+  );
 }

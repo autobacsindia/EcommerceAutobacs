@@ -38,6 +38,10 @@ export const CLOSED_URL_PATHS = Object.freeze({
   // middleware/cacheControl.js cacheMiddleware('static-data') rather than
   // httpCache, so it has no CACHE_PROFILES entry; the header is the same.
   'public:promo-banner': ['/promo-banners/active'],
+
+  // GET /festival-theme/active — festive decoration switch. Bare path only
+  // (src/lib/festival/festivalTheme.ts), same legacy static-data header.
+  'public:festival-theme': ['/festival-theme/active'],
 });
 
 /**

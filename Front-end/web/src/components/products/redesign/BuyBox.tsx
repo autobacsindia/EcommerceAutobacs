@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingBag, Zap, Heart, Shield, Truck, RotateCcw, CreditCard, Star } from 'lucide-react';
@@ -233,6 +234,8 @@ export default function BuyBox({
             <span className="rounded-md bg-[#cc0c39] px-2.5 py-1 text-[13px] font-bold text-[#fff]">
               -{discount}%
             </span>
+            {/* Festival label on an existing sale only — visual, no price logic. */}
+            <FestivalDealBadge />
           </>
         )}
       </div>
@@ -377,6 +380,7 @@ export default function BuyBox({
             </button>
             <div className="flex gap-3">
               <button
+                data-festive-tap
                 onClick={buyNow}
                 disabled={needsSelection || outOfStock || buying}
                 className="flex flex-1 items-center justify-center gap-2.5 rounded-full bg-ink py-3.5 text-[16px] font-bold text-obsidian transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"

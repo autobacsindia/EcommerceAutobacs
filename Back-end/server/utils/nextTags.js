@@ -67,6 +67,9 @@ export const careersTags = () => ['careers:list'];
  */
 export const promoBannerTags = () => ['promo:banner'];
 
+/** Tags for a festival-theme write — the root layout reads it under this tag. */
+export const festivalThemeTags = () => ['promo:festival-theme'];
+
 /**
  * Tags for a media article write. Only blog-type articles have a cached public
  * page (the catch-all /[slug] route) and feed the home journal shelf; press,
@@ -92,4 +95,4 @@ export const articleTags = (article) => {
  */
 export const spinTags = () => ['home:spin'];
 
-export default { productTags, productBulkTags, categoryTags, careersTags, articleTags, promoBannerTags, spinTags };
+export default { productTags, productBulkTags, categoryTags, careersTags, articleTags, promoBannerTags, festivalThemeTags, spinTags };

@@ -160,6 +160,49 @@ describe('CartContext', () => {
     });
   });
 
+  // ── Festival effects must never change add-to-cart ──────────────────────
+  it('announces each add for the festival effects, exactly once, before the server call', async () => {
+    const { CART_ADD_INTENT_EVENT } = jest.requireActual('@/lib/festival/events');
+    const order: string[] = [];
+    const listener = jest.fn(() => order.push('event'));
+    window.addEventListener(CART_ADD_INTENT_EVENT, listener);
+    (apiClient.post as jest.Mock).mockImplementation(async () => {
+      order.push('post');
+      return { success: true, cart: mockCartData };
+    });
+
+    render(<CartProvider><TestComponent /></CartProvider>);
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+    await act(async () => { screen.getByText('Add Item').click(); });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['event', 'post']);
+    window.removeEventListener(CART_ADD_INTENT_EVENT, listener);
+  });
+
+  it('still adds, and still takes the count from the server, when a festival listener throws', async () => {
+    const { CART_ADD_INTENT_EVENT } = jest.requireActual('@/lib/festival/events');
+    const boom = () => { throw new Error('animation exploded'); };
+    const swallow = (e: ErrorEvent) => e.preventDefault();
+    window.addEventListener('error', swallow);
+    window.addEventListener(CART_ADD_INTENT_EVENT, boom);
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    (apiClient.post as jest.Mock).mockResolvedValue({
+      success: true,
+      cart: { ...mockCartData, items: [{ ...mockCartData.items[0], quantity: 5 }] },
+    });
+
+    render(<CartProvider><TestComponent /></CartProvider>);
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+    await act(async () => { screen.getByText('Add Item').click(); });
+
+    expect(apiClient.post).toHaveBeenCalledWith(API_ENDPOINTS.CART_ADD, { productId: 'prod1', quantity: 1 });
+    await waitFor(() => expect(screen.getByTestId('item-count')).toHaveTextContent('5'));
+    window.removeEventListener(CART_ADD_INTENT_EVENT, boom);
+    window.removeEventListener('error', swallow);
+    consoleSpy.mockRestore();
+  });
+
   it('should handle add to cart error', async () => {
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     (apiClient.post as jest.Mock).mockRejectedValue(new Error('Failed to add'));

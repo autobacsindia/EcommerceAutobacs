@@ -16,6 +16,9 @@ import CampaignBanner from "@/components/campaign/CampaignBanner";
 import ConditionalPromoBanner from "@/components/layout/ConditionalPromoBanner";
 import { getNavCategories } from "@/lib/navCategories";
 import { getActivePromoBanner } from "@/lib/promoBanner";
+import { getFestivalTheme, isFestivalLive } from "@/lib/festival/festivalTheme";
+import { FestivalThemeProvider } from "@/components/festival/FestivalThemeContext";
+import FestivalEffectsLoader from "@/components/festival/FestivalEffectsLoader";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
 import ThemeScript from "@/components/theme/ThemeScript";
@@ -158,7 +161,9 @@ export default async function RootLayout({
   // Site-wide promo strip (Onam/Diwali/sale). Resolved on the server so it lands
   // in the initial HTML with its space already reserved; returns null whenever no
   // campaign is scheduled, which is the normal state for most of the year.
-  const promoBanner = await getActivePromoBanner();
+  // The festival switch (Diwali …) is fetched alongside it — in parallel, so the
+  // decoration adds no latency to the layout. Null all year when switched off.
+  const [promoBanner, festivalTheme] = await Promise.all([getActivePromoBanner(), getFestivalTheme()]);
 
   /*
     `data-theme` is deliberately NOT set here. ThemeScript owns it before first
@@ -342,6 +347,7 @@ export default async function RootLayout({
         <LogRocketProvider>
           <PostHogProvider>
           <QueryProvider>
+          <FestivalThemeProvider theme={festivalTheme} initialLive={isFestivalLive(festivalTheme)}>
           <AuthProvider>
             <CartProvider>
               <WishlistProvider>
@@ -364,6 +370,9 @@ export default async function RootLayout({
                       <ThemeSync />
                       <HelpWidget />
                       <ContactFab />
+                      {/* Festival sparks/fireworks: loads its code only after the page is
+                          idle, and only while a festival is live. Renders nothing. */}
+                      <FestivalEffectsLoader />
                       <HelpBot />
                       <Toaster
                         position="top-right"
@@ -401,6 +410,7 @@ export default async function RootLayout({
               </WishlistProvider>
             </CartProvider>
           </AuthProvider>
+          </FestivalThemeProvider>
           </QueryProvider>
           </PostHogProvider>
         </LogRocketProvider>

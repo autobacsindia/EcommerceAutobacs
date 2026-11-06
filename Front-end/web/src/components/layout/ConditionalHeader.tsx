@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import StoreHeader from '@/components/home/store/StoreHeader';
 import type { NavCategory } from '@/lib/navCategories';
+import FestiveToran from '@/components/festival/FestiveToran';
 
 /**
  * Global storefront header — the light store's dark header + green department bar
@@ -43,6 +44,9 @@ export default function ConditionalHeader({ navCategories }: { navCategories: Na
       {/* Target of the footer's "Back to top". Not on the header itself: the header is
           sticky, so the browser treats it as already in view and would not scroll. */}
       <span id="top" aria-hidden="true" />
+      {/* Festival toran (null when no festival is live). Fixed height, in flow,
+          above the sticky header — so it scrolls away and never shifts content. */}
+      <FestiveToran />
       <div className="sh-theme sh-chrome">
         <StoreHeader categories={navCategories.map((c) => ({ name: c.label, href: c.href }))} />
       </div>

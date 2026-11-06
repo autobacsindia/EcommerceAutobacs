@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import ProductImage from '@/components/products/ProductImage';
 import ProductCardWishlistButton from './ProductCardWishlistButton';
+import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
 import ProductCardPriceActions from './ProductCardPriceActions';
 import { Product, productUrl } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -60,6 +61,7 @@ export default function ProductCard({
             {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
           </div>
         )}
+        {product.originalPrice && product.originalPrice > product.price && <FestivalDealBadge />}
         {product.isFeatured && product.stock !== 'out' && product.originalPrice && product.originalPrice <= product.price && (
           <div className="bg-gold text-white px-2 py-1 rounded text-xs font-semibold">Popular</div>
         )}
