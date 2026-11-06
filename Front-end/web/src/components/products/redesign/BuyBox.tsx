@@ -428,9 +428,11 @@ export default function BuyBox({
         <button
           type="button"
           onClick={onWriteReview}
-          className="mt-5 inline-flex items-center gap-2 text-[13px] font-medium text-gold underline-offset-4 hover:underline"
+          // A real button, not a 13px text link: shoppers did not notice the
+          // link. min-h-12 keeps the tap target above the 44px floor on phones.
+          className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-gold px-6 text-[15px] font-semibold text-gold transition-colors hover:bg-gold hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 sm:w-auto"
         >
-          <Star className="h-4 w-4" aria-hidden />
+          <Star className="h-5 w-5" aria-hidden />
           Write a review for this product
         </button>
       )}

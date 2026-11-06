@@ -5,6 +5,7 @@ import EnhancedImage from '@/components/layout/EnhancedImage';
 import { usePrefersReducedMotion } from '@/hooks/useMediaQuery';
 import { cn } from '@/lib/utils';
 import type { GalleryImage } from './types';
+import { offsetInScroller } from './offsetInScroller';
 
 interface GalleryThumbnailsProps {
   images: GalleryImage[];
@@ -54,7 +55,7 @@ export default function GalleryThumbnails({
 
     // Centre the active thumbnail, clamped to the ends so the first and last
     // do not leave a gap.
-    const centred = target.offsetLeft - (rail.clientWidth - target.clientWidth) / 2;
+    const centred = offsetInScroller(target, rail) - (rail.clientWidth - target.clientWidth) / 2;
     const left = Math.max(0, Math.min(centred, rail.scrollWidth - rail.clientWidth));
     if (Math.abs(rail.scrollLeft - left) < 2) return;
 

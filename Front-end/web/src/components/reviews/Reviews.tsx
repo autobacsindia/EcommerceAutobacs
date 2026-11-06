@@ -151,10 +151,13 @@ const Reviews: React.FC<ReviewsProps> = ({ productId, isAuthenticated, openFormS
         />
       ) : (
         <button
+          type="button"
           onClick={handleWriteReviewClick}
-          className="inline-flex items-center gap-2 rounded-lg border border-gold px-5 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-gold hover:text-obsidian"
+          // Sized as a primary action (≥44px tall, full width on phones) so it
+          // reads as the next step after the rating summary, not a footnote.
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-gold px-8 text-[15px] font-semibold text-white transition-colors hover:bg-[#0b6b3c] hover:text-[#fff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 sm:w-auto"
         >
-          <PenLine className="h-4 w-4" />
+          <PenLine className="h-5 w-5" aria-hidden />
           Write a Review
         </button>
       )}

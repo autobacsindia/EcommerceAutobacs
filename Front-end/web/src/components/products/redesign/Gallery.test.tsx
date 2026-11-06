@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import Gallery, { type GalleryImage } from './Gallery';
+import Gallery, { REPRESENTATIVE_IMAGE_NOTE, type GalleryImage } from './Gallery';
 
 // next/image is replaced with a plain <img> so assertions can read `src`/`alt`
 // directly; the real component's srcset machinery is not what these tests are
@@ -58,12 +58,23 @@ const setMatchMedia = (matcher: (query: string) => boolean) => {
  * These stubs give the strips just enough geometry to exercise that arithmetic.
  * Slides/thumbnails are `item` px wide inside an `viewport` px scroller.
  */
-function mockScrollGeometry({ item = 60, viewport = 300 } = {}) {
+function mockScrollGeometry({
+  item = 60,
+  viewport = 300,
+  scrollerOffset = (_scroller: Element) => 0,
+}: { item?: number; viewport?: number; scrollerOffset?: (scroller: Element) => number } = {}) {
   jest.spyOn(HTMLElement.prototype, 'offsetLeft', 'get').mockImplementation(function (
     this: HTMLElement
   ) {
+    // Only items inside a scroller get an offset. The scrollers themselves
+    // read 0 — i.e. they sit at the left edge of their offset parent — unless
+    // a test places one elsewhere via `scrollerOffset`.
+    if (/overflow-x-auto/.test(this.className)) return scrollerOffset(this);
     const parent = this.parentElement;
-    return parent ? Array.prototype.indexOf.call(parent.children, this) * item : 0;
+    if (!parent || !/overflow-x-auto/.test(parent.className)) return 0;
+    return (
+      scrollerOffset(parent) + Array.prototype.indexOf.call(parent.children, this) * item
+    );
   });
   jest.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (
     this: Element
@@ -93,6 +104,24 @@ afterEach(() => {
 });
 
 describe('Gallery', () => {
+  describe('representative-image note', () => {
+    it('shows Procurement\'s wording under the photos', () => {
+      render(<Gallery images={makeImages(3)} name="Roav bumper" />);
+      expect(screen.getByText(REPRESENTATIVE_IMAGE_NOTE)).toBeInTheDocument();
+      expect(REPRESENTATIVE_IMAGE_NOTE).toBe(
+        'Images are for representative purposes only. Products may slightly vary in colour and finish based on the product batch.'
+      );
+    });
+
+    it('shows it on a single-image product and on a product with no image', () => {
+      const { unmount } = render(<Gallery images={makeImages(1)} name="Roav bumper" />);
+      expect(screen.getByText(REPRESENTATIVE_IMAGE_NOTE)).toBeInTheDocument();
+      unmount();
+      render(<Gallery images={[]} name="Roav bumper" />);
+      expect(screen.getByText(REPRESENTATIVE_IMAGE_NOTE)).toBeInTheDocument();
+    });
+  });
+
   it('renders a thumbnail for every image, not just the first five', () => {
     // Regression lock: the previous gallery did `images.slice(0, 5)`, silently
     // dropping uploads 6+ with no way for merchandising to notice.
@@ -354,6 +383,48 @@ describe('Gallery', () => {
       // clamped maximum), instantly rather than animating on first paint.
       expect(scrollTo).toHaveBeenCalledWith(
         expect.objectContaining({ left: 300, behavior: 'auto' })
+      );
+    });
+
+    it('keeps the second thumbnail visible when the viewer opens on image 2', () => {
+      // Regression: the Thar ROXX storage box's parts photo (image 2) vanished
+      // from the viewer's thumbnail rail. `offsetLeft` is measured from the
+      // nearest positioned ancestor — the fixed <dialog> — and the rail sits
+      // centred inside it, so every thumbnail's position carried the rail's own
+      // ~288px indent. Centring thumb 2 then scrolled the rail to its far end,
+      // and thumbnails 1–2 were pushed out of view.
+      const RAIL_INDENT = 288;
+      const scrollTo = mockScrollGeometry({
+        scrollerOffset: (scroller) => (scroller.closest('dialog') ? RAIL_INDENT : 0),
+      });
+      render(<Gallery images={makeImages(7)} name="Thar storage box" />);
+
+      fireEvent.click(carousel().getByRole('button', { name: /image 2 in fullscreen/i }));
+
+      // Thumb 2 sits 60px into a 300px rail: centring it clamps to 0, so the
+      // rail needs no scroll at all. The bug scrolled it to the 120px maximum.
+      const viewerRail = within(screen.getByRole('dialog', { hidden: true }))
+        .getByRole('button', { name: 'Show image 2 of 7', hidden: true }).parentElement;
+      const railScrolls = scrollTo.mock.calls.filter(
+        (_call, i) => scrollTo.mock.contexts[i] === viewerRail
+      );
+      // Before the fix: [{ left: 120, behavior: 'auto' }].
+      expect(railScrolls).toEqual([]);
+    });
+
+    it('scrolls the viewer rail by the thumbnail position inside the rail, not the page', () => {
+      const RAIL_INDENT = 288;
+      const scrollTo = mockScrollGeometry({
+        scrollerOffset: (scroller) => (scroller.closest('dialog') ? RAIL_INDENT : 0),
+      });
+      render(<Gallery images={makeImages(10)} name="Roav bumper" />);
+      scrollTo.mockClear();
+
+      fireEvent.click(carousel().getByRole('button', { name: /image 6 in fullscreen/i }));
+
+      // Thumb 6 is at 300px in the rail; centred in 300px → 300 - 120 = 180.
+      expect(scrollTo).toHaveBeenCalledWith(
+        expect.objectContaining({ left: 180, behavior: 'auto' })
       );
     });
 
