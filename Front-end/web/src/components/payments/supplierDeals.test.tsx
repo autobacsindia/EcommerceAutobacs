@@ -252,3 +252,65 @@ describe('linking an expense to an order', () => {
     expect(form.get('amount')).toBe('450');
   });
 });
+
+describe('accounts sees what a supplier payment is part of', () => {
+  afterEach(() => jest.clearAllMocks());
+  const request = (over: Partial<PaymentRequest> = {}): PaymentRequest => ({
+    id: 'r1', number: 'PR-0101', kind: 'supplier', status: 'submitted', statusLabel: 'Waiting for accounts approval', team: 'procurement', teamLabel: 'Procurement',
+    requestedBy: 'Priya', amount: 10000, currency: 'INR', category: 'supplier', description: '',
+    payee: { name: 'Kochi Fabricators', method: 'bank', accountName: 'Kochi Fabricators', accountNumber: '123456789012', ifsc: 'HDFC0001234' },
+    order: { id: 'o1', number: '#AB12' }, itemNames: ['Roof rack'], customer: null, closedBy: 'Website', files: [], payment: null,
+    decisionNote: '', history: [], createdAt: '2026-11-05T05:00:00Z',
+    can: { approve: true, decline: true, pay: false, hold: false, cancel: false },
+    dealId: 'd1', part: 'advance', partLabel: 'Advance',
+    deal: {
+      dealId: 'd1', dealStatus: 'open', supplierName: 'Sangaroon Trading', itemNames: ['Roof rack'], currency: 'THB',
+      agreedTotal: 29400, partLabel: 'Advance', installment: 1, installments: 1, thisAmount: 10000, thisRupees: null,
+      paidBefore: 0, waitingBefore: 0, balanceAfter: 19400, paidSoFar: 0, waiting: 10000, balanceDue: 29400, rupeesPaid: 0,
+      startDate: '', completionDate: '2026-11-20',
+    },
+    ...over,
+  });
+
+  it('an advance shows the full deal: agreed total, which payment, paid before, balance after, dates', async () => {
+    // The owner's screenshot: the panel showed only "THB 10,000"; the total was only in the history text.
+    get.mockResolvedValue({ request: request() });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    expect(await screen.findByText(/Supplier payment — Advance/)).toBeInTheDocument();
+    const box = screen.getByLabelText('Made to order — supplier deal');
+    const row = (k: string) => within(box).getByText(k).nextSibling;
+    expect(row('Agreed total')).toHaveTextContent('THB 29,400 with Sangaroon Trading');
+    expect(row('This payment')).toHaveTextContent('Advance (payment 1 of 1) · THB 10,000');
+    expect(row('Paid before this')).toHaveTextContent('THB 0');
+    expect(row('Balance after this')).toHaveTextContent('THB 19,400');
+    expect(row('Deal today')).toHaveTextContent('paid THB 0 · balance due THB 29,400');
+    expect(row('Dates')).toHaveTextContent('advance paid not yet · completion 20 Nov 2026');
+  });
+
+  it('a paid foreign part shows the rupees the bank debited', async () => {
+    get.mockResolvedValue({ request: request({ status: 'paid', deal: { ...request().deal!, thisRupees: 24300, paidSoFar: 10000, rupeesPaid: 24300, balanceDue: 19400, startDate: '2026-11-06' } }) });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    const box = await screen.findByLabelText('Made to order — supplier deal');
+    expect(within(box).getByText('This payment').nextSibling).toHaveTextContent('(₹24,300 debited)');
+    expect(within(box).getByText('Dates').nextSibling).toHaveTextContent('advance paid 6 Nov 2026');
+  });
+
+  it('the payments list shows which payment it is and the balance after it', async () => {
+    const { DealLine } = await import('./DealSummary');
+    render(<DealLine d={request().deal!} />);
+    expect(screen.getByText('Advance (payment 1 of 1) · agreed THB 29,400 · balance after THB 19,400')).toBeInTheDocument();
+  });
+
+  it('a payment for a cancelled order says so', async () => {
+    get.mockResolvedValue({ request: request({ status: 'approved', orderCancelled: true, can: { approve: false, decline: true, pay: false, hold: false, cancel: false } }) });
+    wrap(<PaymentRequestDetail id="r1" onClose={() => {}} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/order \(or the item\) was cancelled, so this supplier payment cannot be paid/);
+  });
+
+  it('the deal card opens a part to edit or cancel it', async () => {
+    get.mockResolvedValue({ request: request() });
+    wrap(<LineSupplierPayment order={order} line={line('i1', 'Roof rack')} requests={[]} deals={[deal()]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'PR-0101' }));
+    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringContaining('/payment-requests/r1')));
+  });
+});

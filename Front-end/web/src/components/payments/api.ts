@@ -57,6 +57,23 @@ export type PaymentRequest = {
   };
   /** One part of a supplier deal: its currency is the deal's and cannot change. */
   dealId?: string | null;
+  /** Advance / Part payment / Balance / Full payment — '' for a one-off payment. */
+  part?: '' | 'advance' | 'part' | 'balance' | 'full';
+  partLabel?: string;
+  /**
+   * Where this payment sits in its made-to-order deal, worked out by the server
+   * (supplierDealService.partSummary) — on every list, the detail and the PDF:
+   * "Advance (payment 1 of 2) ₹10,000 of ₹29,000 agreed · balance after ₹19,000".
+   */
+  deal?: DealSummary | null;
+  /** Its order (or every item it pays for) was cancelled: it can only be declined. */
+  orderCancelled?: boolean;
+  /** Supplier credit used on it: the bill = what is transferred + this. */
+  credit?: { amount: number; entryId?: string } | null;
+  /** The bill before credit (null when no credit was used). */
+  bill?: number | null;
+  /** Paid, and the customer cancelled the items since: the refund the supplier owes. */
+  supplierRefund?: SupplierRefund | null;
   /** The requester may edit until then (null for admins, or once it can no longer be edited). */
   editableUntil?: string | null;
 };
@@ -78,8 +95,18 @@ export type OrderPayment = {
   requestedByName?: string;
   /** One part of a supplier deal: Advance / Part payment / Balance. */
   dealId?: string | null;
-  part?: '' | 'advance' | 'part' | 'balance';
+  part?: '' | 'advance' | 'part' | 'balance' | 'full';
   partLabel?: string;
+  credit?: { amount: number } | null;
+  supplierRefund?: SupplierRefund | null;
+};
+
+/** A paid supplier payment whose items were cancelled: the refund claim on it (Back-end supplierLedgerService). */
+export type SupplierRefund = {
+  claim: { id: string; status: 'pending' | 'approved'; amount: number; currency: string } | null;
+  canClaim: boolean;
+  /** Paid to a saved supplier — a refund can only be claimed from one. */
+  savedSupplier: boolean;
 };
 
 /**
@@ -113,6 +140,8 @@ export type SupplierDeal = {
   createdAt: string;
   payments: {
     id: string; number: string; part: string; partLabel: string;
+    /** What is left of the agreed total after this payment (null when declined / cancelled). */
+    balanceAfter?: number | null;
     /** In the deal's currency. `rupees`: the bank debit (null for a foreign part not yet paid). */
     amount: number; rupees: number | null;
     status: PaymentStatus; statusLabel: string; createdAt: string; approvedAt: string | null; paidAt: string | null;
@@ -248,3 +277,18 @@ export const getListFilterOptions = () => apiClient.get<ListFilterOptions>('/pay
 export const getRequest = (id: string) => apiClient.get<{ request: PaymentRequest }>(`/payment-requests/${id}`);
 export const actOn = (id: string, action: 'approve' | 'decline' | 'hold' | 'cancel', note = '') =>
   apiClient.post<{ request: PaymentRequest }>(`/payment-requests/${id}/${action}`, { note });
+
+/** 'YYYY-MM-DD' → "8 Nov 2026" (a calendar day: no time zone shift). */
+export const dayText = (d: string) => (d
+  ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+  : 'Not set');
+
+/** One payment's place in its deal. Amounts are in `currency`; `thisRupees` / `rupeesPaid` are bank debits. */
+export type DealSummary = {
+  dealId: string; dealStatus: string; supplierName: string; itemNames: string[]; currency: string;
+  agreedTotal: number; partLabel: string; installment: number | null; installments: number;
+  thisAmount: number; thisRupees: number | null;
+  paidBefore: number; waitingBefore: number; balanceAfter: number;
+  paidSoFar: number; waiting: number; balanceDue: number; rupeesPaid: number;
+  startDate: string; completionDate: string;
+};

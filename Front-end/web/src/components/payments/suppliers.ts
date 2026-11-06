@@ -1,5 +1,6 @@
 import apiClient from '@/lib/api-client';
 import type { PaymentRequest } from './api';
+import type { CreditBalance } from './credit';
 
 /**
  * The supplier directory and the admin's "to pay, by supplier" queue. The
@@ -34,9 +35,11 @@ export type Supplier = {
   bankChangedBy: string;
   updatedAt: string;
   can: { edit: boolean };
+  /** What this supplier owes us (supplier credit), per currency — worked out by the server. */
+  credit?: CreditBalance[];
 };
 
-export type SupplierInput = Omit<Supplier, 'id' | 'active' | 'bankChangedAt' | 'bankChangedBy' | 'updatedAt' | 'can' | 'payment'> & {
+export type SupplierInput = Omit<Supplier, 'id' | 'credit' | 'active' | 'bankChangedAt' | 'bankChangedBy' | 'updatedAt' | 'can' | 'payment'> & {
   payment: Omit<SupplierPayment, 'accountMasked'>;
 };
 

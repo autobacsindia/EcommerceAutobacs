@@ -47,7 +47,9 @@ export const MAX_DEAL_FOREIGN = 1000000000; // a foreign total: the same guard a
 */
 const currencyOf = (x) => (x?.currency && x.currency !== BASE_CURRENCY ? x.currency : BASE_CURRENCY);
 /** What a request is worth in its own (= the deal's) currency. */
-export const unitsOf = (r) => (currencyOf(r) === BASE_CURRENCY ? Number(r.amount) || 0 : Number(r.foreignAmount) || 0);
+// The bill: the money moved plus any supplier credit used on it (models/PaymentRequest.js `credit`).
+export const unitsOf = (r) => (currencyOf(r) === BASE_CURRENCY ? Number(r.amount) || 0 : Number(r.foreignAmount) || 0)
+  + (Number(r.credit?.amount) || 0);
 /** "₹29,000" / "THB 29,400" from hundredths. */
 export const moneyOf = (minor, currency = BASE_CURRENCY) => {
   const n = fromPaise(minor).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -68,7 +70,7 @@ const STATUS_LABELS = Object.freeze({
   declined: 'Declined',
   cancelled: 'Cancelled',
 });
-export const PART_LABELS = Object.freeze({ advance: 'Advance', part: 'Part payment', balance: 'Balance' });
+export const PART_LABELS = Object.freeze({ advance: 'Advance', part: 'Part payment', balance: 'Balance', full: 'Full payment' });
 
 // ── Who ───────────────────────────────────────────────────────────────────────
 const isAdmin = (u) => u?.role === 'admin';
@@ -121,6 +123,19 @@ const dayText = (s) => (s ? new Date(`${s}T00:00:00Z`).toLocaleDateString('en-IN
 
 // ── Views (the numbers, worked out from the requests) ───────────────────────────
 
+/**
+ * Each payment (oldest first) gets the balance left after it: agreed − the live parts
+ * up to and including it. A declined / cancelled one takes nothing (null).
+ */
+function withBalanceAfter(agreedPaise, payments) {
+  let asked = 0;
+  return payments.map((p) => {
+    if (p.status === 'declined' || p.status === 'cancelled') return { ...p, balanceAfter: null };
+    asked += toPaise(p.amount);
+    return { ...p, balanceAfter: fromPaise(Math.max(0, agreedPaise - asked)) };
+  });
+}
+
 /** A deal and its requests → what the order page shows. Pure: tested directly. */
 export function dealView(deal, requests = [], viewer = null) {
   const mine = requests.filter((r) => idOf(r.deal) === idOf(deal._id));
@@ -163,7 +178,7 @@ export function dealView(deal, requests = [], viewer = null) {
     createdByName: deal.createdByName || '',
     createdAt: deal.createdAt,
     // Oldest first: the payment timeline.
-    payments: [...mine].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt)).map((r) => ({
+    payments: withBalanceAfter(agreed, [...mine].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt)).map((r) => ({
       id: idOf(r._id),
       number: r.number,
       part: r.part || '',
@@ -176,7 +191,7 @@ export function dealView(deal, requests = [], viewer = null) {
       createdAt: r.createdAt,
       approvedAt: r.approvedAt || null,
       paidAt: r.payment?.transactionAt || r.payment?.paidAt || null,
-    })),
+    }))),
     history: (deal.history || []).map((h) => ({ at: h.at, byName: h.byName, action: h.action, note: h.note })),
     can: {
       // One part in flight at a time: the line reads "Payment Pending" until it is paid.
@@ -185,6 +200,75 @@ export function dealView(deal, requests = [], viewer = null) {
       remove: open && mayManage(viewer) && paid + waiting === 0,
     },
   };
+}
+
+/**
+ * Where ONE payment sits in its deal — what every screen and the PDF show beside it:
+ *
+ *   Agreed total THB 29,400 · this payment: Advance (1 of 1) THB 10,000
+ *   paid before it THB 0 · balance after it THB 19,400
+ *
+ * Chronological: "before" and "after" count the deal's live parts (not declined /
+ * cancelled) raised up to and including this one, so a payment's own slip reads
+ * the same whenever it is opened. Pure: tested directly. Null when it is not on the deal.
+ */
+export function partSummary(deal, requests, requestId) {
+  const v = dealView(deal, requests);
+  const me = v.payments.find((p) => p.id === idOf(requestId));
+  if (!me) return null;
+  const isLive = (p) => p.status !== 'declined' && p.status !== 'cancelled';
+  const live = v.payments.filter(isLive);
+  const at = live.findIndex((p) => p.id === me.id);
+  const before = at >= 0 ? live.slice(0, at) : live.filter((p) => +new Date(p.createdAt) < +new Date(me.createdAt));
+  const sum = (list) => list.reduce((n, p) => n + toPaise(p.amount), 0);
+  const paidBefore = sum(before.filter((p) => p.status === 'paid'));
+  const waitingBefore = sum(before.filter((p) => p.status !== 'paid'));
+  const upToMe = sum(before) + (isLive(me) ? toPaise(me.amount) : 0);
+  return {
+    dealId: v.id,
+    dealStatus: v.status,
+    supplierName: v.supplierName,
+    itemNames: v.itemNames,
+    currency: v.currency,
+    agreedTotal: v.agreedTotal,
+    partLabel: me.partLabel,
+    // 1-based among the live parts; null for a declined / cancelled one.
+    installment: at >= 0 ? at + 1 : null,
+    installments: live.length,
+    thisAmount: me.amount,
+    // The bank debit for this payment once paid (a foreign part); rupees = amount for ₹.
+    thisRupees: me.rupees,
+    paidBefore: fromPaise(paidBefore),
+    waitingBefore: fromPaise(waitingBefore),
+    balanceAfter: fromPaise(Math.max(0, deal.agreedPaise - upToMe)),
+    // The deal as it stands now.
+    paidSoFar: v.paid,
+    waiting: v.waiting,
+    balanceDue: v.balanceDue,
+    rupeesPaid: v.rupeesPaid,
+    startDate: v.startDate,
+    completionDate: v.completionDate,
+  };
+}
+
+/**
+ * partSummary for many payments at once (a list page, an order, a to-pay group):
+ * two bounded reads however many payments — their deals, and those deals' parts.
+ * Map requestId → summary; payments not on a deal are absent.
+ */
+export async function summariesFor(requests = []) {
+  const onDeal = requests.filter((r) => r?.deal);
+  const out = new Map();
+  if (!onDeal.length) return out;
+  const ids = [...new Set(onDeal.map((r) => idOf(r.deal)))];
+  const [found, parts] = await Promise.all([supplierDealRepository.findByIds(ids), requestsFor(ids)]);
+  const byId = new Map(found.map((d) => [idOf(d._id), d]));
+  for (const r of onDeal) {
+    const d = byId.get(idOf(r.deal));
+    const s = d ? partSummary(d, parts, r._id) : null;
+    if (s) out.set(idOf(r._id), s);
+  }
+  return out;
 }
 
 async function requestsFor(dealIds) {
@@ -388,6 +472,8 @@ export async function release(dealId, amountPaise, reason = '') {
 
 /** Which part this is, from the deal BEFORE the reservation. */
 export function partFor(before, amountPaise) {
+  // The whole agreed total in one payment is not a "balance" of anything.
+  if (before.reservedPaise === 0 && amountPaise >= before.agreedPaise) return 'full';
   if (before.reservedPaise + amountPaise >= before.agreedPaise) return 'balance';
   return before.reservedPaise === 0 ? 'advance' : 'part';
 }

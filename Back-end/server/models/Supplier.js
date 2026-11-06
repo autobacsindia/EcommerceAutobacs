@@ -39,6 +39,9 @@ const SupplierSchema = new mongoose.Schema(
     },
 
     active: { type: Boolean, default: true },
+    // A lock, not a balance: every change to this supplier's credit (models/SupplierLedgerEntry.js)
+    // bumps it inside its transaction, so two at once cannot both spend the same credit.
+    ledgerSeq: { type: Number, default: 0 },
     bankChangedAt: { type: Date, default: null },
     bankChangedByName: { type: String, default: '' },
     createdByName: { type: String, default: '' },

@@ -132,12 +132,22 @@ const PaymentRequestSchema = new mongoose.Schema(
       type: new mongoose.Schema({ at: Date, byName: { type: String, default: '' } }, { _id: false }),
       default: null,
     },
+    // Supplier credit used on this payment (models/SupplierLedgerEntry.js): `amount`, in
+    // this request's currency, came off what the supplier owes us, so the money moved is
+    // `amount` / `foreignAmount` (already net). The bill is net + credit (deal math uses the bill).
+    credit: {
+      type: new mongoose.Schema({
+        amount: { type: Number, required: true, min: 0.01 },
+        entry: { type: mongoose.Schema.Types.ObjectId, ref: 'SupplierLedgerEntry', required: true },
+      }, { _id: false }),
+      default: null,
+    },
 
     // A supplier payment that is one part of a made-to-order deal (models/SupplierDeal.js):
-    // 'advance' (the first part), 'part', or 'balance' (the part that completes the
-    // agreed total). Worked out by the server from the deal, never sent by the client.
+    // 'advance' (the first part), 'part', 'balance' (the part that completes the
+    // agreed total) or 'full' (the whole agreed total in one payment). Worked out by the server from the deal, never sent by the client.
     deal: { type: mongoose.Schema.Types.ObjectId, ref: 'SupplierDeal', default: null },
-    part: { type: String, enum: ['advance', 'part', 'balance', ''], default: '' },
+    part: { type: String, enum: ['advance', 'part', 'balance', 'full', ''], default: '' },
 
     files: { type: [FileSchema], default: [] },
 

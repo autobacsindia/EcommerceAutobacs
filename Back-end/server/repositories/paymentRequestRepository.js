@@ -10,7 +10,7 @@ const PENDING_RUPEES = { $sum: { $cond: [{ $lte: ['$amount', 0] }, 1, 0] } };
  * what lives in services/paymentRequestService.js.
  */
 const paymentRequestRepository = {
-  create: async (doc) => (await PaymentRequest.create(doc)).toObject(),
+  create: async (doc, session = null) => (await PaymentRequest.create([doc], { session }))[0].toObject(),
   findById: (id) => PaymentRequest.findById(id).lean(),
 
   /**
@@ -50,6 +50,7 @@ const paymentRequestRepository = {
   // `$type` repeats the partial index's filter: without it the planner may not pick the index.
   findForDeals: (dealIds) => PaymentRequest.find({ deal: { $in: dealIds, $type: 'objectId' } })
     .select('number status amount currency foreignAmount part deal createdAt approvedAt payment.paidAt payment.transactionAt')
+    .limit(2000) // bounded: ≤ a page of deals × their parts (one part in flight at a time)
     .lean(),
 
   /** A live one-off (not part of a deal) supplier request covering any of these items. */
@@ -72,7 +73,7 @@ const paymentRequestRepository = {
   findForOrder: (orderId) => PaymentRequest.find({ order: { $eq: orderId, $type: 'objectId' } })
     .sort({ createdAt: -1 })
     .limit(200) // bounded: one order's payments, far above any real order
-    .select('number status kind category team amount currency foreignAmount itemIds itemNames payee.name payment createdAt requestedBy requestedByName deal part')
+    .select('number status kind category team amount currency foreignAmount itemIds itemNames payee.name payment createdAt requestedBy requestedByName deal part credit supplier')
     .lean(),
 
   /**

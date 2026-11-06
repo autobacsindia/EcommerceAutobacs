@@ -5,13 +5,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Link2, Loader2, Paperclip, Pencil, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
 import {
-  actOn, amountText, bankCode, linkOrder, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
+  actOn, amountText, bankCode, linkOrder, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import EditPaymentRequest from './EditPaymentRequest';
 import EditPaidPayment from './EditPaidPayment';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import OrderPicker from './OrderPicker';
+import DealSummaryBox from './DealSummary';
+import { SupplierRefundLine } from './SupplierCredit';
 
 /** The server takes up to three payment screenshots per payment. */
 const MAX_PROOFS = MAX_ATTACHMENTS;
@@ -144,14 +146,28 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
         {r && (
           <div className="space-y-5">
             <div className="rounded-xl bg-gray-50 p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-500">{r.kind === 'supplier' ? 'Supplier payment' : `${categoryName(r)} expense`} · {r.teamLabel}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">{r.kind === 'supplier' ? (r.partLabel ? `Supplier payment — ${r.partLabel}` : 'Supplier payment') : `${categoryName(r)} expense`} · {r.teamLabel}</p>
               <p className="text-2xl font-bold text-gray-900">{amountText(r)}</p>
               {r.rupeesPending
                 ? <p className="text-sm text-gray-700">Rupee amount: what the bank debits — recorded when paid.</p>
                 : foreignBill(r) && <p className="text-sm text-gray-700">Bill: {foreignBill(r)}</p>}
               <p className="text-sm text-gray-600">to {r.payee.name}</p>
+              {r.credit && r.bill != null && (
+                <p className="mt-1 text-sm text-emerald-800" aria-label="Supplier credit used">
+                  Bill {money(r.bill, r.currency)} − supplier credit {money(r.credit.amount, r.currency)} = transfer {money(Math.round((r.bill - r.credit.amount) * 100) / 100, r.currency)}
+                </p>
+              )}
             </div>
+            {r.supplierRefund && (
+              <SupplierRefundLine requestId={r.id} refund={r.supplierRefund} currency={r.currency || 'INR'} bill={r.bill ?? (r.currency !== 'INR' ? r.foreignAmount ?? 0 : r.amount)} />
+            )}
 
+            {r.orderCancelled && (
+              <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
+                This order (or the item) was cancelled, so this supplier payment cannot be paid. Decline it.
+              </p>
+            )}
+            {r.deal && <DealSummaryBox d={r.deal} />}
             {r.bankNotice && r.status !== 'paid' && (
               <p role="status" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
                 ⚠️ This supplier&apos;s bank details were changed on {formatDateTimeIST(r.bankNotice.at)} by {r.bankNotice.byName || 'someone'}. Confirm them with the supplier by phone before paying.

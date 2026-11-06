@@ -8,6 +8,7 @@ import { ListClear, ListResultLine, ListSearch, ListSelect } from '@/components/
 import { errorMessage } from './api';
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
 import { payLine } from './SupplierPicker';
+import { OwesBadge, SupplierCreditPanel } from './SupplierCredit';
 import {
   createSupplier, listSuppliers, setSupplierActive, supplierKeys, updateSupplier,
   type Supplier, type SupplierInput,
@@ -133,6 +134,7 @@ function SupplierCard({ s, onEdit }: { s: Supplier; onEdit: () => void }) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showCredit, setShowCredit] = useState(false);
   async function toggle() {
     setBusy(true);
     try { await setSupplierActive(s.id, !s.active); await qc.invalidateQueries({ queryKey: supplierKeys.all }); } catch (err) { setError(errorMessage(err, 'Could not change it.')); } finally { setBusy(false); }
@@ -147,16 +149,23 @@ function SupplierCard({ s, onEdit }: { s: Supplier; onEdit: () => void }) {
             {payLine(s)}
           </p>
           {s.gstin && <p className="text-xs text-gray-500">GST {s.gstin}</p>}
+          <OwesBadge balances={s.credit} />
           {s.bankChangedAt && <p className="text-xs text-amber-700">Bank details changed {new Date(s.bankChangedAt).toLocaleDateString('en-IN')} by {s.bankChangedBy}</p>}
         </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" aria-expanded={showCredit} onClick={() => setShowCredit(!showCredit)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
+            {showCredit ? 'Hide credit' : 'Credit'}
+          </button>
         {s.can.edit && (
-          <div className="flex gap-2">
+          <>
             <button type="button" onClick={onEdit} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"><Pencil className="h-3.5 w-3.5" /> Edit</button>
             <button type="button" disabled={busy} onClick={toggle} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50">{s.active ? 'Mark inactive' : 'Reactivate'}</button>
-          </div>
+          </>
         )}
+        </div>
       </div>
       {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
+      {showCredit && <SupplierCreditPanel supplierId={s.id} />}
     </li>
   );
 }

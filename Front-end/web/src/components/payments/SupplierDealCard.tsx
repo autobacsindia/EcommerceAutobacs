@@ -6,8 +6,9 @@ import { CalendarClock, Factory, FileText, Pencil, Plus, Trash2 } from 'lucide-r
 import type { WorkOrder } from '@/components/staff/work/types';
 import apiClient from '@/lib/api-client';
 import { formatDateIST } from '@/lib/datetime';
-import { errorMessage, money, paymentKeys, rupees, slipHref, STATUS_TONE, type OrderPayment, type SupplierDeal } from './api';
+import { dayText, errorMessage, money, paymentKeys, rupees, slipHref, STATUS_TONE, type OrderPayment, type SupplierDeal } from './api';
 import PaymentRequestForm from './PaymentRequestForm';
+import PaymentRequestDetail from './PaymentRequestDetail';
 
 type Line = WorkOrder['lines'][number];
 
@@ -16,10 +17,7 @@ const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gra
 const primary = 'inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50';
 const secondary = 'inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50';
 
-/** 'YYYY-MM-DD' → "8 Nov 2026" (a calendar day: no time zone shift). */
-export const dayText = (d: string) => (d
-  ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
-  : 'Not set');
+export { dayText };
 
 const lineName = (l: Line) => (l.variantLabel ? `${l.name} — ${l.variantLabel}` : l.name);
 const closedByOf = (o: WorkOrder) => (o.source === 'sales' ? `GTM lead: ${o.soldBy}` : 'Website');
@@ -113,6 +111,8 @@ export default function SupplierDealCard({ order, deal, requests }: { order: Wor
   const refresh = useRefresh(order.id);
   const [mode, setMode] = useState<'view' | 'pay' | 'edit'>('view');
   const [error, setError] = useState('');
+  // A part opened from the timeline: its detail (edit / cancel while it waits, receipt once paid).
+  const [openId, setOpenId] = useState<string | null>(null);
   const previous = [...requests].filter((r) => r.dealId === deal.id && r.status !== 'declined' && r.status !== 'cancelled')
     .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))[0];
   const dateChanges = deal.history.filter((h) => h.action === 'changed');
@@ -181,9 +181,10 @@ export default function SupplierDealCard({ order, deal, requests }: { order: Wor
               </span>
               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_TONE[p.status]}`}>{p.statusLabel}</span>
               <span className="text-xs text-gray-500">
-                {p.number} · raised {formatDateIST(p.createdAt)}
+                <button type="button" onClick={() => setOpenId(p.id)} className="font-medium text-blue-700 hover:underline">{p.number}</button> · raised {formatDateIST(p.createdAt)}
                 {p.approvedAt ? ` · approved ${formatDateIST(p.approvedAt)}` : ''}
                 {p.paidAt ? ` · paid ${formatDateIST(p.paidAt)}` : ''}
+                {p.balanceAfter != null ? ` · balance after ${money(p.balanceAfter, deal.currency)}` : ''}
               </span>
               <a href={slipHref(p.id)} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-gray-600 hover:underline">
                 <FileText className="h-3.5 w-3.5" /> {p.status === 'paid' ? 'Receipt' : 'Slip'}
@@ -212,6 +213,7 @@ export default function SupplierDealCard({ order, deal, requests }: { order: Wor
       {mode === 'view' && !deal.can.raise && deal.waiting > 0 && !deal.fullyPaid && (
         <p className="text-xs text-gray-500">The next payment can be raised once this one is paid.</p>
       )}
+      {openId && <PaymentRequestDetail id={openId} onClose={() => { setOpenId(null); refresh(); }} />}
       {mode === 'edit' && <EditDealForm deal={deal} onCancel={() => setMode('view')} onDone={() => { setMode('view'); refresh(); }} />}
       {mode === 'pay' && (
         <PaymentRequestForm

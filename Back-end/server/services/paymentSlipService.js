@@ -27,6 +27,43 @@ const ACTION_LABELS = {
 };
 const METHOD_LABELS = { razorpay: 'Razorpay', bank: 'Bank transfer', upi: 'UPI', other: 'Other' };
 const dateTime = (d) => formatDateTimeIST(d);
+/** An amount in a deal's currency: "Rs 29,000.00" / "THB 29,400.00". */
+const dealMoney = (n, cur) => (!cur || cur === BASE_CURRENCY ? money(n) : `${cur} ${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+/** 'YYYY-MM-DD' → "20 Nov 2026" (a calendar day). */
+const dayText = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'not set');
+
+/**
+ * The deal lines on a slip (paymentRequestService.loadForSlip → supplierDealService.partSummary):
+ * the full picture, not just this payment. Exported for tests.
+ */
+/**
+ * Supplier credit used on this payment: the bill, the credit, what is transferred.
+ * Exported for tests.
+ */
+export function creditRows(r) {
+  const used = Number(r?.credit?.amount) || 0;
+  if (!used) return [];
+  const cur = r.currency || BASE_CURRENCY;
+  const moved = cur === BASE_CURRENCY ? Number(r.amount) || 0 : Number(r.foreignAmount) || 0;
+  return [
+    ['Bill', dealMoney(Math.round((moved + used) * 100) / 100, cur)],
+    ['Supplier credit used', `− ${dealMoney(used, cur)} (refund they owed us)`],
+    ['Transfer', dealMoney(moved, cur)],
+  ];
+}
+
+export function dealRows(d) {
+  if (!d) return [];
+  const cur = d.currency;
+  return [
+    ['Agreed total', `${dealMoney(d.agreedTotal, cur)} with ${d.supplierName}`],
+    ['This payment', `${d.partLabel}${d.installment ? ` (payment ${d.installment} of ${d.installments})` : ''} · ${dealMoney(d.thisAmount, cur)}${cur !== BASE_CURRENCY && d.thisRupees != null ? ` (${money(d.thisRupees)} debited)` : ''}`],
+    ['Paid before this', dealMoney(d.paidBefore, cur) + (d.waitingBefore > 0 ? ` (+ ${dealMoney(d.waitingBefore, cur)} not yet paid)` : '')],
+    ['Balance after this', dealMoney(d.balanceAfter, cur)],
+    ['Deal today', `paid ${dealMoney(d.paidSoFar, cur)}${cur !== BASE_CURRENCY && d.rupeesPaid > 0 ? ` (${money(d.rupeesPaid)} debited)` : ''} · balance due ${dealMoney(d.balanceDue, cur)}`],
+    ['Dates', `advance paid ${d.startDate ? dayText(d.startDate) : 'not yet'} · completion ${dayText(d.completionDate)}`],
+  ];
+}
 const foreignMoney = (r) => `${r.currency} ${Number(r.foreignAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 /**
  * A foreign bill: "THB 10,000.00 at Rs 2.45 per THB = Rs 24,500.00" once its rupees
@@ -85,12 +122,38 @@ export async function renderPaymentSlip(r) {
 
       // Amount block
       doc.roundedRect(L, y, R - L, 64, 8).fill(C.zebra);
-      doc.font(FONT).fontSize(9).fillColor(C.muted).text(r.kind === 'supplier' ? 'SUPPLIER PAYMENT' : `${categoryLabel(r.category).toUpperCase()} EXPENSE`, L + 16, y + 12, { characterSpacing: 1 });
+      doc.font(FONT).fontSize(9).fillColor(C.muted).text(r.kind === 'supplier' ? `SUPPLIER PAYMENT${r.dealSummary?.partLabel ? ` — ${r.dealSummary.partLabel.toUpperCase()}` : ''}` : `${categoryLabel(r.category).toUpperCase()} EXPENSE`, L + 16, y + 12, { characterSpacing: 1 });
       // A foreign bill not yet paid has no rupee figure: the bill is the amount.
       const pending = rupeesPending(r);
       doc.font(FONT_BOLD).fontSize(22).fillColor(C.ink).text(pending ? foreignMoney(r) : money(r.amount), L + 16, y + 26, { lineBreak: false });
       doc.font(FONT).fontSize(8.6).fillColor(C.body).text(pending ? 'Rupee amount: what the bank debits, recorded when paid' : rupeesInWords(r.amount), L + 200, y + 34, { width: R - L - 216, align: 'right' });
       y += 80;
+
+      // Supplier credit: the amount above is what is transferred; say why it is less than the bill.
+      const credits = creditRows(r);
+      if (credits.length) {
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor(C.brand).text('SUPPLIER CREDIT USED', L, y, { characterSpacing: 1.2 });
+        let yy = doc.y + 4;
+        for (const [k, v] of credits) {
+          doc.font(FONT).fontSize(8.2).fillColor(C.muted).text(k, L, yy, { width: 110 });
+          doc.font(k === 'Transfer' ? FONT_BOLD : FONT).fontSize(9).fillColor(C.ink).text(v, L + 112, yy, { width: R - L - 112 });
+          yy = Math.max(doc.y, yy + 12) + 3;
+        }
+        y = yy + 12;
+      }
+
+      // Made to order, paid in parts: the whole deal, so the slip is never just "THB 10,000".
+      const rows = dealRows(r.dealSummary);
+      if (rows.length) {
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor(C.brand).text('MADE TO ORDER — PAID IN PARTS', L, y, { characterSpacing: 1.2 });
+        let yy = doc.y + 4;
+        for (const [k, v] of rows) {
+          doc.font(FONT).fontSize(8.2).fillColor(C.muted).text(k, L, yy, { width: 110 });
+          doc.font(k === 'Balance after this' ? FONT_BOLD : FONT).fontSize(9).fillColor(C.ink).text(v, L + 112, yy, { width: R - L - 112 });
+          yy = Math.max(doc.y, yy + 12) + 3;
+        }
+        y = yy + 12;
+      }
 
       // Two columns: request / payee
       const colW = (R - L - 24) / 2;

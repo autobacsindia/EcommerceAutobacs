@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2 } from 'lucide-react';
+import { LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -32,7 +32,9 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
   */
   const paid: NavItem = { href: '/team/orders', label: 'Order processing', icon: BadgeCheck };
   const delivered: NavItem = { href: '/team/orders/delivered', label: 'Delivered', icon: PackageCheck };
-  // GTM: the head and leads sell; executives and customer support have no tools yet.
+  // GTM: everyone sees the leads sheet; only the head and leads take one (the API decides).
+  if (team === 'sales') nav.push({ href: '/team/leads', label: 'Leads', icon: Contact });
+  // GTM: the head and leads sell; executives and customer support have no other tools yet.
   if (team === 'sales' && canSell) {
     nav.push(
       { href: '/team/sales/new', label: 'New quotation', icon: PlusCircle },
