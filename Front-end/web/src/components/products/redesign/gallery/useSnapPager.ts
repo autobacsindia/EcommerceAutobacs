@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { offsetInScroller } from './offsetInScroller';
 
 /**
  * Two-way binding between a CSS scroll-snap strip and an `active` index.
@@ -98,7 +99,7 @@ export function useSnapPager({
       // customer for the full safety timeout: the mount effect below always
       // calls this, and on the common "opens at slide 1" path it is a scroll
       // from 0 to 0.
-      if (Math.abs(el.scrollLeft - target.offsetLeft) < 2) return;
+      if (Math.abs(el.scrollLeft - offsetInScroller(target, el)) < 2) return;
 
       // The strip is being sent somewhere; whatever the customer last scrolled
       // to is now history and must not suppress a later move back to it.
@@ -107,7 +108,7 @@ export function useSnapPager({
       if (pendingTimerRef.current != null) clearTimeout(pendingTimerRef.current);
       pendingTimerRef.current = window.setTimeout(releasePending, PROGRAMMATIC_SCROLL_TIMEOUT_MS);
 
-      el.scrollTo({ left: target.offsetLeft, behavior });
+      el.scrollTo({ left: offsetInScroller(target, el), behavior });
     },
     [releasePending]
   );
@@ -210,7 +211,7 @@ export function useSnapPager({
     const target = el?.children[active] as HTMLElement | undefined;
     if (!el || !target) return;
     // Cheap second line of defence for a settled strip that is already in place.
-    if (Math.abs(el.scrollLeft - target.offsetLeft) < 2) return;
+    if (Math.abs(el.scrollLeft - offsetInScroller(target, el)) < 2) return;
     scrollToIndex(active, smooth ? 'smooth' : 'auto');
   }, [active, smooth, scrollToIndex]);
 

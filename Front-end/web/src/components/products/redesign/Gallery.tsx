@@ -10,6 +10,23 @@ import type { GalleryImage } from './gallery/types';
 export type { GalleryImage };
 
 /**
+ * Procurement's standard wording. Shown under every product's photos: batches
+ * differ slightly in colour and finish, and the photo may be of an earlier one.
+ */
+export const REPRESENTATIVE_IMAGE_NOTE =
+  'Images are for representative purposes only. Products may slightly vary in colour and finish based on the product batch.';
+
+/**
+ * Plain text in normal flow, rendered on the server with the gallery, so it
+ * reserves its own space from first paint — no layout shift when it appears.
+ */
+function ImageNote() {
+  return (
+    <p className="text-[12px] leading-snug text-ink-muted">{REPRESENTATIVE_IMAGE_NOTE}</p>
+  );
+}
+
+/**
  * PDP gallery (obsidian + gold).
  *
  * Three presentations over one selection state:
@@ -81,8 +98,11 @@ export default function Gallery({
 
   if (images.length === 0) {
     return (
-      <div className="flex aspect-square w-full items-center justify-center border border-hairline bg-obsidian-raised text-[12px] uppercase tracking-[0.12em] text-ink-muted font-semibold">
-        No image
+      <div className="flex flex-col gap-4">
+        <div className="flex aspect-square w-full items-center justify-center border border-hairline bg-obsidian-raised text-[12px] uppercase tracking-[0.12em] text-ink-muted font-semibold">
+          No image
+        </div>
+        <ImageNote />
       </div>
     );
   }
@@ -119,6 +139,8 @@ export default function Gallery({
           onSelect={setActive}
         />
       )}
+
+      <ImageNote />
 
       <GalleryLightbox
         images={images}
