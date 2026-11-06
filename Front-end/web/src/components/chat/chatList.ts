@@ -66,21 +66,27 @@ export function listWhen(iso: string, now = new Date()): string {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-/** The sidebar's sections, as Google Chat's left column: what kind of chat it is. */
-export type SectionKey = 'dms' | 'groups' | 'spaces' | 'teams';
+/**
+ * The sidebar's sections, as Google Chat's left column: what kind of chat it is.
+ * There is no separate "Groups" section: a chat with a few people you picked is
+ * listed under Spaces, beside the team and topic spaces, because to the people
+ * using it there is no difference. On the server they stay what they are (a
+ * group is a private conversation admins cannot read unless they are in it;
+ * a space is open to admins), so nothing is moved or converted.
+ */
+export type SectionKey = 'dms' | 'spaces' | 'teams';
 export const SECTIONS: { key: SectionKey; label: string; hint: string }[] = [
   { key: 'dms', label: 'Direct messages', hint: 'Chats with one person' },
-  { key: 'groups', label: 'Groups', hint: 'Chats with a few people you picked' },
-  { key: 'spaces', label: 'Spaces', hint: 'The whole company, your team, and topic spaces' },
+  { key: 'spaces', label: 'Spaces', hint: 'The whole company, your team, topic spaces and chats with a few people' },
   { key: 'teams', label: 'Between teams', hint: 'Private chats between two whole teams' },
 ];
 
 export const sectionOf = (c: ChatChannel): SectionKey =>
-  c.kind === 'dm' ? (c.group ? 'groups' : 'dms') : c.audience === 'teams' ? 'teams' : 'spaces';
+  c.kind === 'dm' ? (c.group ? 'spaces' : 'dms') : c.audience === 'teams' ? 'teams' : 'spaces';
 
 /** Every chat in its section, newest first; never-used chats last, by name. */
 export function sectionsOf(channels: ChatChannel[]): Record<SectionKey, ChatChannel[]> {
-  const out: Record<SectionKey, ChatChannel[]> = { dms: [], groups: [], spaces: [], teams: [] };
+  const out: Record<SectionKey, ChatChannel[]> = { dms: [], spaces: [], teams: [] };
   for (const c of channels) out[sectionOf(c)].push(c);
   const order = (a: ChatChannel, b: ChatChannel) =>
     (isEmpty(a) ? 1 : 0) - (isEmpty(b) ? 1 : 0) || at(b) - at(a) || a.name.localeCompare(b.name);

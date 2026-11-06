@@ -82,10 +82,11 @@ describe('sections', () => {
   it('one person → Direct messages, a few → Groups, two teams → Between teams, the rest → Spaces', () => {
     const s = sectionsOf(mixed);
     expect(ids(s.dms)).toEqual(['dm']);
-    expect(ids(s.groups)).toEqual(['grp']);
+    expect(ids(s.spaces)).toContain('grp');
+    expect('groups' in s).toBe(false);
     expect(ids(s.teams)).toEqual(['pair']);
     // Newest first; a never-used space goes last.
-    expect(ids(s.spaces)).toEqual(['busy', 'company', 'quiet']);
+    expect(ids(s.spaces)).toEqual(['busy', 'grp', 'company', 'quiet']);
   });
 
   it('shows the first 7, plus the open chat and any with someone waiting, and counts the rest', () => {

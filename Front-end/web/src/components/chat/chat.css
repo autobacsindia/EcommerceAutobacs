@@ -272,3 +272,40 @@
 .gc-theme .pn-title { font-family: inherit; font-weight: 400; letter-spacing: 0; font-size: 18px; }
 /* Fields and buttons don't inherit fonts by default. */
 .gc-theme button, .gc-theme input, .gc-theme textarea { font-family: inherit; }
+
+/*
+  Wide chat (computers): the sections and the Home list slide shut so the open
+  conversation fills the chat area; the handle on the line between them opens
+  them again. A shut pane keeps its natural width inside (min-width) so its
+  contents slide away instead of squashing, and its negative margin cancels
+  the flex gap it would otherwise leave. `visibility` flips only after the
+  slide, which also takes the shut pane out of the Tab order and screen readers.
+*/
+@media (min-width: 1024px) {
+  .gc-collapse {
+    overflow: hidden;
+    transition: width 0.22s ease, opacity 0.18s ease, margin 0.22s ease, visibility 0s linear 0s;
+  }
+  .gc-collapse > * { min-width: var(--gc-pane-w, auto); }
+  .gc-collapse[data-collapsed='true'] {
+    width: 0 !important;
+    min-width: 0 !important;
+    flex: 0 0 0 !important;
+    margin-right: -0.5rem;
+    opacity: 0;
+    visibility: hidden;
+    transition: width 0.22s ease, opacity 0.18s ease, margin 0.22s ease, visibility 0s linear 0.22s;
+  }
+  .gc-divider { transition: margin 0.22s ease; }
+}
+.gc-divider-btn {
+  background: var(--gc-card);
+  box-shadow: var(--gc-card-shadow);
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.gc-divider-btn:hover { background: var(--gc-hover); }
+.gc-divider-btn:focus-visible { outline: 2px solid #0b57d0; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .gc-collapse, .gc-collapse[data-collapsed='true'], .gc-divider { transition: none; }
+}

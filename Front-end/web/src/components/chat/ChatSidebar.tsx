@@ -3,7 +3,8 @@
 /**
  * The chat's left column, laid out as Google Chat's: a "New chat" button, a
  * search field, Shortcuts (Home, Mentions, Threads, Starred), then one section
- * per kind of chat — Direct messages, Groups, Spaces, Between teams. Each
+ * per kind of chat — Direct messages, Spaces (groups of a few people
+ * included), Between teams. Each
  * section folds and unfolds with its arrow, shows its unread count beside the
  * title, and keeps long lists short behind "Show all".
  *
@@ -225,7 +226,7 @@ export default function ChatSidebar({
                 {rows.map(item)}
                 {!list.length && (
                   <li className="py-1 pl-11 pr-3 text-[13px] text-gray-500">
-                    {key === 'groups' ? 'Use “New chat” and pick a few people.' : key === 'dms' ? 'Use “New chat” to message someone.' : 'Nothing here yet.'}
+                    {key === 'dms' ? 'Use “New chat” to message someone.' : key === 'spaces' ? 'Use “New chat” and pick a few people, or create a space.' : 'Nothing here yet.'}
                   </li>
                 )}
               </ul>
