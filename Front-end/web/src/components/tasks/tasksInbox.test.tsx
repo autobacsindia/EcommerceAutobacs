@@ -139,8 +139,8 @@ describe('finding the Inbox', () => {
     const button = within(screen.getByRole('navigation', { name: 'Task lists' })).getByRole('button', { name: /^Inbox/ });
     await waitFor(() => expect(button).toHaveTextContent('99+'));
     expect(button).toHaveAttribute('aria-pressed', 'true');
-    // "Assigned to me" is not also lit.
-    expect(screen.getByRole('button', { name: 'Assigned to me' })).toHaveAttribute('aria-pressed', 'false');
+    // "My tasks" is not also lit.
+    expect(screen.getByRole('button', { name: 'My tasks' })).toHaveAttribute('aria-pressed', 'false');
   });
 });
 

@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import TasksWorkspace from '@/components/tasks/TasksWorkspace';
 
 /**
- * Tasks: what I have to do, what I gave out, and my team's space — its folders,
+ * Tasks: what I have to do, what I assigned to others, and my team's space — its folders,
  * lists and every task in it. Anyone in the panel gives tasks to anyone; the team
  * head arranges the space.
  */

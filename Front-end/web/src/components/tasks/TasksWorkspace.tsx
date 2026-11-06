@@ -72,7 +72,7 @@ function HowItWorks({ onHide }: { onHide: () => void }) {
         <p className="font-semibold text-gray-900">How tasks work</p>
         <p className="mt-0.5 leading-relaxed">
           Press <strong>New task</strong> (or the N key), choose who should do it — yourself or anyone in the panel — and pick a due date.
-          They get a pop-up and find it under Assigned to me. Tick the circle when a job is done; open a task to comment, add steps or change it.
+          They get a pop-up and find it under <strong>My tasks</strong>; the tasks you gave to others are under <strong>Assigned by me</strong>. Tick the circle when a job is done; open a task to comment, add steps or change it.
         </p>
       </div>
       <button onClick={onHide} aria-label="Hide how tasks work" className="absolute right-2 top-2 rounded-md p-1 text-gray-500 hover:bg-blue-100 hover:text-gray-800">
@@ -142,7 +142,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   // Trash (?view=trash): deleted tasks — the ones this person gave out, or their team's / every team's.
   const inTrash = lp.view === 'trash';
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>('all');
-  // A view this person cannot see (an old or shared link) falls back to "Assigned to me".
+  // A view this person cannot see (an old or shared link) falls back to "My tasks".
   const view: TaskView = inTrash ? (isAdmin || isHead ? 'team' : 'created') : lp.view === 'created' || lp.view === 'following' || (lp.view === 'team' && canSeeTeam) ? lp.view : 'mine';
   // The admin's team view: one team, or '' for all of them.
   const team = view === 'team' && isAdmin && SPACES.some((sp) => sp.value === lp.team) ? lp.team : '';
@@ -156,10 +156,10 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const tag = lp.tag;
   const sort = asSort(lp.sort);
   const q = lp.q;
-  // "Today & overdue" is Assigned to me with the bell's filter: late or due today.
+  // "Today & overdue" is My tasks with the bell's filter: late or due today.
   const dueNow = !inInbox && !inTrash && view === 'mine' && due === 'late';
-  // Leaving "Today & overdue" (Assigned to me + the Late filter) drops that filter too,
-  // or "Assigned to me" would look dead: same list, same filter, nothing changes.
+  // Leaving "Today & overdue" (My tasks + the Late filter) drops that filter too,
+  // or "My tasks" would look dead: same list, same filter, nothing changes.
   const setView = (v: TaskView, nextTeam = '') => setList({ view: v, team: v === 'team' ? nextTeam : '', list: '', ...(dueNow ? { due: '' } : {}) });
   // A team's space in the side menu: the whole team, one list, or 'none' (Other tasks).
   const pickList = (t: string, l: string) => setList({ view: 'team', team: isAdmin ? t : '', list: l, assignee: '', ...(dueNow ? { due: '' } : {}) });
@@ -208,9 +208,9 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const people = useAssignees();
 
   const views: { value: TaskView; label: string }[] = [
-    { value: 'mine', label: 'Assigned to me' },
+    { value: 'mine', label: 'My tasks' },
     { value: 'following', label: 'Following' },
-    { value: 'created', label: 'I gave out' },
+    { value: 'created', label: 'Assigned by me' },
     ...(canSeeTeam ? [{ value: 'team' as const, label: isAdmin ? 'All teams' : 'My team' }] : []),
   ];
   const filters: TaskFilters = { view, due, priority, q, tag, sort, assignee, team, list };
@@ -279,7 +279,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
   const shownList = list && list !== 'none' ? allLists(spaceData).find((l) => l.id === list) : undefined;
   const listTitle = list === 'none' ? 'Other tasks' : shownList?.name ?? (list ? 'List' : '');
   const spaceLabel = space?.label || (spaceTeam === myTeam ? myTeamLabel : '') || spaceData?.teamLabel || '';
-  const title = inInbox ? 'Inbox' : inTrash ? 'Trash' : listTitle ? listTitle : view === 'team' && space ? `${space.label} tasks` : view === 'team' && !isAdmin && myTeamLabel ? `${myTeamLabel} tasks` : dueNow ? 'Today & overdue' : view === 'mine' ? 'Assigned to me' : (views.find((v) => v.value === view) ?? views[0]).label;
+  const title = inInbox ? 'Inbox' : inTrash ? 'Trash' : listTitle ? listTitle : view === 'team' && space ? `${space.label} tasks` : view === 'team' && !isAdmin && myTeamLabel ? `${myTeamLabel} tasks` : dueNow ? 'Today & overdue' : view === 'mine' ? 'My tasks' : (views.find((v) => v.value === view) ?? views[0]).label;
   const late = summary.data?.late ?? 0;
   const today = summary.data?.today ?? 0;
   const VIEW_ICONS: Record<TaskView, typeof Inbox> = { mine: Inbox, following: Eye, created: Send, team: Users };
