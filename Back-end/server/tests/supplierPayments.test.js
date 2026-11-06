@@ -401,13 +401,15 @@ describe('Supplier directory and one-transfer payments', () => {
       expect((await head.session.put(`/payment-requests/${r.id}`, { description: 'Invoice 77 (head)' })).status).toBe(200);
     });
 
-    it('no time limit — still editable days later — but not once accounts approves', async () => {
+    it('no time limit — still editable days later — and after approval too, going back to accounts (owner 2026-11-06)', async () => {
       const r = (await raised({ amount: 1000, payee: OTHER_BANK })).body.request;
       await PaymentRequest.collection.updateOne({ _id: new mongoose.Types.ObjectId(r.id) }, { $set: { createdAt: new Date(Date.now() - 5 * 24 * 3600 * 1000) } });
       expect((await procurement.session.put(`/payment-requests/${r.id}`, { amount: 1100 })).status).toBe(200);
       const r2 = (await raised({ amount: 500, payee: OTHER_BANK })).body.request;
       await accounts.session.post(`/payment-requests/${r2.id}/approve`);
-      expect((await procurement.session.put(`/payment-requests/${r2.id}`, { amount: 600 })).status).toBe(403);
+      const again = await procurement.session.put(`/payment-requests/${r2.id}`, { amount: 600 });
+      expect(again.status).toBe(200);
+      expect(again.body.request.status).toBe('submitted');
     });
 
     it('the admin edits any unpaid one; changing the money sends it back to accounts; paid is never edited', async () => {

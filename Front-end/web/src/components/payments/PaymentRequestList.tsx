@@ -12,6 +12,7 @@ import {
   amountText, categoryName, errorMessage, foreignBill, getListFilterOptions, listRequests, paymentKeys, rupees, STATUS_TONE,
 } from './api';
 import PaymentRequestDetail from './PaymentRequestDetail';
+import { DealLine } from './DealSummary';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import { STAFF_TEAM_LABELS } from '@/lib/staffTeams';
 
@@ -176,7 +177,9 @@ export default function PaymentRequestList({
                   <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-900">
                     <span className="truncate">{r.number} · {r.kind === 'supplier' ? `Supplier — ${r.payee.name}` : `${categoryName(r)} — ${r.payee.name}`}</span>
                     {r.kind === 'supplier' && <OrderTypeTag type="procurement" />}
+                    {r.partLabel && <span className="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-800">{r.partLabel}</span>}
                   </p>
+                  {r.deal && <DealLine d={r.deal} />}
                   <p className="truncate text-xs text-gray-500">
                     {r.teamLabel} · {r.requestedBy} · {formatDateIST(r.createdAt)}{r.order ? ` · ${r.order.number}` : ''}
                     {r.payment?.reference ? ` · Ref ${r.payment.reference}` : ''}

@@ -12,6 +12,7 @@ import EditPaymentRequest from './EditPaymentRequest';
 import EditPaidPayment from './EditPaidPayment';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import OrderPicker from './OrderPicker';
+import DealSummaryBox from './DealSummary';
 
 /** The server takes up to three payment screenshots per payment. */
 const MAX_PROOFS = MAX_ATTACHMENTS;
@@ -144,7 +145,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
         {r && (
           <div className="space-y-5">
             <div className="rounded-xl bg-gray-50 p-4">
-              <p className="text-xs uppercase tracking-wide text-gray-500">{r.kind === 'supplier' ? 'Supplier payment' : `${categoryName(r)} expense`} · {r.teamLabel}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">{r.kind === 'supplier' ? (r.partLabel ? `Supplier payment — ${r.partLabel}` : 'Supplier payment') : `${categoryName(r)} expense`} · {r.teamLabel}</p>
               <p className="text-2xl font-bold text-gray-900">{amountText(r)}</p>
               {r.rupeesPending
                 ? <p className="text-sm text-gray-700">Rupee amount: what the bank debits — recorded when paid.</p>
@@ -152,6 +153,12 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               <p className="text-sm text-gray-600">to {r.payee.name}</p>
             </div>
 
+            {r.orderCancelled && (
+              <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
+                This order (or the item) was cancelled, so this supplier payment cannot be paid. Decline it.
+              </p>
+            )}
+            {r.deal && <DealSummaryBox d={r.deal} />}
             {r.bankNotice && r.status !== 'paid' && (
               <p role="status" className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
                 ⚠️ This supplier&apos;s bank details were changed on {formatDateTimeIST(r.bankNotice.at)} by {r.bankNotice.byName || 'someone'}. Confirm them with the supplier by phone before paying.

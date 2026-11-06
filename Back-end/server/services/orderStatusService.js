@@ -4,7 +4,7 @@
  */
 
 import mongoose from 'mongoose';
-import { advanceBlockReason } from './supplierAdvanceGuard.js';
+import { advanceBlockReason, withdrawWaitingSupplierPayments } from './supplierAdvanceGuard.js';
 import { initialWorkflow } from '../utils/teamWorkflow.js';
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
@@ -389,6 +389,11 @@ class OrderStatusService {
       // callers and tests — but never fatal, because a reward is not worth failing a
       // legitimate status transition over.
       if (!(session && deferSpinVoid)) await this._voidSpinRewardOnStatus(order, newStatus, session);
+
+      // Supplier payments still waiting for accounts on a cancelled order are withdrawn.
+      // Not inside a caller's transaction (it could still abort): those callers cancel
+      // unpaid orders only, which never have a supplier payment.
+      if (newStatus === 'cancelled' && !session) await withdrawWaitingSupplierPayments(order, `order cancelled (${reason || 'no reason given'})`);
 
       return {
         success: true,

@@ -223,6 +223,31 @@ describe('WorkOrderPanel', () => {
     expect(JSON.parse((fetchMock.mock.calls[0][1].body as FormData).get('itemIds') as string)).toEqual(['i2']);
   });
 
+  it('a made-to-order item with its supplier balance unpaid is not offered for shipping — the rest still are', async () => {
+    // Regression: it was ticked under "ship all", and the server then refused the whole parcel.
+    const two = {
+      ...base, canShip: true, lines: [
+        { ...base.lines[0], stage: 'with_supplier' as const, actions: ['ship' as const] },
+        { ...base.lines[0], itemId: 'i2', name: 'Floor mat', stage: 'with_supplier' as const, actions: ['ship' as const] },
+      ],
+    };
+    const deal = { id: 'd1', itemIds: ['i1'], itemNames: ['Snorkel'], fullyPaid: false, balanceDue: 19000, currency: 'INR', payments: [], history: [], can: { raise: false, edit: false, remove: false } };
+    get.mockImplementation((url: string) => Promise.resolve(url.startsWith('/payment-requests/order/')
+      ? { requests: [], deals: [deal] }
+      : { success: true, order: two }));
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, order: base }) });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    renderPanel();
+
+    const held = await screen.findByRole('list', { name: 'Waiting for the supplier balance' });
+    expect(held).toHaveTextContent('Snorkel: Supplier balance ₹19,000 not paid yet — ship once it is paid.');
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'proof.jpg', { type: 'image/jpeg' });
+    fireEvent.change(screen.getByLabelText('Dispatch photo'), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Upload proof & mark shipped' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse((fetchMock.mock.calls[0][1].body as FormData).get('itemIds') as string)).toEqual(['i2']);
+  });
+
   it('records "Our warehouse" on an item', async () => {
     get.mockResolvedValue({ success: true, order: { ...base, lines: [{ ...base.lines[0], actions: ['in_stock', 'own_stock', 'ordered', 'out_of_stock'] }] } });
     post.mockResolvedValue({ success: true, order: base });
