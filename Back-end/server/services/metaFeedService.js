@@ -62,9 +62,9 @@ function availability(stock) {
  * shared helper; here we keep only the two fields Meta rows carry (the helper's
  * numeric `effectiveRupees` is a Google-side validity check).
  */
-function priceFields(source) {
-  const { price, salePrice } = sharedPriceFields(source);
-  return { price, salePrice };
+function priceFields(source, festivalOffer = null) {
+  const { price, salePrice, salePriceEffectiveDate } = sharedPriceFields(source, festivalOffer);
+  return { price, salePrice, salePriceEffectiveDate };
 }
 
 function primaryImage(product) {
@@ -91,7 +91,7 @@ function productLink(product, siteUrl) {
  * item_group_id). A variable product with no variants degrades to a simple row.
  * Rows are plain objects so they can be asserted in tests before serialization.
  */
-export function buildItemsForProduct(product, { siteUrl, defaultBrand }) {
+export function buildItemsForProduct(product, { siteUrl, defaultBrand, festivalOffer = null }) {
   const link = productLink(product, siteUrl);
   const image = primaryImage(product);
   // Meta requires image_link; skip an item entirely if it has no usable image.
@@ -136,7 +136,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand }) {
       customLabel0: variant.label,
       sku: variant.sku || product.sku || null,
       availability: availability(variant.stock),
-      ...priceFields(variant),
+      ...priceFields(variant, festivalOffer),
     }));
   }
 
@@ -149,7 +149,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand }) {
       customLabel0: null,
       sku: product.sku || null,
       availability: availability(product.stock),
-      ...priceFields(product),
+      ...priceFields(product, festivalOffer),
     },
   ];
 }
@@ -168,6 +168,9 @@ function serializeItem(item) {
     `<g:availability>${item.availability}</g:availability>`,
     `<g:price>${escapeXml(item.price)}</g:price>`,
     item.salePrice ? `<g:sale_price>${escapeXml(item.salePrice)}</g:sale_price>` : null,
+    item.salePriceEffectiveDate
+      ? `<g:sale_price_effective_date>${escapeXml(item.salePriceEffectiveDate)}</g:sale_price_effective_date>`
+      : null,
     // Auto parts rarely carry a GTIN. Emit the SKU as MPN when present, otherwise
     // tell Meta no unique identifier exists (prevents "missing GTIN" warnings).
     item.sku ? `<g:mpn>${escapeXml(item.sku)}</g:mpn>` : `<g:identifier_exists>no</g:identifier_exists>`,
@@ -188,7 +191,7 @@ export function buildMetaCatalogFeed(products = [], opts = {}) {
 
   const items = [];
   for (const product of products) {
-    for (const item of buildItemsForProduct(product, { siteUrl, defaultBrand })) {
+    for (const item of buildItemsForProduct(product, { siteUrl, defaultBrand, festivalOffer: opts.festivalOffer || null })) {
       items.push(serializeItem(item));
     }
   }

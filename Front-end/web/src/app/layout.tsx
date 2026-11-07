@@ -18,6 +18,8 @@ import { getNavCategories } from "@/lib/navCategories";
 import { getActivePromoBanner } from "@/lib/promoBanner";
 import { getFestivalTheme, isFestivalLive } from "@/lib/festival/festivalTheme";
 import { FestivalThemeProvider } from "@/components/festival/FestivalThemeContext";
+import { getFestivalOffer, isOfferLive } from "@/lib/festival/festivalOffer";
+import { FestivalOfferProvider } from "@/components/festival/FestivalOfferContext";
 import FestivalEffectsLoader from "@/components/festival/FestivalEffectsLoader";
 import ConditionalFooter from "@/components/layout/ConditionalFooter";
 import SessionExpiredPrompt from "@/components/layout/SessionExpiredPrompt";
@@ -150,7 +152,11 @@ export default async function RootLayout({
   // campaign is scheduled, which is the normal state for most of the year.
   // The festival switch (Diwali …) is fetched alongside it — in parallel, so the
   // decoration adds no latency to the layout. Null all year when switched off.
-  const [promoBanner, festivalTheme] = await Promise.all([getActivePromoBanner(), getFestivalTheme()]);
+  // The Diwali PRICE offer switch rides along too (display only; the server prices the
+  // cart). Revalidated under `promo:festival-offer` the moment the admin saves.
+  const [promoBanner, festivalTheme, festivalOffer] = await Promise.all([
+    getActivePromoBanner(), getFestivalTheme(), getFestivalOffer(),
+  ]);
 
   /*
     `data-theme` is deliberately NOT set here. ThemeScript owns it before first
@@ -335,6 +341,7 @@ export default async function RootLayout({
           <PostHogProvider>
           <QueryProvider>
           <FestivalThemeProvider theme={festivalTheme} initialLive={isFestivalLive(festivalTheme)}>
+          <FestivalOfferProvider offer={festivalOffer} initialLive={isOfferLive(festivalOffer)}>
           <AuthProvider>
             <CartProvider>
               <WishlistProvider>
@@ -397,6 +404,7 @@ export default async function RootLayout({
               </WishlistProvider>
             </CartProvider>
           </AuthProvider>
+          </FestivalOfferProvider>
           </FestivalThemeProvider>
           </QueryProvider>
           </PostHogProvider>

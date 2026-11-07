@@ -15,6 +15,7 @@
 
 import { effectivePrice } from '../services/pricingService.js';
 import { roundRupees } from './money.js';
+import { applyFestivalOffer } from './festivalOffer.js';
 
 export function escapeXml(value = '') {
   return String(value)
@@ -53,15 +54,41 @@ export function money(rupees) {
  * Also returns the numeric effective price so callers can apply their own
  * validity floor (Google rejects non-positive prices outright).
  */
-export function priceFields(source) {
+export function priceFields(source, festivalOffer = null) {
   const eff = roundRupees(effectivePrice(source));
   const orig = typeof source.originalPrice === 'number' ? roundRupees(source.originalPrice) : null;
+
+  /*
+    Festival (Diwali) price offer, when live — stacked on the selling price by the same
+    pure function the checkout charges with (utils/festivalOffer.js), so the advertised
+    price IS the charged price (Merchant Center disapproves a mismatch). `price` stays the
+    M.R.P. (or the selling price when there is no higher M.R.P.); `sale_price` is the
+    Diwali price; `sale_price_effective_date` bounds it to the offer window so Google/Meta
+    fall back at the end date even if they do not re-fetch the feed in time.
+  */
+  const offer = festivalOffer ? applyFestivalOffer({ unitPrice: eff }) : null;
+  if (offer) {
+    return {
+      price: money(orig != null && orig > eff ? orig : eff),
+      salePrice: money(offer.finalPrice),
+      salePriceEffectiveDate: effectiveDateRange(festivalOffer),
+      effectiveRupees: offer.finalPrice,
+    };
+  }
+
   const onSale = orig != null && orig > eff;
   return {
     price: money(onSale ? orig : eff),
     salePrice: onSale ? money(eff) : null,
+    salePriceEffectiveDate: null,
     effectiveRupees: eff,
   };
 }
 
-export default { escapeXml, stripHtml, money, priceFields };
+/** ISO 8601 interval "start/end" for g:sale_price_effective_date, or null if open-ended. */
+export function effectiveDateRange(window) {
+  if (!window?.startsAt || !window?.endsAt) return null;
+  return `${new Date(window.startsAt).toISOString()}/${new Date(window.endsAt).toISOString()}`;
+}
+
+export default { escapeXml, stripHtml, money, priceFields, effectiveDateRange };

@@ -5,6 +5,7 @@ import ClientPage from './ClientPage';
 import { getServerApiBase, fetchEntityOrNull, internalApiHeaders } from '@/lib/server-api';
 import { isOutOfStock, getStockStatus } from '@/lib/stock';
 import { resolveSeo } from '@/lib/seo';
+import { applyFestivalOffer, getFestivalOffer, isOfferLive } from '@/lib/festival/festivalOffer';
 import { SITE_URL } from '@/lib/siteUrl';
 import { resolveLegacyTarget } from '@/lib/legacyTargetServer';
 
@@ -188,6 +189,21 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   // the client and rendered its own "not found" state under a 200.
   if (!product) await leaveDeadSlug(slug);
 
+  /*
+    Diwali offer price for the rich result, so Google shows what the page and the
+    checkout show. Simple products only (a variable product's price is per model).
+    The fetch carries the `promo:festival-offer` tag, so switching the offer revalidates
+    this page; `priceValidUntil` bounds it to the offer's end date regardless.
+  */
+  const festivalOfferCfg = await getFestivalOffer();
+  const jsonLdOffer = product && product.productType !== 'variable' && isOfferLive(festivalOfferCfg)
+    ? applyFestivalOffer(
+      { unitPrice: Number(product.price) },
+      festivalOfferCfg!.tiers,
+      festivalOfferCfg!.code,
+    )
+    : null;
+
   // Build JSON-LD structured data for Google rich results
   const jsonLd = product?.slug ? {
     '@context': 'https://schema.org',
@@ -229,7 +245,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
     offers: {
       '@type': 'Offer',
       priceCurrency: 'INR',
-      price: product.price,
+      price: jsonLdOffer ? jsonLdOffer.finalPrice : product.price,
       availability: isOutOfStock(product)
         ? 'https://schema.org/OutOfStock'
         : getStockStatus(product) === 'backorder'
@@ -242,9 +258,11 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       itemCondition: 'https://schema.org/NewCondition',  // Default for new products
       
       // Only include priceValidUntil for ACTUAL sales/discounts with end date
-      ...(product.originalPrice && product.originalPrice > product.price && product.offerEndDate && {
-        priceValidUntil: new Date(product.offerEndDate).toISOString().split('T')[0],
-      }),
+      ...(jsonLdOffer && festivalOfferCfg?.endsAt
+        ? { priceValidUntil: new Date(festivalOfferCfg.endsAt).toISOString().split('T')[0] }
+        : !jsonLdOffer && product.originalPrice && product.originalPrice > product.price && product.offerEndDate && {
+          priceValidUntil: new Date(product.offerEndDate).toISOString().split('T')[0],
+        }),
     },
   } : null;
 

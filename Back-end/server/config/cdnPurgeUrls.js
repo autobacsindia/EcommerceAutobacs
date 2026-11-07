@@ -42,6 +42,10 @@ export const CLOSED_URL_PATHS = Object.freeze({
   // GET /festival-theme/active — festive decoration switch. Bare path only
   // (src/lib/festival/festivalTheme.ts), same legacy static-data header.
   'public:festival-theme': ['/festival-theme/active'],
+
+  // GET /festival-offer/active — Diwali price-offer switch (display only; pricing
+  // reads Mongo uncached). Bare path only (src/lib/festival/festivalOffer.ts).
+  'public:festival-offer': ['/festival-offer/active'],
 });
 
 /**

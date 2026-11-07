@@ -214,6 +214,8 @@ export const API_ENDPOINTS = {
   // Promo banners (site-wide occasion strip)
   FESTIVAL_THEME_ACTIVE: '/festival-theme/active',        // public: festive decoration switch
   FESTIVAL_THEME_ADMIN: '/festival-theme/admin',          // admin read/update
+  FESTIVAL_OFFER_ACTIVE: '/festival-offer/active',        // public: Diwali price-offer switch (display only)
+  FESTIVAL_OFFER_ADMIN: '/festival-offer/admin',          // admin read/update
   PROMO_BANNER_ACTIVE: '/promo-banners/active',           // public: the live banner
   PROMO_BANNERS_ADMIN: '/promo-banners/admin',            // admin list/create
   PROMO_BANNER_ADMIN_BY_ID: (id: string) => `/promo-banners/admin/${id}`,

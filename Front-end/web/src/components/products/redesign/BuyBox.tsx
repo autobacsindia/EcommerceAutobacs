@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
+import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -127,6 +129,22 @@ export default function BuyBox({
   const discount = onSale
     ? Math.round(((activeOriginal! - activePrice) / activeOriginal!) * 100)
     : 0;
+  /*
+    Diwali offer — an EXTRA % on top of the selling price of the exact unit being
+    bought; M.R.P. strike-through and the sale badge stay as they are. A simple product
+    whose sale window has closed is charged its M.R.P. by the server (effectivePrice),
+    so the offer is taken from that price there too. Display mirror; the cart and
+    checkout show the server's figure. Before a model is picked the RANGE is shown in
+    Diwali prices (the offer is monotonic in price, so the ends map to the ends).
+  */
+  const saleExpired = !isVariable && !!product.saleEndsAt && !saleLive && !!activeOriginal && activeOriginal > activePrice;
+  const festivalOffer = useFestivalOfferPrice(
+    needsSelection ? null : saleExpired ? activeOriginal : activePrice,
+  );
+  const rangeMinOffer = useFestivalOfferPrice(needsSelection ? priceMin : null);
+  const rangeMaxOffer = useFestivalOfferPrice(needsSelection ? priceMax : null);
+  const rangeMin = rangeMinOffer?.finalPrice ?? priceMin;
+  const rangeMax = rangeMaxOffer?.finalPrice ?? priceMax;
   const outOfStock = activeStock === 'out';
   const backorder = activeStock === 'backorder';
   const wished = isInWishlist(product._id);
@@ -223,10 +241,10 @@ export default function BuyBox({
       <div className="mt-5 flex flex-wrap items-baseline gap-3 border-t border-hairline pt-5">
         {needsSelection ? (
           <span className="text-[32px] font-bold leading-none text-ink">
-            {priceMin === priceMax ? formatPrice(priceMin) : `${formatPrice(priceMin)} – ${formatPrice(priceMax)}`}
+            {rangeMin === rangeMax ? formatPrice(rangeMin) : `${formatPrice(rangeMin)} – ${formatPrice(rangeMax)}`}
           </span>
         ) : (
-          <span className="text-[32px] font-bold leading-none text-ink">{formatPrice(activePrice)}</span>
+          <span className="text-[32px] font-bold leading-none text-ink">{formatPrice(festivalOffer ? festivalOffer.finalPrice : activePrice)}</span>
         )}
         {onSale && (
           <>
@@ -237,6 +255,17 @@ export default function BuyBox({
             {/* Festival label on an existing sale only — visual, no price logic. */}
             <FestivalDealBadge />
           </>
+        )}
+        {/* Diwali offer: %, the price before Diwali, the Diwali saving. */}
+        <FestivalOfferTag
+          offer={festivalOffer}
+          formatMoney={(n) => formatPrice(n, { exact: true })}
+          className="w-full text-[13px]"
+        />
+        {needsSelection && rangeMinOffer && (
+          <span className="w-full text-[13px] font-semibold text-[#b4231a] dark:text-[#ff8a7a]">
+            🪔 Diwali offer prices — pick a model to see its saving
+          </span>
         )}
       </div>
       <p className="mt-2 text-[13px] text-ink-muted">
@@ -249,12 +278,12 @@ export default function BuyBox({
       {!needsSelection && (
         <CampaignRateBadge
           productId={product._id}
-          price={activePrice}
+          price={festivalOffer ? festivalOffer.finalPrice : activePrice}
           originalPrice={activeOriginal}
           className="mt-3"
         />
       )}
-      {onSale && !isVariable && <SaleCountdown saleEndsAt={product.saleEndsAt} className="mt-3" />}
+      {onSale && !festivalOffer && !isVariable && <SaleCountdown saleEndsAt={product.saleEndsAt} className="mt-3" />}
 
       {/* Variant (model) selector — variable products only */}
       {isVariable && (
@@ -329,7 +358,7 @@ export default function BuyBox({
       {/* EMI / affordability options (Razorpay) — mirrors the WooCommerce widget.
           Hidden until a model is chosen (never advertises the range min) and for
           sold-out items (nothing to finance). */}
-      {!backorder && !needsSelection && !outOfStock && <EmiOptions price={activePrice} className="mt-7" />}
+      {!backorder && !needsSelection && !outOfStock && <EmiOptions price={festivalOffer ? festivalOffer.finalPrice : activePrice} className="mt-7" />}
 
       {/* CTAs */}
       <div className="mt-6 flex flex-col gap-3">

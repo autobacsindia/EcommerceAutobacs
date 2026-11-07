@@ -54,7 +54,21 @@ export interface CheckoutQuote {
    * against MRP before any code is typed; `coupon` and `karma` are what the code and
    * their points added. The browser renders these; it never adds them up itself.
    */
-  savings: { catalog: number; coupon: number; karma: number; total: number };
+  savings: {
+    catalog: number;
+    /** What the festival (Diwali) offer saved beyond any existing sale. Optional only
+     *  so a page served while the API is mid-deploy still type-checks the old shape. */
+    festival?: number;
+    coupon: number;
+    karma: number;
+    total: number;
+  };
+  /**
+   * Lines the festival (Diwali) price offer applied to — server-computed. The cart and
+   * checkout render these figures; the browser never derives them. Empty/absent when
+   * the offer is off. Prices are per unit, rupees; `finalPrice` is what is charged.
+   */
+  festivalOfferLines?: FestivalOfferQuoteLine[];
   couponError: string | null;
   /**
    * Machine key for the CLASS of coupon refusal — 'campaign' when the applied code
@@ -81,6 +95,18 @@ export interface CheckoutQuote {
   karmaPointsUsed: number;
   karmaPointValue: number;
   maxRedeemablePoints: number;
+}
+
+export interface FestivalOfferQuoteLine {
+  product: string;
+  variantId: string | null;
+  quantity: number;
+  percent: number;
+  /** The price the % was taken from (MRP, or the selling price). */
+  basePrice: number;
+  priceBeforeOffer: number;
+  discount: number;
+  finalPrice: number;
 }
 
 export interface QuoteItem { product: string; quantity: number; variantId?: string | null }

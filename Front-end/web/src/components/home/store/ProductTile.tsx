@@ -5,6 +5,8 @@ import Img from '../redesign/Img';
 import { useCurrency } from '@/context/CurrencyContext';
 import { discountPct, type StoreProduct } from './storeData';
 import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
+import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
+import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 
 /** Five stars, filled to the rating (rounded to the half). */
 export function Stars({ rating, size = 14 }: { rating: number; size?: number }) {
@@ -27,6 +29,11 @@ export function Stars({ rating, size = 14 }: { rating: number; size?: number }) 
 export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: string }) {
   const { formatPrice } = useCurrency();
   const off = discountPct(p);
+  // Diwali offer (display mirror; the cart charges the server's figure) — an EXTRA %
+  // on top of the price; the sale line and M.R.P. stay. Skipped for a variable product,
+  // whose tile price is not one model's exact price.
+  const offer = useFestivalOfferPrice(p.variable ? null : p.price);
+  const exact = (n: number) => formatPrice(n, { exact: true });
   return (
     <Link href={p.href} className="st-tile">
       <div className="st-tile-media">
@@ -48,13 +55,14 @@ export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: str
           </div>
         )}
         <div className="st-price">
-          <span className="st-now">{formatPrice(p.price)}</span>
+          <span className="st-now">{formatPrice(offer ? offer.finalPrice : p.price)}</span>
           {off > 0 && p.originalPrice && (
             <span className="st-mrp">
               M.R.P.: <s>{formatPrice(p.originalPrice)}</s>
             </span>
           )}
         </div>
+        <FestivalOfferTag offer={offer} formatMoney={exact} className="mt-1" />
         {p.brand && <div className="st-brand">by {p.brand}</div>}
       </div>
     </Link>

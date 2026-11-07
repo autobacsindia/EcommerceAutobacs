@@ -1,0 +1,215 @@
+{
+  "_comment": "Festival (Diwali) offer case table. Run by BOTH tests/festivalOffer.test.js (the server that charges) and Front-end/web/src/lib/festival/festivalOffer.test.ts (the display mirror), so the two cannot drift. Rule: EXTRA % on top of the current selling price, tier chosen by the selling price, rounded down to whole rupees. listPrice (M.R.P.) is informational and must NOT change the result. expected=null means the offer does not apply.",
+  "cases": [
+    {
+      "name": "₹49,999 → 10%",
+      "unitPrice": 49999,
+      "listPrice": null,
+      "expected": {
+        "percent": 10,
+        "basePrice": 49999,
+        "finalPrice": 44999,
+        "discount": 5000
+      }
+    },
+    {
+      "name": "exactly ₹50,000 → 5%",
+      "unitPrice": 50000,
+      "listPrice": null,
+      "expected": {
+        "percent": 5,
+        "basePrice": 50000,
+        "finalPrice": 47500,
+        "discount": 2500
+      }
+    },
+    {
+      "name": "exactly ₹1,00,000 → 5%",
+      "unitPrice": 100000,
+      "listPrice": null,
+      "expected": {
+        "percent": 5,
+        "basePrice": 100000,
+        "finalPrice": 95000,
+        "discount": 5000
+      }
+    },
+    {
+      "name": "₹1,00,001 → 3%, rounded down to whole rupees",
+      "unitPrice": 100001,
+      "listPrice": null,
+      "expected": {
+        "percent": 3,
+        "basePrice": 100001,
+        "finalPrice": 97000,
+        "discount": 3001
+      }
+    },
+    {
+      "name": "exactly ₹2,00,000 → 3%",
+      "unitPrice": 200000,
+      "listPrice": null,
+      "expected": {
+        "percent": 3,
+        "basePrice": 200000,
+        "finalPrice": 194000,
+        "discount": 6000
+      }
+    },
+    {
+      "name": "₹2,00,001 → 2%, rounded down to whole rupees",
+      "unitPrice": 200001,
+      "listPrice": null,
+      "expected": {
+        "percent": 2,
+        "basePrice": 200001,
+        "finalPrice": 196000,
+        "discount": 4001
+      }
+    },
+    {
+      "name": "₹2,00,000.01 → 2%",
+      "unitPrice": 200000.01,
+      "listPrice": null,
+      "expected": {
+        "percent": 2,
+        "basePrice": 200000.01,
+        "finalPrice": 196000,
+        "discount": 4000.01
+      }
+    },
+    {
+      "name": "₹3,50,000 with MRP ₹4,00,000 → 2% on the selling price",
+      "unitPrice": 350000,
+      "listPrice": 400000,
+      "expected": {
+        "percent": 2,
+        "basePrice": 350000,
+        "finalPrice": 343000,
+        "discount": 7000
+      }
+    },
+    {
+      "name": "₹1,00,000.01 → 3%",
+      "unitPrice": 100000.01,
+      "listPrice": null,
+      "expected": {
+        "percent": 3,
+        "basePrice": 100000.01,
+        "finalPrice": 97000,
+        "discount": 3000.01
+      }
+    },
+    {
+      "name": "₹49,999.99 → 10%",
+      "unitPrice": 49999.99,
+      "listPrice": null,
+      "expected": {
+        "percent": 10,
+        "basePrice": 49999.99,
+        "finalPrice": 44999,
+        "discount": 5000.99
+      }
+    },
+    {
+      "name": "₹999.99 rounds DOWN, never up",
+      "unitPrice": 999.99,
+      "listPrice": null,
+      "expected": {
+        "percent": 10,
+        "basePrice": 999.99,
+        "finalPrice": 899,
+        "discount": 100.99
+      }
+    },
+    {
+      "name": "Profender kit: MRP ₹1,40,625 → ₹1,12,500 (−20%) → +3% Diwali on top",
+      "unitPrice": 112500,
+      "listPrice": 140625,
+      "expected": {
+        "percent": 3,
+        "basePrice": 112500,
+        "finalPrice": 109125,
+        "discount": 3375
+      }
+    },
+    {
+      "name": "existing −20% sale: Diwali stacks on the sale price",
+      "unitPrice": 48000,
+      "listPrice": 60000,
+      "expected": {
+        "percent": 10,
+        "basePrice": 48000,
+        "finalPrice": 43200,
+        "discount": 4800
+      }
+    },
+    {
+      "name": "tier picked from the selling price, not the MRP",
+      "unitPrice": 99000,
+      "listPrice": 120000,
+      "expected": {
+        "percent": 5,
+        "basePrice": 99000,
+        "finalPrice": 94050,
+        "discount": 4950
+      }
+    },
+    {
+      "name": "selling just under ₹50,000 with MRP above → 10%",
+      "unitPrice": 49000,
+      "listPrice": 50000,
+      "expected": {
+        "percent": 10,
+        "basePrice": 49000,
+        "finalPrice": 44100,
+        "discount": 4900
+      }
+    },
+    {
+      "name": "no MRP: Diwali applies to the price",
+      "unitPrice": 40000,
+      "listPrice": null,
+      "expected": {
+        "percent": 10,
+        "basePrice": 40000,
+        "finalPrice": 36000,
+        "discount": 4000
+      }
+    },
+    {
+      "name": "MRP below selling price (bad data) changes nothing",
+      "unitPrice": 40000,
+      "listPrice": 30000,
+      "expected": {
+        "percent": 10,
+        "basePrice": 40000,
+        "finalPrice": 36000,
+        "discount": 4000
+      }
+    },
+    {
+      "name": "₹5 → ₹4",
+      "unitPrice": 5,
+      "listPrice": null,
+      "expected": {
+        "percent": 10,
+        "basePrice": 5,
+        "finalPrice": 4,
+        "discount": 1
+      }
+    },
+    {
+      "name": "₹1 would round to ₹0 → no offer",
+      "unitPrice": 1,
+      "listPrice": null,
+      "expected": null
+    },
+    {
+      "name": "₹0 → no offer",
+      "unitPrice": 0,
+      "listPrice": null,
+      "expected": null
+    }
+  ]
+}

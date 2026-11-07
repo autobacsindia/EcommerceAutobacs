@@ -36,6 +36,11 @@ export interface StoreProduct {
   offerEndDate?: string;
   rating: number;
   reviews: number;
+  /**
+   * A variable product: `price` is not one model's exact price, so the Diwali offer
+   * (tiered per unit price) is not shown on its tile — the PDP shows it per model.
+   */
+  variable?: boolean;
 }
 
 export interface StoreCategory {
@@ -87,6 +92,7 @@ interface ApiProduct {
   price: number;
   originalPrice?: number | null;
   offerEndDate?: string | null;
+  productType?: string;
   averageRating?: number;
   totalReviews?: number;
   salesScore?: number;
@@ -112,6 +118,7 @@ export const toStoreProduct = (p: ApiProduct): StoreProduct => {
     ...(onSale && !ended && p.offerEndDate && { offerEndDate: p.offerEndDate }),
     rating: p.averageRating || 0,
     reviews: p.totalReviews || 0,
+    ...(p.productType === 'variable' && { variable: true }),
   };
 };
 

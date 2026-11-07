@@ -7,6 +7,7 @@ import { ShoppingCart, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
+import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
 import { toast } from 'react-hot-toast';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
@@ -58,6 +59,9 @@ export default function StickyCartBar({
   const needsSelection = isVariable && !variant;
   const activePrice = variant ? variant.price : product.price;
   const activeStock: StockStatus = variant ? variant.stock : product.stock;
+  // Diwali offer for the exact unit — an extra % on top of its selling price
+  // (display mirror; the cart charges the server's figure).
+  const festivalOffer = useFestivalOfferPrice(needsSelection ? null : activePrice);
   /*
     Through CurrencyContext, like every other price.
 
@@ -151,7 +155,12 @@ export default function StickyCartBar({
                 ? (priceMin != null && priceMax != null && priceMin !== priceMax
                     ? `${fmt(priceMin)} – ${fmt(priceMax)}`
                     : fmt(priceMin ?? activePrice))
-                : fmt(activePrice)}
+                : fmt(festivalOffer ? festivalOffer.finalPrice : activePrice)}
+              {festivalOffer && (
+                <span className="ml-2 align-middle text-xs font-semibold text-ink-muted">
+                  🪔 −{festivalOffer.percent}% Diwali · was <s>{fmt(festivalOffer.basePrice)}</s>
+                </span>
+              )}
             </p>
           </div>
           <div className="flex gap-2">

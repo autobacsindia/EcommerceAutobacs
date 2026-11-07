@@ -19,6 +19,8 @@ import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 import Eyebrow from '@/components/ui/Eyebrow';
 import Reveal from '@/components/ui/Reveal';
 import { useCheckoutQuote } from '@/hooks/useCheckoutQuote';
+import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
+import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import { useCampaign } from '@/hooks/queries/useCampaign';
 import CampaignMeter from '@/components/campaign/CampaignMeter';
 import CampaignCartNotice from '@/components/campaign/CampaignCartNotice';
@@ -372,7 +374,13 @@ function CartPageContent() {
 
               <div className="divide-y divide-hairline">
                 {cart.items.map((item, index) => {
-                  const unitPrice = item.price ?? item.product.price;
+                  /*
+                    During the Diwali offer the unit price is the SERVER's offer price
+                    (quote.festivalOfferLines) — never computed here. Before the quote
+                    lands, the cart's catalogue price shows, as it always has.
+                  */
+                  const offerLine = findFestivalOfferLine(quote, item.product._id, item.variantId);
+                  const unitPrice = offerLine ? offerLine.finalPrice : item.price ?? item.product.price;
                   const uid = lineKey(item.product._id, item.variantId);
                   return (
                   <div key={`${uid}-${index}`} className="p-4 sm:p-6">
@@ -405,7 +413,14 @@ function CartPageContent() {
                             {item.variantLabel && (
                               <p className="text-[12px] uppercase tracking-[0.12em] text-gold mt-1 font-semibold">{item.variantLabel}</p>
                             )}
-                            <p className="text-sm text-ink-muted font-display mt-1">{formatPrice(unitPrice)} each</p>
+                            <p className="text-sm text-ink-muted font-display mt-1">
+                              {formatPrice(unitPrice, { exact: true })} each
+                            </p>
+                            <FestivalOfferTag
+                              offer={offerLine}
+                              formatMoney={(n) => formatPrice(n, { exact: true })}
+                              className="mt-1"
+                            />
                             <CartLineDiscount
                               quote={quote}
                               productId={item.product._id}
@@ -528,6 +543,14 @@ function CartPageContent() {
                   <div className="flex justify-between text-gold font-display text-sm">
                     <span>Discount ({quote.appliedCoupon?.code})</span>
                     <span>−{formatPrice(quote.couponDiscount, { exact: true })}</span>
+                  </div>
+                )}
+                {quote && (quote.savings?.festival ?? 0) > 0 && (
+                  // Already inside the line prices (and so inside the subtotal above) —
+                  // shown so the shopper can see what Diwali took off. Server figure.
+                  <div className="flex justify-between text-[#b4231a] dark:text-[#ff8a7a] font-display text-sm">
+                    <span>🪔 Diwali offer saving (already in prices)</span>
+                    <span>{formatPrice(quote.savings.festival!, { exact: true })}</span>
                   </div>
                 )}
                 {quote && quote.savings?.total > 0 && (

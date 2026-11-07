@@ -187,11 +187,17 @@ class OrderService {
         order = await orderRepository.create(
           {
             user: userId,
-            items: quote.orderItems.map(({ product, variantId, variantLabel, quantity, price, name, image, discountPaise }) =>
+            items: quote.orderItems.map(({ product, variantId, variantLabel, quantity, price, name, image, discountPaise, festivalOffer }) =>
               // `discountPaise` carries the line's OWN share of a per-product tier
               // discount, so a returned line can be refunded at its own rate rather than
               // the cart's blended average. 0 for every other pricing path.
-              ({ product, variantId, variantLabel, quantity, price, name, image, discountPaise: discountPaise || 0 })),
+              // `festivalOffer` snapshots the Diwali price offer the line was sold at
+              // (already inside `price`); undefined when none applied.
+              ({
+                product, variantId, variantLabel, quantity, price, name, image,
+                discountPaise: discountPaise || 0,
+                ...(festivalOffer ? { festivalOffer } : {}),
+              })),
             shippingAddress,
             subtotal: quote.subtotal,
             shippingCost: quote.shippingCost,
