@@ -82,6 +82,7 @@ Three buckets: **A = must differ** dev vs prod (isolation/safety critical), **B 
 | `QUEUE_REDIS_URL` | dev Redis | prod `Redis` (`${{Redis.REDIS_URL}}`) | **dev worker must not consume prod jobs** |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | `rzp_test_*` | `rzp_test_*` → `rzp_live_*` at cutover | test vs live mode. The ONLY copy of the key id: checkout gets it from create-order and the PDP EMI widget from `GET /payment-config/razorpay` — there is no frontend `NEXT_PUBLIC_RAZORPAY_KEY_ID` any more |
 | `RAZORPAY_WEBHOOK_SECRET` | test-mode webhook secret | live-mode webhook secret at cutover | separate webhook endpoints |
+| `SHIPROCKET_API_EMAIL` / `SHIPROCKET_API_PASSWORD` | blank (Shiprocket off) or a test API user | the dedicated Shiprocket **API user** (not the owner login) | check with `railway run npm run verify-shiprocket`; token cached in Redis `shiprocket:token` |
 | `JWT_SECRET` | dev secret (≥64 chars) | prod secret (≥64 chars) | leaked dev token must not forge prod sessions; **must match frontend in same tier** |
 | `FRONTEND_URL` | `http://localhost:3000` | `https://autobacsindia.com` | CORS/redirects; prod must be HTTPS (validateEnv enforces) |
 | `FRONTEND_URLS` | `http://localhost:3000` | apex + www (+ Railway URL pre-cutover) | CORS allowlist |

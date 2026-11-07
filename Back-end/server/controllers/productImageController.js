@@ -30,6 +30,7 @@ import { aggregateFromVariants } from '../utils/wcVariants.js';
 import { normalizeSeo } from '../utils/seo.js';
 import { imageKey, orderGallery } from '../utils/productGallery.js';
 import { pruneDanglingPointers, planVariantOwnedCleanup } from '../utils/variantImage.js';
+import { normalizeShippingSize } from '../utils/shippingSize.js';
 
 /** Lightweight HTTP error — carries a statusCode for the Express error handler */
 class AppError extends Error {
@@ -196,11 +197,18 @@ const parseProductFields = (body) => {
 
   ['categories', 'features', 'whyChoose', 'packageContents', 'tags',
    'specifications', 'compatibleVehicles', 'seo', 'variants', 'uploadedImages',
-   'imageOrder', 'adoptImages', 'returnPolicy'].forEach((key) => {
+   'imageOrder', 'adoptImages', 'returnPolicy', 'shippingSize'].forEach((key) => {
     if (typeof fields[key] === 'string') {
       try { fields[key] = JSON.parse(fields[key]); } catch { /* leave as string */ }
     }
   });
+
+  // Only touched when sent, so a partial update never wipes a measured size.
+  if ('shippingSize' in fields) {
+    const size = normalizeShippingSize(fields.shippingSize);
+    if (size === undefined) delete fields.shippingSize;
+    else fields.shippingSize = size;
+  }
 
   // ── Variable products ──────────────────────────────────────────────────────
   // The pre('validate') hook derives the price range + parent price/stock on
