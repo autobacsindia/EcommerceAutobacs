@@ -7,13 +7,16 @@
  *   follow up                   GTM head, GTM leads, admin
  *   stop following up           the person following up, GTM head, admin
  *   reassign                    GTM head, admin
+ *   record a follow-up status   the person following up, GTM head, admin
  */
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
-import { validateTeamLeadList, validateTeamLeadId, validateTeamLeadReassign } from '../validators/staffLeads.validator.js';
 import {
-  listTeamLeads, teamLeadPeople, getTeamLead, followUp, releaseLead, reassignLead,
+  validateTeamLeadList, validateTeamLeadId, validateTeamLeadReassign, validateTeamLeadFollowUp,
+} from '../validators/staffLeads.validator.js';
+import {
+  listTeamLeads, teamLeadPeople, getTeamLead, followUp, releaseLead, reassignLead, recordFollowUp,
 } from '../services/teamLeadService.js';
 
 const router = express.Router();
@@ -62,6 +65,22 @@ router.post('/:id/reassign', validateTeamLeadReassign, validateRequest, asyncHan
     return res.status(409).json({ success: false, outcome, message: 'Someone changed this lead just now.', lead });
   }
   res.json({ success: true, outcome, lead });
+}));
+
+// @route  POST /staff/leads/:id/follow-ups { status, note }
+// Not saved because the lead moved on (closed / nobody following / changed) → 409
+// with the lead, so the card shows where it stands now.
+const FOLLOW_UP_CONFLICT = {
+  closed: 'This lead is closed.',
+  not_following: 'Click Follow up first, then record how it went.',
+  changed: 'Someone changed this lead just now. Check it and try again.',
+};
+router.post('/:id/follow-ups', validateTeamLeadFollowUp, validateRequest, asyncHandler(async (req, res) => {
+  const { outcome, lead, warning } = await recordFollowUp(req.user, req.params.id, req.body);
+  if (FOLLOW_UP_CONFLICT[outcome]) {
+    return res.status(409).json({ success: false, outcome, message: FOLLOW_UP_CONFLICT[outcome], lead });
+  }
+  res.json({ success: true, outcome, lead, ...(warning && { warning }) });
 }));
 
 export default router;

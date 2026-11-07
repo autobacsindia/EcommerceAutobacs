@@ -11,6 +11,7 @@
  *   follow up (claim)       GTM head, GTM leads (canSell), admin
  *   stop following up       the person following up, GTM head, admin
  *   reassign                GTM head, admin
+ *   record a follow-up      the person following up, GTM head, admin
  *   phone / e-mail          the person following up, GTM head, admin — so two
  *                           people never ring the same customer
  *
@@ -22,10 +23,17 @@
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 import leadRepository from '../repositories/leadRepository.js';
+import orderRepository from '../repositories/orderRepository.js';
+import cartRepository from '../repositories/cartRepository.js';
+import productRepository from '../repositories/productRepository.js';
+import leadSyncService from './leadSyncService.js';
 import salesRepRepository from '../repositories/salesRepRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import { STAFF_TEAMS, canSell, gtmRoleOf } from '../config/staff.js';
-import { LEAD_STATUSES, OPEN_LEAD_STATUSES, NURTURE_SOURCE, LEAD_QUIET_DAYS } from '../config/leadConstants.js';
+import {
+  LEAD_STATUSES, OPEN_LEAD_STATUSES, NURTURE_SOURCE, LEAD_QUIET_DAYS,
+  FOLLOW_UP_STATUSES, FOLLOW_UP_STATUS_KEYS, FOLLOW_UP_NOTE_MAX,
+} from '../config/leadConstants.js';
 import { and, keysetPage, plainQuery, searchWords, searchClauses, isObjectId } from '../utils/listQuery.js';
 import { phoneSearchPattern } from '../utils/identity.js';
 
@@ -53,9 +61,13 @@ const seesContact = (actor, ownerUserId) =>
 
 // ── Rows ──────────────────────────────────────────────────────────────────────
 
+/** The signal the card describes: the strongest one (primarySource), else the first. */
+const primarySourceOf = (lead) =>
+  (lead.sources || []).find((s) => s.type === lead.primarySource) || lead.sources?.[0] || null;
+
 /** The one short line describing what the customer did, from the strongest signal's snapshot. */
-function detailOf(lead) {
-  const src = (lead.sources || []).find((s) => s.type === lead.primarySource) || lead.sources?.[0];
+function detailOf(lead, items = null) {
+  const src = primarySourceOf(lead);
   const snap = src?.snapshot || {};
   return {
     total: Number.isFinite(Number(snap.total)) && snap.total != null ? Number(snap.total) : null,
@@ -64,11 +76,77 @@ function detailOf(lead) {
     makeModel: typeof snap.makeModel === 'string' ? snap.makeModel : null,
     city: typeof snap.city === 'string' ? snap.city : null,
     orderNumber: typeof snap.orderNumber === 'string' ? snap.orderNumber : null,
+    // Which products — [{ name, variantLabel, quantity, removed }], or null when the
+    // signal has none (a consultation, a sign-up). See lineItemsFor.
+    items: items ?? itemsFromSnapshot(snap),
   };
 }
 
-/** The lead as the team sheet shows it to `actor`. */
-export function rowOf(lead, actor, now = new Date()) {
+// ── Which products ────────────────────────────────────────────────────────────
+//
+// "Left at checkout · ₹15,980" told sales nothing about WHAT was left. The order
+// signals snapshot their lines (snapshot.items, since 2026-07), but older leads
+// and abandoned carts (snapshot.itemCount only) do not, and the snapshot carries
+// no variant. So each page reads the orders / carts behind its rows — one query
+// each, by _id, plus one for product names a line lacks: at most three reads per
+// page of 20, never one per lead. A product deleted since shows as removed.
+
+const MAX_LINES = 10;
+const toQty = (q) => (Number.isFinite(Number(q)) && Number(q) > 0 ? Number(q) : null);
+const line = (name, variantLabel, quantity) => ({
+  name: typeof name === 'string' && name.trim() ? name.trim() : null,
+  variantLabel: typeof variantLabel === 'string' && variantLabel.trim() ? variantLabel.trim() : null,
+  quantity: toQty(quantity),
+  removed: !(typeof name === 'string' && name.trim()),
+});
+
+/** Lines from the signal's own snapshot: the fallback when the order / cart is gone. */
+function itemsFromSnapshot(snap) {
+  if (Array.isArray(snap.items) && snap.items.length) {
+    return snap.items.slice(0, MAX_LINES).map((it) => line(it?.name, it?.variantLabel, it?.quantity));
+  }
+  if (typeof snap.productName === 'string' && snap.productName) return [line(snap.productName, snap.variantLabel, null)];
+  return null;
+}
+
+/**
+ * Lead id → lines, for every lead whose card names products (order and cart
+ * signals). Bounded by the page (≤ 20 leads). A failed read only drops back to
+ * the snapshot: the sheet must never fail because a lookup did.
+ */
+async function lineItemsFor(leads) {
+  const out = new Map();
+  const want = [];
+  for (const lead of leads) {
+    const src = primarySourceOf(lead);
+    if (src?.ref && (src.refModel === 'Order' || src.refModel === 'Cart')) want.push({ lead, src });
+  }
+  if (!want.length) return out;
+  try {
+    const ids = (model) => [...new Set(want.filter((w) => w.src.refModel === model).map((w) => String(w.src.ref)))];
+    const [orders, carts] = await Promise.all([
+      orderRepository.findLeadItemsByIds(ids('Order')),
+      cartRepository.findItemsByIds(ids('Cart')),
+    ]);
+    const raw = new Map();
+    for (const { lead, src } of want) {
+      const lines = (src.refModel === 'Order' ? orders : carts).get(String(src.ref));
+      if (lines?.length) raw.set(idOf(lead._id), lines.slice(0, MAX_LINES));
+    }
+    // Names the lines do not carry (cart lines never do; very old order lines may not).
+    const productIds = [...new Set([...raw.values()].flat().filter((l) => !l.name && l.product).map((l) => String(l.product)))];
+    const names = await productRepository.findNamesByIds(productIds);
+    for (const [leadId, lines] of raw) {
+      out.set(leadId, lines.map((l) => line(l.name || (l.product ? names.get(String(l.product)) : null), l.variantLabel, l.quantity)));
+    }
+  } catch (err) {
+    console.error('[teamLeads] reading lead products failed:', err?.message);
+  }
+  return out;
+}
+
+/** The lead as the team sheet shows it to `actor`. `items` = its lines from lineItemsFor, if read. */
+export function rowOf(lead, actor, now = new Date(), items = undefined) {
   const rep = lead.assignedRep && typeof lead.assignedRep === 'object' ? lead.assignedRep : null;
   const ownerUserId = rep?.user ? idOf(rep.user) : null;
   const last = lead.activities?.[lead.activities.length - 1];
@@ -81,7 +159,10 @@ export function rowOf(lead, actor, now = new Date()) {
     status: lead.status,
     score: lead.leadScore || 0,
     source: lead.primarySource || null,
-    detail: detailOf(lead),
+    detail: detailOf(lead, items),
+    followUpStatus: lead.followUpStatus && FOLLOW_UP_STATUSES[lead.followUpStatus]
+      ? { status: lead.followUpStatus, label: FOLLOW_UP_STATUSES[lead.followUpStatus], at: lead.followUpStatusAt || null }
+      : null,
     hasPurchased: !!lead.hasPurchased,
     returning: (lead.reopenCount || 0) > 0,
     createdAt: lead.createdAt,
@@ -104,6 +185,14 @@ export const TEAM_LEAD_SORTS = {
 };
 export const TEAM_LEAD_VIEWS = ['all', 'free', 'mine', 'person'];
 export const TEAM_LEAD_STATUS_FILTERS = ['open', 'all', ...LEAD_STATUSES];
+/** "Follow-up" filter: the newest status recorded, or 'none' for leads with none yet. */
+export const TEAM_LEAD_FOLLOW_UP_FILTERS = ['none', ...FOLLOW_UP_STATUS_KEYS];
+
+function followUpClause(v) {
+  if (v === 'none') return { followUpStatus: null };
+  // Served by the index team_follow_up_score (models/Lead.js).
+  return FOLLOW_UP_STATUS_KEYS.includes(v) ? { followUpStatus: v } : null;
+}
 
 function statusClause(status) {
   if (!status || status === 'open') return { status: { $in: OPEN_LEAD_STATUSES } };
@@ -152,6 +241,7 @@ export async function listTeamLeads(actor, params = {}) {
     { primarySource: { $ne: NURTURE_SOURCE } },
     statusClause(f.status),
     owner,
+    followUpClause(f.followUp),
     searchClause(f.q),
   );
   const { items, ...page } = await keysetPage({
@@ -159,7 +249,8 @@ export async function listTeamLeads(actor, params = {}) {
     find: (q, o) => leadRepository.teamPage(q, o),
   });
   const now = new Date();
-  return { ...page, leads: items.map((l) => rowOf(l, actor, now)), you: youOf(actor, myRep) };
+  const lines = await lineItemsFor(items);
+  return { ...page, leads: items.map((l) => rowOf(l, actor, now, lines.get(idOf(l._id)))), you: youOf(actor, myRep) };
 }
 
 const youOf = (actor, myRep) => ({
@@ -185,12 +276,23 @@ export async function teamLeadPeople(actor) {
 const HISTORY_LABELS = {
   note: 'Note', call: 'Call', email: 'E-mail', sms: 'SMS', status_change: 'Status changed',
   claim: 'Started following up', assignment: 'Owner changed', conversion: 'Converted to order',
+  follow_up: 'Follow-up',
 };
+
+/** A history line's label: a follow-up shows its status ("No response"). */
+const historyLabel = (a) =>
+  (a.type === 'follow_up' && FOLLOW_UP_STATUSES[a.meta?.status]) || HISTORY_LABELS[a.type] || a.type;
+
+/** The row with its products read — for a single lead after a write or on open. */
+async function rowWithItems(lead, actor) {
+  const lines = await lineItemsFor([lead]);
+  return rowOf(lead, actor, new Date(), lines.get(idOf(lead._id)));
+}
 
 async function loadRow(leadId, actor) {
   const lead = await leadRepository.teamDetail(leadId, 1);
   if (!lead) throw fail('Lead not found.', 404);
-  return rowOf(lead, actor);
+  return rowWithItems(lead, actor);
 }
 
 /** GET /staff/leads/:id — the row plus its history, newest first. Everyone in GTM sees the history. */
@@ -201,14 +303,15 @@ export async function getTeamLead(actor, leadId) {
   const history = (lead.activities || []).slice().reverse().map((a) => ({
     id: idOf(a._id),
     type: a.type,
-    label: HISTORY_LABELS[a.type] || a.type,
+    label: historyLabel(a),
+    followUpStatus: a.type === 'follow_up' && FOLLOW_UP_STATUSES[a.meta?.status] ? a.meta.status : null,
     at: a.at,
     // The named rep it credits, else the login that did it (system lines have neither).
     who: a.rep?.name || a.by?.name || null,
     notes: a.notes || '',
   }));
   const signals = (lead.sources || []).map((s) => ({ type: s.type, at: s.capturedAt }));
-  return { lead: { ...rowOf(lead, actor), history, signals } };
+  return { lead: { ...(await rowWithItems(lead, actor)), history, signals } };
 }
 
 // ── Writes ────────────────────────────────────────────────────────────────────
@@ -269,4 +372,85 @@ export async function reassignLead(actor, leadId, userId) {
   });
   const lead = await loadRow(leadId, actor);
   return { outcome: moved ? 'reassigned' : 'changed', lead };
+}
+
+// ── Follow-up status ──────────────────────────────────────────────────────────
+
+// A second identical click within this window is the same follow-up, not a new one.
+const DUPLICATE_WINDOW_MS = 15 * 1000;
+// Statuses that mean the customer was reached (they bump a new lead to contacted).
+const REACHED = new Set(['responded', 'whatsapp', 'other', 'converted']);
+
+/**
+ * POST /staff/leads/:id/follow-ups { status, note } — record how a follow-up went.
+ *
+ *   status  one of FOLLOW_UP_STATUSES; `other` needs a note
+ *   note    optional free text (≤ FOLLOW_UP_NOTE_MAX)
+ *
+ * Who: the person following up, the GTM head, admin. The lead must be open and
+ * someone must be following it up (click Follow up first).
+ * → { outcome: 'saved' | 'duplicate' | 'closed' | 'not_following' | 'changed', lead, warning? }
+ *
+ * Then the lead's own status moves (see FOLLOW_UP_STATUSES in leadConstants):
+ * Not interested closes it as lost; Converted moves it to qualified and leaves it
+ * open, because only a real paid order marks a lead won.
+ */
+export async function recordFollowUp(actor, leadId, body = {}) {
+  assertView(actor);
+  if (!canFollowUp(actor)) throw fail('Only the GTM head and GTM leads can update follow-ups.', 403);
+  const status = typeof body.status === 'string' ? body.status : '';
+  if (!FOLLOW_UP_STATUS_KEYS.includes(status)) throw fail('Pick how the follow-up went.', 400);
+  if (body.note != null && typeof body.note !== 'string') throw fail('The note must be text.', 400);
+  const note = (body.note || '').trim();
+  if (note.length > FOLLOW_UP_NOTE_MAX) throw fail(`Keep the note under ${FOLLOW_UP_NOTE_MAX} characters.`, 400);
+  if (status === 'other' && !note) throw fail('Type what happened when you pick "Others".', 400);
+
+  const current = await leadRepository.teamDetail(leadId, 1);
+  if (!current) throw fail('Lead not found.', 404);
+  if (!OPEN_LEAD_STATUSES.includes(current.status)) {
+    return { outcome: 'closed', lead: await rowWithItems(current, actor) };
+  }
+  const rep = current.assignedRep;
+  if (!rep) return { outcome: 'not_following', lead: await rowWithItems(current, actor) };
+  const mine = !!rep.user && idOf(rep.user) === idOf(actor._id);
+  if (!mine && !canReassign(actor)) {
+    throw fail('Only the person following up, the GTM head or admin can update this lead.', 403);
+  }
+
+  // A double click (or a retried request) records one follow-up, not two.
+  const now = new Date();
+  const last = current.activities?.[current.activities.length - 1];
+  if (last?.type === 'follow_up' && idOf(last.by) === idOf(actor._id) && last.meta?.status === status
+    && (last.notes || '') === note && now - new Date(last.at) < DUPLICATE_WINDOW_MS) {
+    return { outcome: 'duplicate', lead: await rowWithItems(current, actor) };
+  }
+
+  const set = { followUpStatus: status, followUpStatusAt: now };
+  if (REACHED.has(status) || status === 'not_interested') Object.assign(set, { lastContactedAt: now, contactedBy: actor._id });
+  const saved = await leadRepository.recordTeamFollowUp(leadId, {
+    ownerRepId: rep._id,
+    openStatuses: OPEN_LEAD_STATUSES,
+    // Credited to the owner when it is theirs; otherwise the head / admin by login.
+    entry: { type: 'follow_up', by: actor._id, rep: mine ? rep._id : null, at: now, notes: note, meta: { status, via: 'team' } },
+    set,
+  });
+  if (!saved) return { outcome: 'changed', lead: await loadRow(leadId, actor) };
+
+  // The lead's own status. The follow-up is already saved; if this step fails the
+  // card says so instead of pretending, and choosing the status again finishes it.
+  let warning;
+  try {
+    const opts = { actorId: actor._id, repId: mine ? rep._id : null };
+    if (status === 'not_interested') {
+      await leadSyncService.applyLeadStatus(leadId, 'lost', { ...opts, lostReason: note || 'Not interested', notes: 'Closed: not interested' });
+    } else if (status === 'converted' && current.status !== 'qualified') {
+      await leadSyncService.applyLeadStatus(leadId, 'qualified', { ...opts, notes: 'Converted — closes as won when the order is paid' });
+    } else if (REACHED.has(status) && current.status === 'new') {
+      await leadSyncService.applyLeadStatus(leadId, 'contacted', { ...opts, notes: 'First contact logged' });
+    }
+  } catch (err) {
+    console.error('[teamLeads] follow-up status move failed:', err?.message);
+    warning = 'Follow-up saved, but the lead status did not update. Pick the status again.';
+  }
+  return { outcome: 'saved', lead: await loadRow(leadId, actor), ...(warning && { warning }) };
 }

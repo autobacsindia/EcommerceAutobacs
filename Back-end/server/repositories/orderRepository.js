@@ -826,6 +826,19 @@ class OrderRepository extends BaseRepository {
   }
 
 
+  /**
+   * The line items of the given orders, for the GTM leads sheet ("which product
+   * did they leave at checkout?"). One query by _id; lean; only what the card
+   * shows. Map of order id → items.
+   */
+  async findLeadItemsByIds(ids) {
+    if (!ids?.length) return new Map();
+    const rows = await Order.find({ _id: { $in: ids } })
+      .select('items.name items.variantLabel items.quantity items.product')
+      .lean();
+    return new Map(rows.map((o) => [String(o._id), o.items || []]));
+  }
+
   async findAllAdmin(query, options = {}) {
     // Same opt-in rule as findByUser: null = the whole document.
     const {

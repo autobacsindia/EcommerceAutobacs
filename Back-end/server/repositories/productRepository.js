@@ -130,6 +130,14 @@ class ProductRepository {
     ).lean();
   }
 
+  /** Product names by id, for the GTM leads sheet. Lean; Map of id → name. */
+  async findNamesByIds(ids) {
+    if (!ids?.length) return new Map();
+    // Soft-deleted products included: their name is still the right answer.
+    const rows = await Product.find({ _id: { $in: ids } }).select('name').lean();
+    return new Map(rows.map((p) => [String(p._id), p.name || null]));
+  }
+
   /**
    * Name and return policy of the given products (deleted ones included — an order line
    * keeps pointing at a product after it leaves the catalogue). Lean, bounded by `ids`.

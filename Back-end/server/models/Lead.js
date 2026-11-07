@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { SOURCE_TYPES, LEAD_STATUSES } from "../config/leadConstants.js";
+import { SOURCE_TYPES, LEAD_STATUSES, FOLLOW_UP_STATUS_KEYS } from "../config/leadConstants.js";
 
 /**
  * Lead — the Sales CRM's single source of truth for a prospect.
@@ -69,7 +69,7 @@ const LeadActivitySchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ["note", "call", "email", "sms", "status_change", "claim", "assignment", "conversion"],
+      enum: ["note", "call", "email", "sms", "status_change", "claim", "assignment", "conversion", "follow_up"],
       required: true,
     },
     // `by` = the User (shared admin console operator) who performed the action —
@@ -111,6 +111,11 @@ const LeadSchema = new mongoose.Schema(
     lastContactedAt: { type: Date, default: null },
     nextFollowUpAt: { type: Date, default: null },
     lostReason: { type: String, default: "" },
+    // The newest follow-up status recorded on the GTM sheet (FOLLOW_UP_STATUSES) and
+    // when. The full list lives in `activities` (type 'follow_up', meta.status);
+    // this copy drives the badge and the "Follow-up" filter without reading history.
+    followUpStatus: { type: String, enum: FOLLOW_UP_STATUS_KEYS, default: undefined },
+    followUpStatusAt: { type: Date, default: undefined },
 
     // ── Priority score ────────────────────────────────────────────────────────
     // Denormalized 0–100 hotness/priority, computed by utils/leadScore.js on every
@@ -179,6 +184,17 @@ LeadSchema.index({ leadScore: -1, _id: -1 }); // All, by score
 LeadSchema.index({ assignedRep: 1, leadScore: -1, _id: -1 }); // Free / Mine / a person, by score
 LeadSchema.index({ createdAt: -1, _id: -1 }); // newest first
 LeadSchema.index({ updatedAt: -1, _id: -1 }); // recently active
+/*
+  The sheet's "Follow-up" filter (?followUp=no_response, or none) by score. Without
+  it the status is a residual filter on { leadScore, _id }: measured on 30,000 leads
+  with 15% followed up, ~1,200–1,960 read per page of 20 — the scanned/returned
+  ratio behind the Atlas query-targeting alert. With it: ~40, no in-memory sort.
+  Deliberately NOT partial: a partial index needs the query to restate { $type },
+  and a field with two conditions loses the index's sort order (a blocking SORT
+  came back). Every lead carries one small key — cheap at this collection's size.
+  Prod (autoIndex off): node scripts/audit-index-drift.js --apply --only Lead
+*/
+LeadSchema.index({ followUpStatus: 1, leadScore: -1, _id: -1 }, { name: 'team_follow_up_score' });
 LeadSchema.index({ primarySource: 1 });
 LeadSchema.index({ hasPurchased: 1 });
 LeadSchema.index({ reopenCount: 1 }); // "reopened / returning" segment filter

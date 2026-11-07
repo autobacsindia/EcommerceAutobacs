@@ -114,8 +114,8 @@ describe('leadSyncService — source ingestion & dedup', () => {
     expect(src.snapshot.total).toBe(1500);
     expect(src.snapshot.itemCount).toBe(2);
     expect(src.snapshot.items).toEqual([
-      { name: 'Brake Pads', quantity: 2, price: 300 },
-      { name: 'Oil Filter', quantity: 1, price: 900 },
+      { name: 'Brake Pads', variantLabel: null, quantity: 2, price: 300 },
+      { name: 'Oil Filter', variantLabel: null, quantity: 1, price: 900 },
     ]);
   });
 

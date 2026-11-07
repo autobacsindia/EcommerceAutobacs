@@ -119,3 +119,98 @@ it('"Show more" loads the next page by cursor', async () => {
   expect(new URLSearchParams(listCalls().at(-1)!.split('?')[1]).get('cursor')).toBe('1');
   expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
 });
+
+describe('which product', () => {
+  it('names each product with variant and qty; a deleted one reads "Product removed"', async () => {
+    serve([{ leads: [LEAD({ detail: {
+      total: 15980, itemCount: 2, productName: null, makeModel: null, city: null, orderNumber: null,
+      items: [
+        { name: 'Pioneer SPH-10BT', variantLabel: 'Black', quantity: 1, removed: false },
+        { name: null, variantLabel: null, quantity: 2, removed: true },
+      ],
+    } })], nextCursor: null }]);
+    renderList();
+    const products = await screen.findByRole('list', { name: 'Products' });
+    expect(within(products).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Pioneer SPH-10BT — Black × 1', 'Product removed × 2',
+    ]);
+    expect(screen.getByText(/₹15,980 · 2 items/)).toBeInTheDocument();
+  });
+
+  it('a card from an older server (no items) still shows its one-line summary', async () => {
+    serve([{ leads: [LEAD()], nextCursor: null }]);
+    renderList();
+    expect(await screen.findByText(/₹18,400 · 2 items/)).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Products' })).not.toBeInTheDocument();
+  });
+});
+
+describe('follow-up status', () => {
+  const MINE = { repId: 'r1', name: 'Nevin', at: '2026-11-06T10:00:00.000Z', mine: true };
+
+  it('taking a lead opens "How did it go?" straight away', async () => {
+    serve([{ leads: [LEAD()], nextCursor: null }]);
+    const mine = LEAD({ followingUp: MINE });
+    post.mockImplementation(() => { pagesNow = [{ leads: [mine], nextCursor: null }]; return Promise.resolve({ success: true, outcome: 'claimed', lead: mine }); });
+    renderList();
+    fireEvent.click(await screen.findByRole('button', { name: /Follow up/ }));
+    expect(await screen.findByRole('radiogroup', { name: 'Follow-up status' })).toBeInTheDocument();
+    expect(within(screen.getByRole('radiogroup')).getAllByRole('radio').map((r) => r.textContent)).toEqual([
+      'Responded', 'WhatsApp', 'Converted', 'No response', 'Not interested', 'Others',
+    ]);
+  });
+
+  it('"Others" cannot be saved without text; with text it posts status + note and shows the badge', async () => {
+    serve([{ leads: [LEAD({ followingUp: MINE })], nextCursor: null }]);
+    const saved = LEAD({ followingUp: MINE, followUpStatus: { status: 'other', label: 'Others', at: '2026-11-07T10:00:00.000Z' } });
+    post.mockImplementation(() => { pagesNow = [{ leads: [saved], nextCursor: null }]; return Promise.resolve({ success: true, outcome: 'saved', lead: saved }); });
+    renderList();
+    fireEvent.click(await screen.findByRole('button', { name: /Update follow-up/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Others' }));
+    const save = screen.getByRole('button', { name: /Save follow-up/ });
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/What happened\? \(required\)/), { target: { value: '   ' } });
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/What happened\? \(required\)/), { target: { value: ' Call after Diwali ' } });
+    fireEvent.click(save);
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/leads/l1/follow-ups', { status: 'other', note: 'Call after Diwali' }));
+    expect(await screen.findByText('Others', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+  });
+
+  it('a note is optional for the other statuses', async () => {
+    serve([{ leads: [LEAD({ followingUp: MINE })], nextCursor: null }]);
+    const saved = LEAD({ followingUp: MINE, followUpStatus: { status: 'no_response', label: 'No response', at: null } });
+    post.mockResolvedValue({ success: true, outcome: 'saved', lead: saved });
+    renderList();
+    fireEvent.click(await screen.findByRole('button', { name: /Update follow-up/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'No response' }));
+    fireEvent.click(screen.getByRole('button', { name: /Save follow-up/ }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/leads/l1/follow-ups', { status: 'no_response', note: '' }));
+  });
+
+  it('a server refusal is shown, and nothing changes on the card', async () => {
+    serve([{ leads: [LEAD({ followingUp: MINE })], nextCursor: null }]);
+    post.mockRejectedValue({ status: 403, message: 'Only the person following up, the GTM head or admin can update this lead.' });
+    renderList();
+    fireEvent.click(await screen.findByRole('button', { name: /Update follow-up/ }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Responded' }));
+    fireEvent.click(screen.getByRole('button', { name: /Save follow-up/ }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
+  });
+
+  it('no "Update follow-up" for someone else\'s lead, or for viewers', async () => {
+    serve([{ leads: [LEAD({ followingUp: { ...MINE, name: 'Arjun', mine: false } })], nextCursor: null }]);
+    renderList();
+    await screen.findByText('Following up: Arjun');
+    expect(screen.queryByRole('button', { name: /Update follow-up/ })).not.toBeInTheDocument();
+  });
+
+  it('the Follow-up filter asks the server for that status', async () => {
+    serve([{ leads: [LEAD()], nextCursor: null }]);
+    renderList();
+    fireEvent.change(await screen.findByLabelText('Follow-up'), { target: { value: 'no_response' } });
+    await waitFor(() => expect(new URLSearchParams(listCalls().at(-1)!.split('?')[1]).get('followUp')).toBe('no_response'));
+  });
+});

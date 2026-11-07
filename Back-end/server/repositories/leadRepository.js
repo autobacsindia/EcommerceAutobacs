@@ -87,6 +87,9 @@ class LeadRepository extends BaseRepository {
 
   static TEAM_FIELDS = {
     name: 1, email: 1, phone: 1, primarySource: 1, 'sources.type': 1, 'sources.snapshot': 1, 'sources.capturedAt': 1,
+    // The order / cart behind a signal, to read which products it held.
+    'sources.ref': 1, 'sources.refModel': 1,
+    followUpStatus: 1, followUpStatusAt: 1,
     status: 1, leadScore: 1, hasPurchased: 1, reopenCount: 1, assignedRep: 1, assignedAt: 1,
     lastContactedAt: 1, nextFollowUpAt: 1, createdAt: 1, updatedAt: 1,
     // Only the newest history line: enough for "last update" and the quiet tag.
@@ -145,6 +148,21 @@ class LeadRepository extends BaseRepository {
           },
         },
       },
+      { new: true, projection: { _id: 1 } }
+    ).lean();
+  }
+
+  /**
+   * Record a follow-up status on the team sheet: push the history line and keep
+   * the newest status on the lead. Compare-and-set on the owner the caller saw and
+   * on the lead still being open, so a follow-up never lands on a lead that was
+   * reassigned, released or closed meanwhile.
+   * @returns the updated lead (_id only), or null when it changed.
+   */
+  async recordTeamFollowUp(leadId, { ownerRepId, openStatuses, entry, set }) {
+    return Lead.findOneAndUpdate(
+      { _id: leadId, assignedRep: ownerRepId, status: { $in: openStatuses } },
+      { $set: set, $push: { activities: entry } },
       { new: true, projection: { _id: 1 } }
     ).lean();
   }
