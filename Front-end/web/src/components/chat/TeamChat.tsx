@@ -7,6 +7,8 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { ArrowLeft, CheckCheck, ChevronDown, ChevronLeft, ChevronRight, MessagesSquare } from 'lucide-react';
 import ChatSidebar from './ChatSidebar';
 import { useChatWide } from './chatWide';
+import { useChatRail, useListWidth } from './chatLayout';
+import ListResizeHandle from './ListResizeHandle';
 import { firstToOpen, homeList, listWhen, totalPeopleUnread } from './chatList';
 import { useSSE } from '@/hooks/useSSE';
 import { useAuth } from '@/context/AuthContext';
@@ -42,6 +44,7 @@ import MentionsPanel from './MentionsPanel';
 import ThreadsListPanel from './ThreadsListPanel';
 import StatusDialog from './StatusDialog';
 import { ONE_PANE_BELOW, useFitToViewport } from './useFitToViewport';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { setOpenConversation } from '@/lib/chatSound';
 import { plainLine } from './chatFormat';
 import { clearTyping, noteTyping, useResetTypingOnUnmount } from '@/lib/chatTyping';
@@ -271,6 +274,24 @@ export default function TeamChat({ fontClassName = '' }: { fontClassName?: strin
   // Desktop: the open conversation fills the chat area; the lists slide away.
   // Remembered per person on this browser.
   const [wide, setWide] = useChatWide(meId);
+  // Computers: the left sections folded to an icon rail (☰), and the Home
+  // list's width set by dragging the line beside it. Both remembered per person.
+  const [railChoice, setRail] = useChatRail(meId);
+  // Phones and tablets show the sections full screen, so they never fold.
+  const computer = useMediaQuery(`(min-width: ${ONE_PANE_BELOW}px)`);
+  const rail = railChoice && computer;
+  const listWidth = useListWidth(meId);
+  const [resizing, setResizing] = useState(false);
+  // The saved fold and width are applied just after the first paint; switch the
+  // slide animations off until then, so the panes don't visibly slide into place
+  // on every page load.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!meId) return;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => { inner = requestAnimationFrame(() => setSettled(true)); });
+    return () => { cancelAnimationFrame(outer); cancelAnimationFrame(inner); };
+  }, [meId]);
   const meName = user?.name ?? 'You';
   const peopleById = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const myStatus = liveStatus(peopleById.get(meId)?.status);
@@ -577,16 +598,23 @@ export default function TeamChat({ fontClassName = '' }: { fontClassName?: strin
     // so the bell's drop-down is never drawn behind the chat.
     <div
       ref={box}
+      data-resizing={resizing || undefined}
+      data-settling={!settled || undefined}
       className={`${fontClassName} gc-theme relative isolate -m-4 flex h-[calc(100dvh-3.5rem)] min-h-[320px] overflow-hidden md:-m-6 lg:-m-8 lg:gap-2 lg:py-2 lg:pr-2`}
     >
       <aside
         id="gc-nav"
-        className={`${navClass} gc-collapse w-full min-w-0 shrink-0 flex-col bg-[var(--gc-page)] lg:flex lg:w-[232px]`}
-        style={{ '--gc-pane-w': '232px' } as React.CSSProperties}
+        className={`${navClass} gc-collapse w-full min-w-0 shrink-0 flex-col bg-[var(--gc-page)] lg:flex ${rail ? 'lg:w-[72px]' : 'lg:w-[232px]'}`}
+        style={{ '--gc-pane-w': rail ? '72px' : '232px' } as React.CSSProperties}
         data-collapsed={listHidden || undefined}
+        data-rail={rail || undefined}
         aria-label="Chat channels"
       >
         <ChatSidebar
+          rail={rail}
+          onToggleRail={() => setRail((v) => !v)}
+          me={me_}
+          onStatus={() => setEditingStatus(true)}
           channels={channels}
           selectedId={selectedId}
           homeOn={!selected || smallPane === 'home'}
@@ -623,8 +651,8 @@ export default function TeamChat({ fontClassName = '' }: { fontClassName?: strin
 
       <section
         id="gc-home"
-        className={`${homeClass} gc-collapse gc-card gc-pane min-h-0 w-full min-w-0 flex-col lg:flex-1 lg:rounded-2xl xl:w-[340px] xl:flex-none 2xl:w-[360px]`}
-        style={{ '--gc-pane-w': '340px' } as React.CSSProperties}
+        className={`${homeClass} gc-collapse gc-card gc-pane min-h-0 w-full min-w-0 flex-col lg:flex-1 lg:rounded-2xl xl:w-[var(--gc-list-w)] xl:flex-none`}
+        style={{ '--gc-pane-w': `${listWidth.width}px`, '--gc-list-w': `${listWidth.width}px` } as React.CSSProperties}
         data-collapsed={listHidden || undefined}
         aria-label="Home"
       >
@@ -701,10 +729,22 @@ export default function TeamChat({ fontClassName = '' }: { fontClassName?: strin
       </section>
 
       {selected && (
-        // The handle on the line between the lists and the open chat: widen the
-        // chat (the lists slide away) or bring the lists back. Computers only —
-        // phones and tablets already show one pane at a time.
+        // The line between the lists and the open chat. Wide computers (Home list
+        // on screen): drag it to resize the list. Narrower computers: a button
+        // that widens the chat. Once the lists are hidden, a button brings them
+        // back. Phones and tablets already show one pane at a time.
         <div className={`gc-divider relative z-10 hidden w-0 shrink-0 lg:block ${listHidden ? 'ml-3 -mr-1' : '-mx-1'}`}>
+          {!listHidden && (
+            <div className="hidden xl:contents">
+              <ListResizeHandle
+                width={listWidth.width}
+                onResize={listWidth.setWidth}
+                onCommit={listWidth.commit}
+                onHide={() => setWide(true)}
+                onDragging={setResizing}
+              />
+            </div>
+          )}
           <button
             type="button"
             onClick={() => setWide((v) => !v)}
@@ -712,7 +752,7 @@ export default function TeamChat({ fontClassName = '' }: { fontClassName?: strin
             aria-expanded={!listHidden}
             aria-label={listHidden ? 'Show the chat list' : 'Hide the chat list and widen this chat'}
             title={listHidden ? 'Show the chat list' : 'Widen the chat'}
-            className="gc-divider-btn absolute left-1/2 top-1/2 grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-gray-600"
+            className={`gc-divider-btn absolute left-1/2 top-1/2 ${listHidden ? 'grid' : 'grid gc-divider-peek'} h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full text-gray-600`}
           >
             {listHidden ? <ChevronRight className="h-4 w-4" aria-hidden="true" /> : <ChevronLeft className="h-4 w-4" aria-hidden="true" />}
           </button>

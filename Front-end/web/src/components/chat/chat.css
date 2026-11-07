@@ -309,3 +309,38 @@
 @media (prefers-reduced-motion: reduce) {
   .gc-collapse, .gc-collapse[data-collapsed='true'], .gc-divider { transition: none; }
 }
+
+/*
+  The line between the Home list and the open chat (wide computers): point at
+  it and a grip appears with a ↔ cursor; drag to resize. The round "hide the
+  lists" button shows only while pointing at (or tabbing to) the line, so the
+  line itself stays clean. While dragging, slides are switched off so the list
+  follows the pointer exactly, and text can't be selected by accident.
+*/
+.gc-resize { z-index: 1; }
+.gc-resize-grip {
+  position: absolute; left: 50%; top: 50%;
+  width: 4px; height: 40px; margin: -20px 0 0 -2px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color 0.15s ease, height 0.15s ease;
+}
+.gc-resize:hover .gc-resize-grip, .gc-resize:focus-visible .gc-resize-grip,
+.gc-theme[data-resizing] .gc-resize-grip { background: #0b57d0; }
+.gc-resize:focus-visible { outline: none; }
+.gc-resize:focus-visible .gc-resize-grip { box-shadow: 0 0 0 2px var(--gc-card), 0 0 0 4px #0b57d0; }
+.gc-divider-btn { z-index: 2; }
+@media (min-width: 1280px) {
+  .gc-divider-peek { top: 20%; opacity: 0; transition: opacity 0.15s ease; }
+  .gc-divider:hover .gc-divider-peek, .gc-divider:focus-within .gc-divider-peek { opacity: 1; }
+}
+.gc-theme[data-resizing] { cursor: col-resize; user-select: none; }
+.gc-theme[data-resizing] .gc-collapse, .gc-theme[data-resizing] .gc-divider { transition: none !important; }
+.gc-theme[data-resizing] .gc-divider-peek { opacity: 0 !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .gc-resize-grip, .gc-divider-peek { transition: none; }
+}
+
+/* Until the saved layout is applied, panes take their size without sliding. */
+.gc-theme[data-settling] .gc-collapse, .gc-theme[data-settling] .gc-divider { transition: none !important; }

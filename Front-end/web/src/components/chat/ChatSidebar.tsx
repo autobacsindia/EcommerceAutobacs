@@ -8,13 +8,16 @@
  * section folds and unfolds with its arrow, shows its unread count beside the
  * title, and keeps long lists short behind "Show all".
  *
+ * On computers, ☰ folds the whole column to a slim strip of icons (New chat,
+ * search, the shortcuts, your status) and back, as Google Chat's menu button.
+ *
  * Folded sections are remembered on this browser (a per-viewer convenience;
  * storage can be missing, so every read and write is guarded).
  */
 import { useEffect, useState } from 'react';
-import { AtSign, ChevronsUpDown, Play, House, Keyboard, MessageSquarePlus, MessagesSquare, Plus, Search, Star } from 'lucide-react';
-import { notifyOf, type ChatChannel } from '@/hooks/queries/useTeamChat';
-import { ChannelIcon, OnlineDot } from './chatUi';
+import { AtSign, ChevronsUpDown, Menu, Play, House, Keyboard, MessageSquarePlus, MessagesSquare, Plus, Search, Star } from 'lucide-react';
+import { notifyOf, type ChatChannel, type ChatPerson } from '@/hooks/queries/useTeamChat';
+import { Avatar, ChannelIcon, OnlineDot } from './chatUi';
 import { channelTitle } from './QuickSwitcher';
 import { NotifyIcon } from './NotifyMenu';
 import { SECTIONS, peopleUnread, sectionRows, sectionsOf, type SectionKey } from './chatList';
@@ -37,6 +40,10 @@ function saveFolded(s: Set<FoldKey>) {
 const cap = (n: number) => (n > 99 ? '99+' : String(n));
 
 export default function ChatSidebar({
+  rail = false,
+  onToggleRail,
+  me,
+  onStatus,
   channels,
   selectedId,
   homeOn,
@@ -53,6 +60,12 @@ export default function ChatSidebar({
   onShortcuts,
   footer,
 }: {
+  /** Folded to icons (computers only). */
+  rail?: boolean;
+  onToggleRail?: () => void;
+  /** You, for the folded strip's status button. */
+  me?: ChatPerson;
+  onStatus?: () => void;
   channels: ChatChannel[];
   selectedId: string | null;
   /** Home is what the middle shows (no chat open on a small screen, or always on a wide one). */
@@ -159,13 +172,76 @@ export default function ChatSidebar({
     </li>
   );
 
-  return (
-    <>
-      <div className="flex items-center gap-2 px-3 pb-1 pt-3 lg:pt-2">
+  // ☰: fold to icons / unfold. Computers only; phones and tablets show this column full screen.
+  const menuButton = onToggleRail && (
+    <button
+      type="button"
+      onClick={onToggleRail}
+      aria-expanded={!rail}
+      aria-controls="gc-nav"
+      aria-label={rail ? 'Expand the side menu' : 'Collapse the side menu'}
+      title={rail ? 'Expand menu' : 'Collapse menu'}
+      className="gc-icon-btn -ml-1 hidden h-10 w-10 shrink-0 place-items-center rounded-full text-gray-700 lg:grid"
+    >
+      <Menu className="h-5 w-5" aria-hidden="true" />
+    </button>
+  );
+
+  if (rail) {
+    // One icon per action, each with a name for screen readers and a tooltip.
+    const icon = (label: string, node: React.ReactNode, onClick: () => void, opts: { current?: boolean; count?: number } = {}) => (
+      <li>
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={opts.count ? `${label}, ${opts.count} unread` : label}
+          aria-current={opts.current ? 'page' : undefined}
+          title={label}
+          className="gc-nav-item relative grid h-10 w-10 place-items-center rounded-full text-gray-700"
+        >
+          {node}
+          {!!opts.count && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-blue-700" aria-hidden="true" />}
+        </button>
+      </li>
+    );
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center gap-1 py-2" data-testid="gc-rail">
+        {menuButton}
         <button
           type="button"
           onClick={onNewChat}
-          className="gc-fab inline-flex h-14 items-center gap-3 rounded-2xl pl-4 pr-5 text-sm font-medium text-gray-900"
+          className="gc-fab mt-1 grid h-12 w-12 place-items-center rounded-2xl text-gray-900"
+          aria-label="New chat"
+          title="New chat"
+        >
+          <MessageSquarePlus className="h-5 w-5 text-gray-800" aria-hidden="true" />
+        </button>
+        <ul className="mt-2 flex flex-col items-center gap-1" aria-label="Shortcuts">
+          {icon('Search all messages', <Search className="h-[18px] w-[18px]" />, onSearch)}
+          {icon('Home', <House className="h-[18px] w-[18px]" />, onHome, { current: homeOn && !selectedId, count: homeUnread })}
+          {icon('Mentions', <AtSign className="h-[18px] w-[18px]" />, onMentions)}
+          {icon('Threads', <MessagesSquare className="h-[18px] w-[18px]" />, onThreads)}
+          {icon('Starred', <Star className="h-[18px] w-[18px]" />, onStarred)}
+          {icon('Keyboard shortcuts', <Keyboard className="h-[18px] w-[18px]" />, onShortcuts)}
+        </ul>
+        <span className="flex-1" />
+        {me && onStatus && (
+          <button type="button" onClick={onStatus} className="gc-icon-btn rounded-full p-1" aria-label="Set a status" title="Set a status everyone in chat can see">
+            <Avatar person={me} size="sm" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="flex items-center gap-2 px-3 pb-1 pt-3 lg:pt-2">
+        {menuButton}
+        <button
+          type="button"
+          onClick={onNewChat}
+          className={`gc-fab inline-flex h-14 items-center whitespace-nowrap rounded-2xl text-sm font-medium text-gray-900 ${onToggleRail ? 'gap-2.5 pl-3.5 pr-4' : 'gap-3 pl-4 pr-5'}`}
           aria-label="New chat"
           title="Start a chat with a person or a group"
         >
@@ -176,7 +252,7 @@ export default function ChatSidebar({
         <button
           type="button"
           onClick={onShortcuts}
-          className="gc-icon-btn hidden h-10 w-10 place-items-center rounded-full text-gray-600 sm:grid"
+          className="gc-icon-btn hidden h-10 w-10 shrink-0 place-items-center rounded-full text-gray-600 sm:grid lg:h-9 lg:w-9"
           aria-label="Keyboard shortcuts"
           title="Keyboard shortcuts (?)"
         >
