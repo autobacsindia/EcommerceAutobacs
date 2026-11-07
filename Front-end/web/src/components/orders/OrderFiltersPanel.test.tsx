@@ -7,7 +7,10 @@ jest.mock('lucide-react', () => ({
   X: () => <span>XIcon</span>,
   Filter: () => <span>FilterIcon</span>,
   Calendar: () => <span>CalendarIcon</span>,
+  Loader2: (p: { 'aria-label'?: string }) => <span role="status" aria-label={p['aria-label']}>Spinner</span>,
 }));
+
+const searchBox = () => screen.getByRole('searchbox', { name: 'Search orders' }) as HTMLInputElement;
 
 const emptyFilters: OrderFilters = {
   search: '',
@@ -26,9 +29,8 @@ describe('OrderFiltersPanel', () => {
     const onFiltersChange = jest.fn();
     render(<OrderFiltersPanel filters={emptyFilters} onFiltersChange={onFiltersChange} autoApply />);
 
-    // Search lives in the collapsible section — expand it first.
-    fireEvent.click(screen.getByText('Filters'));
-    const input = screen.getByPlaceholderText(/order id/i);
+    // Search is always on show — no need to open "Filters" first.
+    const input = searchBox();
 
     // Two quick keystrokes must NOT fire a request each.
     fireEvent.change(input, { target: { value: 'ab' } });
@@ -70,8 +72,7 @@ describe('OrderFiltersPanel', () => {
       <OrderFiltersPanel filters={emptyFilters} onFiltersChange={onFiltersChange} autoApply />,
     );
 
-    fireEvent.click(screen.getByText('Filters'));
-    const input = screen.getByPlaceholderText(/order id/i) as HTMLInputElement;
+    const input = searchBox();
 
     fireEvent.change(input, { target: { value: 'abc' } });
     act(() => { jest.advanceTimersByTime(350); });
@@ -100,8 +101,7 @@ describe('OrderFiltersPanel', () => {
       <OrderFiltersPanel filters={emptyFilters} onFiltersChange={onFiltersChange} autoApply />,
     );
 
-    fireEvent.click(screen.getByText('Filters'));
-    const input = screen.getByPlaceholderText(/order id/i) as HTMLInputElement;
+    const input = searchBox();
 
     fireEvent.change(input, { target: { value: 'abc' } });
     act(() => { jest.advanceTimersByTime(350); });
@@ -128,12 +128,50 @@ describe('OrderFiltersPanel', () => {
       />,
     );
 
-    expect((screen.getByPlaceholderText(/order id/i) as HTMLInputElement).value).toBe('moto');
+    expect(searchBox().value).toBe('moto');
   });
 
-  it('starts collapsed when no filter is active', () => {
+  it('starts collapsed when no filter is active — the search box still shows', () => {
     render(<OrderFiltersPanel filters={emptyFilters} onFiltersChange={jest.fn()} autoApply />);
-    expect(screen.queryByPlaceholderText(/order id/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/name, email, or phone/i)).not.toBeInTheDocument();
+    expect(searchBox()).toBeInTheDocument();
+  });
+
+  // Staff asked for "a search button": the box used to sit inside the collapsed panel.
+  it('a search alone does not open the advanced filters', () => {
+    render(<OrderFiltersPanel filters={{ ...emptyFilters, search: 'moto' }} onFiltersChange={jest.fn()} autoApply />);
+    expect(searchBox().value).toBe('moto');
+    expect(screen.queryByPlaceholderText(/name, email, or phone/i)).not.toBeInTheDocument();
+  });
+
+  it('Enter searches at once, without waiting for the pause', () => {
+    jest.useFakeTimers();
+    const onFiltersChange = jest.fn();
+    render(<OrderFiltersPanel filters={emptyFilters} onFiltersChange={onFiltersChange} autoApply />);
+    fireEvent.change(searchBox(), { target: { value: '#ECD8464E' } });
+    fireEvent.keyDown(searchBox(), { key: 'Enter' });
+    expect(onFiltersChange).toHaveBeenCalledTimes(1);
+    expect(onFiltersChange).toHaveBeenCalledWith(expect.objectContaining({ search: '#ECD8464E' }));
+    // The pending debounce was cancelled: no second request.
+    act(() => { jest.advanceTimersByTime(1000); });
+    expect(onFiltersChange).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it('the clear button empties the search at once', () => {
+    const onFiltersChange = jest.fn();
+    render(<OrderFiltersPanel filters={{ ...emptyFilters, search: 'roof' }} onFiltersChange={onFiltersChange} autoApply />);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(onFiltersChange).toHaveBeenCalledWith(expect.objectContaining({ search: '' }));
+    expect(searchBox().value).toBe('');
+  });
+
+  it('shows a spinner in the box while a search is loading', () => {
+    const { rerender } = render(<OrderFiltersPanel filters={{ ...emptyFilters, search: 'roof' }} onFiltersChange={jest.fn()} autoApply searching />);
+    expect(screen.getByRole('status', { name: 'Searching' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear search' })).not.toBeInTheDocument();
+    rerender(<OrderFiltersPanel filters={{ ...emptyFilters, search: 'roof' }} onFiltersChange={jest.fn()} autoApply />);
+    expect(screen.queryByRole('status', { name: 'Searching' })).not.toBeInTheDocument();
   });
 
   it('surfaces unpaid outcomes via the "Unpaid / abandoned" quick filter', () => {

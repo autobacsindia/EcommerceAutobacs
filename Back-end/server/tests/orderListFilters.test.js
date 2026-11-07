@@ -24,7 +24,8 @@ const { default: User } = await import('../models/User.js');
 const { default: orderStatusService } = await import('../services/orderStatusService.js');
 const wf = await import('../services/teamWorkflowService.js');
 const { listPaidSalesOrders } = await import('../services/salesOrderService.js');
-const { readListFilters, rowMatches, orderQueryFor } = await import('../utils/orderListFilters.js');
+const { readListFilters, rowMatches, orderQueryFor, withCustomerIds, USER_LANE_MAX_IDS } = await import('../utils/orderListFilters.js');
+const { pinOrder } = await import('../services/orderPinService.js');
 
 const req = { headers: {}, ip: '127.0.0.1', connection: {}, get: () => '' };
 let n = 0;
@@ -213,5 +214,123 @@ describe('search, filter and sort on the team lists', () => {
     expect(new Set(all.map((o) => o.id)).size).toBe(27);
     const t = all.map((o) => new Date(o.createdAt).getTime());
     expect(t).toEqual([...t].sort((x, y) => x - y));
+  });
+});
+
+/*
+ * Orders search (owner request, 2026-11): every list's one search box matches the
+ * order number (full id or the #xxxxxxxx shown), the customer's name / phone /
+ * email — including a registered customer's account email, which is not copied
+ * onto the order — and the product name or SKU. Typed regex characters are
+ * literal; paging and pins keep honouring the search.
+ */
+describe('orders search: what one box matches', () => {
+  const idsOf = (res) => res.orders.map((o) => o.id);
+  const oneItem = (name) => [{ product: new mongoose.Types.ObjectId(), name, price: 3000, quantity: 1 }];
+
+  it('the customer-account lookup is bounded: three words of 3+ characters, 200 accounts each', async () => {
+    const calls = [];
+    const find = async (w, opts) => { calls.push([w, opts]); return w === 'ravi' ? ['u1'] : []; };
+    const f = await withCustomerIds(readListFilters({ q: 'ab ravi kochi rack hilux mats' }), find);
+    expect(calls).toEqual([['ravi', { limit: USER_LANE_MAX_IDS }], ['kochi', { limit: 200 }], ['rack', { limit: 200 }]]);
+    expect(f.userIds).toEqual({ ravi: ['u1'] });
+    // No search: no lookup at all.
+    const none = readListFilters({});
+    expect(await withCustomerIds(none, find)).toBe(none);
+    expect(calls).toHaveLength(3);
+  });
+
+  it('the Mongo form adds the account lane only for words that found accounts', () => {
+    const uid = new mongoose.Types.ObjectId();
+    const q = orderQueryFor({ ...readListFilters({ q: 'pio ravi' }), userIds: { ravi: [uid] } });
+    const [pio, ravi] = q.$and.map((c) => c.$or);
+    expect(pio).toEqual(expect.arrayContaining([{ 'items.name': /pio/i }]));
+    expect(pio.some((c) => c.user)).toBe(false);
+    expect(ravi).toEqual(expect.arrayContaining([{ user: { $in: [uid] } }]));
+  });
+
+  it('a work-list row matches its full order id and the short #number', () => {
+    const row = { id: '6553f1a2b3c4d5e6f7a8b9c0', orderNumber: 'F7A8B9C0', customer: {}, lines: [{ name: 'Pioneer stereo' }] };
+    expect(rowMatches(row, readListFilters({ q: '6553f1a2b3c4d5e6f7a8b9c0' }))).toBe(true);
+    expect(rowMatches(row, readListFilters({ q: '#f7a8b9c0' }))).toBe(true);
+    expect(rowMatches(row, readListFilters({ q: 'pioneer' }))).toBe(true);
+    expect(rowMatches(row, readListFilters({ q: '6553f1a2b3c4d5e6f7a8b9c1' }))).toBe(false);
+  });
+
+  it('paid list: finds a registered customer by their account email, a product, and a full id', async () => {
+    const acc = await staff('accounts');
+    const buyer = await User.create({ name: 'Leela Das', email: 'leela.das@example.test', phone: '9811111111', passwordHash: 'x', role: 'customer' });
+    const mine = await paidOrder({ items: oneItem('Pioneer stereo') });
+    await Order.updateOne({ _id: mine._id }, { $set: { user: buyer._id } });
+    const other = await paidOrder({ items: oneItem('Floor mat') });
+    expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', q: 'leela.das@example' }))).toEqual([String(mine._id)]);
+    expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', q: 'pioneer' }))).toEqual([String(mine._id)]);
+    expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', q: 'FLOOR mat' }))).toEqual([String(other._id)]);
+    // The full id, as pasted from a link or an email.
+    expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', q: String(other._id) }))).toEqual([String(other._id)]);
+  });
+
+  it('special characters are matched literally and never break the query', async () => {
+    const acc = await staff('accounts');
+    const p = await staff('procurement');
+    const cpp = await paidOrder({ items: oneItem('Philips H4.1 (C++ edition)') });
+    await paidOrder({ items: oneItem('Philips H4X1 standard') });
+    for (const q of ['c++', '(c++', 'h4.1']) {
+      expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', q }))).toEqual([String(cpp._id)]);
+      expect(idsOf(await wf.listQueue(p, 'procurement', { q }))).toEqual([String(cpp._id)]);
+    }
+    for (const q of ['.*', '[', '\\', '$where', '{"$gt":""}', '^', '?']) {
+      expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', q }))).toEqual([]);
+      expect(idsOf(await wf.listQueue(p, 'procurement', { q }))).toEqual([]);
+    }
+  });
+
+  it('paging with a search: every page honours it, with no repeats or gaps', async () => {
+    const acc = await staff('accounts');
+    const p = await staff('procurement');
+    const wanted = [];
+    for (let i = 0; i < 27; i += 1) {
+      wanted.push(String((await paidOrder({ items: oneItem(`Roof rack ${i}`) }))._id));
+      if (i % 5 === 0) await paidOrder({ items: oneItem('Seat cover') }); // never matches
+    }
+    const p1 = await listPaidSalesOrders(acc, { stage: 'processing', q: 'roof rack' });
+    expect(p1.orders).toHaveLength(25);
+    expect(p1.summary.count).toBe(27);
+    const p2 = await listPaidSalesOrders(acc, { stage: 'processing', q: 'roof rack', cursor: p1.nextCursor });
+    expect(p2.nextCursor).toBeNull();
+    const seen = [...idsOf(p1), ...idsOf(p2)];
+    expect(new Set(seen).size).toBe(27);
+    expect(seen.sort()).toEqual([...wanted].sort());
+    // The work queue pages the same way.
+    const w1 = await wf.listQueue(p, 'procurement', { q: 'roof rack' });
+    const w2 = await wf.listQueue(p, 'procurement', { q: 'roof rack', cursor: w1.nextCursor });
+    const wseen = [...idsOf(w1), ...idsOf(w2)];
+    expect(new Set(wseen).size).toBe(wseen.length);
+    expect(wseen.sort()).toEqual([...wanted].sort());
+  });
+
+  it('a pinned order shows on top only when it matches the search', async () => {
+    const acc = await staff('accounts');
+    const rack = await paidOrder({ items: oneItem('Roof rack') });
+    const mat = await paidOrder({ items: oneItem('Floor mat') });
+    await pinOrder(acc, String(rack._id));
+    const all = await listPaidSalesOrders(acc, { stage: 'processing' });
+    expect(idsOf(all)[0]).toBe(String(rack._id));
+    expect(idsOf(await listPaidSalesOrders(acc, { stage: 'processing', q: 'floor' }))).toEqual([String(mat._id)]);
+  });
+
+  it('the order panel shows each line\'s catalogue SKU (the variant\'s first), read in one go', async () => {
+    const { default: Product } = await import('../models/Product.js');
+    const p = await staff('procurement');
+    const plain = await Product.collection.insertOne({ name: 'Floor mat', slug: 'floor-mat-sku', sku: 'MAT-FTN-3D', price: 4500 });
+    const variantId = new mongoose.Types.ObjectId();
+    const multi = await Product.collection.insertOne({ name: 'Stereo', slug: 'stereo-sku', sku: 'PIO-BASE', price: 1, variants: [{ _id: variantId, sku: 'PIO-Z6350' }] });
+    const o = await paidOrder({ items: [
+      { product: plain.insertedId, name: 'Floor mat', price: 4500, quantity: 1 },
+      { product: multi.insertedId, variantId, variantLabel: 'Z6350', name: 'Stereo', price: 24990, quantity: 1 },
+      { product: new mongoose.Types.ObjectId(), name: 'Gone from the catalogue', price: 10, quantity: 1 },
+    ] });
+    const view = await wf.getOrder(p, String(o._id));
+    expect(view.lines.map((l) => l.sku)).toEqual(['MAT-FTN-3D', 'PIO-Z6350', null]);
   });
 });

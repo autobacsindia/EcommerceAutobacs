@@ -1,5 +1,6 @@
 'use client';
 
+import CopyId from '@/components/ui/CopyId';
 import { useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, Loader2 } from 'lucide-react';
@@ -142,13 +143,14 @@ export function EntryRow({ e, showSupplier = false }: { e: CreditEntry; showSupp
             {showSupplier && <span>{e.supplier.name} · </span>}{e.kindLabel}
             <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[e.status]}`}>{e.statusLabel}</span>
           </p>
-          <p className="text-xs text-gray-600">
+          <p className="flex flex-wrap items-center gap-x-1 text-xs text-gray-600">
             {[
               e.paymentRequest && `payment ${e.paymentRequest.number}`,
               e.order?.number && `order ${e.order.number}`,
               e.date && `repaid ${day(e.date)}`,
               e.reference && `ref ${e.reference}`,
             ].filter(Boolean).join(' · ')}
+            {e.order?.number && <CopyId value={e.order.number} label="Order number" />}
           </p>
           {e.note && <p className="text-sm text-gray-700">{e.note}</p>}
           <p className="text-xs text-gray-500">

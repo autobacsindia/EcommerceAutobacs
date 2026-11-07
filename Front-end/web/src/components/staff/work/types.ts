@@ -50,6 +50,8 @@ export type WorkRow = {
     productId?: string | null;
     variantId?: string | null;
     name: string;
+    /** Snapshotted on the order; null when the product had none. Absent from an older server. */
+    sku?: string | null;
     variantLabel: string | null;
     quantity: number;
     price: number;

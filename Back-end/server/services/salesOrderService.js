@@ -33,7 +33,7 @@ import { isPurchasable } from '../utils/stockStatus.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { buildHold, shapeHold, heldFilter } from '../utils/salesHold.js';
 import { workflowView } from '../utils/teamWorkflow.js';
-import { readListFilters, orderQueryFor } from '../utils/orderListFilters.js';
+import { readListFilters, orderQueryFor, withCustomerIds } from '../utils/orderListFilters.js';
 import { and, findEachBranch, isObjectId, keysetPage, plainQuery } from '../utils/listQuery.js';
 import { phoneOnlyEmailFor, publicEmail } from '../utils/customerContact.js';
 import { paymentSummary, retireAllParts } from './salesPaymentService.js';
@@ -399,7 +399,8 @@ export async function listSalesOrders(actor, params = {}) {
     ? (isObjectId(seller) ? ownId(new mongoose.Types.ObjectId(seller)) : { salesUser: { $type: 'objectId' } })
     : ownId(actor._id);
   const now = new Date();
-  const f = readListFilters(filters);
+  // A search also matches the customer's account (email on the user, not the order).
+  const f = await withCustomerIds(readListFilters(filters), findCustomerIds);
   const query = and(
     owner,
     view === 'on_hold'
@@ -419,6 +420,9 @@ export async function listSalesOrders(actor, params = {}) {
   const { items, pinned = [], ...rest } = await page(query, { cursor, sortName: f.sort, actor, hints: [LIST_DATE_INDEX.sales] });
   return { ...rest, orders: listRows(items, pinned), scope: isSalesHead(actor) ? 'team' : 'mine' };
 }
+
+/** Account ids for a search word (bounded; the word is regex-escaped there). */
+const findCustomerIds = (word, opts) => userRepository.findIdsByNameOrEmail(word, opts);
 
 /** "Paid" / "Not paid yet" on a seller's list. Cancelled and refunded orders are in neither. */
 const PAID_FILTER = Object.freeze({
@@ -465,7 +469,8 @@ export async function listPaidSalesOrders(actor, params = {}) {
   if (!allowed) throw fail('Not authorized.', 403);
   // No stage (or an unknown one) keeps the old behaviour: every paid order.
   const stageStatuses = PAID_ORDER_STAGES[stage];
-  const f = readListFilters(filters);
+  // A search also matches the customer's account (email on the user, not the order).
+  const f = await withCustomerIds(readListFilters(filters), findCustomerIds);
   const common = and(
     // `refunded` stays listed so Accounts can still see an order after its refund.
     { paymentStatus: { $in: ['paid', 'refunded'] } },

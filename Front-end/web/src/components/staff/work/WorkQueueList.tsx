@@ -8,6 +8,7 @@ import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import PinButton from '@/components/staff/PinButton';
+import CopyId from '@/components/ui/CopyId';
 import { errorMessage, rupees } from '@/components/staff/sales/types';
 import WorkOrderPanel from './WorkOrderPanel';
 import { STAGE_TONE, type WorkQueue, type WorkRow } from './types';
@@ -51,7 +52,11 @@ function Row({ order }: { order: WorkRow }) {
         <span className="ml-auto text-right text-sm font-bold text-gray-900 sm:ml-0 sm:w-28">{rupees(order.totalAmount)}</span>
         <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      <PinButton orderId={order.id} pinned={!!order.pinned} className="mr-3 mt-3" />
+      {/* Beside the pin, not inside the row's button (a button cannot hold a button). */}
+      <div className="mr-3 mt-3 flex items-center gap-1">
+        <CopyId value={order.orderNumber} label="Order number" />
+        <PinButton orderId={order.id} pinned={!!order.pinned} />
+      </div>
       </div>
       {open && <div className="border-t border-gray-100 p-4"><WorkOrderPanel orderId={order.id} /></div>}
     </li>

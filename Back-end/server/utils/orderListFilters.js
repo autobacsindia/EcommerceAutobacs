@@ -7,7 +7,9 @@ import { listDateOf } from './orderListDate.js';
  * query string for every list, so "search" means the same thing everywhere.
  *
  *   q      — words to find in the order number, customer name / phone / email,
- *            city, seller and product names (case-insensitive)
+ *            city, seller and product names (case-insensitive). Every
+ *            word must match somewhere; a leading # (the order number as shown)
+ *            is ignored.
  *   step   — a workflow stage key (stock_check, to_ship, …): work lists only
  *            (`stage` already means processing / delivered on the paid lists)
  *   source — 'website' | 'sales'
@@ -57,7 +59,8 @@ export function rowMatches(row, f) {
   if (f.stage && row.summaryStage !== f.stage && !(row.lines || []).some((l) => l.stage === f.stage)) return false;
   if (f.q) {
     const hay = [
-      row.orderNumber, row.customer?.name, row.customer?.phone, row.customer?.email, row.city, row.soldBy,
+      // The id too: an order number copied in full (24 characters) must find its order.
+      row.id, row.orderNumber, row.customer?.name, row.customer?.phone, row.customer?.email, row.city, row.soldBy,
       ...(row.lines || []).map((l) => `${l.name} ${l.variantLabel || ''}`),
     ].join(' ').toLowerCase();
     // Every word must appear somewhere ("hilux kochi" narrows; it does not widen).
@@ -67,6 +70,33 @@ export function rowMatches(row, f) {
 }
 
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Search words, as orderQueryFor reads them (at most five). */
+const searchWords = (f) => (f.q ? f.q.split(/\s+/).slice(0, 5) : []);
+
+// The registered customer's own account (email / name / phone on the user) is looked
+// up per word, bounded: only the first three words of three characters or more, and
+// at most 200 accounts each — enough to find a customer, never an unbounded $in.
+const USER_LANE_WORDS = 3;
+const USER_LANE_MIN_LENGTH = 3;
+export const USER_LANE_MAX_IDS = 200;
+
+/**
+ * Adds `userIds` (word → matching account ids) to the filters, so orderQueryFor can
+ * also match an order by its customer's account. An order only carries the account
+ * by id, and the account email is not copied onto the order (only a guest's is), so
+ * without this a search for a registered customer's email finds nothing.
+ *
+ * `findIds(word, { limit })` is userRepository.findIdsByNameOrEmail (regex-escaped).
+ */
+export async function withCustomerIds(f, findIds) {
+  const words = searchWords(f).filter((w) => w.length >= USER_LANE_MIN_LENGTH).slice(0, USER_LANE_WORDS);
+  if (!words.length) return f;
+  const found = await Promise.all(words.map((w) => findIds(w, { limit: USER_LANE_MAX_IDS })));
+  const userIds = {};
+  words.forEach((w, i) => { if (found[i]?.length) userIds[w] = found[i]; });
+  return { ...f, userIds };
+}
 
 /**
  * The same filters as a Mongo query, for lists read straight from the orders
@@ -86,8 +116,9 @@ export function orderQueryFor(f) {
   if (f.placed) and.push({ listDate: f.placed });
   if (f.amount) and.push({ totalAmount: f.amount });
   if (f.q) {
-    for (const w of f.q.split(/\s+/).slice(0, 5)) {
+    for (const w of searchWords(f)) {
       const re = new RegExp(escapeRegex(w), 'i');
+      const accounts = f.userIds?.[w];
       and.push({
         $or: [
           { 'shippingAddress.fullName': re },
@@ -95,6 +126,7 @@ export function orderQueryFor(f) {
           { 'shippingAddress.city': re },
           { guestEmail: re },
           { 'items.name': re },
+          ...(accounts?.length ? [{ user: { $in: accounts } }] : []),
           // The order number shown everywhere is the last 8 characters of the id.
           ...(/^[0-9a-f]{3,24}$/.test(w) ? [{ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: escapeRegex(w), options: 'i' } } }] : []),
         ],

@@ -1,5 +1,6 @@
 'use client';
 
+import CopyId from '@/components/ui/CopyId';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Link2, Loader2, Paperclip, Pencil, X } from 'lucide-react';
@@ -28,12 +29,12 @@ const ACTION_LABELS: Record<string, string> = {
 };
 const FILE_LABELS = { bill: 'Bill / invoice', qr: 'Payment QR', proof: 'Payment screenshot' } as const;
 
-function Row({ k, v }: { k: string; v?: string | null }) {
+function Row({ k, v, copy }: { k: string; v?: string | null; /** Names a copy icon after the value ("Order number"). */ copy?: string }) {
   if (!v) return null;
   return (
     <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">
       <dt className="text-gray-500">{k}</dt>
-      <dd className="break-words text-gray-900">{v}</dd>
+      <dd className="break-words text-gray-900">{v}{copy && <CopyId value={v} label={copy} className="ml-1" />}</dd>
     </div>
   );
 }
@@ -61,7 +62,9 @@ function OrderLinkRow({ r, onSaved }: { r: PaymentRequest; onSaved: (next: Payme
       <dd className="space-y-2 text-gray-900">
         {!picking && (
           <div className="flex flex-wrap items-center gap-2">
-            {r.order ? <span className="font-medium">{r.order.number}</span> : <span className="text-gray-500">Not linked to an order</span>}
+            {r.order
+              ? <span className="inline-flex items-center gap-1 font-medium">{r.order.number}<CopyId value={r.order.number} label="Order number" /></span>
+              : <span className="text-gray-500">Not linked to an order</span>}
             {may && (
               <button type="button" onClick={() => setPicking(true)} className={`${small} text-blue-700`}>
                 <Link2 className="h-3 w-3" /> {r.order ? 'Change' : 'Link to order'}
@@ -181,7 +184,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                   if (was) qc.invalidateQueries({ queryKey: paymentKeys.forOrder(was) });
                   done(next);
                 }} />
-              ) : <Row k="Order" v={r.order?.number} />}
+              ) : <Row k="Order" v={r.order?.number} copy="Order number" />}
               <Row k="Items" v={r.itemNames.join(', ')} />
               <Row k="Customer" v={r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.city].filter(Boolean).join(' · ') : null} />
               <Row k="Sale closed by" v={r.closedBy} />

@@ -43,6 +43,7 @@ import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
 import orderRepository from '../repositories/orderRepository.js';
+import productRepository from '../repositories/productRepository.js';
 import shipmentService from './shipmentService.js';
 import cancellationService from './cancellationService.js';
 import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage/privateUploads.js';
@@ -417,7 +418,32 @@ export async function listQueue(actor, queue, { cursor, ...filters } = {}) {
 export async function getOrder(actor, orderId) {
   const o = await orderRepository.findForWorkflow(orderId);
   if (!o || !canView(actor, o)) throw fail('Order not found.', 404);
-  return detail(actor, o);
+  return withSkus(detail(actor, o));
+}
+
+/**
+ * The catalogue SKU on each line (the variant's, else the product's), so
+ * procurement can copy it for a supplier. Orders do not snapshot a SKU, so it is
+ * read from the product — an identifier, not money, so reading it live is fine
+ * (the price and name on the line stay the order's own). One batched read per
+ * opened order; a failure only leaves the SKUs out.
+ */
+async function withSkus(order) {
+  const ids = [...new Set(order.lines.map((l) => l.productId).filter(Boolean))];
+  let skus = new Map();
+  try {
+    skus = await productRepository.findSkusByIds(ids);
+  } catch {
+    return order;
+  }
+  return {
+    ...order,
+    lines: order.lines.map((l) => {
+      const p = skus.get(l.productId);
+      const sku = (l.variantId && p?.variants.get(l.variantId)) || p?.sku || null;
+      return { ...l, sku };
+    }),
+  };
 }
 
 /**

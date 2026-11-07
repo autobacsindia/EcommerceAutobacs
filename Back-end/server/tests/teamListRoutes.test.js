@@ -110,3 +110,17 @@ it('Tasks: the sort is accepted, and the open list carries a count', async () =>
   // An unknown sort reads as due date (an old link still opens).
   expect((await get('/staff/tasks?view=mine&state=open&sort=sideways', p)).body.sort).toBe('due');
 });
+
+it('a search on the order lists is refused when signed out (401) or on another team\'s list (403)', async () => {
+  for (const path of ['/staff/work?queue=procurement&q=roof', '/staff/orders/paid?q=roof', '/staff/sales/orders?q=roof']) {
+    expect((await request(app).get(`${BASE}${path}`)).status).toBe(401);
+  }
+  const marketing = await login('staff', { team: 'marketing' });
+  expect((await get('/staff/work?queue=procurement&q=roof', marketing)).status).toBe(403);
+  expect((await get('/staff/orders/paid?q=roof', marketing)).status).toBe(403);
+  // A search with regex characters is plain text, not a 400 or a 500.
+  const acc = await login('staff', { team: 'accounts' });
+  const res = await get(`/staff/orders/paid?q=${encodeURIComponent('(c++ [.*')}`, acc);
+  expect(res.status).toBe(200);
+  expect(res.body.orders).toEqual([]);
+});
