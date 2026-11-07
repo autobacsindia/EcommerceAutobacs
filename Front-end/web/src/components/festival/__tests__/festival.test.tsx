@@ -16,7 +16,7 @@ jest.mock('next/navigation', () => ({ usePathname: () => mockPath }));
 const mockGet = jest.fn();
 jest.mock('@/lib/api', () => ({ __esModule: true, default: { get: (...a: unknown[]) => mockGet(...a) } }));
 
-const engine = { burst: jest.fn(), sparkle: jest.fn(), flyToCart: jest.fn(() => Promise.resolve()), popBadge: jest.fn(), fireworks: jest.fn(), destroy: jest.fn() };
+const engine = { burst: jest.fn(), sparkle: jest.fn(), trail: jest.fn(), flyToCart: jest.fn(() => Promise.resolve()), popBadge: jest.fn(), fireworks: jest.fn(), destroy: jest.fn() };
 const mockCreateEngine = jest.fn(() => engine);
 jest.mock('../effects/engine', () => ({
   createEngine: (...a: unknown[]) => mockCreateEngine(...(a as [])),
@@ -222,6 +222,91 @@ describe('add-to-cart effects', () => {
     mockPath = '/checkout';
     view.rerender(<FestivalThemeProvider theme={liveTheme()} initialLive><FestivalEffects /></FestivalThemeProvider>);
     await waitFor(() => expect(engine.destroy).toHaveBeenCalled());
+  });
+});
+
+describe('cursor sparkle trail', () => {
+  /** matchMedia for a desktop mouse (fine + hover), optionally asking for less motion. */
+  const setMouse = (fine: boolean, reduce = false) => {
+    window.matchMedia = jest.fn().mockImplementation((q: string) => ({
+      matches: (q.includes('reduce') && reduce) || (q.includes('pointer: fine') && fine),
+      media: q, addEventListener: jest.fn(), removeEventListener: jest.fn(), addListener: jest.fn(), removeListener: jest.fn(),
+    }));
+  };
+  const move = (x: number, y: number, pointerType = 'mouse', timeStamp = 0) => {
+    const ev = new Event('pointermove', { bubbles: true }) as PointerEvent;
+    Object.defineProperties(ev, {
+      clientX: { value: x }, clientY: { value: y }, pointerType: { value: pointerType }, timeStamp: { value: timeStamp },
+    });
+    document.body.dispatchEvent(ev);
+  };
+  /** Let the idle warm-up load the (mocked) engine chunk. */
+  const warm = async () => {
+    await act(async () => { jest.advanceTimersByTime(2100); });
+    await flush();
+  };
+
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('sheds sparks behind a moving mouse once the engine is warm', async () => {
+    setMouse(true);
+    withTheme(<FestivalEffects />);
+    move(10, 10, 'mouse', 1000); // before warm-up: nothing, and no waiting on the chunk
+    expect(engine.trail).not.toHaveBeenCalled();
+    await warm();
+    move(50, 60, 'mouse', 2000);
+    expect(engine.trail).toHaveBeenCalledWith(50, 60);
+  });
+
+  it('is throttled: tiny or too-quick moves shed nothing extra', async () => {
+    setMouse(true);
+    withTheme(<FestivalEffects />);
+    await warm();
+    move(100, 100, 'mouse', 3000);
+    move(103, 102, 'mouse', 3100); // 3.6px: too short
+    move(160, 100, 'mouse', 3105); // 5ms later: too soon
+    move(160, 100, 'mouse', 3200); // far enough from (100,100) and late enough
+    expect(engine.trail).toHaveBeenCalledTimes(2);
+  });
+
+  it('never runs for touch or pen, nor on devices without a fine pointer', async () => {
+    setMouse(true);
+    const view = withTheme(<FestivalEffects />);
+    await warm();
+    move(50, 50, 'touch', 2000);
+    move(90, 90, 'pen', 2100);
+    expect(engine.trail).not.toHaveBeenCalled();
+    view.unmount();
+
+    setMouse(false);
+    withTheme(<FestivalEffects />);
+    await warm();
+    move(50, 50, 'mouse', 3000);
+    expect(engine.trail).not.toHaveBeenCalled();
+  });
+
+  it('reduced motion: no trail and no animation code', async () => {
+    setMouse(true, true);
+    withTheme(<FestivalEffects />);
+    await warm();
+    move(50, 50, 'mouse', 2000);
+    expect(mockCreateEngine).not.toHaveBeenCalled();
+    expect(engine.trail).not.toHaveBeenCalled();
+  });
+
+  it('stops when the festival is off and on checkout', async () => {
+    setMouse(true);
+    withTheme(<FestivalEffects />, null, false);
+    await warm();
+    move(50, 50, 'mouse', 2000);
+    expect(engine.trail).not.toHaveBeenCalled();
+
+    mockPath = '/checkout';
+    withTheme(<FestivalEffects />);
+    await warm();
+    move(80, 80, 'mouse', 3000);
+    expect(engine.trail).not.toHaveBeenCalled();
   });
 });
 
