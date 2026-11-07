@@ -37,6 +37,7 @@ function orderItemsSnapshot(order) {
   const items = Array.isArray(order.items) ? order.items : [];
   return items.slice(0, MAX_SNAPSHOT_ITEMS).map((it) => ({
     name: it.name || null,
+    variantLabel: it.variantLabel || null,
     quantity: it.quantity,
     price: it.price,
   }));
@@ -101,6 +102,9 @@ class LeadSyncService {
     lead.contactedBy = null;
     lead.lastContactedAt = null;
     lead.nextFollowUpAt = null;
+    // The last cycle's follow-up badge belongs to that cycle (its history stays).
+    lead.followUpStatus = undefined;
+    lead.followUpStatusAt = undefined;
     lead.lostReason = '';
     lead.convertedOrder = null;
     lead.convertedAt = null;

@@ -38,6 +38,18 @@ export const userCartFilter = (userId) => ({
 });
 
 class CartRepository {
+  /**
+   * The items of the given carts, by cart _id (the primary key, so no owner
+   * filter is involved), for the GTM leads sheet. Lean. Map of cart id → items.
+   */
+  async findItemsByIds(ids) {
+    if (!ids?.length) return new Map();
+    const rows = await Cart.find({ _id: { $in: ids } })
+      .select('items.product items.variantLabel items.quantity')
+      .lean();
+    return new Map(rows.map((c) => [String(c._id), c.items || []]));
+  }
+
   async clearCart(userId, session = null) {
     return Cart.findOneAndUpdate(
       userCartFilter(userId),

@@ -24,6 +24,31 @@ export const LEAD_QUIET_DAYS = 7;
 
 export const TERMINAL_LEAD_STATUSES = ['won', 'lost'];
 
+/*
+  Follow-up statuses on the GTM leads sheet (/team/leads). Each time someone
+  follows up a lead they record one of these, with an optional note ('other'
+  needs one). Saved as a `follow_up` history line; the newest one is also kept on
+  the lead (followUpStatus) for the badge and the filter.
+
+  What each does to the lead's own status (teamLeadService.recordFollowUp):
+    responded, whatsapp, other  → new becomes contacted
+    converted                   → moves forward to qualified, stays OPEN: a lead
+                                  is marked won only by a real paid order
+                                  (leadSyncService), never by hand
+    not_interested              → closes it as lost
+    no_response                 → no change
+*/
+export const FOLLOW_UP_STATUSES = Object.freeze({
+  responded: 'Responded',
+  whatsapp: 'WhatsApp',
+  converted: 'Converted',
+  no_response: 'No response',
+  not_interested: 'Not interested',
+  other: 'Others',
+});
+export const FOLLOW_UP_STATUS_KEYS = Object.keys(FOLLOW_UP_STATUSES);
+export const FOLLOW_UP_NOTE_MAX = 500;
+
 // Active (workable) statuses — a live lead a rep can still move. The pool/nurture
 // counts, the re-score sweep, and the stale-follow-up sweep all operate on these;
 // won/lost are closed and excluded. Single source of truth for the triplet.

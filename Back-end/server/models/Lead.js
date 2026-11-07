@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { SOURCE_TYPES, LEAD_STATUSES } from "../config/leadConstants.js";
+import { SOURCE_TYPES, LEAD_STATUSES, FOLLOW_UP_STATUS_KEYS } from "../config/leadConstants.js";
 
 /**
  * Lead — the Sales CRM's single source of truth for a prospect.
@@ -69,7 +69,7 @@ const LeadActivitySchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ["note", "call", "email", "sms", "status_change", "claim", "assignment", "conversion"],
+      enum: ["note", "call", "email", "sms", "status_change", "claim", "assignment", "conversion", "follow_up"],
       required: true,
     },
     // `by` = the User (shared admin console operator) who performed the action —
@@ -111,6 +111,11 @@ const LeadSchema = new mongoose.Schema(
     lastContactedAt: { type: Date, default: null },
     nextFollowUpAt: { type: Date, default: null },
     lostReason: { type: String, default: "" },
+    // The newest follow-up status recorded on the GTM sheet (FOLLOW_UP_STATUSES) and
+    // when. The full list lives in `activities` (type 'follow_up', meta.status);
+    // this copy drives the badge and the "Follow-up" filter without reading history.
+    followUpStatus: { type: String, enum: FOLLOW_UP_STATUS_KEYS, default: undefined },
+    followUpStatusAt: { type: Date, default: undefined },
 
     // ── Priority score ────────────────────────────────────────────────────────
     // Denormalized 0–100 hotness/priority, computed by utils/leadScore.js on every
