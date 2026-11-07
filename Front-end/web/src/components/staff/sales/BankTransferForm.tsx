@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Landmark, Loader2, Paperclip } from 'lucide-react';
 import FilePicker from '@/components/payments/FilePicker';
 import { postForm } from '@/components/payments/api';
-import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
+import { acceptsFile, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, mb, PHOTO_OR_PDF } from '@/lib/attachments';
 import { errorMessage, rupees, type SalesOrder } from './types';
 
 /** Same as the server's MAX_TRANSFER_FILES (services/bankTransferService.js). */
@@ -27,15 +27,19 @@ function today(): string {
  * it again.
  *
  * `open` / `onOpenChange` let the page open it from "How will the customer pay?"
- * — the salesman holding a receipt looks there first.
+ * — the salesman holding a receipt looks there first. `initialFiles` is a
+ * receipt they already chose there (dropped into the QR box by mistake): it is
+ * attached as soon as the form opens, after the same type and size checks.
  */
-export default function BankTransferForm({ order, onDone, open, onOpenChange, showButton = true }: {
+export default function BankTransferForm({ order, onDone, open, onOpenChange, showButton = true, initialFiles }: {
   order: SalesOrder;
   onDone: () => void;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   /** False when the page already offers "Customer already paid" higher up. */
   showButton?: boolean;
+  /** Files to attach when the form opens (each still checked here and on the server). */
+  initialFiles?: File[];
 }) {
   const [ownOpen, setOwnOpen] = useState(false);
   const openForm = open ?? ownOpen;
@@ -53,6 +57,16 @@ export default function BankTransferForm({ order, onDone, open, onOpenChange, sh
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Carried-over receipt: attach it when it arrives, unless it breaks this form's rules.
+  useEffect(() => {
+    if (!initialFiles?.length) return;
+    const tooBig = initialFiles.find((f) => f.size > MAX_ATTACHMENT_BYTES);
+    const wrong = initialFiles.find((f) => !acceptsFile(f, PHOTO_OR_PDF));
+    if (tooBig) setError(`"${tooBig.name}" is too large (${mb(MAX_ATTACHMENT_BYTES)} maximum).`);
+    else if (wrong) setError(`"${wrong.name}" can't be attached here — only a photo (JPG, PNG, WebP) or a PDF.`);
+    const ok = initialFiles.filter((f) => f.size <= MAX_ATTACHMENT_BYTES && acceptsFile(f, PHOTO_OR_PDF));
+    if (ok.length) setFiles((now) => [...now.filter((f) => !ok.includes(f)), ...ok].slice(0, MAX_TRANSFER_FILES));
+  }, [initialFiles]);
 
   if (!openForm) {
     if (!showButton) return null;

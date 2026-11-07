@@ -4,7 +4,7 @@
  * checks them; above ₹50,000 a QR tells the customer to pay by bank transfer;
  * "Payment first" creates and accepts the quotation, then opens the details.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import SalesOrderPayment from './SalesOrderPayment';
 import { payDetailsMessage, QR_LIMIT_NOTE, rupees, type PayDetails } from './types';
@@ -89,7 +89,7 @@ it('a PDF in the GPay QR box: refused on the spot, with a way to the receipt for
   expect(screen.getByRole('alert')).toHaveTextContent('Record it under "Customer already paid" — PDFs and screenshots both work there.');
   expect(fetchMock).not.toHaveBeenCalled();
 
-  fireEvent.click(screen.getByRole('button', { name: /Customer already paid — attach receipt/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Customer already paid — attach “gpay receipt.pdf” as the receipt' }));
   expect(screen.queryByRole('form', { name: 'Payment details' })).not.toBeInTheDocument();
   expect(screen.getByRole('form', { name: 'Record a bank transfer' })).toBeInTheDocument();
   expect(screen.getByLabelText('Attach receipt (PDF or photo)')).toHaveAttribute('accept', 'image/jpeg,image/png,image/webp,application/pdf');
@@ -100,7 +100,7 @@ it('a QR picture is still taken; another refusal does not offer the receipt form
   wrap(<SalesOrderPayment id="o1" startWithDetails />);
   fireEvent.click(await screen.findByRole('radio', { name: 'GPay / UPI QR' }));
   fireEvent.change(screen.getByLabelText('Attach the GPay / UPI QR'), { target: { files: [new File(['%PDF'], 'r.pdf', { type: 'application/pdf' })] } });
-  expect(screen.getByRole('button', { name: /Customer already paid — attach receipt/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Customer already paid — attach “r.pdf” as the receipt/ })).toBeInTheDocument();
   // Too big is a different problem: no receipt hint.
   fireEvent.change(screen.getByLabelText('Attach the GPay / UPI QR'), { target: { files: [new File([new Uint8Array(11 * 1024 * 1024)], 'qr.png', { type: 'image/png' })] } });
   expect(screen.getByRole('alert')).toHaveTextContent('"qr.png" is too large');
@@ -110,6 +110,65 @@ it('a QR picture is still taken; another refusal does not offer the receipt form
   fireEvent.click(screen.getByRole('button', { name: /Save payment details/ }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalled());
   expect(((fetchMock.mock.calls[0][1] as RequestInit).body as FormData).get('qr')).toMatchObject({ name: 'our-qr.png' });
+});
+
+/*
+  Production, 2026-11-07: GTM still met "PDF not supported" in the QR box. The
+  receipt form took PDFs, but going there meant finding and choosing the file
+  again. Now the refused file goes along, already attached.
+*/
+describe('a receipt dropped into the QR box is carried to the receipt form', () => {
+  const qrBox = () => screen.getByLabelText('Attach the GPay / UPI QR');
+  const receiptForm = () => screen.getByRole('form', { name: 'Record a bank transfer' });
+  const attachedNames = () => Array.from(receiptForm().querySelectorAll('li')).map((li) => li.textContent);
+  async function openQrBox() {
+    get.mockResolvedValue(ORDER());
+    wrap(<SalesOrderPayment id="o1" startWithDetails />);
+    fireEvent.click(await screen.findByRole('radio', { name: 'GPay / UPI QR' }));
+  }
+
+  it('a PDF arrives attached and is sent with the UTR as the proof', async () => {
+    await openQrBox();
+    const pdf = new File(['%PDF-1.4'], 'hdfc statement.pdf', { type: 'application/pdf' });
+    fireEvent.change(qrBox(), { target: { files: [pdf] } });
+    fireEvent.click(screen.getByRole('button', { name: /attach “hdfc statement.pdf” as the receipt/ }));
+
+    expect(attachedNames()).toEqual(['hdfc statement.pdf']);
+    // More can still be added beside it (a GPay screenshot too).
+    fireEvent.change(screen.getByLabelText(/Attach receipt|Add another/), { target: { files: [new File(['x'], 'gpay.jpg', { type: 'image/jpeg' })] } });
+    expect(attachedNames()).toEqual(['hdfc statement.pdf', 'gpay.jpg']);
+
+    window.confirm = jest.fn(() => true);
+    fireEvent.change(screen.getByLabelText(/UTR \/ bank or UPI reference/), { target: { value: '430912345678' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send to accounts/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/staff/sales/orders/o1/bank-transfer');
+    expect(((init.body as FormData).getAll('proof') as File[]).map((f) => f.name)).toEqual(['hdfc statement.pdf', 'gpay.jpg']);
+  });
+
+  it('a Windows-labelled PDF (no type, .pdf name) is carried too', async () => {
+    await openQrBox();
+    fireEvent.change(qrBox(), { target: { files: [new File(['%PDF'], 'receipt.pdf', { type: '' })] } });
+    fireEvent.click(screen.getByRole('button', { name: /attach “receipt.pdf” as the receipt/ }));
+    expect(attachedNames()).toEqual(['receipt.pdf']);
+  });
+
+  it('a file the receipt form would refuse is not carried (a Word file)', async () => {
+    await openQrBox();
+    fireEvent.change(qrBox(), { target: { files: [new File(['x'], 'receipt.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Customer already paid — attach receipt' }));
+    expect(attachedNames()).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('a PDF over 10 MB is not attached; the form says why', async () => {
+    await openQrBox();
+    fireEvent.change(qrBox(), { target: { files: [new File([new Uint8Array(11 * 1024 * 1024)], 'big.pdf', { type: 'application/pdf' })] } });
+    fireEvent.click(screen.getByRole('button', { name: /attach “big.pdf” as the receipt/ }));
+    expect(attachedNames()).toEqual([]);
+    expect(within(receiptForm()).getByRole('alert')).toHaveTextContent('"big.pdf" is too large (10 MB maximum).');
+  });
 });
 
 it('saved details: ready to share as PDF and WhatsApp; not changeable once paid', async () => {
