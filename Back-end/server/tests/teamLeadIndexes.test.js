@@ -27,6 +27,8 @@ beforeEach(async () => {
   await Lead.collection.insertMany(Array.from({ length: N }, (_, i) => ({
     identityKey: `k${i}`, name: `Lead ${i}`, primarySource: src[i % 5], status: st[(i * 3) % 5],
     leadScore: (i * 13) % 100, assignedRep: i % 3 === 0 ? reps[i % 4] : null,
+    // A few followed up (2% each status), most never: the filter must still walk an index.
+    ...(i % 50 === 0 ? { followUpStatus: 'no_response' } : i % 50 === 1 ? { followUpStatus: 'converted' } : {}),
     createdAt: new Date(Date.UTC(2026, 0, 1) + i * 6e4), updatedAt: new Date(Date.UTC(2026, 0, 1) + i * 6e4),
   })));
 });
@@ -64,4 +66,14 @@ describe.each(CASES)('%s', (_label, params, mine) => {
     expect(next.sorted).toBe(false);
     expect(next.read).toBeLessThan(200);
   });
+});
+
+it('the Follow-up filter walks its own index: a rare status reads a handful of rows, not every open lead', async () => {
+  const res = await planOf({ view: 'all', followUp: 'no_response' });
+  expect(res.sorted).toBe(false);
+  expect(res.read).toBeLessThan(60);
+  expect(res.page.leads.length).toBeGreaterThan(0);
+  const none = await planOf({ view: 'all', followUp: 'none' });
+  expect(none.sorted).toBe(false);
+  expect(none.read).toBeLessThan(200);
 });

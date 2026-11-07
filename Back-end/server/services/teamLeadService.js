@@ -190,6 +190,7 @@ export const TEAM_LEAD_FOLLOW_UP_FILTERS = ['none', ...FOLLOW_UP_STATUS_KEYS];
 
 function followUpClause(v) {
   if (v === 'none') return { followUpStatus: null };
+  // Served by the index team_follow_up_score (models/Lead.js).
   return FOLLOW_UP_STATUS_KEYS.includes(v) ? { followUpStatus: v } : null;
 }
 
