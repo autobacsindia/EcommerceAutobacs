@@ -5,8 +5,8 @@
  * the site. Ported from the Hero.html design, then made responsive.
  *
  * FONT: the whole UI reads `--display-font`, which points at the Montserrat
- * next/font variable defined in app/layout.tsx. To change the site font, swap
- * that one import — do NOT hardcode font-family here.
+ * self-hosted next/font variable defined in src/fonts/siteFonts.ts. To change
+ * the site font, edit that file — do NOT hardcode font-family here.
  *
  * THEME: colours live in the `.hr` token block below (obsidian + gold). Adjust
  * there to re-skin; components never hardcode colours.
