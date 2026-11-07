@@ -98,8 +98,28 @@ export function msUntilOfferBoundary(offer: PublicFestivalOffer | null, now: num
   return times.length ? Math.min(...times) - now : null;
 }
 
+/**
+ * After a failed read, this process skips the backend for this long and shows "no offer".
+ *
+ * Why: the root layout calls this for EVERY page. Next's data cache keeps only successful
+ * responses, so a failing endpoint (a 404 while the backend predates this route, a 5xx,
+ * a 429) is re-requested once per page. During `next build` that is one extra request per
+ * prerendered page, which tipped the shared per-IP rate limit and failed the build with a
+ * 429 on unrelated product/category pages. Backing off turns N failures into one per
+ * window. Display only — cart/checkout/payment always use the server quote, so a hidden
+ * tag for up to a minute never changes what a customer is charged.
+ */
+export const FESTIVAL_OFFER_FAILURE_BACKOFF_MS = 60_000;
+let failedUntil = 0;
+
+/** Test hook: forget a previous failure. */
+export function resetFestivalOfferBackoff(): void {
+  failedUntil = 0;
+}
+
 /** Server-side read for the root layout. Never throws — degrades to "no offer". */
-export async function getFestivalOffer(): Promise<PublicFestivalOffer | null> {
+export async function getFestivalOffer(now: number = Date.now()): Promise<PublicFestivalOffer | null> {
+  if (now < failedUntil) return null;
   try {
     const res = await serverFetch<{ success: boolean; offer: PublicFestivalOffer | null }>(
       API_ENDPOINTS.FESTIVAL_OFFER_ACTIVE,
@@ -107,6 +127,7 @@ export async function getFestivalOffer(): Promise<PublicFestivalOffer | null> {
     );
     return res?.offer ?? null;
   } catch {
+    failedUntil = now + FESTIVAL_OFFER_FAILURE_BACKOFF_MS;
     return null;
   }
 }
