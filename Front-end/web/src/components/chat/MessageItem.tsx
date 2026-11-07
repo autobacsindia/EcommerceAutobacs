@@ -54,29 +54,78 @@ function MeetCard({ url }: { url: string }) {
   );
 }
 
-/** Shared photos: a tap opens the full image in a new tab. */
+/**
+ * How big one shared photo is drawn. The frame's height is fixed (so the chat
+ * never jumps when the picture arrives); once the picture's real shape is
+ * known, the frame narrows to fit it — never wider than PHOTO_MAX_W — so a
+ * tall phone screenshot isn't drawn with wide empty sides. Nothing is cropped.
+ */
+export const PHOTO_MAX_W = 360;
+export const PHOTO_H = 280;
+export function photoFrameWidth(naturalW: number, naturalH: number, maxW = PHOTO_MAX_W, h = PHOTO_H): number {
+  if (!(naturalW > 0) || !(naturalH > 0)) return maxW;
+  return Math.max(96, Math.min(maxW, Math.round((h * naturalW) / naturalH)));
+}
+// Widths already measured, so a picture scrolled away and back (or the same
+// one in a thread) doesn't start wide and narrow again.
+const measured = new Map<string, number>();
+
+function OnePhoto({ a }: { a: ChatAttachment }) {
+  const [w, setW] = useState(() => measured.get(a.url) ?? PHOTO_MAX_W);
+  return (
+    <a
+      href={a.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="gc-photo block max-w-full overflow-hidden rounded-xl border border-gray-200"
+      style={{ width: w, height: 'var(--gc-photo-h)' }}
+      title={`${a.name} · ${fileSize(a.size)} · open full size`}
+      data-testid="chat-photo"
+    >
+      {/* A plain <img>: these are user uploads on a private staff page, so there is
+          nothing for next/image to optimise and no size known ahead of time. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={a.url}
+        alt={a.name}
+        loading="lazy"
+        decoding="async"
+        onLoad={(e) => {
+          // Fit to the frame's real height (shorter on phones).
+          const frameH = e.currentTarget.parentElement?.clientHeight || PHOTO_H;
+          const next = photoFrameWidth(e.currentTarget.naturalWidth, e.currentTarget.naturalHeight, PHOTO_MAX_W, frameH);
+          measured.set(a.url, next);
+          setW(next);
+        }}
+        className="h-full w-full object-contain"
+      />
+    </a>
+  );
+}
+
+/**
+ * Shared photos, drawn small enough to sit in the conversation but big enough
+ * to read: one photo in a fixed-height frame, several in a tidy grid of equal
+ * tiles. The whole picture always shows (never cropped — screenshots carry
+ * words). A tap opens the full image in a new tab.
+ */
 function Photos({ items }: { items: ChatAttachment[] }) {
   if (!items.length) return null;
+  if (items.length === 1) return <div className="mt-2"><OnePhoto a={items[0]} /></div>;
   return (
-    <div className={`mt-2 grid gap-2 ${items.length > 1 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1'}`}>
-      {items.map((a) => (
+    <div className={`mt-2 grid max-w-[360px] gap-1.5 ${items.length === 2 || items.length === 4 ? 'grid-cols-2' : 'grid-cols-3'}`} data-testid="chat-photo-grid">
+      {items.map((a, i) => (
         <a
-          key={a.url}
+          key={`${i}:${a.url}`}
           href={a.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="block overflow-hidden rounded-lg border border-gray-200 bg-gray-50"
-          title={`${a.name} · ${fileSize(a.size)}`}
+          className="gc-photo block aspect-[4/3] overflow-hidden rounded-lg border border-gray-200"
+          title={`${a.name} · ${fileSize(a.size)} · open full size`}
+          data-testid="chat-photo"
         >
-          {/* A plain <img>: these are user uploads on a private staff page, so there is
-              nothing for next/image to optimise and no size known ahead of time. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={a.url}
-            alt={a.name}
-            loading="lazy"
-            className={`w-full object-cover ${items.length > 1 ? 'h-32' : 'max-h-80 w-auto'}`}
-          />
+          <img src={a.url} alt={a.name} loading="lazy" decoding="async" className="h-full w-full object-contain" />
         </a>
       ))}
     </div>
@@ -334,6 +383,32 @@ function QuoteBlock({ quote, onJump }: { quote: NonNullable<ChatMessage['quote']
 /** When a timeline row last changed: its newest reply, or when it was posted. */
 const activityAt = (m: ChatMessage) => m.lastReply?.at ?? m.createdAt;
 
+/** Whether `m` is the first message of a new day (by activity, as the timeline is ordered). */
+export function startsNewDay(m: ChatMessage, previous?: ChatMessage): boolean {
+  return !previous || new Date(activityAt(previous)).toDateString() !== new Date(activityAt(m)).toDateString();
+}
+
+/**
+ * The day line: "Today", "Yesterday" or "Wed, 4 Nov" in a pill on a thin rule.
+ * `sticky` pins it to the top of the conversation while that day scrolls past
+ * (each next day's pill slides over the one before).
+ */
+export function DaySeparator({ m, sticky = false }: { m: ChatMessage; sticky?: boolean }) {
+  const label = dayLabel(activityAt(m));
+  return (
+    <div
+      role="separator"
+      aria-label={label}
+      data-day-separator
+      className={`gc-day pointer-events-none my-3 flex items-center gap-3 ${sticky ? 'sticky top-0 z-[5]' : ''}`}
+    >
+      <span className="gc-day-rule h-px flex-1" aria-hidden="true" />
+      <span className="gc-day-pill pointer-events-auto min-w-[7.5rem] rounded-full px-3 py-1 text-center text-xs font-medium text-gray-700">{label}</span>
+      <span className="gc-day-rule h-px flex-1" aria-hidden="true" />
+    </div>
+  );
+}
+
 /**
  * Is it still inside its edit window? Re-renders once, at the moment the window
  * closes, so the Edit and Delete buttons disappear on their own instead of
@@ -394,6 +469,7 @@ function EditHistory({ history }: { history: NonNullable<ChatMessage['editHistor
 export default function MessageItem({
   message,
   previous,
+  showDay = true,
   meId,
   meName,
   peopleById,
@@ -412,6 +488,8 @@ export default function MessageItem({
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
+  /** Draw this message's day line here. Off when the list draws it (pinned to the top). */
+  showDay?: boolean;
   meId: string;
   meName: string;
   peopleById: Map<string, ChatPerson>;
@@ -441,8 +519,7 @@ export default function MessageItem({
   const m = message;
   // The timeline is ordered by activity, so a thread that just moved sits under
   // today's divider even if it was started last week.
-  const newDay =
-    !previous || new Date(activityAt(previous)).toDateString() !== new Date(activityAt(m)).toDateString();
+  const newDay = startsNewDay(m, previous);
   // Consecutive messages from one person within 5 minutes hide the repeated header.
   // A message with a thread or a quote always shows its own header.
   const grouped =
@@ -556,13 +633,11 @@ export default function MessageItem({
 
   return (
     <div id={messageDomId(m.id)} className="scroll-mt-24">
-      {newDay && (
-        <div className="my-4 text-center text-xs font-medium text-gray-600">{dayLabel(m.createdAt)}</div>
-      )}
+      {newDay && showDay && <DaySeparator m={m} />}
       <div
         ref={row}
         onClick={onRowTap}
-        className={`group relative flex gap-3 rounded-2xl px-3 transition-colors ${grouped ? 'py-0.5' : 'mt-1 pb-1 pt-2'} ${
+        className={`group relative flex gap-3 rounded-2xl px-3 transition-colors ${grouped ? 'py-0.5' : newDay ? 'pb-1 pt-2' : 'mt-3 pb-1 pt-2'} ${
           mentionsMe ? 'bg-amber-50 ring-1 ring-amber-200' : card ? '' : actionsOpen ? 'bg-gray-50' : 'hover:bg-gray-50'
         }`}
       >
@@ -575,7 +650,7 @@ export default function MessageItem({
         <div className={card ? 'flex min-w-0 flex-1 flex-col items-end' : 'min-w-0 flex-1'}>
           {!grouped && (
             <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${card ? 'justify-end' : ''}`}>
-              <span className={card ? 'sr-only' : 'text-[13px] font-semibold text-gray-900'}>
+              <span className={card ? 'sr-only' : 'text-sm font-semibold text-gray-900'}>
                 {m.kind === 'system' ? 'Roavion updates' : mine ? 'You' : m.sender?.name ?? 'Former member'}
               </span>
               {m.kind === 'system' ? (
