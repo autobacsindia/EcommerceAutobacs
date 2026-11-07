@@ -149,6 +149,20 @@ class ProductRepository {
   }
 
   /**
+   * SKUs for a set of products — the product's own and each variant's — for the
+   * team panel's order view (procurement quotes them to suppliers). One query, by
+   * _id; lean. Map of product id → { sku, variants: Map(variant id → sku) }.
+   */
+  async findSkusByIds(ids) {
+    if (!ids?.length) return new Map();
+    const rows = await Product.find({ _id: { $in: ids } }).select('sku variants._id variants.sku').lean();
+    return new Map(rows.map((p) => [String(p._id), {
+      sku: p.sku || null,
+      variants: new Map((p.variants || []).map((v) => [String(v._id), v.sku || null])),
+    }]));
+  }
+
+  /**
    * Find products by query
    */
   async find(query, options = {}) {

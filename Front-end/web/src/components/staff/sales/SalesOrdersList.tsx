@@ -16,6 +16,7 @@ import OrderListFilters, { useOrderListParams } from '@/components/staff/OrderLi
 import { errorMessage, quotationHref, rupees, type SalesFilterOptions, type SalesOrder, type SalesOrderPage } from './types';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import PinButton from '@/components/staff/PinButton';
+import CopyId from '@/components/ui/CopyId';
 
 type Mode = 'sales' | 'paid';
 /** Which half of the paid list to show: still being worked, or handed over. */
@@ -99,7 +100,11 @@ function OrderRow({ order, mode, showSeller }: { order: SalesOrder; mode: Mode; 
         <span className="ml-auto text-right text-sm font-bold text-gray-900 sm:ml-0 sm:w-28">{rupees(order.totalAmount)}</span>
         <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      <PinButton orderId={order.id} pinned={!!order.pinned} className="mr-3 mt-3" />
+      {/* Beside the pin, not inside the row's button (a button cannot hold a button). */}
+      <div className="mr-3 mt-3 flex items-center gap-1">
+        <CopyId value={order.orderNumber} label="Order number" />
+        <PinButton orderId={order.id} pinned={!!order.pinned} />
+      </div>
       </div>
 
       {open && !unpaid && order.status !== 'cancelled' && (

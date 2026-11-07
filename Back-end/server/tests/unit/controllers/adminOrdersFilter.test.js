@@ -149,7 +149,8 @@ describe('getAllOrdersAdmin — order-id lane accepts the displayed order number
     await getAllOrdersAdmin({ query: { search: '#7f3a91b2' } }, mockRes());
     const nameLane = queryPassedToRepo().$or.find(c => c['shippingAddress.fullName']);
     expect(nameLane['shippingAddress.fullName'].source).toContain('#7f3a91b2');
-    expect(mockUserRepo.findIdsByNameOrEmail).toHaveBeenCalledWith('#7f3a91b2');
+    // Bounded: a short term must never become an $in of every account.
+    expect(mockUserRepo.findIdsByNameOrEmail).toHaveBeenCalledWith('#7f3a91b2', { limit: 500 });
   });
 
   it('skips the id lane entirely for a non-hex term', async () => {

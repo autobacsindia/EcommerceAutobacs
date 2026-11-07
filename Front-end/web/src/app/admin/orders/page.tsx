@@ -24,6 +24,7 @@ import { getRefundBadge } from '@/lib/refundBadge';
 import { usePanel } from '@/lib/usePanel';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import PinButton from '@/components/staff/PinButton';
+import CopyId from '@/components/ui/CopyId';
 
 // Mirror of orderStatusService STATUS_TRANSITIONS (fulfillment axis).
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -671,7 +672,10 @@ function AdminOrdersPageInner() {
     </button>
   );
 
-  if (loading && orders.length === 0) {
+  // The full-page skeleton is for the very first load only. Once anything has loaded,
+  // a reload keeps the page (and the search box being typed in) on screen: replacing
+  // it with the skeleton unmounted the input mid-word whenever a search found nothing.
+  if (loading && !data) {
     return (
       <div className="p-8">
         <div className="animate-pulse">
@@ -710,6 +714,7 @@ function AdminOrdersPageInner() {
         filters={filters}
         onFiltersChange={handleFiltersChange}
         autoApply={true}
+        searching={loading && Boolean(filters.search)}
       />
 
       {isError && (
@@ -824,6 +829,7 @@ function AdminOrdersPageInner() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-1 text-sm font-medium text-gray-900">
                       #{order.orderNumber || order._id.slice(-8)}
+                      <CopyId value={order.orderNumber || order._id.slice(-8)} label="Order number" />
                       <PinButton orderId={order._id} pinned={!!order.pinned} />
                     </div>
                     <OrderTypeTag type="purchase" className="mt-1" />
@@ -1016,8 +1022,28 @@ function AdminOrdersPageInner() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No orders found</h3>
-          <p className="text-gray-500">Try adjusting your filters to find what you're looking for.</p>
+          {filters.search ? (
+            <>
+              <h3 className="text-lg font-medium text-gray-900 mb-2 break-words px-4">
+                No orders match &ldquo;{filters.search}&rdquo;
+              </h3>
+              <p className="text-gray-500 px-4">
+                Check the spelling, or try the order number, phone number or product name.
+              </p>
+              <button
+                type="button"
+                onClick={() => handleFiltersChange({ ...filters, search: '' })}
+                className="mt-4 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+              >
+                Clear search
+              </button>
+            </>
+          ) : (
+            <>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No orders found</h3>
+              <p className="text-gray-500">Try adjusting your filters to find what you&apos;re looking for.</p>
+            </>
+          )}
         </div>
       )}
 

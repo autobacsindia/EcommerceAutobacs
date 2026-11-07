@@ -246,3 +246,28 @@ it('records a courier step over HTTP — operations only, a known step, with the
   expect(res.body.order.parcels[0]).toMatchObject({ stepCount: 1, steps: [{ status: 'in_transit', label: 'In transit', note: 'Kochi hub' }] });
   expect((await request(app).post(path).set(as(operations)).send({ status: 'out_for_delivery', expectedSteps: 0 })).status).toBe(409);
 });
+
+it('an opened order carries each line\'s SKU (the variant\'s, else the product\'s) for procurement to copy', async () => {
+  const { default: Product } = await import('../models/Product.js');
+  const withVariant = new mongoose.Types.ObjectId();
+  const variantId = new mongoose.Types.ObjectId();
+  const plain = new mongoose.Types.ObjectId();
+  await Product.collection.insertMany([
+    { _id: withVariant, name: 'Mats', slug: 'mats', sku: 'MAT', variants: [{ _id: variantId, label: 'Hilux', sku: 'MAT-HLX' }] },
+    { _id: plain, name: 'Snorkel', slug: 'snorkel', sku: 'SNK-01' },
+  ]);
+  const o = await Order.create({
+    user: new mongoose.Types.ObjectId(),
+    items: [
+      { product: withVariant, variantId, variantLabel: 'Hilux', name: 'Mats', price: 1000, quantity: 1 },
+      { product: plain, name: 'Snorkel', price: 2000, quantity: 1 },
+      { product: new mongoose.Types.ObjectId(), name: 'Gone', price: 500, quantity: 1 },
+    ],
+    shippingAddress: { fullName: 'Ravi', phone: '9876543210', addressLine1: '1 Road', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
+    subtotal: 3500, totalAmount: 3500, status: 'awaiting_payment', paymentStatus: 'pending',
+  });
+  await orderStatusService.updateOrderStatus(String(o._id), 'processing', { isAdmin: true, reason: 'payment_verified' });
+  const token = await login('staff', { team: 'procurement' });
+  const res = await request(app).get(`${BASE}/staff/work/orders/${o._id}`).set(as(token)).expect(200);
+  expect(res.body.order.lines.map((l) => [l.name, l.sku])).toEqual([['Mats', 'MAT-HLX'], ['Snorkel', 'SNK-01'], ['Gone', null]]);
+});

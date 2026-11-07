@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, X, Filter, Calendar } from 'lucide-react';
+import { Search, X, Filter, Calendar, Loader2 } from 'lucide-react';
 import { ORDER_STATUS_LABELS, UNPAID_PAYMENT_STATUSES } from '@/lib/constants';
 
 export interface OrderFilters {
@@ -23,6 +23,8 @@ interface OrderFiltersPanelProps {
   onFiltersChange: (filters: OrderFilters) => void;
   onApply?: () => void;
   autoApply?: boolean;
+  /** The list is reloading for a search — shows a spinner in the search box. */
+  searching?: boolean;
 }
 
 const QUICK_FILTERS = [
@@ -103,11 +105,12 @@ export default function OrderFiltersPanel({
   onFiltersChange,
   onApply,
   autoApply = true,
+  searching = false,
 }: OrderFiltersPanelProps) {
   // Start open when anything is already filtered (e.g. a shared /admin/orders?search=…
   // link), otherwise the table looks arbitrarily narrowed with no visible reason and no
   // visible search term.
-  const [isExpanded, setIsExpanded] = useState(() => countActive(filters) > 0);
+  const [isExpanded, setIsExpanded] = useState(() => countActive({ ...filters, search: '' }) > 0);
   const [localFilters, setLocalFilters] = useState<OrderFilters>(filters);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -263,6 +266,48 @@ export default function OrderFiltersPanel({
         </div>
       </div>
 
+      {/*
+        Search — always on show, not inside the collapsed panel: staff asked for a
+        search box because the old one was hidden behind "Filters". Matches the order
+        number (full id or the #xxxxxxxx shown), customer name / phone / email, and
+        product name or SKU; the server does the matching (orderController
+        getAllOrdersAdmin), so every page honours it. Typing is debounced.
+      */}
+      <div className="p-4 border-b border-gray-200">
+        <label htmlFor="orders-search" className="sr-only">Search orders</label>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden />
+          <input
+            id="orders-search"
+            type="search"
+            inputMode="search"
+            enterKeyHint="search"
+            autoComplete="off"
+            maxLength={100}
+            placeholder="Search order #, customer, phone, email or product"
+            value={localFilters.search}
+            onChange={(e) => handleFilterChange('search', e.target.value)}
+            onKeyDown={(e) => {
+              // Enter searches now instead of waiting for the pause.
+              if (e.key === 'Enter') commitImmediate({ ...localFilters });
+            }}
+            className="w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-10 text-base sm:text-sm focus:border-transparent focus:ring-2 focus:ring-blue-500 [&::-webkit-search-cancel-button]:hidden"
+          />
+          {searching ? (
+            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-500" aria-label="Searching" />
+          ) : localFilters.search ? (
+            <button
+              type="button"
+              onClick={() => { const next = { ...localFilters, search: '' }; setLocalFilters(next); commitImmediate(next); }}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
       {/* Quick Filters */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex flex-wrap gap-2">
@@ -289,23 +334,6 @@ export default function OrderFiltersPanel({
       {/* Main Filters - Collapsible */}
       {isExpanded && (
         <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Unified search — order id, customer, or recipient on the order. */}
-          <div className="md:col-span-2 lg:col-span-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Search
-            </label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
-              <input
-                type="text"
-                placeholder="Order ID, name, email, or phone…"
-                value={localFilters.search}
-                onChange={(e) => handleFilterChange('search', e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
-
           {/* Customer — advanced, customer-only narrowing (ANDs with everything else). */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

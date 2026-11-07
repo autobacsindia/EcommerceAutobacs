@@ -52,6 +52,9 @@ jest.mock('lucide-react', () => ({
   // PinButton (personal order pins)
   Pin: () => <span>PinIcon</span>,
   PinOff: () => <span>PinOffIcon</span>,
+  // CopyId (copy the order number)
+  Copy: () => <span>CopyIcon</span>,
+  Check: () => <span>CheckIcon</span>,
   // Icons used by ConfirmStatusChangeModal
   X: () => <span>XIcon</span>,
   AlertCircle: () => <span>AlertCircleIcon</span>,

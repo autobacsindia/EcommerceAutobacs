@@ -121,7 +121,7 @@ export default function OrderListFilters({ list, summary, shown, sellers = [], c
     <div role="search" aria-label="Search and filter orders" className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <ListSearch value={v.q} onChange={(text) => set({ q: text.trim() })} label="Search orders"
-          placeholder="Search customer, phone, product, order #, city" />
+          placeholder="Search order #, customer, phone, email, product, city" />
         <ListSelect label="Sort" value={v.sort} onChange={(x) => set({ sort: x })} options={sorts} />
         <button type="button" onClick={() => setShowFilters((x) => !x)} aria-expanded={showFilters} aria-controls={id}
           className={`${listField} inline-flex items-center gap-1.5 sm:hidden`}>

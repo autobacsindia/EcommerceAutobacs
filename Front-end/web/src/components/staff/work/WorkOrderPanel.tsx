@@ -14,6 +14,7 @@ import { STAGE_TONE, PARCEL_STEP_OPTIONS, type LineAction, type ParcelStepStatus
 import LineSupplierPayment, { OrderOtherPayments, useOrderSupplierPayments } from '@/components/payments/OrderSupplierPayments';
 import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
+import CopyId from '@/components/ui/CopyId';
 import ParcelEta from './ParcelEta';
 import OrderJourney from '@/components/orders/OrderJourney';
 import RaiseReturnButton from '@/components/staff/returns/RaiseReturnDialog';
@@ -200,6 +201,12 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
       {/* Where every product stands, left to right, with who moved it and when. */}
       <OrderJourney order={o} showFacts={false} />
 
+      {/* The order number, to quote to a supplier or paste into search. */}
+      <p className="flex items-center gap-1 text-gray-700">
+        Order <span className="font-mono font-medium text-gray-900">{o.orderNumber}</span>
+        <CopyId value={o.orderNumber} label="Order number" />
+      </p>
+
       {/* Customer + delivery */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
@@ -221,7 +228,12 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
           <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Sold by</p>
           <p className="text-gray-900">{o.soldBy}</p>
           <p className="text-gray-700">{rupees(o.totalAmount)} paid</p>
-          {o.payment?.razorpayPaymentId && <p className="font-mono text-xs text-gray-500">{o.payment.razorpayPaymentId}</p>}
+          {o.payment?.razorpayPaymentId && (
+            <p className="flex items-center gap-1 font-mono text-xs text-gray-500">
+              <span className="break-all">{o.payment.razorpayPaymentId}</span>
+              <CopyId value={o.payment.razorpayPaymentId} label="Payment ID" />
+            </p>
+          )}
         </div>
       </div>
 
@@ -243,6 +255,12 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
                     <ProductLink product={line.productId} variantId={line.variantId}>{line.name}{line.variantLabel ? ` — ${line.variantLabel}` : ''}</ProductLink>{' '}
                     <span className="font-normal text-gray-500">× {line.quantity}</span>
                   </p>
+                  {line.sku && (
+                    <p className="flex items-center gap-1 text-xs text-gray-500">
+                      SKU <span className="font-mono text-gray-700">{line.sku}</span>
+                      <CopyId value={line.sku} label="SKU" />
+                    </p>
+                  )}
                   {line.supplierName && line.stage === 'with_supplier' && <p className="text-xs text-gray-500">Supplier: {line.supplierName}</p>}
                   {line.paymentInitiatedAt && line.stage === 'to_ship' && (
                     <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">

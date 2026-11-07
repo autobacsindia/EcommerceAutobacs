@@ -2270,7 +2270,16 @@ const ADMIN_ORDER_SORT_FIELDS = new Set(['listDate', 'createdAt', 'totalAmount',
  * Only the id lane uses this; the customer/recipient lanes keep matching the raw term,
  * so a name or email containing a '#' is unaffected.
  */
-const orderIdTerm = (term) => String(term).replace(/^#+/, '').replace(/\s+/g, '');
+// "#5adab5bf", "5ADAB5BF" and the invoice's legacy "AB-5ADAB5BF" all name the same order.
+const orderIdTerm = (term) => String(term).replace(/^#+/, '').replace(/^AB-/i, '').replace(/\s+/g, '');
+/**
+ * The invoice number in a search term — "59", "INV-000059", "invoice 59" → 59 — or
+ * null. Matched exactly on `invoiceNo` (unique index), never as a pattern.
+ */
+const invoiceNoTerm = (term) => {
+  const m = /^(?:inv(?:oice)?)?[\s#:-]*(\d{1,9})$/i.exec(String(term).trim());
+  return m ? Number(m[1]) : null;
+};
 // The store operates in a single timezone (India). Admin date-range filters send a
 // date-only string ("YYYY-MM-DD"); we anchor it to this offset so "14 Jul" means the
 // IST calendar day regardless of the server's own timezone. Shared with the admin
@@ -2312,7 +2321,8 @@ export const getAllOrdersAdmin = async (req, res) => {
   // Search terms are parsed up front because they also relax the payment-axis default
   // below — an explicit search must not be silently narrowed by it. The two params' full
   // contract is documented at the search block further down, where they're applied.
-  const unifiedTerm = String(req.query.search || '').trim();
+  // Capped: a pasted paragraph must not become a 5,000-character regex run on every row.
+  const unifiedTerm = String(req.query.search || '').trim().slice(0, 100);
   const orderNumberTerm = String(req.query.orderNumber || '').trim();
   const hasSearchTerm = Boolean(unifiedTerm || orderNumberTerm);
 
@@ -2399,6 +2409,8 @@ export const getAllOrdersAdmin = async (req, res) => {
   //    8 hex chars), the buyer (user name/email/phone → ids), or the order's own
   //    recipient details (shippingAddress.fullName / .phone + guest contact email,
   //    which cover guest and offline orders whose `user` link is thin/absent).
+  //    It also matches a product on the order (the line's name) and the invoice
+  //    number ("59" / "INV-000059").
   //    Previously the box only accepted order-id hex, so typing a customer name
   //    returned an empty page.
   //  • `orderNumber` — the LEGACY strict order-id lookup, kept for API compatibility
@@ -2417,16 +2429,24 @@ export const getAllOrdersAdmin = async (req, res) => {
       or.push({ $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: `${idTerm}$`, options: 'i' } } });
     }
 
-    // Buyer lane — resolve matching users to ids.
-    const userIds = await userRepository.findIdsByNameOrEmail(unifiedTerm);
+    // Invoice lane — exact, on the unique invoiceNo index.
+    const invoiceNo = invoiceNoTerm(unifiedTerm);
+    if (invoiceNo != null) or.push({ invoiceNo });
+
+    // Buyer lane — resolve matching users to ids. Bounded: a short term like "a"
+    // must not become an $in of every account.
+    const userIds = await userRepository.findIdsByNameOrEmail(unifiedTerm, { limit: 500 });
     if (userIds.length > 0) or.push({ user: { $in: userIds } });
 
     // Recipient / guest-contact lanes stored directly on the order (regex-escaped).
     const rx = new RegExp(unifiedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    // Product lane: the name is snapshotted onto each line at order time, so "which
+    // order had the Pioneer stereo" is answered from the order itself.
     or.push(
       { 'shippingAddress.fullName': rx },
       { 'shippingAddress.phone': rx },
       { guestEmail: rx },
+      { 'items.name': rx },
     );
 
     // If the caller already narrowed by `customer` (query.user set above), keep both

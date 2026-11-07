@@ -39,6 +39,21 @@ beforeEach(() => {
 });
 
 describe('WorkOrderPanel', () => {
+  it('has copy icons for the order number, the payment id and each line\'s SKU', async () => {
+    get.mockResolvedValue({ success: true, order: { ...base, lines: [{ ...base.lines[0], sku: 'SNK-HLX-01' }] } });
+    renderPanel();
+    expect(await screen.findByRole('button', { name: 'Copy order number ORD1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy payment ID pay_1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy SKU SNK-HLX-01' })).toBeInTheDocument();
+  });
+
+  it('no SKU row when the product has none', async () => {
+    get.mockResolvedValue({ success: true, order: base });
+    renderPanel();
+    await screen.findByRole('button', { name: 'Copy order number ORD1' });
+    expect(screen.queryByRole('button', { name: /Copy SKU/ })).not.toBeInTheDocument();
+  });
+
   it('shows procurement its stock buttons and records "in stock"', async () => {
     get.mockResolvedValue({ success: true, order: base });
     post.mockResolvedValue({ success: true, order: { ...base, lines: [{ ...base.lines[0], stage: 'to_ship', stageLabel: 'In stock — to ship', actions: ['ordered', 'out_of_stock', 'ship'] }] } });
