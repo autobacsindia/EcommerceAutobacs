@@ -383,6 +383,32 @@ function QuoteBlock({ quote, onJump }: { quote: NonNullable<ChatMessage['quote']
 /** When a timeline row last changed: its newest reply, or when it was posted. */
 const activityAt = (m: ChatMessage) => m.lastReply?.at ?? m.createdAt;
 
+/** Whether `m` is the first message of a new day (by activity, as the timeline is ordered). */
+export function startsNewDay(m: ChatMessage, previous?: ChatMessage): boolean {
+  return !previous || new Date(activityAt(previous)).toDateString() !== new Date(activityAt(m)).toDateString();
+}
+
+/**
+ * The day line: "Today", "Yesterday" or "Wed, 4 Nov" in a pill on a thin rule.
+ * `sticky` pins it to the top of the conversation while that day scrolls past
+ * (each next day's pill slides over the one before).
+ */
+export function DaySeparator({ m, sticky = false }: { m: ChatMessage; sticky?: boolean }) {
+  const label = dayLabel(activityAt(m));
+  return (
+    <div
+      role="separator"
+      aria-label={label}
+      data-day-separator
+      className={`gc-day pointer-events-none my-3 flex items-center gap-3 ${sticky ? 'sticky top-0 z-[5]' : ''}`}
+    >
+      <span className="gc-day-rule h-px flex-1" aria-hidden="true" />
+      <span className="gc-day-pill pointer-events-auto min-w-[7.5rem] rounded-full px-3 py-1 text-center text-xs font-medium text-gray-700">{label}</span>
+      <span className="gc-day-rule h-px flex-1" aria-hidden="true" />
+    </div>
+  );
+}
+
 /**
  * Is it still inside its edit window? Re-renders once, at the moment the window
  * closes, so the Edit and Delete buttons disappear on their own instead of
@@ -443,6 +469,7 @@ function EditHistory({ history }: { history: NonNullable<ChatMessage['editHistor
 export default function MessageItem({
   message,
   previous,
+  showDay = true,
   meId,
   meName,
   peopleById,
@@ -461,6 +488,8 @@ export default function MessageItem({
 }: {
   message: ChatMessage;
   previous?: ChatMessage;
+  /** Draw this message's day line here. Off when the list draws it (pinned to the top). */
+  showDay?: boolean;
   meId: string;
   meName: string;
   peopleById: Map<string, ChatPerson>;
@@ -490,8 +519,7 @@ export default function MessageItem({
   const m = message;
   // The timeline is ordered by activity, so a thread that just moved sits under
   // today's divider even if it was started last week.
-  const newDay =
-    !previous || new Date(activityAt(previous)).toDateString() !== new Date(activityAt(m)).toDateString();
+  const newDay = startsNewDay(m, previous);
   // Consecutive messages from one person within 5 minutes hide the repeated header.
   // A message with a thread or a quote always shows its own header.
   const grouped =
@@ -605,13 +633,11 @@ export default function MessageItem({
 
   return (
     <div id={messageDomId(m.id)} className="scroll-mt-24">
-      {newDay && (
-        <div className="my-4 text-center text-xs font-medium text-gray-600">{dayLabel(m.createdAt)}</div>
-      )}
+      {newDay && showDay && <DaySeparator m={m} />}
       <div
         ref={row}
         onClick={onRowTap}
-        className={`group relative flex gap-3 rounded-2xl px-3 transition-colors ${grouped ? 'py-0.5' : 'mt-1 pb-1 pt-2'} ${
+        className={`group relative flex gap-3 rounded-2xl px-3 transition-colors ${grouped ? 'py-0.5' : newDay ? 'pb-1 pt-2' : 'mt-3 pb-1 pt-2'} ${
           mentionsMe ? 'bg-amber-50 ring-1 ring-amber-200' : card ? '' : actionsOpen ? 'bg-gray-50' : 'hover:bg-gray-50'
         }`}
       >
@@ -624,7 +650,7 @@ export default function MessageItem({
         <div className={card ? 'flex min-w-0 flex-1 flex-col items-end' : 'min-w-0 flex-1'}>
           {!grouped && (
             <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${card ? 'justify-end' : ''}`}>
-              <span className={card ? 'sr-only' : 'text-[13px] font-semibold text-gray-900'}>
+              <span className={card ? 'sr-only' : 'text-sm font-semibold text-gray-900'}>
                 {m.kind === 'system' ? 'Roavion updates' : mine ? 'You' : m.sender?.name ?? 'Former member'}
               </span>
               {m.kind === 'system' ? (

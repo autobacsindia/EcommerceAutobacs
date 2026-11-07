@@ -355,3 +355,7 @@
 .gc-photo { background: var(--gc-hover); transition: filter 0.15s ease; }
 .gc-photo:hover { filter: brightness(0.96); }
 .gc-photo:focus-visible { outline: 2px solid #0b57d0; outline-offset: 2px; }
+
+/* The day line: a thin rule with the day in a pill (solid, so a pinned pill hides what scrolls under it). */
+.gc-day-rule { background: var(--gc-sep); }
+.gc-day-pill { background: var(--gc-card); border: 1px solid var(--gc-sep); }

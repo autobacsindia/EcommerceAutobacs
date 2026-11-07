@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { InfiniteData } from '@tanstack/react-query';
 import { ArrowDown, ArrowLeft, Download, Search, Users, X } from 'lucide-react';
@@ -29,7 +29,7 @@ import { useResendStore } from './resend';
 import MembersPanel from './MembersPanel';
 import { Avatar, ChannelIcon, FileKindIcon, fileSize, newClientId, timeOf } from './chatUi';
 import Composer, { mentionableTeams } from './Composer';
-import MessageItem, { messageDomId } from './MessageItem';
+import MessageItem, { DaySeparator, messageDomId, startsNewDay } from './MessageItem';
 import NotifyMenu from './NotifyMenu';
 import ForwardDialog from './ForwardDialog';
 import PinnedStrip from './PinnedStrip';
@@ -562,7 +562,10 @@ export default function Conversation({
                 )}
 
                 {visible.map((m, i) => (
-                  <div key={m.id}>
+                  <Fragment key={m.id}>
+                  {/* The day line sits directly in the scrolling list so it can stay pinned at the top. */}
+                  {startsNewDay(m, visible[i - 1]) && <DaySeparator m={m} sticky />}
+                  <div>
                   {tab === 'messages' && m.id === firstNewId && (
                     <div data-new-messages role="separator" aria-label="New messages" className="gc-new my-3 flex items-center gap-2 text-[11px] font-semibold text-blue-700">
                       <span className="h-px flex-1 bg-blue-500" />
@@ -592,8 +595,10 @@ export default function Conversation({
                     onForward={setForwarding}
                     onPin={(msg, on) => pin.mutate({ id: msg.id, on })}
                     onMarkUnread={markUnread}
+                    showDay={false}
                   />
                   </div>
+                  </Fragment>
                 ))}
                 {tab === 'updates' && isFetchingNextPage && <p className="py-2 text-center text-xs text-gray-500">Loading older updates…</p>}
                 {tab === 'updates' && !hasNextPage && !isLoading && visible.length > 0 && (
