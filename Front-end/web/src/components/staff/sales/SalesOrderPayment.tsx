@@ -122,7 +122,9 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
   const [choice, setChoice] = useState<null | 'details' | 'link'>(startWithDetails ? 'details' : null);
   // "Customer already paid": the receipt form, opened from the buttons above it too.
   const [recordPaid, setRecordPaid] = useState(false);
-  const customerPaid = () => { setChoice(null); setRecordPaid(true); };
+  // A receipt dropped into the QR box comes along, already attached.
+  const [carried, setCarried] = useState<File[]>([]);
+  const customerPaid = (files: File[] = []) => { setCarried(files); setChoice(null); setRecordPaid(true); };
   const q = useQuery({
     queryKey: staffKeys.salesOrder(id),
     queryFn: () => apiClient.get<{ order: SalesOrder }>(`/staff/sales/orders/${encodeURIComponent(id)}`),
@@ -223,7 +225,7 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
               className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">
               <Link2 className="h-4 w-4" /> Razorpay payment link
             </button>
-            <button type="button" onClick={customerPaid}
+            <button type="button" onClick={() => customerPaid()}
               className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50">
               <ReceiptText className="h-4 w-4" /> Customer already paid — attach receipt
             </button>
@@ -248,7 +250,7 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
         <RequestPayment key={pay.amountToRequest} order={o} onDone={() => { setChoice(null); refresh(); }} />
       )}
 
-      {canPay && !anyPaid && <BankTransferForm order={o} onDone={refresh} open={recordPaid} onOpenChange={setRecordPaid} showButton={!askHowToPay} />}
+      {canPay && !anyPaid && <BankTransferForm order={o} onDone={refresh} open={recordPaid} onOpenChange={setRecordPaid} initialFiles={carried} showButton={!askHowToPay} />}
 
       {parts.length > 0 && (
         <section className="space-y-3">

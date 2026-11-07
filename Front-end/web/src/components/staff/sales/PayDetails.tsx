@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { AlertTriangle, Copy, FileText, Loader2, MessageCircle, Pencil, QrCode, ReceiptText } from 'lucide-react';
 import { postForm } from '@/components/payments/api';
 import FilePicker from '@/components/payments/FilePicker';
-import { isPdf, PHOTO_ONLY } from '@/lib/attachments';
+import { acceptsFile, isPdf, PHOTO_ONLY, PHOTO_OR_PDF } from '@/lib/attachments';
 import { whatsappNumber } from './PaymentLinkCard';
 import {
   errorMessage, paymentRequestHref, payDetailsMessage, payDetailsQrHref, QR_LIMIT, QR_LIMIT_NOTE, rupees,
@@ -28,14 +28,15 @@ const METHODS: { value: PayMethod; text: string }[] = [
  * The QR box takes OUR QR as a picture: it is printed on the payment request PDF,
  * and a PDF cannot be drawn inside a PDF. A salesman holding the customer's
  * receipt (often a PDF) tends to land here first, so a PDF in this box is met
- * with a way to the receipt form (`onCustomerPaid`) rather than a bare "no".
+ * with a way to the receipt form (`onCustomerPaid`) rather than a bare "no" —
+ * and the refused file goes along, so nobody has to find and pick it twice.
  */
 export function PayDetailsForm({ order, onDone, onCancel, onCustomerPaid }: {
   order: SalesOrder;
   onDone: () => void;
   onCancel?: () => void;
-  /** Open "Customer already paid" (the receipt form) instead. */
-  onCustomerPaid?: () => void;
+  /** Open "Customer already paid" (the receipt form) instead, with the file refused here (if the receipt form takes it). */
+  onCustomerPaid?: (files: File[]) => void;
 }) {
   const was = order.payDetails;
   const [method, setMethod] = useState<PayMethod>(was?.method ?? 'bank');
@@ -51,6 +52,8 @@ export function PayDetailsForm({ order, onDone, onCancel, onCustomerPaid }: {
   // The last refusal was a document in the QR box — likely the customer's receipt.
   const [receiptHere, setReceiptHere] = useState(false);
   const wrongTypeNow = useRef(false);
+  // That refused file, when it is something the receipt form takes (a PDF or photo).
+  const [stray, setStray] = useState<File | null>(null);
   const over = order.totalAmount > QR_LIMIT;
   const hasBank = Object.values(bank).some((v) => v.trim());
   const set = (k: keyof typeof bank) => (e: React.ChangeEvent<HTMLInputElement>) => setBank({ ...bank, [k]: e.target.value });
@@ -123,6 +126,7 @@ export function PayDetailsForm({ order, onDone, onCancel, onCustomerPaid }: {
               onError={(message) => { setError(message); setReceiptHere(wrongTypeNow.current); wrongTypeNow.current = false; }}
               wrongType={(f) => {
                 wrongTypeNow.current = true;
+                setStray(acceptsFile(f, PHOTO_OR_PDF) ? f : null);
                 return `"${f.name}" ${isPdf(f) ? 'is a PDF' : 'is not a picture'}. This box is only for a picture of our GPay / UPI QR, which the customer scans to pay. `
                   + 'Is it the customer\'s payment receipt? Record it under "Customer already paid" — PDFs and screenshots both work there.';
               }} />
@@ -132,9 +136,10 @@ export function PayDetailsForm({ order, onDone, onCancel, onCustomerPaid }: {
             <div role="alert" className="space-y-2 rounded-lg bg-red-50 p-3 text-sm text-red-700">
               <p>{error}</p>
               {onCustomerPaid && (
-                <button type="button" onClick={onCustomerPaid}
-                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-50">
-                  <ReceiptText className="h-4 w-4" /> Customer already paid — attach receipt
+                <button type="button" onClick={() => onCustomerPaid(stray ? [stray] : [])}
+                  className="inline-flex items-center gap-2 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-left text-sm font-medium text-emerald-800 hover:bg-emerald-50">
+                  <ReceiptText className="h-4 w-4 shrink-0" />
+                  {stray ? <span>Customer already paid — attach <span className="break-all">“{stray.name}”</span> as the receipt</span> : 'Customer already paid — attach receipt'}
                 </button>
               )}
             </div>
