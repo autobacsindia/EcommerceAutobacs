@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { DM_Sans, Montserrat } from "next/font/google";
+import { dmSans, montserrat } from "@/fonts/siteFonts";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
@@ -37,26 +37,13 @@ import {
   metaPixelSnippet,
 } from "@/lib/analyticsSnippets";
 
-const dmSans = DM_Sans({
-  variable: "--font-dm-sans",
-  subsets: ["latin"],
-  weight: ["300", "400", "500"],
-  display: "swap",
-});
-
 // ──────────────────────────────────────────────────────────────────────────
-// SITE DISPLAY FONT — single source of truth.
-// The redesigned UI uses Montserrat everywhere via the `--font-montserrat`
-// CSS variable (consumed by `--display-font` in home-redesign.css and any
-// future redesigned page). To change the whole site's font, swap this one
-// import (e.g. `Inter`, `Poppins`) and its `weight` list — nothing else.
+// SITE FONTS — DM Sans (body, `--font-dm-sans`) and Montserrat (the redesigned
+// UI's display font, `--font-montserrat`, consumed by `--display-font` in
+// home-redesign.css). Both are SELF-HOSTED from src/fonts/ so `next build`
+// never downloads from Google (that download flaked and failed CI builds).
+// To change the site font, edit src/fonts/siteFonts.ts — nothing else.
 // ──────────────────────────────────────────────────────────────────────────
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
