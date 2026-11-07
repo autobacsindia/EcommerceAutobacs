@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useFestival } from './FestivalThemeContext';
 import { loadEngine, prefersReducedMotion, stopEngine } from './loadEngine';
+import type { FestivalEngine } from './effects/engine';
 import { CART_ADD_INTENT_EVENT } from '@/lib/festival/events';
 
 /** A tap this recent is taken as the origin of an add-to-cart. */
@@ -13,6 +14,20 @@ const POINTER_FRESH_MS = 1500;
  * category tiles, and anything opted in with data-festive-tap (Buy now).
  */
 const TAP_SELECTOR = '[data-festive-tap], a.st-tile, a[href^="/products/"], a[href^="/categories/"]';
+
+/** The trail sheds sparks only after the mouse has moved this far (px)… */
+const TRAIL_MIN_DISTANCE = 9;
+/** …and at most once per this many ms (about one frame), whatever the mouse rate. */
+const TRAIL_MIN_INTERVAL_MS = 16;
+
+/** A real mouse — not a phone, tablet or pen, where a trail would only follow taps. */
+export function hasFineHoverPointer(): boolean {
+  try {
+    return !!window.matchMedia?.('(hover: hover) and (pointer: fine)').matches;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Wires the festival's interaction effects. Renders nothing.
@@ -31,10 +46,20 @@ export default function FestivalEffects() {
 
     let lastTap: { x: number; y: number; at: number } | null = null;
     let cancelled = false;
+    // The loaded engine, once warm. The cursor trail never waits for the chunk:
+    // until it arrives, mouse moves simply shed nothing.
+    let engine: FestivalEngine | null = null;
+    const trailOn = hasFineHoverPointer();
+    let trailX = Number.NaN;
+    let trailY = Number.NaN;
+    let trailAt = 0;
 
     // Warm the chunk once the page is idle, so the first add is instant.
     const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
-    const warm = () => { if (!cancelled) void loadEngine(tokens); };
+    const warm = () => {
+      if (cancelled) return;
+      void loadEngine(tokens).then((e) => { if (!cancelled) engine = e; });
+    };
     const hasIdle = typeof w.requestIdleCallback === 'function';
     const idleId = hasIdle ? w.requestIdleCallback!(warm, { timeout: 4000 }) : window.setTimeout(warm, 2000);
 
@@ -44,6 +69,20 @@ export default function FestivalEffects() {
       if (target?.closest?.(TAP_SELECTOR)) {
         void loadEngine(tokens).then((engine) => engine?.sparkle(e.clientX, e.clientY));
       }
+    };
+
+    // Cursor sparkle trail: throttled by distance and time, so a fast mouse
+    // costs at most one tiny particle push per frame. Passive, never blocks.
+    const onPointerMove = (e: PointerEvent) => {
+      if (!engine || e.pointerType !== 'mouse') return;
+      const dx = e.clientX - trailX;
+      const dy = e.clientY - trailY;
+      if (e.timeStamp - trailAt < TRAIL_MIN_INTERVAL_MS) return;
+      if (dx * dx + dy * dy < TRAIL_MIN_DISTANCE * TRAIL_MIN_DISTANCE) return;
+      trailX = e.clientX;
+      trailY = e.clientY;
+      trailAt = e.timeStamp;
+      engine.trail(e.clientX, e.clientY);
     };
 
     const onCartAdd = () => {
@@ -59,6 +98,7 @@ export default function FestivalEffects() {
     };
 
     document.addEventListener('pointerdown', onPointerDown, { capture: true, passive: true });
+    if (trailOn) document.addEventListener('pointermove', onPointerMove, { passive: true });
     window.addEventListener(CART_ADD_INTENT_EVENT, onCartAdd);
     return () => {
       cancelled = true;
@@ -66,6 +106,7 @@ export default function FestivalEffects() {
       if (hasIdle) w.cancelIdleCallback?.(idleId);
       else window.clearTimeout(idleId);
       document.removeEventListener('pointerdown', onPointerDown, { capture: true });
+      document.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener(CART_ADD_INTENT_EVENT, onCartAdd);
     };
   }, [tokens]);

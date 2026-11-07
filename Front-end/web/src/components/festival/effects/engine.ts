@@ -28,7 +28,20 @@ interface Particle {
   gravity: number; drag: number;
   /** Rockets explode into a burst when they run out of life. */
   rocket?: boolean;
+  /** Drawn as a twinkling four-point star instead of a dot (cursor trail). */
+  star?: boolean;
+  /** Shed by the cursor trail (counted against MAX_TRAIL). */
+  trail?: boolean;
+  /** Phase for the star's twinkle. */
+  spin?: number;
 }
+
+/**
+ * The cursor trail's own cap. Trail sparks are only ever added while this many
+ * or fewer are alive, so a frantic mouse can never grow the particle list (or
+ * the frame cost) without bound — and bursts/fireworks still get their full count.
+ */
+const MAX_TRAIL = 90;
 
 const Z_INDEX = '9990';
 const MAX_DPR = 2;
@@ -50,6 +63,18 @@ function findVisible(selector: string): HTMLElement | null {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
   }) ?? null;
+}
+
+/** A four-point sparkle, radius `r`, centred on (x, y). */
+function drawStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  const k = r * 0.28;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.quadraticCurveTo(x + k, y - k, x + r, y);
+  ctx.quadraticCurveTo(x + k, y + k, x, y + r);
+  ctx.quadraticCurveTo(x - k, y + k, x - r, y);
+  ctx.quadraticCurveTo(x - k, y - k, x, y - r);
+  ctx.fill();
 }
 
 export function createEngine(opts: EngineOptions) {
@@ -143,9 +168,21 @@ export function createEngine(opts: EngineOptions) {
       const alpha = Math.max(0, Math.min(1, p.life / (p.maxLife * 0.5)));
       ctx.globalAlpha = alpha;
       ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
+      if (p.star) {
+        p.spin = (p.spin ?? 0) + 0.18 * dt;
+        const r = p.size * (0.75 + 0.35 * Math.sin(p.spin));
+        // Soft halo first (a plain translucent disc — far cheaper than shadowBlur).
+        ctx.globalAlpha = alpha * 0.22;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * 1.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = alpha;
+        drawStar(ctx, p.x, p.y, r);
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
       next.push(p);
     }
     ctx.globalAlpha = 1;
@@ -185,6 +222,33 @@ export function createEngine(opts: EngineOptions) {
     /** 0.5s tap sparkle on primary buttons. */
     sparkle(x: number, y: number) {
       spray(x, y, n(10), 2.2, 26, 1.8);
+      run();
+    },
+
+    /**
+     * A few sparks shed behind the moving mouse: twinkling gold stars and
+     * embers that drift down and fade in well under a second. Bounded by
+     * MAX_TRAIL; the canvas still goes away as soon as the last one fades.
+     */
+    trail(x: number, y: number) {
+      let trailing = 0;
+      for (const p of particles) if (p.trail) trailing++;
+      if (trailing >= MAX_TRAIL * opts.quality) return;
+      const count = Math.random() < 0.6 ? 2 : 3;
+      for (let i = 0; i < count; i++) {
+        const star = Math.random() < 0.6;
+        const life = 30 + Math.random() * 24;
+        particles.push({
+          x: x + (Math.random() - 0.5) * 8,
+          y: y + (Math.random() - 0.5) * 8,
+          vx: (Math.random() - 0.5) * 0.9,
+          vy: -0.2 + Math.random() * 0.7,
+          life, maxLife: life,
+          size: star ? 3.6 + Math.random() * 3.4 : 1.2 + Math.random() * 1.4,
+          color: pick(), gravity: 0.025, drag: 0.97,
+          star, trail: true, spin: Math.random() * Math.PI * 2,
+        });
+      }
       run();
     },
 
