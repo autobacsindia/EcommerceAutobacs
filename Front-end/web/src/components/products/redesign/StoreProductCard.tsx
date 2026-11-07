@@ -12,6 +12,8 @@ import { useCurrency } from '@/context/CurrencyContext';
 import { Product, productUrl } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
+import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
+import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import {
   campaignSavingLabel,
   lineSavings,
@@ -84,6 +86,10 @@ export default function StoreProductCard({
   const discount = onSale
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : 0;
+  // Diwali offer — an EXTRA % on top of the price shown; the sale badge and M.R.P.
+  // strike-through stay exactly as they are. For a variable product the offer is
+  // monotonic in price, so the cheapest model's Diwali price is the true "From" price.
+  const festivalOffer = useFestivalOfferPrice(isVariable ? priceMin : product.price);
   const outOfStock = product.stock === 'out';
   const backorder = product.stock === 'backorder';
   const wished = isInWishlist(product._id);
@@ -107,7 +113,9 @@ export default function StoreProductCard({
   */
   const campaignSaving = campaignSavingLabel({
     saving: lineSavings({
-      price: isVariable ? priceMin : product.price,
+      // A campaign coupon applies to the price the cart CHARGES, which during the
+      // Diwali offer is the offer price.
+      price: festivalOffer?.finalPrice ?? (isVariable ? priceMin : product.price),
       quantity: 1,
       percent: campaignPercent,
     }).campaign,
@@ -279,13 +287,18 @@ export default function StoreProductCard({
               <span className="text-[12px] text-ink-muted">From</span>
             )}
             <span className="text-[16px] font-bold text-ink sm:text-[18px]">
-              {formatPrice(isVariable ? priceMin : product.price)}
+              {formatPrice(festivalOffer?.finalPrice ?? (isVariable ? priceMin : product.price))}
             </span>
             {onSale && (
               <span className="text-[11px] text-ink-muted line-through sm:text-[12px]">
                 {formatPrice(product.originalPrice!)}
               </span>
             )}
+            <FestivalOfferTag
+              offer={festivalOffer}
+              formatMoney={(n) => formatPrice(n, { exact: true })}
+              className="w-full text-[11px]"
+            />
           </div>
           <button
             onClick={add}

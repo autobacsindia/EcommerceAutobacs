@@ -34,6 +34,8 @@ import { toPaise, fromPaise, subtotalBeforeTax } from '../utils/money.js';
 import { effectivePrice } from '../utils/productPrice.js';
 import { CAMPAIGN_REASON } from '../config/campaign.js';
 import { resolveLinePercent, lineDiscountPaise, apportionCap } from '../utils/productTiers.js';
+import { applyFestivalOffer } from '../utils/festivalOffer.js';
+import { isOfferLiveForPricing } from './festivalOfferService.js';
 
 // Buyer-facing rejection reasons (all whitelisted in errorMiddleware so they survive).
 const REASON = {
@@ -116,11 +118,23 @@ class PricingService {
    * Validate each item against the catalogue and re-price from the DB.
    * Returns priced line items (incl. categories/brandSlug for coupon scoping) and
    * the integer-paise subtotal. Pure read — pass a session to join a transaction.
+   *
+   * `options.festivalOffer` — apply the festival (Diwali) price offer when it is live.
+   * OPT-IN on purpose: only the storefront path (computeQuote → /checkout/quote and
+   * order creation) asks for it. The staff sales panel (salesOrderService) also calls
+   * priceItems to read the CATALOGUE list price, and quotations / staff orders must not
+   * change, so the default leaves every price exactly as it was before the offer existed.
    */
-  async priceItems(items, session = null) {
+  async priceItems(items, session = null, { festivalOffer = false, now = new Date() } = {}) {
     if (!Array.isArray(items) || items.length === 0) {
       throw new AppError('No order items provided', 400);
     }
+
+    // Read the switch ONCE per cart, uncached (see festivalOfferService): an admin who
+    // turns the offer off stops it being charged on the very next quote.
+    const offerLive = festivalOffer ? await isOfferLiveForPricing(now, session) : false;
+    // Σ (pre-offer unit price − offer unit price) × qty. Reported in `savings.festival`.
+    let festivalSavingsPaise = 0;
 
     const orderItems = [];
     let subtotalPaise = 0;
@@ -159,7 +173,9 @@ class PricingService {
       }
 
       const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
-      const unitPrice = effectivePrice(priceSource);   // honours an expired sale window (product or variant)
+      // What the buyer would pay WITHOUT the festival offer — honours an expired sale
+      // window (product or variant). Everything that existed before the offer reads this.
+      const preOfferPrice = effectivePrice(priceSource);
 
       /*
         Is this line ALREADY discounted right now?
@@ -176,7 +192,20 @@ class PricingService {
         snapshotted.
       */
       const listPrice = typeof priceSource.originalPrice === 'number' ? priceSource.originalPrice : null;
-      const onSale = listPrice != null && listPrice > unitPrice;
+      // Existing catalogue sale only — computed from the PRE-offer price so the festival
+      // offer does not change what campaign product tiers treat as "already on sale".
+      const onSale = listPrice != null && listPrice > preOfferPrice;
+
+      /*
+        Festival (Diwali) price offer — an EXTRA discount on top of the current selling
+        price (after any existing sale), tiered by that selling price. See
+        utils/festivalOffer.js. When it applies, the LINE PRICE itself drops: coupons,
+        karma, GST, refunds and the Razorpay amount all flow from `price` exactly as
+        before, so no downstream maths has to learn about the offer. The offer is
+        snapshotted on the line (`festivalOffer`) because orders are immutable records.
+      */
+      const offer = offerLive ? applyFestivalOffer({ unitPrice: preOfferPrice }) : null;
+      const unitPrice = offer ? offer.finalPrice : preOfferPrice;
 
       orderItems.push({
         product: product._id,
@@ -205,13 +234,25 @@ class PricingService {
         onSale,
         // Filled in by the product-tier ladder when one applies; 0 otherwise. This is
         // the figure refundMathService reads to refund a returned line at ITS OWN rate.
-        discountPaise: 0
+        discountPaise: 0,
+        // Festival offer snapshot, or null. Per unit, rupees. `basePrice` is the price
+        // the % was taken from (= `priceBeforeOffer`, the selling price before Diwali).
+        festivalOffer: offer
+          ? {
+            code: offer.code,
+            percent: offer.percent,
+            basePrice: offer.basePrice,
+            priceBeforeOffer: preOfferPrice,
+            discount: offer.discount,
+          }
+          : null,
       });
       subtotalPaise += toPaise(unitPrice) * quantity;
-      if (onSale) catalogSavingsPaise += (toPaise(listPrice) - toPaise(unitPrice)) * quantity;
+      if (onSale) catalogSavingsPaise += (toPaise(listPrice) - toPaise(preOfferPrice)) * quantity;
+      if (offer) festivalSavingsPaise += (toPaise(preOfferPrice) - toPaise(unitPrice)) * quantity;
     }
 
-    return { orderItems, subtotalPaise, catalogSavingsPaise };
+    return { orderItems, subtotalPaise, catalogSavingsPaise, festivalSavingsPaise };
   }
 
   /** Does a priced line item fall within a coupon's appliesTo scope? */
@@ -474,7 +515,8 @@ class PricingService {
     items, couponCode, redeemKarmaPoints = 0, userId = null, shippingCost = 0,
     session = null, buyer = null, referralCode = null,
   }) {
-    const { orderItems, subtotalPaise, catalogSavingsPaise } = await this.priceItems(items, session);
+    const { orderItems, subtotalPaise, catalogSavingsPaise, festivalSavingsPaise } =
+      await this.priceItems(items, session, { festivalOffer: true });
     const shippingPaise = Math.max(0, toPaise(shippingCost));
 
     // ── Coupon (reported, not thrown) ──────────────────────────────────────────
@@ -667,10 +709,29 @@ class PricingService {
       */
       savings: {
         catalog: fromPaise(catalogSavingsPaise),
+        // The festival offer's extra saving beyond the existing sale price (0 when off).
+        festival: fromPaise(festivalSavingsPaise),
         coupon: fromPaise(goodsCouponPaise),
         karma: fromPaise(karmaDiscountPaise),
-        total: fromPaise(catalogSavingsPaise + goodsCouponPaise + karmaDiscountPaise),
+        total: fromPaise(catalogSavingsPaise + festivalSavingsPaise + goodsCouponPaise + karmaDiscountPaise),
       },
+      /*
+        Per-line festival offer, for the cart/checkout to render (original price, %,
+        saving, offer price) — server-computed, never derived in the browser. Empty when
+        the offer is off or no line qualified.
+      */
+      festivalOfferLines: orderItems
+        .filter((i) => i.festivalOffer)
+        .map((i) => ({
+          product: String(i.product),
+          variantId: i.variantId ? String(i.variantId) : null,
+          quantity: i.quantity,
+          percent: i.festivalOffer.percent,
+          basePrice: i.festivalOffer.basePrice,
+          priceBeforeOffer: i.festivalOffer.priceBeforeOffer,
+          discount: i.festivalOffer.discount,
+          finalPrice: i.price,
+        })),
       couponError,
       /*
         The machine key for that refusal, when there is one. Present so the cart can tell

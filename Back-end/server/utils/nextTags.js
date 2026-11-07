@@ -71,6 +71,13 @@ export const promoBannerTags = () => ['promo:banner'];
 export const festivalThemeTags = () => ['promo:festival-theme'];
 
 /**
+ * Tags for a festival-offer (Diwali price offer) write. The root layout reads the
+ * public offer under this tag, so every cached storefront page (cards, PDP price,
+ * JSON-LD) re-renders with the offer on/off as soon as the admin saves.
+ */
+export const festivalOfferTags = () => ['promo:festival-offer'];
+
+/**
  * Tags for a media article write. Only blog-type articles have a cached public
  * page (the catch-all /[slug] route) and feed the home journal shelf; press,
  * gallery and video items render client-side and need no Data Cache refresh.
@@ -95,4 +102,4 @@ export const articleTags = (article) => {
  */
 export const spinTags = () => ['home:spin'];
 
-export default { productTags, productBulkTags, categoryTags, careersTags, articleTags, promoBannerTags, festivalThemeTags, spinTags };
+export default { productTags, productBulkTags, categoryTags, careersTags, articleTags, promoBannerTags, festivalThemeTags, festivalOfferTags, spinTags };

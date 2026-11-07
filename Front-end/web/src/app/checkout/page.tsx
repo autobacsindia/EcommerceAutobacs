@@ -34,6 +34,8 @@ import PaymentMethodSelector from '@/components/checkout/PaymentMethodSelector';
 import CheckoutErrorBoundary from '@/components/checkout/CheckoutErrorBoundary';
 import CheckoutSummary from '@/components/checkout/CheckoutSummary';
 import { useCheckoutQuote, type CheckoutQuote } from '@/hooks/useCheckoutQuote';
+import { findFestivalOfferLine } from '@/lib/festival/festivalOfferQuote';
+import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 import { formatRupees } from '@/lib/formatRupees';
 
 type CheckoutStep = 'cart' | 'address' | 'payment' | 'review' | 'confirmation';
@@ -776,8 +778,25 @@ function CheckoutPageContent() {
                       <p className="text-[12px] uppercase tracking-[0.12em] text-gold mt-0.5 font-semibold">{item.variantLabel}</p>
                     )}
                     <p className="text-ink-muted font-display text-xs mt-0.5">Qty: {item.quantity}</p>
+                    {/* Server-priced Diwali offer for this line (never computed here). */}
+                    <FestivalOfferTag
+                      offer={findFestivalOfferLine(reviewQuote, item.product._id, item.variantId)}
+                      formatMoney={(n) => formatRupees(n, { exact: true })}
+                      className="mt-1"
+                    />
                   </div>
-                  <p className="font-display font-bold text-gold">{formatRupees(((item.price ?? item.product.price) * item.quantity), { exact: true })}</p>
+                  {(() => {
+                    const offerLine = findFestivalOfferLine(reviewQuote, item.product._id, item.variantId);
+                    const unit = offerLine ? offerLine.finalPrice : (item.price ?? item.product.price);
+                    return (
+                      <div className="text-right">
+                        <p className="font-display font-bold text-gold">{formatRupees(unit * item.quantity, { exact: true })}</p>
+                        {offerLine && (
+                          <p className="text-xs text-ink-muted line-through">{formatRupees(offerLine.basePrice * item.quantity, { exact: true })}</p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -791,6 +810,12 @@ function CheckoutPageContent() {
                     {reviewQuote?.subtotalBeforeTax != null ? formatRupees(reviewQuote.subtotalBeforeTax, { exact: true }) : '—'}
                   </span>
                 </div>
+                {reviewQuote && (reviewQuote.savings?.festival ?? 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[#b4231a] dark:text-[#ff8a7a] font-display">🪔 Diwali offer saving (already in prices)</span>
+                    <span className="text-[#b4231a] dark:text-[#ff8a7a] font-display">{formatRupees(reviewQuote.savings.festival!, { exact: true })}</span>
+                  </div>
+                )}
                 {reviewQuote && reviewQuote.couponDiscount > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gold font-display">Discount ({reviewQuote.appliedCoupon?.code})</span>

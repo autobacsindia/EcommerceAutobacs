@@ -142,6 +142,12 @@ export default function SavingsCelebration({ quote, reducedMotionOverride }: Pro
               <dd>{formatPrice(savings.catalog)}</dd>
             </div>
           )}
+          {(savings.festival ?? 0) > 0 && (
+            <div className="flex justify-between text-ink-muted">
+              <dt>🪔 Diwali offer</dt>
+              <dd>{formatPrice(savings.festival!)}</dd>
+            </div>
+          )}
           {savings.coupon > 0 && (
             <div className="flex justify-between text-emerald-700">
               <dt>Coupon {frozen.appliedCoupon?.code}</dt>

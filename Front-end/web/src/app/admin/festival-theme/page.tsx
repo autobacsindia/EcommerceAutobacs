@@ -6,6 +6,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { FESTIVAL_THEMES } from '@/lib/festival/themes';
 import { istInputToIso, isoToIstInput } from '@/lib/festival/istInput';
 import { formatDateTimeIST } from '@/lib/datetime';
+import FestivalOfferPanel from '@/components/admin/FestivalOfferPanel';
 
 /**
  * Admin — festival theme (Diwali sparks, toran, fireworks, deal badges, countdown).
@@ -137,6 +138,11 @@ export default function AdminFestivalThemePage() {
           {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
+
+      <FestivalOfferPanel
+        themeStartsAt={isoToIstInput(saved?.startsAt ?? null)}
+        themeEndsAt={isoToIstInput(saved?.endsAt ?? null)}
+      />
     </div>
   );
 }

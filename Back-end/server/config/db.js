@@ -434,6 +434,17 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ PromoBanner indexes confirmed');
 
+    // MONEY: the festival (Diwali) price-offer switch is a singleton keyed by
+    // `key: 'default'`. The unique index is what makes the admin's upsert
+    // race-safe — without it two concurrent first saves could create two switch
+    // documents and the pricing read would pick one arbitrarily. Tiny collection
+    // (one row), so building it is instant.
+    await db.collection('festivaloffers').createIndex(
+      { key: 1 },
+      { unique: true, background: true, name: 'key_1' }
+    );
+    console.log('✓ FestivalOffer singleton index confirmed');
+
     // MONEY-ADJACENT: one ACTIVE (non-cancelled) return per (order, product). This
     // is the DB race-safe backstop returnController.createReturnRequest relies on —
     // its findOne pre-check can be beaten by two concurrent submissions, and only

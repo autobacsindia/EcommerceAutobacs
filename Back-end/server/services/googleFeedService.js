@@ -112,7 +112,7 @@ function productTypes(product) {
  * Merchant Center diagnostics; a silently-wrong item is worse — a ₹0 or ₹2 price
  * can be served as a real Shopping ad and honoured as a real order.
  */
-export function buildItemsForProduct(product, { siteUrl, defaultBrand, googleCategory }) {
+export function buildItemsForProduct(product, { siteUrl, defaultBrand, googleCategory, festivalOffer = null }) {
   const link = productLink(product, siteUrl);
   const image = primaryImage(product);
   if (!image) return [];
@@ -140,7 +140,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, googleCat
   const rows =
     product.productType === 'variable' && variants.length > 0
       ? variants.map((variant) => {
-          const { price, salePrice, effectiveRupees } = priceFields(variant);
+          const { price, salePrice, salePriceEffectiveDate, effectiveRupees } = priceFields(variant, festivalOffer);
           return {
             ...base,
             id: googleVariantOfferId(product, variant),
@@ -159,12 +159,13 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, googleCat
             availability: availability(variant.stock),
             price,
             salePrice,
+            salePriceEffectiveDate,
             effectiveRupees,
           };
         })
       : [
           (() => {
-            const { price, salePrice, effectiveRupees } = priceFields(product);
+            const { price, salePrice, salePriceEffectiveDate, effectiveRupees } = priceFields(product, festivalOffer);
             return {
               ...base,
               id: googleOfferId(product),
@@ -174,6 +175,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, googleCat
               availability: availability(product.stock),
               price,
               salePrice,
+              salePriceEffectiveDate,
               effectiveRupees,
             };
           })(),
@@ -196,6 +198,9 @@ function serializeItem(item) {
     `<g:availability>${item.availability}</g:availability>`,
     `<g:price>${escapeXml(item.price)}</g:price>`,
     item.salePrice ? `<g:sale_price>${escapeXml(item.salePrice)}</g:sale_price>` : null,
+    item.salePriceEffectiveDate
+      ? `<g:sale_price_effective_date>${escapeXml(item.salePriceEffectiveDate)}</g:sale_price_effective_date>`
+      : null,
     item.googleCategory
       ? `<g:google_product_category>${escapeXml(item.googleCategory)}</g:google_product_category>`
       : null,
@@ -229,7 +234,7 @@ export function buildGoogleMerchantFeed(products = [], opts = {}) {
 
   const items = [];
   for (const product of products) {
-    for (const item of buildItemsForProduct(product, { siteUrl, defaultBrand, googleCategory })) {
+    for (const item of buildItemsForProduct(product, { siteUrl, defaultBrand, googleCategory, festivalOffer: opts.festivalOffer || null })) {
       items.push(serializeItem(item));
     }
   }

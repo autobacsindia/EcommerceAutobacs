@@ -13,6 +13,8 @@ import { publicBrowsingRateLimit } from '../middleware/rateLimitMiddleware.js';
 import productRepository from '../repositories/productRepository.js';
 import { buildMetaCatalogFeed } from '../services/metaFeedService.js';
 import { buildGoogleMerchantFeed } from '../services/googleFeedService.js';
+import festivalOfferRepository from '../repositories/festivalOfferRepository.js';
+import { isFestivalOfferLive } from '../services/festivalOfferService.js';
 
 const router = express.Router();
 
@@ -27,15 +29,26 @@ const caches = new Map();
  * Serve a cached feed document, rebuilding when its TTL has expired.
  * @param {string} key    cache slot (the feed's filename)
  * @param {number} ttl    milliseconds
- * @param {(products: Array) => string} build
+ * @param {(products: Array, opts: object) => string} build
  */
 function serveFeed(key, ttl, build) {
   return asyncHandler(async (_req, res) => {
     const now = Date.now();
     const cached = caches.get(key);
-    if (!cached || now - cached.builtAt > ttl) {
+    /*
+      The festival (Diwali) price offer is read on every pull — one indexed findOne on
+      a singleton — and is part of the cache key. Switching the offer on or off (or its
+      end date passing) rebuilds the feed on the next pull instead of advertising a
+      price the checkout no longer charges for the rest of the TTL.
+    */
+    const offerCfg = await festivalOfferRepository.find();
+    const festivalOffer = isFestivalOfferLive(offerCfg, new Date(now))
+      ? { startsAt: offerCfg.startsAt || null, endsAt: offerCfg.endsAt || null }
+      : null;
+    const offerKey = festivalOffer ? `on:${festivalOffer.startsAt}:${festivalOffer.endsAt}` : 'off';
+    if (!cached || now - cached.builtAt > ttl || cached.offerKey !== offerKey) {
       const products = await productRepository.findForFeed();
-      caches.set(key, { xml: build(products), builtAt: now });
+      caches.set(key, { xml: build(products, { festivalOffer }), builtAt: now, offerKey });
     }
     res.set('Content-Type', 'application/xml; charset=utf-8');
     res.set('Cache-Control', `public, max-age=${Math.floor(ttl / 1000)}`);
@@ -49,8 +62,8 @@ function serveFeed(key, ttl, build) {
 router.get(
   '/meta-catalog.xml',
   publicBrowsingRateLimit,
-  serveFeed('meta-catalog.xml', ttlMs(process.env.META_FEED_CACHE_SECONDS), (products) =>
-    buildMetaCatalogFeed(products)
+  serveFeed('meta-catalog.xml', ttlMs(process.env.META_FEED_CACHE_SECONDS), (products, opts) =>
+    buildMetaCatalogFeed(products, opts)
   )
 );
 
@@ -60,8 +73,8 @@ router.get(
 router.get(
   '/google-merchant.xml',
   publicBrowsingRateLimit,
-  serveFeed('google-merchant.xml', ttlMs(process.env.GOOGLE_FEED_CACHE_SECONDS), (products) =>
-    buildGoogleMerchantFeed(products)
+  serveFeed('google-merchant.xml', ttlMs(process.env.GOOGLE_FEED_CACHE_SECONDS), (products, opts) =>
+    buildGoogleMerchantFeed(products, opts)
   )
 );
 

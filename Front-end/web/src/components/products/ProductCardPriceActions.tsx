@@ -6,6 +6,8 @@ import { ShoppingCart, SlidersHorizontal } from 'lucide-react';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import { toast } from 'react-hot-toast';
+import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
+import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 
 interface Props {
   productId: string;
@@ -37,6 +39,10 @@ export default function ProductCardPriceActions({
   // Range spans two different prices → advertise the starting ("From") price.
   const showsRange = isVariable && priceMin != null && priceMax != null && priceMax > priceMin;
   const displayPrice = isVariable ? priceMin ?? price : price;
+  // Diwali offer — an extra % on top of the price shown. For a variable product the
+  // offer is monotonic in price, so the cheapest model's Diwali price is the true "From".
+  const offer = useFestivalOfferPrice(displayPrice);
+  const exact = (n: number) => formatPrice(n, { exact: true });
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -58,12 +64,13 @@ export default function ProductCardPriceActions({
         )}
         {!isVariable && originalPrice && originalPrice > price ? (
           <div className="flex items-baseline gap-2">
-            <p className="text-2xl font-display font-bold text-gold">{formatPrice(price)}</p>
+            <p className="text-2xl font-display font-bold text-gold">{formatPrice(offer ? offer.finalPrice : price)}</p>
             <p className="text-sm text-ink-muted line-through">{formatPrice(originalPrice)}</p>
           </div>
         ) : (
-          <p className="text-2xl font-display font-bold text-gold">{formatPrice(displayPrice)}</p>
+          <p className="text-2xl font-display font-bold text-gold">{formatPrice(offer ? offer.finalPrice : displayPrice)}</p>
         )}
+        <FestivalOfferTag offer={offer} formatMoney={exact} className="mt-1" />
       </div>
 
       {isVariable ? (

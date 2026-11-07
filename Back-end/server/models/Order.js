@@ -354,6 +354,24 @@ const OrderSchema = new mongoose.Schema({
         default: 0,
         min: 0
       },
+      /**
+       * Festival (Diwali) price offer this line was sold at, or absent.
+       *
+       * ALREADY INSIDE `price` — this is a record of how `price` was reached, not a
+       * further discount. Nothing re-applies it: refunds, invoices and totals keep
+       * reading `price`. Rupees, per unit. Snapshotted because orders are immutable
+       * financial records: the offer ending must not change what this order says.
+       */
+      festivalOffer: {
+        type: new mongoose.Schema({
+          code: { type: String, required: true },          // e.g. 'diwali'
+          percent: { type: Number, required: true, min: 0, max: 100 },
+          basePrice: { type: Number, required: true, min: 0 },        // MRP or selling price the % was taken from
+          priceBeforeOffer: { type: Number, required: true, min: 0 }, // what the unit cost without the offer
+          discount: { type: Number, required: true, min: 0 },         // basePrice − price
+        }, { _id: false }),
+        default: undefined
+      },
       name: String,
       image: String
     }
