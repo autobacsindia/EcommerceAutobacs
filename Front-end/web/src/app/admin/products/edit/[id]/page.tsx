@@ -24,6 +24,8 @@ import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } f
 import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
 import { generateSlug } from '@/lib/utils';
 import { usePanel } from '@/lib/usePanel';
+import ShippingSizeFields from '@/components/admin/ShippingSizeFields';
+import { EMPTY_SHIPPING_SIZE, firstShippingSizeError, shippingSizeToForm, shippingSizeToPayload, type ShippingSize, type ShippingSizeForm } from '@/lib/shippingSize';
 
 type Category = CategoryOption;
 
@@ -76,6 +78,7 @@ interface Product {
     cancellable?: boolean;
     nonReturnReason?: 'electrical' | 'custom' | 'imported' | 'installed' | null;
   };
+  shippingSize?: ShippingSize | null;
 }
 
 /** Stable empty gallery — an inline `[]` would be a fresh prop every render. */
@@ -137,6 +140,7 @@ export default function EditProductPage() {
     nonReturnReason: '',
   });
   
+  const [shippingSize, setShippingSize] = useState<ShippingSizeForm>(EMPTY_SHIPPING_SIZE);
   const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<CloudinaryImage[]>([]);
   // The full gallery (saved + pending) in the admin's chosen display order, and
@@ -346,6 +350,7 @@ export default function EditProductPage() {
 
       // Hydrate SEO overrides (blank fields fall back to computed defaults)
       setSeo(toSeoFormValue(productData.seo));
+      setShippingSize(shippingSizeToForm(productData.shippingSize));
 
       // Hydrate variable-product models (if any) so edits preserve variant _ids
       // AND their WooCommerce linkage — see EditorVariant.wpVariationId. A field
@@ -443,6 +448,13 @@ export default function EditProductPage() {
       return;
     }
 
+    const sizeError = firstShippingSizeError(shippingSize);
+    if (sizeError) {
+      alert(`Parcel size — ${sizeError}`);
+      setSubmitting(false);
+      return;
+    }
+
     const price = parseFloat(formData.price);
     const stock = formData.stock;
     if (productType === 'simple') {
@@ -506,6 +518,7 @@ export default function EditProductPage() {
         cancellable: formData.cancellable,
         nonReturnReason: formData.returnable ? null : (formData.nonReturnReason || null),
       }));
+      fd.append('shippingSize', JSON.stringify(shippingSizeToPayload(shippingSize)));
       if (formData.offerStartDate) fd.append('offerStartDate', formData.offerStartDate);
       if (formData.offerEndDate)   fd.append('offerEndDate',   formData.offerEndDate);
 
@@ -1061,6 +1074,9 @@ export default function EditProductPage() {
                 <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">Active</label>
               </div>
             </div>
+
+            {/* Parcel size — what the courier charges on (Shiprocket booking) */}
+            <ShippingSizeFields value={shippingSize} onChange={setShippingSize} />
 
             {/* Return / cancellation policy (per the signed Roavion policy) */}
             <div className="mb-4 border-t border-gray-200 pt-4">

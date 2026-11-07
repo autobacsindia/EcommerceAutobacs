@@ -18,6 +18,8 @@ import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } f
 import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
 import SlugField from '@/components/admin/SlugField';
 import { usePanel } from '@/lib/usePanel';
+import ShippingSizeFields from '@/components/admin/ShippingSizeFields';
+import { EMPTY_SHIPPING_SIZE, firstShippingSizeError, shippingSizeToPayload, type ShippingSizeForm } from '@/lib/shippingSize';
 
 type Category = CategoryOption;
 
@@ -59,6 +61,7 @@ export default function CreateProductPage() {
   // Tags state
   const [tagsInput, setTagsInput] = useState('');
 
+  const [shippingSize, setShippingSize] = useState<ShippingSizeForm>(EMPTY_SHIPPING_SIZE);
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
@@ -178,6 +181,12 @@ export default function CreateProductPage() {
       return;
     }
 
+    const sizeError = firstShippingSizeError(shippingSize);
+    if (sizeError) {
+      alert(`Parcel size — ${sizeError}`);
+      return;
+    }
+
     // A sale countdown is only meaningful with a real markdown — mirror the
     // server-side rule so the admin gets an instant message, not a 400.
     // (Simple products only; variable products don't use the single sale field.)
@@ -208,6 +217,7 @@ export default function CreateProductPage() {
       fd.append('isActive',         String(formData.isActive));
       fd.append('isFeatured',       String(formData.isFeatured));
       fd.append('isFastMoving',     String(formData.isFastMoving));
+      fd.append('shippingSize',     JSON.stringify(shippingSizeToPayload(shippingSize)));
       fd.append('returnPolicy',     JSON.stringify({
         returnable: formData.returnable,
         cancellable: formData.cancellable,
@@ -577,6 +587,9 @@ export default function CreateProductPage() {
                 <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">Active</label>
               </div>
             </div>
+
+            {/* Parcel size — what the courier charges on (Shiprocket booking) */}
+            <ShippingSizeFields value={shippingSize} onChange={setShippingSize} />
 
             {/* Return / cancellation policy (per the signed Roavion policy) */}
             <div className="mb-4 border-t border-gray-200 pt-4">

@@ -4,6 +4,7 @@ import { STOCK_STATUS, STOCK_VALUES, normalizeStockValue, stockRankFor } from '.
 import { snapshotStock, diffRecoveredTargets } from '../utils/restockDetect.js';
 import SeoSchema from './shared/seoSchema.js';
 import { slugify, generateUniqueSlug } from '../utils/slug.js';
+import { SHIPPING_SIZE_LIMITS as SZ } from '../utils/shippingSize.js';
 
 // One selectable model of a `variable` product (e.g. the car model a filter fits).
 // Each variant carries its OWN price + stock status, independent of its siblings —
@@ -314,6 +315,16 @@ const ProductSchema = new mongoose.Schema({
       enum: ['electrical', 'custom', 'imported', 'installed', null],
       default: null,
     },
+  },
+
+  // Packed parcel size for courier booking (Shiprocket): weight in kg, box in cm.
+  // All optional — null means "not measured yet", never a guessed default (see
+  // utils/shippingSize.js). Product-level: variants share the parent's box.
+  shippingSize: {
+    weightKg:  { type: Number, min: SZ.weightKg.min,  max: SZ.weightKg.max,  default: null },
+    lengthCm:  { type: Number, min: SZ.lengthCm.min,  max: SZ.lengthCm.max,  default: null },
+    breadthCm: { type: Number, min: SZ.breadthCm.min, max: SZ.breadthCm.max, default: null },
+    heightCm:  { type: Number, min: SZ.heightCm.min,  max: SZ.heightCm.max,  default: null },
   },
 
   // SEO metadata overrides (meta title/description, canonical, OG image,
