@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useFestival } from './FestivalThemeContext';
+import { useFestival, useFestivalCursor } from './FestivalThemeContext';
 import { loadEngine, prefersReducedMotion, stopEngine } from './loadEngine';
 import type { FestivalEngine } from './effects/engine';
 import { CART_ADD_INTENT_EVENT } from '@/lib/festival/events';
@@ -55,11 +55,12 @@ export function tagPlainCursor(target: EventTarget | null): void {
  * This file is tiny on purpose and is all that ships in the main bundle: it
  * remembers where the last tap was, and the engine itself is imported only
  * after the browser goes idle (and only while a festival is live, outside the
- * checkout/admin routes — useFestival() already returns null there).
+ * checkout/sign-in routes). The staff panels get the cursor and its trail only:
+ * useFestival() is null there, so tap sparkles and cart effects stay off.
  */
 export default function FestivalEffects() {
-  const festival = useFestival();
-  const tokens = festival?.tokens ?? null;
+  const tokens = useFestivalCursor();
+  const fullEffects = useFestival() !== null;
 
   // The diya cursor is still, not motion, so it ignores reduced-motion — but it
   // is mouse-only, so phones and tablets never attach this listener.
@@ -128,9 +129,11 @@ export default function FestivalEffects() {
       });
     };
 
-    document.addEventListener('pointerdown', onPointerDown, { capture: true, passive: true });
+    if (fullEffects) {
+      document.addEventListener('pointerdown', onPointerDown, { capture: true, passive: true });
+      window.addEventListener(CART_ADD_INTENT_EVENT, onCartAdd);
+    }
     if (trailOn) document.addEventListener('pointermove', onPointerMove, { passive: true });
-    window.addEventListener(CART_ADD_INTENT_EVENT, onCartAdd);
     return () => {
       cancelled = true;
       stopEngine();
@@ -140,7 +143,7 @@ export default function FestivalEffects() {
       document.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener(CART_ADD_INTENT_EVENT, onCartAdd);
     };
-  }, [tokens]);
+  }, [tokens, fullEffects]);
 
   return null;
 }

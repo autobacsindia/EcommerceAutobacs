@@ -8,7 +8,7 @@ import OrderCelebration, { isConfirmedOrder } from '../OrderCelebration';
 import FestivalEffects from '../FestivalEffects';
 import { resetEngineForTests } from '../loadEngine';
 import { emitCartAddIntent } from '@/lib/festival/events';
-import type { PublicFestivalTheme } from '@/lib/festival/festivalTheme';
+import { isStaffPanelRoute, type PublicFestivalTheme } from '@/lib/festival/festivalTheme';
 
 let mockPath = '/';
 jest.mock('next/navigation', () => ({ usePathname: () => mockPath }));
@@ -322,6 +322,96 @@ describe('page-wide accents', () => {
     mockPath = '/admin';
     withTheme(<span />);
     expect(document.documentElement.dataset.festival).toBeUndefined();
+  });
+});
+
+describe('staff panels get the diya cursor and sparkle trail, nothing else', () => {
+  const setMouse = (reduce = false) => {
+    window.matchMedia = jest.fn().mockImplementation((q: string) => ({
+      matches: q.includes('hover') || (reduce && q.includes('reduce')), media: q, addEventListener: jest.fn(), removeEventListener: jest.fn(), addListener: jest.fn(), removeListener: jest.fn(),
+    }));
+  };
+  const warm = async () => {
+    await act(async () => { jest.advanceTimersByTime(2100); });
+    await flush();
+  };
+  const moveAt = (x: number, t: number) => {
+    const ev = new Event('pointermove', { bubbles: true });
+    Object.defineProperties(ev, {
+      clientX: { value: x }, clientY: { value: x }, pointerType: { value: 'mouse' }, timeStamp: { value: t },
+    });
+    document.body.dispatchEvent(ev);
+  };
+
+  beforeEach(() => { jest.useFakeTimers(); setMouse(); });
+  afterEach(() => { jest.useRealTimers(); document.documentElement.removeAttribute('data-festival-cursor'); });
+
+  it.each(['/admin', '/admin/orders', '/team', '/team/tasks'])('%s: cursor on, page-wide decoration off', (p) => {
+    mockPath = p;
+    withTheme(<span />);
+    expect(document.documentElement.dataset.festivalCursor).toBe('diwali');
+    expect(document.documentElement.dataset.festival).toBeUndefined();
+  });
+
+  it.each(['/checkout', '/payment/x', '/login', '/register'])('%s: no cursor', (p) => {
+    mockPath = p;
+    withTheme(<span />);
+    expect(document.documentElement.dataset.festivalCursor).toBeUndefined();
+  });
+
+  it('a look-alike route is not a panel', () => {
+    expect(isStaffPanelRoute('/teams')).toBe(false);
+    expect(isStaffPanelRoute('/administrator')).toBe(false);
+    expect(isStaffPanelRoute('/team/')).toBe(true);
+  });
+
+  it('the storefront still gets both tags', () => {
+    withTheme(<span />);
+    expect(document.documentElement.dataset.festivalCursor).toBe('diwali');
+    expect(document.documentElement.dataset.festival).toBe('diwali');
+  });
+
+  it('switching the theme off removes the cursor from the panel', () => {
+    mockPath = '/admin';
+    const view = withTheme(<span />);
+    view.rerender(<FestivalThemeProvider theme={null} initialLive={false}><span /></FestivalThemeProvider>);
+    expect(document.documentElement.dataset.festivalCursor).toBeUndefined();
+  });
+
+  it('the trail runs in the panel, but tap sparkles and cart effects do not', async () => {
+    mockPath = '/admin/products';
+    withTheme(<FestivalEffects />);
+    await warm();
+    moveAt(50, 1000);
+    expect(engine.trail).toHaveBeenCalledTimes(1);
+
+    const link = document.createElement('a');
+    link.href = '/products/x';
+    document.body.appendChild(link);
+    link.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 5, clientY: 5 }));
+    emitCartAddIntent();
+    await flush();
+    link.remove();
+    expect(engine.sparkle).not.toHaveBeenCalled();
+    expect(engine.burst).not.toHaveBeenCalled();
+    expect(engine.flyToCart).not.toHaveBeenCalled();
+  });
+
+  it('no trail in the panel when the theme is off', async () => {
+    mockPath = '/team';
+    withTheme(<FestivalEffects />, null, false);
+    await warm();
+    moveAt(50, 1000);
+    expect(engine.trail).not.toHaveBeenCalled();
+  });
+
+  it('no trail in the panel under reduced motion', async () => {
+    setMouse(true);
+    mockPath = '/team';
+    withTheme(<FestivalEffects />);
+    await warm();
+    moveAt(50, 1000);
+    expect(engine.trail).not.toHaveBeenCalled();
   });
 });
 

@@ -55,6 +55,12 @@ export function isFestiveRoute(pathname: string | null | undefined): boolean {
   );
 }
 
+/** The staff panels: no decoration, but they do get the diya cursor and its sparkles. */
+export function isStaffPanelRoute(pathname: string | null | undefined): boolean {
+  const path = (pathname || '/').replace(/\/+$/, '') || '/';
+  return path === '/admin' || path.startsWith('/admin/') || path === '/team' || path.startsWith('/team/');
+}
+
 /**
  * Server-side read for the root layout. Never throws — decoration must degrade
  * to "no festival", never take the layout down.
