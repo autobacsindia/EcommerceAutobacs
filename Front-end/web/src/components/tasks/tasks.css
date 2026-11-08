@@ -254,3 +254,42 @@
   .tk-theme .tk-more-host:hover .tk-more,
   .tk-theme .tk-more-host:focus-within .tk-more { opacity: 1; }
 }
+
+/* ── Finishing touches ─────────────────────────────────────────────────── */
+.tk-theme .tk-tile {
+  background: var(--tk-card-bg);
+  border: 1px solid var(--tk-card-line);
+  box-shadow: 0 1px 2px rgba(20, 22, 40, 0.04);
+}
+.tk-theme .tk-tile-hot { border-color: var(--color-red-200); }
+.tk-theme .tk-tile-press { transition: border-color 0.12s ease, box-shadow 0.12s ease; }
+.tk-theme .tk-tile-press:hover { border-color: var(--color-blue-300); }
+.tk-theme .tk-tile-press[aria-pressed='true'] { border-color: var(--tk-accent); box-shadow: 0 0 0 1px var(--tk-accent); }
+.tk-theme .tk-tile-press:focus-visible { outline: 2px solid var(--pn-focus); outline-offset: 1px; }
+
+/* The main button lifts off the page a little. Layered over its own colour, so dark mode keeps working. */
+.tk-theme .tk-primary {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0));
+  box-shadow: 0 8px 18px -8px rgba(106, 87, 227, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* Rounder cards and columns. */
+.tk-theme .tk-card { border-radius: 0.75rem; }
+.tk-theme .tk-col { border-radius: 0.875rem; }
+.tk-theme .tk-sheet { border-radius: 0.75rem; }
+
+/* The tick fills with the status: a slice while in progress. */
+.tk-theme .tk-tick[data-status='in_progress'] {
+  background: conic-gradient(var(--tk-st-in_progress) 0 50%, transparent 0);
+  box-shadow: inset 0 0 0 2px var(--tk-card-bg);
+}
+.tk-theme .tk-tick[data-status='todo'] { border-style: dashed; }
+.tk-theme .tk-tick[data-status='in_progress']:hover { background: none; box-shadow: none; }
+
+/* A comment reads as a card on the activity column. */
+.tk-theme .tk-bubble {
+  background: var(--tk-card-bg);
+  border: 1px solid var(--tk-card-line);
+  border-radius: 0.25rem 0.75rem 0.75rem 0.75rem;
+  box-shadow: 0 1px 2px rgba(20, 22, 40, 0.04);
+}

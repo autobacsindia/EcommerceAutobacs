@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { AlarmClock, ArrowDownUp, BellDot, ChevronRight, CircleHelp, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Lock, MessageSquareText, Plus, Search, Send, Tag, Trash2, User, Users, X } from 'lucide-react';
+import { AlarmClock, ArrowDownUp, BellDot, ChevronRight, CircleCheck, CircleHelp, Columns3, Eye, Flag, Inbox, Info, Keyboard, Layers, List, ListTodo, Lock, MessageSquareText, Plus, Search, Send, Tag, Trash2, TriangleAlert, User, Users, X, Zap } from 'lucide-react';
 import { Kbd, ShortcutsDialog, isTypingIn, useHotkeys, type ShortcutGroup } from '@/components/panel/shortcuts';
 import { ListResultLine } from '@/components/panel/ListControls';
 import { useListParams } from '@/lib/hooks/useListParams';
@@ -18,6 +18,7 @@ import TaskForm, { useAssignees } from './TaskForm';
 import { Dialog, TaskWindow } from './Overlays';
 import { groupTasks } from './grouping';
 import { AssignedComments } from './AssignedComments';
+import { StatTile } from './StatTile';
 import { TeamOverview } from './TeamOverview';
 import InboxView, { inboxOrder, useInboxPages } from './Inbox';
 import { TimerChip, TimerNotice } from './Timer';
@@ -209,7 +210,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
 
   const summary = useQuery({
     queryKey: taskKeys.summary(),
-    queryFn: () => apiClient.get<{ late: number; today: number; inbox?: number; assignedComments?: number }>('/staff/tasks/summary'),
+    queryFn: () => apiClient.get<{ late: number; today: number; inbox?: number; assignedComments?: number; inProgress?: number; doneWeek?: number }>('/staff/tasks/summary'),
     refetchInterval: 60_000,
   });
   const people = useAssignees();
@@ -435,8 +436,6 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
                   <CircleHelp aria-hidden className="h-4 w-4" />
                 </button>
               )}
-              {!inOther && view === 'mine' && late > 0 && <span className="rounded-md bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">{late} late</span>}
-              {!inOther && view === 'mine' && today > 0 && <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{today} due today</span>}
             </h1>
             <p className="mt-0.5 text-[13px] text-gray-500">
               {inInbox ? 'What happened on your tasks: new tasks, status changes, comments and mentions.'
@@ -473,12 +472,20 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
           <button onClick={() => setShortcuts(true)} title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts" className="hidden h-9 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 md:inline-flex lg:hidden">
             <Keyboard aria-hidden className="h-4 w-4" /><Kbd>?</Kbd>
           </button>
-          <button onClick={() => setCreating(true)} className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3.5 text-sm font-semibold text-white shadow-sm transition-[background-color,transform] hover:bg-blue-700 active:scale-[0.98]" title="New task (N)">
+          <button onClick={() => setCreating(true)} className="tk-primary inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3.5 text-sm font-semibold text-white shadow-sm transition-[background-color,transform] hover:bg-blue-700 active:scale-[0.98]" title="New task (N)">
             <Plus className="h-4 w-4" /> New task <span className="hidden sm:contents"><Kbd className="border-transparent! bg-white/20! text-white! shadow-none!">N</Kbd></span>
           </button>
           </div>
         </header>
         <TimerNotice onOpen={setOpenId} />
+        {!inOther && view === 'mine' && (
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="group" aria-label="Your numbers">
+            <StatTile icon={TriangleAlert} label="Late" value={late} tone="red" onClick={showDueNow} pressed={dueNow} />
+            <StatTile icon={AlarmClock} label="Due today" value={today} tone="amber" onClick={showDueNow} pressed={dueNow} />
+            <StatTile icon={Zap} label="In progress" value={summary.data?.inProgress ?? 0} tone="sky" />
+            <StatTile icon={CircleCheck} label="Done this week" value={summary.data?.doneWeek ?? 0} tone="green" />
+          </div>
+        )}
 
         {inInbox ? (
           <InboxView filter={inboxFilter} onFilter={setInboxFilter} openId={openId} onOpen={setOpenId} />

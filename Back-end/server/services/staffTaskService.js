@@ -769,14 +769,17 @@ export async function summaryFor(user) {
   const today = todayIST();
   const tomorrow = addDays(today, 1);
   // Late = earlier days + today's timed tasks whose time has come; "today" = the rest of today's.
-  const [before, lateToday, allToday, inbox, assignedComments] = await Promise.all([
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const [before, lateToday, allToday, inbox, assignedComments, inProgress, doneWeek] = await Promise.all([
     staffTaskRepository.countDueIn(user._id, { $lt: today }),
     staffTaskRepository.countDueIn(user._id, { $gt: today, $lte: `${today} ${timeIST()}` }),
     staffTaskRepository.countDueIn(user._id, { $gte: today, $lt: tomorrow }),
     staffTaskInboxRepository.countUnread(user._id, INBOX_UNREAD_CAP),
     staffTaskRepository.countOpenAssignedComments(user._id, 100),
+    staffTaskRepository.countUpTo({ 'assignees.user': user._id, bucket: 'open', status: { $in: ['in_progress', 'waiting'] } }, 999),
+    staffTaskRepository.countUpTo({ 'assignees.user': user._id, bucket: 'done', rank: { $lte: `d${String(TIME_MAX - since).padStart(13, '0')}` } }, 999),
   ]);
-  return { late: before + lateToday, today: allToday - lateToday, inbox, assignedComments };
+  return { late: before + lateToday, today: allToday - lateToday, inbox, assignedComments, inProgress: inProgress.count, doneWeek: doneWeek.count };
 }
 
 /** The bell: open tasks given to `user` that are overdue or due today. */

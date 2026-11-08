@@ -281,7 +281,7 @@ function CommentItem({ task, c }: { task: Task; c: TaskComment }) {
     <li className="group flex gap-2.5">
       <Avatar name={c.by.name} id={c.by.id} size="sm" />
       <div className="min-w-0 flex-1">
-        <div className="rounded-lg rounded-tl-none bg-gray-50 px-3 py-2">
+        <div className="tk-bubble px-3 py-2">
           <p className="flex items-center gap-1 text-xs text-gray-500">
             <span className="font-semibold text-gray-900">{c.by.name}</span> · <time title={formatDateTimeIST(c.createdAt)}>{timeAgo(c.createdAt)}</time>
             {c.editedAt && !c.deleted && <span title={formatDateTimeIST(c.editedAt)}>· edited</span>}
@@ -452,7 +452,7 @@ function CommentBox({ task }: { task: Task }) {
           onSubmit={() => { if (ready) send.mutate(); }}
           maxLength={2000}
           minHeightClass="min-h-[2.75rem]"
-          placeholder="Write an update or a question… type @ to mention someone"
+          placeholder={task.personal ? 'Write a note to yourself…' : 'Write an update or a question… type @ to mention someone'}
           ariaLabel="Comment"
         />
         {files.length > 0 && (
