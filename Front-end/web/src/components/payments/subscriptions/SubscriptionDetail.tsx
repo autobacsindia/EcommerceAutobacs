@@ -10,6 +10,7 @@ import {
   approxText, archiveSubscription, billText, dayText, dueText, getSubscription, invoiceHref, payText, perText,
   rejectSubscription, STATUS_TONE, subscriptionKeys, verifySubscription, type Subscription,
 } from './api';
+import RichText from '@/components/ui/RichText';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50';
@@ -94,7 +95,7 @@ export default function SubscriptionDetail({ id, onClose }: { id: string; onClos
                   Open <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               )} />
-              <Row k="Notes" v={s.notes} />
+              <Row k="Notes" v={s.notes ? <RichText value={s.notes} /> : null} />
               <Row k="Added by" v={`${s.addedByName} · ${formatDateTimeIST(s.createdAt)}`} />
               {s.status === 'verified' && <Row k="Verified by" v={`${s.verifiedByName}${s.verifiedAt ? ` · ${formatDateTimeIST(s.verifiedAt)}` : ''}`} />}
             </dl>

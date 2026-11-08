@@ -75,7 +75,7 @@ const SubscriptionDueSchema = new mongoose.Schema(
       autoDebit: { type: Boolean, default: false },
     },
     billingUrl: { type: String, default: '', maxlength: 500 },
-    notes: { type: String, default: '', maxlength: 1000 },
+    notes: { type: String, default: '', maxlength: 6000 },
     files: { type: [FileSchema], default: [] },
 
     status: { type: String, enum: ['pending', 'verified', 'rejected'], default: 'pending', required: true },

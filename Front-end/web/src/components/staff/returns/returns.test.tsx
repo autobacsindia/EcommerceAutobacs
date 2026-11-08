@@ -8,6 +8,8 @@ import { tabsFor, type ReturnDetail } from './types';
 const get = jest.fn();
 const post = jest.fn();
 const patch = jest.fn();
+// jsdom cannot type into the real editor: a textarea with the same props stands in.
+jest.mock('@/components/ui/RichTextBox', () => require('@/test-utils/richTextBoxMock'));
 jest.mock('@/lib/api-client', () => ({ __esModule: true, default: {
   get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), patch: (...a: unknown[]) => patch(...a),
 } }));

@@ -8,6 +8,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TeamLeadsList, { type TeamLead } from './TeamLeadsList';
 import { addressBar } from '@/test-utils/addressBarMock';
 
+// jsdom cannot type into the real editor: a textarea with the same props stands in.
+jest.mock('@/components/ui/RichTextBox', () => require('@/test-utils/richTextBoxMock'));
 jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
 const get = jest.fn();
 const post = jest.fn();

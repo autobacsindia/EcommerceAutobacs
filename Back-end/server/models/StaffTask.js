@@ -124,7 +124,7 @@ const StaffTaskSchema = new mongoose.Schema(
   {
     number: { type: Number, required: true },
     title: { type: String, required: true, trim: true, maxlength: 200 },
-    description: { type: String, default: '', maxlength: 4000 },
+    description: { type: String, default: '', maxlength: 24000 }, // words ≤ DESCRIPTION_MAX (4000); formatted HTML may be longer
     status: { type: String, enum: TASK_STATUSES, default: 'todo', required: true },
     priority: { type: String, enum: TASK_PRIORITIES, default: 'normal', required: true },
     /** IST calendar day, 'YYYY-MM-DD' — a day, not an instant, so "due today" means the same thing to everyone. */
@@ -196,6 +196,14 @@ const StaffTaskSchema = new mongoose.Schema(
      * decides who sees the task.
      */
     list: { type: mongoose.Schema.Types.ObjectId, default: null },
+    /**
+     * A private task in its maker's Personal list: only they see it — not the
+     * team, not a head, not the admin. It has no teams, followers or list, and
+     * can never be given to anyone (services/staffTaskService.js).
+     */
+    personal: { type: Boolean, default: undefined },
+    /** How long it should take, in whole minutes (null: not planned). */
+    estimateMinutes: { type: Number, default: null, min: 1, max: 60000 },
     bucket: { type: String, enum: TASK_BUCKETS, default: 'open', required: true },
     rank: { type: String, required: true },
     rev: { type: Number, default: 1 },
@@ -236,6 +244,11 @@ StaffTaskSchema.index({ teams: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_t
 StaffTaskSchema.index({ teams: 1, list: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_team_list' });
 // "Following": the tasks someone follows, the same way.
 StaffTaskSchema.index({ 'followers.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_followers' });
+// One person's Personal list. Partial: most tasks are not personal.
+StaffTaskSchema.index(
+  { createdBy: 1, bucket: 1, rank: 1, _id: 1 },
+  { partialFilterExpression: { personal: true }, name: 'staff_task_personal' },
+);
 // The copies of one task given to several people. Partial: most tasks have no group.
 StaffTaskSchema.index({ group: 1 }, { partialFilterExpression: { group: { $type: 'objectId' } }, name: 'staff_task_group' });
 // The sub-tasks of one task, in list order. Partial: most tasks are not sub-tasks.

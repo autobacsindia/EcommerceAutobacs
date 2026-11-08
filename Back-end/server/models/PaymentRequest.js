@@ -93,7 +93,7 @@ const PaymentRequestSchema = new mongoose.Schema(
     // before per-team lists keep fuel | travel | food | purchase | other.
     // Supplier requests: 'supplier'.
     category: { type: String, required: true },
-    description: { type: String, default: '', maxlength: 2000 },
+    description: { type: String, default: '', maxlength: 12000 },
 
     payee: {
       name: { type: String, required: true, maxlength: 120 },

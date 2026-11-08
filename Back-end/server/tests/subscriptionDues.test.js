@@ -209,6 +209,15 @@ describe('Subscriptions & dues', () => {
       expect(item.payment.cardLast4).toBe('');
     });
 
+    it('formatted notes are cleaned; a card number split by formatting is still refused', async () => {
+      const item = await add(dev, { notes: '<p><strong>Card</strong> needs intl<script>x()</script></p>' });
+      expect(item.notes).toBe('<p><strong>Card</strong> needs intl</p>');
+      const res = await dev.s.add({ ...RAILWAY, notes: '<p>card <strong>4111 1111</strong> 1111 1111</p>' });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/card number/);
+      expect((await dev.s.add({ ...RAILWAY, notes: `<p><em>${'x'.repeat(1001)}</em></p>` })).status).toBe(400);
+    });
+
     it('ordinary long numbers (a phone number, an order number) are allowed', async () => {
       const item = await add(dev, { notes: 'Call +91 98765 43210, order 1234567890123' });
       expect(item.notes).toContain('98765');

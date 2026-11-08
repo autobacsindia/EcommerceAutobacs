@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import apiClient from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
+import RichTextBox from '@/components/ui/RichTextBox';
 
 type Status = 'new' | 'reviewing' | 'shortlisted' | 'rejected' | 'hired';
 
@@ -274,13 +275,8 @@ export default function AdminCareersApplicationsPage() {
                   </div>
 
                   <div>
-                    <label className="text-gray-400 block text-xs mb-1">Internal notes</label>
-                    <textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      rows={3}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none resize-y"
-                    />
+                    <span className="text-gray-400 block text-xs mb-1">Internal notes</span>
+                    <RichTextBox ariaLabel="Internal notes" compact maxLength={5000} value={notes} onChange={setNotes} minHeightClass="min-h-[4.5rem]" />
                     <div className="flex justify-end mt-2">
                       <button
                         disabled={savingStatus}

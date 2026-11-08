@@ -170,6 +170,14 @@ describe('Supplier directory and one-transfer payments', () => {
       expect(raw.payment.accountLast4).toBe('9012');
     });
 
+    it('formatted notes are cleaned and the limit counts words, not markup', async () => {
+      const res = await procurement.session.post('/suppliers', { ...ARB, notes: '<ul><li><p><strong>Net 30</strong></p></li></ul><img src=x onerror=alert(1)>' });
+      expect(res.status).toBe(201);
+      expect(res.body.supplier.notes).toBe('<ul><li><p><strong>Net 30</strong></p></li></ul>');
+      expect((await procurement.session.post('/suppliers', { ...ARB, name: 'Long Co', notes: `<p><em>${'x'.repeat(1000)}</em></p>` })).status).toBe(201);
+      expect((await procurement.session.post('/suppliers', { ...ARB, name: 'Longer Co', notes: `<p>${'x'.repeat(1001)}</p>` })).status).toBe(400);
+    });
+
     it('accounts views with the number masked and cannot edit; other teams see nothing', async () => {
       const s = await addSupplier();
       const seen = (await accounts.session.get('/suppliers')).body.suppliers[0];

@@ -3,15 +3,16 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { CalendarDays, CalendarRange, Flag, ListChecks, ListTree, Loader2, Tag, UserPlus, Users, X } from 'lucide-react';
+import { CalendarDays, CalendarRange, Flag, ListChecks, ListTree, Loader2, Lock, Tag, Timer, UserPlus, Users, X } from 'lucide-react';
 import TagInput from './TagInput';
 import AssigneePicker from './AssigneePicker';
 import { AvatarStack, DueTimeSelect } from './ui';
 import { ListPicker } from './spaces';
 import apiClient from '@/lib/api-client';
+import RichTextBox from '@/components/ui/RichTextBox';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
-import { MAX_ASSIGNEES, TASK_PRIORITIES, isPastDue, newClientId, type Assignee, type Task, type TaskPriority } from './types';
+import { MAX_ASSIGNEES, TASK_PRIORITIES, estimateProblem, isPastDue, newClientId, parseDuration, type Assignee, type Task, type TaskPriority } from './types';
 
 /** Shown under a due date that has already passed. */
 export function PastDueWarning({ dueOn, dueTime }: { dueOn: string; dueTime?: string | null }) {
@@ -151,8 +152,10 @@ export function PeopleField({ people, selected, onChange, copies, onCopies }: {
  * `listTeam` is the space whose lists the form offers (the team being shown, or
  * the person's own); `defaultListId` starts it in the list on screen.
  */
-export default function TaskForm({ onDone, onCancel, listTeam, defaultListId }: {
+export default function TaskForm({ onDone, onCancel, listTeam, defaultListId, personal = false }: {
   onDone: (task: Task) => void; onCancel: () => void; listTeam?: string | null; defaultListId?: string;
+  /** Made in the Personal list: private, so there is nobody to give it to and no team list. */
+  personal?: boolean;
 }) {
   const queryClient = useQueryClient();
   const people = useAssignees();
@@ -170,6 +173,9 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId }: 
   const [order, setOrder] = useState<PickedOrder | null>(null);
   const [listId, setListId] = useState<string | null>(defaultListId ?? null);
   const [error, setError] = useState('');
+  const [estimate, setEstimate] = useState('');
+  const estimateMinutes = estimate.trim() ? parseDuration(estimate) : undefined;
+  const estimateError = estimateMinutes === undefined ? '' : estimateProblem(estimateMinutes);
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
   const datesBackwards = !!form.startOn && !!form.dueOn && form.startOn > form.dueOn;
 
@@ -177,8 +183,8 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId }: 
     mutationFn: () => apiClient.post<{ task: Task; tasks: Task[] }>('/staff/tasks', {
       title: form.title.trim(),
       description: form.description.trim(),
-      assigneeIds: chosen,
-      shared: !copies,
+      ...(personal ? { personal: true } : { assigneeIds: chosen, shared: !copies }),
+      ...(estimateMinutes ? { estimateMinutes } : {}),
       checklist: form.steps.split('\n').map((l) => l.trim()).filter(Boolean),
       priority: form.priority,
       dueOn: form.dueOn || null,
@@ -186,7 +192,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId }: 
       startOn: form.startOn || null,
       tags: form.tags,
       orderId: order?.id || null,
-      ...(listId ? { listId } : {}),
+      ...(listId && !personal ? { listId } : {}),
       clientId: clientId.current,
     }),
     onSuccess: (res) => {
@@ -200,7 +206,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId }: 
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); setError(''); if (form.title.trim() && chosen.length && !datesBackwards) create.mutate(); }}
+      onSubmit={(e) => { e.preventDefault(); setError(''); if (form.title.trim() && (personal || chosen.length) && !datesBackwards && !estimateError) create.mutate(); }}
       className="flex max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
     >
       <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
@@ -218,14 +224,13 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId }: 
           aria-label="Title"
           className="w-full border-0 bg-transparent p-0 text-lg font-semibold text-gray-900 outline-none placeholder:font-normal placeholder:text-gray-400"
         />
-        <textarea
+        <RichTextBox
           value={form.description}
-          onChange={(e) => set({ description: e.target.value })}
+          onChange={(description) => set({ description })}
           maxLength={4000}
-          rows={3}
+          minHeightClass="min-h-[4.5rem]"
           placeholder="Add a description (optional)"
-          aria-label="Notes"
-          className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm"
+          ariaLabel="Notes"
         />
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="text-xs font-medium text-gray-500">
@@ -252,8 +257,16 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId }: 
           <span className="mb-1 flex items-center gap-1"><Tag aria-hidden className="h-3.5 w-3.5" /> Tags (optional)</span>
           <TagInput value={form.tags} onChange={(tags) => set({ tags })} />
         </label>
-        {choices.length > 1 && <PeopleField people={choices} selected={chosen} onChange={setPicked} copies={copies} onCopies={setCopies} />}
-        {choices.length === 1 && (
+        <label className="block text-xs font-medium text-gray-500">
+          <span className="mb-1 flex items-center gap-1"><Timer aria-hidden className="h-3.5 w-3.5" /> Time estimate (optional)</span>
+          <input value={estimate} onChange={(e) => setEstimate(e.target.value)} maxLength={12} placeholder="e.g. 45, 2h or 1h 30m" className="w-40 rounded-lg border border-gray-200 px-2 py-1 text-sm text-gray-900" />
+          {estimateError && <span role="alert" className="mt-1 block text-red-700">{estimateError}</span>}
+        </label>
+        {personal && (
+          <p className="flex items-center gap-1.5 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600"><Lock aria-hidden className="h-3.5 w-3.5" /> Only you will see this task.</p>
+        )}
+        {!personal && choices.length > 1 && <PeopleField people={choices} selected={chosen} onChange={setPicked} copies={copies} onCopies={setCopies} />}
+        {!personal && choices.length === 1 && (
           <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">This task is for you.</p>
         )}
         <label className="block text-xs font-medium text-gray-500">
@@ -268,7 +281,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId }: 
           />
         </label>
         <OrderPicker value={order} onChange={setOrder} />
-        {listTeam && (
+        {listTeam && !personal && (
           <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
             <span className="flex shrink-0 items-center gap-1"><ListTree aria-hidden className="h-3.5 w-3.5" /> List</span>
             <ListPicker team={listTeam} value={listId} onChange={setListId} className="rounded-lg border border-gray-200 px-2 py-1" />
@@ -280,7 +293,7 @@ export default function TaskForm({ onDone, onCancel, listTeam, defaultListId }: 
         <button type="button" onClick={onCancel} className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100">Cancel</button>
         <button
           type="submit"
-          disabled={create.isPending || !form.title.trim() || chosen.length === 0 || datesBackwards}
+          disabled={create.isPending || !form.title.trim() || (!personal && chosen.length === 0) || datesBackwards || !!estimateError}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
         >
           {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}

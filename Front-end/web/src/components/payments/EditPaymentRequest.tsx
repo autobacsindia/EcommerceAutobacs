@@ -10,6 +10,8 @@ import {
 import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeKind } from './BankCodeField';
 import { SupplierSuggestions, payLine } from './SupplierPicker';
 import type { Supplier } from './suppliers';
+import RichTextBox from '@/components/ui/RichTextBox';
+import { richTextToPlain } from '@/lib/richText';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
@@ -73,6 +75,7 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
     setError('');
     const codeProblem = !picked && method === 'bank' && !masked ? bankCodeProblem(codeKind, payee[codeKind]) : '';
     if (codeProblem) { setError(codeProblem); return; }
+    if (noteRequired && richTextToPlain(description).trim().length < 3) { setError('Add details — say what it was for.'); return; }
     const body: Record<string, unknown> = { description: description.trim() };
     // A foreign bill sends only what was billed: its rupees are recorded when it is paid.
     if (foreign) Object.assign(body, currencyLocked ? { foreignAmount } : { currency, foreignAmount });
@@ -166,7 +169,7 @@ export default function EditPaymentRequest({ r, onDone, onCancel }: {
       )}
 
       <div><label className={label} htmlFor="ed-desc">Details</label>
-        <textarea id="ed-desc" className={input} rows={2} required={noteRequired} minLength={noteRequired ? 3 : 0} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+        <RichTextBox id="ed-desc" ariaLabel="Details" compact maxLength={2000} value={description} onChange={setDescription} /></div>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">

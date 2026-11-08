@@ -19,7 +19,7 @@ const optionalId = (field) => body(field).optional({ values: 'null' })
 export const validateTaskId = [param('id').custom(isObjectId).withMessage('Invalid task id')];
 
 export const validateTaskList = [
-  query('view').optional().isIn(['mine', 'following', 'created', 'team']).withMessage('Invalid view'),
+  query('view').optional().isIn(['mine', 'following', 'created', 'team', 'personal']).withMessage('Invalid view'),
   query('state').optional().isIn(['open', 'done', 'archived']).withMessage('Invalid state'),
   query('due').optional().isIn(['overdue', 'today', 'late', 'week']).withMessage('Invalid due filter'),
   query('priority').optional().isIn(TASK_PRIORITIES).withMessage('Invalid priority'),
@@ -47,6 +47,8 @@ export const validateTaskCreate = [
   body('assigneeIds').optional().isArray({ max: 30 }).withMessage('Pick at most 30 people'),
   body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
   body('shared').optional().isBoolean().withMessage('Invalid choice'),
+  body('personal').optional().isBoolean().withMessage('Invalid choice'),
+  body('estimateMinutes').optional({ values: 'null' }).isInt({ min: 1, max: 60000 }).withMessage('Enter an estimate between 1 minute and 1000 hours'),
   body('checklist').optional().isArray({ max: 30 }).withMessage('A checklist can have at most 30 steps'),
   body('checklist.*').isString().withMessage('Invalid step'),
   optionalId('orderId'),
@@ -68,6 +70,7 @@ export const validateTaskUpdate = [
   body('tags').optional().isArray({ max: 10 }).withMessage('A task can have at most 10 tags'),
   body('tags.*').isString().withMessage('Invalid tag'),
   body('archived').optional().isBoolean().withMessage('Invalid archive flag'),
+  body('estimateMinutes').optional({ values: 'null' }).isInt({ min: 1, max: 60000 }).withMessage('Enter an estimate between 1 minute and 1000 hours'),
   optionalId('assigneeId'),
   body('assigneeIds').optional().isArray({ min: 1, max: 30 }).withMessage('Keep between 1 and 30 people on a task'),
   body('assigneeIds.*').custom(isObjectId).withMessage('Invalid person'),
@@ -114,6 +117,16 @@ export const validateCommentCreate = [
 
 const commentParams = [...validateTaskId, param('commentId').custom(isObjectId).withMessage('Invalid comment')];
 export const validateCommentId = commentParams;
+export const validateCommentAssign = [
+  ...commentParams,
+  body('userId').custom((v) => v === null || (typeof v === 'string' && /^[a-f\d]{24}$/i.test(v))).withMessage('Pick who to assign it to'),
+];
+export const validateCommentResolve = [...commentParams, body('resolved').isBoolean().withMessage('Say whether it is resolved')];
+export const validateAssignedCommentList = [
+  query('state').optional().isIn(['open', 'resolved']).withMessage('Invalid list'),
+  query('before').optional().isMongoId().withMessage('Invalid page'),
+];
+export const validateOverview = [query('team').optional().isString().matches(/^[\w-]{1,40}$/).withMessage('Invalid team')];
 export const validateCommentEdit = [...commentParams, body('text').isString().withMessage('Write the comment first')];
 export const validateCommentReaction = [
   ...commentParams,
@@ -123,6 +136,20 @@ export const validateCommentReaction = [
 export const validateTaskFileName = [...validateTaskId, param('name').isString().isLength({ min: 1, max: 120 }).withMessage('File not found')];
 
 const itemParams = [...validateTaskId, param('itemId').custom(isObjectId).withMessage('Invalid step')];
+
+export const validateTaskLinkAdd = [
+  ...validateTaskId,
+  body('kind').isIn(['waiting_on', 'blocking', 'related']).withMessage('Pick how the tasks are linked'),
+  body('taskId').custom(isObjectId).withMessage('Pick a task'),
+];
+export const validateTaskLinkRemove = [
+  ...validateTaskId,
+  param('linkId').custom(isObjectId).withMessage('Invalid link'),
+];
+export const validateTaskLinkOptions = [
+  ...validateTaskId,
+  query('q').optional().isString().isLength({ max: 100 }).withMessage('Search is too long'),
+];
 
 export const validateChecklistAdd = [
   ...validateTaskId,

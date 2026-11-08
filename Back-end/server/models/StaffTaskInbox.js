@@ -15,7 +15,7 @@ import mongoose from 'mongoose';
  * days after they were written: this is a feed of what happened, not the record
  * of it (that is the task's own history), so nothing of value is lost.
  */
-export const INBOX_KINDS = Object.freeze(['assigned', 'status', 'comment', 'mention', 'subtask']);
+export const INBOX_KINDS = Object.freeze(['assigned', 'status', 'comment', 'mention', 'subtask', 'comment_assigned', 'comment_resolved']);
 export const INBOX_STATES = Object.freeze(['unread', 'read', 'cleared']);
 export const INBOX_TTL_SECONDS = 90 * 24 * 60 * 60;
 

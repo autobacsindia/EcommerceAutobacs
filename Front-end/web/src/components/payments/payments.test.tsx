@@ -14,6 +14,7 @@ import type { ExpenseOptions, PaymentRequest } from './api';
 const get = jest.fn();
 const post = jest.fn();
 const put = jest.fn();
+jest.mock('@/components/ui/RichTextBox', () => require('@/test-utils/richTextBoxMock'));
 jest.mock('@/lib/api-client', () => ({
   __esModule: true,
   default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), put: (...a: unknown[]) => put(...a) },
@@ -232,11 +233,17 @@ describe('each team’s own options', () => {
   it('details are optional on a plain option and required on "Others"', async () => {
     wrap(<PaymentRequestForm onDone={() => {}} />);
     await optionsLoaded();
-    expect(detailsBox()).not.toBeRequired();
     expect(screen.getByText('Optional')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('What for'), { target: { value: 'other' } });
-    expect(detailsBox()).toBeRequired();
     expect(screen.getByText('Required')).toBeInTheDocument();
+    // Empty formatting is not details: the form says so and sends nothing.
+    fireEvent.change(detailsBox(), { target: { value: '<p><strong> </strong></p>' } });
+    fireEvent.change(screen.getByLabelText(/^Amount/), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText('Pay to'), { target: { value: 'Shop' } });
+    fireEvent.change(screen.getByLabelText('UPI ID'), { target: { value: 'shop@okaxis' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send for approval/ }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Add details/);
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(detailsBox()).toHaveAttribute('placeholder', expect.stringMatching(/^Say what it was for/));
   });
 

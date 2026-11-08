@@ -30,5 +30,5 @@ export const validateTeamLeadFollowUp = [
   ...validateTeamLeadId,
   body('status').isIn(FOLLOW_UP_STATUS_KEYS).withMessage('Pick how the follow-up went.'),
   body('note').optional({ nullable: true }).isString().withMessage('The note must be text.')
-    .bail().isLength({ max: FOLLOW_UP_NOTE_MAX + 50 }).withMessage(`Keep the note under ${FOLLOW_UP_NOTE_MAX} characters.`),
+    .bail().isLength({ max: Math.max(FOLLOW_UP_NOTE_MAX * 6, 2000) }).withMessage(`Keep the note under ${FOLLOW_UP_NOTE_MAX} characters.`),
 ];

@@ -492,6 +492,24 @@ describe('the flow', () => {
     expect(done.pickup).toMatchObject({ mode: 'supplier_direct', bookedBy: 'supplier' });
   });
 
+  it("the supplier's check notes may be formatted: cleaned when saved, plain words in the timeline, limit counts words", async () => {
+    const o = await deliveredOrder();
+    const ops = await person('operations');
+    const r = await svc.raiseReturn(ops, { orderId: String(o.order._id), description: 'x', images: PHOTOS, video: VIDEO, items: [{ itemId: o.cam, quantity: 1, reason: 'wrong_item' }] }, req(ops));
+    await svc.reviewReturn(ops, r.id, { decision: 'approve', destination: { kind: 'supplier', supplierName: 'Ram Traders' } }, req(ops));
+    const proc = await person('procurement');
+    await svc.bookPickup(proc, r.id, { provider: 'Blue Dart', trackingNumber: 'BD9', bookedBy: 'supplier' }, req(proc));
+    await svc.markReceived(proc, r.id, {}, req(proc));
+    await expect(svc.recordSupplierCheck(proc, r.id, { passed: true, notes: '<p> </p>' }, [photo()], req(proc)))
+      .rejects.toMatchObject({ statusCode: 400 });
+    await expect(svc.recordSupplierCheck(proc, r.id, { passed: true, notes: `<p>${'x'.repeat(1001)}</p>` }, [photo()], req(proc)))
+      .rejects.toMatchObject({ statusCode: 400 });
+    await svc.recordSupplierCheck(proc, r.id, { passed: true, notes: '<p><strong>Wrong model</strong><img src=x onerror=alert(1)></p><ul><li><p>box sealed</p></li></ul>' }, [photo()], req(proc));
+    const saved = await ReturnRequest.findById(r.id).lean();
+    expect(saved.inspection.supplierCheck.notes).toBe('<p><strong>Wrong model</strong></p><ul><li><p>box sealed</p></li></ul>');
+    expect(saved.timeline.at(-1).note).toBe("Supplier's check: passed — Wrong model • box sealed");
+  });
+
   it("customer's reason: operations records the pickup cost at check 2 and the refund deducts it", async () => {
     const o = await deliveredOrder();
     const ops = await person('operations');

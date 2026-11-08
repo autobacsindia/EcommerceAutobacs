@@ -26,7 +26,7 @@ const StaffTaskCommentSchema = new mongoose.Schema(
     by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     byName: { type: String, default: '' },
     /** Empty only when the comment is files alone. */
-    text: { type: String, default: '', maxlength: 2000 },
+    text: { type: String, default: '', maxlength: 12000 }, // words ≤ COMMENT_MAX; formatted HTML may be longer
     /** The browser's id for this comment, so a double-send posts once. */
     clientId: { type: String, default: undefined, maxlength: 64 },
     /** People addressed with @Name — each could see the task when it was written. */
@@ -38,6 +38,12 @@ const StaffTaskCommentSchema = new mongoose.Schema(
     edits: { type: [{ _id: false, text: String, at: Date }], default: undefined },
     deletedAt: { type: Date, default: null },
     deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    /** Someone asked to act on this comment; it stays on their list until resolved. */
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
+    assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
+    assignedAt: { type: Date, default: undefined },
+    resolvedAt: { type: Date, default: undefined },
+    resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
   },
   { timestamps: { createdAt: true, updatedAt: false } },
 );
@@ -48,5 +54,8 @@ StaffTaskCommentSchema.index(
   { by: 1, clientId: 1 },
   { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_task_comment_client_id' },
 );
+
+// "Assigned comments": one person's open or resolved ones, newest first.
+StaffTaskCommentSchema.index({ assignedTo: 1, resolvedAt: 1, _id: -1 }, { name: 'staff_task_comment_assigned' });
 
 export default mongoose.models.StaffTaskComment || mongoose.model('StaffTaskComment', StaffTaskCommentSchema);

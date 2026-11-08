@@ -11,6 +11,7 @@ import { formatDateIST } from '@/lib/datetime';
 import { useReturnAction } from './useReturnAction';
 import { CLAIM_STATUS_LABEL, SETTLEMENT_LABEL, type ReturnDetail, type SupplierClaim } from './types';
 import { danger, input, primary, secondary } from './ui';
+import { richTextToPlain } from '@/lib/richText';
 
 function Claim({ r, c }: { r: ReturnDetail; c: SupplierClaim }) {
   const act = useReturnAction(r.id);
@@ -39,7 +40,7 @@ function Claim({ r, c }: { r: ReturnDetail; c: SupplierClaim }) {
       )}
       {c.loss?.recorded && <p className="text-xs font-semibold text-red-700">Recorded as a loss against {c.supplierName}. The customer is refunded anyway.</p>}
       {c.shipBack?.trackingNumber && <p className="text-xs text-gray-600">Sent back with {c.shipBack.courier} · AWB {c.shipBack.trackingNumber}</p>}
-      {c.supplierCheck?.passed != null && <p className="text-xs text-gray-600">Supplier&apos;s check: {c.supplierCheck.passed ? 'passed' : 'failed'}{c.supplierCheck.notes ? ` — ${c.supplierCheck.notes}` : ''}</p>}
+      {c.supplierCheck?.passed != null && <p className="text-xs text-gray-600">Supplier&apos;s check: {c.supplierCheck.passed ? 'passed' : 'failed'}{c.supplierCheck.notes ? ` — ${richTextToPlain(c.supplierCheck.notes)}` : ''}</p>}
       {c.settlement?.kind && (
         <p className="text-xs text-gray-700">
           Promised: {SETTLEMENT_LABEL[c.settlement.kind]}{c.settlement.amountPaise ? ` of ${rupees(c.settlement.amountPaise / 100)}` : ''}

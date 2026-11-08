@@ -36,6 +36,7 @@ import {
 } from '../config/leadConstants.js';
 import { and, keysetPage, plainQuery, searchWords, searchClauses, isObjectId } from '../utils/listQuery.js';
 import { phoneSearchPattern } from '../utils/identity.js';
+import { cleanRichTextWithin, richTextToPlain } from '../utils/richText.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const DAY = 24 * 60 * 60 * 1000;
@@ -401,8 +402,9 @@ export async function recordFollowUp(actor, leadId, body = {}) {
   const status = typeof body.status === 'string' ? body.status : '';
   if (!FOLLOW_UP_STATUS_KEYS.includes(status)) throw fail('Pick how the follow-up went.', 400);
   if (body.note != null && typeof body.note !== 'string') throw fail('The note must be text.', 400);
-  const note = (body.note || '').trim();
-  if (note.length > FOLLOW_UP_NOTE_MAX) throw fail(`Keep the note under ${FOLLOW_UP_NOTE_MAX} characters.`, 400);
+  // The note may be formatted (rich-text box): cleaned here, limit counts words.
+  const { value: note, tooLong } = cleanRichTextWithin(body.note, FOLLOW_UP_NOTE_MAX);
+  if (tooLong) throw fail(`Keep the note under ${FOLLOW_UP_NOTE_MAX} characters.`, 400);
   if (status === 'other' && !note) throw fail('Type what happened when you pick "Others".', 400);
 
   const current = await leadRepository.teamDetail(leadId, 1);
@@ -442,7 +444,7 @@ export async function recordFollowUp(actor, leadId, body = {}) {
   try {
     const opts = { actorId: actor._id, repId: mine ? rep._id : null };
     if (status === 'not_interested') {
-      await leadSyncService.applyLeadStatus(leadId, 'lost', { ...opts, lostReason: note || 'Not interested', notes: 'Closed: not interested' });
+      await leadSyncService.applyLeadStatus(leadId, 'lost', { ...opts, lostReason: richTextToPlain(note).replace(/\s+/g, ' ').slice(0, 500) || 'Not interested', notes: 'Closed: not interested' });
     } else if (status === 'converted' && current.status !== 'qualified') {
       await leadSyncService.applyLeadStatus(leadId, 'qualified', { ...opts, notes: 'Converted — closes as won when the order is paid' });
     } else if (REACHED.has(status) && current.status === 'new') {

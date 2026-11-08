@@ -20,6 +20,9 @@ import SupplierClaims from './SupplierClaims';
 import EditReturnForm from './EditReturnForm';
 import { DISPOSITION_OPTIONS, FAULT_LABEL, FAULT_TONE, type ReturnDetail, type ReturnFault } from './types';
 import { danger, input, primary, secondary } from './ui';
+import RichTextBox from '@/components/ui/RichTextBox';
+import RichText from '@/components/ui/RichText';
+import { isRichTextEmpty } from '@/lib/richText';
 
 
 type Res = { success: boolean; return: ReturnDetail };
@@ -209,11 +212,11 @@ function SupplierCheckForm({ r }: { r: ReturnDetail }) {
   return (
     <Box title="The supplier's check">
       <PassFail name={`supcheck-${r.id}`} value={passed} onChange={setPassed} />
-      <textarea className={input} rows={2} placeholder="What the supplier said" value={notes} onChange={(e) => setNotes(e.target.value)} />
+      <RichTextBox value={notes} onChange={setNotes} ariaLabel="What the supplier said" placeholder="What the supplier said" maxLength={1000} minHeightClass="min-h-[3.5rem]" />
       <FilePicker files={files} onChange={setFiles} max={MAX_ATTACHMENTS} accept={PHOTO_OR_PDF}
         label="The supplier's photos (optional)" icon={<Camera className="h-4 w-4" />} onError={setFileError} />
       {fileError && <p className="text-xs text-red-700">{fileError}</p>}
-      <button type="button" className={primary} disabled={act.isPending || passed === null || !notes.trim()}
+      <button type="button" className={primary} disabled={act.isPending || passed === null || isRichTextEmpty(notes)}
         onClick={() => act.mutate({ path: '/supplier-check', body: { passed, notes }, files })}>Save the supplier&apos;s check</button>
       <p className="text-[11px] text-gray-500">Operations then confirms it — they decide whose fault it is for the customer.</p>
       <ErrorLine error={act.error} />
@@ -253,9 +256,10 @@ function InspectionForm({ r }: { r: ReturnDetail }) {
   return (
     <Box title={atSupplier ? "Check 2 — confirm the supplier's check" : 'Check 2 — inspect the item'}>
       {atSupplier && r.inspection?.supplierCheck && (
-        <p className="rounded bg-white p-2 text-xs text-gray-700">
-          Supplier: <strong>{r.inspection.supplierCheck.passed ? 'passed' : 'failed'}</strong> — {r.inspection.supplierCheck.notes}
-        </p>
+        <div className="rounded bg-white p-2 text-xs text-gray-700">
+          Supplier: <strong>{r.inspection.supplierCheck.passed ? 'passed' : 'failed'}</strong>
+          <RichText value={r.inspection.supplierCheck.notes} className="mt-1" />
+        </div>
       )}
       <PassFail name={`inspect-${r.id}`} value={passed} onChange={setPassed} />
       <textarea className={input} rows={2} placeholder="What you found" value={notes} onChange={(e) => setNotes(e.target.value)} />

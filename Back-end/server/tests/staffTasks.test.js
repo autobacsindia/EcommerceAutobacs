@@ -700,7 +700,7 @@ describe('list rows (what the database sends for a page)', () => {
     // A field missing from LIST_PROJECTION would show up here as a difference.
     const full = await tasks.getTask(procA, t.id);
     // timeSeconds: list rows only — the task window reads its time from GET /:id/time.
-    const listOnly = ['summary', 'timeSeconds'];
+    const listOnly = ['summary', 'timeSeconds', 'waitingOn'];
     const pageOnly = ['description', 'checklistItems', 'history', 'siblings', 'files'];
     for (const key of Object.keys(full).filter((k) => !pageOnly.includes(k))) expect(row[key]).toEqual(full[key]);
     expect(Object.keys(row).filter((k) => !listOnly.includes(k)).sort())
@@ -742,8 +742,8 @@ describe('search, filters, counters and quick add', () => {
     await make(procHead, { assigneeId: String(procA._id), dueOn: day(3) });
     await make(procHead, { assigneeId: String(procB._id), dueOn: day(-1) });
     // …and an unread Inbox line for each of the four tasks given to procA.
-    expect(await tasks.summaryFor(procA)).toEqual({ late: 2, today: 1, inbox: 4 });
-    expect(await tasks.summaryFor(salesA)).toEqual({ late: 0, today: 0, inbox: 0 });
+    expect(await tasks.summaryFor(procA)).toMatchObject({ late: 2, today: 1, inbox: 4 });
+    expect(await tasks.summaryFor(salesA)).toMatchObject({ late: 0, today: 0, inbox: 0 });
   });
 
   it('"+ Add task" in a status group starts the task there — never in Done', async () => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CornerLeftUp, Flag, ListChecks, MessageSquare, Network, Package, Plus, Tag, Timer as TimerIcon, UserPlus, Users, X } from 'lucide-react';
+import { Ban, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CornerLeftUp, Flag, ListChecks, MessageSquare, Network, Package, Plus, Tag, Timer as TimerIcon, UserPlus, Users, X } from 'lucide-react';
 import { errorMessage } from '@/components/staff/sales/types';
 import { useQuickAdd, useQuickEdit, useSetStatus, useTaskPages, type QuickEdit, type QuickExtras } from './hooks';
 import { QuickDate, QuickPeople, QuickPriority } from './CardActions';
@@ -54,6 +54,11 @@ export function TaskMeta({ t, withOrder = true, withComments = true }: { t: Task
       {t.parent && (
         <Chip title={`A sub-task of ${t.parent.code} ${t.parent.title}`}>
           <CornerLeftUp aria-hidden className="h-3 w-3 shrink-0" /><span className="max-w-[11rem] truncate">in {t.parent.code} {t.parent.title}</span>
+        </Chip>
+      )}
+      {(t.waitingOn ?? 0) > 0 && t.bucket === 'open' && (
+        <Chip tone="bg-amber-100 text-amber-900" title={`Waiting on ${t.waitingOn} unfinished task${t.waitingOn === 1 ? '' : 's'}`}>
+          <Ban aria-hidden className="h-3 w-3" />Waiting
         </Chip>
       )}
       {subs > 0 && (
@@ -189,7 +194,7 @@ const chipClass = 'inline-flex h-7 items-center gap-1 rounded-md border border-g
  * The board's chips under a new task's name: who does it, the due date, the
  * priority and tags — each optional, each shown as what it is once set.
  */
-function QuickChips({ extras, onChange }: { extras: QuickExtras; onChange: (patch: QuickExtras) => void }) {
+function QuickChips({ extras, onChange, noPeople = false }: { extras: QuickExtras; onChange: (patch: QuickExtras) => void; noPeople?: boolean }) {
   const people = useAssignees();
   const choices = people.data?.people ?? [];
   const byId = new Map(choices.map((p) => [p.id, p]));
@@ -207,6 +212,7 @@ function QuickChips({ extras, onChange }: { extras: QuickExtras; onChange: (patc
   };
   return (
     <div className="flex flex-wrap items-center gap-1">
+      {!noPeople && (
       <AssigneePicker
         people={choices}
         selected={ids}
@@ -220,6 +226,7 @@ function QuickChips({ extras, onChange }: { extras: QuickExtras; onChange: (patc
           </span>
         )}
       />
+      )}
       {dating || extras.dueOn ? (
         <input
           type="date"
@@ -279,10 +286,12 @@ function QuickChips({ extras, onChange }: { extras: QuickExtras; onChange: (patc
  * date, the priority and tags before it is saved. One id per draft: a double
  * Enter or a retried request makes one task.
  */
-export function QuickAdd({ status, assigneeId, listId, label = 'Add task', variant = 'list' }: {
+export function QuickAdd({ status, assigneeId, listId, personal = false, label = 'Add task', variant = 'list' }: {
   status: TaskStatus; assigneeId?: string; label?: string; variant?: 'list' | 'board';
   /** Inside one list of a space: the new task goes in it. */
   listId?: string;
+  /** In the Personal list: private, so nobody to give it to. */
+  personal?: boolean;
 }) {
   const add = useQuickAdd();
   const [open, setOpen] = useState(false);
@@ -311,7 +320,7 @@ export function QuickAdd({ status, assigneeId, listId, label = 'Add task', varia
         e.preventDefault();
         const text = title.trim();
         if (!text) return;
-        add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(listId ? { listId } : {}) }, clientId: clientId.current }, {
+        add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(listId ? { listId } : {}), ...(personal ? { personal } : {}) }, clientId: clientId.current }, {
           // Ready for the next one; the people and the chips stay, the name clears.
           onSuccess: () => { setTitle(''); clientId.current = newClientId(); },
         });
@@ -341,7 +350,7 @@ export function QuickAdd({ status, assigneeId, listId, label = 'Add task', varia
       </div>
       {board && (
         <>
-          <QuickChips extras={extras} onChange={(patch) => setExtras((x) => ({ ...x, ...patch }))} />
+          <QuickChips extras={extras} noPeople={personal} onChange={(patch) => setExtras((x) => ({ ...x, ...patch }))} />
           <div className="flex justify-end gap-1.5">
             <button type="button" onClick={stop} className="rounded-md px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100">Cancel</button>
             <button type="submit" disabled={add.isPending || !title.trim()} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40">Save</button>
@@ -363,9 +372,9 @@ function GroupHeading({ g }: { g: TaskGroup }) {
 }
 const PriorityFlagIcon = ({ priority }: { priority: keyof typeof PRIORITY_STYLE }) => <PriorityFlag priority={priority} />;
 
-function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, footer, selected, onSelect, onTag, activeTag, countLabel, base }: {
+function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, personal, footer, selected, onSelect, onTag, activeTag, countLabel, base }: {
   g: TaskGroup; onOpen: (id: string) => void; collapsed: boolean; onToggle: () => void; base?: string;
-  quickAddFor?: string | null; listId?: string; footer?: ReactNode; selected: Set<string>; onSelect: (ts: Task[], on: boolean) => void;
+  quickAddFor?: string | null; listId?: string; personal?: boolean; footer?: ReactNode; selected: Set<string>; onSelect: (ts: Task[], on: boolean) => void;
   onTag?: (tag: string) => void; activeTag?: string; countLabel?: string;
 }) {
   const Chevron = collapsed ? ChevronRight : ChevronDown;
@@ -404,7 +413,7 @@ function Group({ g, onOpen, collapsed, onToggle, quickAddFor, listId, footer, se
             ))}
           </ul>
           {footer}
-          {quickAddFor !== null && g.addStatus && <QuickAdd status={g.addStatus} assigneeId={quickAddFor} listId={listId} />}
+          {quickAddFor !== null && g.addStatus && <QuickAdd status={g.addStatus} assigneeId={quickAddFor} listId={listId} personal={personal} />}
         </div>
       )}
     </section>
@@ -459,6 +468,7 @@ export default function TaskListView({ filters, onOpen, quickAddFor, empty, grou
           onToggle={() => toggle(g.key)}
           quickAddFor={quickAddFor}
           listId={listOf(filters)}
+          personal={filters.view === 'personal'}
           selected={selected}
           onSelect={onSelect}
           onTag={onTag}

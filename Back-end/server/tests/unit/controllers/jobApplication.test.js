@@ -313,6 +313,14 @@ describe('admin inbox', () => {
     expect(ok.body.application.status).toBe('shortlisted');
     expect(ok.body.application.adminNotes).toBe('strong');
 
+    const rich = mockRes();
+    await controller.updateApplication({ params: { id: app._id.toString() }, body: { adminNotes: '<p><strong>Call</strong> Mon<script>x()</script></p>' } }, rich);
+    expect(rich.body.application.adminNotes).toBe('<p><strong>Call</strong> Mon</p>');
+    const long = mockRes();
+    await controller.updateApplication({ params: { id: app._id.toString() }, body: { status: 'reviewing', adminNotes: `<p>${'x'.repeat(5001)}</p>` } }, long);
+    expect(long.statusCode).toBe(400);
+    expect((await JobApplication.findById(app._id)).status).toBe('shortlisted'); // nothing saved
+
     const bad = mockRes();
     await controller.updateApplication({ params: { id: app._id.toString() }, body: { status: 'nonsense' } }, bad);
     expect(bad.statusCode).toBe(400);

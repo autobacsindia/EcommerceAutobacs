@@ -127,6 +127,21 @@ describe('Payment requests', () => {
   });
 
   describe('raising an expense', () => {
+    it('formatted details are cleaned; the words, not the markup, are checked and counted', async () => {
+      const ok = await expense(ops.session, { description: '<p><strong>Diesel</strong> for van<script>x()</script><img src=x onerror=alert(1)></p>' });
+      expect(ok.status).toBe(201);
+      expect(ok.body.request.description).toBe('<p><strong>Diesel</strong> for van</p>');
+      // Old plain text is kept exactly as typed.
+      expect((await expense(ops.session, { description: 'a < b' })).body.request.description).toBe('a < b');
+      // A required note that is only empty formatting is not filled in.
+      const empty = await expense(marketing.session, { category: 'tools', description: '<p><strong> </strong></p>' });
+      expect(empty.status).toBe(400);
+      // 2000 words fit even with markup around them; 2001 do not.
+      const words = 'x'.repeat(2000);
+      expect((await expense(ops.session, { description: `<p><em>${words}</em></p>` })).status).toBe(201);
+      expect((await expense(ops.session, { description: `<p>${words}y</p>` })).status).toBe(400);
+    });
+
     it('a team raises one; it starts with accounts, numbered, with the bill stored privately', async () => {
       const res = await expense(ops.session);
       expect(res.status).toBe(201);

@@ -68,7 +68,7 @@ const JobApplicationSchema = new mongoose.Schema(
       default: "new",
       index: true,
     },
-    adminNotes: { type: String, trim: true, maxlength: 5000, default: "" },
+    adminNotes: { type: String, trim: true, maxlength: 30000, default: "" },
 
     // Applicant-facing email idempotency stamps — set only once the provider
     // accepts the send, so a BullMQ retry (or an admin toggling status back and

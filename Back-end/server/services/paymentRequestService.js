@@ -53,6 +53,7 @@ import * as deals from './supplierDealService.js';
 import { itemsCancelled } from './supplierAdvanceGuard.js';
 import * as credit from './supplierLedgerService.js';
 import { toPaise, fromPaise } from '../utils/money.js';
+import { cleanRichTextWithin, richTextLength } from '../utils/richText.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
@@ -171,8 +172,17 @@ function checkCategory(team, value) {
   return found.value;
 }
 
+// Details may be formatted (see utils/richText.js): limits and "is it filled in"
+// count the words, not the markup.
+const DESCRIPTION_MAX = 2000;
+function cleanDetails(raw) {
+  const { value, tooLong } = cleanRichTextWithin(raw, DESCRIPTION_MAX);
+  if (tooLong) throw fail(`Details are too long — keep them under ${DESCRIPTION_MAX} characters.`, 400);
+  return value;
+}
+
 function checkNote(team, category, description) {
-  if (noteRequiredFor(team, category) && description.length < 3) {
+  if (noteRequiredFor(team, category) && richTextLength(description) < 3) {
     throw fail(`Add details — say what this “${categoryLabel(category)}” expense was for.`, 400);
   }
 }
@@ -458,7 +468,7 @@ export async function createExpense(actor, input, uploaded, req) {
   }
   if (!EXPENSE_TEAMS.includes(team)) throw fail('Choose the team the expense is for.', 400);
   const category = checkCategory(team, input.category);
-  const description = String(input.description || '').trim().slice(0, 2000);
+  const description = cleanDetails(input.description);
   checkNote(team, category, description);
   const money = cleanMoney(team, input);
   const { amount } = money;
@@ -547,7 +557,7 @@ export async function createSupplierRequest(actor, input, uploaded, req) {
     : 0;
   const money = netOfCredit(bill, creditPaise);
   const { amount } = money;
-  const description = String(input.description || '').trim().slice(0, 2000);
+  const description = cleanDetails(input.description);
   const { files, kinds } = filesFrom(uploaded);
   requireUpiOrQr(payee, kinds);
 
@@ -889,7 +899,7 @@ export async function update(actor, id, input = {}, req) {
     Object.assign(money, { foreignAmount: before.foreignAmount, amount: r0.amount, fxRate: before.fxRate });
   }
   const { amount } = money;
-  const description = input.description != null ? String(input.description).trim().slice(0, 2000) : r0.description || '';
+  const description = input.description != null ? cleanDetails(input.description) : r0.description || '';
   let { category } = r0;
   // The team's list is checked only when the category CHANGES: an old record
   // (procurement "fuel", from the shared list) can still be corrected as it is.

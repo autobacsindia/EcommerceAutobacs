@@ -16,6 +16,7 @@ import { rupeesInWords } from '../utils/amountInWords.js';
 import { STAFF_TEAM_LABELS } from '../config/staff.js';
 import { BASE_CURRENCY, categoryLabel } from '../config/expenseCategories.js';
 import { STATUS_LABELS, maskAccount, rupeesPending } from './paymentRequestService.js';
+import { richTextToPlain } from '../utils/richText.js';
 
 const { HAS_UNICODE, FONT, FONT_BOLD, CURRENCY, unicodeFonts } = pdfFonts;
 const C = { ink: '#111a16', body: '#3b4641', muted: '#6b7671', line: '#dfe5e2', zebra: '#f5f8f6', brand: '#0a5c33', band: '#0d1612', red: '#b42318', amber: '#b54708' };
@@ -177,7 +178,7 @@ export async function renderPaymentSlip(r) {
         ['Order', r.orderNumber],
         ['Customer', r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.city].filter(Boolean).join(' · ') : ''],
         ['Sale closed by', r.closedBy],
-        ['Details', r.description],
+        ['Details', richTextToPlain(r.description)],
       ]);
       const rightEnd = block(L + colW + 24, 'PAY TO', [
         ['Name', payee.name],

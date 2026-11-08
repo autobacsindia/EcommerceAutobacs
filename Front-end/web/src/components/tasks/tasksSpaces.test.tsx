@@ -61,6 +61,7 @@ function serve({ sp = space(), one = task() }: { sp?: Space; one?: Task } = {}) 
     if (url === '/staff/tasks/assignees') return Promise.resolve({ people: [{ id: 'u1', name: 'Priya', team: 'procurement', teamLabel: 'Procurement', isHead: true, me: true }] });
     if (url.startsWith('/staff/tasks?')) return Promise.resolve({ tasks: [task({ list: 'l1' })], nextCursor: null });
     if (url.includes('/comments')) return Promise.resolve({ comments: [], nextBefore: null });
+    if (url.includes('/links')) return Promise.resolve({ waitingOn: [], blocking: [], related: [], hidden: 0, hiddenWaiting: 0, canAdd: false });
     if (url.startsWith('/staff/tasks/')) return Promise.resolve({ task: one });
     return Promise.resolve({ orders: [] });
   });

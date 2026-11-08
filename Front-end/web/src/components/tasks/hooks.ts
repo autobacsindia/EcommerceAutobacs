@@ -91,7 +91,7 @@ export function useQuickEdit() {
 }
 
 /** What "+ Add task" may set beside the title (the board's chips). */
-export type QuickExtras = { assigneeIds?: string[]; dueOn?: string | null; priority?: TaskPriority; tags?: string[]; listId?: string };
+export type QuickExtras = { assigneeIds?: string[]; dueOn?: string | null; priority?: TaskPriority; tags?: string[]; listId?: string; personal?: boolean };
 
 /**
  * "+ Add task" inside a status group or board column: a title, Enter, done.
@@ -114,6 +114,7 @@ export function useQuickAdd() {
         ...(extras.priority && extras.priority !== 'normal' ? { priority: extras.priority } : {}),
         ...(extras.tags?.length ? { tags: extras.tags } : {}),
         ...(extras.listId ? { listId: extras.listId } : {}),
+        ...(extras.personal ? { personal: true } : {}),
         clientId,
       });
     },

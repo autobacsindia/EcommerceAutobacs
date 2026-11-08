@@ -41,6 +41,7 @@ import { BASE_CURRENCY, EXPENSE_CURRENCIES } from '../config/expenseCategories.j
 import { ROUGH_INR_PER_UNIT, roughInr } from '../config/roughFxRates.js';
 import { containsCardNumber } from '../utils/cardNumber.js';
 import { and, isObjectId, keysetPage, plainQuery, searchClauses, searchWords } from '../utils/listQuery.js';
+import { cleanRichTextWithin, richTextToPlain } from '../utils/richText.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
@@ -203,7 +204,13 @@ function cleanFields(input, { partial = false } = {}) {
   if (has('dueDate')) out.dueDate = cleanDueDate(input.dueDate);
   if (has('payment')) out.payment = cleanPayment(input.payment || {});
   if (has('billingUrl')) out.billingUrl = cleanUrl(input.billingUrl);
-  if (has('notes')) out.notes = noCard(String(input.notes ?? '').trim().slice(0, 1000));
+  if (has('notes')) {
+    // May be formatted (utils/richText.js): the limit and the card check read the words.
+    const { value, tooLong } = cleanRichTextWithin(input.notes, 1000);
+    if (tooLong) throw fail('The notes are too long (1000 characters at most).', 400);
+    noCard(richTextToPlain(value));
+    out.notes = noCard(value);
+  }
   return out;
 }
 

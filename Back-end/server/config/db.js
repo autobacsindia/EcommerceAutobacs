@@ -676,8 +676,12 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftasks').createIndex({ 'assignees.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_assignees', background: true });
     await db.collection('stafftasks').createIndex({ teams: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_teams', background: true });
     await db.collection('stafftasks').createIndex({ 'followers.user': 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_followers', background: true });
+    await db.collection('stafftasks').createIndex({ createdBy: 1, bucket: 1, rank: 1, _id: 1 }, { partialFilterExpression: { personal: true }, name: 'staff_task_personal', background: true });
     // One list of a space, or its "Other tasks" (list: null) — models/StaffTaskList.js.
     await db.collection('stafftasks').createIndex({ teams: 1, list: 1, bucket: 1, rank: 1, _id: 1 }, { name: 'staff_task_team_list', background: true });
+    await db.collection('stafftasklinks').createIndex({ pair: 1 }, { unique: true, name: 'staff_task_link_pair', background: true });
+    await db.collection('stafftasklinks').createIndex({ from: 1, kind: 1 }, { name: 'staff_task_link_from', background: true });
+    await db.collection('stafftasklinks').createIndex({ to: 1, kind: 1 }, { name: 'staff_task_link_to', background: true });
     await db.collection('stafftasklists').createIndex({ team: 1, archivedAt: 1, order: 1 }, { name: 'staff_task_list_team', background: true });
     await db.collection('stafftasklists').createIndex({ team: 1, folder: 1, kind: 1, nameKey: 1 }, { unique: true, name: 'staff_task_list_name', background: true });
     await db.collection('stafftasks').createIndex(
@@ -695,6 +699,7 @@ export async function ensureCriticalIndexes() {
       { partialFilterExpression: { 'parent.task': { $type: 'objectId' } }, name: 'staff_task_parent', background: true }
     );
     await db.collection('stafftaskcomments').createIndex({ task: 1, _id: -1 }, { name: 'staff_task_comment_task', background: true });
+    await db.collection('stafftaskcomments').createIndex({ assignedTo: 1, resolvedAt: 1, _id: -1 }, { name: 'staff_task_comment_assigned', background: true });
     await db.collection('stafftaskcomments').createIndex(
       { by: 1, clientId: 1 },
       { unique: true, partialFilterExpression: { clientId: { $type: 'string' } }, name: 'staff_task_comment_client_id', background: true }
