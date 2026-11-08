@@ -53,6 +53,31 @@ describe('engine.trail', () => {
   });
 });
 
+describe('engine.trail gentle (staff panels)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    document.querySelectorAll('[data-festival-fx]').forEach((el) => el.remove());
+  });
+
+  it('stays to a handful of sparks however fast the mouse moves', () => {
+    let fills = 0;
+    let cb: FrameRequestCallback | undefined;
+    jest.spyOn(window, 'requestAnimationFrame').mockImplementation((f) => { cb = f; return 1; });
+    jest.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    const ctx = {
+      setTransform: jest.fn(), clearRect: jest.fn(), beginPath: jest.fn(), arc: jest.fn(), moveTo: jest.fn(),
+      quadraticCurveTo: jest.fn(), lineTo: jest.fn(), closePath: jest.fn(), fill: () => { fills++; }, globalAlpha: 1, fillStyle: '',
+    };
+    jest.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ctx as unknown as CanvasRenderingContext2D);
+    const engine = createEngine({ colors: ['#ffd166'], lamp: '🪔', glow: 'gold', quality: 1 });
+    for (let i = 0; i < 1000; i++) engine.trail(i, i, { gentle: true });
+    cb?.(16);
+    // A star is two fills (halo + star); the gentle cap is 10 sparks.
+    expect(fills).toBe(20);
+    engine.destroy();
+  });
+});
+
 describe('diya cursor CSS', () => {
   const css = fs.readFileSync(path.join(__dirname, '../../../app/globals.css'), 'utf8');
   const start = css.indexOf('/* Festive cursor');
@@ -62,10 +87,10 @@ describe('diya cursor CSS', () => {
     expect(start).toBeGreaterThan(-1);
     expect(block.length).toBeGreaterThan(100);
     expect(block).toContain('@media (hover: hover) and (pointer: fine)');
-    // Every selector in the block is scoped to html[data-festival-cursor] (never set on checkout/sign-in).
+    // Every selector in the block is scoped to html[data-festival] (never set on checkout/admin/team).
     const selectors = block.match(/^\s*([^@/{}\n][^{}]*)\{/gm) ?? [];
     expect(selectors.length).toBeGreaterThan(0);
-    for (const s of selectors) expect(s.trim().startsWith('html[data-festival-cursor]')).toBe(true);
+    for (const s of selectors) expect(s.trim().startsWith('html[data-festival]')).toBe(true);
   });
 
   it('always names a system fallback cursor, and keeps text fields and disabled controls honest', () => {
@@ -81,7 +106,7 @@ describe('diya cursor CSS', () => {
   });
 
   it('page-styled clickables tagged by FestivalEffects get the diya too, never a disabled one', () => {
-    expect(block).toMatch(/html\[data-festival-cursor\] \[data-fx-cursor='base'\]\s*\{\s*cursor: url\(/);
+    expect(block).toMatch(/html\[data-festival\] \[data-fx-cursor='base'\]\s*\{\s*cursor: url\(/);
     expect(block).toContain("[data-fx-cursor='hand']:not(:disabled, [aria-disabled='true'])");
   });
 });
