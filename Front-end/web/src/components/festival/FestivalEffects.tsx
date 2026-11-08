@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useFestival, useFestivalCursor } from './FestivalThemeContext';
+import { useFestival, useFestivalTrail } from './FestivalThemeContext';
 import { loadEngine, prefersReducedMotion, stopEngine } from './loadEngine';
 import type { FestivalEngine } from './effects/engine';
 import { CART_ADD_INTENT_EVENT } from '@/lib/festival/events';
@@ -19,6 +19,11 @@ const TAP_SELECTOR = '[data-festive-tap], a.st-tile, a[href^="/products/"], a[hr
 const TRAIL_MIN_DISTANCE = 9;
 /** …and at most once per this many ms (about one frame), whatever the mouse rate. */
 const TRAIL_MIN_INTERVAL_MS = 16;
+/** Staff panels: a spark far less often, so it never competes with the work. */
+const GENTLE_TRAIL_MIN_DISTANCE = 44;
+const GENTLE_TRAIL_MIN_INTERVAL_MS = 110;
+/** No panel sparks over a field someone is typing or choosing in. */
+const NO_GENTLE_TRAIL_SELECTOR = 'input, textarea, select, [contenteditable="true"]';
 
 /** A real mouse — not a phone, tablet or pen, where a trail would only follow taps. */
 export function hasFineHoverPointer(): boolean {
@@ -55,23 +60,23 @@ export function tagPlainCursor(target: EventTarget | null): void {
  * This file is tiny on purpose and is all that ships in the main bundle: it
  * remembers where the last tap was, and the engine itself is imported only
  * after the browser goes idle (and only while a festival is live, outside the
- * checkout/sign-in routes). The staff panels get the cursor and its trail only:
- * useFestival() is null there, so tap sparkles and cart effects stay off.
+ * checkout/sign-in routes). The staff panels keep the normal mouse and get only
+ * a gentle trail: useFestival() is null there, so the rest stays off.
  */
 export default function FestivalEffects() {
-  const tokens = useFestivalCursor();
+  const tokens = useFestivalTrail();
   const fullEffects = useFestival() !== null;
 
   // The diya cursor is still, not motion, so it ignores reduced-motion — but it
   // is mouse-only, so phones and tablets never attach this listener.
   useEffect(() => {
-    if (!tokens || !hasFineHoverPointer()) return;
+    if (!tokens || !fullEffects || !hasFineHoverPointer()) return;
     const onPointerOver = (e: PointerEvent) => {
       if (e.pointerType === 'mouse') tagPlainCursor(e.target);
     };
     document.addEventListener('pointerover', onPointerOver, { capture: true, passive: true });
     return () => document.removeEventListener('pointerover', onPointerOver, { capture: true });
-  }, [tokens]);
+  }, [tokens, fullEffects]);
 
   useEffect(() => {
     if (!tokens || prefersReducedMotion()) return;
@@ -82,6 +87,7 @@ export default function FestivalEffects() {
     // until it arrives, mouse moves simply shed nothing.
     let engine: FestivalEngine | null = null;
     const trailOn = hasFineHoverPointer();
+    const gentle = !fullEffects;
     let trailX = Number.NaN;
     let trailY = Number.NaN;
     let trailAt = 0;
@@ -107,14 +113,20 @@ export default function FestivalEffects() {
     // costs at most one tiny particle push per frame. Passive, never blocks.
     const onPointerMove = (e: PointerEvent) => {
       if (!engine || e.pointerType !== 'mouse') return;
+      // Panels: nothing while dragging or selecting (a button is held).
+      if (gentle && e.buttons) return;
+      const minDistance = gentle ? GENTLE_TRAIL_MIN_DISTANCE : TRAIL_MIN_DISTANCE;
+      const minInterval = gentle ? GENTLE_TRAIL_MIN_INTERVAL_MS : TRAIL_MIN_INTERVAL_MS;
       const dx = e.clientX - trailX;
       const dy = e.clientY - trailY;
-      if (e.timeStamp - trailAt < TRAIL_MIN_INTERVAL_MS) return;
-      if (dx * dx + dy * dy < TRAIL_MIN_DISTANCE * TRAIL_MIN_DISTANCE) return;
+      if (e.timeStamp - trailAt < minInterval) return;
+      if (dx * dx + dy * dy < minDistance * minDistance) return;
+      if (gentle && (e.target as Element | null)?.closest?.(NO_GENTLE_TRAIL_SELECTOR)) return;
       trailX = e.clientX;
       trailY = e.clientY;
       trailAt = e.timeStamp;
-      engine.trail(e.clientX, e.clientY);
+      if (gentle) engine.trail(e.clientX, e.clientY, { gentle: true });
+      else engine.trail(e.clientX, e.clientY);
     };
 
     const onCartAdd = () => {

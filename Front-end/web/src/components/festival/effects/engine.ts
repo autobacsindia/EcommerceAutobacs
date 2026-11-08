@@ -42,6 +42,8 @@ interface Particle {
  * the frame cost) without bound — and bursts/fireworks still get their full count.
  */
 const MAX_TRAIL = 90;
+/** The staff panels' trail stays this small, however fast the mouse moves. */
+const MAX_GENTLE_TRAIL = 10;
 
 const Z_INDEX = '9990';
 const MAX_DPR = 2;
@@ -230,9 +232,26 @@ export function createEngine(opts: EngineOptions) {
      * embers that drift down and fade in well under a second. Bounded by
      * MAX_TRAIL; the canvas still goes away as soon as the last one fades.
      */
-    trail(x: number, y: number) {
+    trail(x: number, y: number, options?: { gentle?: boolean }) {
       let trailing = 0;
       for (const p of particles) if (p.trail) trailing++;
+      if (options?.gentle) {
+        // Staff panels: one small star, gone in about a third of a second.
+        if (trailing >= MAX_GENTLE_TRAIL) return;
+        const life = 14 + Math.random() * 8;
+        particles.push({
+          x: x + 6 + Math.random() * 6,
+          y: y + 6 + Math.random() * 6,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: 0.1 + Math.random() * 0.3,
+          life, maxLife: life,
+          size: 1.8 + Math.random() * 1.4,
+          color: pick(), gravity: 0.01, drag: 0.97,
+          star: true, trail: true, spin: Math.random() * Math.PI * 2,
+        });
+        run();
+        return;
+      }
       if (trailing >= MAX_TRAIL * opts.quality) return;
       const count = Math.random() < 0.6 ? 2 : 3;
       for (let i = 0; i < count; i++) {

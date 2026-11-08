@@ -325,7 +325,7 @@ describe('page-wide accents', () => {
   });
 });
 
-describe('staff panels get the diya cursor and sparkle trail, nothing else', () => {
+describe('staff panels: normal mouse, gentle sparkles, nothing else', () => {
   const setMouse = (reduce = false) => {
     window.matchMedia = jest.fn().mockImplementation((q: string) => ({
       matches: q.includes('hover') || (reduce && q.includes('reduce')), media: q, addEventListener: jest.fn(), removeEventListener: jest.fn(), addListener: jest.fn(), removeListener: jest.fn(),
@@ -335,28 +335,21 @@ describe('staff panels get the diya cursor and sparkle trail, nothing else', () 
     await act(async () => { jest.advanceTimersByTime(2100); });
     await flush();
   };
-  const moveAt = (x: number, t: number) => {
+  const moveAt = (x: number, t: number, buttons = 0, target: EventTarget = document.body) => {
     const ev = new Event('pointermove', { bubbles: true });
     Object.defineProperties(ev, {
-      clientX: { value: x }, clientY: { value: x }, pointerType: { value: 'mouse' }, timeStamp: { value: t },
+      clientX: { value: x }, clientY: { value: x }, pointerType: { value: 'mouse' }, timeStamp: { value: t }, buttons: { value: buttons },
     });
-    document.body.dispatchEvent(ev);
+    target.dispatchEvent(ev);
   };
 
   beforeEach(() => { jest.useFakeTimers(); setMouse(); });
-  afterEach(() => { jest.useRealTimers(); document.documentElement.removeAttribute('data-festival-cursor'); });
+  afterEach(() => jest.useRealTimers());
 
-  it.each(['/admin', '/admin/orders', '/team', '/team/tasks'])('%s: cursor on, page-wide decoration off', (p) => {
+  it.each(['/admin', '/admin/orders', '/team', '/team/tasks'])('%s: no diya cursor tag, no decoration', (p) => {
     mockPath = p;
     withTheme(<span />);
-    expect(document.documentElement.dataset.festivalCursor).toBe('diwali');
     expect(document.documentElement.dataset.festival).toBeUndefined();
-  });
-
-  it.each(['/checkout', '/payment/x', '/login', '/register'])('%s: no cursor', (p) => {
-    mockPath = p;
-    withTheme(<span />);
-    expect(document.documentElement.dataset.festivalCursor).toBeUndefined();
   });
 
   it('a look-alike route is not a panel', () => {
@@ -365,26 +358,71 @@ describe('staff panels get the diya cursor and sparkle trail, nothing else', () 
     expect(isStaffPanelRoute('/team/')).toBe(true);
   });
 
-  it('the storefront still gets both tags', () => {
-    withTheme(<span />);
-    expect(document.documentElement.dataset.festivalCursor).toBe('diwali');
-    expect(document.documentElement.dataset.festival).toBe('diwali');
-  });
-
-  it('switching the theme off removes the cursor from the panel', () => {
-    mockPath = '/admin';
-    const view = withTheme(<span />);
-    view.rerender(<FestivalThemeProvider theme={null} initialLive={false}><span /></FestivalThemeProvider>);
-    expect(document.documentElement.dataset.festivalCursor).toBeUndefined();
-  });
-
-  it('the trail runs in the panel, but tap sparkles and cart effects do not', async () => {
+  it('the panel asks for the gentle trail; the storefront keeps its full trail', async () => {
     mockPath = '/admin/products';
+    const panel = withTheme(<FestivalEffects />);
+    await warm();
+    moveAt(50, 1000);
+    expect(engine.trail).toHaveBeenCalledWith(50, 50, { gentle: true });
+    panel.unmount();
+    engine.trail.mockClear();
+
+    mockPath = '/';
+    resetEngineForTests();
     withTheme(<FestivalEffects />);
     await warm();
     moveAt(50, 1000);
-    expect(engine.trail).toHaveBeenCalledTimes(1);
+    expect(engine.trail).toHaveBeenCalledWith(50, 50);
+  });
 
+  it('sheds sparks far less often than the storefront', async () => {
+    mockPath = '/team';
+    withTheme(<FestivalEffects />);
+    await warm();
+    moveAt(0, 1000);
+    moveAt(100, 1050); // far enough, but too soon
+    moveAt(30, 1200); // late enough, but too short a move
+    expect(engine.trail).toHaveBeenCalledTimes(1);
+    moveAt(100, 1300);
+    expect(engine.trail).toHaveBeenCalledTimes(2);
+  });
+
+  it('no sparks while a button is held (dragging, selecting text)', async () => {
+    mockPath = '/team/tasks';
+    withTheme(<FestivalEffects />);
+    await warm();
+    moveAt(50, 1000, 1);
+    expect(engine.trail).not.toHaveBeenCalled();
+  });
+
+  it.each([['input'], ['textarea'], ['select']])('no sparks over a %s', async (tag) => {
+    mockPath = '/admin';
+    withTheme(<FestivalEffects />);
+    await warm();
+    const field = document.createElement(tag);
+    document.body.appendChild(field);
+    moveAt(50, 1000, 0, field);
+    field.remove();
+    expect(engine.trail).not.toHaveBeenCalled();
+  });
+
+  it('never tags page elements for the diya in a panel', () => {
+    mockPath = '/admin';
+    withTheme(<FestivalEffects />);
+    const div = document.createElement('div');
+    div.style.cursor = 'pointer';
+    document.body.appendChild(div);
+    const ev = new Event('pointerover', { bubbles: true });
+    Object.defineProperty(ev, 'pointerType', { value: 'mouse' });
+    div.dispatchEvent(ev);
+    expect(div.dataset.fxCursor).toBeUndefined();
+    div.remove();
+  });
+
+  it('tap sparkles and cart effects stay off in the panel', async () => {
+    mockPath = '/admin/products';
+    withTheme(<FestivalEffects />);
+    await warm();
     const link = document.createElement('a');
     link.href = '/products/x';
     document.body.appendChild(link);

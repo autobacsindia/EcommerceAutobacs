@@ -55,7 +55,7 @@ export function isFestiveRoute(pathname: string | null | undefined): boolean {
   );
 }
 
-/** The staff panels: no decoration, but they do get the diya cursor and its sparkles. */
+/** The staff panels: no decoration and the normal mouse, but a gentle sparkle trail. */
 export function isStaffPanelRoute(pathname: string | null | undefined): boolean {
   const path = (pathname || '/').replace(/\/+$/, '') || '/';
   return path === '/admin' || path.startsWith('/admin/') || path === '/team' || path.startsWith('/team/');
