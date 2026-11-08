@@ -324,3 +324,83 @@ describe('page-wide accents', () => {
     expect(document.documentElement.dataset.festival).toBeUndefined();
   });
 });
+
+describe('festive cursor on page-styled clickables (careers role cards, filter labels)', () => {
+  const setPointer = (fine: boolean, reduce = false) => {
+    window.matchMedia = jest.fn().mockImplementation((q: string) => ({
+      matches: (q.includes('reduce') && reduce) || (q.includes('pointer: fine') && fine),
+      media: q, addEventListener: jest.fn(), removeEventListener: jest.fn(), addListener: jest.fn(), removeListener: jest.fn(),
+    }));
+  };
+  const over = (el: Element, pointerType = 'mouse') => {
+    const ev = new Event('pointerover', { bubbles: true }) as PointerEvent;
+    Object.defineProperty(ev, 'pointerType', { value: pointerType });
+    el.dispatchEvent(ev);
+  };
+  /** A page's own markup: a div styled `cursor: pointer`, one `cursor: default`, one inheriting. */
+  const page = () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<div id="card" style="cursor: pointer"><span id="child">Role</span></div><div id="arrow" style="cursor: default"></div><p id="plain">Text</p>';
+    document.body.appendChild(root);
+    return {
+      root,
+      card: root.querySelector<HTMLElement>('#card')!,
+      child: root.querySelector<HTMLElement>('#child')!,
+      arrow: root.querySelector<HTMLElement>('#arrow')!,
+      plain: root.querySelector<HTMLElement>('#plain')!,
+    };
+  };
+  let dom: ReturnType<typeof page>;
+  beforeEach(() => { mockPath = '/careers'; dom = page(); });
+  afterEach(() => { dom.root.remove(); mockPath = '/'; });
+
+  it('marks a plain hand as "hand" and a plain arrow as "base"; leaves the rest alone', () => {
+    setPointer(true);
+    withTheme(<FestivalEffects />);
+    over(dom.card); over(dom.arrow); over(dom.plain);
+    expect(dom.card.dataset.fxCursor).toBe('hand');
+    // (A child inheriting the hand is covered in the browser check: jsdom does not inherit `cursor`.)
+    expect(dom.arrow.dataset.fxCursor).toBe('base');
+    expect(dom.plain.dataset.fxCursor).toBeUndefined();
+  });
+
+  it('is still shown with reduced motion (a still cursor is not motion)', () => {
+    setPointer(true, true);
+    withTheme(<FestivalEffects />);
+    over(dom.card);
+    expect(dom.card.dataset.fxCursor).toBe('hand');
+  });
+
+  it('never runs for touch/pen, on phones (no fine pointer), when the festival is off, or on checkout', () => {
+    setPointer(true);
+    const a = withTheme(<FestivalEffects />);
+    over(dom.card, 'touch'); over(dom.card, 'pen');
+    expect(dom.card.dataset.fxCursor).toBeUndefined();
+    a.unmount();
+
+    setPointer(false);
+    const b = withTheme(<FestivalEffects />);
+    over(dom.card);
+    expect(dom.card.dataset.fxCursor).toBeUndefined();
+    b.unmount();
+
+    setPointer(true);
+    const c = withTheme(<FestivalEffects />, null, false);
+    over(dom.card);
+    expect(dom.card.dataset.fxCursor).toBeUndefined();
+    c.unmount();
+
+    mockPath = '/checkout';
+    withTheme(<FestivalEffects />);
+    over(dom.card);
+    expect(dom.card.dataset.fxCursor).toBeUndefined();
+  });
+
+  it('stops listening once unmounted', () => {
+    setPointer(true);
+    const view = withTheme(<FestivalEffects />);
+    view.unmount();
+    over(dom.card);
+    expect(dom.card.dataset.fxCursor).toBeUndefined();
+  });
+});
