@@ -192,6 +192,17 @@ describe('the list', () => {
   });
 });
 
+describe('the header numbers', () => {
+  it('counts my in-progress tasks and what I finished this week, nobody else\'s', async () => {
+    const a = await makeTask();
+    const b = await makeTask();
+    await tasks.updateTask(head, a.id, { status: 'in_progress', rev: a.rev }, req);
+    await tasks.updateTask(head, b.id, { status: 'done', rev: b.rev }, req);
+    expect(await tasks.summaryFor(arun)).toMatchObject({ inProgress: 1, doneWeek: 1 });
+    expect(await tasks.summaryFor(priya)).toMatchObject({ inProgress: 0, doneWeek: 0 });
+  });
+});
+
 describe('team overview', () => {
   const today = tasks.todayIST();
   const shift = (d) => { const x = new Date(`${today}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10); };

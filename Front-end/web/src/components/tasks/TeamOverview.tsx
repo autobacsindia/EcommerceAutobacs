@@ -1,10 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { RefreshCw } from 'lucide-react';
+import { AlarmClock, CalendarDays, CircleCheck, ListTodo, RefreshCw, TriangleAlert } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { Avatar } from './ui';
+import { StatTile } from './StatTile';
 import { useSpace, allLists } from './spaces';
 import { formatDueKey, type TeamOverviewData } from './types';
 
@@ -15,13 +16,6 @@ const Card = ({ title, children, className = '' }: { title: string; children: Re
   </section>
 );
 const Nothing = ({ children }: { children: React.ReactNode }) => <p className="py-3 text-center text-[13px] text-gray-500">{children}</p>;
-
-const Tile = ({ label, value, tone = 'text-gray-900' }: { label: string; value: number; tone?: string }) => (
-  <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
-    <p className={`text-2xl font-bold tabular-nums leading-tight ${tone}`}>{value}</p>
-    <p className="mt-0.5 text-xs font-medium text-gray-500">{label}</p>
-  </div>
-);
 
 const Bar = ({ label, count, max, extra }: { label: React.ReactNode; count: number; max: number; extra?: React.ReactNode }) => (
   <div>
@@ -71,11 +65,11 @@ export function TeamOverview({ team, spaceTeam, onOpen, onPickList }: {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        <Tile label="Open" value={d.counts.open} />
-        <Tile label="Late" value={d.counts.late} tone={d.counts.late ? 'text-red-600' : 'text-gray-900'} />
-        <Tile label="Due today" value={d.counts.today} tone={d.counts.today ? 'text-amber-600' : 'text-gray-900'} />
-        <Tile label="Next 7 days" value={d.counts.nextWeek} />
-        <Tile label="Done, last 7 days" value={d.counts.doneWeek} tone={d.counts.doneWeek ? 'text-emerald-600' : 'text-gray-900'} />
+        <StatTile icon={ListTodo} label="Open" value={d.counts.open} tone="violet" />
+        <StatTile icon={TriangleAlert} label="Late" value={d.counts.late} tone="red" />
+        <StatTile icon={AlarmClock} label="Due today" value={d.counts.today} tone="amber" />
+        <StatTile icon={CalendarDays} label="Next 7 days" value={d.counts.nextWeek} tone="sky" />
+        <StatTile icon={CircleCheck} label="Done, last 7 days" value={d.counts.doneWeek} tone="green" />
       </div>
       {d.capped && <p className="text-xs text-gray-500">This team has a very large number of tasks, so these are the numbers for the first 5,000.</p>}
       <div className="grid gap-3 md:grid-cols-2">

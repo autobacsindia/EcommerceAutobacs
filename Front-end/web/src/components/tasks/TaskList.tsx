@@ -30,7 +30,8 @@ export function CompleteButton({ t, onToggle, busy }: { t: Task; onToggle: () =>
       disabled={busy}
       aria-label={done ? `Open ${t.code} again` : `Mark ${t.code} complete`}
       title={done ? 'Open again' : 'Mark complete'}
-      className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+      data-status={t.status}
+      className={`tk-tick flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
         done ? 'border-emerald-500 bg-emerald-500 text-white' : `${STATUS_RING[t.status]} text-transparent hover:border-emerald-500 hover:text-emerald-500`
       }`}
     >
@@ -145,7 +146,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder, b
       onKeyDown={onKey}
       aria-label={`Open ${t.code}: ${t.title}`}
       className={`tk-more-host group relative flex cursor-pointer items-start gap-3 border-t ${base ? 'pr-10' : ''} border-gray-100 px-3 py-2.5 transition-colors first:border-t-0 lg:min-h-11 lg:py-2 ${withOrder ? COLUMNS_ORDER : COLUMNS} ${
-        selected ? 'bg-blue-50' : 'hover:bg-gray-50'
+        selected ? 'bg-blue-50' : 'hover:bg-blue-50/60'
       } focus-visible:bg-blue-50 focus:outline-none`}
     >
       <span className={`mt-0.5 lg:mt-0 ${selected ? '' : 'lg:opacity-40 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100'}`}>
@@ -155,7 +156,7 @@ function TaskRow({ t, onOpen, selected, onSelect, onTag, activeTag, withOrder, b
         <span className="mt-0.5"><CompleteButton t={t} busy={move.isPending} onToggle={() => { if (done || confirmComplete(t)) move.mutate({ t, status: done ? 'todo' : 'done' }); }} /></span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={`line-clamp-2 break-words text-sm font-medium ${done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</span>
+            <span className={`line-clamp-2 break-words text-sm font-semibold ${done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</span>
             <span className="font-mono text-[11px] text-gray-400">{t.code}</span>
             <TaskMeta t={t} withOrder={false} />
             <span className="hidden lg:contents xl:hidden">
