@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   isFestivalLive,
   isFestiveRoute,
+  isStaffPanelRoute,
   msUntilNextBoundary,
   type PublicFestivalTheme,
 } from '@/lib/festival/festivalTheme';
@@ -15,9 +16,11 @@ interface FestivalState {
   tokens: FestivalThemeTokens | null;
   /** Inside its date window AND on a route that may be decorated. */
   live: boolean;
+  /** Inside its date window AND on a route that shows the diya cursor (festive routes + staff panels). */
+  cursorLive: boolean;
 }
 
-const FestivalContext = createContext<FestivalState>({ theme: null, tokens: null, live: false });
+const FestivalContext = createContext<FestivalState>({ theme: null, tokens: null, live: false, cursorLive: false });
 
 /** setTimeout's ceiling (~24.8 days); longer waits just re-arm. */
 const MAX_TIMER_MS = 2 ** 31 - 1;
@@ -58,6 +61,7 @@ export function FestivalThemeProvider({
 
   const tokens = getThemeTokens(theme?.themeKey);
   const active = live && !!tokens && isFestiveRoute(pathname);
+  const cursorActive = active || (live && !!tokens && isStaffPanelRoute(pathname));
 
   // Page-wide accents (rangoli behind headings) hang off <html data-festival>.
   // Set after hydration and purely decorative: it adds a background, never size.
@@ -74,8 +78,18 @@ export function FestivalThemeProvider({
     };
   }, [active, tokens]);
 
+  // The diya cursor has its own tag so the staff panels can have it without the
+  // page-wide accents that hang off data-festival.
+  const cursorKey = cursorActive ? tokens?.key : undefined;
+  useEffect(() => {
+    if (!cursorKey) return;
+    const root = document.documentElement;
+    root.dataset.festivalCursor = cursorKey;
+    return () => { delete root.dataset.festivalCursor; };
+  }, [cursorKey]);
+
   return (
-    <FestivalContext.Provider value={{ theme, tokens, live: active }}>
+    <FestivalContext.Provider value={{ theme, tokens, live: active, cursorLive: cursorActive }}>
       {children}
     </FestivalContext.Provider>
   );
@@ -89,4 +103,10 @@ export function useFestival(): { theme: PublicFestivalTheme; tokens: FestivalThe
   const { theme, tokens, live } = useContext(FestivalContext);
   if (!live || !theme || !tokens) return null;
   return { theme, tokens };
+}
+
+/** The theme tokens if THIS page shows the diya cursor and sparkle trail, or null. */
+export function useFestivalCursor(): FestivalThemeTokens | null {
+  const { tokens, cursorLive } = useContext(FestivalContext);
+  return cursorLive ? tokens : null;
 }

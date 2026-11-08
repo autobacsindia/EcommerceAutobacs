@@ -639,26 +639,28 @@ textarea::placeholder {
 
 /* Festive cursor: a small diya whose flame tip is the click point. Only for a
    real mouse (hover + fine pointer) — phones and pens keep their own — and only
-   while the festival is live on a festive route (html[data-festival] is never
-   set on checkout/payment/admin). Every rule names a fallback system cursor, so
+   while the festival is live. html[data-festival-cursor] is set on festive routes
+   and the staff panels, never on checkout/payment/sign-in; it is separate from
+   html[data-festival] so the panels get this and no other decoration. Every rule names a fallback system cursor, so
    a browser that refuses the image falls back to the normal arrow or hand.
    Text fields keep the I-beam and disabled controls keep "not-allowed": the
    decoration never hides what a control does.
    [data-fx-cursor] is set by FestivalEffects on anything a page styled with its
    own plain `cursor: pointer` / `cursor: default` (careers role cards, a
-   Tailwind cursor-pointer div…), so no page needs its own festive cursor rules. */
+   Tailwind cursor-pointer div…), so no page needs its own festive cursor rules.
+   Drag handles (cursor-grab, e.g. Tasks cards) keep their grab hand. */
 @media (hover: hover) and (pointer: fine) {
-  html[data-festival],
-  html[data-festival] [data-fx-cursor='base'] {
+  html[data-festival-cursor],
+  html[data-festival-cursor] [data-fx-cursor='base'] {
     cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='f' cx='50%25' cy='72%25' r='60%25'%3E%3Cstop offset='0' stop-color='%23fffbe0'/%3E%3Cstop offset='.38' stop-color='%23ffd23f'/%3E%3Cstop offset='1' stop-color='%23ff7b00'/%3E%3C/radialGradient%3E%3ClinearGradient id='b' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23f0a030'/%3E%3Cstop offset='.45' stop-color='%23c8501a'/%3E%3Cstop offset='1' stop-color='%237a1f0f'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M16 2.5C13.2 7.5 11.6 10.4 11.6 13.4A4.4 4.4 0 0 0 20.4 13.4C20.4 10.4 18.8 7.5 16 2.5Z' fill='url(%23f)' stroke='%23b34700' stroke-width='.9'/%3E%3Cpath d='M16 9.5C15 11.6 14.4 12.8 14.4 13.9A1.6 1.6 0 0 0 17.6 13.9C17.6 12.8 17 11.6 16 9.5Z' fill='%23fffef5'/%3E%3Cpath d='M3.5 19.5H28.5C28.5 25.2 22.9 29.2 16 29.2S3.5 25.2 3.5 19.5Z' fill='url(%23b)' stroke='%234a1208' stroke-width='1.1' stroke-linejoin='round'/%3E%3Cpath d='M3.5 19.5C8 21.6 24 21.6 28.5 19.5' fill='none' stroke='%23ffd77a' stroke-width='1.2'/%3E%3Ccircle cx='10' cy='24.4' r='1' fill='%23ffd77a'/%3E%3Ccircle cx='16' cy='25.6' r='1' fill='%23ffd77a'/%3E%3Ccircle cx='22' cy='24.4' r='1' fill='%23ffd77a'/%3E%3C/svg%3E") 16 2, auto;
   }
-  html[data-festival] :is(a[href], button:not(:disabled), [role='button']:not([aria-disabled='true']), summary, label[for], select:not(:disabled), input:is([type='checkbox'], [type='radio'], [type='submit'], [type='button']):not(:disabled), [data-fx-cursor='hand']:not(:disabled, [aria-disabled='true'])) {
+  html[data-festival-cursor] :is(a[href], button:not(:disabled), [role='button']:not([aria-disabled='true']), summary, label[for], select:not(:disabled), input:is([type='checkbox'], [type='radio'], [type='submit'], [type='button']):not(:disabled), [data-fx-cursor='hand']:not(:disabled, [aria-disabled='true'])):not([class*='cursor-grab']) {
     cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='g' cx='50%25' cy='45%25' r='50%25'%3E%3Cstop offset='0' stop-color='%23ffd23f' stop-opacity='.75'/%3E%3Cstop offset='1' stop-color='%23ffd23f' stop-opacity='0'/%3E%3C/radialGradient%3E%3CradialGradient id='f' cx='50%25' cy='72%25' r='60%25'%3E%3Cstop offset='0' stop-color='%23ffffff'/%3E%3Cstop offset='.35' stop-color='%23ffe066'/%3E%3Cstop offset='1' stop-color='%23ff6a00'/%3E%3C/radialGradient%3E%3ClinearGradient id='b' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%23f0a030'/%3E%3Cstop offset='.45' stop-color='%23c8501a'/%3E%3Cstop offset='1' stop-color='%237a1f0f'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='11' r='10.5' fill='url(%23g)'/%3E%3Cpath d='M16 1C12.6 6.8 10.8 10 10.8 13.4A5.2 5.2 0 0 0 21.2 13.4C21.2 10 19.4 6.8 16 1Z' fill='url(%23f)' stroke='%23b34700' stroke-width='.9'/%3E%3Cpath d='M16 8.6C14.9 11 14.2 12.4 14.2 13.8A1.8 1.8 0 0 0 17.8 13.8C17.8 12.4 17.1 11 16 8.6Z' fill='%23fffef5'/%3E%3Cpath d='M3.5 19.5H28.5C28.5 25.2 22.9 29.2 16 29.2S3.5 25.2 3.5 19.5Z' fill='url(%23b)' stroke='%234a1208' stroke-width='1.1' stroke-linejoin='round'/%3E%3Cpath d='M3.5 19.5C8 21.6 24 21.6 28.5 19.5' fill='none' stroke='%23ffd77a' stroke-width='1.2'/%3E%3Ccircle cx='10' cy='24.4' r='1' fill='%23ffd77a'/%3E%3Ccircle cx='16' cy='25.6' r='1' fill='%23ffd77a'/%3E%3Ccircle cx='22' cy='24.4' r='1' fill='%23ffd77a'/%3E%3Cpath d='M27 3.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z' fill='%23ffd23f'/%3E%3C/svg%3E") 16 1, pointer;
   }
-  html[data-festival] :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='submit'], [type='button'], [type='color'], [type='file']), textarea, [contenteditable='true']) {
+  html[data-festival-cursor] :is(input:not([type='checkbox'], [type='radio'], [type='range'], [type='submit'], [type='button'], [type='color'], [type='file']), textarea, [contenteditable='true']) {
     cursor: text;
   }
-  html[data-festival] :is(:disabled, [aria-disabled='true']) { cursor: not-allowed; }
+  html[data-festival-cursor] :is(:disabled, [aria-disabled='true']) { cursor: not-allowed; }
 }
 
 /* Rangoli accent behind home section headings while a festival is live.
