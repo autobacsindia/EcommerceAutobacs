@@ -190,7 +190,7 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base }:
                 <p className="px-3 pb-2 pt-1 text-xs text-gray-500">Showing the latest {DONE_SHOWN}. The list view has the rest.</p>
               )}
               {col.value !== 'done' && quickAddFor !== null && (
-                <div className="px-2 pb-2 pt-1"><QuickAdd status={col.value} assigneeId={quickAddFor} listId={listOf(filters)} variant="board" /></div>
+                <div className="px-2 pb-2 pt-1"><QuickAdd status={col.value} assigneeId={quickAddFor} listId={listOf(filters)} personal={filters.view === 'personal'} variant="board" /></div>
               )}
             </section>
           );

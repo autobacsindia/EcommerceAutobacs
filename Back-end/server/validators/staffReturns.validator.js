@@ -152,7 +152,8 @@ export const validateInspection = [
 export const validateSupplierCheck = [
   ...validateReturnId,
   body('passed').customSanitizer(toBool).isBoolean().withMessage('Pass or fail?'),
-  body('notes').isString().trim().isLength({ min: 1, max: 1000 }).withMessage('Add the supplier\'s notes'),
+  // May be formatted: the service counts the words (≤1000) after cleaning.
+  body('notes').isString().trim().isLength({ min: 1, max: 6000 }).withMessage('Add the supplier\'s notes'),
 ];
 
 export const validateClaimParam = [
@@ -183,7 +184,7 @@ export const validateClaimShipBack = [
 export const validateClaimCheck = [
   ...validateClaimParam,
   body('passed').customSanitizer(toBool).isBoolean().withMessage('Pass or fail?'),
-  body('notes').optional().isString().isLength({ max: 1000 }),
+  body('notes').optional().isString().isLength({ max: 6000 }),
 ];
 
 export const validateClaimPromise = [

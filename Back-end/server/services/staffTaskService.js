@@ -77,6 +77,8 @@ import {
   storeTaskFiles, discardTaskFiles, removeTaskFile, readTaskFile, taskFileUrl, taskFolder, basenameOf, isTaskFileName,
   TASK_FILES_MAX, COMMENT_FILES_MAX,
 } from './taskFileService.js';
+import { cleanRichText, richTextLength, richTextToPlain, RICH_TEXT_MARKUP_FACTOR } from '../utils/richText.js';
+import staffTaskLinkRepository from '../repositories/staffTaskLinkRepository.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -159,10 +161,12 @@ const headOnTask = (u, t) => teamsOf(t).some((team) => headOf(u, team));
 // commenting and following — changing one stays with canEdit).
 const teamOnTask = (u, t) => !!teamOf(u) && teamsOf(t).includes(teamOf(u));
 
-export const canSee = (u, t) => isAdmin(u) || isDoing(u, t) || isFollowing(u, t) || same(u?._id, t.createdBy) || teamOnTask(u, t);
-export const canEdit = (u, t) => isAdmin(u) || same(u?._id, t.createdBy) || headOnTask(u, t);
+/** A Personal-list task belongs to its maker alone: this comes before every other rule, the admin's included. */
+const ownPersonal = (u, t) => same(u?._id, t.createdBy);
+export const canSee = (u, t) => (t.personal ? ownPersonal(u, t) : isAdmin(u) || isDoing(u, t) || isFollowing(u, t) || same(u?._id, t.createdBy) || teamOnTask(u, t));
+export const canEdit = (u, t) => (t.personal ? ownPersonal(u, t) : isAdmin(u) || same(u?._id, t.createdBy) || headOnTask(u, t));
 const canSetStatus = (u, t) => canEdit(u, t) || isDoing(u, t);
-const canReassign = canEdit;
+const canReassign = (u, t) => !t.personal && canEdit(u, t);
 
 /** The bucket a task lives in, and its sort key inside it. */
 export function placeOf({ status, dueOn, dueTime, completedAt, archivedAt }) {
@@ -180,11 +184,25 @@ export function cleanTitle(raw) {
   return title;
 }
 
-function cleanDescription(raw) {
-  const text = String(raw ?? '').trim();
-  if (text.length > DESCRIPTION_MAX) throw fail(`Keep the notes under ${DESCRIPTION_MAX} characters.`, 400);
+/**
+ * Notes and comments may be formatted (HTML from the rich-text box) or plain
+ * text (everything older). Formatted HTML is cleaned to the allow-list; the
+ * limit counts words, not markup, and an absurd payload is refused before
+ * anything parses it.
+ */
+function cleanRich(raw, max, tooLong) {
+  const s = String(raw ?? '');
+  if (s.length > max * RICH_TEXT_MARKUP_FACTOR) throw fail(tooLong, 400);
+  const text = cleanRichText(s);
+  if (richTextLength(text) > max) throw fail(tooLong, 400);
   return text;
 }
+
+function cleanDescription(raw) {
+  return cleanRich(raw, DESCRIPTION_MAX, `Keep the notes under ${DESCRIPTION_MAX} characters.`);
+}
+
+const cleanCommentText = (raw) => cleanRich(raw, COMMENT_MAX, `Keep a comment under ${COMMENT_MAX} characters.`);
 
 /** 'YYYY-MM-DD' (a real calendar day), or null to clear. */
 function cleanDay(raw, what) {
@@ -213,6 +231,15 @@ function checkDates(startOn, dueOn) {
 }
 
 /** One tag: lower-case, single-spaced, no leading '#'. */
+export const ESTIMATE_MAX = 60000; // 1000 hours
+/** An estimate in whole minutes, or null for none. */
+export function cleanEstimate(raw) {
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > ESTIMATE_MAX) throw fail('Enter an estimate between 1 minute and 1000 hours.', 400);
+  return n;
+}
+
 export function cleanTag(raw) {
   // eslint-disable-next-line no-control-regex
   const tag = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().replace(/^#+/, '').trim().toLowerCase();
@@ -312,6 +339,8 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
   const late = open && !!t.dueOn && (t.dueOn < today || (t.dueOn === today && !!t.dueTime && t.dueTime <= now));
   const archived = t.bucket === 'archived';
   const description = t.description || '';
+  // Lists show a plain preview; the task's own page gets the formatted notes.
+  const summary = full ? '' : richTextToPlain(description).replace(/\s+/g, ' ');
   return {
     id: idOf(t._id),
     number: t.number,
@@ -319,7 +348,7 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
     title: t.title,
     ...(full
       ? { description }
-      : { summary: description.length > SUMMARY_MAX ? `${description.slice(0, SUMMARY_MAX - 1)}…` : description }),
+      : { summary: summary.length > SUMMARY_MAX ? `${summary.slice(0, SUMMARY_MAX - 1)}…` : summary }),
     status: shownStatus(t.status),
     statusLabel: STATUS_LABELS[shownStatus(t.status)],
     priority: t.priority,
@@ -336,7 +365,9 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
     followers: followersOf(t).map((p) => ({ id: idOf(p.user), name: p.name || '' })),
     following: isFollowing(viewer, t),
     team: t.team || null,
-    teamLabel: t.team ? STAFF_TEAM_LABELS[t.team] || t.team : 'Admin',
+    teamLabel: t.personal ? 'Personal' : t.team ? STAFF_TEAM_LABELS[t.team] || t.team : 'Admin',
+    personal: !!t.personal,
+    estimateMinutes: t.estimateMinutes ?? null,
     createdBy: { id: idOf(t.createdBy), name: t.createdByName || '' },
     order: t.order ? { id: idOf(t.order.target), code: t.order.code } : null,
     group: t.group ? { id: idOf(t.group), size: t.groupSize || 1 } : null,
@@ -368,8 +399,8 @@ export function shape(t, viewer, { full = false, today = todayIST(), now = timeI
       checklist: !archived && canEdit(viewer, t),
       files: !archived && canSee(viewer, t),
       // Following yourself: anyone who sees it. Choosing who else follows: the editors.
-      follow: canSee(viewer, t),
-      followers: !archived && canEdit(viewer, t),
+      follow: !t.personal && canSee(viewer, t),
+      followers: !archived && !t.personal && canEdit(viewer, t),
       // One level only: a sub-task has no sub-tasks of its own.
       subtask: !archived && !t.parent && canEdit(viewer, t),
       // Anyone who sees a task may track time on it (services/staffTaskTimeService.js).
@@ -424,6 +455,14 @@ function shapeComment(c, viewer, names = new Map(), now = Date.now()) {
       mine: r.users.some((u) => same(u, viewer?._id)),
       names: r.users.map(nameOf),
     })),
+    assignment: deleted || !c.assignedTo ? null : {
+      to: { id: idOf(c.assignedTo), name: nameOf(c.assignedTo) },
+      by: { id: idOf(c.assignedBy), name: nameOf(c.assignedBy) },
+      at: c.assignedAt,
+      resolvedAt: c.resolvedAt || null,
+      resolvedBy: c.resolvedBy ? nameOf(c.resolvedBy) : '',
+      canChange: mine || same(c.assignedTo, viewer?._id) || same(c.assignedBy, viewer?._id) || !!c.viewerEdits,
+    },
   };
 }
 
@@ -434,6 +473,7 @@ async function namesFor(comments) {
     if (c.deletedAt) continue;
     for (const u of c.mentions || []) ids.add(idOf(u));
     for (const r of c.reactions || []) for (const u of r.users) ids.add(idOf(u));
+    for (const u of [c.assignedTo, c.assignedBy, c.resolvedBy]) if (u) ids.add(idOf(u));
   }
   const people = await userRepository.findDisplayByIds([...ids]);
   return new Map(people.map((u) => [idOf(u._id), u.name || '']));
@@ -598,9 +638,13 @@ const TASK_COUNT_CAP = 1000;
 
 /** Time spent on each row, from one total over the page (running timers counted up to now). */
 async function withTime(rows) {
-  const totals = await staffTaskTimeRepository.totalsByTask(rows.map((r) => r.id), new Date());
+  const ids = rows.map((r) => r.id);
+  const [totals, waiting] = await Promise.all([
+    staffTaskTimeRepository.totalsByTask(ids, new Date()),
+    staffTaskLinkRepository.openBlockerCounts(ids.map((x) => new mongoose.Types.ObjectId(x))),
+  ]);
   const seconds = new Map(totals.map((x) => [idOf(x._id), x.seconds]));
-  return rows.map((r) => ({ ...r, timeSeconds: seconds.get(r.id) ?? 0 }));
+  return rows.map((r) => ({ ...r, timeSeconds: seconds.get(r.id) ?? 0, waitingOn: waiting.get(r.id) ?? 0 }));
 }
 
 export async function listTasks(actor, { view = 'mine', state = 'open', due, assignee, team, list, priority, tag, q, sort, cursor } = {}) {
@@ -611,7 +655,12 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
     query['followers.user'] = actor._id;
   } else if (view === 'created') {
     query.createdBy = actor._id;
+  } else if (view === 'personal') {
+    query.createdBy = actor._id;
+    query.personal = true;
   } else if (view === 'team') {
+    // Personal tasks have no team, but "All teams" has no team filter to keep them out.
+    query.personal = { $ne: true };
     if (isAdmin(actor)) {
       if (team) query.teams = team === 'admin' ? null : team;
     } else if (teamOf(actor)) {
@@ -720,13 +769,14 @@ export async function summaryFor(user) {
   const today = todayIST();
   const tomorrow = addDays(today, 1);
   // Late = earlier days + today's timed tasks whose time has come; "today" = the rest of today's.
-  const [before, lateToday, allToday, inbox] = await Promise.all([
+  const [before, lateToday, allToday, inbox, assignedComments] = await Promise.all([
     staffTaskRepository.countDueIn(user._id, { $lt: today }),
     staffTaskRepository.countDueIn(user._id, { $gt: today, $lte: `${today} ${timeIST()}` }),
     staffTaskRepository.countDueIn(user._id, { $gte: today, $lt: tomorrow }),
     staffTaskInboxRepository.countUnread(user._id, INBOX_UNREAD_CAP),
+    staffTaskRepository.countOpenAssignedComments(user._id, 100),
   ]);
-  return { late: before + lateToday, today: allToday - lateToday, inbox };
+  return { late: before + lateToday, today: allToday - lateToday, inbox, assignedComments };
 }
 
 /** The bell: open tasks given to `user` that are overdue or due today. */
@@ -795,20 +845,25 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
   checkDates(startOn, dueOn);
   const tags = cleanTags(input.tags);
   const checklist = cleanChecklist(input.checklist);
+  const estimateMinutes = cleanEstimate(input.estimateMinutes);
   // "+ Add task" inside a status group starts the task in that group (never Done).
   const status = input.status == null || input.status === '' ? 'todo' : cleanEnum(input.status, ['todo', 'in_progress'], 'status');
   const rawIds = Array.isArray(input.assigneeIds) && input.assigneeIds.length ? input.assigneeIds : [input.assigneeId].filter(Boolean);
-  const people = await loadAssignees(actor, rawIds);
-  const order = await loadOrderRef(input.orderId);
   const parent = input.parentId ? await loadParent(actor, input.parentId) : null;
+  const askedPersonal = input.personal === true || input.personal === 'true';
+  if (askedPersonal && parent && !parent.personal) throw fail('A sub-task of a shared task can’t be personal.', 400);
+  // Everything under a personal task stays personal, or its title would reach others.
+  const personal = askedPersonal || !!parent?.personal;
+  const people = await loadAssignees(actor, personal ? [] : rawIds);
+  const order = await loadOrderRef(input.orderId);
 
   // One shared task for everyone, unless the giver asked for a copy each.
-  const shared = input.shared === true || input.shared === 'true';
+  const shared = personal || input.shared === true || input.shared === 'true';
   const many = people.length > 1 && !shared;
   const rows = many ? people.map((p) => [p]) : [people];
   // The list must be in a space of every copy made (each copy has its person's team).
   let list = null;
-  for (const who of rows) list = await listForTask(input.listId, peopleFields(who).teams);
+  if (!personal) for (const who of rows) list = await listForTask(input.listId, peopleFields(who).teams);
   const keyFor = (who) => (!clientId ? undefined : many ? `${clientId}.${idOf(who[0]._id)}` : clientId);
   const earlier = clientId ? await staffTaskRepository.findByClientIds(actor._id, rows.map(keyFor)) : [];
   const madeFor = new Map(earlier.map((t) => [t.clientId, t]));
@@ -841,6 +896,8 @@ export async function createTask(actor, input = {}, req, { note = true } = {}) {
         startOn,
         ...(tags.length ? { tags } : {}),
         ...peopleFields(who),
+        ...(personal ? { personal: true, team: null, teams: [] } : {}),
+        ...(estimateMinutes ? { estimateMinutes } : {}),
         createdBy: actor._id,
         createdByName: actor.name || '',
         order,
@@ -958,7 +1015,7 @@ async function applyUpdate(actor, t, input, req) {
     }
   }
   const willBeArchived = set.archivedAt !== undefined ? !!set.archivedAt : archived;
-  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds', 'listId'].some(has);
+  const editing = ['title', 'description', 'priority', 'dueOn', 'dueTime', 'startOn', 'tags', 'orderId', 'status', 'assigneeId', 'assigneeIds', 'listId', 'estimateMinutes'].some(has);
   if (editing && willBeArchived) throw fail('This task is archived. Restore it first.', 409);
 
   const editable = canEdit(actor, t);
@@ -1000,6 +1057,10 @@ async function applyUpdate(actor, t, input, req) {
   if (set.dueOn !== undefined || set.startOn !== undefined) {
     checkDates(set.startOn !== undefined ? set.startOn : t.startOn, set.dueOn !== undefined ? set.dueOn : t.dueOn);
   }
+  if (has('estimateMinutes')) {
+    const estimate = cleanEstimate(input.estimateMinutes);
+    if (estimate !== (t.estimateMinutes ?? null)) { needEdit(); set.estimateMinutes = estimate; note('estimate', t.estimateMinutes ?? 'none', estimate ?? 'none'); }
+  }
   if (has('tags')) {
     const tags = cleanTags(input.tags);
     const before = t.tags || [];
@@ -1025,6 +1086,7 @@ async function applyUpdate(actor, t, input, req) {
     const before = peopleOf(t);
     const ids = [...new Set(wanted.map(idOf).filter(Boolean))];
     if (!sameIds(ids, before.map((p) => idOf(p.user)))) {
+      if (t.personal) throw fail('A personal task stays with you. It can’t be given to anyone.', 400);
       if (!canReassign(actor, t)) throw fail('Only whoever gave this task, the team head or the admin can change who does it.', 403);
       const list = await nextPeople(actor, t, ids);
       Object.assign(set, personFields(list));
@@ -1034,7 +1096,9 @@ async function applyUpdate(actor, t, input, req) {
   }
   // The list: a new one sent, or the old one dropped when the task left its team.
   const teamsNow = set.teams ?? teamsOf(t);
-  if (has('listId')) {
+  if (has('listId') && t.personal) {
+    if (input.listId) throw fail('A personal task can’t go in a team list.', 400);
+  } else if (has('listId')) {
     const want = await listForTask(input.listId, teamsNow);
     if (idOf(want?._id) !== idOf(t.list)) {
       needEdit();
@@ -1369,6 +1433,7 @@ export async function changeFollowers(actor, id, { add = [], remove = [] } = {})
   const addIds = clean(add);
   const removeIds = clean(remove);
   if (addIds.some((x) => removeIds.includes(x))) throw fail('Add or remove a person, not both.', 400);
+  if (t.personal && addIds.length) throw fail('A personal task is only yours, so nobody can follow it.', 400);
   if (![...addIds, ...removeIds].every((x) => same(x, actor._id)) && !canEdit(actor, t)) throw fail(EDIT_FOLLOWERS, 403);
 
   const toAdd = addIds.filter((x) => !isDoing(asUser(x), t) && !isFollowing(asUser(x), t));
@@ -1414,6 +1479,7 @@ const peopleOnTask = async (t) => {
  */
 export async function listMentionable(actor, id) {
   const t = await loadVisible(actor, id);
+  if (t.personal) return { people: [] };
   const on = await peopleOnTask(t);
   const onIds = new Set(on.map((u) => idOf(u._id)));
   const everyone = canEdit(actor, t) && t.bucket !== 'archived'
@@ -1443,6 +1509,7 @@ async function cleanMentions(actor, t, raw) {
   if (!Array.isArray(list) || list.some((x) => !mongoose.isValidObjectId(x))) throw fail('Invalid mentions.', 400);
   const ids = [...new Set(list.map(String))].filter((x) => !same(x, actor._id));
   if (!ids.length) return { ids: [], newFollowers: [] };
+  if (t.personal) throw fail('A personal task is only yours, so nobody can be mentioned on it.', 400);
   if (ids.length > MENTIONS_MAX) throw fail(`Mention at most ${MENTIONS_MAX} people in one comment.`, 400);
   const on = new Set((await peopleOnTask(t)).map((u) => idOf(u._id)));
   const outside = ids.filter((x) => !on.has(x));
@@ -1452,7 +1519,7 @@ async function cleanMentions(actor, t, raw) {
   return { ids: ids.map((x) => new mongoose.Types.ObjectId(x)), newFollowers };
 }
 
-const saidIn = (c) => (c.text ? c.text.replace(/\s+/g, ' ').slice(0, 120) : 'Shared a file');
+const saidIn = (c) => (c.text ? richTextToPlain(c.text).replace(/\s+/g, ' ').slice(0, 120) : 'Shared a file');
 
 /** Inbox lines for a comment: "mentioned you" to those named, "commented" to the rest. */
 async function commentToInbox(t, actor, c) {
@@ -1490,7 +1557,7 @@ export async function listComments(actor, id, { before } = {}) {
   const names = await namesFor(comments);
   const now = Date.now();
   return {
-    comments: comments.map((c) => shapeComment(c, actor, names, now)),
+    comments: comments.map((c) => shapeComment({ ...c, viewerEdits: canEdit(actor, t) }, actor, names, now)),
     nextBefore: more ? idOf(comments[comments.length - 1]._id) : null,
   };
 }
@@ -1509,9 +1576,8 @@ export async function addComment(actor, id, { text, clientId: rawClientId, menti
     // A retry: finish the Inbox lines a failed first attempt may have missed (keyed, so none double).
     if (seen) { await commentToInbox(t, actor, seen); return { comment: await shapeOne(seen, actor), duplicate: true }; }
   }
-  const body = String(text ?? '').trim();
+  const body = cleanCommentText(text);
   if (!body && !files.length) throw fail('Write a comment first.', 400);
-  if (body.length > COMMENT_MAX) throw fail(`Keep a comment under ${COMMENT_MAX} characters.`, 400);
   if (files.length > COMMENT_FILES_MAX) throw fail(`Attach at most ${COMMENT_FILES_MAX} files to one comment.`, 400);
   const { ids: mentionIds, newFollowers } = await cleanMentions(actor, t, mentions);
   // Someone @mentioned from outside follows first, so the comment never names a
@@ -1571,9 +1637,8 @@ export async function editComment(actor, id, commentId, { text } = {}) {
   const { c } = await loadOwnComment(actor, id, commentId);
   if (c.deletedAt) throw fail('This comment was deleted.', 409);
   assertCommentWindow(c);
-  const body = String(text ?? '').trim();
+  const body = cleanCommentText(text);
   if (!body && !(c.attachments || []).length) throw fail('A comment needs some words — delete it instead.', 400);
-  if (body.length > COMMENT_MAX) throw fail(`Keep a comment under ${COMMENT_MAX} characters.`, 400);
   if (body === c.text) return { comment: await shapeOne(c, actor) };
 
   const updated = await staffTaskRepository.editComment(c._id, actor._id, { fromText: c.text, toText: body, notBefore: commentWindowStart() });
@@ -1615,6 +1680,173 @@ export async function reactToComment(actor, id, commentId, { emoji, on = true } 
     throw fail(`A comment can have up to ${REACTIONS_MAX} different reactions.`, 400);
   }
   return { comment: await shapeOne(updated, actor) };
+}
+
+// ── Assigned comments ───────────────────────────────────────
+/*
+  Anyone who can comment may give an unassigned comment to someone on the task.
+  After that, only the person it was given to, whoever gave it, whoever wrote it
+  or an editor of the task changes it. Both writes say what it should BE, so a
+  double-click or retry changes nothing and tells nobody twice.
+*/
+const ASSIGNED_PAGE_SIZE = 30;
+const SAID_MAX = 300;
+
+const mayChangeAssignment = (actor, t, c) => canEdit(actor, t)
+  || [c.assignedTo, c.assignedBy, c.by].some((u) => same(u, actor._id));
+
+const shapeForViewer = async (t, c, actor) => shapeOne({ ...c, viewerEdits: canEdit(actor, t) }, actor);
+
+export async function assignComment(actor, id, commentId, userId) {
+  const { t, c } = await loadComment(actor, id, commentId);
+  if (c.deletedAt) throw fail('This comment was deleted.', 409);
+  if (t.bucket === 'archived') throw fail('This task is archived. Restore it first.', 409);
+  if (c.assignedTo && !mayChangeAssignment(actor, t, c)) throw fail('Only the people involved can change who this comment is assigned to.', 403);
+
+  if (userId === null) {
+    const cleared = await staffTaskRepository.unassignComment(c._id);
+    if (cleared) {
+      await staffTaskRepository.noteHistory(t._id, { at: new Date(), by: actor._id, byName: actor.name || '', action: 'comment_unassigned', from: '', to: '' });
+    }
+    return { comment: await shapeForViewer(t, cleared || await staffTaskRepository.findComment(t._id, c._id), actor) };
+  }
+
+  // The same rule as @mentioning: someone outside the task follows it first, so they can open it.
+  if (!same(userId, actor._id)) {
+    const { newFollowers } = await cleanMentions(actor, t, [userId]);
+    if (newFollowers.length) await writeFollowers(actor, t, newFollowers, []);
+  }
+  const user = new mongoose.Types.ObjectId(String(userId));
+  const updated = await staffTaskRepository.assignComment(c._id, user, actor._id);
+  if (!updated) {
+    const now = await staffTaskRepository.findComment(t._id, c._id);
+    if (now?.deletedAt) throw fail('This comment was deleted.', 409);
+    return { comment: await shapeForViewer(t, now, actor) }; // already theirs
+  }
+  const out = await shapeForViewer(t, updated, actor);
+  await staffTaskRepository.noteHistory(t._id, { at: new Date(), by: actor._id, byName: actor.name || '', action: 'comment_assigned', from: '', to: out.assignment.to.name });
+  await toInbox(t, actor, [user], { kind: 'comment_assigned', key: `c:${idOf(c._id)}:as:${idOf(user)}:${new Date(updated.assignedAt).getTime()}`, text: saidIn(c) });
+  void notifyPeople(t, actor, [user], { title: `${actor.name || 'Someone'} assigned you a comment on T-${t.number}`, body: t.title });
+  return { comment: out };
+}
+
+export async function resolveComment(actor, id, commentId, resolved) {
+  if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(commentId)) throw fail('Comment not found.', 404);
+  const t = await staffTaskRepository.findById(id);
+  const c = await staffTaskRepository.findComment(id, commentId);
+  // Someone who has since lost the task can still clear it off their own list, and learns nothing more.
+  const visible = !!t && canSee(actor, t);
+  if (!c || (!visible && !same(c.assignedTo, actor._id))) throw fail('Comment not found.', 404);
+  if (c.deletedAt) throw fail('This comment was deleted.', 409);
+  if (!c.assignedTo) throw fail('Nobody is assigned this comment.', 409);
+  if (visible && !mayChangeAssignment(actor, t, c)) throw fail('Only the people involved can resolve this comment.', 403);
+
+  const on = resolved === true || resolved === 'true';
+  const updated = await staffTaskRepository.setCommentResolved(c._id, on, actor._id);
+  if (updated && t) {
+    await staffTaskRepository.noteHistory(t._id, { at: new Date(), by: actor._id, byName: actor.name || '', action: on ? 'comment_resolved' : 'comment_reopened', from: '', to: '' });
+    if (on && visible) {
+      await toInbox(t, actor, [c.assignedBy, c.by].filter(Boolean), { kind: 'comment_resolved', key: `c:${idOf(c._id)}:res:${new Date(updated.resolvedAt).getTime()}`, text: saidIn(c) });
+    }
+  }
+  if (!visible) return { comment: null };
+  return { comment: await shapeForViewer(t, updated || await staffTaskRepository.findComment(t._id, c._id), actor) };
+}
+
+/** The comments given to `actor`, newest first. One they can no longer open keeps a line, without its words. */
+export async function listAssignedComments(actor, { state = 'open', before } = {}) {
+  const resolved = state === 'resolved';
+  const rows = await staffTaskRepository.pageAssignedComments(actor._id, { resolved, before: before || null, limit: ASSIGNED_PAGE_SIZE + 1 });
+  const more = rows.length > ASSIGNED_PAGE_SIZE;
+  const page = more ? rows.slice(0, ASSIGNED_PAGE_SIZE) : rows;
+  const [tasks, people] = await Promise.all([
+    staffTaskRepository.tasksForComments([...new Set(page.map((c) => idOf(c.task)))]),
+    userRepository.findDisplayByIds([...new Set(page.map((c) => idOf(c.assignedBy)).filter(Boolean))]),
+  ]);
+  const taskOf = new Map(tasks.map((t) => [idOf(t._id), t]));
+  const nameOf = new Map(people.map((u) => [idOf(u._id), u.name || '']));
+  const comments = page.map((c) => {
+    const t = taskOf.get(idOf(c.task));
+    const canOpen = !!t && canSee(actor, t);
+    return {
+      id: idOf(c._id),
+      task: canOpen ? { id: idOf(t._id), code: `T-${t.number}`, title: t.title } : { id: idOf(c.task), code: '', title: '' },
+      canOpen,
+      text: canOpen ? richTextToPlain(c.text || '').slice(0, SAID_MAX) : '',
+      by: canOpen ? { id: idOf(c.by), name: c.byName || '' } : null,
+      assignedBy: canOpen ? nameOf.get(idOf(c.assignedBy)) || '' : '',
+      at: c.assignedAt,
+      resolvedAt: c.resolvedAt || null,
+    };
+  });
+  return { comments, nextBefore: more ? idOf(page[page.length - 1]._id) : null };
+}
+
+// ── Team overview ───────────────────────────────────────────
+const OVERVIEW_SCAN_MAX = 5000;
+const OVERVIEW_ROWS = 5;
+const OVERVIEW_PEOPLE = 12;
+
+const overviewRow = (t) => ({ id: idOf(t._id), code: `T-${t.number}`, title: t.title, dueOn: t.dueOn || null, dueTime: t.dueTime || '', completedAt: t.completedAt || null });
+
+/** One team's numbers: everyone in the team sees them; an admin picks the team. Personal tasks never count. */
+export async function teamOverview(actor, { team } = {}) {
+  let chosen;
+  if (isAdmin(actor)) {
+    if (!team) throw fail('Pick a team first.', 400);
+    chosen = team === 'admin' ? null : team;
+  } else {
+    if (!teamOf(actor)) throw fail('Only people in a team see the team\'s tasks.', 403);
+    if (team && team !== teamOf(actor)) throw fail('You can only see your own team.', 403);
+    chosen = teamOf(actor);
+  }
+  const query = { teams: chosen, personal: { $ne: true } };
+  const today = todayIST();
+  const lateTodayUpTo = `${today} ${timeIST()}`;
+  const tomorrow = addDays(today, 1);
+  const weekEnd = addDays(today, 8);
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const [open, doneWeek, recentDone] = await Promise.all([
+    staffTaskRepository.overviewScan(query, OVERVIEW_SCAN_MAX + 1),
+    staffTaskRepository.countUpTo({ ...query, bucket: 'done', rank: { $lte: `d${String(TIME_MAX - since).padStart(13, '0')}` } }, OVERVIEW_SCAN_MAX),
+    staffTaskRepository.overviewDone(query, OVERVIEW_ROWS),
+  ]);
+  const capped = open.length > OVERVIEW_SCAN_MAX;
+  const rows = capped ? open.slice(0, OVERVIEW_SCAN_MAX) : open;
+
+  const counts = { open: rows.length, late: 0, today: 0, nextWeek: 0, noDate: 0, unassigned: 0, doneWeek: doneWeek.count };
+  const byStatus = {};
+  const byPerson = new Map();
+  const late = [];
+  for (const t of rows) {
+    const r = t.rank;
+    const isLate = r < today || (r > today && r <= lateTodayUpTo);
+    if (isLate) { counts.late += 1; if (late.length < OVERVIEW_ROWS) late.push(overviewRow(t)); }
+    else if (r === NO_DUE) counts.noDate += 1;
+    else if (r < tomorrow) counts.today += 1;
+    else if (r < weekEnd) counts.nextWeek += 1;
+    const status = shownStatus(t.status);
+    byStatus[status] = (byStatus[status] || 0) + 1;
+    const doing = peopleOf(t);
+    if (!doing.length) counts.unassigned += 1;
+    for (const p of doing) {
+      const row = byPerson.get(idOf(p.user)) || { id: idOf(p.user), name: p.name || '', open: 0, late: 0 };
+      row.open += 1;
+      if (isLate) row.late += 1;
+      byPerson.set(row.id, row);
+    }
+  }
+  const people = [...byPerson.values()].sort((a, b) => b.open - a.open || a.name.localeCompare(b.name));
+  return {
+    team: team || teamOf(actor),
+    counts,
+    capped: capped || doneWeek.capped,
+    byStatus: Object.entries(byStatus).map(([status, count]) => ({ status, label: STATUS_LABELS[status] || status, count })),
+    people: people.slice(0, OVERVIEW_PEOPLE),
+    morePeople: Math.max(0, people.length - OVERVIEW_PEOPLE),
+    late,
+    recentDone: recentDone.map(overviewRow),
+  };
 }
 
 // ── Files on the task ───────────────────────────────────────────────────────

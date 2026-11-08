@@ -24,7 +24,7 @@ const SupplierSchema = new mongoose.Schema(
     email: { type: String, default: '', maxlength: 160 },
     gstin: { type: String, default: '', maxlength: 15 },
     address: { type: String, default: '', maxlength: 500 },
-    notes: { type: String, default: '', maxlength: 1000 },
+    notes: { type: String, default: '', maxlength: 6000 },
 
     payment: {
       method: { type: String, enum: ['bank', 'upi'], required: true },

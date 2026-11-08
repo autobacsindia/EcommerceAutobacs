@@ -17,7 +17,7 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 
 import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ChevronRight, Folder, FolderPlus, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, Folder, FolderPlus, MoreHorizontal, Pencil, Plus, Trash2, LayoutDashboard } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
 import { errorMessage } from '@/components/staff/sales/types';
@@ -273,11 +273,12 @@ function useClosedFolders() {
  * folders, lists and "Other tasks". On a phone the lists show as chips.
  * `active` is the list being shown ('' = the whole team, 'none' = Other tasks).
  */
-export function SpaceTree({ team, label, expanded, onToggle, isCurrent, active, onPick, itemClass }: {
+export function SpaceTree({ team, label, expanded, onToggle, isCurrent, active, onPick, itemClass, overviewActive, onOverview }: {
   team: string; label: string; expanded: boolean; onToggle: () => void;
   /** This team's tasks are on screen (the team or one of its lists). */
   isCurrent: boolean; active: string;
   onPick: (list: string) => void; itemClass: string;
+  overviewActive: boolean; onOverview: () => void;
 }) {
   const space = useSpace(team, expanded);
   const { closed, toggle } = useClosedFolders();
@@ -329,6 +330,10 @@ export function SpaceTree({ team, label, expanded, onToggle, isCurrent, active, 
       </div>
       {expanded && s && (
         <>
+          <button aria-pressed={overviewActive} onClick={onOverview} className={`${itemClass} lg:pl-6`}>
+            <LayoutDashboard aria-hidden className="hidden h-4 w-4 shrink-0 text-gray-400 lg:block" />
+            <span className="truncate">Overview</span>
+          </button>
           {s.folders.map((f) => {
             const open = !closed.includes(f.id);
             return (

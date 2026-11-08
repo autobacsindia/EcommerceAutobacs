@@ -13,6 +13,7 @@ import {
   createSupplier, listSuppliers, setSupplierActive, supplierKeys, updateSupplier,
   type Supplier, type SupplierInput,
 } from './suppliers';
+import RichTextBox from '@/components/ui/RichTextBox';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500';
@@ -117,7 +118,7 @@ export function SupplierForm({ supplier, onDone, onCancel }: {
       </div>
 
       <div><label className={label} htmlFor="sup-notes">Notes</label>
-        <textarea id="sup-notes" className={input} rows={2} maxLength={1000} value={v.notes} onChange={set('notes')} placeholder="What they supply, payment terms…" /></div>
+        <RichTextBox id="sup-notes" ariaLabel="Notes" compact maxLength={1000} value={v.notes} onChange={(notes) => setV((x) => ({ ...x, notes }))} placeholder="What they supply, payment terms…" /></div>
 
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">

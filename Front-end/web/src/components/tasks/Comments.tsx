@@ -3,11 +3,15 @@
 import { useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { AssignCommentButton, CommentAssignment } from './CommentAssign';
 import { Download, MessageSquare, Paperclip, Pencil, Send, SmilePlus, Trash2, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { submitMultipart, parseApiResponse } from '@/lib/multipartResponse';
 import { acceptsFile, MAX_ATTACHMENT_BYTES, mb } from '@/lib/attachments';
 import { usePasteFiles } from '@/hooks/usePasteFiles';
+import RichText from '@/components/ui/RichText';
+import RichTextBox, { type RichTextBoxHandle } from '@/components/ui/RichTextBox';
+import { isRichTextEmpty, richTextToPlain } from '@/lib/richText';
 import PasteHint from '@/components/ui/PasteHint';
 import { taskKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
@@ -271,6 +275,7 @@ function CommentItem({ task, c }: { task: Task; c: TaskComment }) {
     onError: (e) => { toast.error(errorMessage(e, 'Could not add the reaction.')); refresh(); },
   });
   const changeable = !!c.editableUntil && new Date(c.editableUntil).getTime() > Date.now();
+  const canAssign = !c.deleted && !c.assignment && task.can.comment && task.bucket !== 'archived';
 
   return (
     <li className="group flex gap-2.5">
@@ -280,41 +285,55 @@ function CommentItem({ task, c }: { task: Task; c: TaskComment }) {
           <p className="flex items-center gap-1 text-xs text-gray-500">
             <span className="font-semibold text-gray-900">{c.by.name}</span> · <time title={formatDateTimeIST(c.createdAt)}>{timeAgo(c.createdAt)}</time>
             {c.editedAt && !c.deleted && <span title={formatDateTimeIST(c.editedAt)}>· edited</span>}
-            {changeable && !editing && (
+            {(changeable || canAssign) && !editing && (
               <span className="ml-auto flex gap-0.5 opacity-100 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
+                {canAssign && <AssignCommentButton task={task} c={c} put={put} />}
+                {changeable && <>
                 <button type="button" onClick={() => { setDraft(c.text); setEditing(true); }} aria-label="Edit comment" className="rounded p-1 hover:bg-gray-200"><Pencil className="h-3.5 w-3.5" /></button>
                 <button type="button" onClick={() => { if (window.confirm('Delete this comment?')) del.mutate(); }} aria-label="Delete comment" className="rounded p-1 hover:bg-gray-200"><Trash2 className="h-3.5 w-3.5" /></button>
+                </>}
               </span>
             )}
           </p>
           {c.deleted ? (
             <p className="mt-0.5 text-sm italic text-gray-400">This comment was deleted.</p>
           ) : editing ? (
-            <form onSubmit={(e) => { e.preventDefault(); if (draft.trim()) edit.mutate(); }} className="mt-1">
-              <textarea
+            <form onSubmit={(e) => { e.preventDefault(); if (!isRichTextEmpty(draft)) edit.mutate(); }} className="mt-1">
+              <RichTextBox
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setEditing(false); } }}
+                onChange={setDraft}
+                onKeyDownFirst={(e) => {
+                  if (e.key === 'Escape' && draft === c.text) { e.preventDefault(); e.stopPropagation(); setEditing(false); return true; }
+                  return false;
+                }}
+                onSubmit={() => { if (!isRichTextEmpty(draft)) edit.mutate(); }}
                 autoFocus
-                rows={2}
                 maxLength={2000}
-                aria-label="Edit comment"
-                className="w-full resize-y rounded-md border border-gray-200 bg-white px-2 py-1 text-sm"
+                minHeightClass="min-h-[3rem]"
+                ariaLabel="Edit comment"
               />
               <div className="mt-1 flex gap-2">
-                <button type="submit" disabled={edit.isPending || !draft.trim()} className="rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40">Save</button>
+                <button type="submit" disabled={edit.isPending || isRichTextEmpty(draft)} className="rounded-md bg-gray-900 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-40">Save</button>
                 <button type="button" onClick={() => setEditing(false)} className="rounded-md px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-200">Cancel</button>
               </div>
             </form>
           ) : (
             <>
-              {c.text && <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-gray-800"><Linkified text={c.text} plain={(s) => withMentions(s, c.mentions)} /></p>}
+              {c.text && (
+                <RichText
+                  value={c.text}
+                  highlight={c.mentions.map((p) => p.name)}
+                  plain={(s) => <Linkified text={s} plain={(w) => withMentions(w, c.mentions)} />}
+                  className="mt-0.5 text-sm text-gray-800"
+                />
+              )}
               {c.files.length > 0 && (
                 <ul className="mt-1.5 flex flex-wrap gap-1.5">{c.files.map((f) => <li key={f.url} className="max-w-full"><FileChip file={f} /></li>)}</ul>
               )}
             </>
           )}
         </div>
+        {!c.deleted && c.assignment && <CommentAssignment task={task} c={c} put={put} />}
         {!c.deleted && (task.can.comment || c.reactions.length > 0) && (
           task.can.comment
             ? <Reactions c={c} onToggle={(emoji, on) => react.mutate({ emoji, on })} />
@@ -329,7 +348,7 @@ function CommentItem({ task, c }: { task: Task; c: TaskComment }) {
 
 function CommentBox({ task }: { task: Task }) {
   const queryClient = useQueryClient();
-  const box = useRef<HTMLTextAreaElement>(null);
+  const box = useRef<RichTextBoxHandle>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const zone = useRef<HTMLFormElement>(null);
   const [text, setText] = useState('');
@@ -349,9 +368,10 @@ function CommentBox({ task }: { task: Task }) {
 
   const send = useMutation({
     mutationFn: () => {
-      const body = text.trim();
+      const body = isRichTextEmpty(text) ? '' : text.trim();
       // Only the people whose "@Name" is still in the words.
-      const mentions = mentioned.filter((p) => body.includes(`@${p.name}`)).map((p) => p.id);
+      const words = richTextToPlain(body);
+      const mentions = mentioned.filter((p) => words.includes(`@${p.name}`)).map((p) => p.id);
       const path = `${taskPath(task.id)}/comments`;
       if (!files.length) return apiClient.post<{ comment: TaskComment }>(path, { text: body, clientId: clientId.current, mentions });
       const form = new FormData();
@@ -373,7 +393,7 @@ function CommentBox({ task }: { task: Task }) {
     },
     onError: (e) => setError(errorMessage(e, 'Could not post the comment.')),
   });
-  const ready = (text.trim() || files.length) && !send.isPending;
+  const ready = (!isRichTextEmpty(text) || files.length > 0) && !send.isPending;
 
   const attach = (incoming: File[]) => {
     const picked = pickFiles(incoming, COMMENT_FILES_MAX - files.length, setError);
@@ -383,13 +403,10 @@ function CommentBox({ task }: { task: Task }) {
 
   const choose = (p: Person) => {
     if (!at) return;
-    const caret = box.current?.selectionStart ?? text.length;
-    const next = `${text.slice(0, at.start)}@${p.name} ${text.slice(caret)}`;
-    setText(next);
+    // Swap the "@que" being typed for the whole name.
+    box.current?.replaceBeforeCaret(at.query.length + 1, `@${p.name} `);
     setMentioned((m) => (m.some((x) => x.id === p.id) ? m : [...m, p]));
     setAt(null);
-    const pos = at.start + p.name.length + 2;
-    requestAnimationFrame(() => { box.current?.focus(); box.current?.setSelectionRange(pos, pos); });
   };
 
   return (
@@ -412,28 +429,31 @@ function CommentBox({ task }: { task: Task }) {
         </ul>
       )}
       <div className="rounded-xl border border-gray-200 bg-white p-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
-        <textarea
+        <RichTextBox
           ref={box}
+          bare
+          compact
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setAt(mentionAt(e.target.value, e.target.selectionStart));
-            setHighlight(0);
+          onChange={setText}
+          onCaretText={(before) => {
+            const next = mentionAt(before, before.length);
+            setAt((cur) => (cur?.start === next?.start && cur?.query === next?.query ? cur : next));
+            if (!next) setHighlight(0);
           }}
-          onKeyDown={(e) => {
+          onKeyDownFirst={(e) => {
             if (at && options.length) {
-              if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => (h + 1) % options.length); return; }
-              if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => (h - 1 + options.length) % options.length); return; }
-              if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); choose(options[highlight]); return; }
-              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAt(null); return; }
+              if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => (h + 1) % options.length); return true; }
+              if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => (h - 1 + options.length) % options.length); return true; }
+              if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); choose(options[Math.min(highlight, options.length - 1)]); return true; }
+              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAt(null); return true; }
             }
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && ready) { e.preventDefault(); send.mutate(); }
+            return false;
           }}
+          onSubmit={() => { if (ready) send.mutate(); }}
           maxLength={2000}
-          rows={2}
+          minHeightClass="min-h-[2.75rem]"
           placeholder="Write an update or a question… type @ to mention someone"
-          aria-label="Comment"
-          className="w-full resize-none border-0 bg-transparent px-1 text-sm outline-none"
+          ariaLabel="Comment"
         />
         {files.length > 0 && (
           <ul className="mb-1 flex flex-wrap gap-1.5 px-1" aria-label="Files to send">

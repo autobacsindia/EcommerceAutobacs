@@ -14,6 +14,8 @@ import { addressBar } from '@/test-utils/addressBarMock';
 const get = jest.fn();
 const post = jest.fn();
 const patch = jest.fn();
+// jsdom cannot type into the real editor: a textarea with the same props stands in.
+jest.mock('@/components/ui/RichTextBox', () => require('@/test-utils/richTextBoxMock'));
 jest.mock('@/lib/api-client', () => ({
   __esModule: true,
   default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), patch: (...a: unknown[]) => patch(...a), delete: jest.fn() },
@@ -50,6 +52,7 @@ function serve({ list = [task()], archived = [] as Task[], one = task() } = {}) 
     if (url.startsWith('/staff/tasks?') && url.includes('state=done')) return Promise.resolve({ tasks: [], nextCursor: null });
     if (url.startsWith('/staff/tasks?')) return Promise.resolve({ tasks: list, nextCursor: null });
     if (url.includes('/comments')) return Promise.resolve({ comments: [], nextBefore: null });
+    if (url.includes('/links')) return Promise.resolve({ waitingOn: [], blocking: [], related: [], hidden: 0, hiddenWaiting: 0, canAdd: false });
     if (url.startsWith('/staff/tasks/')) return Promise.resolve({ task: one });
     return Promise.resolve({ orders: [] });
   });

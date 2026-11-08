@@ -196,6 +196,26 @@ describe('2. follow-up statuses', () => {
     expect((await Lead.findById(lead._id)).activities.at(-2).notes).toBe('Asked for a quote on email');
   });
 
+  it('a formatted note is saved cleaned; its words (not markup) count, empty formatting counts as no note', async () => {
+    const nevin = await gtmLead();
+    const lead = await makeLead();
+    await takeLead(nevin, lead);
+    await record(nevin, lead, { status: 'other', note: '<p> </p>' }).expect(400);
+    await record(nevin, lead, { status: 'responded', note: `<p>${'x'.repeat(501)}</p>` }).expect(400);
+    await record(nevin, lead, { status: 'responded', note: `<p><strong><em>${'x'.repeat(480)}</em></strong></p>` }).expect(200);
+    await record(nevin, lead, { status: 'other', note: '<p>Call <strong>after Diwali</strong><script>alert(1)</script></p><ul><li><p>quote sent</p></li></ul>' }).expect(200);
+    const notes = (await Lead.findById(lead._id)).activities.filter((a) => a.type === 'follow_up').map((a) => a.notes);
+    expect(notes.at(-1)).toBe('<p>Call <strong>after Diwali</strong></p><ul><li><p>quote sent</p></li></ul>');
+  });
+
+  it('Not interested with a formatted note keeps the lost reason as plain words', async () => {
+    const nevin = await gtmLead();
+    const lead = await makeLead();
+    await takeLead(nevin, lead);
+    await record(nevin, lead, { status: 'not_interested', note: '<p>Bought <strong>elsewhere</strong></p><ul><li><p>cheaper</p></li></ul>' }).expect(200);
+    expect((await Lead.findById(lead._id)).lostReason).toBe('Bought elsewhere • cheaper');
+  });
+
   it('only the person following up, the GTM head and admin may record; everyone else is refused', async () => {
     const nevin = await gtmLead('Nevin');
     const other = await gtmLead('Other seller');

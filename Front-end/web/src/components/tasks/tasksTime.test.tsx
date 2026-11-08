@@ -82,6 +82,7 @@ function serve({
   const all: Record<string, Task> = { t1: task(), ...tasks };
   const state = { timer, autoStopped };
   get.mockImplementation((url: string) => {
+    if (url.endsWith('/links')) return Promise.resolve({ waitingOn: [], blocking: [], related: [], hidden: 0, hiddenWaiting: 0, canAdd: false });
     if (url === '/staff/tasks/summary') return Promise.resolve({ late: 0, today: 0 });
     if (url === '/staff/tasks/assignees') return Promise.resolve(people);
     if (url === '/staff/tasks/time/current') {

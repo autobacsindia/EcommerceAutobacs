@@ -17,6 +17,7 @@ import SubscriptionDetail from './SubscriptionDetail';
 import { looksLikeCardNumber, type Subscription } from './api';
 import { addressBar } from '@/test-utils/addressBarMock';
 
+jest.mock('@/components/ui/RichTextBox', () => require('@/test-utils/richTextBoxMock'));
 jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);
 
 const get = jest.fn();

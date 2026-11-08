@@ -18,6 +18,7 @@ import { addressBar } from '@/test-utils/addressBarMock';
 const get = jest.fn();
 const post = jest.fn();
 const put = jest.fn();
+jest.mock('@/components/ui/RichTextBox', () => require('@/test-utils/richTextBoxMock'));
 jest.mock('@/lib/api-client', () => ({
   __esModule: true,
   default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a), put: (...a: unknown[]) => put(...a) },

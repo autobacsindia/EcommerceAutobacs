@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  AlignLeft, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, Clock, CornerLeftUp, Eye, Flag, Link2,
-  ListChecks, ListTree, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, Timer as TimerIcon, Trash2, UserPlus, UserRound, Users, X, type LucideIcon,
+  AlignLeft, ArrowLeft, Bell, BellOff, CalendarDays, CalendarRange, Check, ChevronDown, ChevronUp, CircleDot, Clock, CornerLeftUp, Eye, Flag, Hourglass, Link2,
+  ListChecks, ListTree, Lock, Maximize2, MessageSquare, Network, Package, Pencil, RotateCcw, Send, Tag, Timer as TimerIcon, Trash2, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { taskKeys } from '@/hooks/queries/keys';
@@ -18,31 +18,42 @@ import { Activity, TaskFiles, timeAgo } from './Comments';
 import { TagList } from './TaskList';
 import AssigneePicker from './AssigneePicker';
 import { useFollowers } from './hooks';
-import { Linkified } from './links';
+import InlineRichText from './InlineRichText';
 import TaskMenu from './TaskMenu';
 import Subtasks from './Subtasks';
-import { TimePanel, TimerButton } from './Timer';
+import Links, { WaitingWarning } from './TaskLinks';
+import { TimePanel, TimerButton, useTaskTime } from './Timer';
 import { Avatar, AvatarStack, DuePill, DueTimeSelect, PriorityFlag, StatusPill, quietControl, statusSelectClass } from './ui';
 import { ListPicker } from './spaces';
 import {
-  FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, formatDueDay, formatDueKey, isConflict, isPastDue, newClientId, orderHrefFor, peopleOf,
+  FOLLOWERS_MAX, MAX_ASSIGNEES, TASK_PRIORITIES, TASK_STATUSES, confirmComplete, estimateProblem, formatDueDay, formatDueKey, formatDuration, isConflict, isPastDue, minutesText, newClientId, orderHrefFor, parseDuration, peopleOf,
   type Assignee, type ChecklistItem, type CommentPage, type Person, type Task, type TaskComment, type TaskPriority, type TaskStatus,
 } from './types';
 
 type Patch = Partial<{
   title: string; description: string; priority: TaskPriority; dueOn: string | null; dueTime: string | null; startOn: string | null; tags: string[];
-  orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean; listId: string | null;
+  orderId: string | null; status: TaskStatus; assigneeId: string; assigneeIds: string[]; archived: boolean; listId: string | null; estimateMinutes: number | null;
 }>;
+
+const LINK_WORDS: Record<string, string> = { waiting_on: 'waiting on', blocking: 'blocking', related: 'related to' };
+const estimateWords = (v: string) => (v === 'none' ? 'none' : minutesText(Number(v)));
 
 const HISTORY_TEXT: Record<string, (h: NonNullable<Task['history']>[number]) => string> = {
   created: (h) => `created this task for ${h.to}`,
   status: (h) => `moved it from ${h.from} to ${h.to}`,
+  comment_assigned: (h) => `assigned a comment to ${h.to}`,
+  comment_unassigned: () => 'removed a comment assignment',
+  comment_resolved: () => 'resolved a comment',
+  comment_reopened: () => 'reopened a comment',
   assignee: (h) => `changed who does it to ${h.to} (was ${h.from})`,
   follower_added: (h) => `added ${h.to} as a follower`,
   follower_removed: (h) => `removed ${h.from} as a follower`,
   priority: (h) => `changed priority from ${h.from} to ${h.to}`,
   due: (h) => `changed the due date from ${h.from === 'none' ? 'none' : formatDueKey(h.from)} to ${h.to === 'none' ? 'none' : formatDueKey(h.to)}`,
   start: (h) => `changed the start date from ${h.from === 'none' ? 'none' : formatDueDay(h.from)} to ${h.to === 'none' ? 'none' : formatDueDay(h.to)}`,
+  link_added: (h) => `linked it: ${LINK_WORDS[h.from] ?? h.from} ${h.to}`,
+  link_removed: (h) => `removed the link: ${LINK_WORDS[h.from] ?? h.from} ${h.to}`,
+  estimate: (h) => `changed the time estimate from ${estimateWords(h.from)} to ${estimateWords(h.to)}`,
   tags: (h) => (h.to === 'none' ? 'removed the tags' : `set the tags to ${h.to}`),
   order: (h) => `changed the order from ${h.from} to ${h.to}`,
   list: (h) => (h.from && h.to ? `moved it from the list ${h.from} to ${h.to}` : h.to ? `put it in the list ${h.to}` : `took it out of the list ${h.from}`),
@@ -66,36 +77,15 @@ export { timeAgo };
 // ── Inline editing ───────────────────────────────────────────────────────────
 
 /** Text shown as text until clicked; Enter (or leaving the field) saves, Escape cancels. */
-function InlineText({ value, onSave, multiline = false, placeholder, label, className, canEdit, maxLength }: {
-  value: string; onSave: (v: string) => void; multiline?: boolean; placeholder: string; label: string;
+function InlineText({ value, onSave, placeholder, label, className, canEdit, maxLength }: {
+  value: string; onSave: (v: string) => void; placeholder: string; label: string;
   className: string; canEdit: boolean; maxLength: number;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
+  const ref = useRef<HTMLInputElement>(null);
   useEffect(() => { if (draft !== null) ref.current?.focus(); }, [draft !== null]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!canEdit) {
-    return value
-      ? <div className={`${className} whitespace-pre-wrap break-words`}>{multiline ? <Linkified text={value} /> : value}</div>
-      : null;
-  }
-  // Long text with links: the links open, a click anywhere else (or the pencil) edits.
-  if (draft === null && multiline && value) {
-    return (
-      <div onClick={() => setDraft(value)} className={`${className} group cursor-text rounded-md hover:bg-gray-50`}>
-        <span className="whitespace-pre-wrap break-words"><Linkified text={value} /></span>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); setDraft(value); }}
-          aria-label={`Edit ${label}`}
-          title="Edit"
-          className="ml-1 inline-flex rounded p-0.5 align-middle text-gray-300 opacity-0 hover:bg-gray-100 hover:text-gray-600 focus-visible:opacity-100 group-hover:opacity-100"
-        >
-          <Pencil aria-hidden className="h-3.5 w-3.5" />
-        </button>
-      </div>
-    );
-  }
+  if (!canEdit) return value ? <div className={`${className} break-words`}>{value}</div> : null;
   if (draft === null) {
     return (
       <button
@@ -112,29 +102,31 @@ function InlineText({ value, onSave, multiline = false, placeholder, label, clas
   const commit = () => {
     const next = draft.trim();
     setDraft(null);
-    if (next !== value.trim() && (next || multiline)) onSave(next);
+    if (next && next !== value.trim()) onSave(next);
   };
-  const props = {
-    ref,
-    value: draft,
-    maxLength,
-    'aria-label': label,
-    onChange: (e: { target: { value: string } }) => setDraft(e.target.value),
-    onBlur: commit,
-    onKeyDown: (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); setDraft(null); }
-      if (e.key === 'Enter' && (!multiline || e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(); }
-    },
-    className: `${className} w-full rounded-md border border-blue-500! bg-white px-2 py-1 outline-none ring-2 ring-blue-100`,
-  };
-  return multiline ? <textarea rows={4} {...props} /> : <input {...props} />;
+  return (
+    <input
+      ref={ref}
+      value={draft}
+      maxLength={maxLength}
+      aria-label={label}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') { e.preventDefault(); setDraft(null); }
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      }}
+      className={`${className} w-full rounded-md border border-blue-500! bg-white px-2 py-1 outline-none ring-2 ring-blue-100`}
+    />
+  );
 }
 
 /**
  * One detail: an icon and a label, then its value. In a wide window two sit
  * side by side (`wide` takes the whole row); in a narrow one, one per row.
  */
-function Field({ label, icon: Icon, wide = false, children }: { label: string; icon: LucideIcon; wide?: boolean; children: ReactNode }) {
+function Field({ label, icon: Icon, wide = false, hidden = false, children }: { label: string; icon: LucideIcon; wide?: boolean; hidden?: boolean; children: ReactNode }) {
+  if (hidden) return null;
   return (
     <div className={`flex min-h-9 min-w-0 items-center gap-3 ${wide ? '@xl:col-span-2' : ''}`}>
       <dt className="flex w-[104px] shrink-0 items-center gap-2 text-[13px] text-gray-500">
@@ -142,6 +134,74 @@ function Field({ label, icon: Icon, wide = false, children }: { label: string; i
       </dt>
       <dd className="min-w-0 flex-1 text-sm text-gray-900">{children}</dd>
     </div>
+  );
+}
+
+const HIDE_EMPTY_KEY = 'tasks.hideEmptyFields';
+/** "Hide empty fields": remembered on this device. Starts off, so the first paint matches the server's. */
+function useHideEmpty() {
+  const [hide, setHide] = useState(false);
+  useEffect(() => {
+    try { setHide(localStorage.getItem(HIDE_EMPTY_KEY) === '1'); } catch { /* private window: just not remembered */ }
+  }, []);
+  const toggle = () => {
+    const next = !hide;
+    setHide(next);
+    try { if (next) localStorage.setItem(HIDE_EMPTY_KEY, '1'); else localStorage.removeItem(HIDE_EMPTY_KEY); } catch { /* as above */ }
+  };
+  return { hide, toggle };
+}
+
+/**
+ * "2h" planned, beside how much has been tracked ("45m of 2h"); typed like the
+ * time form ("90", "1h 30m"). Saved on Enter or on leaving the box; Esc cancels.
+ */
+function EstimateField({ task, saving, onSave }: { task: Task; saving: boolean; onSave: (minutes: number | null) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  const [problem, setProblem] = useState('');
+  const tracked = useTaskTime(task.id).data?.pages[0]?.total?.seconds ?? 0;
+  const planned = task.estimateMinutes ?? null;
+  const commit = () => {
+    if (text === null) return;
+    const clean = text.trim();
+    const minutes = clean ? parseDuration(clean) : null;
+    const wrong = clean ? estimateProblem(minutes) : '';
+    if (wrong) { setProblem(wrong); return; }
+    setText(null);
+    setProblem('');
+    if (minutes !== planned) onSave(minutes);
+  };
+  if (text !== null) {
+    return (
+      <span className="block">
+        <input
+          autoFocus
+          value={text}
+          disabled={saving}
+          maxLength={12}
+          aria-label="Time estimate"
+          aria-invalid={!!problem}
+          placeholder="e.g. 2h or 1h 30m"
+          onChange={(e) => { setText(e.target.value); setProblem(''); }}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setText(null); setProblem(''); }
+          }}
+          className="h-7 w-36 rounded-md border border-gray-200 px-2 text-sm"
+        />
+        {problem && <span role="alert" className="mt-0.5 block text-xs text-red-700">{problem}</span>}
+      </span>
+    );
+  }
+  const over = planned !== null && tracked > planned * 60;
+  const words = planned === null ? 'Empty' : tracked ? `${formatDuration(tracked)} of ${minutesText(planned)}` : `${minutesText(planned)} planned`;
+  const cls = planned === null ? 'text-gray-400' : over ? 'font-medium text-red-700' : 'text-gray-900';
+  if (!task.can.edit) return <span className={cls}>{words}</span>;
+  return (
+    <button type="button" aria-label={`Time estimate: ${words}. Change`} onClick={() => setText(planned === null ? '' : minutesText(planned))} className={`rounded px-1 py-0.5 hover:bg-gray-100 ${cls}`}>
+      {words}{over && <span className="sr-only"> — over the estimate</span>}
+    </button>
   );
 }
 
@@ -456,6 +516,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState('');
+  const { hide: hideEmpty, toggle: toggleEmpty } = useHideEmpty();
   const q = useQuery({
     queryKey: taskKeys.one(id),
     queryFn: () => apiClient.get<{ task: Task }>(`/staff/tasks/${encodeURIComponent(id)}`),
@@ -516,6 +577,12 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
 
   const reassignTo = people.data?.people ?? [];
   const archived = task.bucket === 'archived';
+  const emptyFields = {
+    estimate: task.estimateMinutes == null, due: !task.dueOn, start: !task.startOn, followers: !task.followers?.length,
+    tags: !task.tags.length, order: !task.order, list: !task.list,
+  };
+  const emptyCount = Object.values(emptyFields).filter(Boolean).length - (task.team ? 0 : Number(emptyFields.list)) - (task.personal ? Number(emptyFields.followers) : 0);
+  const blank = (empty: boolean) => hideEmpty && empty;
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(`${window.location.origin}${base}/${task.id}`);
@@ -564,6 +631,10 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
         />
       </header>
 
+      <WaitingWarning task={task} onOpen={onOpen} />
+      {task.personal && (
+        <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500"><Lock aria-hidden className="h-3.5 w-3.5" /> Private — only you can see this task.</p>
+      )}
       <div className="@container">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-0.5 border-y border-gray-100 py-3 @xl:grid-cols-2">
           <Field label="Status" icon={CircleDot}>
@@ -585,7 +656,10 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
           <Field label="Assignees" icon={UserRound}>
             <AssigneesField task={task} choices={reassignTo} saving={save.isPending} onSave={(assigneeIds) => save.mutate({ assigneeIds })} />
           </Field>
-          <Field label="Due date" icon={CalendarDays}>
+          <Field label="Estimate" icon={Hourglass} hidden={blank(emptyFields.estimate)}>
+            <EstimateField task={task} saving={save.isPending} onSave={(estimateMinutes) => save.mutate({ estimateMinutes })} />
+          </Field>
+          <Field label="Due date" icon={CalendarDays} hidden={blank(emptyFields.due)}>
             {task.can.edit ? (
               <DateField
                 value={task.dueOn}
@@ -606,7 +680,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
               />
             ) : <DuePill t={task} empty={<span className="text-gray-400">Empty</span>} />}
           </Field>
-          <Field label="Start date" icon={CalendarRange}>
+          <Field label="Start date" icon={CalendarRange} hidden={blank(emptyFields.start)}>
             {task.can.edit ? (
               <DateField value={task.startOn} label="Start date" max={task.dueOn || undefined} onChange={(v) => save.mutate({ startOn: v || null })} />
             ) : task.startOn ? <span>{formatDueDay(task.startOn)}</span> : <span className="text-gray-400">Empty</span>}
@@ -621,15 +695,15 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
               </span>
             ) : <PriorityFlag priority={task.priority} withLabel />}
           </Field>
-          <Field label="Followers" icon={Eye}>
+          <Field label="Followers" icon={Eye} hidden={!!task.personal || blank(emptyFields.followers)}>
             <FollowersField task={task} choices={reassignTo} onGone={onClose} />
           </Field>
-          <Field label="Tags" icon={Tag} wide>
+          <Field label="Tags" icon={Tag} wide hidden={blank(emptyFields.tags)}>
             {task.can.edit
               ? <TagInput value={task.tags} onChange={(tags) => save.mutate({ tags })} disabled={save.isPending} quiet />
               : task.tags.length ? <TagList tags={task.tags} max={10} /> : <span className="text-gray-400">Empty</span>}
           </Field>
-          <Field label="Order" icon={Package}>
+          <Field label="Order" icon={Package} hidden={blank(emptyFields.order)}>
             {task.can.edit && task.order ? (
               <span className="flex items-center gap-1">
                 <Link href={orderHrefFor(base, task.order.id)} className="font-medium text-blue-700 hover:underline">{task.order.code}</Link>
@@ -642,7 +716,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
               : <span className="text-gray-400">Empty</span>}
           </Field>
           {task.team && (
-            <Field label="List" icon={ListTree}>
+            <Field label="List" icon={ListTree} hidden={blank(emptyFields.list)}>
               <ListPicker
                 team={task.team}
                 teamLabel={task.teamLabel}
@@ -660,16 +734,20 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
             </span>
           </Field>
         </dl>
+        {emptyCount > 0 && (
+          <button type="button" aria-pressed={hideEmpty} onClick={toggleEmpty} className="mt-1 rounded px-1 py-0.5 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-800">
+            {hideEmpty ? `Show ${emptyCount} empty field${emptyCount === 1 ? '' : 's'}` : 'Hide empty fields'}
+          </button>
+        )}
       </div>
 
       {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <section>
         <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900"><AlignLeft aria-hidden className="h-4 w-4 text-gray-500" /> Description</h3>
-        <InlineText
+        <InlineRichText
           value={task.description || ''}
           onSave={(description) => save.mutate({ description })}
-          multiline
           label="description"
           placeholder="Add more detail for whoever does this…"
           className="px-1 text-sm leading-relaxed text-gray-700"
@@ -680,6 +758,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
       </section>
 
       <Subtasks task={task} base={base} onOpen={onOpen} />
+      <Links task={task} base={base} onOpen={onOpen} />
       <Checklist task={task} />
 
       {task.group && (

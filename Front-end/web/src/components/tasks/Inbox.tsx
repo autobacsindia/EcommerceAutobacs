@@ -99,6 +99,8 @@ const KIND: Record<InboxKind, { icon: typeof AtSign; tone: string; say: (code: s
   comment: { icon: MessageSquare, tone: 'bg-gray-100 text-gray-600', say: (c) => `commented on ${c}`, quote: true },
   mention: { icon: AtSign, tone: 'bg-violet-100 text-violet-700', say: (c) => `mentioned you on ${c}`, quote: true },
   subtask: { icon: Network, tone: 'bg-amber-100 text-amber-700', say: (c) => `added a sub-task to ${c}`, quote: false },
+  comment_assigned: { icon: UserPlus, tone: 'bg-violet-100 text-violet-700', say: (c) => `assigned you a comment on ${c}`, quote: true },
+  comment_resolved: { icon: CircleCheck, tone: 'bg-emerald-100 text-emerald-700', say: (c) => `resolved a comment on ${c}`, quote: true },
 };
 
 /** What follows the sentence: the status it moved to, the due day, the words, the sub-task. */

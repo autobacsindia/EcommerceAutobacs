@@ -14,6 +14,7 @@ import {
 import type { JourneyEvent, JourneyGroup } from '@/lib/leadJourney';
 import { formatDateIST, formatDateTimeIST, toIsoAttr } from '@/lib/datetime';
 import { usePanel } from '@/lib/usePanel';
+import { richTextToPlain } from '@/lib/richText';
 
 const SIGNAL_ICONS: Record<LeadSourceType, LucideIcon> = {
   consultation: MessageCircle,
@@ -155,7 +156,7 @@ function renderBody(ev: JourneyEvent, isAdmin: boolean) {
   return (
     <div>
       <span className="capitalize text-gray-700">{ev.activityType.replace('_', ' ')}</span>
-      {ev.notes && <span className="text-gray-600"> — {ev.notes}</span>}
+      {ev.notes && <span className="text-gray-600"> — {richTextToPlain(ev.notes)}</span>}
       {ev.actor && <span className="text-xs text-gray-400"> · {ev.actor}</span>}
     </div>
   );

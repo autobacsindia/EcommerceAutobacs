@@ -17,6 +17,8 @@ const post = jest.fn();
 const patch = jest.fn();
 const put = jest.fn();
 const del = jest.fn();
+// jsdom cannot type into the real editor: a textarea with the same props stands in.
+jest.mock('@/components/ui/RichTextBox', () => require('@/test-utils/richTextBoxMock'));
 jest.mock('@/lib/api-client', () => ({
   __esModule: true,
   default: {
@@ -50,12 +52,13 @@ const task = (over: Partial<Task> = {}): Task => ({
 } as Task);
 const comment = (over: Partial<TaskComment> = {}): TaskComment => ({
   id: 'c1', by: { id: 'u2', name: 'Arun' }, text: 'Bosch says Friday', createdAt: new Date().toISOString(),
-  editedAt: null, deleted: false, mine: false, editableUntil: null, mentions: [], files: [], reactions: [], ...over,
+  editedAt: null, deleted: false, mine: false, editableUntil: null, mentions: [], files: [], reactions: [], assignment: null, ...over,
 });
 const later = () => new Date(Date.now() + 10 * 60_000).toISOString();
 
 function open({ one = task(), comments = [] as TaskComment[] } = {}) {
   get.mockImplementation((url: string) => {
+    if (url.endsWith('/links')) return Promise.resolve({ waitingOn: [], blocking: [], related: [], hidden: 0, hiddenWaiting: 0, canAdd: false });
     if (url === '/staff/tasks/assignees') return Promise.resolve({ people: [] });
     if (url.endsWith('/mentionable')) {
       return Promise.resolve({ people: [{ id: 'u1', name: 'Priya Nair', onTask: true }, { id: 'u3', name: 'Bala', onTask: true }, { id: 'u7', name: 'Sam', onTask: false }] });

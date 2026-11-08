@@ -15,6 +15,9 @@ import {
   type LeadSourceType, type LeadStatus,
 } from '@/lib/leads';
 import { FOLLOW_UP_NOTE_MAX, FOLLOW_UP_OPTIONS, followUpOption, type FollowUpStatus } from './followUpStatus';
+import RichTextBox from '@/components/ui/RichTextBox';
+import RichText from '@/components/ui/RichText';
+import { isRichTextEmpty, richTextToPlain } from '@/lib/richText';
 
 /** One product behind the lead. `removed` = the name is gone (product deleted, nothing saved). */
 export type LeadItem = { name: string | null; variantLabel: string | null; quantity: number | null; removed: boolean };
@@ -119,7 +122,7 @@ function FollowUpRecorder({ path, onSaved, onClose }: {
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const save = useMutation({
-    mutationFn: () => apiClient.post<WriteResult>(`${path}/follow-ups`, { status, note: note.trim() }),
+    mutationFn: () => apiClient.post<WriteResult>(`${path}/follow-ups`, { status, note: isRichTextEmpty(note) ? '' : note.trim() }),
     onSuccess: (res) => { setStatus(''); setNote(''); setError(''); onSaved(res); },
     onError: (e: unknown) => {
       const body = (e as { rawData?: WriteResult })?.rawData;
@@ -127,7 +130,7 @@ function FollowUpRecorder({ path, onSaved, onClose }: {
       else setError(errorMessage(e, 'Could not save the follow-up. Please try again.'));
     },
   });
-  const needsNote = status === 'other' && !note.trim();
+  const needsNote = status === 'other' && isRichTextEmpty(note);
   const chosen = followUpOption(status);
   const noteId = `fu-note-${path.replace(/\W/g, '')}`;
 
@@ -154,12 +157,12 @@ function FollowUpRecorder({ path, onSaved, onClose }: {
           <label htmlFor={noteId} className="block text-sm font-medium text-gray-800">
             {status === 'other' ? 'What happened? (required)' : 'Note (optional)'}
           </label>
-          <textarea id={noteId} value={note} maxLength={FOLLOW_UP_NOTE_MAX} rows={2}
-            onChange={(e) => setNote(e.target.value)}
+          <RichTextBox id={noteId} value={note} maxLength={FOLLOW_UP_NOTE_MAX} minHeightClass="min-h-[3.5rem]"
+            onChange={setNote}
+            ariaLabel={status === 'other' ? 'What happened' : 'Note'}
             placeholder={status === 'other' ? 'e.g. Asked us to call back after Diwali' : 'e.g. Rang twice, will try tomorrow'}
-            aria-invalid={needsNote || undefined}
-            className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <p className="text-right text-xs text-gray-500">{note.length}/{FOLLOW_UP_NOTE_MAX}</p>
+            className={`mt-1 ${needsNote ? 'border-red-400' : ''}`} />
+          <p className="text-right text-xs text-gray-500">{richTextToPlain(note).length}/{FOLLOW_UP_NOTE_MAX}</p>
         </div>
       )}
       {error && <p role="alert" className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</p>}
@@ -366,7 +369,7 @@ function LeadCard({ lead, you, sellers }: { lead: TeamLead; you: You; sellers: P
                     <span className={h.followUpStatus ? `rounded-full border px-2 py-0.5 text-xs font-semibold ${followUpOption(h.followUpStatus)?.tone ?? ''}` : 'font-medium text-gray-900'}>{h.label}</span>
                     {h.who && <span className="text-gray-700"> · {h.who}</span>}
                     <span className="text-gray-500"> · {formatDateTimeIST(h.at)}</span>
-                    {h.notes && <p className="text-gray-600">{h.notes}</p>}
+                    {h.notes && <RichText value={h.notes} className="text-gray-600" />}
                   </li>
                 ))}
               </ol>

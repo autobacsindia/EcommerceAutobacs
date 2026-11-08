@@ -18,8 +18,16 @@ import { decryptField } from '../utils/fieldEncryption.js';
 import { cleanPayee, maskAccount } from '../utils/payee.js';
 import { STAFF_TEAMS } from '../config/staff.js';
 import { and, keysetPage, plainQuery, searchClauses, searchWords } from '../utils/listQuery.js';
+import { cleanRichTextWithin } from '../utils/richText.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
+// Notes may be formatted (utils/richText.js); the limit counts the words, not the markup.
+const NOTES_MAX = 1000;
+function cleanNotes(raw) {
+  const { value, tooLong } = cleanRichTextWithin(raw, NOTES_MAX);
+  if (tooLong) throw fail(`The notes are too long (${NOTES_MAX} characters at most).`, 400);
+  return value;
+}
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 
 /** A payment raised this soon after a bank-detail change carries a warning. */
@@ -59,7 +67,7 @@ function cleanSupplier(input = {}) {
     email,
     gstin,
     address: text(input.address, 500),
-    notes: text(input.notes, 1000),
+    notes: cleanNotes(input.notes),
     payment,
   };
 }

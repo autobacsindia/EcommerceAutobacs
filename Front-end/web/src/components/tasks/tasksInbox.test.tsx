@@ -93,6 +93,7 @@ function serve({ lines = LINES, unread, next = null, more = [], inboxError = fal
     return Promise.resolve({ id, state: body.state, unread: count() });
   });
   get.mockImplementation((url: string) => {
+    if (url.endsWith('/links')) return Promise.resolve({ waitingOn: [], blocking: [], related: [], hidden: 0, hiddenWaiting: 0, canAdd: false });
     if (url === '/staff/tasks/summary') return Promise.resolve({ late: 0, today: 0, inbox: count() });
     if (url === '/staff/tasks/assignees') return Promise.resolve({ people: [] });
     if (url.startsWith('/staff/tasks/inbox?')) {

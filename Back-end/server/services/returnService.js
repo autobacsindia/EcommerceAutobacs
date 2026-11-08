@@ -77,6 +77,7 @@ import { putPrivateAsset, deletePrivateAsset, readPrivateAsset } from './storage
 import { checkAttachments } from './storage/attachmentCheck.js';
 import { and, amountOf, istRange, keysetPage, plainQuery, searchClauses, searchWords } from '../utils/listQuery.js';
 import { storeAll } from './storage/storeAll.js';
+import { cleanRichTextWithin, richTextToPlain } from '../utils/richText.js';
 
 const PAGE_SIZE = 25;
 const FILE_FOLDER = 'return-files'; // a PRIVATE prefix (storage/assetScope.js)
@@ -135,6 +136,18 @@ export const phoneKey = (phone) => {
 const daysSince = (date) => (Date.now() - new Date(date).getTime()) / DAY_MS;
 const timelineEntry = (status, note, actor) => ({ status, note, updatedBy: actor?._id || null, timestamp: new Date() });
 const trimmed = (v, max = 500) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+/**
+ * The supplier's check notes: internal (procurement and operations only), so they
+ * may be formatted. Cleaned here; the timeline gets the plain words, which is also
+ * what the customer-facing pieces (rejection reason, emails) are built from elsewhere.
+ */
+const SUPPLIER_NOTES_MAX = 1000;
+function supplierNotes(raw) {
+  if (raw != null && typeof raw !== 'string') throw fail('The notes must be text.', 400);
+  const { value, tooLong } = cleanRichTextWithin(raw, SUPPLIER_NOTES_MAX);
+  if (tooLong) throw fail(`Keep the notes under ${SUPPLIER_NOTES_MAX} characters.`, 400);
+  return { notes: value, plain: richTextToPlain(value).replace(/\s+/g, ' ') };
+}
 /**
  * A plain copy of a return line. A line loaded from the database is a Mongoose
  * subdocument, and spreading one copies none of its fields — the same trap that once
@@ -825,7 +838,7 @@ export async function recordSupplierCheck(actor, id, input = {}, files = [], req
   if (rr.pickup?.mode !== 'supplier_direct' || rr.status !== 'received') throw fail('This return is not waiting for a supplier check.', 409);
   if (rr.inspection?.passed != null) throw fail('Operations has already confirmed the inspection.', 409);
   if (typeof input.passed !== 'boolean') throw fail('Did the item pass the supplier\'s check?', 400);
-  const notes = trimmed(input.notes, 1000);
+  const { notes, plain: notesText } = supplierNotes(input.notes);
   if (!notes) throw fail('Add the supplier\'s notes.', 400);
 
   const stored = await storeFiles(files, { rr, actor, purpose: 'supplier_check', existing: 0 });
@@ -835,7 +848,7 @@ export async function recordSupplierCheck(actor, id, input = {}, files = [], req
     },
     $push: {
       ...(stored.length && { staffFiles: { $each: stored } }),
-      timeline: timelineEntry('received', `Supplier's check: ${input.passed ? 'passed' : 'failed'} — ${notes}`, actor),
+      timeline: timelineEntry('received', `Supplier's check: ${input.passed ? 'passed' : 'failed'} — ${notesText}`, actor),
     },
   });
   if (!done) {
@@ -1147,12 +1160,12 @@ export async function recordClaimCheck(actor, id, claimId, input = {}, files = [
   const rr = await loadVisible(actor, id);
   const claim = claimOf(rr, claimId);
   if (typeof input.passed !== 'boolean') throw fail('Did the item pass the supplier\'s check?', 400);
-  const notes = trimmed(input.notes, 1000);
+  const { notes, plain: notesText } = supplierNotes(input.notes);
   const stored = await storeFiles(files, { rr, actor, purpose: 'supplier_check', claimId: claim._id });
   try {
     const done = await updateClaim(rr, claim, ['open', 'accepted', 'promised'], {
       supplierCheck: { passed: input.passed, notes: notes || null, by: actor._id, byName: actorName(actor), at: new Date() },
-    }, `${claim.supplierName}'s check: ${input.passed ? 'passed' : 'failed'}${notes ? ` — ${notes}` : ''}`, actor);
+    }, `${claim.supplierName}'s check: ${input.passed ? 'passed' : 'failed'}${notes ? ` — ${notesText}` : ''}`, actor);
     if (stored.length) await returnRequestRepository.transitionIf(done._id, {}, { $push: { staffFiles: { $each: stored } } });
   } catch (err) {
     await removeFiles(stored);

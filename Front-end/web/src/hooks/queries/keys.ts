@@ -262,6 +262,12 @@ export const taskKeys = {
   comments: (id: string) => [...taskKeys.all, 'comments', id] as const,
   /** The sub-tasks listed under one task. */
   subtasks: (id: string) => [...taskKeys.all, 'subtasks', id] as const,
+  /** The links on tasks: `allLinks()` is every task's, `links(id)` one task's. */
+  allAssignedComments: () => [...taskKeys.all, 'assigned-comments'] as const,
+  assignedComments: (state: string) => [...taskKeys.allAssignedComments(), state] as const,
+  overview: (team: string) => [...taskKeys.all, 'overview', team] as const,
+  allLinks: () => [...taskKeys.all, 'links'] as const,
+  links: (id: string) => [...taskKeys.allLinks(), id] as const,
   assignees: () => [...taskKeys.all, 'assignees'] as const,
   /** The page header's late / due-today counts. */
   summary: () => [...taskKeys.all, 'summary'] as const,

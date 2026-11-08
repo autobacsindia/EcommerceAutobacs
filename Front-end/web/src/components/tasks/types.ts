@@ -10,7 +10,7 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'done';
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskBucket = 'open' | 'done' | 'archived';
-export type TaskView = 'mine' | 'following' | 'created' | 'team';
+export type TaskView = 'mine' | 'following' | 'created' | 'team' | 'personal';
 export type TaskDue = 'late' | 'overdue' | 'today' | 'week';
 /** How a list is ordered (server-side, keyset-paged). Open tasks only; done and archived keep "most recently finished first". */
 export type TaskSort = 'due' | 'newest' | 'oldest' | 'updated';
@@ -103,6 +103,12 @@ export type Task = {
     /** Start a timer or add time on it (anyone who sees it, while it is not archived). */
     time?: boolean;
   };
+  /** In its maker's private Personal list: nobody else can see it. */
+  personal?: boolean;
+  /** How long it should take, in whole minutes; null when not planned. */
+  estimateMinutes?: number | null;
+  /** The lists only: how many unfinished tasks this one is waiting on. */
+  waitingOn?: number;
   /** The lists only: all the time logged on it, everyone's, in seconds. */
   timeSeconds?: number;
   history?: { at: string; by: string; action: string; from: string; to: string }[];
@@ -153,13 +159,17 @@ export type TaskComment = {
   id: string; by: { id: string; name: string }; text: string; createdAt: string;
   editedAt: string | null; deleted: boolean; mine: boolean; editableUntil: string | null;
   mentions: { id: string; name: string }[]; files: TaskFile[]; reactions: TaskReaction[];
+  /** Given to someone to act on; `canChange` = this viewer may resolve or remove it. */
+  assignment: {
+    to: Person; by: Person; at: string; resolvedAt: string | null; resolvedBy: string; canChange: boolean;
+  } | null;
 };
 export type CommentPage = { comments: TaskComment[]; nextBefore: string | null };
 
 export type Person = { id: string; name: string };
 
 /** One line in the Inbox (GET /staff/tasks/inbox). */
-export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask';
+export type InboxKind = 'assigned' | 'status' | 'comment' | 'mention' | 'subtask' | 'comment_assigned' | 'comment_resolved';
 export type InboxItem = {
   id: string;
   kind: InboxKind;
@@ -170,6 +180,24 @@ export type InboxItem = {
   read: boolean;
   at: string;
   canOpen: boolean;
+};
+/** One line of "Assigned comments" (GET /staff/tasks/assigned-comments). */
+export type AssignedComment = {
+  id: string; task: { id: string; code: string; title: string }; canOpen: boolean; text: string;
+  by: Person | null; assignedBy: string; at: string; resolvedAt: string | null;
+};
+export type AssignedCommentPage = { comments: AssignedComment[]; nextBefore: string | null };
+
+/** GET /staff/tasks/overview. */
+export type TeamOverviewData = {
+  team: string;
+  counts: { open: number; late: number; today: number; nextWeek: number; noDate: number; unassigned: number; doneWeek: number };
+  capped: boolean;
+  byStatus: { status: string; label: string; count: number }[];
+  people: { id: string; name: string; open: number; late: number }[];
+  morePeople: number;
+  late: { id: string; code: string; title: string; dueOn: string | null; dueTime: string; completedAt: string | null }[];
+  recentDone: { id: string; code: string; title: string; dueOn: string | null; dueTime: string; completedAt: string | null }[];
 };
 export type InboxFilter = 'all' | 'unread';
 export type InboxPage = { items: InboxItem[]; nextCursor: string | null; unread: number };
@@ -380,6 +408,20 @@ export function parseDuration(raw: string): number | null {
 export function durationProblem(minutes: number | null): string {
   if (minutes === null) return 'Type a length like 45, 1h 30m or 1:30.';
   if (minutes < 1 || minutes > TIME_MAX_MINUTES) return 'Enter between 1 minute and 24 hours.';
+  return '';
+}
+
+export type TaskLinkKind = 'waiting_on' | 'blocking' | 'related';
+export type TaskLinkOption = { id: string; code: string; title: string; status: TaskStatus; statusLabel: string; bucket: string };
+export type TaskLinkRow = { linkId: string; task: TaskLinkOption; canRemove: boolean };
+/** `GET /staff/tasks/:id/links`. `hidden`: links to tasks this person can't open (a count, never a name). */
+export type TaskLinks = { waitingOn: TaskLinkRow[]; blocking: TaskLinkRow[]; related: TaskLinkRow[]; hidden: number; hiddenWaiting: number; canAdd: boolean };
+
+export const ESTIMATE_MAX_MINUTES = 60000;
+/** Why a typed estimate would be refused, or '' when it is fine. */
+export function estimateProblem(minutes: number | null): string {
+  if (minutes === null) return 'Type a length like 45, 2h or 1h 30m.';
+  if (minutes < 1 || minutes > ESTIMATE_MAX_MINUTES) return 'Enter between 1 minute and 1000 hours.';
   return '';
 }
 

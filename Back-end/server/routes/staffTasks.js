@@ -12,11 +12,18 @@ import {
   validateCommentId,
   validateCommentEdit,
   validateCommentReaction,
+  validateCommentAssign,
+  validateCommentResolve,
+  validateAssignedCommentList,
+  validateOverview,
   validateTaskFileName,
   validateChecklistAdd,
   validateChecklistUpdate,
   validateChecklistRemove,
   validateTaskFollowers,
+  validateTaskLinkAdd,
+  validateTaskLinkRemove,
+  validateTaskLinkOptions,
   validateStepToSubtask,
   validateInboxList,
   validateInboxItem,
@@ -30,6 +37,7 @@ import {
   validateListItemId,
   validateListItemUpdate,
 } from '../validators/staffTask.validator.js';
+import { listLinks, linkOptions, addLink, removeLink } from '../services/staffTaskLinkService.js';
 import { getSpace, createListItem, updateListItem, deleteListItem } from '../services/staffTaskListService.js';
 import { listInbox, setInboxState, readAllInbox } from '../services/staffTaskInboxService.js';
 import {
@@ -48,6 +56,10 @@ import {
   editComment,
   deleteComment,
   reactToComment,
+  assignComment,
+  resolveComment,
+  listAssignedComments,
+  teamOverview,
   listMentionable,
   addTaskFiles,
   removeTaskFileFrom,
@@ -76,6 +88,16 @@ const router = express.Router();
 // @route  GET /staff/tasks?view=mine|following|created|team&state=open|done|archived&due=&priority=&tag=&q=&assignee=&team=&sort=due|newest|oldest|updated&cursor=
 router.get('/', validateTaskList, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listTasks(req.user, req.query)) });
+}));
+
+// @route  GET /staff/tasks/assigned-comments?state=open|resolved&before= — comments given to the caller
+router.get('/assigned-comments', validateAssignedCommentList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listAssignedComments(req.user, req.query)) });
+}));
+
+// @route  GET /staff/tasks/overview?team= — one team's numbers
+router.get('/overview', validateOverview, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await teamOverview(req.user, req.query)) });
 }));
 
 // @route  GET /staff/tasks/summary — the caller's late / due-today counts (page header)
@@ -176,9 +198,39 @@ router.post('/:id/checklist/:itemId/subtask', validateStepToSubtask, validateReq
   res.json({ success: true, ...(await subtaskFromStep(req.user, req.params.id, req.params.itemId, req.body, req)) });
 }));
 
+// @route  GET /staff/tasks/:id/links — waiting on / blocking / related
+router.get('/:id/links', validateTaskId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await listLinks(req.user, req.params.id)) });
+}));
+
+// @route  GET /staff/tasks/:id/links/options?q= — tasks that could be linked to this one
+router.get('/:id/links/options', validateTaskLinkOptions, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await linkOptions(req.user, req.params.id, req.query)) });
+}));
+
+// @route  POST /staff/tasks/:id/links { kind, taskId }
+router.post('/:id/links', validateTaskLinkAdd, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await addLink(req.user, req.params.id, req.body, req)) });
+}));
+
+// @route  DELETE /staff/tasks/:id/links/:linkId
+router.delete('/:id/links/:linkId', validateTaskLinkRemove, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await removeLink(req.user, req.params.id, req.params.linkId, req)) });
+}));
+
 // @route  GET /staff/tasks/:id/subtasks — the sub-tasks under a task (at most 50, not archived)
 router.get('/:id/subtasks', validateTaskId, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, ...(await listSubtasks(req.user, req.params.id)) });
+}));
+
+// @route  PUT /staff/tasks/:id/comments/:commentId/assignee { userId | null } — what it should be
+router.put('/:id/comments/:commentId/assignee', validateCommentAssign, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await assignComment(req.user, req.params.id, req.params.commentId, req.body.userId)) });
+}));
+
+// @route  PUT /staff/tasks/:id/comments/:commentId/resolved { resolved } — what it should be
+router.put('/:id/comments/:commentId/resolved', validateCommentResolve, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await resolveComment(req.user, req.params.id, req.params.commentId, req.body.resolved)) });
 }));
 
 // @route  GET /staff/tasks/:id/comments?before=
@@ -242,7 +294,7 @@ router.patch('/:id/followers', validateTaskFollowers, validateRequest, asyncHand
 
 // @route  GET /staff/tasks/:id/mentionable — who can be @mentioned (the people on the task; editors: anyone in the panel)
 router.get('/:id/mentionable', validateTaskId, validateRequest, asyncHandler(async (req, res) => {
-  res.json({ success: true, ...(await listMentionable(req.user, req.params.id)) });
+  res.json({ success: true, ...(await listMentionable(req.user, req.params.id)), me: { id: String(req.user._id), name: req.user.name || '' } });
 }));
 
 // @route  POST /staff/tasks/:id/files (multipart `files`) — add files to the task

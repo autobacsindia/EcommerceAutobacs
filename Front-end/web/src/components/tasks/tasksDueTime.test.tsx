@@ -35,6 +35,7 @@ const task = (over: Partial<Task> = {}): Task => ({
 });
 const detail = (t: Task) => {
   get.mockImplementation((url: string) => {
+    if (url.endsWith('/links')) return Promise.resolve({ waitingOn: [], blocking: [], related: [], hidden: 0, hiddenWaiting: 0, canAdd: false });
     if (url === '/staff/tasks/assignees') return Promise.resolve({ people: [] });
     if (url.includes('/comments')) return Promise.resolve({ comments: [], nextBefore: null });
     return Promise.resolve({ task: t });

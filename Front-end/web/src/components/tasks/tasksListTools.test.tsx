@@ -54,6 +54,7 @@ function serve({ list = [task()], one = task() } = {}) {
     if (url.startsWith('/staff/tasks?') && url.includes('state=done')) return Promise.resolve({ tasks: [], nextCursor: null });
     if (url.startsWith('/staff/tasks?')) return Promise.resolve({ tasks: list, nextCursor: null });
     if (url.includes('/comments')) return Promise.resolve({ comments: [], nextBefore: null });
+    if (url.includes('/links')) return Promise.resolve({ waitingOn: [], blocking: [], related: [], hidden: 0, hiddenWaiting: 0, canAdd: false });
     if (url.startsWith('/staff/tasks/')) return Promise.resolve({ task: one });
     return Promise.resolve({ orders: [] });
   });

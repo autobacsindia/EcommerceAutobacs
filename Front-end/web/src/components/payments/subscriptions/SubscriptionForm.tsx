@@ -10,6 +10,8 @@ import {
   approxText, getSubscriptionOptions, looksLikeCardNumber, saveSubscription, subscriptionKeys,
   type PayMethod, type Subscription, type SubscriptionKind,
 } from './api';
+import RichTextBox from '@/components/ui/RichTextBox';
+import { richTextToPlain } from '@/lib/richText';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100';
 const label = 'block text-sm font-medium text-gray-800';
@@ -69,7 +71,7 @@ export default function SubscriptionForm({ item, onCancel, onDone }: {
     if (!d.dueDate) return 'Enter the next due date.';
     if (d.method === 'card' && !/^\d{4}$/.test(d.cardLast4)) return 'Enter the last 4 digits of the card — only 4 digits.';
     if (d.billingUrl.trim() && !/^https:\/\//i.test(d.billingUrl.trim())) return 'The billing page link must start with https://';
-    if ([d.name, d.purpose, d.notes].some(looksLikeCardNumber)) {
+    if ([d.name, d.purpose, richTextToPlain(d.notes)].some(looksLikeCardNumber)) {
       return 'That looks like a full card number. Never type card numbers here — the card is its last 4 digits only.';
     }
     if (o?.teams.length && !item && !d.team && !o.team) return 'Choose the team this is for.';
@@ -178,10 +180,12 @@ export default function SubscriptionForm({ item, onCancel, onDone }: {
       <label className={label}>Billing page link (optional)
         <input className={`${input} mt-1`} type="url" value={d.billingUrl} onChange={(e) => set({ billingUrl: e.target.value })} placeholder="https://…" maxLength={500} />
       </label>
-      <label className={label}>Notes (optional)
-        <textarea className={`${input} mt-1`} rows={2} value={d.notes} onChange={(e) => set({ notes: e.target.value })} maxLength={1000}
-          placeholder="e.g. The card needs international payments turned on" />
-      </label>
+      <div className={label}>Notes (optional)
+        <div className="mt-1">
+          <RichTextBox ariaLabel="Notes (optional)" compact maxLength={1000} value={d.notes} onChange={(notes) => set({ notes })}
+            placeholder="e.g. The card needs international payments turned on" />
+        </div>
+      </div>
 
       <div className="space-y-2 text-sm">
         <p className="font-medium text-gray-800">Invoice (optional)</p>

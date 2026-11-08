@@ -15,6 +15,7 @@ import OrderTypeTag from '@/components/orders/OrderTypeTag';
 import OrderPicker from './OrderPicker';
 import DealSummaryBox from './DealSummary';
 import { SupplierRefundLine } from './SupplierCredit';
+import RichText from '@/components/ui/RichText';
 
 /** The server takes up to three payment screenshots per payment. */
 const MAX_PROOFS = MAX_ATTACHMENTS;
@@ -188,7 +189,12 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               <Row k="Items" v={r.itemNames.join(', ')} />
               <Row k="Customer" v={r.customer?.name ? [r.customer.name, r.customer.phone, r.customer.city].filter(Boolean).join(' · ') : null} />
               <Row k="Sale closed by" v={r.closedBy} />
-              <Row k="Details" v={r.description} />
+              {r.description && (
+                <div className="grid grid-cols-[120px_1fr] gap-2 py-1 text-sm">
+                  <dt className="text-gray-500">Details</dt>
+                  <dd className="min-w-0 text-gray-900"><RichText value={r.description} /></dd>
+                </div>
+              )}
               <Row k="Pay by" v={r.payee.method === 'upi' ? `UPI · ${r.payee.upiId || 'scan their QR (attached)'}` : `Bank · ${r.payee.accountName}, A/c ${r.payee.accountNumber}, ${bankCode(r.payee)}${r.payee.bankName ? ` (${r.payee.bankName})` : ''}`} />
               <Row k="Payee phone" v={r.payee.phone} />
               {r.payment && <Row k="Paid" v={`${r.payment.method.toUpperCase()}${r.payment.reference ? ` · ref ${r.payment.reference}` : ''} · by ${r.payment.paidByName}`} />}

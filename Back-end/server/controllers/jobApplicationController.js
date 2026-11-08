@@ -35,6 +35,7 @@ import {
   buildCareersUploadTargets,
   newCareersFolder,
 } from '../services/storage/careersUploadTargets.js';
+import { cleanRichTextWithin } from '../utils/richText.js';
 
 const MB = 1024 * 1024;
 const VIDEO_MAX_BYTES = 30 * MB;
@@ -390,7 +391,10 @@ export const updateApplication = async (req, res) => {
     }
   }
   if (req.body.adminNotes !== undefined) {
-    app.adminNotes = str(req.body.adminNotes, 5000);
+    // May be formatted (utils/richText.js): cleaned, and the limit counts the words.
+    const { value, tooLong } = cleanRichTextWithin(typeof req.body.adminNotes === 'string' ? req.body.adminNotes : '', 5000);
+    if (tooLong) return res.status(400).json({ success: false, message: 'The notes are too long (5000 characters at most).' });
+    app.adminNotes = value;
   }
   await app.save();
 

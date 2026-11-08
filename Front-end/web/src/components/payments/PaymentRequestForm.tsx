@@ -14,6 +14,8 @@ import BankCodeField, { bankCodePayload, bankCodeProblem, kindOf, type BankCodeK
 import { MAX_ATTACHMENTS, PHOTO_ONLY, PHOTO_OR_PDF } from '@/lib/attachments';
 import SupplierPicker, { SupplierSuggestions } from './SupplierPicker';
 import type { Supplier } from './suppliers';
+import RichTextBox from '@/components/ui/RichTextBox';
+import { richTextToPlain } from '@/lib/richText';
 
 /** The server takes up to five bills and one payee QR per request. */
 const MAX_BILLS = MAX_ATTACHMENTS;
@@ -145,6 +147,7 @@ export default function PaymentRequestForm({
     if (setup && Number(amount) > Number(agreedTotal)) { setError(`The advance cannot be more than the agreed total (${money(Number(agreedTotal), currency)}).`); return; }
     const codeProblem = !picked && method === 'bank' ? bankCodeProblem(codeKind, payee[codeKind]) : '';
     if (codeProblem) { setError(codeProblem); return; }
+    if (noteRequired && richTextToPlain(description).trim().length < 3) { setError('Add details — say what it was for.'); return; }
     const form = new FormData();
     // A foreign bill sends only what was billed: the rupees are recorded when it is paid.
     form.append('currency', currency);
@@ -152,7 +155,7 @@ export default function PaymentRequestForm({
       form.append('agreedTotal', agreedTotal);
       form.append('advance', amount);
       form.append('completionDate', completionDate);
-      form.append('note', description.trim());
+      form.append('note', richTextToPlain(description).trim());
     } else if (foreign) {
       form.append('foreignAmount', amount);
     } else {
@@ -379,7 +382,7 @@ export default function PaymentRequestForm({
           <label className={label} htmlFor="pr-desc">Details</label>
           {!supplier && <span className="text-xs text-gray-500">{noteRequired ? 'Required' : 'Optional'}</span>}
         </div>
-        <textarea id="pr-desc" className={input} rows={2} required={noteRequired} minLength={noteRequired ? 3 : 0} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)}
+        <RichTextBox id="pr-desc" ariaLabel="Details" compact maxLength={2000} value={description} onChange={setDescription}
           placeholder={supplier ? 'Supplier invoice number, anything accounts should know' : noteRequired ? 'Say what it was for (e.g. which tool, which month’s GST)' : 'What was bought / where you travelled, and why'} />
       </div>
 

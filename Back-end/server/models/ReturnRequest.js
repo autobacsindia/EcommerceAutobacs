@@ -118,7 +118,7 @@ const SupplierClaimSchema = new mongoose.Schema({
   // The supplier's own inspection.
   supplierCheck: {
     passed: { type: Boolean, default: null },
-    notes:  { type: String, trim: true, maxlength: 1000, default: null },
+    notes:  { type: String, trim: true, maxlength: 6000, default: null }, // ≤1000 words; may be formatted
     ...ByAt,
   },
   // What the supplier promised, and — set by accounts, once — that it arrived.
@@ -330,7 +330,7 @@ const ReturnRequestSchema = new mongoose.Schema({
     // confirms it (operations always owns the fault decision towards the customer).
     supplierCheck: {
       passed: { type: Boolean, default: null },
-      notes:  { type: String, trim: true, maxlength: 1000, default: null },
+      notes:  { type: String, trim: true, maxlength: 6000, default: null }, // ≤1000 words; may be formatted
       ...ByAt,
     },
   },

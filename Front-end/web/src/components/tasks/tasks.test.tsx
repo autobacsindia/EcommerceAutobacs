@@ -18,6 +18,8 @@ const get = jest.fn();
 const post = jest.fn();
 const patch = jest.fn();
 const remove = jest.fn();
+// jsdom cannot type into the real editor: a textarea with the same props stands in.
+jest.mock('@/components/ui/RichTextBox', () => require('@/test-utils/richTextBoxMock'));
 jest.mock('@/lib/api-client', () => ({
   __esModule: true,
   default: {
@@ -68,6 +70,7 @@ function serve({
     if (url.startsWith('/staff/tasks?') && url.includes('state=done')) return Promise.resolve({ tasks: done, nextCursor: null });
     if (url.startsWith('/staff/tasks?')) return Promise.resolve({ tasks: list, nextCursor: null });
     if (url.includes('/comments')) return Promise.resolve({ comments, nextBefore: null });
+    if (url.includes('/links')) return Promise.resolve({ waitingOn: [], blocking: [], related: [], hidden: 0, hiddenWaiting: 0, canAdd: false });
     if (url.startsWith('/staff/tasks/')) return Promise.resolve({ task: one });
     return Promise.resolve({ orders: [] });
   });
@@ -1074,5 +1077,111 @@ describe('shared tasks and followers (phase 4)', () => {
     expect(again.clientId).toBe(sent.clientId);
     // Saved: the name clears for the next one, and a new one gets a new id.
     await waitFor(() => expect(within(column).getByLabelText('New task in In progress')).toHaveValue(''));
+  });
+});
+
+describe('estimate, empty fields and the Personal list', () => {
+  const detail = (one: Task, time?: unknown) => {
+    serve({ one });
+    if (time) {
+      const inner = get.getMockImplementation()!;
+      get.mockImplementation((url: string) => (url.includes('/time') ? Promise.resolve(time) : inner(url)));
+    }
+    return wrap(<TaskDetail id="t1" base="/team/tasks" />);
+  };
+  const edit = async (from: RegExp, text: string) => {
+    fireEvent.click(await screen.findByRole('button', { name: from }));
+    const box = screen.getByLabelText('Time estimate');
+    fireEvent.change(box, { target: { value: text } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    return box;
+  };
+
+  it('an estimate is typed like "1h 30m" and saved as minutes with the revision', async () => {
+    patch.mockResolvedValue({ task: task({ estimateMinutes: 90, rev: 4 }) });
+    detail(task({ estimateMinutes: null }));
+    await edit(/Time estimate: Empty/, '1h 30m');
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, estimateMinutes: 90 }));
+  });
+
+  it('a wrong estimate says why and sends nothing; emptying the box clears it', async () => {
+    patch.mockResolvedValue({ task: task({ estimateMinutes: null, rev: 4 }) });
+    detail(task({ estimateMinutes: 60 }));
+    const box = await edit(/Time estimate: 1h planned/, 'soon');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Type a length/);
+    expect(patch).not.toHaveBeenCalled();
+    fireEvent.change(box, { target: { value: '' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('/staff/tasks/t1', { rev: 3, estimateMinutes: null }));
+  });
+
+  it('shows tracked time against the estimate, and marks going over', async () => {
+    detail(task({ estimateMinutes: 60 }), { entries: [], total: { seconds: 4500, people: [] }, nextCursor: null });
+    expect(await screen.findByRole('button', { name: /1h 15m of 1h/ })).toHaveTextContent(/over the estimate/);
+  });
+
+  it('someone who cannot edit reads the estimate but gets no button', async () => {
+    detail(task({ estimateMinutes: 60, can: { ...can, edit: false } }));
+    expect(await screen.findByText('1h planned')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Time estimate/ })).toBeNull();
+  });
+
+  it('"Hide empty fields" hides them, counts them, and is remembered', async () => {
+    const { unmount } = detail(task({ estimateMinutes: null, startOn: null, dueOn: '2026-10-27' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide empty fields' }));
+    expect(screen.queryByText('Start date')).toBeNull();
+    expect(screen.queryByText('Estimate')).toBeNull();
+    expect(screen.getByText('Due date')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Show \d+ empty fields?$/ })).toBeInTheDocument();
+    unmount();
+    detail(task({ estimateMinutes: null, startOn: null }));
+    expect(await screen.findByRole('button', { name: /^Show \d+ empty fields?$/ })).toBeInTheDocument();
+    expect(screen.queryByText('Start date')).toBeNull();
+  });
+
+  it('still works when the browser refuses to remember', async () => {
+    const spy = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied'); });
+    detail(task());
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide empty fields' }));
+    expect(screen.queryByText('Start date')).toBeNull();
+    spy.mockRestore();
+  });
+
+  it('a personal task says it is private and has no followers', async () => {
+    detail(task({ personal: true, team: null, can: { ...can, reassign: false, followers: false, follow: false } }));
+    expect(await screen.findByText(/only you can see this task/)).toBeInTheDocument();
+    expect(screen.queryByText('Followers')).toBeNull();
+  });
+
+  it('the Personal list asks for its own tasks; a task made there is private with nobody picked', async () => {
+    serve({ list: [] });
+    post.mockResolvedValue({ task: task(), tasks: [task()] });
+    workspace();
+    fireEvent.click(await screen.findByRole('button', { name: 'Personal' }));
+    await waitFor(() => expect(listCalls().some((u) => u.includes('view=personal'))).toBe(true));
+    expect(await screen.findByText('Your private list is empty')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'n' });
+    const dialog = await screen.findByRole('dialog', { name: 'New task' });
+    expect(within(dialog).getByText(/Only you will see this task/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Who does it' })).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Renew licence' } });
+    fireEvent.change(within(dialog).getByLabelText(/Time estimate/), { target: { value: '2h' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Create/ }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    const body = post.mock.calls[0][1];
+    expect(body).toMatchObject({ personal: true, estimateMinutes: 120 });
+    expect(body).not.toHaveProperty('assigneeIds');
+  });
+
+  it('N and / do nothing while typing in a formatting box', async () => {
+    serve({ list: [] });
+    workspace();
+    await screen.findByText(/Nothing on your plate/);
+    const box = document.createElement('div');
+    box.setAttribute('contenteditable', 'true');
+    document.body.appendChild(box);
+    fireEvent.keyDown(box, { key: 'n' });
+    expect(screen.queryByRole('dialog', { name: 'New task' })).toBeNull();
+    box.remove();
   });
 });

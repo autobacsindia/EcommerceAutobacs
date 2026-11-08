@@ -17,7 +17,7 @@ const HISTORY_CAP = 100;
 export const LIST_PROJECTION = Object.freeze({
   number: 1, title: 1, description: 1, status: 1, priority: 1, dueOn: 1, dueTime: 1, startOn: 1, tags: 1,
   assignee: 1, assigneeName: 1, team: 1, assignees: 1, teams: 1, followers: 1, createdBy: 1, createdByName: 1,
-  order: 1, group: 1, groupSize: 1, list: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
+  order: 1, group: 1, groupSize: 1, list: 1, personal: 1, estimateMinutes: 1, parent: 1, subtasks: 1, bucket: 1, rank: 1, rev: 1,
   completedAt: 1, archivedAt: 1, commentCount: 1, lastCommentAt: 1, createdAt: 1, updatedAt: 1,
   checklistTotal: { $size: { $ifNull: ['$checklist', []] } },
   checklistDone: { $size: { $filter: { input: { $ifNull: ['$checklist', []] }, cond: '$$this.done' } } },
@@ -227,6 +227,39 @@ const staffTaskRepository = {
     .limit(limit)
     .select('-clientId -edits')
     .lean(),
+  // ── Assigned comments. Each write matches only if it changes something, so a retry is a no-op (null). ──
+  assignComment: (id, user, by, at = new Date()) => StaffTaskComment.findOneAndUpdate(
+    { _id: id, deletedAt: null, assignedTo: { $ne: user } },
+    { $set: { assignedTo: user, assignedBy: by, assignedAt: at }, $unset: { resolvedAt: 1, resolvedBy: 1 } },
+    { new: true },
+  ).select('-edits').lean(),
+  unassignComment: (id) => StaffTaskComment.findOneAndUpdate(
+    { _id: id, deletedAt: null, assignedTo: { $type: 'objectId' } },
+    { $unset: { assignedTo: 1, assignedBy: 1, assignedAt: 1, resolvedAt: 1, resolvedBy: 1 } },
+    { new: true },
+  ).select('-edits').lean(),
+  setCommentResolved: (id, on, by, at = new Date()) => StaffTaskComment.findOneAndUpdate(
+    { _id: id, deletedAt: null, assignedTo: { $type: 'objectId' }, resolvedAt: on ? null : { $type: 'date' } },
+    on ? { $set: { resolvedAt: at, resolvedBy: by } } : { $unset: { resolvedAt: 1, resolvedBy: 1 } },
+    { new: true },
+  ).select('-edits').lean(),
+  assignedCommentQuery: (user, resolved) => ({ assignedTo: user, resolvedAt: resolved ? { $type: 'date' } : null, deletedAt: null }),
+  pageAssignedComments: (user, { resolved, before = null, limit }) => StaffTaskComment.find({
+    ...staffTaskRepository.assignedCommentQuery(user, resolved),
+    ...(before ? { _id: { $lt: before } } : {}),
+  }).sort({ _id: -1 }).limit(limit).select('task by byName text assignedBy assignedAt resolvedAt resolvedBy').lean(),
+  countOpenAssignedComments: async (user, cap) => StaffTaskComment.countDocuments(staffTaskRepository.assignedCommentQuery(user, false), { limit: cap }),
+  /** Just enough of `ids` for the Assigned comments list and who may see it. */
+  tasksForComments: (ids) => StaffTask.find({ _id: { $in: ids } }).select('number title personal createdBy assignee assignees team teams followers').lean(),
+
+  /** A team's open tasks, soonest due first, at most `cap`: the Overview's raw numbers. */
+  overviewScan: (query, cap) => StaffTask.find({ ...query, bucket: 'open' })
+    .sort({ rank: 1, _id: 1 }).limit(cap)
+    .select('number title status dueOn dueTime rank assignee assigneeName assignees')
+    .lean(),
+  overviewDone: (query, limit) => StaffTask.find({ ...query, bucket: 'done' })
+    .sort({ rank: 1, _id: 1 }).limit(limit).select('number title completedAt').lean(),
+
   findComment: (taskId, id) => StaffTaskComment.findOne({ _id: id, task: taskId }).select('-edits').lean(),
 
   /*
