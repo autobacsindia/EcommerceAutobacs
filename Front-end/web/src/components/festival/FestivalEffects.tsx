@@ -30,6 +30,26 @@ export function hasFineHoverPointer(): boolean {
 }
 
 /**
+ * Pages style their own clickable things with a plain `cursor: pointer` (the
+ * careers role cards, any Tailwind `cursor-pointer` div), and an element's own
+ * cursor beats the diya it would otherwise inherit from <html>. Rather than
+ * chase every page's CSS, tag the element the mouse is over with what the page
+ * meant — 'hand' or 'base' — and let the festive CSS swap in the matching diya.
+ *
+ * Cheap: called on pointerover, which fires once per element entered, not per
+ * move; a tagged element is skipped, and the CSS only applies under
+ * html[data-festival], so stale tags are inert once the festival ends.
+ */
+export function tagPlainCursor(target: EventTarget | null): void {
+  if (!(target instanceof Element)) return;
+  const el = target as HTMLElement | SVGElement;
+  if (!el.dataset || el.dataset.fxCursor) return;
+  const cursor = window.getComputedStyle(el).cursor;
+  if (cursor === 'pointer') el.dataset.fxCursor = 'hand';
+  else if (cursor === 'default') el.dataset.fxCursor = 'base';
+}
+
+/**
  * Wires the festival's interaction effects. Renders nothing.
  *
  * This file is tiny on purpose and is all that ships in the main bundle: it
@@ -40,6 +60,17 @@ export function hasFineHoverPointer(): boolean {
 export default function FestivalEffects() {
   const festival = useFestival();
   const tokens = festival?.tokens ?? null;
+
+  // The diya cursor is still, not motion, so it ignores reduced-motion — but it
+  // is mouse-only, so phones and tablets never attach this listener.
+  useEffect(() => {
+    if (!tokens || !hasFineHoverPointer()) return;
+    const onPointerOver = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') tagPlainCursor(e.target);
+    };
+    document.addEventListener('pointerover', onPointerOver, { capture: true, passive: true });
+    return () => document.removeEventListener('pointerover', onPointerOver, { capture: true });
+  }, [tokens]);
 
   useEffect(() => {
     if (!tokens || prefersReducedMotion()) return;

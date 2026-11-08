@@ -75,4 +75,9 @@ describe('diya cursor CSS', () => {
     expect(block).toMatch(/textarea[^{]*\{\s*cursor: text;/);
     expect(block).toMatch(/:disabled[^{]*\{\s*cursor: not-allowed;/);
   });
+
+  it('page-styled clickables tagged by FestivalEffects get the diya too, never a disabled one', () => {
+    expect(block).toMatch(/html\[data-festival\] \[data-fx-cursor='base'\]\s*\{\s*cursor: url\(/);
+    expect(block).toContain("[data-fx-cursor='hand']:not(:disabled, [aria-disabled='true'])");
+  });
 });
