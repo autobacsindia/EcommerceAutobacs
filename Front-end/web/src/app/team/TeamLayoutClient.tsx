@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { GraduationCap, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact } from 'lucide-react';
+import { BookOpenCheck, GraduationCap, LayoutDashboard, Users, KeyRound, Banknote, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, MessagesSquare, Landmark, Factory, ListTodo, LifeBuoy, History, Undo2, Contact } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useChatUnreadTotal } from '@/hooks/queries/useTeamChat';
@@ -26,6 +26,7 @@ function navFor(team: string, isHead: boolean, canSell: boolean): NavItem[] {
     { href: '/team/tasks', label: 'Tasks', icon: ListTodo },
     // Every team: training that heads and admins post.
     { href: '/team/lessons', label: 'Lessons', icon: GraduationCap },
+    { href: '/team/training', label: 'Training', icon: BookOpenCheck },
   ];
   /*
     The paid list, split in two so "what still needs doing" is not buried under

@@ -263,6 +263,17 @@ export const lessonKeys = {
   meta: () => [...lessonKeys.all, 'meta'] as const,
 };
 
+export const trainingKeys = {
+  all: [...staffKeys.all, 'training'] as const,
+  meta: () => [...trainingKeys.all, 'meta'] as const,
+  lists: () => [...trainingKeys.all, 'list'] as const,
+  list: (filters: object) => [...trainingKeys.lists(), filters] as const,
+  one: (id: string) => [...trainingKeys.all, 'one', id] as const,
+  paths: () => [...trainingKeys.all, 'paths'] as const,
+  path: (id: string) => [...trainingKeys.all, 'path', id] as const,
+  lessonOptions: (team: string) => [...trainingKeys.all, 'lesson-options', team] as const,
+};
+
 export const taskKeys = {
   all: [...staffKeys.all, 'tasks'] as const,
   lists: () => [...taskKeys.all, 'list'] as const,
