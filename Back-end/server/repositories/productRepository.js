@@ -143,11 +143,13 @@ class ProductRepository {
 
   /**
    * One keyset page of products that are not on Automatic. `mode` narrows to
-   * none/custom; otherwise the `$type` match is what lets the partial index serve it.
+   * none/custom. The `$type` must stay in BOTH cases: it is what proves to the planner
+   * that the partial index covers this query. Without it a mode filter walks `_id`
+   * instead (measured: 2,501 documents read to return 51 from a 5,000 product catalogue).
    */
   async findFestivalOfferExceptions({ mode = null, afterId = null, limit = 50 } = {}) {
     return Product.find({
-      'festivalOfferSetting.mode': mode || { $type: 'string' },
+      'festivalOfferSetting.mode': mode ? { $type: 'string', $eq: mode } : { $type: 'string' },
       deletedAt: null,
       ...(afterId && { _id: { $gt: afterId } }),
     })

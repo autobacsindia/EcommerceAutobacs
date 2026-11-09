@@ -227,3 +227,16 @@ describe('storefront payloads carry the setting', () => {
     expect(body.festivalOfferSetting).toEqual({ mode: 'custom', percent: 7 });
   });
 });
+
+describe('exceptions list stays index-backed', () => {
+  it('reads only exception rows, not the catalogue', async () => {
+    await Product.createIndexes();
+    await Product.collection.insertMany(Array.from({ length: 300 }, (_, i) => ({
+      name: `N${i}`, slug: `n-${i}`, price: 100, deletedAt: null,
+      ...(i % 30 === 0 ? { festivalOfferSetting: { mode: 'none' } } : {}),
+    })));
+    const stats = await Product.find({ 'festivalOfferSetting.mode': { $type: 'string', $eq: 'none' }, deletedAt: null })
+      .sort({ _id: 1 }).limit(51).explain('executionStats');
+    expect(stats.executionStats.totalDocsExamined).toBeLessThanOrEqual(10);
+  });
+});
