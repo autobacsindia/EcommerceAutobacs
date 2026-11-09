@@ -2,9 +2,9 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { adminKeys } from '@/hooks/queries/keys';
+import SellerChangeProofDialog, { type ProofFailure } from './SellerChangeProofDialog';
 
 export type Seller = { id: string; name: string; isHead: boolean };
 
@@ -18,12 +18,11 @@ export function useSellers(enabled = true) {
   });
 }
 
-const errorText = (e: unknown) => (e as { rawData?: { message?: string } })?.rawData?.message || 'Could not change the salesman.';
-
 /**
  * "Sold by" for one order: Website order, or the salesman. On a PAID order a
- * dropdown changes it (admin and marketing — the server checks, and refuses if
- * someone changed it meanwhile). An unpaid order shows it as text: its payment
+ * dropdown starts a change, which needs proof in a popup (admin and marketing —
+ * the server checks, and refuses if someone changed it meanwhile). The dropdown
+ * keeps showing the current salesman until the server has confirmed the new one. An unpaid order shows it as text: its payment
  * links are tied to the salesman until it is paid.
  */
 export default function SoldByCell({
@@ -36,7 +35,7 @@ export default function SoldByCell({
   onChanged: () => void;
 }) {
   const qc = useQueryClient();
-  const [busy, setBusy] = useState(false);
+  const [target, setTarget] = useState<{ id: string; name: string } | null>(null);
   const [error, setError] = useState('');
   const current = seller?._id ? String(seller._id) : '';
   const label = current ? seller?.name || 'Salesman' : 'Website order';
@@ -47,25 +46,13 @@ export default function SoldByCell({
   // Keep a former salesman (no longer active) visible as the current choice.
   const options = current && !sellers.some((s) => s.id === current) ? [...sellers, { id: current, name: `${label} (inactive)`, isHead: false }] : sellers;
 
-  async function change(next: string) {
+  function change(next: string) {
     if (next === current) return;
-    const toName = next ? options.find((s) => s.id === next)?.name || 'this salesman' : 'Website order';
-    if (!window.confirm(`Change "Sold by" to ${toName}?`)) return;
-    setBusy(true);
     setError('');
-    try {
-      await apiClient.put(`/staff/attribution/orders/${encodeURIComponent(orderId)}`, {
-        salesUserId: next || null,
-        expectedSalesUserId: current || null,
-      });
-      await qc.invalidateQueries({ queryKey: adminKeys.resource('orders') });
-      onChanged();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(false);
-    }
+    setTarget({ id: next, name: next ? options.find((s) => s.id === next)?.name || 'this salesman' : 'Website order' });
   }
+
+  const refresh = () => qc.invalidateQueries({ queryKey: adminKeys.resource('orders') });
 
   return (
     <div className="min-w-[10rem]">
@@ -73,16 +60,27 @@ export default function SoldByCell({
         <select
           aria-label="Sold by"
           value={current}
-          disabled={busy}
+          disabled={!!target}
           onChange={(e) => change(e.target.value)}
           className="w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60"
         >
           <option value="">Website order</option>
           {options.map((s) => <option key={s.id} value={s.id}>{s.name}{s.isHead ? ' (GTM head)' : ''}</option>)}
         </select>
-        {busy && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-gray-400" />}
       </div>
       {error && <p role="alert" className="mt-1 max-w-[14rem] whitespace-normal text-xs text-red-700">{error}</p>}
+      {target && (
+        <SellerChangeProofDialog
+          orderId={orderId}
+          fromId={current}
+          fromName={label}
+          toId={target.id}
+          toName={target.name}
+          onCancel={() => setTarget(null)}
+          onSaved={async () => { await refresh(); onChanged(); setTarget(null); }}
+          onConflict={async ({ message }: ProofFailure) => { await refresh(); setTarget(null); setError(message); }}
+        />
+      )}
     </div>
   );
 }

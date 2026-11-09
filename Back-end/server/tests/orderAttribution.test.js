@@ -53,6 +53,7 @@ async function signIn(email) {
   };
 }
 let n = 0;
+let changes = 0;
 const makeUser = async (name, role, staff) => {
   n += 1;
   const email = `${name.toLowerCase()}${n}@autobacs.test`;
@@ -97,7 +98,7 @@ describe('Crediting a website order to a salesman', () => {
   });
 
   const credit = (s, orderId, salesUserId, expectedSalesUserId = null, note) =>
-    s.put(`/staff/attribution/orders/${orderId}`, { salesUserId, expectedSalesUserId, ...(note && { note }) });
+    s.put(`/staff/attribution/orders/${orderId}`, { salesUserId, expectedSalesUserId, note: note || 'Closed by this salesman on a call', changeId: `test-change-${++changes}` });
 
   describe('who', () => {
     it('admin and marketing only — the GTM head, other teams and leads get 403', async () => {
@@ -270,7 +271,7 @@ describe('Crediting a website order to a salesman', () => {
     it('the customer never sees who sold or credited it, or the team workflow (regression)', async () => {
       const customer = await makeUser('Ravi', 'customer');
       const order = await websiteOrder({ user: customer.user._id });
-      expect((await credit(marketing.session, order._id, lead.id, null, 'internal note')).status).toBe(200);
+      expect((await credit(marketing.session, order._id, lead.id, null, 'internal note about this sale')).status).toBe(200);
 
       const own = await customer.session.get(`/orders/${order._id}`);
       expect(own.status).toBe(200);

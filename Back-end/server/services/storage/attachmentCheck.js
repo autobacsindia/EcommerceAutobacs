@@ -32,16 +32,40 @@ function typeOf(buf, kind) {
   return null; // GIF/HEIC/AVIF: an image, but not one we accept here
 }
 
+const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/** A real Word or Excel file is a zip that lists these names; a renamed zip or .exe does not. */
+const isOffice = (buf, folder) => startsWith(buf, [0x50, 0x4B, 0x03, 0x04])
+  && buf.includes('[Content_Types].xml') && buf.includes(folder);
+
+/**
+ * Word, Excel, TXT and CSV, for screens that allow them. These have no reliable
+ * signature of their own (text has none at all), so the name is used with a check
+ * of the bytes. They are always served as a download, never opened in the browser.
+ */
+function documentType(buf, name) {
+  const ext = name.toLowerCase().split('.').pop();
+  if (ext === 'docx' && isOffice(buf, 'word/')) return { contentType: DOCX, ext };
+  if (ext === 'xlsx' && isOffice(buf, 'xl/')) return { contentType: XLSX, ext };
+  // A binary file renamed .txt has NUL bytes; real text does not.
+  if ((ext === 'txt' || ext === 'csv') && !buf.includes(0)) {
+    return { contentType: ext === 'csv' ? 'text/csv' : 'text/plain', ext };
+  }
+  return null;
+}
+
 /**
  * @param {object[]} files multer files ({ buffer, originalname, mimetype })
  * @param {object} [opts]
  * @param {boolean} [opts.allowPdf=true]  false → photos only (e.g. a QR code)
+ * @param {boolean} [opts.allowDocuments=false]  also Word, Excel, TXT and CSV
  * @param {number}  [opts.existing=0]     files the record already holds
  * @param {number}  [opts.max=MAX_ATTACHMENTS] files allowed in this save
  * @param {string}  [opts.noun='file']     'screenshot', 'photo' … for messages
  * @returns {{ file: object, contentType: string, ext: string, bytes: number, name: string }[]}
  */
-export function checkAttachments(files, { allowPdf = true, existing = 0, max = MAX_ATTACHMENTS, noun = 'file' } = {}) {
+export function checkAttachments(files, { allowPdf = true, allowDocuments = false, existing = 0, max = MAX_ATTACHMENTS, noun = 'file' } = {}) {
   const uploads = (Array.isArray(files) ? files : [files]).filter((f) => f?.buffer?.length);
   if (uploads.length > max) throw fail(`You can attach up to ${max} ${noun}s at a time.`);
   if (existing + uploads.length > MAX_ATTACHMENTS_PER_RECORD) {
@@ -59,8 +83,10 @@ export function checkAttachments(files, { allowPdf = true, existing = 0, max = M
     const label = name ? `"${name}"` : `A ${noun}`;
     if (file.buffer.length > MAX_ATTACHMENT_BYTES) throw fail(`${label} is too large (${mb(MAX_ATTACHMENT_BYTES)} maximum).`);
     const kind = detectKind(file.buffer);
-    const type = (kind === KIND.IMAGE || (allowPdf && kind === KIND.PDF)) ? typeOf(file.buffer, kind) : null;
+    const type = ((kind === KIND.IMAGE || (allowPdf && kind === KIND.PDF)) ? typeOf(file.buffer, kind) : null)
+      || (allowDocuments && !kind ? documentType(file.buffer, name) : null);
     if (!type) {
+      if (allowDocuments) throw fail(`${label} is not a photo (JPG, PNG, WebP), PDF, Word, Excel, TXT or CSV file.`);
       throw fail(allowPdf
         ? `${label} is not a photo (JPG, PNG, WebP) or a PDF.`
         : `${label} is not a photo (JPG, PNG or WebP).`);

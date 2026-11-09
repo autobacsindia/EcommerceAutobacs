@@ -27,6 +27,8 @@ import orderRepository from '../repositories/orderRepository.js';
 import { STAFF_TEAMS } from '../config/staff.js';
 import { countPending as countPendingBankTransfers } from './bankTransferService.js';
 import { countDueForBell as countTasksDue } from './staffTaskService.js';
+import { countTrainingForBell } from './staffTrainingService.js';
+import { countLastDaysForBell } from './staffDepartureService.js';
 import { countsFor as countReturnsFor } from './returnService.js';
 import { countUnread as countInboxUnread } from './staffTaskInboxService.js';
 
@@ -111,6 +113,28 @@ export async function summaryFor(user) {
       label: 'My tasks due or overdue',
       count: tasksDue,
       href: isAdmin(user) ? '/admin/tasks?due=late' : '/team/tasks?due=late',
+    });
+  }
+
+  // Tests to mark, sign-offs, and people out of attempts. Only when there are some.
+  const trainingWaiting = await countTrainingForBell(user);
+  if (trainingWaiting > 0) {
+    items.push({
+      key: 'training_waiting',
+      label: 'Training waiting on you',
+      count: trainingWaiting,
+      href: isAdmin(user) ? '/admin/training?view=team' : '/team/training?view=team',
+    });
+  }
+
+  // Someone's last day is close or past and their access is still on.
+  const lastDays = await countLastDaysForBell(user);
+  if (lastDays > 0) {
+    items.push({
+      key: 'last_days',
+      label: 'Last days: remove access',
+      count: lastDays,
+      href: isAdmin(user) ? '/admin/handover' : '/team/handover',
     });
   }
 

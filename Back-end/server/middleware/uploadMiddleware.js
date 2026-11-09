@@ -454,6 +454,22 @@ export const uploadPaymentProof = staffUpload().array('proof', MAX_ATTACHMENTS);
 /** Parcel proof: up to MAX_ATTACHMENTS photos or PDFs (field `photo`, repeated). */
 export const uploadProofPhotos = staffUpload().array('photo', MAX_ATTACHMENTS);
 
+const PROOF_DOCUMENTS = new Set(['docx', 'xlsx', 'txt', 'csv']);
+/**
+ * Proof for changing who is credited with an order: photos, PDFs and common
+ * documents (field `proof`). Decided by name here because Windows labels a CSV
+ * or Word file from the PC's own settings; attachmentCheck.js decides from the bytes.
+ */
+export const uploadCreditProof = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    const ext = String(file.originalname || '').toLowerCase().split('.').pop();
+    if (claimedKind(file) || PROOF_DOCUMENTS.has(ext)) return cb(null, true);
+    return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', `"${file.originalname}" is not a photo (JPG, PNG, WebP), PDF, Word, Excel, TXT or CSV file.`), false);
+  },
+  limits: { fileSize: MAX_ATTACHMENT_BYTES, files: MAX_ATTACHMENTS + 1 },
+}).array('proof', MAX_ATTACHMENTS);
+
 /** Multer errors on any staff attachment route → a 400 with words, never a 500. */
 export const handleAttachmentError = (err, req, res, next) => {
   if (!(err instanceof multer.MulterError)) return next(err);

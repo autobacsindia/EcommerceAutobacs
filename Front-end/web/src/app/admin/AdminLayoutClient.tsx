@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import {
+import { BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserRoundCog,
@@ -33,6 +33,8 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/chat', label: 'Team Chat', icon: MessagesSquare },
       { href: '/admin/tasks', label: 'Tasks', icon: ListTodo },
       { href: '/admin/lessons', label: 'Lessons', icon: GraduationCap },
+      { href: '/admin/training', label: 'Training', icon: BookOpenCheck },
+      { href: '/admin/handover', label: 'Handover', icon: Handshake },
       { href: '/admin/analytics', label: 'Analytics', icon: ChartLine },
     ],
   },

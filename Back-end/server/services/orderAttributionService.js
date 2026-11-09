@@ -16,9 +16,15 @@
  *     and the money truth for a paid order is already settled by the webhook.
  *   - compare-and-set on the seller the person SAW, so two people at once (or a
  *     stale screen) cannot silently overwrite each other.
- * Every change is kept on the order (`salesAttribution`) and in the audit log.
+ *   - proof is required for every change: at least one file, or a written note
+ *     of MIN_PROOF_NOTE characters. Checked here, so no screen or direct API call
+ *     can skip it.
+ *   - one submission (`changeId`) makes one change: a double-click or a retry
+ *     after a dropped connection gets the same result, not a second record.
+ * Every change is kept on the order (`salesAttribution`), permanently, and in the audit log.
  */
 
+import crypto from 'crypto';
 import AppError from '../utils/AppError.js';
 import auditLogger from './auditLogger.js';
 import orderRepository from '../repositories/orderRepository.js';
@@ -27,13 +33,24 @@ import { STAFF_TEAMS, canSell } from '../config/staff.js';
 import { orderNumber } from './invoiceService.js';
 import { pinnedIds, inPinOrder } from './orderPinService.js';
 import { and } from '../utils/listQuery.js';
+import { checkAttachments } from './storage/attachmentCheck.js';
+import { storeAll } from './storage/storeAll.js';
+import { putPrivateAsset, deletePrivateAsset, readPrivateAsset, resourceTypeFor } from './storage/privateUploads.js';
 import { listDateOf } from '../utils/orderListDate.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
 const PAGE_SIZE = 25;
-/** How much history one order keeps. Reassigning is rare; this is a ceiling, not a target. */
-const HISTORY_KEEP = 50;
+/**
+ * Changes one order can hold. Never trimmed — it is a permanent record — so past
+ * this the change is refused. Keeps the order safely under MongoDB's 16 MB limit;
+ * a real order is changed a handful of times.
+ */
+export const MAX_CHANGES = 500;
+/** A written note counts as proof from this length ("ok" is not proof). */
+export const MIN_PROOF_NOTE = 20;
+const MAX_NOTE = 1000;
+const PROOF_FOLDER = 'order-credit-proof'; // a PRIVATE prefix (storage/assetScope.js)
 
 const idOf = (v) => (v && v._id ? String(v._id) : v ? String(v) : null);
 const isAdmin = (u) => u?.role === 'admin';
@@ -109,6 +126,9 @@ const shapeRow = (o) => ({
   seller: o.salesUser ? { id: idOf(o.salesUser), name: o.salesUser.name || '' } : null,
   history: (o.salesAttribution || []).slice().reverse().map((h) => ({
     at: h.at, by: h.byName || '', from: h.fromName || null, to: h.toName || null, note: h.note || '',
+    // Only what the panel needs: never the storage location.
+    proofRequired: !!h.changeId,
+    files: (h.proofFiles || []).map((f) => ({ id: idOf(f._id), name: f.name || 'File', contentType: f.contentType || '', bytes: f.bytes || 0 })),
   })),
 });
 
@@ -162,31 +182,70 @@ const ROW_POPULATE = [{ path: 'user', select: 'name' }, { path: 'salesUser', sel
 export async function getWebsiteOrder(actor, orderId) {
   assertMay(actor);
   const [o] = await orderRepository.find({ _id: orderId }, { limit: 1, select: ROW_SELECT, populate: ROW_POPULATE });
-  if (!o || o.source !== 'web' || o.paymentStatus !== 'paid') return null;
+  if (!o || o.paymentStatus !== 'paid') return null;
+  // A salesman's own order can be moved from the Orders list; once it has been, its record shows here too.
+  if (o.source !== 'web' && !o.salesAttribution?.length) return null;
   return shapeRow(o);
 }
 
+const removeProof = (stored) => Promise.all(stored.map((f) =>
+  deletePrivateAsset({ publicId: f.publicId, provider: f.provider, resourceType: resourceTypeFor(f.contentType) }).catch(() => {})));
+
+const storeProof = (checked) => storeAll(checked, async ({ file, contentType, ext, name }) => {
+  const ref = await putPrivateAsset({
+    buffer: file.buffer,
+    folder: PROOF_FOLDER,
+    basename: `proof-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${ext}`,
+    contentType,
+    cloudinaryPrivate: true,
+  });
+  return { publicId: ref.publicId, provider: ref.provider, url: ref.url || '', contentType, bytes: ref.bytes, name };
+}, (f) => removeProof([f]));
+
+/** The entry this submission already wrote on `order`, if any. */
+const entryFor = (order, changeId, actor) => (order?.salesAttribution || [])
+  .find((h) => h.changeId === changeId && idOf(h.by) === idOf(actor._id));
+
+const loadRow = (orderId) => orderRepository.model.findById(orderId).populate(ROW_POPULATE).lean();
+
 /**
  * Credit (or un-credit, `salesUserId: null`) a paid website order.
- * @param {{ salesUserId: string|null, expectedSalesUserId: string|null, note?: string }} input
+ * @param {{ salesUserId: string|null, expectedSalesUserId: string|null, changeId: string, note?: string }} input
  *   `expectedSalesUserId` — the seller the person saw on screen (null = "no one").
+ *   `changeId` — made once per submission by the screen, so a retry is recognised.
+ * @param {object[]} files multer files (field `proof`) — the proof, with or instead of the note
  */
-export async function setSeller(actor, orderId, { salesUserId = null, expectedSalesUserId = null, note } = {}, req) {
+export async function setSeller(actor, orderId, { salesUserId = null, expectedSalesUserId = null, note, changeId } = {}, files = [], req) {
   assertMay(actor);
   const to = salesUserId ? String(salesUserId) : null;
   const expected = expectedSalesUserId ? String(expectedSalesUserId) : null;
   if (to === expected) throw fail('That salesman is already credited with this order.', 400);
+  if (!changeId) throw fail('Refresh the page and try again.', 400);
+
+  const text = String(note || '').trim().slice(0, MAX_NOTE);
+  const checked = checkAttachments(files, { allowDocuments: true });
+  if (!checked.length && text.replace(/\s+/g, ' ').length < MIN_PROOF_NOTE) {
+    throw fail(`Add proof: attach a file, or write at least ${MIN_PROOF_NOTE} characters explaining the change.`, 400);
+  }
+
+  const order = await orderRepository.findById(orderId, [{ path: 'salesUser', select: 'name' }]);
+  if (!order) throw fail('Order not found.', 404);
+  // A retry of a change that already went through: same answer, nothing new.
+  if (entryFor(order, changeId, actor)) return shapeRow(await loadRow(order._id));
 
   let seller = null;
   if (to) {
     seller = (await listSellers(actor)).find((s) => s.id === to);
     if (!seller) throw fail('Choose an active GTM head or GTM lead.', 400);
   }
-
-  const order = await orderRepository.findById(orderId, [{ path: 'salesUser', select: 'name' }]);
-  if (!order) throw fail('Order not found.', 404);
   if (order.paymentStatus !== 'paid') throw fail('Only a paid order\'s salesman can be changed — an unpaid one still has payment links tied to its salesman.', 409);
+  // Checked again in the write below; this one saves storing files that would only be removed.
+  if (idOf(order.salesUser) !== expected) throw fail('Someone else just changed this order. Refresh and try again.', 409);
+  if ((order.salesAttribution || []).length >= MAX_CHANGES) {
+    throw fail('This order has reached the limit of recorded changes. Please contact the admin.', 409);
+  }
 
+  const proofFiles = await storeProof(checked);
   const entry = {
     at: new Date(),
     by: actor._id,
@@ -195,22 +254,54 @@ export async function setSeller(actor, orderId, { salesUserId = null, expectedSa
     fromName: order.salesUser && idOf(order.salesUser) === expected ? order.salesUser.name || '' : '',
     to,
     toName: seller?.name || '',
-    note: String(note || '').trim().slice(0, 300),
+    note: text,
+    changeId,
+    ...(proofFiles.length && { proofFiles }),
   };
-  const updated = await orderRepository.model.findOneAndUpdate(
-    { _id: order._id, paymentStatus: 'paid', salesUser: expected },
-    {
-      $set: { salesUser: to },
-      $push: { salesAttribution: { $each: [entry], $slice: -HISTORY_KEEP } },
-    },
-    { new: true },
-  ).populate(ROW_POPULATE).lean();
-  if (!updated) throw fail('Someone else just changed this order. Refresh and try again.', 409);
+  let updated;
+  try {
+    // One atomic write: the seller, the record and the retry guard land together or not at all.
+    updated = await orderRepository.model.findOneAndUpdate(
+      {
+        _id: order._id,
+        paymentStatus: 'paid',
+        salesUser: expected,
+        'salesAttribution.changeId': { $ne: changeId },
+        [`salesAttribution.${MAX_CHANGES - 1}`]: { $exists: false },
+      },
+      { $set: { salesUser: to }, $push: { salesAttribution: entry } },
+      { new: true },
+    ).populate(ROW_POPULATE).lean();
+  } catch (err) {
+    await removeProof(proofFiles);
+    throw err;
+  }
+  if (!updated) {
+    await removeProof(proofFiles);
+    // Lost to our own double-click (it went through) or to another person (it did not).
+    const now = await loadRow(order._id);
+    if (entryFor(now, changeId, actor)) return shapeRow(now);
+    throw fail('Someone else just changed this order. Refresh and try again.', 409);
+  }
 
   auditLogger.logAction(req, 'UPDATE', 'Order', idOf(order._id), {
-    change: 'sales_attribution', from: expected, to, note: entry.note || undefined,
+    change: 'sales_attribution', from: expected, to, note: text || undefined, files: proofFiles.length, changeId,
   });
   return shapeRow(updated);
 }
 
-export default { mayAttribute, listSellers, listWebsiteOrders, getWebsiteOrder, setSeller };
+/** One proof file, streamed through us (never a public link) to those who may change credit. */
+export async function getProofFile(actor, orderId, fileId) {
+  assertMay(actor);
+  const order = await loadRow(orderId);
+  const f = (order?.salesAttribution || []).flatMap((h) => h.proofFiles || []).find((x) => idOf(x._id) === String(fileId));
+  if (!f) throw fail('File not found.', 404);
+  const buffer = await readPrivateAsset(f, async (url) => {
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`File fetch failed: ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  });
+  return { buffer, contentType: f.contentType, name: f.name || 'proof' };
+}
+
+export default { mayAttribute, listSellers, listWebsiteOrders, getWebsiteOrder, setSeller, getProofFile };

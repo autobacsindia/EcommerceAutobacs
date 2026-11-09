@@ -1,4 +1,5 @@
 'use client';
+import { articleSlugForApi } from '@/lib/articleSlug';
 import { useState, useEffect, useCallback } from 'react';
 import { MessageSquare, Send } from 'lucide-react';
 
@@ -80,7 +81,7 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
 
   const loadComments = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/media/articles/${articleSlug}/comments`);
+      const res = await fetch(`/api/v1/media/articles/${articleSlugForApi(articleSlug)}/comments`);
       const data = await res.json();
       if (data.success) setComments(data.data);
     } catch {
@@ -101,7 +102,7 @@ export default function CommentSection({ articleSlug }: { articleSlug: string })
     setSubmitting(true);
     setSubmitError('');
     try {
-      const res = await fetch(`/api/v1/media/articles/${articleSlug}/comments`, {
+      const res = await fetch(`/api/v1/media/articles/${articleSlugForApi(articleSlug)}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, parent: replyTo }),
