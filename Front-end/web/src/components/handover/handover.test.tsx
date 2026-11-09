@@ -32,7 +32,7 @@ const show = (d: Departure) => {
   get.mockImplementation((u: string) => Promise.resolve(u.endsWith('training/meta') ? { teams: [{ key: 'procurement', label: 'Procurement' }] } : u.endsWith('lessons/meta') ? { people: [] } : { departure: d }));
   wrap(<HandoverDetail id="D1" base="/team/handover" />);
 };
-const manager = { manage: true, writeNote: true };
+const manager = { manage: true, writeNote: true, handover: true };
 
 beforeEach(() => { jest.clearAllMocks(); get.mockReset(); post.mockReset(); patch.mockReset(); });
 afterEach(() => jest.restoreAllMocks());
@@ -76,10 +76,67 @@ describe('record page', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  test('a head reads the reason but has no way to change anything', async () => {
+    show(record({ reason: 'Moving city' }));
+    expect(await screen.findByText('Moving city')).toBeInTheDocument();
+    expect(screen.queryByText('They are staying')).not.toBeInTheDocument();
+    expect(screen.queryByText('Save note')).not.toBeInTheDocument();
+    expect(screen.queryByText('Start handover')).not.toBeInTheDocument();
+  });
+
   test('a record someone cannot see just says so', async () => {
     get.mockRejectedValue(new Error('404'));
     wrap(<HandoverDetail id="D1" base="/team/handover" />);
     expect(await screen.findByText(/isn't available/)).toBeInTheDocument();
+  });
+});
+
+describe('Start handover', () => {
+  const empty = { tasks: [], leads: [], quotations: [], lessons: [], orders: [] };
+  const showWork = (work: object, goesTo: object | null, moves: object[] = []) => {
+    get.mockImplementation((u: string) => Promise.resolve(u.endsWith('/work') ? { work: { ...empty, ...work }, goesTo, canStart: true, moves }
+      : u.endsWith('training/meta') ? { teams: [] } : u.endsWith('lessons/meta') ? { people: [] } : { departure: record({ reason: '', can: { manage: false, writeNote: false, handover: true } }) }));
+    wrap(<HandoverDetail id="D1" base="/team/handover" />);
+  };
+  const meena = { id: 'U2', name: 'Meena' };
+  const oneTask = { tasks: [{ id: 'T1', label: 'T-1 Call' }] };
+
+  test('nothing moves if the confirmation is refused', async () => {
+    showWork(oneTask, meena);
+    jest.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.click(await screen.findByText('Start handover'));
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  test('confirming starts it', async () => {
+    showWork(oneTask, meena);
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    post.mockResolvedValue({ result: { moved: 1, failed: 0 }, work: empty, goesTo: meena, canStart: true, moves: [] });
+    fireEvent.click(await screen.findByText('Start handover'));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/departures/D1/handover', {}));
+    expect(await screen.findByText('Nothing left to move.')).toBeInTheDocument();
+  });
+
+  test('no one to give it to: the button is off', async () => {
+    showWork(oneTask, null);
+    expect(await screen.findByText('Start handover')).toBeDisabled();
+  });
+
+  test('failures are listed with the reason', async () => {
+    showWork({ leads: [{ id: 'L1', label: 'Ravi' }] }, meena, [{ id: 'M1', kind: 'lead', label: 'Ravi', state: 'failed', error: 'Not a seller', fromName: 'A', toName: 'B', byName: 'C', at: '' }]);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Lead: Ravi: Not a seller');
+  });
+
+  test('orders are listed but do not count as work to move', async () => {
+    showWork({ orders: [{ id: 'O1', label: 'Order ending ABC', status: 'processing' }] }, meena);
+    expect(await screen.findByText(/Order ending ABC/)).toBeInTheDocument();
+    expect(screen.queryByText('Start handover')).not.toBeInTheDocument();
+  });
+
+  test('someone who is not a manager gets no panel', async () => {
+    show(record());
+    await screen.findByText('Call Ravi');
+    expect(get.mock.calls.some(([u]) => String(u).endsWith('/work'))).toBe(false);
   });
 });
 
@@ -101,12 +158,19 @@ describe('home', () => {
     expect(await screen.findByText('Taking over from Arun')).toBeInTheDocument();
   });
 
-  test('a head can open the form', async () => {
-    route([{ key: 'procurement', label: 'Procurement' }], [], [record()]);
-    wrap(<HandoverHome base="/team/handover" />);
+  test('an admin can open the form', async () => {
+    get.mockImplementation((u: string) => Promise.resolve(u.endsWith('training/meta') ? { teams: [{ key: 'procurement', label: 'Procurement' }] } : u.endsWith('/mine') ? { departures: [] } : u.endsWith('lessons/meta') ? { people: [] } : { departures: [record()], nextCursor: null, canRecord: true }));
+    wrap(<HandoverHome base="/admin/handover" />);
     fireEvent.click(await screen.findByText('Record a resignation'));
     expect(screen.getByLabelText('Who is leaving')).toBeInTheDocument();
     expect(screen.getByText('Save')).toBeDisabled();
+  });
+
+  test('a head sees their team but gets no record button', async () => {
+    get.mockImplementation((u: string) => Promise.resolve(u.endsWith('training/meta') ? { teams: [{ key: 'procurement', label: 'Procurement' }] } : u.endsWith('/mine') ? { departures: [] } : { departures: [record()], nextCursor: null, canRecord: false }));
+    wrap(<HandoverHome base="/team/handover" />);
+    expect(await screen.findByText('Arun')).toBeInTheDocument();
+    expect(screen.queryByText('Record a resignation')).not.toBeInTheDocument();
   });
 });
 

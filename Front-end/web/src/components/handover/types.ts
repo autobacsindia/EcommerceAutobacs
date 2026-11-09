@@ -19,7 +19,16 @@ export interface Departure {
   noteByName?: string;
   noteAt?: string | null;
   mine?: 'leaving' | 'taking_over';
-  can: { manage: boolean; writeNote: boolean };
+  can: { manage: boolean; writeNote: boolean; handover?: boolean };
+}
+
+export interface WorkItem { id: string; label: string; status?: string }
+export interface HandoverMove { id: string; kind: 'task' | 'lead' | 'quotation' | 'lesson'; label: string; fromName: string; toName: string; byName: string; state: 'pending' | 'moved' | 'failed'; error: string; at: string }
+export interface HandoverWork {
+  work: { tasks: WorkItem[]; leads: WorkItem[]; quotations: WorkItem[]; lessons: WorkItem[]; orders: WorkItem[] };
+  goesTo: { id: string; name: string } | null;
+  canStart: boolean;
+  moves: HandoverMove[];
 }
 
 export const dayLabel = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });

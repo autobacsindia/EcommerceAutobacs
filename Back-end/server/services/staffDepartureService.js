@@ -2,11 +2,14 @@
  * Someone is leaving: last day, private reason, replacement, handover note.
  *
  * Who may do what:
- *   record, edit, cancel, read the reason
- *            admin, or the head of the person's team. Only admin when the person
- *            leaving is a head. Nobody manages their own.
- *   read and write the handover note
- *            those managers and the person leaving.
+ *   record, edit, cancel, start the handover
+ *            admin only (canManage is the one place to widen this, for example
+ *            when an HR role exists). Team heads do not.
+ *   read a record, including the reason
+ *            admin, and the head of the person's team (read-only, to plan cover).
+ *            Not another head's record.
+ *   write the handover note
+ *            admin and the person leaving.
  *   read the handover note
  *            the named replacement. Never the reason.
  * Someone who may not see a record gets 404, so its existence does not leak.
@@ -42,13 +45,14 @@ const isHead = (u) => isActiveStaff(u) && u.staff.isHead === true;
 const inPanel = (u) => isAdmin(u) || isActiveStaff(u);
 
 /** Managing is decided from the person leaving: their team and whether they are a head. */
-const canManage = (u, d) => {
-  if (same(u._id, d.user)) return false;
-  return isAdmin(u) || (isHead(u) && u.staff.team === d.team && !d.wasHead);
-};
+const canManage = (u, d) => !same(u._id, d.user) && isAdmin(u);
+/** The person's own team head: sees it to plan cover, changes nothing. */
+const isTeamHeadOf = (u, d) => isHead(u) && u.staff.team === d.team && !d.wasHead && !same(u._id, d.user);
+export const canManageDeparture = canManage;
 const isLeaver = (u, d) => same(u._id, d.user);
 const isSuccessor = (u, d) => same(u._id, d.successor);
-const canSee = (u, d) => canManage(u, d) || isLeaver(u, d) || isSuccessor(u, d);
+const canSee = (u, d) => canManage(u, d) || isTeamHeadOf(u, d) || isLeaver(u, d) || isSuccessor(u, d);
+export const canSeeDeparture = canSee;
 const canWriteNote = (u, d) => d.status === 'open' && (canManage(u, d) || isLeaver(u, d));
 
 const dayMs = 86400000;
@@ -93,6 +97,7 @@ async function closeLeft(rows) {
 function shape(d, viewer, { full = false, today = todayIST(), left = false } = {}) {
   const status = left ? 'left' : d.status;
   const manage = canManage(viewer, d);
+  const privateView = manage || isTeamHeadOf(viewer, d);
   const live = { ...d, status };
   return {
     id: String(d._id),
@@ -105,18 +110,17 @@ function shape(d, viewer, { full = false, today = todayIST(), left = false } = {
     successor: d.successor ? { id: String(d.successor), name: d.successorName } : null,
     rev: d.rev,
     createdAt: d.createdAt,
-    ...(manage ? { reason: d.reason || '', createdByName: d.createdByName } : {}),
+    ...(privateView ? { reason: d.reason || '', createdByName: d.createdByName } : {}),
     ...(full ? { note: d.note || '', noteByName: d.noteByName, noteAt: d.noteAt } : {}),
-    can: { manage: manage && status === 'open', writeNote: canWriteNote(viewer, live) },
+    can: { manage: manage && status === 'open', writeNote: canWriteNote(viewer, live), handover: manage && status !== 'cancelled' },
   };
 }
 
-async function loadSuccessor(actor, leaverId, team, successorId) {
+async function loadSuccessor(leaverId, successorId) {
   if (!successorId) return { successor: null, successorName: '' };
   if (same(successorId, leaverId)) throw fail('Choose someone else to take over.', 400);
   const person = await userRepository.findById(successorId);
   if (!isActiveStaff(person)) throw fail('Choose an active team member to take over.', 400);
-  if (!isAdmin(actor) && person.staff.team !== team) throw fail('You can only choose someone from your own team.', 403);
   return { successor: person._id, successorName: person.name || '' };
 }
 
@@ -131,15 +135,11 @@ async function tellSuccessor(d) {
 }
 
 export async function recordDeparture(actor, input, req) {
+  if (!isAdmin(actor)) throw fail('Only an admin can record a resignation.', 403);
   const target = await userRepository.findById(input.userId);
   if (!isActiveStaff(target)) throw fail('Staff member not found.', 404);
-  if (same(target._id, actor._id)) throw fail('Someone else needs to record your resignation.', 400);
-  if (!isAdmin(actor)) {
-    if (!isHead(actor) || target.staff.team !== actor.staff.team) throw fail('You can only record this for your own team.', 403);
-    if (target.staff.isHead) throw fail('Only an administrator can record this for a team head.', 403);
-  }
   const lastDay = cleanLastDay(input.lastDay);
-  const who = await loadSuccessor(actor, target._id, target.staff.team, input.successorId);
+  const who = await loadSuccessor(target._id, input.successorId);
   let created;
   try {
     created = await repo.create({
@@ -165,6 +165,7 @@ export async function listDepartures(actor, { cursor } = {}) {
   const gone = await closeLeft(page);
   return {
     departures: page.map((d) => shape(d, actor, { left: gone.has(String(d._id)) })),
+    canRecord: isAdmin(actor),
     nextCursor: more ? Buffer.from(String(rows[PAGE_SIZE - 1]._id)).toString('base64url') : null,
   };
 }
@@ -193,10 +194,10 @@ export async function updateDeparture(actor, id, input, req) {
   const d = await load(actor, id);
   const set = {};
   if (['lastDay', 'reason', 'successorId'].some((k) => input[k] !== undefined)) {
-    if (!canManage(actor, d)) throw fail('Only the head or an admin can change this.', 403);
+    if (!canManage(actor, d)) throw fail('Only an admin can change this.', 403);
     if (input.lastDay !== undefined) set.lastDay = cleanLastDay(input.lastDay);
     if (input.reason !== undefined) set.reason = cleanReason(input.reason);
-    if (input.successorId !== undefined) Object.assign(set, await loadSuccessor(actor, d.user, d.team, input.successorId));
+    if (input.successorId !== undefined) Object.assign(set, await loadSuccessor(d.user, input.successorId));
   }
   if (input.note !== undefined) {
     if (!canWriteNote(actor, d)) throw fail('You cannot change this note.', 403);
@@ -212,7 +213,7 @@ export async function updateDeparture(actor, id, input, req) {
 
 export async function cancelDeparture(actor, id, req) {
   const d = await load(actor, id);
-  if (!canManage(actor, d)) throw fail('Only the head or an admin can change this.', 403);
+  if (!canManage(actor, d)) throw fail('Only an admin can change this.', 403);
   const updated = await repo.cancel(d._id);
   if (!updated) throw fail('This is already closed.', 409);
   auditLogger.logAction(req, 'UPDATE', 'StaffDeparture', d._id, { change: 'cancelled' });

@@ -28,6 +28,7 @@ const StaffDepartureSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     createdByName: { type: String, default: '' },
     rev: { type: Number, default: 0 },
+    handoverLockedUntil: { type: Date, default: null },
   },
   { timestamps: true },
 );

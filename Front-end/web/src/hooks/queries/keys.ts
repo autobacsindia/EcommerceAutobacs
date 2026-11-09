@@ -268,6 +268,7 @@ export const handoverKeys = {
   list: () => [...handoverKeys.all, 'list'] as const,
   mine: () => [...handoverKeys.all, 'mine'] as const,
   one: (id: string) => [...handoverKeys.all, 'one', id] as const,
+  work: (id: string) => [...handoverKeys.all, 'work', id] as const,
 };
 
 export const trainingKeys = {

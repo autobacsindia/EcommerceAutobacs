@@ -2,6 +2,7 @@
  * Resignations and handovers over HTTP. Push is a double; everything else is real.
  *
  * What must hold:
+ *   - only an admin records, edits or cancels; a head is refused and can only read
  *   - the reason reaches only admin and the person's head (admin only for a head)
  *   - the person leaving and the replacement see the record but never the reason
  *   - another team, and anyone unrelated, gets 404
@@ -83,7 +84,7 @@ describe('Departures', () => {
   });
 
   const inDays = (n) => new Date(Date.parse(`${todayIST()}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
-  const record = async (by = head, over = {}) => {
+  const record = async (by = admin, over = {}) => {
     const r = await by.s.post('', { userId: leaver.id, lastDay: inDays(20), reason: 'Moving city', successorId: next.id, ...over });
     expect(r.status).toBe(201);
     return r.body.departure;
@@ -112,11 +113,29 @@ describe('Departures', () => {
     expect((await peer.s.post('', { userId: leaver.id, lastDay: inDays(5) })).status).toBe(403);
   });
 
-  test('a head cannot record for another team, for a head, or for themselves', async () => {
-    expect((await otherHead.s.post('', { userId: leaver.id, lastDay: inDays(5) })).status).toBe(403);
-    const second = await makeUser('SecondHead', 'staff', procurement({ isHead: true }));
-    expect((await head.s.post('', { userId: second.id, lastDay: inDays(5) })).status).toBe(403);
-    expect((await head.s.post('', { userId: head.id, lastDay: inDays(5) })).status).toBe(400);
+  test('a team head can read their team but is refused every change, even by direct call', async () => {
+    const refused = await head.s.post('', { userId: leaver.id, lastDay: inDays(5) });
+    expect(refused.status).toBe(403);
+    expect(await StaffDeparture.countDocuments({})).toBe(0);
+    const d = await record();
+    const seen = await head.s.get(`/${d.id}`);
+    expect(seen.status).toBe(200);
+    expect(seen.body.departure.can).toEqual({ manage: false, writeNote: false, handover: false });
+    const list = await head.s.get('');
+    expect(list.body.departures).toHaveLength(1);
+    expect(list.body.canRecord).toBe(false);
+    expect((await head.s.patch(`/${d.id}`, { rev: d.rev, lastDay: inDays(1) })).status).toBe(403);
+    expect((await head.s.patch(`/${d.id}`, { rev: d.rev, note: 'x' })).status).toBe(403);
+    expect((await head.s.post(`/${d.id}/cancel`)).status).toBe(403);
+    expect((await StaffDeparture.findById(d.id).lean()).rev).toBe(d.rev);
+  });
+
+  test('an admin records, edits and cancels', async () => {
+    const d = await record();
+    const e = await admin.s.patch(`/${d.id}`, { rev: d.rev, lastDay: inDays(2) });
+    expect(e.status).toBe(200);
+    expect((await admin.s.post(`/${d.id}/cancel`)).status).toBe(200);
+    expect((await admin.s.get('')).body.canRecord).toBe(true);
   });
 
   test('a leaving head is visible to admin only, including the same-team head and the list', async () => {
@@ -137,26 +156,25 @@ describe('Departures', () => {
 
   test('only one open record, even when two arrive together', async () => {
     const body = { userId: leaver.id, lastDay: inDays(9) };
-    const res = await Promise.all([head.s.post('', body), admin.s.post('', body)]);
+    const res = await Promise.all([admin.s.post('', body), admin.s.post('', body)]);
     expect(res.map((r) => r.status).sort()).toEqual([201, 409]);
     expect(await StaffDeparture.countDocuments({ user: leaver.id })).toBe(1);
   });
 
   test.each([['not a date', 'soon'], ['impossible', '2026-02-31'], ['far past', '2020-01-01'], ['far future', '2099-01-01']])('rejects a last day that is %s', async (_n, lastDay) => {
-    expect((await head.s.post('', { userId: leaver.id, lastDay })).status).toBe(400);
+    expect((await admin.s.post('', { userId: leaver.id, lastDay })).status).toBe(400);
   });
 
-  test('the replacement must be someone else, active, and in the team for a head', async () => {
-    expect((await head.s.post('', { userId: leaver.id, lastDay: inDays(5), successorId: leaver.id })).status).toBe(400);
-    expect((await head.s.post('', { userId: leaver.id, lastDay: inDays(5), successorId: outsider.id })).status).toBe(403);
+  test('the replacement must be someone else and active', async () => {
+    expect((await admin.s.post('', { userId: leaver.id, lastDay: inDays(5), successorId: leaver.id })).status).toBe(400);
     expect((await admin.s.post('', { userId: leaver.id, lastDay: inDays(5), successorId: outsider.id })).status).toBe(201);
   });
 
   test('a replacement can be named later and is told', async () => {
-    const d = await record(head, { successorId: '' });
+    const d = await record(admin, { successorId: '' });
     expect(d.successor).toBeNull();
     expect(pushed).toHaveLength(0);
-    const r = await head.s.patch(`/${d.id}`, { rev: d.rev, successorId: next.id });
+    const r = await admin.s.patch(`/${d.id}`, { rev: d.rev, successorId: next.id });
     expect(r.body.departure.successor.id).toBe(next.id);
     expect(pushed).toHaveLength(1);
   });
@@ -174,20 +192,20 @@ describe('Departures', () => {
 
   test('a stale edit is refused', async () => {
     const d = await record();
-    expect((await head.s.patch(`/${d.id}`, { rev: d.rev, reason: 'One' })).status).toBe(200);
+    expect((await admin.s.patch(`/${d.id}`, { rev: d.rev, reason: 'One' })).status).toBe(200);
     expect((await admin.s.patch(`/${d.id}`, { rev: d.rev, reason: 'Two' })).status).toBe(409);
   });
 
   test('cancelled: can be recorded again, and cannot be cancelled twice', async () => {
     const d = await record();
-    expect((await head.s.post(`/${d.id}/cancel`)).status).toBe(200);
-    expect((await head.s.post(`/${d.id}/cancel`)).status).toBe(409);
+    expect((await admin.s.post(`/${d.id}/cancel`)).status).toBe(200);
+    expect((await admin.s.post(`/${d.id}/cancel`)).status).toBe(409);
     await record();
   });
 
   describe('bell and closing', () => {
     test('only within 3 days, and only for the right people', async () => {
-      await record(head, { lastDay: inDays(4) });
+      await record(admin, { lastDay: inDays(4) });
       expect(await countLastDaysForBell(head.user)).toBe(0);
       await StaffDeparture.updateOne({ user: leaver.id }, { lastDay: inDays(3) });
       expect(await countLastDaysForBell(head.user)).toBe(1);
@@ -197,20 +215,20 @@ describe('Departures', () => {
     });
 
     test('a past last day keeps reminding until access is removed, then closes', async () => {
-      const d = await record(head, { lastDay: inDays(-2) });
+      const d = await record(admin, { lastDay: inDays(-2) });
       expect(await countLastDaysForBell(head.user)).toBe(1);
       await User.updateOne({ _id: leaver.id }, { role: 'customer', 'staff.active': false });
       expect(await countLastDaysForBell(head.user)).toBe(0);
       expect((await StaffDeparture.findById(d.id).lean()).status).toBe('left');
-      const r = await head.s.get(`/${d.id}`);
+      const r = await admin.s.get(`/${d.id}`);
       expect(r.body.departure.status).toBe('left');
-      expect(r.body.departure.can).toEqual({ manage: false, writeNote: false });
+      expect(r.body.departure.can).toEqual({ manage: false, writeNote: false, handover: true });
     });
 
     test('the list shows someone who has lost access as left', async () => {
       await record();
       await User.updateOne({ _id: leaver.id }, { role: 'customer', 'staff.active': false });
-      expect((await head.s.get('')).body.departures[0].status).toBe('left');
+      expect((await admin.s.get('')).body.departures[0].status).toBe('left');
     });
   });
 
@@ -218,14 +236,14 @@ describe('Departures', () => {
     const people = [];
     for (let i = 0; i < 26; i += 1) people.push({ user: leaver.user._id, userName: `P${i}`, team: 'procurement', lastDay: inDays(20), status: 'cancelled', wasHead: false, createdBy: admin.user._id });
     await StaffDeparture.collection.insertMany(people);
-    const first = await head.s.get('');
+    const first = await admin.s.get('');
     expect(first.body.departures).toHaveLength(24);
-    const second = await head.s.get(`?cursor=${first.body.nextCursor}`);
+    const second = await admin.s.get(`?cursor=${first.body.nextCursor}`);
     expect(second.body.departures).toHaveLength(2);
     expect(second.body.nextCursor).toBeNull();
   });
 
   test('a bad cursor is a 400', async () => {
-    expect((await head.s.get('?cursor=nope')).status).toBe(400);
+    expect((await admin.s.get('?cursor=nope')).status).toBe(400);
   });
 });
