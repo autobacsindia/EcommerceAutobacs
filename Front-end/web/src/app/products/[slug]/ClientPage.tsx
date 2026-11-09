@@ -1,7 +1,7 @@
 'use client';
 
 import type { StockStatus } from '@/lib/stock';
-import { Suspense, useState, useEffect, useRef } from 'react';
+import { Fragment, Suspense, useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -9,6 +9,7 @@ import { ChevronRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Reviews } from '@/components/reviews';
 import apiClient from '@/lib/api';
+import { productBreadcrumbs } from '@/lib/productBreadcrumbs';
 import { productKeys } from '@/hooks/queries/keys';
 import { trackProductView } from '@/lib/analytics';
 import { trackViewContent } from '@/lib/metaPixel';
@@ -193,8 +194,6 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
   const whyChoose = product.whyChoose ?? [];
   const packageContents = product.packageContents ?? [];
   const specifications = product.specifications ?? [];
-  const categoryName = typeof product.category === 'object' ? product.category?.name : product.category;
-  const categorySlug = typeof product.category === 'object' ? product.category?.slug : undefined;
 
   const renderTitledItem = (item: string, index: number) => {
     let title: string | null = null;
@@ -227,19 +226,16 @@ export function ProductDetailPageClient({ product }: { product: Product | null }
       <div className="mx-auto max-w-[1400px] px-3 py-4 sm:px-6 sm:py-6">
         {/* Breadcrumb */}
         <nav className="sp-crumbs" aria-label="Breadcrumb">
-          <Link href="/">Home</Link>
-          <ChevronRight className="h-3 w-3" />
-          <Link href="/products">Products</Link>
-          {categoryName && (
-            <>
-              <ChevronRight className="h-3 w-3" />
-              <Link href={categorySlug ? `/categories/${categorySlug}` : '/products'} className="hover:text-gold">
-                {categoryName}
-              </Link>
-            </>
-          )}
-          <ChevronRight className="h-3 w-3" />
-          <span className="line-clamp-1 font-semibold text-ink/80">{product.name}</span>
+          {productBreadcrumbs(product).map((crumb, index) => (
+            <Fragment key={`${crumb.label}-${index}`}>
+              {index > 0 && <ChevronRight className="h-3 w-3" />}
+              {crumb.href ? (
+                <Link href={crumb.href}>{crumb.label}</Link>
+              ) : (
+                <span aria-current="page" className="line-clamp-1 font-semibold text-ink/80">{crumb.label}</span>
+              )}
+            </Fragment>
+          ))}
         </nav>
 
         {/* Gallery + Buy box */}

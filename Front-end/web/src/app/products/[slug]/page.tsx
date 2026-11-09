@@ -7,6 +7,7 @@ import { isOutOfStock, getStockStatus } from '@/lib/stock';
 import { resolveSeo } from '@/lib/seo';
 import { applyFestivalOffer, getFestivalOffer, isOfferLive } from '@/lib/festival/festivalOffer';
 import { SITE_URL } from '@/lib/siteUrl';
+import { productBreadcrumbJsonLd } from '@/lib/productBreadcrumbs';
 import { resolveLegacyTarget } from '@/lib/legacyTargetServer';
 
 import { productSlugsForPrerender } from '@/lib/staticParams';
@@ -267,36 +268,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   } : null;
 
   // Build breadcrumb schema for enhanced search navigation
-  const breadcrumbSchema = product?.slug ? {
-    '@context': 'https://schema.org',
-    '@type': 'BreadcrumbList',
-    '@id': `${SITE_URL}/products/${product.slug}#breadcrumb`,  // Entity ID
-    itemListElement: [
-      {
-        '@type': 'ListItem',
-        position: 1,
-        name: 'Home',
-        item: SITE_URL,
-      },
-      {
-        '@type': 'ListItem',
-        position: 2,
-        name: 'Products',
-        item: `${SITE_URL}/products`,
-      },
-      ...(product.category ? [{
-        '@type': 'ListItem',
-        position: 3,
-        name: typeof product.category === 'string' ? product.category : product.category.name,
-        item: `${SITE_URL}/categories/${typeof product.category === 'string' ? product.category : product.category.slug}`,
-      }] : []),
-      {
-        '@type': 'ListItem',
-        position: product.category ? 4 : 3,
-        name: product.name,
-      },
-    ],
-  } : null;
+  const breadcrumbSchema = product?.slug ? productBreadcrumbJsonLd(product, SITE_URL) : null;
 
   return (
     <>
