@@ -40,14 +40,14 @@ function BoardCard({ t, base, status, onOpen, onMove, moving, onTag, activeTag, 
       aria-label={`Open ${t.code}: ${t.title}`}
       data-late={late || undefined}
       data-dragging={dragging || undefined}
-      className={`tk-card tk-more-host group rounded-lg bg-white px-2.5 py-2 focus:outline-none ${
+      className={`tk-card tk-more-host group rounded-lg bg-white px-3 py-2.5 focus:outline-none ${
         t.can.status ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
       } ${busy ? 'opacity-60' : ''}`}
     >
       <div className="flex items-start gap-2">
         <span className="mt-px"><CompleteButton t={t} busy={busy} onToggle={() => onMove(t, done ? 'todo' : 'done')} /></span>
-        <p className={`line-clamp-3 min-w-0 flex-1 break-words text-[13px] font-medium leading-snug ${done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</p>
-        <span className="mt-0.5 shrink-0 whitespace-nowrap font-mono text-[10px] text-gray-400">{t.code}</span>
+        <p className={`line-clamp-3 min-w-0 flex-1 break-words text-sm font-semibold leading-snug ${done ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{t.title}</p>
+        <span className="mt-0.5 shrink-0 whitespace-nowrap font-mono text-[11px] text-gray-500">{t.code}</span>
       </div>
       {t.tags?.length > 0 && <div className="mt-1.5 pl-[26px]"><TagList tags={t.tags} onTag={onTag} activeTag={activeTag} max={3} /></div>}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-[26px] empty:hidden">
@@ -171,13 +171,14 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base }:
               data-status={col.value}
               data-over={over === col.value}
               // A wide screen: each column scrolls on its own under its heading, ClickUp-style.
-              className="tk-col flex w-[272px] shrink-0 snap-start flex-col rounded-xl transition-[background-color,box-shadow] md:w-auto md:min-w-[236px] md:flex-1 lg:max-h-[calc(100dvh-15.5rem)] lg:min-h-64"
+              className="tk-col flex w-[272px] shrink-0 snap-start flex-col rounded-xl transition-[background-color,box-shadow] md:w-auto md:min-w-[236px] md:flex-1 lg:max-h-[calc(100dvh-11rem)] lg:min-h-64"
             >
               <h3 className="flex items-center gap-2 px-2.5 pb-2 pt-2.5">
                 <GroupPill status={col.value}>{col.label}</GroupPill>
                 <GroupCount status={col.value}>{cards.length}</GroupCount>
               </h3>
-              <ul className="min-h-16 flex-1 space-y-1.5 overflow-y-auto px-2 pb-1 [scrollbar-width:thin]">
+              {cards.length === 0 && <p className="px-3 py-2 text-center text-xs text-gray-500">No tasks here</p>}
+              <ul className="min-h-4 flex-1 space-y-1.5 overflow-y-auto px-2 pb-1 [scrollbar-width:thin]">
                 {cards.map((t) => (
                   <BoardCard
                     key={t.id} t={t} base={base} status={statusOf(t)} onOpen={onOpen} onMove={onMove}
@@ -201,12 +202,6 @@ export default function TaskBoard({ filters, onOpen, quickAddFor, onTag, base }:
           {open.isFetchingNextPage ? 'Loading…' : 'Load more tasks'}
         </button>
       )}
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-        <span>Drag a card to another column to change its status. On a phone, use “Move to” on the card.</span>
-        <span className="hidden items-center gap-1 md:inline-flex"><Kbd>N</Kbd> new task</span>
-        <span className="hidden items-center gap-1 md:inline-flex"><Kbd>/</Kbd> search</span>
-        <span className="hidden items-center gap-1 md:inline-flex"><Kbd>?</Kbd> all shortcuts</span>
-      </p>
     </div>
   );
 }

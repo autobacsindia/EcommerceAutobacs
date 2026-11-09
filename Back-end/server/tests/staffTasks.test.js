@@ -20,6 +20,7 @@
  *   - the bell counts open tasks due by today (IST), and only for the assignee
  */
 import { jest } from '@jest/globals';
+import staffTaskRepository from '../repositories/staffTaskRepository.js';
 import mongoose from 'mongoose';
 
 jest.setTimeout(120000);
@@ -597,6 +598,26 @@ describe('one task for several people', () => {
     expect((await tasks.getTask(procA, a.id)).siblings.map((s) => s.assignee.name)).toEqual(['Bala']);
     // A plain task has none.
     expect((await tasks.getTask(procA, (await make(procA)).id)).siblings).toEqual([]);
+  });
+
+  it('the picker puts your latest picks after you, newest first, for you alone', async () => {
+    await make(procA, { assigneeId: String(salesA._id) });
+    await make(procA, { assigneeId: String(procB._id) });
+    await make(procA, { assigneeId: String(salesA._id) });
+    await make(procA, { assigneeId: String(salesHead._id) });
+    const mine = (await tasks.listAssignees(procA)).map((p) => p.name);
+    expect(mine.slice(0, 4)).toEqual([procA, salesHead, salesA, procB].map((u) => u.name));
+    // Someone else's picks are untouched by that.
+    const theirs = await tasks.listAssignees(salesA);
+    expect(theirs[0].name).toBe(salesA.name);
+    expect(theirs[1].isHead).toBe(true);
+  });
+
+  it('a failed history read still lists everyone, in the usual order', async () => {
+    const before = (await tasks.listAssignees(admin)).map((p) => p.name);
+    const spy = jest.spyOn(staffTaskRepository, 'findRecentlyCreatedPeople').mockRejectedValueOnce(new Error('timed out'));
+    expect((await tasks.listAssignees(admin)).map((p) => p.name)).toEqual(before);
+    spy.mockRestore();
   });
 
   it('the picker lists you first, then team heads, then everyone else by name', async () => {

@@ -75,7 +75,7 @@ function HowItWorks({ onHide }: { onHide: () => void }) {
         <p className="font-semibold text-gray-900">How tasks work</p>
         <p className="mt-0.5 leading-relaxed">
           Press <strong>New task</strong> (or the N key), choose who should do it — yourself or anyone in the panel — and pick a due date.
-          They get a pop-up and find it under <strong>My tasks</strong>; the tasks you gave to others are under <strong>Assigned by me</strong>. Tick the circle when a job is done; open a task to comment, add steps or change it.
+          They get a pop-up and find it under <strong>My tasks</strong>; the tasks you gave to others are under <strong>Assigned by me</strong>. On the board, drag a card to change its status (on a phone, use <strong>Move to</strong>). Tick the circle when a job is done; open a task to comment, add steps or change it.
         </p>
       </div>
       <button onClick={onHide} aria-label="Hide how tasks work" className="absolute right-2 top-2 rounded-md p-1 text-gray-500 hover:bg-blue-100 hover:text-gray-800">
@@ -308,10 +308,8 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
       { keys: ['?'], label: 'Show these shortcuts' },
     ] },
   ];
-  const navItem = 'tk-menu-item inline-flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 max-lg:border max-lg:border-gray-200 max-lg:bg-white lg:min-h-8 lg:rounded-md lg:px-2 lg:py-1.5';
-  const sectionLabel = 'hidden px-2 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 lg:block';
-  // Where you are, ClickUp-style: Tasks › My work (or Team / a space) › this list.
-  const crumbSection = view === 'team' && !inOther ? (listTitle && spaceLabel ? spaceLabel : isAdmin ? 'Spaces' : 'Team') : 'My work';
+  const navItem = 'tk-menu-item inline-flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-100 max-lg:border max-lg:border-gray-200 max-lg:bg-white lg:min-h-8 lg:rounded-md lg:px-2 lg:py-1.5';
+  const sectionLabel = 'hidden px-2 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500 lg:block';
   const personal = views.filter((v) => v.value !== 'team');
   const teamViews = views.filter((v) => v.value === 'team');
   const viewButton = (v: (typeof views)[number]) => {
@@ -333,10 +331,6 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
         aria-label="Task lists"
         className="tk-side relative flex gap-1.5 overflow-x-auto border-b px-3 py-2.5 [scrollbar-width:none] [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)] lg:[mask-image:none] md:px-5 lg:sticky lg:top-14 lg:h-[calc(100dvh-3.5rem)] lg:w-56 lg:shrink-0 lg:flex-col lg:gap-0 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-2 lg:py-3"
       >
-        <p className="hidden items-center gap-2 px-2 pb-3 lg:flex">
-          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-sm"><ListTodo aria-hidden className="h-3.5 w-3.5" /></span>
-          <span className="text-sm font-bold text-gray-900">Tasks</span>
-        </p>
         <div className="flex gap-1.5 lg:flex-col lg:gap-px" role="group" aria-label="Whose tasks">
           <button aria-pressed={inInbox} onClick={() => setList({ view: 'inbox', team: '', list: '' })} className={navItem}>
             <BellDot aria-hidden className="hidden h-4 w-4 text-gray-500 lg:block" />Inbox
@@ -413,45 +407,25 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
         </button>
       </nav>
 
-      <div className="min-w-0 flex-1 space-y-3 px-3 py-3 md:px-5 lg:px-6 lg:py-4">
-        <header className="tk-line flex flex-wrap items-end gap-x-3 gap-y-2 border-b">
-          <div className="min-w-0 flex-1 pb-2">
-            <nav aria-label="Breadcrumb" className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-500">
-              <button onClick={() => setView('mine')} className="rounded px-0.5 hover:text-gray-900 hover:underline">Tasks</button>
-              <ChevronRight aria-hidden className="h-3 w-3 text-gray-400" />
-              {!inTrash && (listTitle && spaceTeam
-                ? <button onClick={() => pickList(spaceTeam, '')} className="rounded px-0.5 hover:text-gray-900 hover:underline">{crumbSection}</button>
-                : <span>{crumbSection}</span>)}
-              {!inTrash && <ChevronRight aria-hidden className="h-3 w-3 text-gray-400" />}
-              {shownList?.folderName && <><span className="truncate">{shownList.folderName}</span><ChevronRight aria-hidden className="h-3 w-3 text-gray-400" /></>}
-              <span aria-current="page" className="truncate text-gray-700">{title}</span>
-            </nav>
-            <h1 className="pn-title flex flex-wrap items-center gap-2 text-xl text-gray-900">
+      <div className="min-w-0 flex-1 space-y-2 px-3 py-2 md:px-4 lg:px-5 lg:py-2">
+        {listTitle && spaceTeam && (
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-xs font-medium text-gray-600">
+            <button onClick={() => pickList(spaceTeam, '')} className="rounded px-0.5 hover:text-gray-900 hover:underline">{spaceLabel || 'Team'}</button>
+            <ChevronRight aria-hidden className="h-3 w-3 text-gray-500" />
+            {shownList?.folderName && <><span className="truncate">{shownList.folderName}</span><ChevronRight aria-hidden className="h-3 w-3 text-gray-500" /></>}
+            <span aria-current="page" className="truncate text-gray-900">{title}</span>
+          </nav>
+        )}
+        <header className="tk-line flex flex-wrap items-center gap-x-3 gap-y-1 border-b lg:flex-nowrap">
+          <div className="order-1 min-w-0 flex-1 lg:w-0 lg:flex-none">
+            <h1 className="pn-title flex flex-wrap items-center gap-2 text-base text-gray-900 lg:sr-only">
               {listTitle
                 ? <span aria-hidden className={`h-3 w-3 rounded-full ${list === 'none' ? 'border-2 border-gray-400' : dotOf(shownList?.colour)}`} />
                 : space && <span aria-hidden className={`flex h-7 w-7 items-center justify-center rounded-lg text-sm font-bold ${teamColour(space.value)}`}>{space.label[0]}</span>}
               {title}
-              {!inOther && help.hidden && (
-                <button onClick={help.show} aria-label="Show how tasks work" title="How tasks work" className="rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
-                  <CircleHelp aria-hidden className="h-4 w-4" />
-                </button>
-              )}
             </h1>
-            <p className="mt-0.5 text-[13px] text-gray-500">
-              {inInbox ? 'What happened on your tasks: new tasks, status changes, comments and mentions.'
-                : inAssigned ? 'Comments someone has asked you to act on. Resolve each one when it is done.'
-                : inOverview ? 'How the team’s work stands right now.'
-                : inTrash ? 'Deleted tasks. Restore any of them — nothing here is lost.'
-                : view === 'personal' ? 'Private to you: nobody else can see these tasks, not even the admin.'
-                : view === 'created' ? 'Jobs you gave to others, and how far they have got.'
-                : view === 'following' ? 'Tasks you watch without doing them: you hear about every change.'
-                : list === 'none' ? `Tasks in ${spaceLabel || 'the team'} that are not in any list yet.`
-                : listTitle ? 'New tasks made here go straight into this list.'
-                : view === 'team' ? (space ? `Open work in ${space.label}.` : isAdmin ? 'Every team’s open work.' : 'Everything your team is working on.')
-                  : 'Who has to do what, and by when.'}
-            </p>
           </div>
-          {!inOther && <div className="order-last -mt-1 flex basis-full gap-1" role="tablist" aria-label="Show as">
+          {!inOther && <div className="order-3 flex basis-full gap-1 lg:order-2 lg:shrink-0 lg:basis-auto" role="tablist" aria-label="Show as">
             {([['list', 'List', List], ['board', 'Board', Columns3]] as const).map(([value, label, Icon]) => (
               <button
                 key={value}
@@ -467,25 +441,43 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
               </button>
             ))}
           </div>}
-          <div className="ml-auto flex items-center gap-2 pb-2">
+        {!inOther && view === 'mine' && (
+          <div className="order-4 grid basis-full grid-cols-2 gap-1.5 pb-2 lg:order-3 lg:flex lg:min-w-0 lg:shrink lg:basis-auto lg:pb-1.5" role="group" aria-label="Your numbers">
+            <StatTile compact icon={TriangleAlert} label="Late" value={late} tone="red" onClick={showDueNow} pressed={dueNow} />
+            <StatTile compact icon={AlarmClock} label="Due today" value={today} tone="amber" onClick={showDueNow} pressed={dueNow} />
+            <StatTile compact icon={Zap} label="In progress" value={summary.data?.inProgress ?? 0} tone="sky" />
+            <StatTile compact icon={CircleCheck} label="Done this week" value={summary.data?.doneWeek ?? 0} tone="green" />
+          </div>
+        )}
+          <div className="order-2 ml-auto flex shrink-0 items-center gap-1.5 pb-1.5 lg:order-4">
           <TimerChip onOpen={setOpenId} />
+          {!inOther && help.hidden && (
+            <button onClick={help.show} aria-label="Show how tasks work" title="How tasks work" className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900">
+              <CircleHelp aria-hidden className="h-4 w-4" />
+            </button>
+          )}
           <button onClick={() => setShortcuts(true)} title="Keyboard shortcuts (?)" aria-label="Show keyboard shortcuts" className="hidden h-9 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 md:inline-flex lg:hidden">
             <Keyboard aria-hidden className="h-4 w-4" /><Kbd>?</Kbd>
           </button>
           <button onClick={() => setCreating(true)} className="tk-primary inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-3.5 text-sm font-semibold text-white shadow-sm transition-[background-color,transform] hover:bg-blue-700 active:scale-[0.98]" title="New task (N)">
-            <Plus className="h-4 w-4" /> New task <span className="hidden sm:contents"><Kbd className="border-transparent! bg-white/20! text-white! shadow-none!">N</Kbd></span>
+            <Plus className="h-4 w-4" /> New task <span className="hidden xl:contents"><Kbd className="border-transparent! bg-white/20! text-white! shadow-none!">N</Kbd></span>
           </button>
           </div>
         </header>
+          <p className={!inOther && view === 'personal' ? 'text-[13px] text-gray-600' : 'sr-only'}>
+            {inInbox ? 'What happened on your tasks: new tasks, status changes, comments and mentions.'
+              : inAssigned ? 'Comments someone has asked you to act on. Resolve each one when it is done.'
+              : inOverview ? 'How the team’s work stands right now.'
+              : inTrash ? 'Deleted tasks. Restore any of them — nothing here is lost.'
+              : view === 'personal' ? 'Private to you: nobody else can see these tasks, not even the admin.'
+              : view === 'created' ? 'Jobs you gave to others, and how far they have got.'
+              : view === 'following' ? 'Tasks you watch without doing them: you hear about every change.'
+              : list === 'none' ? `Tasks in ${spaceLabel || 'the team'} that are not in any list yet.`
+              : listTitle ? 'New tasks made here go straight into this list.'
+              : view === 'team' ? (space ? `Open work in ${space.label}.` : isAdmin ? 'Every team’s open work.' : 'Everything your team is working on.')
+                : 'Who has to do what, and by when.'}
+          </p>
         <TimerNotice onOpen={setOpenId} />
-        {!inOther && view === 'mine' && (
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4" role="group" aria-label="Your numbers">
-            <StatTile icon={TriangleAlert} label="Late" value={late} tone="red" onClick={showDueNow} pressed={dueNow} />
-            <StatTile icon={AlarmClock} label="Due today" value={today} tone="amber" onClick={showDueNow} pressed={dueNow} />
-            <StatTile icon={Zap} label="In progress" value={summary.data?.inProgress ?? 0} tone="sky" />
-            <StatTile icon={CircleCheck} label="Done this week" value={summary.data?.doneWeek ?? 0} tone="green" />
-          </div>
-        )}
 
         {inInbox ? (
           <InboxView filter={inboxFilter} onFilter={setInboxFilter} openId={openId} onOpen={setOpenId} />
@@ -497,7 +489,7 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
         {!help.hidden && !inTrash && <HowItWorks onHide={help.hide} />}
 
         <div className="flex flex-wrap items-center gap-2">
-          <label className="relative flex min-w-0 flex-1 basis-56 items-center sm:max-w-xs">
+          <label className="relative flex min-w-0 flex-1 basis-44 items-center sm:max-w-[15rem]">
             <Search aria-hidden className="pointer-events-none absolute left-2.5 h-4 w-4 text-gray-400" />
             <input
               ref={searchRef}
@@ -567,8 +559,8 @@ export default function TasksWorkspace({ base, canSeeTeam, myTeam = null, myTeam
           )}
           {narrowed && <button onClick={clear} className="col-span-2 shrink-0 justify-self-start whitespace-nowrap text-sm font-medium text-blue-700 hover:underline">Clear all</button>}
           </div>}
+          {counted && !inTrash && <span className="ml-auto shrink-0 [&>*]:mb-0"><ListResultLine count={counted.count} capped={counted.capped} noun={['open task', 'open tasks']} /></span>}
         </div>
-        {counted && !inTrash && <ListResultLine count={counted.count} capped={counted.capped} noun={['open task', 'open tasks']} />}
 
         {inTrash ? (
           <TrashList filters={filters} base={base} onOpen={setOpenId} />

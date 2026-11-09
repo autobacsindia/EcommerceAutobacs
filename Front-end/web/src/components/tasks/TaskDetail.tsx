@@ -743,7 +743,7 @@ export default function TaskDetail({ id, base, onClose, onOpen, nav }: {
 
       {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <section>
+      <section className="max-w-[90ch]">
         <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900"><AlignLeft aria-hidden className="h-4 w-4 text-gray-500" /> Description</h3>
         <InlineRichText
           value={task.description || ''}

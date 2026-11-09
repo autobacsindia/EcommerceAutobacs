@@ -8,7 +8,7 @@ import type { Assignee } from './types';
 
 /**
  * Pick people: a search box ("Search or enter name…"), you at the top, then
- * everyone else as the API orders them (team heads first). Arrow keys move,
+ * everyone else as the API orders them (your recent picks, then team heads). Arrow keys move,
  * Enter ticks or unticks, Escape closes. Several may be ticked.
  *
  * `people` is who may be picked (the API decides); someone already ticked who is

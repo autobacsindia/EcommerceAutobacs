@@ -74,21 +74,16 @@ export function PriorityFlag({ priority, withLabel = false }: { priority: TaskPr
 // ── People ───────────────────────────────────────────────────────────────────
 
 /*
-  Solid faces with white initials (`.tk-face` in tasks.css). Each colour carries
-  white at 4.5:1 or better, and reads on a dark page too, so no dark-mode remap.
+  Anyone without a photo gets the same solid violet with white initials
+  (`.tk-face` in tasks.css). A fixed value, not a theme variable: dark mode
+  lightens the theme violets, which would make white initials unreadable.
+  White on this is 5.1:1; the lighter brand #7b68ee is only 4.2:1 at this tiny size.
 */
-const AVATAR_COLOURS = ['#0f766e', '#b45309', '#7e22ce', '#be123c', '#0369a1', '#4338ca', '#c2410c', '#047857'];
+export const AVATAR_COLOUR = '#6a57e3';
 
 export const initialsOf = (name: string) => {
   const parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
   return ((parts[0]?.[0] ?? '?') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
-};
-
-/** The same person always gets the same colour. */
-export const colourFor = (key: string) => {
-  let h = 0;
-  for (const ch of String(key)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return AVATAR_COLOURS[h % AVATAR_COLOURS.length];
 };
 
 export function Avatar({ name, id, size = 'sm' }: { name: string; id?: string; size?: 'xs' | 'sm' | 'md' }) {
@@ -97,7 +92,7 @@ export function Avatar({ name, id, size = 'sm' }: { name: string; id?: string; s
   return (
     <span
       title={name}
-      style={{ background: colourFor(id || name) }}
+      style={{ background: AVATAR_COLOUR }}
       className={`tk-face inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold tracking-tight ${dims}`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}

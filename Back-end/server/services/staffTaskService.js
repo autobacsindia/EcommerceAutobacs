@@ -745,14 +745,30 @@ export async function listTasks(actor, { view = 'mine', state = 'open', due, ass
   };
 }
 
+/** How many of the caller's latest tasks decide who counts as "recently picked". */
+const RECENT_PICK_TASKS = 50;
+
+/** id → position, most recently given a task first. Ordering is a nicety: a failed read just means no history. */
+async function recentPicks(actor) {
+  const tasks = await staffTaskRepository.findRecentlyCreatedPeople(actor._id, RECENT_PICK_TASKS).catch((err) => {
+    console.error('[StaffTask] recent assignees unavailable (ignored):', err.message);
+    return [];
+  });
+  const picks = new Map();
+  for (const t of tasks) for (const p of peopleOf(t)) if (!picks.has(idOf(p.user))) picks.set(idOf(p.user), picks.size);
+  return picks;
+}
+
 /** Who `actor` may give a task to, for the form's picker. */
 export async function listAssignees(actor) {
-  const people = inPanel(actor) ? await userRepository.findChatUsers() : [];
-  // You first, then team heads, then everyone else — each by name.
-  const order = (p) => (same(p._id, actor._id) ? 0 : isHead(p) ? 1 : 2);
+  if (!inPanel(actor)) return [];
+  const [people, picks] = await Promise.all([userRepository.findChatUsers(), recentPicks(actor)]);
+  // You first, then whoever you gave a task to lately, newest first; then team heads, then everyone else — each by name.
+  const recent = (p) => picks.get(idOf(p._id)) ?? Infinity;
+  const order = (p) => (same(p._id, actor._id) ? 0 : picks.has(idOf(p._id)) ? 1 : isHead(p) ? 2 : 3);
   return people
     .filter((p) => mayAssignTo(actor, p))
-    .sort((a, b) => order(a) - order(b) || String(a.name || '').localeCompare(String(b.name || '')))
+    .sort((a, b) => order(a) - order(b) || (order(a) === 1 ? recent(a) - recent(b) : 0) || String(a.name || '').localeCompare(String(b.name || '')))
     .map((p) => ({
       id: idOf(p._id),
       name: p.name || '',

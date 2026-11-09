@@ -97,7 +97,7 @@ describe('the side menu', () => {
     await waitFor(() => expect(listCalls()).toContain('/staff/tasks?view=team&state=open&list=l1'));
     expect(await screen.findByRole('heading', { level: 1, name: /Bosch orders/ })).toBeInTheDocument();
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(crumbs).toHaveTextContent(/Tasks.*Procurement.*Suppliers.*Bosch orders/);
+    expect(crumbs).toHaveTextContent(/Procurement.*Suppliers.*Bosch orders/);
     expect(screen.getByText('New tasks made here go straight into this list.')).toBeInTheDocument();
 
     fireEvent.click(within(tree).getByRole('button', { name: /Other tasks/ }));
