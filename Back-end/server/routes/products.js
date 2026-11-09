@@ -16,7 +16,7 @@ import {
   validateSearchAnalytics,
   validateProductSearch
 } from "../middleware/validationMiddleware.js";
-import { protect, admin, adminOrMarketing, adminOrMarketingHead } from "../middleware/authMiddleware.js";
+import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
 import { setFestivalOfferSetting, listFestivalOfferExceptions } from "../controllers/productFestivalOfferController.js";
 import { validateSetFestivalOfferSetting, validateFestivalOfferExceptions } from "../validators/festivalOffer.validator.js";
 import { httpCache } from "../middleware/httpCache.js";
@@ -418,11 +418,11 @@ router.get(
 
 // @route   PATCH /products/festival-offer-setting  { productIds[], mode, percent? }
 // @desc    Set the Diwali offer for one or many products (the only write path)
-// @access  Private/Admin, Marketing head
+// @access  Private/Admin, Marketing
 router.patch(
   "/festival-offer-setting",
   protect,
-  adminOrMarketingHead,
+  adminOrMarketing,
   validateSetFestivalOfferSetting,
   validateRequest,
   asyncHandler(setFestivalOfferSetting)

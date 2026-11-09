@@ -59,12 +59,12 @@ afterAll(async () => {
 });
 
 describe('who may change it', () => {
-  it('rejects anonymous, customers, marketing members, inactive heads and other teams\' heads', async () => {
+  it('rejects customers, inactive marketing staff and other teams\' heads', async () => {
     const p = await seed();
     const body = { productIds: [String(p._id)], mode: 'none' };
     const denied = await Promise.all([
       login('customer'),
-      login('staff', marketing(false)),
+      login('staff', marketing(false, false)),
       login('staff', marketing(true, false)),
       login('staff', { staff: { team: 'sales', isHead: true, active: true } }),
     ]);
@@ -76,16 +76,18 @@ describe('who may change it', () => {
     expect(await AuditLog.countDocuments({ action: 'FESTIVAL_OFFER_PRODUCT_SETTING' })).toBe(0);
   });
 
-  it('allows an admin and the marketing head', async () => {
+  it('allows an admin, the marketing head and any active marketing member', async () => {
     const p = await seed();
     const admin = await login('admin');
     expect((await patch(admin, { productIds: [String(p._id)], mode: 'none' })).status).toBe(200);
     const head = await login('staff', marketing(true));
     expect((await patch(head, { productIds: [String(p._id)], mode: 'custom', percent: 7 })).status).toBe(200);
-    expect((await reload(p)).festivalOfferSetting).toEqual({ mode: 'custom', percent: 7 });
+    const member = await login('staff', marketing(false));
+    expect((await patch(member, { productIds: [String(p._id)], mode: 'custom', percent: 9 })).status).toBe(200);
+    expect((await reload(p)).festivalOfferSetting).toEqual({ mode: 'custom', percent: 9 });
   });
 
-  it('a marketing member cannot slip it through a normal product save', async () => {
+  it('a normal product save cannot change it', async () => {
     const p = await seed();
     const member = await login('staff', marketing(false));
     const res = await member.a.put(`${BASE}/products/${p._id}`).set('X-XSRF-TOKEN', member.csrf)
@@ -190,7 +192,7 @@ describe('exceptions list', () => {
     await seed();
     for (let i = 0; i < 3; i++) await seed({ festivalOfferSetting: { mode: 'none' } });
     await seed({ festivalOfferSetting: { mode: 'custom', percent: 5 } });
-    const { a } = await login('staff', marketing(false)); // read-only is open to the team
+    const { a } = await login('staff', marketing(false));
 
     const first = await a.get(`${LIST}?limit=3`);
     expect(first.status).toBe(200);

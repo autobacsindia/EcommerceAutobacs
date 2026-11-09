@@ -349,8 +349,8 @@ const ProductSchema = new mongoose.Schema({
     Per-product control of the festival (Diwali) price offer. ABSENT = Automatic (the
     tier ladder), so existing products need no migration. Applies to every variant.
     Written ONLY by services/productFestivalOfferService.js (parseProductFields drops
-    it from normal saves) because a member of the marketing team may edit a product but
-    may not change this. Public on purpose — the storefront display needs it — so it
+    it from normal saves) so every change is validated, purged and audited in one
+    place. Public on purpose — the storefront display needs it — so it
     holds no staff identity; who changed it lives in the audit log.
   */
   festivalOfferSetting: {

@@ -3,7 +3,7 @@ import {
   listFestivalOfferExceptions as listExceptions,
 } from '../services/productFestivalOfferService.js';
 
-// @route PATCH /products/festival-offer-setting  (admin, marketing head)
+// @route PATCH /products/festival-offer-setting  (admin, marketing)
 export const setFestivalOfferSetting = async (req, res) => {
   const { productIds, mode, percent } = req.body;
   const result = await setProductsFestivalOffer(req, { productIds, mode, percent });
