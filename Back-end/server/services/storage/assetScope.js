@@ -45,6 +45,8 @@ export const PRIVATE_PREFIXES = [
   'tasks',
   // Invoices on the tools / subscriptions list (services/subscriptionDueService.js).
   'subscription-dues',
+  // Training lessons: PDFs, videos, slides (services/staffLessonService.js), one folder per lesson.
+  'autobacs/lessons',
 ];
 
 /** Prefixes that are public storefront/marketing imagery. */

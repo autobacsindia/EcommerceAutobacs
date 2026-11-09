@@ -45,15 +45,17 @@ export const providerOf = (ref) =>
  * @param {string}  opts.key            R2 object key
  * @param {number}  [opts.ttlSeconds]   defaults to R2_SIGNED_GET_TTL_SECONDS
  * @param {string}  [opts.downloadAs]   force a download with this filename
+ * @param {string}  [opts.contentType]  serve as this type
  * @returns {Promise<string>} '' when the key is unusable
  */
-export const r2PrivateUrl = ({ key, ttlSeconds, downloadAs } = {}) => {
+export const r2PrivateUrl = ({ key, ttlSeconds, downloadAs, contentType } = {}) => {
   if (!key) return Promise.resolve('');
   return presignGet({
     key,
     scope: 'private',
     expiresIn: ttlSeconds || r2Config().signedGetTtlSeconds,
     downloadAs,
+    contentType,
   });
 };
 

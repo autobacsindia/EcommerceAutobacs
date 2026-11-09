@@ -12,6 +12,12 @@ import { buildStrictCsp, buildPublicCsp } from './csp';
 const directive = (csp: string, name: string) =>
   csp.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `)) || '';
 
+describe('media-src', () => {
+  test('lets a lesson video play from the private bucket', async () => {
+    expect(directive(await buildStrictCsp('n0nc3'), 'media-src')).toMatch(/r2\.cloudflarestorage\.com/);
+  });
+});
+
 describe('connect-src', () => {
   test('allows the R2 upload origin', async () => {
     // Presigned PUTs go to the S3 endpoint. A private bucket has no custom

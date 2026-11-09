@@ -224,6 +224,11 @@ export const TEAM_HELP: TeamHelpSection[] = [
         links: [{ label: 'Team chat', href: '/team/chat' }],
       },
       {
+        question: 'Where do I learn how the work is done?',
+        answer: 'Open Lessons. It has notes, videos, PDFs and PowerPoints for your team and the whole company. When you finish one, press "I\'ve finished this lesson". Team heads and admins post lessons.',
+        links: [{ label: 'Lessons', href: '/team/lessons' }],
+      },
+      {
         question: 'How do tasks work?',
         answer: 'Press "New task", choose who should do it (yourself, or anyone in the staff panel — several people if you like) and pick a due date. They get a pop-up. Whoever gave the task, the team head or the admin can change it or give it to someone else. Tick the circle when a job is done; open a task to comment, add steps or change it.',
         links: [{ label: 'Tasks', href: '/team/tasks' }],

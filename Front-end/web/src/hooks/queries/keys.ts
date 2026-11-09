@@ -254,6 +254,15 @@ export const pastSaleKeys = {
 };
 
 /** `/staff/tasks/*` — tasks given to people in the panel. Invalidate `all` after any change. */
+export const lessonKeys = {
+  all: [...staffKeys.all, 'lessons'] as const,
+  lists: () => [...lessonKeys.all, 'list'] as const,
+  list: (filters: object) => [...lessonKeys.lists(), filters] as const,
+  one: (id: string) => [...lessonKeys.all, 'one', id] as const,
+  progress: (id: string) => [...lessonKeys.all, 'progress', id] as const,
+  meta: () => [...lessonKeys.all, 'meta'] as const,
+};
+
 export const taskKeys = {
   all: [...staffKeys.all, 'tasks'] as const,
   lists: () => [...taskKeys.all, 'list'] as const,
