@@ -11,6 +11,8 @@ import SeoSchema from '../models/shared/seoSchema.js';
  *    plain text — never HTML), and hard-capped to the schema maxlengths.
  *  - URL fields (canonical, ogImage) must look like an absolute http(s) URL or
  *    a site-relative path; anything else is dropped rather than stored.
+ *  - A canonical must be a page on our own site and not an old WooCommerce
+ *    address; anything else is dropped so the page canonicalises to itself.
  *  - `noindex` is coerced to a real boolean.
  *  - Empty/blank fields are removed so an empty override never shadows the
  *    frontend's computed default.
@@ -71,6 +73,42 @@ const cleanUrl = (value, cap) => {
   return out;
 };
 
+/** Paths that only existed on the old WooCommerce site. */
+const LEGACY_PATH = /^\/product(-category)?(\/|$)/i;
+
+const siteHosts = () => {
+  const hosts = new Set(['autobacsindia.com', 'www.autobacsindia.com']);
+  for (const value of [process.env.FRONTEND_URL, ...(process.env.FRONTEND_URLS || '').split(',')]) {
+    try {
+      if (value?.trim()) hosts.add(new URL(value.trim()).hostname.toLowerCase());
+    } catch { /* a malformed env entry simply adds nothing */ }
+  }
+  return hosts;
+};
+
+/**
+ * May this value be used as a canonical override? Only a page on our own site,
+ * and never an old WooCommerce address: 46 migrated products told Google their
+ * real page was a /product/<old-slug> URL that redirected elsewhere or 404'd.
+ * A dead link on our own site is NOT caught; that needs a network check on save.
+ */
+export function isAllowedCanonical(value) {
+  let url;
+  try {
+    url = new URL(value, 'https://www.autobacsindia.com');
+  } catch {
+    return false;
+  }
+  const relative = value.startsWith('/') && !value.startsWith('//');
+  if (!relative && !siteHosts().has(url.hostname.toLowerCase())) return false;
+  return !LEGACY_PATH.test(url.pathname);
+}
+
+const cleanCanonical = (value, cap) => {
+  const out = cleanUrl(value, cap);
+  return out && isAllowedCanonical(out) ? out : undefined;
+};
+
 export function normalizeSeo(raw) {
   // Tolerate a JSON-string payload (multipart/form-data fields arrive as
   // strings) so multipart and JSON callers can both pass `seo` straight in.
@@ -83,7 +121,7 @@ export function normalizeSeo(raw) {
   const metaTitle = cleanText(raw.metaTitle, CAPS.metaTitle);
   const metaDescription = cleanText(raw.metaDescription, CAPS.metaDescription);
   const focusKeyword = cleanText(raw.focusKeyword, CAPS.focusKeyword);
-  const canonical = cleanUrl(raw.canonical, CAPS.canonical);
+  const canonical = cleanCanonical(raw.canonical, CAPS.canonical);
   const ogImage = cleanUrl(raw.ogImage, CAPS.ogImage);
 
   if (metaTitle) seo.metaTitle = metaTitle;
