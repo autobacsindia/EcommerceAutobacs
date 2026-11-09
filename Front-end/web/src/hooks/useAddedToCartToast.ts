@@ -5,6 +5,8 @@ import { toast } from 'react-hot-toast';
 import { useCurrency } from '@/context/CurrencyContext';
 import { useCampaign } from '@/hooks/queries/useCampaign';
 import { lineSavings } from '@/hooks/queries/useCampaignProductRates';
+import { useFestivalOffer } from '@/components/festival/FestivalOfferContext';
+import { applyFestivalOffer } from '@/lib/festival/festivalOffer';
 
 /**
  * The one add-to-cart confirmation toast, for every surface that adds to the cart.
@@ -44,6 +46,7 @@ export function useAddedToCartToast() {
   // already renders one — including a grid of cards, which share the single entry.
   const { data: campaignStatus } = useCampaign(0);
   const eligible = !!campaignStatus?.eligible;
+  const festivalOffer = useFestivalOffer();
 
   return useCallback(
     ({ price, originalPrice, quantity = 1, campaignPercent = 0 }: AddedToCartLine) => {
@@ -60,9 +63,14 @@ export function useAddedToCartToast() {
         forgetting is a rupee figure claimed as banked and then contradicted by the
         cart, so eligibility is applied once, here, where no call site can skip it.
       */
+      // A live festival offer lowers the price the cart charges, so its saving belongs
+      // in this figure too. Omitting it told shoppers ₹46,750 where the cart said ₹50,575.
+      const festival = festivalOffer
+        ? applyFestivalOffer({ unitPrice: price }, festivalOffer.tiers, festivalOffer.code)
+        : null;
       const saved = lineSavings({
-        price,
-        originalPrice,
+        price: festival?.finalPrice ?? price,
+        originalPrice: festival ? Math.max(originalPrice ?? 0, festival.basePrice) : originalPrice,
         quantity: qty,
         percent: eligible ? campaignPercent : 0,
       });
@@ -75,6 +83,6 @@ export function useAddedToCartToast() {
             : 'Added to cart',
       );
     },
-    [eligible, formatPrice],
+    [eligible, festivalOffer, formatPrice],
   );
 }

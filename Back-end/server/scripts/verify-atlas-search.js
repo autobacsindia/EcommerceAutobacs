@@ -110,6 +110,9 @@ const CASES = [
   { label: 'impossible make+model matches nothing',
     params: { vehicleMake: 'BMW', vehicleModel: 'Fortuner' }, expectEmpty: true },
   { label: 'suggestions (autocomplete)', suggest: 'brak' },
+  { label: 'punctuation-only search', params: { q: '***' } },
+  { label: 'punctuation beside a word', params: { q: '- winch &' } },
+  { label: 'punctuation-only suggestions', suggest: '---' },
 ];
 
 let failures = 0;

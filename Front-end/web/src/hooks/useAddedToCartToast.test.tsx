@@ -29,6 +29,11 @@ jest.mock('@/context/CurrencyContext', () => ({
   }),
 }));
 
+const useFestivalOfferMock = jest.fn();
+jest.mock('@/components/festival/FestivalOfferContext', () => ({
+  useFestivalOffer: () => useFestivalOfferMock(),
+}));
+
 /** Renders the hook with a given eligibility answer and returns the fire function. */
 function fireWith(eligible: boolean | undefined) {
   useCampaignMock.mockReturnValue({ data: eligible === undefined ? undefined : { eligible } });
@@ -39,6 +44,8 @@ function fireWith(eligible: boolean | undefined) {
 beforeEach(() => {
   successMock.mockReset();
   useCampaignMock.mockReset();
+  useFestivalOfferMock.mockReset();
+  useFestivalOfferMock.mockReturnValue(null);
 });
 
 describe('useAddedToCartToast', () => {
@@ -83,5 +90,23 @@ describe('useAddedToCartToast', () => {
     const result = fireWith(true);
     act(() => result.current({ price: 1000 }));
     expect(successMock).toHaveBeenCalledWith('Added to cart');
+  });
+
+  describe('live festival offer', () => {
+    const offer = { code: 'diwali', tiers: [{ minPaise: 0, percent: 10 }] };
+
+    it('includes the festival saving, matching what the cart shows', () => {
+      useFestivalOfferMock.mockReturnValue(offer);
+      const result = fireWith(false);
+      act(() => result.current({ price: 38250, originalPrice: 85000 }));
+      expect(successMock).toHaveBeenCalledWith(expect.stringContaining('₹50,575'));
+    });
+
+    it('reports the saving on a product with no M.R.P. discount', () => {
+      useFestivalOfferMock.mockReturnValue(offer);
+      const result = fireWith(false);
+      act(() => result.current({ price: 38250 }));
+      expect(successMock).toHaveBeenCalledWith(expect.stringContaining('₹3,825'));
+    });
   });
 });
