@@ -47,6 +47,8 @@ import {
   and, amountOf, amountRange, isObjectId, istRange, keysetPage, plainQuery, searchClauses, searchWords,
 } from '../utils/listQuery.js';
 import { STAFF_TEAMS, canSell } from '../config/staff.js';
+import { publicEmail } from '../utils/customerContact.js';
+import { quotationDetailsForOrder } from './salesQuotationService.js';
 
 const fail = (message, status) => new AppError(message, status, { expose: true });
 
@@ -566,6 +568,72 @@ async function loadVisible(actor, id) {
 
 export async function getBankTransfer(actor, id) {
   return shape(await loadVisible(actor, id), actor);
+}
+
+const ORDER_DETAIL_FIELDS = 'wpId salesUser user guestEmail shippingAddress buyer items subtotal shippingCost tax discount couponCode totalAmount status paymentStatus statusHistory createdAt';
+const addressOf = (a) => {
+  if (!a) return null;
+  const lines = [a.addressLine1, a.addressLine2, [a.city, a.state].filter(Boolean).join(', '), a.postalCode, a.country].filter(Boolean);
+  return lines.length ? { lines, phone: a.phone || '' } : null;
+};
+const paiseTimes = (price, quantity) => (Math.round(Number(price) * 100) * Number(quantity)) / 100;
+
+/** The order as it was sold: names and prices are the order's own saved copies. */
+function shapeOrderDetails(o) {
+  return {
+    createdAt: o.createdAt || null,
+    status: o.status || '',
+    paymentStatus: o.paymentStatus || '',
+    customer: {
+      name: o.shippingAddress?.fullName || o.user?.name || '',
+      email: publicEmail(o.user?.email || o.guestEmail || ''),
+      phone: o.shippingAddress?.phone || o.user?.phone || '',
+    },
+    shippingAddress: addressOf(o.shippingAddress),
+    billingAddress: addressOf(o.buyer?.billingAddress),
+    buyer: { legalName: o.buyer?.legalName || '', gstin: o.buyer?.gstin || '' },
+    items: (o.items || []).map((i) => ({
+      name: i.name || 'Item',
+      variantLabel: i.variantLabel || '',
+      quantity: i.quantity,
+      price: i.price,
+      lineTotal: paiseTimes(i.price, i.quantity),
+      image: i.product?.images?.[0]?.url || '', // a photo only — never the product's current price
+    })),
+    totals: {
+      subtotal: o.subtotal ?? null,
+      shipping: o.shippingCost ?? 0,
+      tax: o.tax ?? 0,
+      discount: o.discount ?? 0,
+      couponCode: o.couponCode || '',
+      total: o.totalAmount ?? null,
+    },
+    statusHistory: (o.statusHistory || []).map((h) => ({
+      status: h.status, at: h.timestamp || null, by: h.updatedBy?.name || '', reason: h.reason || '',
+    })),
+  };
+}
+
+/**
+ * Everything about one transfer for its details popup. Read-only, and limited to
+ * the people who may see the transfer (loadVisible). `order` is null if the order
+ * no longer exists; the transfer's own record still shows.
+ */
+export async function getBankTransferDetails(actor, id) {
+  const t = await loadVisible(actor, id);
+  const order = await orderRepository.model.findById(t.order)
+    .select(ORDER_DETAIL_FIELDS)
+    .populate('items.product', 'images')
+    .populate('user', 'name email phone')
+    .populate('statusHistory.updatedBy', 'name')
+    .lean();
+  return {
+    ...shape(t, actor),
+    history: (t.history || []).map((h) => ({ at: h.at, by: h.byName || '', action: h.action, note: h.note || '' })),
+    order: order ? shapeOrderDetails(order) : null,
+    quotation: await quotationDetailsForOrder(actor, order),
+    canOpenOrder: !!order && isAdmin(actor),
+  };
 }
 
 /** One screenshot, streamed through us (never a public link). */

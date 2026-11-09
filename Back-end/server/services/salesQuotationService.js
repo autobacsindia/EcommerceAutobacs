@@ -586,7 +586,14 @@ export async function listQuotations(actor, params = {}) {
 export async function getQuotationDocument(actor, id) {
   const q = await loadReadable(actor, id);
   if (q.status === 'cancelled') throw fail('This quotation was cancelled.', 409);
-  const asOrder = {
+  const doc = printableQuotation(q);
+  const buffer = await renderQuotationPdf(doc);
+  return { buffer, filename: `Quotation-${printedNumber(q)}.pdf` };
+}
+
+/** What a saved quotation prints: its own lines and prices. */
+function printableQuotation(q) {
+  const built = buildQuotation({
     _id: q._id,
     createdAt: q.revisions?.length ? q.revisions[q.revisions.length - 1].savedAt : q.createdAt,
     items: q.items,
@@ -599,11 +606,33 @@ export async function getQuotationDocument(actor, id) {
     shippingCost: 0,
     status: 'awaiting_payment',
     paymentStatus: 'pending',
+  });
+  return { ...built, number: printedNumber(q), orderRef: printedNumber(q), validUntil: q.validUntil };
+}
+
+/**
+ * The quotation behind an order, for the bank-transfer details popup. Older sales
+ * orders have no saved quotation but still print one from the order itself. null
+ * when there is none to show. `pdf` is set only for people the PDF routes allow.
+ */
+export async function quotationDetailsForOrder(actor, order) {
+  if (!order || !order.salesUser || order.status === 'cancelled') return null;
+  const q = await salesQuotationRepository.model.findOne({ order: order._id }).lean();
+  if (q?.status === 'cancelled') return null;
+  const b = q ? printableQuotation(q) : buildQuotation(order);
+  return {
+    number: b.number,
+    date: b.date,
+    validUntil: b.validUntil,
+    customer: { name: b.customer.name, phone: b.customer.phone, address: b.customer.address },
+    lines: b.lines.map(({ n, name, quantity, listPrice, offerPrice, amount }) => ({ n, name, quantity, listPrice, offerPrice, amount })),
+    subtotal: b.subtotalAtList,
+    discount: b.discount,
+    shipping: b.shipping,
+    total: b.total,
+    totalInWords: b.totalInWords,
+    pdf: mayRead(actor, q || order) ? { quotationId: q ? idOf(q._id) : null, orderId: idOf(order._id) } : null,
   };
-  const built = buildQuotation(asOrder);
-  const doc = { ...built, number: printedNumber(q), orderRef: printedNumber(q), validUntil: q.validUntil };
-  const buffer = await renderQuotationPdf(doc);
-  return { buffer, filename: `Quotation-${printedNumber(q)}.pdf` };
 }
 
 /** The quotation an order came from, if any (for the order screen). */

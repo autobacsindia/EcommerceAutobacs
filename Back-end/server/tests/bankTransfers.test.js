@@ -64,6 +64,8 @@ jest.unstable_mockModule('../services/storage/privateUploads.js', () => ({ ...st
 const { default: User } = await import('../models/User.js');
 const { default: Order } = await import('../models/Order.js');
 const { default: BankTransfer } = await import('../models/BankTransfer.js');
+const { default: Product } = await import('../models/Product.js');
+const { default: SalesQuotation } = await import('../models/SalesQuotation.js');
 const { default: ChatMessage } = await import('../models/ChatMessage.js');
 const bt = await import('../services/bankTransferService.js');
 const sales = await import('../services/salesOrderService.js');
@@ -379,6 +381,98 @@ describe('seeing them', () => {
     expect(await item(head)).toBeUndefined();
     await bt.confirmBankTransfer(accounts, t.id, req);
     expect((await item(accounts)).count).toBe(0);
+  });
+});
+
+describe('the details popup', () => {
+  const recorded = async (extra) => {
+    const order = await salesOrder(lead);
+    if (extra) await Order.updateOne({ _id: order._id }, extra);
+    const t = await bt.recordBankTransfer(lead, order.id, { amount: 52000, reference: `HDFC${Date.now()}`, paidOn: isoDay(), note: 'n' }, [shot()], req);
+    return { order, t };
+  };
+
+  it('shows the customer, the order and the history, as saved on the order', async () => {
+    const product = await Product.collection.insertOne({ name: 'Lift kit', images: [{ url: 'https://img.test/a.jpg' }], price: 99999 });
+    const { order, t } = await recorded({ $set: {
+      'items.0.product': product.insertedId, 'items.0.quantity': 2, 'items.0.price': 26000.5, tax: 100, discount: 50, couponCode: 'SAVE',
+      buyer: { legalName: 'Ravi Motors', gstin: '32ABCDE1234F1Z5', billingAddress: { addressLine1: '9 Bill St', city: 'Kochi', state: 'Kerala', postalCode: '682002' } },
+    } });
+    const before = await Order.findById(order._id).lean();
+    const d = await bt.getBankTransferDetails(accounts, t.id);
+    expect(d.reference).toBe(t.reference);
+    expect(d.history.map((h) => h.action)).toEqual(['recorded']);
+    expect(d.order.customer).toMatchObject({ name: 'Ravi Kumar', phone: '9812345678' });
+    expect(d.order.shippingAddress.lines[0]).toBe('1 Road');
+    expect(d.order.billingAddress.lines[0]).toBe('9 Bill St');
+    expect(d.order.buyer.gstin).toBe('32ABCDE1234F1Z5');
+    expect(d.order.items[0]).toMatchObject({ price: 26000.5, quantity: 2, lineTotal: 52001, image: 'https://img.test/a.jpg' });
+    expect(d.order.totals).toMatchObject({ tax: 100, discount: 50, couponCode: 'SAVE', total: 52000 });
+    expect(JSON.stringify(d)).not.toContain('99999');
+    expect(d.canOpenOrder).toBe(false);
+    expect((await bt.getBankTransferDetails(admin, t.id)).canOpenOrder).toBe(true);
+    // Reading changes nothing.
+    expect(await Order.findById(order._id).lean()).toEqual(before);
+  });
+
+  it('follows the list\'s rule: another lead and other teams are refused', async () => {
+    const { t } = await recorded();
+    await expect(bt.getBankTransferDetails(lead2, t.id)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(bt.getBankTransferDetails(ops, t.id)).rejects.toMatchObject({ statusCode: 403 });
+    expect((await bt.getBankTransferDetails(lead, t.id)).order).toBeTruthy();
+  });
+
+  it('shows the saved quotation; the PDF link is only for those the PDF allows', async () => {
+    const { order, t } = await recorded({ $set: { 'items.0.listPrice': 60000 } });
+    const validUntil = new Date(Date.now() + 7 * DAY);
+    const q = await SalesQuotation.create({
+      number: 'QT-SAVED1', version: 2, status: 'accepted', order: order._id, salesUser: lead._id, validUntil,
+      customer: { name: 'Saved Name', phone: '9812345678' },
+      shippingAddress: { fullName: 'Saved Name', phone: '9812345678', addressLine1: '5 Quote Rd', city: 'Kochi', state: 'Kerala', postalCode: '682001' },
+      items: [{ name: 'Quoted kit', quantity: 2, price: 26000, listPrice: 30000 }], subtotal: 52000, totalAmount: 52000,
+    });
+    const d = await bt.getBankTransferDetails(admin, t.id);
+    expect(d.quotation).toMatchObject({
+      number: 'QT-SAVED1-v2', subtotal: 60000, discount: 8000, shipping: 0, total: 52000,
+      customer: { name: 'Saved Name', address: expect.arrayContaining(['5 Quote Rd']) },
+      lines: [{ n: 1, name: 'Quoted kit', quantity: 2, listPrice: 30000, offerPrice: 26000, amount: 52000 }],
+      pdf: { quotationId: q.id, orderId: order.id },
+    });
+    expect(d.quotation.totalInWords).toMatch(/Fifty Two Thousand/i);
+    expect(new Date(d.quotation.validUntil)).toEqual(validUntil);
+    expect((await bt.getBankTransferDetails(lead, t.id)).quotation.pdf).toBeTruthy();
+    expect((await bt.getBankTransferDetails(head, t.id)).quotation.pdf).toBeTruthy();
+    const forAccounts = await bt.getBankTransferDetails(accounts, t.id);
+    expect(forAccounts.quotation.number).toBe('QT-SAVED1-v2');
+    expect(forAccounts.quotation.pdf).toBeNull();
+  });
+
+  it('an older order prints from itself; a cancelled order or quotation shows none', async () => {
+    const { order, t } = await recorded();
+    const d = await bt.getBankTransferDetails(admin, t.id);
+    expect(d.quotation.number).toMatch(/^QT-/);
+    expect(d.quotation.lines[0]).toMatchObject({ name: 'Lift kit', offerPrice: 52000 });
+    expect(d.quotation.pdf).toEqual({ quotationId: null, orderId: order.id });
+    await SalesQuotation.collection.insertOne({ number: 'QT-X', status: 'cancelled', order: order._id });
+    expect((await bt.getBankTransferDetails(admin, t.id)).quotation).toBeNull();
+    await SalesQuotation.collection.deleteMany({});
+    await Order.updateOne({ _id: order._id }, { $set: { status: 'cancelled' } });
+    expect((await bt.getBankTransferDetails(admin, t.id)).quotation).toBeNull();
+  });
+
+  it('copes with a deleted order, a deleted product and an internal email', async () => {
+    const phoneOnly = await User.create({ name: 'Phone only', email: 'm9812345678@phone.autobacs.invalid', phone: '9812345678', passwordHash: 'x' });
+    const { order, t } = await recorded({ $set: { user: phoneOnly._id } });
+    const d = await bt.getBankTransferDetails(accounts, t.id);
+    expect(d.order.customer.email).toBe('');
+    expect(d.order.items[0].image).toBe('');
+    expect(d.order.billingAddress).toBeNull();
+    await Order.deleteOne({ _id: order._id });
+    const gone = await bt.getBankTransferDetails(admin, t.id);
+    expect(gone.order).toBeNull();
+    expect(gone.canOpenOrder).toBe(false);
+    expect(gone.quotation).toBeNull();
+    expect(gone.reference).toBe(t.reference);
   });
 });
 

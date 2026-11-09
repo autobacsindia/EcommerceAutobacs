@@ -249,6 +249,19 @@ describe('Bank transfer routes', () => {
     expect((await lead.session.get('/staff/bank-transfers/filter-options')).body.sellers).toEqual([]);
   });
 
+  it('details: the seller and accounts may open them; a bad id and a stranger may not', async () => {
+    const res = await lead.session.form(`/staff/sales/orders/${order._id}/bank-transfer`, fields, [shot()]);
+    const url = `/staff/bank-transfers/${res.body.transfer.id}/details`;
+    const seen = await accounts.session.get(url);
+    expect(seen.status).toBe(200);
+    expect(seen.body.transfer.order.customer.name).toBe('Ravi Kumar');
+    expect((await lead.session.get(url)).status).toBe(200);
+    const other = await makeUser('Tom', 'staff', { team: 'sales', isHead: false, active: true });
+    expect((await other.session.get(url)).status).toBe(404);
+    expect((await accounts.session.get('/staff/bank-transfers/not-an-id/details')).status).toBe(400);
+    expect((await request(app).get(`${BASE}${url}`)).status).toBe(401);
+  });
+
   it('needs a signed-in staff member', async () => {
     expect((await request(app).get(`${BASE}/staff/bank-transfers`)).status).toBe(401);
   });
