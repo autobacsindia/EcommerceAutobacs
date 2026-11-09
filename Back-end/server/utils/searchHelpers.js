@@ -45,6 +45,13 @@ export function sanitizeQuery(input, maxLength = 200) {
 }
 
 /**
+ * Whether a term contains anything the search analyzer keeps. Atlas rejects a
+ * clause whose query is only punctuation ("query analyzed to zero tokens"), and
+ * that error sends the search to the full-collection MongoDB fallback.
+ */
+export const hasSearchableText = (term) => /[\p{L}\p{N}]/u.test(String(term ?? ''));
+
+/**
  * The free-text search term, from whichever parameter carried it.
  *
  * The storefront sends `?q=`; large parts of the backend were written against

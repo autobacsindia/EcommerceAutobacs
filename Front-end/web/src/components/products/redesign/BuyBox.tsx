@@ -175,8 +175,9 @@ export default function BuyBox({
     // back (in addToCart) and the catch surfaces an error toast. The savings wording
     // and the eligibility gate live in the shared hook — see `useAddedToCartToast`.
     notifyAdded({
-      price: activePrice,
-      originalPrice: activeOriginal,
+      // An expired sale is charged at M.R.P., so there is no catalogue saving to claim.
+      price: saleExpired ? activeOriginal! : activePrice,
+      originalPrice: saleExpired ? null : activeOriginal,
       quantity: qty,
       campaignPercent: campaignRates?.rates?.[product._id]?.percent,
     });

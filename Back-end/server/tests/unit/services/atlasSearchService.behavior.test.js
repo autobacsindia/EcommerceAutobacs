@@ -581,3 +581,44 @@ describe('suggestCorrection — probe preconditions', () => {
     spy.mockRestore();
   });
 });
+
+describe('punctuation-only search terms', () => {
+  const Product = mongoose.model('Product');
+  let aggregateSpy;
+
+  beforeEach(() => {
+    aggregateSpy = jest.spyOn(Product.collection, 'aggregate').mockImplementation((pipeline) => ({
+      toArray: async () => (pipeline.some((p) => p.$facet) ? [{ total: [{ value: 3 }] }] : []),
+    }));
+  });
+  afterEach(() => aggregateSpy.mockRestore());
+
+  const sentQueries = () => JSON.stringify(aggregateSpy.mock.calls.map(([p]) => p));
+
+  it.each(['***', '-', '&', '...'])('never sends %s to Atlas as a text query', async (q) => {
+    const { cleanedQuery, tokens } = await atlasSearchService.resolveSearchContext({ q });
+    expect(cleanedQuery).toBeNull();
+    expect(tokens).toEqual([]);
+
+    await atlasSearchService.searchProducts({ q });
+    expect(aggregateSpy).toHaveBeenCalled();
+    expect(sentQueries()).not.toContain(`"query":"${q}"`);
+  });
+
+  it('drops the punctuation but keeps the word beside it', async () => {
+    const { tokens, cleanedQuery } = await atlasSearchService.resolveSearchContext({ q: '- winch &' });
+    expect(tokens).toEqual(['winch']);
+    expect(cleanedQuery).toBe('winch');
+  });
+
+  it('keeps a stop-word-only search, which Atlas accepts', async () => {
+    const { cleanedQuery } = await atlasSearchService.resolveSearchContext({ q: 'the' });
+    expect(cleanedQuery).toBe('the');
+  });
+
+  it('answers punctuation-only suggestions without querying Atlas', async () => {
+    const result = await atlasSearchService.getSearchSuggestions('---', 6);
+    expect(result).toEqual({ suggestions: [], corrections: [], total: 0 });
+    expect(aggregateSpy).not.toHaveBeenCalled();
+  });
+});

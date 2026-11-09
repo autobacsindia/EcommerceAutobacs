@@ -41,7 +41,7 @@ import Product from '../models/Product.js';
 import Vehicle from '../models/Vehicle.js';
 import categoryMappingService from './categoryMappingService.js';
 import { expand as expandSynonyms, contentTokens } from '../config/searchSynonyms.js';
-import { normalizeImages, sanitizeQuery, pickCorrection, resolveSearchTerm } from '../utils/searchHelpers.js';
+import { normalizeImages, sanitizeQuery, pickCorrection, resolveSearchTerm, hasSearchableText } from '../utils/searchHelpers.js';
 import { NON_PURCHASABLE_STOCK, PURCHASABLE_STOCK } from '../utils/stockStatus.js';
 import { ATLAS_SEARCH_INDEX_NAME, ATLAS_SYNONYM_MAPPING_NAME } from '../config/atlasSearchIndex.js';
 import { getRedisClient } from './cacheService.js';
@@ -1348,8 +1348,9 @@ class AtlasSearchService {
   async resolveSearchContext(params) {
     const rawQuery = resolveSearchTerm(params) || null;
     const safeQ = rawQuery ? this.sanitizeQuery(rawQuery) : null;
-    const tokens = safeQ ? contentTokens(safeQ) : [];
-    const cleanedQuery = safeQ ? (tokens.length ? tokens.join(' ') : safeQ) : null;
+    const tokens = safeQ ? contentTokens(safeQ).filter(hasSearchableText) : [];
+    // No usable token means the term was only punctuation, so it filters nothing.
+    const cleanedQuery = tokens.length ? tokens.join(' ') : null;
 
     const entities = await resolveQueryEntities(cleanedQuery, tokens);
     const vehicleFilterIds = await resolveVehicleFilter(params);
@@ -1881,7 +1882,7 @@ class AtlasSearchService {
    */
   async getSearchSuggestions(query, limit = 10) {
     const safeQuery = this.sanitizeQuery(query);
-    if (!safeQuery) return { suggestions: [], corrections: [], total: 0 };
+    if (!hasSearchableText(safeQuery)) return { suggestions: [], corrections: [], total: 0 };
 
     const lower = safeQuery.toLowerCase();
 
@@ -2112,7 +2113,7 @@ class AtlasSearchService {
     // maxEdits:2 fuzzy query that is structurally incapable of returning anything.
     const hasCorrectableToken = String(query || '')
       .split(/\s+/)
-      .some((token) => token.length >= 4);
+      .some((token) => token.length >= 4 && hasSearchableText(token));
     if (!hasCorrectableToken) return [];
 
     try {
