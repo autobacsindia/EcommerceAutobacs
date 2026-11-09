@@ -87,6 +87,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: 'Sales',
     items: [
       { href: '/admin/leads', label: 'Leads', icon: Briefcase },
+      { href: '/admin/meta-leads', label: 'Meta leads', icon: Briefcase },
       { href: '/admin/sales-reps', label: 'Sales Reps', icon: UserRoundCog },
       { href: '/admin/past-sales', label: 'Past sales', icon: History },
       { href: '/admin/affiliates', label: 'Affiliates', icon: Handshake },

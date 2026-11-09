@@ -235,6 +235,10 @@ export const staffKeys = {
   leadList: (params: Record<string, string> = {}) => [...staffKeys.leads(), 'list', params] as const,
   leadOne: (id: string) => [...staffKeys.leads(), 'one', id] as const,
   leadPeople: () => [...staffKeys.leads(), 'people'] as const,
+  /** The Meta leads tab (rows from the sales lead sheet) — invalidate after an edit. */
+  metaLeads: () => [...staffKeys.all, 'meta-leads'] as const,
+  metaLeadList: (params: Record<string, string> = {}) => [...staffKeys.metaLeads(), 'list', params] as const,
+  metaLeadOne: (id: string) => [...staffKeys.metaLeads(), 'one', id] as const,
   customerBanks: () => [...staffKeys.all, 'customer-bank'] as const,
   customerBank: (kind: string, id: string) => [...staffKeys.customerBanks(), kind, id] as const,
 };

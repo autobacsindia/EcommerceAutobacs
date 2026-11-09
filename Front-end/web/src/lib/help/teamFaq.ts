@@ -103,8 +103,8 @@ export const TEAM_HELP: TeamHelpSection[] = [
     items: [
       {
         question: 'How do I take a lead?',
-        answer: 'Open Leads and press Follow up on a free lead. It is now yours: everyone in GTM sees "Following up: your name" and the time, and only you (plus the GTM head) see the phone number. If someone pressed first, the lead shows their name instead. Finished with it? Press Stop following up and it is free again. The GTM head can move a lead to someone else.',
-        links: [{ label: 'Leads', href: '/team/leads' }],
+        answer: 'Open Website leads and press Follow up on a free lead. It is now yours: everyone in GTM sees "Following up: your name" and the time, and only you (plus the GTM head) see the phone number. If someone pressed first, the lead shows their name instead. Finished with it? Press Stop following up and it is free again. The GTM head can move a lead to someone else.',
+        links: [{ label: 'Website leads', href: '/team/leads' }],
       },
       {
         question: 'A customer called or messaged. How do I sell to them?',
