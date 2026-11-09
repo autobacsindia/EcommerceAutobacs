@@ -47,9 +47,9 @@ export async function saveFestivalOfferSetting(
   });
 }
 
-/** Admin, or the active head of marketing. The server enforces the same rule. */
+/** Admin or marketing team. The server enforces the same rule. */
 export function canChangeFestivalOffer(
-  user: { role?: string; staff?: { team?: string; isHead?: boolean } | null } | null | undefined,
+  user: { role?: string; staff?: { team?: string } | null } | null | undefined,
 ): boolean {
-  return user?.role === 'admin' || (user?.staff?.team === 'marketing' && user.staff.isHead === true);
+  return user?.role === 'admin' || user?.staff?.team === 'marketing';
 }

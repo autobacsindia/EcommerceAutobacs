@@ -154,14 +154,6 @@ export const adminOrMarketing = (req, res, next) => {
   return res.status(403).json({ success: false, message: 'Not authorized' });
 };
 
-/** Pricing decisions: admins and the ACTIVE head of marketing, not the whole team. */
-export const adminOrMarketingHead = (req, res, next) => {
-  const user = req.user;
-  if (user?.role === 'admin') return admin(req, res, next);
-  if (user?.role === 'staff' && user.staff?.active === true && user.staff.team === 'marketing' && user.staff.isHead === true) return next();
-  return res.status(403).json({ success: false, message: 'Not authorized' });
-};
-
 // Staff-panel gate: an ACTIVE staff member, or an admin. Run after `protect`.
 //
 // This is a separate gate on purpose — `admin` above stays admin-only, so none of

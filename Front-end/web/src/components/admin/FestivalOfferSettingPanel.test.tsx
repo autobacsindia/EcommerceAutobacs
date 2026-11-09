@@ -15,15 +15,15 @@ beforeEach(() => {
 });
 
 describe('FestivalOfferSettingPanel', () => {
-  it('shows a read-only line to a marketing member and offers no controls', () => {
-    asUser({ role: 'staff', staff: { team: 'marketing', isHead: false } });
+  it('shows a read-only line to staff outside marketing and offers no controls', () => {
+    asUser({ role: 'staff', staff: { team: 'sales', isHead: true } });
     render(<FestivalOfferSettingPanel productId="p1" setting={{ mode: 'custom', percent: 7 }} />);
     expect(screen.getByText(/Custom 7%/)).toBeInTheDocument();
     expect(screen.queryByRole('radio')).toBeNull();
   });
 
-  it('lets the marketing head save', async () => {
-    asUser({ role: 'staff', staff: { team: 'marketing', isHead: true } });
+  it('lets a marketing team member save', async () => {
+    asUser({ role: 'staff', staff: { team: 'marketing', isHead: false } });
     render(<FestivalOfferSettingPanel productId="p1" setting={null} />);
     fireEvent.click(screen.getByRole('radio', { name: /No Diwali offer/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Apply Diwali offer' }));

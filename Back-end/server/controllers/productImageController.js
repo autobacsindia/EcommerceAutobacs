@@ -194,9 +194,8 @@ const parseProductFields = (body) => {
   // Set only through PATCH /products/:id/seo-review, so a product save can never
   // overwrite (or forge) the SEO team's status and its who/when.
   delete fields.seoReview;
-  // Likewise: changing what a product is sold for is Admin / Marketing head only, and
-  // only through PATCH /products/festival-offer-setting. Dropped here because the rest
-  // of the marketing team may save products.
+  // Likewise: only PATCH /products/festival-offer-setting may change it, so every
+  // change gets the same validation, cache purge and audit row.
   delete fields.festivalOfferSetting;
 
   ['categories', 'features', 'whyChoose', 'packageContents', 'tags',

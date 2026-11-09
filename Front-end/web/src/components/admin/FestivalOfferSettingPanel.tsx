@@ -19,9 +19,8 @@ const OPTIONS: { mode: FestivalOfferMode; label: string; help: string }[] = [
 ];
 
 /**
- * The Diwali offer for one product. Saves on its own button: changing what a product
- * sells for is Admin / Marketing head only, while the rest of the form is open to the
- * whole marketing team, so the two must not share a Save.
+ * The Diwali offer for one product. Saves on its own button because it goes through
+ * its own validated, audited endpoint rather than the multipart product save.
  */
 export default function FestivalOfferSettingPanel({
   productId,
@@ -50,7 +49,7 @@ export default function FestivalOfferSettingPanel({
       <section className="mt-6 rounded-lg border border-gray-200 p-4" aria-label="Diwali offer">
         <h3 className="font-semibold text-gray-900">Diwali offer</h3>
         <p className="mt-1 text-sm text-gray-600">
-          {festivalSettingLabel(saved)}. Only an admin or the Marketing head can change this.
+          {festivalSettingLabel(saved)}. Only an admin or the marketing team can change this.
         </p>
       </section>
     );
