@@ -213,6 +213,8 @@ export const staffKeys = {
    */
   bankTransfers: (params: Record<string, string>) => [...staffKeys.orders(), 'bank-transfers', params] as const,
   bankTransferFilterOptions: () => [...staffKeys.orders(), 'bank-transfers', 'filter-options'] as const,
+  /** One transfer's details popup. Under orders(), so confirming or rejecting refreshes it too. */
+  bankTransferDetails: (id: string) => [...staffKeys.orders(), 'bank-transfer-details', id] as const,
   /** One sales order (its payment requests). Under orders(), so list invalidation refreshes it too. */
   salesOrder: (id: string) => [...staffKeys.orders(), 'sales-order', id] as const,
   /** GTM quotations — invalidate after create, edit, cancel or accept. */

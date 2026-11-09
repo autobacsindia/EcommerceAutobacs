@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, FileText, Loader2, Pencil, SlidersHorizontal, X } from 'lucide-react';
+import { Check, ChevronRight, Loader2, Pencil, SlidersHorizontal, X } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateIST, formatDateTimeIST } from '@/lib/datetime';
@@ -11,8 +11,9 @@ import { useListParams } from '@/lib/hooks/useListParams';
 import {
   ListAmountRange, ListClear, ListDateRange, ListResultLine, ListSearch, ListSelect, listField,
 } from '@/components/panel/ListControls';
+import BankTransferDetails, { BANK_TRANSFER_BADGE, type BankTransferStatus } from './BankTransferDetails';
 
-export type BankTransferStatus = 'pending' | 'confirmed' | 'rejected' | 'withdrawn';
+export { transferFileHref, type BankTransferStatus } from './BankTransferDetails';
 
 export type BankTransfer = {
   id: string;
@@ -67,17 +68,12 @@ const DATE_OF = [
 // The filters (not the tab, sort or which-date choice); any of them on → "Clear all".
 const FILTER_KEYS = ['q', 'seller', 'from', 'to', 'min', 'max'] as const;
 
-const BADGE: Record<BankTransferStatus, string> = {
-  pending: 'bg-amber-100 text-amber-800',
-  confirmed: 'bg-green-100 text-green-800',
-  rejected: 'bg-red-100 text-red-800',
-  withdrawn: 'bg-gray-200 text-gray-700',
-};
+/** A click on the card opens the details, unless it was on a control or selected text. */
+const isPlainCardClick = (e: React.MouseEvent) =>
+  !(e.target as HTMLElement).closest('a,button,input,textarea,select,label,form')
+  && !window.getSelection()?.toString();
 
-export const transferFileHref = (id: string, fileId: string) =>
-  `/api/v1/staff/bank-transfers/${encodeURIComponent(id)}/files/${encodeURIComponent(fileId)}`;
-
-function TransferCard({ t }: { t: BankTransfer }) {
+function TransferCard({ t, onOpen }: { t: BankTransfer; onOpen: (id: string) => void }) {
   const queryClient = useQueryClient();
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
@@ -112,7 +108,8 @@ function TransferCard({ t }: { t: BankTransfer }) {
   const busy = confirm.isPending || reject.isPending || edit.isPending || withdraw.isPending;
 
   return (
-    <li className="rounded-xl border border-gray-200 bg-white p-4">
+    <li className="cursor-pointer rounded-xl border border-gray-200 bg-white p-4 hover:border-gray-300 hover:shadow-sm"
+      onClick={(e) => { if (isPlainCardClick(e)) onOpen(t.id); }}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900">
@@ -123,33 +120,16 @@ function TransferCard({ t }: { t: BankTransfer }) {
             {t.salesPerson ? ` · sold by ${t.salesPerson}` : ''}
           </p>
         </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${BADGE[t.status]}`}>{t.statusLabel}</span>
+        <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${BANK_TRANSFER_BADGE[t.status]}`}>{t.statusLabel}</span>
       </div>
 
-      <dl className="mt-3 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-        <div className="flex gap-2"><dt className="text-gray-500">UTR / reference</dt><dd className="font-mono font-medium text-gray-900 break-all">{t.reference}</dd></div>
-        <div className="flex gap-2"><dt className="text-gray-500">Paid on</dt><dd className="text-gray-900">{formatDateIST(t.paidOn)}</dd></div>
-        <div className="flex gap-2 sm:col-span-2"><dt className="text-gray-500">Recorded</dt><dd className="text-gray-900">{t.recordedBy}, {formatDateTimeIST(t.recordedAt)}</dd></div>
-        {t.reviewedAt && (
-          <div className="flex gap-2 sm:col-span-2">
-            <dt className="text-gray-500">{t.status === 'rejected' ? 'Rejected' : 'Confirmed'}</dt>
-            <dd className="text-gray-900">{t.reviewedBy}, {formatDateTimeIST(t.reviewedAt)}</dd>
-          </div>
-        )}
-      </dl>
-      {t.note && <p className="mt-2 rounded-lg bg-gray-50 p-2 text-sm text-gray-700">GTM: {t.note}</p>}
-      {t.reviewNote && <p className="mt-2 rounded-lg bg-red-50 p-2 text-sm text-red-800">Reason: {t.reviewNote}</p>}
-
-      {t.files.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {t.files.map((f, i) => (
-            <a key={f.id} href={transferFileHref(t.id, f.id)} target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50">
-              <FileText className="h-4 w-4 text-emerald-700" /> {f.contentType === 'application/pdf' ? 'PDF' : 'Screenshot'} {t.files.length > 1 ? i + 1 : ''}
-            </a>
-          ))}
-        </div>
-      )}
+      <p className="mt-2 text-sm text-gray-600">
+        Paid on {formatDateIST(t.paidOn)} · UTR <span className="font-mono break-all text-gray-900">{t.reference}</span>
+      </p>
+      <button type="button" onClick={() => onOpen(t.id)}
+        className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:underline">
+        View full details <ChevronRight className="h-4 w-4" />
+      </button>
 
       {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
@@ -240,6 +220,7 @@ export default function BankTransfersList() {
   const { values: v, set, clear } = useListParams({
     status: 'pending', sort: 'newest', dateOf: 'paid', q: '', seller: '', from: '', to: '', min: '', max: '',
   });
+  const [openId, setOpenId] = useState<string | null>(null);
   // Phones: the filters fold away behind a button so the list is not pushed off screen.
   const [showFilters, setShowFilters] = useState(false);
   // A tab the page does not offer (an old link) falls back to "To check".
@@ -331,7 +312,7 @@ export default function BankTransfersList() {
       )}
 
       <ul className={`space-y-3 ${q.isPlaceholderData ? 'opacity-60' : ''}`}>
-        {rows.map((t) => <TransferCard key={t.id} t={t} />)}
+        {rows.map((t) => <TransferCard key={t.id} t={t} onOpen={setOpenId} />)}
       </ul>
 
       {q.hasNextPage && (
@@ -340,6 +321,8 @@ export default function BankTransfersList() {
           {q.isFetchingNextPage ? 'Loading…' : 'Show more'}
         </button>
       )}
+
+      {openId && <BankTransferDetails id={openId} onClose={() => setOpenId(null)} />}
     </div>
   );
 }

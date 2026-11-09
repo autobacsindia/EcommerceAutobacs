@@ -129,7 +129,7 @@ import { canSell } from '../config/staff.js';
 import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller, getProofFile } from '../services/orderAttributionService.js';
 import { listPins, pinOrder, unpinOrder } from '../services/orderPinService.js';
 import {
-  recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, transferFilterOptions, getBankTransfer,
+  recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, transferFilterOptions, getBankTransfer, getBankTransferDetails,
   editBankTransfer, withdrawBankTransfer, getTransferFile,
 } from '../services/bankTransferService.js';
 
@@ -496,6 +496,11 @@ router.post('/bank-transfers/:id/withdraw', validateBankTransferId, validateRequ
 // @route  GET /staff/bank-transfers/:id
 router.get('/bank-transfers/:id', validateBankTransferId, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, transfer: await getBankTransfer(req.user, req.params.id) });
+}));
+
+// @route  GET /staff/bank-transfers/:id/details — the transfer with its customer and order (read-only)
+router.get('/bank-transfers/:id/details', validateBankTransferId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, transfer: await getBankTransferDetails(req.user, req.params.id) });
 }));
 
 // @route  GET /staff/bank-transfers/:id/files/:fileId — a screenshot (private)

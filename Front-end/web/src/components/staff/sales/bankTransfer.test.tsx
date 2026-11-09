@@ -198,11 +198,10 @@ describe('checking bank transfers (accounts / admin)', () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith('/staff/bank-transfers/t1/reject', { note: 'No credit with this UTR' }));
   });
 
-  it('a viewer who may not confirm (GTM) sees the transfer and its screenshot, without the buttons', async () => {
+  it('a viewer who may not confirm (GTM) sees the transfer, without the buttons', async () => {
     get.mockResolvedValue({ transfers: [TRANSFER({ can: { confirm: false, reject: false } })], nextCursor: null });
     wrap(<BankTransfersList />);
     const card = (await screen.findByText(/UTR123456789/)).closest('li') as HTMLElement;
-    expect(within(card).getByRole('link', { name: /Screenshot/ })).toHaveAttribute('href', '/api/v1/staff/bank-transfers/t1/files/f1');
     expect(within(card).queryByRole('button', { name: /confirm/ })).not.toBeInTheDocument();
     expect(within(card).queryByRole('button', { name: /reject/ })).not.toBeInTheDocument();
   });
@@ -213,6 +212,118 @@ describe('checking bank transfers (accounts / admin)', () => {
     expect(await screen.findByText(/Nothing to check/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Confirmed' }));
     await waitFor(() => expect(get).toHaveBeenCalledWith('/staff/bank-transfers?status=confirmed'));
+  });
+});
+
+describe('the full details popup', () => {
+  const DETAILS = (extra: object = {}) => ({ transfer: {
+    ...TRANSFER({ note: 'Paid from HDFC', files: [{ id: 'f1', name: 'a.jpg', contentType: 'image/jpeg', bytes: 1 }, { id: 'f2', name: 'b.pdf', contentType: 'application/pdf', bytes: 1 }] }),
+    history: [{ at: '2026-10-20T10:00:00.000Z', by: 'Asha', action: 'recorded', note: '' }],
+    canOpenOrder: true,
+    quotation: {
+      number: 'QT-TEST1', date: '2026-10-19T10:00:00.000Z', validUntil: '2026-10-26T10:00:00.000Z',
+      customer: { name: 'Quote Person', phone: '9000000000', address: ['5 Quote Rd', 'Kochi, Kerala', '682001'] },
+      lines: [{ n: 1, name: 'Quoted kit', quantity: 2, listPrice: 30000, offerPrice: 26000, amount: 52000 }],
+      subtotal: 60000, discount: 8000, shipping: 0, total: 52000, totalInWords: 'Rupees Fifty Two Thousand Only',
+      pdf: { quotationId: 'q1', orderId: 'o1' },
+    },
+    order: {
+      createdAt: '2026-10-19T10:00:00.000Z', status: 'awaiting_payment', paymentStatus: 'pending',
+      customer: { name: 'Salman Khan', email: 'salman@example.com', phone: '9820917286' },
+      shippingAddress: { lines: ['1 Marine Drive', 'Kochi, Kerala'], phone: '9820917286' }, billingAddress: null,
+      buyer: { legalName: '', gstin: '' },
+      items: [{ name: 'Lift kit', variantLabel: 'Black', quantity: 2, price: 26000, lineTotal: 52000, image: '' }],
+      totals: { subtotal: 52000, shipping: 0, tax: 900, discount: 0, couponCode: '', total: 52000 },
+      statusHistory: [{ status: 'awaiting_payment', at: '2026-10-19T10:00:00.000Z', by: '', reason: '' }],
+    },
+    ...extra,
+  } });
+  const answer = (details: unknown) => get.mockImplementation((url: string) => {
+    if (url.endsWith('/details')) return details instanceof Error ? Promise.reject(details) : Promise.resolve(details);
+    return Promise.resolve({ transfers: [TRANSFER()], nextCursor: null });
+  });
+  const detailCalls = () => get.mock.calls.filter(([u]) => String(u).endsWith('/details')).length;
+
+  it('before a click the card shows only the main details', async () => {
+    answer(DETAILS());
+    wrap(<BankTransfersList />);
+    const card = (await screen.findByText(/UTR123456789/)).closest('li') as HTMLElement;
+    expect(card).toHaveTextContent('Salman Khan');
+    expect(within(card).queryByRole('link', { name: /Screenshot/ })).not.toBeInTheDocument();
+    expect(card).not.toHaveTextContent('Recorded');
+    expect(detailCalls()).toBe(0);
+  });
+
+  it('clicking the card opens everything; Close and Escape shut it', async () => {
+    answer(DETAILS());
+    wrap(<BankTransfersList />);
+    fireEvent.click(await screen.findByText(/Salman Khan/));
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('salman@example.com');
+    expect(dialog).toHaveTextContent('1 Marine Drive');
+    expect(dialog).toHaveTextContent('Lift kit');
+    expect(dialog).toHaveTextContent('Black');
+    expect(dialog).toHaveTextContent('Paid from HDFC');
+    expect(within(dialog).getByRole('link', { name: /Screenshot 1/ })).toHaveAttribute('href', '/api/v1/staff/bank-transfers/t1/files/f1');
+    expect(within(dialog).getByRole('link', { name: /PDF 2/ })).toHaveAttribute('href', '/api/v1/staff/bank-transfers/t1/files/f2');
+    expect(within(dialog).getByRole('link', { name: /Open full order/ })).toHaveAttribute('href', '/admin/orders/o1');
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('shows the quotation, with a link only when the server allows it', async () => {
+    answer(DETAILS());
+    const { unmount } = wrap(<BankTransfersList />);
+    fireEvent.click(await screen.findByRole('button', { name: /View full details/ }));
+    let dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('QT-TEST1');
+    for (const text of ['5 Quote Rd', 'Quoted kit', '₹30,000', '₹26,000', 'Extra, as applicable', 'Rupees Fifty Two Thousand Only']) expect(dialog).toHaveTextContent(text);
+    expect(within(dialog).getByRole('link', { name: /View quotation/ })).toHaveAttribute('href', '/api/v1/staff/sales/quotations/q1/pdf');
+    unmount();
+
+    answer(DETAILS({ quotation: { ...DETAILS().transfer.quotation, shipping: 500, pdf: null } }));
+    wrap(<BankTransfersList />);
+    fireEvent.click(await screen.findByRole('button', { name: /View full details/ }));
+    dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('QT-TEST1');
+    expect(dialog).not.toHaveTextContent('Extra, as applicable');
+    expect(within(dialog).queryByRole('link', { name: /View quotation/ })).not.toBeInTheDocument();
+  });
+
+  it('says so when there is no quotation', async () => {
+    answer(DETAILS({ quotation: null }));
+    wrap(<BankTransfersList />);
+    fireEvent.click(await screen.findByRole('button', { name: /View full details/ }));
+    expect(await within(await screen.findByRole('dialog')).findByText('No quotation for this order.')).toBeInTheDocument();
+  });
+
+  it('the buttons on a card do their own job and never open the popup', async () => {
+    answer(DETAILS());
+    wrap(<BankTransfersList />);
+    fireEvent.click(await screen.findByRole('button', { name: /Not received — reject/ }));
+    expect(screen.getByLabelText(/Why\?/)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/Why\?/));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(detailCalls()).toBe(0);
+  });
+
+  it('an entry with no order and missing fields still reads cleanly', async () => {
+    answer(DETAILS({ order: null, quotation: null, canOpenOrder: false, note: '', files: [], reviewNote: '', history: [] }));
+    wrap(<BankTransfersList />);
+    fireEvent.click(await screen.findByRole('button', { name: /View full details/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText(/order linked to this payment could not be found/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole('link', { name: /Open full order/ })).not.toBeInTheDocument();
+    expect(dialog).not.toHaveTextContent('undefined');
+  });
+
+  it('shows the error if the details cannot be loaded', async () => {
+    answer(new Error('boom'));
+    wrap(<BankTransfersList />);
+    fireEvent.click(await screen.findByRole('button', { name: /View full details/ }));
+    expect(await within(await screen.findByRole('dialog')).findByRole('alert')).toHaveTextContent(/Could not load/);
   });
 });
 
