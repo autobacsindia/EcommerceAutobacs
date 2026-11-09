@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
+import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
 import { toast } from 'react-hot-toast';
 import { useCampaignProductRates } from '@/hooks/queries/useCampaignProductRates';
 import { useAddedToCartToast } from '@/hooks/useAddedToCartToast';
@@ -27,6 +28,7 @@ interface StickyCartBarProps {
     price: number;
     originalPrice?: number;
     stock: StockStatus;
+    festivalOfferSetting?: FestivalOfferSetting | null;
   };
   // Variable-product context (mirrors the BuyBox selection, lifted to the page).
   isVariable?: boolean;
@@ -61,7 +63,7 @@ export default function StickyCartBar({
   const activeStock: StockStatus = variant ? variant.stock : product.stock;
   // Diwali offer for the exact unit — an extra % on top of its selling price
   // (display mirror; the cart charges the server's figure).
-  const festivalOffer = useFestivalOfferPrice(needsSelection ? null : activePrice);
+  const festivalOffer = useFestivalOfferPrice(needsSelection ? null : activePrice, product.festivalOfferSetting);
   /*
     Through CurrencyContext, like every other price.
 

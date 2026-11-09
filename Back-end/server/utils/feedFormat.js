@@ -54,7 +54,7 @@ export function money(rupees) {
  * Also returns the numeric effective price so callers can apply their own
  * validity floor (Google rejects non-positive prices outright).
  */
-export function priceFields(source, festivalOffer = null) {
+export function priceFields(source, festivalOffer = null, setting = null) {
   const eff = roundRupees(effectivePrice(source));
   const orig = typeof source.originalPrice === 'number' ? roundRupees(source.originalPrice) : null;
 
@@ -66,7 +66,7 @@ export function priceFields(source, festivalOffer = null) {
     Diwali price; `sale_price_effective_date` bounds it to the offer window so Google/Meta
     fall back at the end date even if they do not re-fetch the feed in time.
   */
-  const offer = festivalOffer ? applyFestivalOffer({ unitPrice: eff }) : null;
+  const offer = festivalOffer ? applyFestivalOffer({ unitPrice: eff, setting }) : null;
   if (offer) {
     return {
       price: money(orig != null && orig > eff ? orig : eff),

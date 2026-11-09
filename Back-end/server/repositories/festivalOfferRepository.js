@@ -8,6 +8,11 @@ class FestivalOfferRepository {
     return q;
   }
 
+  /** Marks that a per-product setting changed, so shopping feeds rebuild. */
+  async touchProductSettings(at = new Date()) {
+    return this.update({ productSettingsChangedAt: at });
+  }
+
   async update(set) {
     return FestivalOffer.findOneAndUpdate(
       { key: 'default' },

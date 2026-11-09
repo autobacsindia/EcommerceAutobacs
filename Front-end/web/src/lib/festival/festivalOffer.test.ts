@@ -8,6 +8,7 @@ import {
   type FestivalOfferTier,
   type PublicFestivalOffer,
 } from './festivalOffer';
+import type { FestivalOfferSetting } from './festivalOffer';
 
 /*
   The SAME case table the backend runs against the function that charges
@@ -16,7 +17,7 @@ import {
 */
 const fixturePath = path.resolve(__dirname, '../../../../../Back-end/server/tests/fixtures/festivalOfferCases.json');
 const { cases } = JSON.parse(readFileSync(fixturePath, 'utf8')) as {
-  cases: { name: string; unitPrice: number; listPrice: number | null; expected: Record<string, number> | null }[];
+  cases: { name: string; unitPrice: number; listPrice: number | null; setting?: FestivalOfferSetting; expected: Record<string, number> | null }[];
 };
 
 // The server's ladder, as GET /festival-offer/active publishes it.
@@ -33,7 +34,7 @@ describe('applyFestivalOffer — shared case table with the server', () => {
   });
 
   it.each(cases.map((c) => [c.name, c] as const))('%s', (_name, c) => {
-    const out = applyFestivalOffer({ unitPrice: c.unitPrice }, TIERS);
+    const out = applyFestivalOffer({ unitPrice: c.unitPrice, setting: c.setting }, TIERS);
     if (c.expected === null) expect(out).toBeNull();
     else expect(out).toEqual({ code: 'diwali', ...c.expected });
   });

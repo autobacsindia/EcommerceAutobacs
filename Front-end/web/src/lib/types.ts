@@ -34,6 +34,8 @@ export interface ProductSpecification {
 
 export interface Product {
   _id: string;
+  /** Diwali offer override; absent = Automatic. Display only — the server prices. */
+  festivalOfferSetting?: import('@/lib/festival/festivalOffer').FestivalOfferSetting | null;
   name: string;
   slug?: string;
   description: string;

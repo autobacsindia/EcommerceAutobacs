@@ -45,6 +45,51 @@ export const FESTIVAL_OFFER_TIERS = Object.freeze([
   Object.freeze({ minPaise: 2_00_000_00 + 1, percent: 2 }),     // above ₹2,00,000
 ]);
 
+/**
+ * Per-product control (owner decision, 2026-11-09). Stored on the product as
+ * `festivalOfferSetting`; absent means Automatic, so every existing product keeps the
+ * tier ladder with no data migration.
+ *
+ *   absent              → Automatic: the tier ladder above
+ *   { mode: 'none' }    → No Diwali offer: the normal selling price
+ *   { mode: 'custom', percent } → this whole % instead of the ladder
+ */
+export const FESTIVAL_SETTING_MODE = Object.freeze({ AUTO: 'auto', NONE: 'none', CUSTOM: 'custom' });
+export const FESTIVAL_CUSTOM_PERCENT_MIN = 1;
+export const FESTIVAL_CUSTOM_PERCENT_MAX = 30;
+
+/** Whole numbers from the allowed range only — 7.5, 0, 31 and "7" are all refused. */
+export function isValidCustomPercent(percent) {
+  return Number.isInteger(percent)
+    && percent >= FESTIVAL_CUSTOM_PERCENT_MIN
+    && percent <= FESTIVAL_CUSTOM_PERCENT_MAX;
+}
+
+/**
+ * The stored form of an admin's choice: null for Automatic (the field is removed), else
+ * the sub-document. Throws RangeError on anything else so no write path can store a
+ * value the price calculation would have to second-guess.
+ */
+export function toStoredSetting(mode, percent) {
+  if (mode === FESTIVAL_SETTING_MODE.AUTO) return null;
+  if (mode === FESTIVAL_SETTING_MODE.NONE) return { mode };
+  if (mode === FESTIVAL_SETTING_MODE.CUSTOM && isValidCustomPercent(percent)) return { mode, percent };
+  throw new RangeError('Invalid Diwali offer setting');
+}
+
+/**
+ * The % this product earns at this price. A stored value that is neither absent nor
+ * valid gives 0 (no offer): a corrupted row must fall back to the normal price, never
+ * to a guessed discount.
+ */
+export function offerPercentForSetting(basePaise, setting, tiers = FESTIVAL_OFFER_TIERS) {
+  if (setting == null) return tierPercentForPaise(basePaise, tiers);
+  if (setting.mode === FESTIVAL_SETTING_MODE.CUSTOM && isValidCustomPercent(setting.percent)) {
+    return setting.percent;
+  }
+  return 0;
+}
+
 /** The percentage a base price (paise) earns, or 0 when it is not a positive price. */
 export function tierPercentForPaise(basePaise, tiers = FESTIVAL_OFFER_TIERS) {
   if (!Number.isFinite(basePaise) || basePaise <= 0) return 0;
@@ -61,16 +106,17 @@ export function tierPercentForPaise(basePaise, tiers = FESTIVAL_OFFER_TIERS) {
  * @param {Object} args
  * @param {number} args.unitPrice  rupees — the current selling price WITHOUT the offer
  *                                 (pricingService's effectivePrice, sale expiry honoured)
+ * @param {Object} [args.setting]  the product's festivalOfferSetting; absent = Automatic
  * @returns {null | { code, percent, basePrice, finalPrice, discount }}
  *   basePrice  — the price before Diwali (= the selling price the % was taken from)
  *   finalPrice — what one unit costs with the offer, whole rupees
  *   discount   — basePrice − finalPrice, rupees (the Diwali discount amount)
  */
-export function applyFestivalOffer({ unitPrice }, tiers = FESTIVAL_OFFER_TIERS) {
+export function applyFestivalOffer({ unitPrice, setting = null }, tiers = FESTIVAL_OFFER_TIERS) {
   const basePaise = toPaise(unitPrice);
   if (!Number.isFinite(basePaise) || basePaise <= 0) return null;
 
-  const percent = tierPercentForPaise(basePaise, tiers);
+  const percent = offerPercentForSetting(basePaise, setting, tiers);
   if (percent <= 0) return null;
 
   // Round DOWN to whole rupees: the buyer is never charged more than the advertised %.
@@ -87,4 +133,7 @@ export function applyFestivalOffer({ unitPrice }, tiers = FESTIVAL_OFFER_TIERS) 
   };
 }
 
-export default { FESTIVAL_OFFER_CODE, FESTIVAL_OFFER_TIERS, tierPercentForPaise, applyFestivalOffer };
+export default {
+  FESTIVAL_OFFER_CODE, FESTIVAL_OFFER_TIERS, FESTIVAL_SETTING_MODE,
+  tierPercentForPaise, offerPercentForSetting, isValidCustomPercent, toStoredSetting, applyFestivalOffer,
+};

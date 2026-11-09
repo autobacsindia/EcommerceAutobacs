@@ -140,7 +140,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, googleCat
   const rows =
     product.productType === 'variable' && variants.length > 0
       ? variants.map((variant) => {
-          const { price, salePrice, salePriceEffectiveDate, effectiveRupees } = priceFields(variant, festivalOffer);
+          const { price, salePrice, salePriceEffectiveDate, effectiveRupees } = priceFields(variant, festivalOffer, product.festivalOfferSetting);
           return {
             ...base,
             id: googleVariantOfferId(product, variant),
@@ -165,7 +165,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, googleCat
         })
       : [
           (() => {
-            const { price, salePrice, salePriceEffectiveDate, effectiveRupees } = priceFields(product, festivalOffer);
+            const { price, salePrice, salePriceEffectiveDate, effectiveRupees } = priceFields(product, festivalOffer, product.festivalOfferSetting);
             return {
               ...base,
               id: googleOfferId(product),

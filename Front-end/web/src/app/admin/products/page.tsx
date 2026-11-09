@@ -17,12 +17,18 @@ import { SEO_REVIEW, seoReviewStatus, type SeoReview } from '@/lib/seoReview';
 import type { ScorableProduct } from '@/lib/seoScore';
 import { productsListPath, productEditHref } from '@/lib/adminProductsReturn';
 import { usePanel } from '@/lib/usePanel';
+import { useAuth } from '@/context/AuthContext';
+import FestivalOfferBulkBar from '@/components/admin/FestivalOfferBulkBar';
+import FestivalOfferExceptions from '@/components/admin/FestivalOfferExceptions';
+import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
+import { canChangeFestivalOffer, festivalSettingLabel } from '@/lib/festival/festivalOfferSetting';
 
 // ScorableProduct: the admin list returns the full content fields, which is what
 // lets each row show the editor's SEO score without another request.
 interface Product extends ScorableProduct {
   _id: string;
   seoReview?: SeoReview | null;
+  festivalOfferSetting?: FestivalOfferSetting | null;
   name: string;
   price: number;
   stock: StockStatus;
@@ -59,6 +65,15 @@ function oneOf<T extends string, F extends string>(value: string | null, allowed
 
 function AdminProductsPageInner() {
   const { base: panelBase, isAdmin: canManage } = usePanel();
+  const { user } = useAuth();
+  const canEditFestivalOffer = canChangeFestivalOffer(user);
+  // Ticked rows survive paging, so a bulk change can span several pages.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelected = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const searchParams = useSearchParams();
   const router = useRouter();
   // Category filter is URL-driven so it's shareable/bookmarkable. The backend
@@ -289,6 +304,22 @@ function AdminProductsPageInner() {
         </select>
       </div>
 
+      <FestivalOfferExceptions
+        canEdit={canEditFestivalOffer}
+        onChanged={() => queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') })}
+      />
+
+      {canEditFestivalOffer && (
+        <FestivalOfferBulkBar
+          selectedIds={[...selectedIds]}
+          onDone={() => {
+            setSelectedIds(new Set());
+            queryClient.invalidateQueries({ queryKey: adminKeys.resource('products') });
+            queryClient.invalidateQueries({ queryKey: adminKeys.resource('products-festival-exceptions') });
+          }}
+        />
+      )}
+
       {categoryId && (
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-sm border border-blue-200">
@@ -328,6 +359,7 @@ function AdminProductsPageInner() {
           <table className="w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                {canEditFestivalOffer && <th className="px-4 py-3"><span className="sr-only">Select</span></th>}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/3">
                   Product Name
                 </th>
@@ -347,6 +379,9 @@ function AdminProductsPageInner() {
                   SEO work
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Diwali
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Featured
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -357,13 +392,18 @@ function AdminProductsPageInner() {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-500">
+                  <td colSpan={canEditFestivalOffer ? 10 : 9} className="px-4 py-12 text-center text-sm text-gray-500">
                     Loading...
                   </td>
                 </tr>
               )}
               {!loading && products.map((product) => (
                 <tr key={product._id} className={`hover:bg-gray-50 ${product.isActive === false ? 'bg-gray-50/60' : ''}`}>
+                  {canEditFestivalOffer && (
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selectedIds.has(product._id)} onChange={() => toggleSelected(product._id)} aria-label={`Select ${product.name}`} />
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="flex items-start gap-2">
                       <div className="text-sm font-medium text-gray-900 line-clamp-2" title={product.name}>
@@ -418,6 +458,11 @@ function AdminProductsPageInner() {
                         </span>
                       );
                     })()}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className={`px-2 py-1 text-xs rounded-full ${product.festivalOfferSetting ? 'bg-amber-100 text-amber-900' : 'text-gray-500'}`}>
+                      {festivalSettingLabel(product.festivalOfferSetting)}
+                    </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span

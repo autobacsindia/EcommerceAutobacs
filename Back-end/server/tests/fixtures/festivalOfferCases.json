@@ -210,6 +210,123 @@
       "unitPrice": 0,
       "listPrice": null,
       "expected": null
+    },
+    {
+      "name": "setting: no offer → normal price",
+      "unitPrice": 12999,
+      "listPrice": null,
+      "setting": {
+        "mode": "none"
+      },
+      "expected": null
+    },
+    {
+      "name": "setting: custom 7% replaces the 10% tier",
+      "unitPrice": 12999,
+      "listPrice": null,
+      "setting": {
+        "mode": "custom",
+        "percent": 7
+      },
+      "expected": {
+        "percent": 7,
+        "basePrice": 12999,
+        "finalPrice": 12089,
+        "discount": 910
+      }
+    },
+    {
+      "name": "setting: custom 1% (lowest allowed)",
+      "unitPrice": 10000,
+      "listPrice": null,
+      "setting": {
+        "mode": "custom",
+        "percent": 1
+      },
+      "expected": {
+        "percent": 1,
+        "basePrice": 10000,
+        "finalPrice": 9900,
+        "discount": 100
+      }
+    },
+    {
+      "name": "setting: custom 30% (highest allowed)",
+      "unitPrice": 112500,
+      "listPrice": null,
+      "setting": {
+        "mode": "custom",
+        "percent": 30
+      },
+      "expected": {
+        "percent": 30,
+        "basePrice": 112500,
+        "finalPrice": 78750,
+        "discount": 33750
+      }
+    },
+    {
+      "name": "setting: custom % ignores the price tier",
+      "unitPrice": 250000,
+      "listPrice": null,
+      "setting": {
+        "mode": "custom",
+        "percent": 15
+      },
+      "expected": {
+        "percent": 15,
+        "basePrice": 250000,
+        "finalPrice": 212500,
+        "discount": 37500
+      }
+    },
+    {
+      "name": "setting: corrupt custom 31% → no offer",
+      "unitPrice": 12999,
+      "listPrice": null,
+      "setting": {
+        "mode": "custom",
+        "percent": 31
+      },
+      "expected": null
+    },
+    {
+      "name": "setting: corrupt custom 0% → no offer",
+      "unitPrice": 12999,
+      "listPrice": null,
+      "setting": {
+        "mode": "custom",
+        "percent": 0
+      },
+      "expected": null
+    },
+    {
+      "name": "setting: corrupt custom 7.5% → no offer",
+      "unitPrice": 12999,
+      "listPrice": null,
+      "setting": {
+        "mode": "custom",
+        "percent": 7.5
+      },
+      "expected": null
+    },
+    {
+      "name": "setting: corrupt custom with no % → no offer",
+      "unitPrice": 12999,
+      "listPrice": null,
+      "setting": {
+        "mode": "custom"
+      },
+      "expected": null
+    },
+    {
+      "name": "setting: unknown mode → no offer",
+      "unitPrice": 12999,
+      "listPrice": null,
+      "setting": {
+        "mode": "banana"
+      },
+      "expected": null
     }
   ]
 }

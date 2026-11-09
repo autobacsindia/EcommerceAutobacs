@@ -62,8 +62,8 @@ function availability(stock) {
  * shared helper; here we keep only the two fields Meta rows carry (the helper's
  * numeric `effectiveRupees` is a Google-side validity check).
  */
-function priceFields(source, festivalOffer = null) {
-  const { price, salePrice, salePriceEffectiveDate } = sharedPriceFields(source, festivalOffer);
+function priceFields(source, festivalOffer = null, setting = null) {
+  const { price, salePrice, salePriceEffectiveDate } = sharedPriceFields(source, festivalOffer, setting);
   return { price, salePrice, salePriceEffectiveDate };
 }
 
@@ -136,7 +136,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, festivalO
       customLabel0: variant.label,
       sku: variant.sku || product.sku || null,
       availability: availability(variant.stock),
-      ...priceFields(variant, festivalOffer),
+      ...priceFields(variant, festivalOffer, product.festivalOfferSetting),
     }));
   }
 
@@ -149,7 +149,7 @@ export function buildItemsForProduct(product, { siteUrl, defaultBrand, festivalO
       customLabel0: null,
       sku: product.sku || null,
       availability: availability(product.stock),
-      ...priceFields(product, festivalOffer),
+      ...priceFields(product, festivalOffer, product.festivalOfferSetting),
     },
   ];
 }

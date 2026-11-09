@@ -89,7 +89,7 @@ export default function StoreProductCard({
   // Diwali offer — an EXTRA % on top of the price shown; the sale badge and M.R.P.
   // strike-through stay exactly as they are. For a variable product the offer is
   // monotonic in price, so the cheapest model's Diwali price is the true "From" price.
-  const festivalOffer = useFestivalOfferPrice(isVariable ? priceMin : product.price);
+  const festivalOffer = useFestivalOfferPrice(isVariable ? priceMin : product.price, product.festivalOfferSetting);
   const outOfStock = product.stock === 'out';
   const backorder = product.stock === 'backorder';
   const wished = isInWishlist(product._id);

@@ -32,7 +32,7 @@ export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: str
   // Diwali offer (display mirror; the cart charges the server's figure) — an EXTRA %
   // on top of the price; the sale line and M.R.P. stay. Skipped for a variable product,
   // whose tile price is not one model's exact price.
-  const offer = useFestivalOfferPrice(p.variable ? null : p.price);
+  const offer = useFestivalOfferPrice(p.variable ? null : p.price, p.festivalOfferSetting);
   const exact = (n: number) => formatPrice(n, { exact: true });
   return (
     <Link href={p.href} className="st-tile">

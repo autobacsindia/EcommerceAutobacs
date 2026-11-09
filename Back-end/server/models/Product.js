@@ -5,6 +5,7 @@ import { snapshotStock, diffRecoveredTargets } from '../utils/restockDetect.js';
 import SeoSchema from './shared/seoSchema.js';
 import { slugify, generateUniqueSlug } from '../utils/slug.js';
 import { SHIPPING_SIZE_LIMITS as SZ } from '../utils/shippingSize.js';
+import { FESTIVAL_SETTING_MODE, FESTIVAL_CUSTOM_PERCENT_MIN, FESTIVAL_CUSTOM_PERCENT_MAX } from '../utils/festivalOffer.js';
 
 // One selectable model of a `variable` product (e.g. the car model a filter fits).
 // Each variant carries its OWN price + stock status, independent of its siblings —
@@ -344,6 +345,28 @@ const ProductSchema = new mongoose.Schema({
     updatedAt: Date,
   },
 
+  /*
+    Per-product control of the festival (Diwali) price offer. ABSENT = Automatic (the
+    tier ladder), so existing products need no migration. Applies to every variant.
+    Written ONLY by services/productFestivalOfferService.js (parseProductFields drops
+    it from normal saves) because a member of the marketing team may edit a product but
+    may not change this. Public on purpose — the storefront display needs it — so it
+    holds no staff identity; who changed it lives in the audit log.
+  */
+  festivalOfferSetting: {
+    type: new mongoose.Schema({
+      mode: { type: String, enum: [FESTIVAL_SETTING_MODE.NONE, FESTIVAL_SETTING_MODE.CUSTOM], required: true },
+      percent: {
+        type: Number,
+        min: FESTIVAL_CUSTOM_PERCENT_MIN,
+        max: FESTIVAL_CUSTOM_PERCENT_MAX,
+        validate: { validator: (v) => v == null || Number.isInteger(v), message: 'Must be a whole number' },
+        required() { return this.mode === FESTIVAL_SETTING_MODE.CUSTOM; },
+      },
+    }, { _id: false }),
+    default: undefined,
+  },
+
   externalId: {
     type: String,
     unique: true,
@@ -423,6 +446,14 @@ ProductSchema.index({ deletedAt: 1 }, { sparse: true });
 // Sparse index drives the sale-expiry sweep (cronService) — only products with
 // an active sale window carry a saleEndsAt, so the scan stays tiny.
 ProductSchema.index({ saleEndsAt: 1 }, { sparse: true });
+
+// Admin "Diwali offer exceptions" list, keyset-paged on _id. Partial: only products
+// with a non-Automatic setting are indexed, so it stays tiny. Built by config/db.js
+// (autoIndex is off in prod). `$type`, because a partial filter rejects `$ne`.
+ProductSchema.index(
+  { 'festivalOfferSetting.mode': 1, _id: 1 },
+  { partialFilterExpression: { 'festivalOfferSetting.mode': { $type: 'string' } }, name: 'festival_offer_exceptions' },
+);
 
 // Derive `slug` from `name` when the caller didn't supply one. `slug` is required
 // and unique, but nothing upstream guarantees it: the admin create form never sends

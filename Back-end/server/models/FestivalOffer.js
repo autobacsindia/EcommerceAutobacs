@@ -21,6 +21,10 @@ const FestivalOfferSchema = new mongoose.Schema({
   endsAt: { type: Date, default: null },
 
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+
+  // Bumped by every per-product setting change. Part of the shopping-feed cache key,
+  // so Google/Meta stop advertising a price the checkout no longer charges.
+  productSettingsChangedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 export default mongoose.model('FestivalOffer', FestivalOfferSchema);

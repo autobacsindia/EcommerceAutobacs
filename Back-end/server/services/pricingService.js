@@ -204,7 +204,9 @@ class PricingService {
         before, so no downstream maths has to learn about the offer. The offer is
         snapshotted on the line (`festivalOffer`) because orders are immutable records.
       */
-      const offer = offerLive ? applyFestivalOffer({ unitPrice: preOfferPrice }) : null;
+      const offer = offerLive
+        ? applyFestivalOffer({ unitPrice: preOfferPrice, setting: product.festivalOfferSetting })
+        : null;
       const unitPrice = offer ? offer.finalPrice : preOfferPrice;
 
       orderItems.push({

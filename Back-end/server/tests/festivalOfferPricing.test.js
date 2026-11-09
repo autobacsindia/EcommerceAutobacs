@@ -252,3 +252,106 @@ describe('staff sales panel / quotation-style pricing is untouched', () => {
     expect(festivalSavingsPaise).toBe(0);
   });
 });
+
+describe('per-product Diwali setting through the real money path', () => {
+  const NONE = { festivalOfferSetting: { mode: 'none' } };
+  const custom = (percent) => ({ festivalOfferSetting: { mode: 'custom', percent } });
+
+  it('a cart mixing all three settings prices each line by its own', async () => {
+    await offerOn();
+    const auto = await seedProduct(12999);
+    const none = await seedProduct(12999, NONE);
+    const seven = await seedProduct(12999, custom(7));
+
+    const q = await quoteFor([[auto], [none], [seven]]);
+
+    expect(q.orderItems.map((i) => i.price)).toEqual([11699, 12999, 12089]);
+    expect(q.subtotal).toBe(36787);
+    expect(q.savings.festival).toBe(1300 + 910);
+    expect(q.festivalOfferLines.map((l) => l.percent)).toEqual([10, 7]);
+    expect(q.orderItems[1].festivalOffer).toBeNull();
+  });
+
+  it('with the switch off or the dates over, settings do nothing', async () => {
+    const none = await seedProduct(12999, NONE);
+    const seven = await seedProduct(12999, custom(7));
+
+    await offerOff();
+    expect((await quoteFor([[none], [seven]])).orderItems.map((i) => i.price)).toEqual([12999, 12999]);
+    await offerOn({ endsAt: new Date(Date.now() - 1000) });
+    const ended = await quoteFor([[none], [seven]]);
+    expect(ended.orderItems.map((i) => i.price)).toEqual([12999, 12999]);
+    expect(ended.festivalOfferLines).toEqual([]);
+  });
+
+  it('a custom % stacks on an existing sale price, like the tiers do', async () => {
+    await offerOn();
+    const p = await seedProduct(112500, { originalPrice: 140625, ...custom(30) });
+    expect((await quoteFor([[p]])).orderItems[0].price).toBe(78750);
+  });
+
+  it('the setting covers every variant', async () => {
+    await offerOn();
+    const p = await seedProduct(10000, {
+      productType: 'variable',
+      ...custom(20),
+      variants: [
+        { label: 'A', sku: `A${Date.now()}`, price: 10000, stock: 'in' },
+        { label: 'B', sku: `B${Date.now()}`, price: 60000, stock: 'in' },
+      ],
+    });
+    const prices = await Promise.all(p.variants.map(async (v) => (await quoteFor([[p, 1, v._id]])).orderItems[0].price));
+    expect(prices).toEqual([8000, 48000]);
+  });
+
+  it('the order is charged the server price, ignores a tampered client value, and keeps its snapshot', async () => {
+    await offerOn();
+    const user = await seedUser();
+    const p = await seedProduct(12999, custom(7));
+
+    const order = await orderService.createOrder(
+      user._id,
+      [{ product: p._id, quantity: 1, price: 1, festivalOfferSetting: { mode: 'custom', percent: 30 } }],
+      ADDRESS,
+      { shippingCost: 0, acceptTerms: true, totalAmount: 1, festivalOfferPercent: 30 },
+    );
+    const stored = await Order.findById(order._id).lean();
+    expect(stored.items[0].price).toBe(12089);
+    expect(stored.totalAmount).toBe(12089);
+    expect(stored.items[0].festivalOffer).toMatchObject({ percent: 7, priceBeforeOffer: 12999, discount: 910 });
+
+    // Changing the product afterwards must not touch the placed order.
+    await Product.updateOne({ _id: p._id }, { $set: { festivalOfferSetting: { mode: 'none' } } });
+    const after = await Order.findById(order._id).lean();
+    expect(after.items[0].price).toBe(12089);
+    expect(after.items[0].festivalOffer.percent).toBe(7);
+  });
+
+  it('a setting changed between quote and order is caught: the order uses the new one', async () => {
+    await offerOn();
+    const user = await seedUser();
+    const p = await seedProduct(12999, custom(20));
+    expect((await quoteFor([[p]])).totalAmount).toBe(10399);
+
+    await Product.updateOne({ _id: p._id }, { $set: { festivalOfferSetting: { mode: 'none' } } });
+    const order = await orderService.createOrder(user._id, [{ product: p._id, quantity: 1 }], ADDRESS, { shippingCost: 0, acceptTerms: true });
+    expect((await Order.findById(order._id).lean()).totalAmount).toBe(12999);
+  });
+
+  it('coupons apply to the custom price', async () => {
+    await offerOn();
+    const p = await seedProduct(10000, custom(20));
+    await Coupon.create({ code: 'TENOFF', type: 'percentage', value: 10, isActive: true });
+    const q = await quoteFor([[p]], { couponCode: 'TENOFF' });
+    expect(q.subtotal).toBe(8000);
+    expect(q.couponDiscount).toBe(800);
+    expect(q.totalAmount).toBe(7200);
+  });
+
+  it('the staff sales panel still ignores the offer and the setting', async () => {
+    await offerOn();
+    const p = await seedProduct(12999, custom(30));
+    const { orderItems } = await pricingService.priceItems([{ product: p._id, quantity: 1 }]);
+    expect(orderItems[0].price).toBe(12999);
+  });
+});

@@ -45,7 +45,9 @@ function serveFeed(key, ttl, build) {
     const festivalOffer = isFestivalOfferLive(offerCfg, new Date(now))
       ? { startsAt: offerCfg.startsAt || null, endsAt: offerCfg.endsAt || null }
       : null;
-    const offerKey = festivalOffer ? `on:${festivalOffer.startsAt}:${festivalOffer.endsAt}` : 'off';
+    const offerKey = festivalOffer
+      ? `on:${festivalOffer.startsAt}:${festivalOffer.endsAt}:${offerCfg.productSettingsChangedAt?.getTime?.() ?? 0}`
+      : 'off';
     if (!cached || now - cached.builtAt > ttl || cached.offerKey !== offerKey) {
       const products = await productRepository.findForFeed();
       caches.set(key, { xml: build(products, { festivalOffer }), builtAt: now, offerKey });

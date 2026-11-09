@@ -137,6 +137,7 @@ export default function ProductCard({
           priceMin={product.priceMin}
           priceMax={product.priceMax}
           href={url}
+          festivalOfferSetting={product.festivalOfferSetting}
         />
       </div>
     </div>
