@@ -154,6 +154,10 @@ function buildPolicy(scriptSrc: string): string {
     // Blocked in production until 2026-09-21 — browser-verified, and invisible
     // from the server because a blocked frame produces no request to log.
     "frame-src https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com https://www.googletagmanager.com https://www.facebook.com",
+    // Training videos in the staff Lesson Library play straight from the private
+    // bucket by a short-lived link. Without this they fall back to default-src and
+    // the player silently shows nothing.
+    `media-src 'self' ${R2_UPLOAD_ORIGIN}`,
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'self'",

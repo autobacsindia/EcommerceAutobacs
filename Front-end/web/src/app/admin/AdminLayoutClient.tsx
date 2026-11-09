@@ -32,6 +32,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/overview', label: 'Company overview', icon: Building2 },
       { href: '/admin/chat', label: 'Team Chat', icon: MessagesSquare },
       { href: '/admin/tasks', label: 'Tasks', icon: ListTodo },
+      { href: '/admin/lessons', label: 'Lessons', icon: GraduationCap },
       { href: '/admin/analytics', label: 'Analytics', icon: ChartLine },
     ],
   },

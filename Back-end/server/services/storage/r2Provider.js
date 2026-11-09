@@ -266,7 +266,7 @@ export const presignPut = async ({ key, scope, contentType, expiresIn }) => {
  * Presigned GET for a private object — the R2 equivalent of Cloudinary's
  * `private_download_url`, with the same short TTL semantics.
  */
-export const presignGet = async ({ key, scope = 'private', expiresIn, downloadAs }) => {
+export const presignGet = async ({ key, scope = 'private', expiresIn, downloadAs, contentType }) => {
   if (!key) return '';
   const bucket = bucketFor(scope);
   const cfg = r2Config();
@@ -280,6 +280,8 @@ export const presignGet = async ({ key, scope = 'private', expiresIn, downloadAs
       ...(downloadAs
         ? { ResponseContentDisposition: `attachment; filename="${downloadAs.replace(/"/g, '')}"` }
         : {}),
+      // Serve as this type, whatever Content-Type the uploader stored.
+      ...(contentType ? { ResponseContentType: contentType } : {}),
     }),
     { expiresIn: expiresIn || cfg.signedGetTtlSeconds },
   );

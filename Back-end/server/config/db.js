@@ -682,6 +682,9 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftasklinks').createIndex({ pair: 1 }, { unique: true, name: 'staff_task_link_pair', background: true });
     await db.collection('stafftasklinks').createIndex({ from: 1, kind: 1 }, { name: 'staff_task_link_from', background: true });
     await db.collection('stafftasklinks').createIndex({ to: 1, kind: 1 }, { name: 'staff_task_link_to', background: true });
+    await db.collection('stafflessons').createIndex({ archivedAt: 1, audience: 1, _id: -1 }, { name: 'staff_lesson_audience', background: true });
+    await db.collection('stafflessons').createIndex({ archivedAt: 1, _id: -1 }, { name: 'staff_lesson_all', background: true });
+    await db.collection('stafflessonprogress').createIndex({ lesson: 1, user: 1 }, { unique: true, name: 'staff_lesson_progress_person', background: true });
     await db.collection('stafftasklists').createIndex({ team: 1, archivedAt: 1, order: 1 }, { name: 'staff_task_list_team', background: true });
     await db.collection('stafftasklists').createIndex({ team: 1, folder: 1, kind: 1, nameKey: 1 }, { unique: true, name: 'staff_task_list_name', background: true });
     await db.collection('stafftasks').createIndex(
