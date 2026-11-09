@@ -1,16 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, UserCheck } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Paperclip, UserCheck } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { attributionKeys, staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
+import SellerChangeProofDialog, { type ProofFailure } from '@/components/orders/SellerChangeProofDialog';
 
 export interface CreditedOrder {
   id: string;
   seller: { id: string; name: string } | null;
-  history: { at: string; by: string; from: string | null; to: string | null; note: string }[];
+  history: {
+    at: string; by: string; from: string | null; to: string | null; note: string;
+    proofRequired?: boolean;
+    files?: { id: string; name: string }[];
+  }[];
 }
 interface Seller { id: string; name: string; isHead: boolean }
 
@@ -22,8 +27,9 @@ const NONE = '';
  *
  * Shows nothing for any other order (the server answers `null`). The server is
  * the authority: it re-checks who may do this, that the order is a paid website
- * order, and that nobody changed the credit since this screen loaded
- * (`expectedSalesUserId`) — so a stale screen gets "refresh", never a silent overwrite.
+ * order, that proof came with the change (the popup), and that nobody changed the
+ * credit since this screen loaded (`expectedSalesUserId`) — so a stale screen gets
+ * "refresh", never a silent overwrite.
  */
 export default function OrderSellerCredit({ orderId }: { orderId: string }) {
   const qc = useQueryClient();
@@ -40,30 +46,15 @@ export default function OrderSellerCredit({ orderId }: { orderId: string }) {
   });
 
   const [choice, setChoice] = useState<string | null>(null);
-  const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const current = order?.seller?.id ?? NONE;
-  const picked = choice ?? current;
 
-  const save = useMutation({
-    mutationFn: () => apiClient.put<{ order: CreditedOrder }>(`/staff/attribution/orders/${orderId}`, {
-      salesUserId: picked || null,
-      expectedSalesUserId: current || null,
-      ...(note.trim() && { note: note.trim() }),
-    }).then((r) => r.order),
-    onSuccess: (updated) => {
-      qc.setQueryData(attributionKeys.order(orderId), updated);
-      // The salesman's "my orders" and the team lists now include (or drop) this order.
-      qc.invalidateQueries({ queryKey: staffKeys.orders() });
-      qc.invalidateQueries({ queryKey: attributionKeys.lists() });
-      setChoice(null); setNote(''); setError('');
-    },
-    onError: (e: unknown) => {
-      setError(e instanceof Error && e.message ? e.message : 'Could not save. Refresh and try again.');
-      // A 409 means someone else changed it: show what is there now.
-      qc.invalidateQueries({ queryKey: attributionKeys.order(orderId) });
-    },
-  });
+  async function refresh() {
+    // The salesman's "my orders" and the team lists now include (or drop) this order.
+    qc.invalidateQueries({ queryKey: staffKeys.orders() });
+    qc.invalidateQueries({ queryKey: attributionKeys.lists() });
+    await qc.invalidateQueries({ queryKey: attributionKeys.order(orderId) });
+  }
 
   if (!order) return null;
   const sellers = sellersQ.data ?? [];
@@ -86,27 +77,25 @@ export default function OrderSellerCredit({ orderId }: { orderId: string }) {
         </p>
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-gray-700">Credit to</span>
-          <select aria-label="Credit to" value={picked} onChange={(e) => { setChoice(e.target.value); setError(''); }}
-            disabled={sellersQ.isLoading || save.isPending}
+          <select aria-label="Credit to" value={current}
+            onChange={(e) => { if (e.target.value !== current) { setChoice(e.target.value); setError(''); } }}
+            disabled={sellersQ.isLoading || choice !== null}
             className="w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value={NONE}>Website (no salesman)</option>
             {options.map((s) => <option key={s.id} value={s.id}>{s.name}{s.isHead ? ' (GTM head)' : ''}</option>)}
           </select>
         </label>
-        {picked !== current && (
-          <>
-            <input aria-label="Note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300}
-              placeholder="Note (optional) — e.g. closed on a call"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <div className="flex gap-2">
-              <button type="button" onClick={() => save.mutate()} disabled={save.isPending}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-                {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Save
-              </button>
-              <button type="button" onClick={() => { setChoice(null); setNote(''); setError(''); }}
-                className="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">Cancel</button>
-            </div>
-          </>
+        {choice !== null && (
+          <SellerChangeProofDialog
+            orderId={orderId}
+            fromId={current}
+            fromName={order.seller?.name ?? 'Website (no salesman)'}
+            toId={choice}
+            toName={choice ? options.find((s) => s.id === choice)?.name ?? 'this salesman' : 'Website (no salesman)'}
+            onCancel={() => setChoice(null)}
+            onSaved={async () => { await refresh(); setChoice(null); }}
+            onConflict={async ({ message }: ProofFailure) => { await refresh(); setChoice(null); setError(message); }}
+          />
         )}
         {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {order.history.length > 0 && (
@@ -116,6 +105,17 @@ export default function OrderSellerCredit({ orderId }: { orderId: string }) {
               {order.history.map((h, i) => (
                 <li key={i}>
                   {formatDateTimeIST(h.at)} — {h.by}: {h.from ?? 'Website'} → {h.to ?? 'Website'}{h.note && ` · ${h.note}`}
+                  {h.proofRequired === false && <span className="text-gray-400"> · before proof was required</span>}
+                  {!!h.files?.length && (
+                    <span className="mt-0.5 flex flex-wrap gap-x-3">
+                      {h.files.map((f) => (
+                        <a key={f.id} href={`/api/v1/staff/attribution/orders/${encodeURIComponent(orderId)}/proof/${encodeURIComponent(f.id)}`}
+                          target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 underline">
+                          <Paperclip className="h-3 w-3" />{f.name}
+                        </a>
+                      ))}
+                    </span>
+                  )}
                 </li>
               ))}
             </ol>

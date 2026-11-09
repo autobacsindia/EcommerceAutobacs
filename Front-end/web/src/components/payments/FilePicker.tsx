@@ -36,6 +36,7 @@ export default function FilePicker({
   onError,
   maxBytes = MAX_FILE_BYTES,
   wrongType,
+  typesHint,
 }: {
   files: File[];
   onChange: (files: File[]) => void;
@@ -51,6 +52,8 @@ export default function FilePicker({
   maxBytes?: number;
   /** What to say when a file of the wrong type is chosen or pasted (default: what this picker takes). */
   wrongType?: (file: File) => string;
+  /** The kinds of file named under the button (default: photos, or photos or PDFs). */
+  typesHint?: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [preparing, setPreparing] = useState(false);
@@ -112,7 +115,7 @@ export default function FilePicker({
       )}
       {max > 1 && files.length === 0 && (
         <p className="text-xs text-gray-500">
-          Up to {max} files{takesPdf ? ' — photos or PDFs' : ' — photos'}, {mb(Math.min(maxBytes, MAX_ATTACHMENT_BYTES))} each.
+          Up to {max} files — {typesHint ?? (takesPdf ? 'photos or PDFs' : 'photos')}, {mb(Math.min(maxBytes, MAX_ATTACHMENT_BYTES))} each.
         </p>
       )}
       {files.length > 0 && (

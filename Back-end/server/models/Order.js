@@ -129,8 +129,9 @@ const OrderSchema = new mongoose.Schema({
     }, { _id: false }),
     default: undefined,
   },
-  // Who credited this website order to a salesman, and when (services/orderAttributionService.js).
-  // Capped at 50 entries on write. `from`/`to` null = "no one".
+  // Who credited this website order to a salesman, when, and the proof
+  // (services/orderAttributionService.js). A permanent record: entries are never
+  // removed. `from`/`to` null = "no one". No `changeId` = made before proof was required.
   salesAttribution: {
     type: [new mongoose.Schema({
       at: { type: Date, required: true },
@@ -141,6 +142,18 @@ const OrderSchema = new mongoose.Schema({
       to: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
       toName: String,
       note: String,
+      changeId: String,
+      proofFiles: {
+        type: [new mongoose.Schema({
+          publicId: { type: String, required: true },
+          provider: String,
+          url: String,
+          contentType: String,
+          bytes: Number,
+          name: String,
+        })],
+        default: undefined,
+      },
     }, { _id: false })],
     default: undefined,
   },
