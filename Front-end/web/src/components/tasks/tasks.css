@@ -24,9 +24,9 @@
   --tk-accent: #7b68ee;
   /* The page behind the lists, a board column, and the cards on it. */
   --tk-page: #ffffff;
-  --tk-col: #f2f3f6;
+  --tk-col: #ecedf2;
   --tk-col-over: #e6e2fc;
-  --tk-card-line: #e3e6ec;
+  --tk-card-line: #d9dde5;
   --tk-card-bg: #ffffff;
   --tk-card-shadow: 0 1px 2px rgba(20, 22, 40, 0.06), 0 0 0 1px rgba(20, 22, 40, 0.04);
   --tk-card-lift: 0 6px 18px -6px rgba(40, 30, 110, 0.22), 0 0 0 1px rgba(123, 104, 238, 0.35);
@@ -51,7 +51,7 @@
   --tk-add-hover: rgba(123, 104, 238, 0.08);
   /* The small square buttons on a card (date, priority, people, move). */
   --tk-qa-line: #e3e6ec;
-  --tk-qa-ink: #8a93a3;
+  --tk-qa-ink: #5f6878;
   --tk-qa-hover: #f1f0fe;
 
   --pn-focus: #6a57e3;
@@ -60,8 +60,8 @@
   --color-gray-100: oklch(96.7% 0.004 265);
   --color-gray-200: oklch(92.8% 0.006 265);
   --color-gray-300: oklch(87.2% 0.009 265);
-  --color-gray-400: oklch(70.7% 0.014 265);
-  --color-gray-500: oklch(52% 0.016 265);   /* 4.8:1 on white, AA on --tk-page */
+  --color-gray-400: oklch(60% 0.015 265);
+  --color-gray-500: oklch(47% 0.016 265);   /* 4.8:1 on white, AA on --tk-page */
   --color-gray-600: oklch(44.6% 0.016 265);
   --color-gray-700: oklch(37.3% 0.015 265);
   --color-gray-800: oklch(27.8% 0.013 265);

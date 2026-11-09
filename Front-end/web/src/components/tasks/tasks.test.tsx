@@ -8,10 +8,10 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TasksWorkspace from './TasksWorkspace';
 import TaskDetail, { timeAgo } from './TaskDetail';
-import { AvatarStack, colourFor, initialsOf } from './ui';
+import { AVATAR_COLOUR, Avatar, AvatarStack, initialsOf } from './ui';
 import { formatDueDay, isPastDay, todayIST, type Task } from './types';
 import { groupTasks } from './grouping';
-import { placePopover } from './AssigneePicker';
+import { PeopleMenu, placePopover } from './AssigneePicker';
 import { addressBar } from '@/test-utils/addressBarMock';
 
 const get = jest.fn();
@@ -660,10 +660,19 @@ describe('helpers', () => {
     expect(formatDueDay('2031-01-15')).toBe('15 Jan 2031');
   });
 
-  it('initials and colours are stable per person', () => {
+  it('everyone without a photo gets the same violet, with white initials readable on it', () => {
+    const { container } = wrap(<><Avatar name="Herald Pottipati" id="u1" /><Avatar name="Akash" id="u2" /></>);
+    const faces = [...container.querySelectorAll<HTMLElement>('.tk-face')];
+    expect(faces.map((f) => f.textContent)).toEqual(['HP', 'A']);
+    expect(faces.map((f) => f.style.background)).toEqual(['rgb(106, 87, 227)', 'rgb(106, 87, 227)']);
+    const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+    const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(AVATAR_COLOUR.slice(i, i + 2), 16) / 255));
+    expect(1.05 / (0.2126 * r + 0.7152 * g + 0.0722 * b + 0.05)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('initials are taken from the first and last name', () => {
     expect(initialsOf('Herald Winston Pottipati')).toBe('HP');
     expect(initialsOf('Akash')).toBe('A');
-    expect(colourFor('u1')).toBe(colourFor('u1'));
   });
 
   it('times read as "5m ago", then the date', () => {
@@ -872,32 +881,12 @@ describe('the list rows edit in place, like the board (and ClickUp)', () => {
 });
 
 describe('the page header', () => {
-  it('shows where you are: Tasks › My work › the list; "Tasks" goes back to My tasks', async () => {
-    serve();
-    addressBar.reset('/team/tasks', 'view=following');
-    workspace();
-    const crumbs = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    expect(crumbs).toHaveTextContent('Tasks');
-    expect(crumbs).toHaveTextContent('My work');
-    expect(within(crumbs).getByText('Following')).toHaveAttribute('aria-current', 'page');
-    fireEvent.click(within(crumbs).getByRole('button', { name: 'Tasks' }));
-    await waitFor(() => expect(replace).toHaveBeenCalled());
-  });
-
-  it('the breadcrumb and page title use the new names: My tasks, Assigned by me', async () => {
+  it('names the page for screen readers, and shows no breadcrumb outside a list', async () => {
     serve();
     addressBar.reset('/team/tasks', 'view=created');
     workspace();
-    const crumbs = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    expect(within(crumbs).getByText('Assigned by me')).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('heading', { level: 1, name: 'Assigned by me' })).toBeInTheDocument();
-  });
-
-  it('a team head\'s team list sits under "Team"', async () => {
-    serve();
-    addressBar.reset('/team/tasks', 'view=team');
-    workspace({ canSeeTeam: true });
-    expect(await screen.findByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Team');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Assigned by me' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
   });
 });
 
@@ -1033,7 +1022,7 @@ describe('shared tasks and followers (phase 4)', () => {
     const column = await screen.findByRole('region', { name: 'In progress' });
     fireEvent.click(within(column).getByRole('button', { name: /Add task/ }));
     const name = within(column).getByLabelText('New task in In progress');
-    const chip = within(column).getByRole('button', { name: 'Add assignee' });
+    const chip = await within(column).findByRole('button', { name: 'Assignees: Priya' });
     fireEvent.click(chip);
     const search = await screen.findByRole('combobox', { name: 'Search assignees' });
     // The pop-over is drawn on the page, outside the column, so nothing clips it.
@@ -1044,6 +1033,60 @@ describe('shared tasks and followers (phase 4)', () => {
     expect(within(column).queryByLabelText('New task in In progress')).toBeNull();
   });
 
+  describe('the board draft starts with the person adding it', () => {
+    const openDraft = async () => {
+      post.mockResolvedValue({ task: task(), tasks: [task()] });
+      serve({ list: [task()] });
+      localStorage.setItem('tasks-view-mode', 'board');
+      workspace();
+      const column = await screen.findByRole('region', { name: 'In progress' });
+      fireEvent.click(within(column).getByRole('button', { name: /Add task/ }));
+      fireEvent.change(within(column).getByLabelText('New task in In progress'), { target: { value: 'Ring Bosch' } });
+      fireEvent.click(await within(column).findByRole('button', { name: 'Assignees: Priya' }));
+      return column;
+    };
+
+    it('saving untouched gives it to them', async () => {
+      const column = await openDraft();
+      fireEvent.keyDown(await screen.findByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
+      fireEvent.click(within(column).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(post).toHaveBeenCalled());
+      expect(post.mock.calls[0][1].assigneeIds).toEqual(['u1']);
+    });
+
+    it('untick yourself and pick someone else: saved with exactly that person', async () => {
+      const column = await openDraft();
+      fireEvent.click(await screen.findByRole('option', { name: /Me/ }));
+      fireEvent.click(screen.getByRole('option', { name: /Bala/ }));
+      fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
+      fireEvent.click(within(column).getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(post).toHaveBeenCalled());
+      expect(post.mock.calls[0][1].assigneeIds).toEqual(['u3']);
+    });
+
+    it('untick everyone: asks for a person and sends nothing, so nobody is silently added back', async () => {
+      const column = await openDraft();
+      fireEvent.click(await screen.findByRole('option', { name: /Me/ }));
+      fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
+      expect(within(column).getByText('Pick at least one person.')).toBeInTheDocument();
+      expect(within(column).getByRole('button', { name: 'Save' })).toBeDisabled();
+      fireEvent.submit(within(column).getByLabelText('New task in In progress').closest('form')!);
+      expect(post).not.toHaveBeenCalled();
+    });
+  });
+
+  it('the picker keeps the order the server sends after Me, and search still narrows it', async () => {
+    const list = [
+      { id: 'a', name: 'Zara', team: null, teamLabel: '', isHead: false, me: false },
+      { id: 'b', name: 'Anil', team: null, teamLabel: '', isHead: false, me: false },
+      { id: 'c', name: 'Mine', team: null, teamLabel: '', isHead: false, me: true },
+    ];
+    wrap(<PeopleMenu people={list} selected={[]} onChange={() => {}} />);
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([expect.stringMatching(/^.*Me/), expect.stringContaining('Zara'), expect.stringContaining('Anil')]);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'ani' } });
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+  });
+
   it('the board\'s "+ Add task" sets people, a date, priority and a tag; a retry keeps one clientId', async () => {
     serve({ list: [task()] });
     localStorage.setItem('tasks-view-mode', 'board');
@@ -1052,7 +1095,7 @@ describe('shared tasks and followers (phase 4)', () => {
     const column = await screen.findByRole('region', { name: 'In progress' });
     fireEvent.click(within(column).getByRole('button', { name: /Add task/ }));
     fireEvent.change(within(column).getByLabelText('New task in In progress'), { target: { value: 'Ring Bosch' } });
-    fireEvent.click(within(column).getByRole('button', { name: 'Add assignee' }));
+    fireEvent.click(await within(column).findByRole('button', { name: 'Assignees: Priya' }));
     fireEvent.click(await screen.findByRole('option', { name: /Bala/ }));
     fireEvent.click(screen.getByRole('option', { name: /Arun/ }));
     fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search assignees' }), { key: 'Escape' });
@@ -1071,7 +1114,7 @@ describe('shared tasks and followers (phase 4)', () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     const [sent, again] = post.mock.calls.map((c) => c[1]);
     expect(sent).toEqual({
-      title: 'Ring Bosch', status: 'in_progress', assigneeIds: ['u3', 'u2'], shared: true,
+      title: 'Ring Bosch', status: 'in_progress', assigneeIds: ['u1', 'u3', 'u2'], shared: true,
       dueOn: '2099-11-05', priority: 'urgent', tags: ['kochi'], clientId: expect.any(String),
     });
     expect(again.clientId).toBe(sent.clientId);

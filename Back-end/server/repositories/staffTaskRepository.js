@@ -104,6 +104,18 @@ const staffTaskRepository = {
   pageSorted: (query, { sort, limit }) => StaffTask.find(query, LIST_PROJECTION).sort(sort).limit(limit).lean(),
 
   /** How many tasks match, counted over at most `cap` of them. */
+  /**
+   * Who `userId` gave their latest tasks to, newest task first: only for ordering
+   * the people picker, so it reads a few fields of a fixed number of tasks and is
+   * cut off quickly rather than ever holding up the form.
+   */
+  findRecentlyCreatedPeople: (userId, limit) => StaffTask.find({ createdBy: userId })
+    .sort({ _id: -1 })
+    .limit(limit)
+    .select({ assignee: 1, assignees: 1 })
+    .maxTimeMS(2000)
+    .lean(),
+
   countUpTo: async (query, cap) => {
     const count = await StaffTask.countDocuments(query, { limit: cap + 1 });
     return count > cap ? { count: cap, capped: true } : { count, capped: false };

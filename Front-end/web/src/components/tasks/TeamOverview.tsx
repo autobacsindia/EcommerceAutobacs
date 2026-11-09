@@ -64,7 +64,7 @@ export function TeamOverview({ team, spaceTeam, onOpen, onPickList }: {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
         <StatTile icon={ListTodo} label="Open" value={d.counts.open} tone="violet" />
         <StatTile icon={TriangleAlert} label="Late" value={d.counts.late} tone="red" />
         <StatTile icon={AlarmClock} label="Due today" value={d.counts.today} tone="amber" />

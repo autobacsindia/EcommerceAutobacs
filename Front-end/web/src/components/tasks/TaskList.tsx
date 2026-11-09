@@ -195,11 +195,10 @@ const chipClass = 'inline-flex h-7 items-center gap-1 rounded-md border border-g
  * The board's chips under a new task's name: who does it, the due date, the
  * priority and tags — each optional, each shown as what it is once set.
  */
-function QuickChips({ extras, onChange, noPeople = false }: { extras: QuickExtras; onChange: (patch: QuickExtras) => void; noPeople?: boolean }) {
+function QuickChips({ extras, ids, onChange, noPeople = false }: { extras: QuickExtras; ids: string[]; onChange: (patch: QuickExtras) => void; noPeople?: boolean }) {
   const people = useAssignees();
   const choices = people.data?.people ?? [];
   const byId = new Map(choices.map((p) => [p.id, p]));
-  const ids = extras.assigneeIds ?? [];
   const picked = ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
   const [dating, setDating] = useState(false);
   const [tagging, setTagging] = useState(false);
@@ -295,11 +294,17 @@ export function QuickAdd({ status, assigneeId, listId, personal = false, label =
   personal?: boolean;
 }) {
   const add = useQuickAdd();
+  const me = useAssignees().data?.people.find((p) => p.me);
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [extras, setExtras] = useState<QuickExtras>({});
   const clientId = useRef(newClientId());
   const board = variant === 'board';
+  // Until the people are touched, the draft is for whoever's list this is, else the person adding it.
+  const startsWith = assigneeId ?? me?.id;
+  const chosen = extras.assigneeIds ?? (startsWith ? [startsWith] : []);
+  // Everyone taken off: the server would quietly give it back to the creator, so ask instead.
+  const nobody = board && !personal && chosen.length === 0 && extras.assigneeIds !== undefined;
   const stop = () => { setOpen(false); setTitle(''); setExtras({}); };
   if (!open) {
     return (
@@ -314,14 +319,14 @@ export function QuickAdd({ status, assigneeId, listId, personal = false, label =
       </button>
     );
   }
-  const touched = !!(title.trim() || extras.assigneeIds?.length || extras.dueOn || extras.tags?.length || (extras.priority && extras.priority !== 'normal'));
+  const touched = !!(title.trim() || extras.assigneeIds !== undefined || extras.dueOn || extras.tags?.length || (extras.priority && extras.priority !== 'normal'));
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         const text = title.trim();
-        if (!text) return;
-        add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(listId ? { listId } : {}), ...(personal ? { personal } : {}) }, clientId: clientId.current }, {
+        if (!text || nobody) return;
+        add.mutate({ title: text, status, assigneeId, extras: { ...extras, ...(board && !personal && chosen.length ? { assigneeIds: chosen } : {}), ...(listId ? { listId } : {}), ...(personal ? { personal } : {}) }, clientId: clientId.current }, {
           // Ready for the next one; the people and the chips stay, the name clears.
           onSuccess: () => { setTitle(''); clientId.current = newClientId(); },
         });
@@ -351,10 +356,11 @@ export function QuickAdd({ status, assigneeId, listId, personal = false, label =
       </div>
       {board && (
         <>
-          <QuickChips extras={extras} noPeople={personal} onChange={(patch) => setExtras((x) => ({ ...x, ...patch }))} />
+          <QuickChips extras={extras} ids={chosen} noPeople={personal} onChange={(patch) => setExtras((x) => ({ ...x, ...patch }))} />
+          {nobody && <p className="text-xs text-red-600">Pick at least one person.</p>}
           <div className="flex justify-end gap-1.5">
             <button type="button" onClick={stop} className="rounded-md px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100">Cancel</button>
-            <button type="submit" disabled={add.isPending || !title.trim()} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40">Save</button>
+            <button type="submit" disabled={add.isPending || !title.trim() || nobody} className="rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40">Save</button>
           </div>
         </>
       )}

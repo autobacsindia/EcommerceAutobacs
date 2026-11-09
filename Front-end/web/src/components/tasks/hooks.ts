@@ -101,6 +101,7 @@ export type QuickExtras = { assigneeIds?: string[]; dueOn?: string | null; prior
  */
 export function useQuickAdd() {
   const refresh = useRefreshTasks();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ title, status, assigneeId, extras = {}, clientId = newClientId() }: {
       title: string; status: TaskStatus; assigneeId?: string; extras?: QuickExtras; clientId?: string;
@@ -118,7 +119,11 @@ export function useQuickAdd() {
         clientId,
       });
     },
-    onSuccess: () => refresh(),
+    onSuccess: () => {
+      // Whoever was just picked moves up the people picker.
+      queryClient.invalidateQueries({ queryKey: taskKeys.assignees() });
+      return refresh();
+    },
     onError: (e) => { toast.error(errorMessage(e, 'Could not add the task.')); },
   });
 }
