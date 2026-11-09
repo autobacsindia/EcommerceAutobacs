@@ -59,4 +59,7 @@ const StaffLessonSchema = new mongoose.Schema(
 StaffLessonSchema.index({ archivedAt: 1, audience: 1, _id: -1 }, { name: 'staff_lesson_audience' });
 StaffLessonSchema.index({ archivedAt: 1, _id: -1 }, { name: 'staff_lesson_all' });
 
+// Whose lessons: measured in tests/staffHandoverIndexUsage.test.js; also in ensureCriticalIndexes.
+StaffLessonSchema.index({ owner: 1, archivedAt: 1, _id: 1 }, { name: 'staff_lesson_owner' });
+
 export default mongoose.models.StaffLesson || mongoose.model('StaffLesson', StaffLessonSchema);

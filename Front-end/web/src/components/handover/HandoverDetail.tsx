@@ -10,6 +10,7 @@ import { errorMessage } from '@/components/staff/sales/types';
 import { useLessonMeta } from '@/components/lessons/hooks';
 import { useTrainingMeta } from '@/components/training/hooks';
 import { field, primaryButton, quietButton } from '@/components/training/types';
+import WorkPanel from './WorkPanel';
 import { useCancelDeparture, useDeparture, useUpdateDeparture } from './hooks';
 import { dayLabel, timing, type Departure } from './types';
 
@@ -42,7 +43,7 @@ function Details({ d, base }: { d: Departure; base: string }) {
         </div>
       </div>
       <div>
-        <label htmlFor="e-reason" className="mb-1 block text-sm font-medium text-gray-800">Reason (private: only the head and admins)</label>
+        <label htmlFor="e-reason" className="mb-1 block text-sm font-medium text-gray-800">Reason (private: only admins and their team head)</label>
         <textarea id="e-reason" className={field} rows={2} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} />
       </div>
       <div className="flex flex-wrap gap-2">
@@ -80,6 +81,8 @@ export default function HandoverDetail({ id, base }: { id: string; base: string 
       <div className="flex flex-wrap items-center gap-2"><h1 className="text-2xl font-bold text-gray-900">{d.user.name}</h1><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${t.pill}`}>{t.label}</span></div>
       <p className="mt-1 text-sm text-gray-600">{d.teamLabel} · Last day {dayLabel(d.lastDay)} · Taking over: {d.successor?.name ?? 'not named yet'}</p>
       {d.can.manage && <Details key={d.rev} d={d} base={base} />}
+      {!d.can.manage && d.reason && <p className="mt-4 text-sm text-gray-800"><span className="font-medium">Reason (private):</span> {d.reason}</p>}
+      {d.can.handover && <WorkPanel key={d.successor?.id ?? 'none'} d={d} />}
       <section className="mt-6">
         <h2 className="mb-2 font-semibold text-gray-900">Handover note</h2>
         <Note d={d} />

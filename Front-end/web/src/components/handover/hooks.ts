@@ -3,14 +3,14 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api-client';
 import { handoverKeys } from '@/hooks/queries/keys';
-import type { Departure } from './types';
+import type { Departure, HandoverWork } from './types';
 
 const BASE = '/staff/departures';
 
 export function useDeparturePages(enabled: boolean) {
   return useInfiniteQuery({
     queryKey: handoverKeys.list(),
-    queryFn: ({ pageParam }) => apiClient.get<{ departures: Departure[]; nextCursor: string | null }>(`${BASE}${pageParam ? `?cursor=${pageParam}` : ''}`),
+    queryFn: ({ pageParam }) => apiClient.get<{ departures: Departure[]; nextCursor: string | null; canRecord: boolean }>(`${BASE}${pageParam ? `?cursor=${pageParam}` : ''}`),
     initialPageParam: '' as string,
     getNextPageParam: (last) => last.nextCursor || undefined,
     enabled,
@@ -55,5 +55,17 @@ export function useCancelDeparture(id: string) {
   return useMutation({
     mutationFn: () => apiClient.post<{ departure: Departure }>(`${BASE}/${id}/cancel`, {}).then((r) => r.departure),
     onSuccess: apply,
+  });
+}
+
+export function useHandoverWork(id: string, enabled: boolean) {
+  return useQuery({ queryKey: handoverKeys.work(id), queryFn: () => apiClient.get<HandoverWork>(`${BASE}/${id}/work`), enabled });
+}
+
+export function useStartHandover(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiClient.post<HandoverWork & { result: { moved: number; failed: number } }>(`${BASE}/${id}/handover`, {}),
+    onSuccess: (data) => { queryClient.setQueryData(handoverKeys.work(id), data); },
   });
 }

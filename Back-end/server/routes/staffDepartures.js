@@ -2,6 +2,7 @@ import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { validateDepartureId, validateDepartureList, validateDepartureCreate, validateDepartureUpdate } from '../validators/staffDeparture.validator.js';
+import { getWork, startHandover } from '../services/staffHandoverService.js';
 import { recordDeparture, listDepartures, myHandovers, getDeparture, updateDeparture, cancelDeparture } from '../services/staffDepartureService.js';
 
 /** Resignations and handovers (/api/v1/staff/departures). Mounted after routes/staff.js's signed-in gate. */
@@ -27,6 +28,12 @@ router.patch('/:id', v(validateDepartureUpdate), asyncHandler(async (req, res) =
 }));
 router.post('/:id/cancel', v(validateDepartureId), asyncHandler(async (req, res) => {
   res.json({ success: true, departure: await cancelDeparture(req.user, req.params.id, req) });
+}));
+router.get('/:id/work', v(validateDepartureId), asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await getWork(req.user, req.params.id)) });
+}));
+router.post('/:id/handover', v(validateDepartureId), asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await startHandover(req.user, req.params.id, req)) });
 }));
 
 export default router;

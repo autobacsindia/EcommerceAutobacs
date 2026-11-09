@@ -66,7 +66,7 @@ function RecordForm({ base, teams, onClose }: { base: string; teams: string[]; o
         </select>
       </div>
       <div>
-        <label htmlFor="d-reason" className="mb-1 block text-sm font-medium text-gray-800">Reason (private: only the head and admins)</label>
+        <label htmlFor="d-reason" className="mb-1 block text-sm font-medium text-gray-800">Reason (private: only admins and their team head)</label>
         <textarea id="d-reason" className={field} rows={2} maxLength={1000} value={reason} onChange={(e) => setReason(e.target.value)} />
       </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -85,6 +85,7 @@ export default function HandoverHome({ base }: { base: string }) {
   const mine = useMyHandovers();
   const pages = useDeparturePages(isManager);
   const [adding, setAdding] = useState(false);
+  const canRecord = pages.data?.pages[0]?.canRecord === true;
   const rows = pages.data?.pages.flatMap((p) => p.departures) ?? [];
   const myRows = mine.data ?? [];
   const nothing = mine.isSuccess && !myRows.length && (!isManager || (pages.isSuccess && !rows.length));
@@ -96,9 +97,9 @@ export default function HandoverHome({ base }: { base: string }) {
           <h1 className="text-2xl font-bold text-gray-900">Handover</h1>
           <p className="mt-1 text-sm text-gray-600">When someone leaves, this keeps their last day and handover note together.</p>
         </div>
-        {isManager && !adding && <button type="button" onClick={() => setAdding(true)} className={primaryButton}>Record a resignation</button>}
+        {canRecord && !adding && <button type="button" onClick={() => setAdding(true)} className={primaryButton}>Record a resignation</button>}
       </div>
-      {adding && <RecordForm base={base} teams={teams} onClose={() => setAdding(false)} />}
+      {adding && canRecord && <RecordForm base={base} teams={teams} onClose={() => setAdding(false)} />}
       {(mine.isError || pages.isError) && <p className="text-sm text-red-700">This could not be loaded. <button type="button" className="underline" onClick={() => { void mine.refetch(); void pages.refetch(); }}>Try again</button></p>}
       {(mine.isLoading || pages.isLoading) && <p className="text-sm text-gray-600">Loading…</p>}
       {nothing && (
