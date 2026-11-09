@@ -229,6 +229,11 @@ export const TEAM_HELP: TeamHelpSection[] = [
         links: [{ label: 'Lessons', href: '/team/lessons' }],
       },
       {
+        question: 'How does training work?',
+        answer: 'Open Training. Finish your lessons in order, then take the test at the end. The pass mark is 80% and you get 3 attempts. Your team head then signs you off. Team heads set up the training and assign it.',
+        links: [{ label: 'Training', href: '/team/training' }],
+      },
+      {
         question: 'How do tasks work?',
         answer: 'Press "New task", choose who should do it (yourself, or anyone in the staff panel — several people if you like) and pick a due date. They get a pop-up. Whoever gave the task, the team head or the admin can change it or give it to someone else. Tick the circle when a job is done; open a task to comment, add steps or change it.',
         links: [{ label: 'Tasks', href: '/team/tasks' }],

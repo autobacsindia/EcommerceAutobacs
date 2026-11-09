@@ -57,6 +57,7 @@ import {
 } from '../validators/staff.validator.js';
 import staffTaskRoutes from './staffTasks.js';
 import staffLessonRoutes from './staffLessons.js';
+import staffTrainingRoutes from './staffTraining.js';
 import pastSaleRoutes from './pastSales.js';
 import staffReturnRoutes from './staffReturns.js';
 import staffLeadRoutes from './staffLeads.js';
@@ -162,6 +163,9 @@ router.use('/tasks', staffTaskRoutes);
 
 // The Lesson Library: training that heads and admins post.
 router.use('/lessons', staffLessonRoutes);
+
+// Training paths, the module test and the head's sign-off.
+router.use('/training', staffTrainingRoutes);
 
 // Past (offline) sales (routes/pastSales.js) — GTM sellers, accounts, admin.
 router.use('/past-sales', pastSaleRoutes);
