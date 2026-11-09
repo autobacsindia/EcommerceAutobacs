@@ -34,6 +34,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/tasks', label: 'Tasks', icon: ListTodo },
       { href: '/admin/lessons', label: 'Lessons', icon: GraduationCap },
       { href: '/admin/training', label: 'Training', icon: BookOpenCheck },
+      { href: '/admin/handover', label: 'Handover', icon: Handshake },
       { href: '/admin/analytics', label: 'Analytics', icon: ChartLine },
     ],
   },

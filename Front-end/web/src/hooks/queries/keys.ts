@@ -263,6 +263,13 @@ export const lessonKeys = {
   meta: () => [...lessonKeys.all, 'meta'] as const,
 };
 
+export const handoverKeys = {
+  all: [...staffKeys.all, 'handover'] as const,
+  list: () => [...handoverKeys.all, 'list'] as const,
+  mine: () => [...handoverKeys.all, 'mine'] as const,
+  one: (id: string) => [...handoverKeys.all, 'one', id] as const,
+};
+
 export const trainingKeys = {
   all: [...staffKeys.all, 'training'] as const,
   meta: () => [...trainingKeys.all, 'meta'] as const,

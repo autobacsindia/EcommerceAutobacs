@@ -229,6 +229,11 @@ export const TEAM_HELP: TeamHelpSection[] = [
         links: [{ label: 'Lessons', href: '/team/lessons' }],
       },
       {
+        question: 'What is the Handover page?',
+        answer: 'When someone resigns, their team head records the last day and who takes over. The person leaving writes a handover note, and the person taking over can read it. The reason for leaving is private to the head and admins. Recording it does not remove anyone\'s access.',
+        links: [{ label: 'Handover', href: '/team/handover' }],
+      },
+      {
         question: 'How does training work?',
         answer: 'Open Training. Finish your lessons in order, then take the test at the end. The pass mark is 80% and you get 3 attempts. Your team head then signs you off. Team heads set up the training and assign it.',
         links: [{ label: 'Training', href: '/team/training' }],

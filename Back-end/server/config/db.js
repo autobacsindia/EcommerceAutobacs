@@ -690,6 +690,11 @@ export async function ensureCriticalIndexes() {
     await db.collection('stafftrainingassignments').createIndex({ team: 1, _id: -1 }, { name: 'staff_training_team', background: true });
     await db.collection('stafftrainingassignments').createIndex({ active: 1, status: 1, team: 1 }, { name: 'staff_training_waiting', background: true });
     await db.collection('stafftrainingpaths').createIndex({ archivedAt: 1, team: 1, _id: -1 }, { name: 'staff_training_path_team', background: true });
+    await db.collection('staffdepartures').createIndex({ user: 1 }, { unique: true, partialFilterExpression: { active: true }, name: 'staff_departure_one_open', background: true });
+    await db.collection('staffdepartures').createIndex({ team: 1, wasHead: 1, _id: -1 }, { name: 'staff_departure_team', background: true });
+    await db.collection('staffdepartures').createIndex({ active: 1, lastDay: 1, team: 1 }, { name: 'staff_departure_due', background: true });
+    await db.collection('staffdepartures').createIndex({ active: 1, successor: 1 }, { name: 'staff_departure_successor', background: true });
+    await db.collection('staffdepartures').createIndex({ active: 1, user: 1 }, { name: 'staff_departure_person', background: true });
     await db.collection('stafftrainingattempts').createIndex({ assignment: 1, number: 1 }, { unique: true, name: 'staff_training_attempt_number', background: true });
     await db.collection('stafflessonprogress').createIndex({ lesson: 1, user: 1 }, { unique: true, name: 'staff_lesson_progress_person', background: true });
     await db.collection('stafftasklists').createIndex({ team: 1, archivedAt: 1, order: 1 }, { name: 'staff_task_list_team', background: true });
