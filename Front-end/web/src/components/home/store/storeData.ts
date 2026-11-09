@@ -11,6 +11,7 @@
  * Each fetch degrades to an empty list, and an empty row is simply not rendered.
  */
 import { serverFetch } from '@/lib/server-api';
+import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
 
 const REVALIDATE = 300;
 /*
@@ -41,6 +42,7 @@ export interface StoreProduct {
    * (tiered per unit price) is not shown on its tile — the PDP shows it per model.
    */
   variable?: boolean;
+  festivalOfferSetting?: FestivalOfferSetting | null;
 }
 
 export interface StoreCategory {
@@ -91,6 +93,7 @@ interface ApiProduct {
   brand?: string;
   price: number;
   originalPrice?: number | null;
+  festivalOfferSetting?: FestivalOfferSetting | null;
   offerEndDate?: string | null;
   productType?: string;
   averageRating?: number;
@@ -119,6 +122,7 @@ export const toStoreProduct = (p: ApiProduct): StoreProduct => {
     rating: p.averageRating || 0,
     reviews: p.totalReviews || 0,
     ...(p.productType === 'variable' && { variable: true }),
+    ...(p.festivalOfferSetting && { festivalOfferSetting: p.festivalOfferSetting }),
   };
 };
 

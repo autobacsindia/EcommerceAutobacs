@@ -7,9 +7,11 @@ import { useCart } from '@/context/CartContext';
 import { useCurrency } from '@/context/CurrencyContext';
 import { toast } from 'react-hot-toast';
 import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
+import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
 
 interface Props {
+  festivalOfferSetting?: FestivalOfferSetting | null;
   productId: string;
   price: number;
   originalPrice?: number;
@@ -31,6 +33,7 @@ export default function ProductCardPriceActions({
   priceMin,
   priceMax,
   href,
+  festivalOfferSetting,
 }: Props) {
   const { addToCart } = useCart();
   const { formatPrice } = useCurrency();
@@ -41,7 +44,7 @@ export default function ProductCardPriceActions({
   const displayPrice = isVariable ? priceMin ?? price : price;
   // Diwali offer — an extra % on top of the price shown. For a variable product the
   // offer is monotonic in price, so the cheapest model's Diwali price is the true "From".
-  const offer = useFestivalOfferPrice(displayPrice);
+  const offer = useFestivalOfferPrice(displayPrice, festivalOfferSetting);
   const exact = (n: number) => formatPrice(n, { exact: true });
 
   const handleAddToCart = async (e: React.MouseEvent) => {

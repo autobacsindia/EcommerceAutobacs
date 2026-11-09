@@ -445,6 +445,19 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ FestivalOffer singleton index confirmed');
 
+    // Admin "Diwali offer exceptions" list. Partial, so it holds only the few products
+    // with a non-Automatic setting and builds instantly. autoIndex is off in prod, so
+    // this is what actually creates it. Must match Product.js.
+    await db.collection('products').createIndex(
+      { 'festivalOfferSetting.mode': 1, _id: 1 },
+      {
+        background: true,
+        name: 'festival_offer_exceptions',
+        partialFilterExpression: { 'festivalOfferSetting.mode': { $type: 'string' } },
+      }
+    );
+    console.log('✓ Product festival-offer exceptions index confirmed');
+
     // MONEY-ADJACENT: one ACTIVE (non-cancelled) return per (order, product). This
     // is the DB race-safe backstop returnController.createReturnRequest relies on —
     // its findOne pre-check can be beaten by two concurrent submissions, and only

@@ -89,7 +89,7 @@ class ProductRepository {
       .select(
         'name shortDescription description slug price originalPrice salePrice ' +
         'saleEndsAt stock brand images wpId productType variants updatedAt ' +
-        'sku categories'
+        'sku categories festivalOfferSetting'
       )
       .populate({ path: 'categories', select: 'name' })
       .sort({ updatedAt: -1 })
@@ -111,6 +111,49 @@ class ProductRepository {
         price: 1, originalPrice: 1, saleEndsAt: 1, stock: 1, isActive: 1,
         productType: 1, variants: 1, updatedAt: 1, images: { $slice: 1 },
       })
+      .sort({ _id: 1 })
+      .limit(limit)
+      .lean()
+      .maxTimeMS(QUERY_TIMEOUTS.listing);
+  }
+
+  /** Live products among `ids`, with what the audit and the cache purge need. */
+  async findForFestivalOfferChange(ids) {
+    return Product.find({ _id: { $in: ids }, deletedAt: null })
+      .select('name slug festivalOfferSetting')
+      .limit(ids.length)
+      .lean();
+  }
+
+  /**
+   * Apply one Diwali offer setting to many products; null removes it (Automatic).
+   * `timestamps: false`: not a content change, so the sitemap's lastmod stays put.
+   */
+  async setFestivalOfferSetting(ids, stored) {
+    const update = stored
+      ? { $set: { festivalOfferSetting: stored } }
+      : { $unset: { festivalOfferSetting: 1 } };
+    const res = await Product.updateMany(
+      { _id: { $in: ids }, deletedAt: null },
+      update,
+      { timestamps: false, runValidators: true },
+    );
+    return res.modifiedCount;
+  }
+
+  /**
+   * One keyset page of products that are not on Automatic. `mode` narrows to
+   * none/custom. The `$type` must stay in BOTH cases: it is what proves to the planner
+   * that the partial index covers this query. Without it a mode filter walks `_id`
+   * instead (measured: 2,501 documents read to return 51 from a 5,000 product catalogue).
+   */
+  async findFestivalOfferExceptions({ mode = null, afterId = null, limit = 50 } = {}) {
+    return Product.find({
+      'festivalOfferSetting.mode': mode ? { $type: 'string', $eq: mode } : { $type: 'string' },
+      deletedAt: null,
+      ...(afterId && { _id: { $gt: afterId } }),
+    })
+      .select('name slug price productType priceMin priceMax isActive festivalOfferSetting')
       .sort({ _id: 1 })
       .limit(limit)
       .lean()

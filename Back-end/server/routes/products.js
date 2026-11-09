@@ -16,7 +16,9 @@ import {
   validateSearchAnalytics,
   validateProductSearch
 } from "../middleware/validationMiddleware.js";
-import { protect, admin, adminOrMarketing } from "../middleware/authMiddleware.js";
+import { protect, admin, adminOrMarketing, adminOrMarketingHead } from "../middleware/authMiddleware.js";
+import { setFestivalOfferSetting, listFestivalOfferExceptions } from "../controllers/productFestivalOfferController.js";
+import { validateSetFestivalOfferSetting, validateFestivalOfferExceptions } from "../validators/festivalOffer.validator.js";
 import { httpCache } from "../middleware/httpCache.js";
 import { invalidatePublicCache } from "../middleware/publicCacheMiddleware.js";
 import {
@@ -400,6 +402,30 @@ router.put(
   // route-level hook here used PRODUCT_DETAIL:*/PRODUCT_LIST* patterns that
   // never matched the real md5 keys — a silent no-op.
   asyncHandler(updateProductWithImages)
+);
+
+// @route   GET /products/admin/festival-offer-exceptions?mode=none|custom&cursor=&limit=
+// @desc    Products not on Automatic for the Diwali offer (keyset-paged, bounded)
+// @access  Private/Admin, Marketing
+router.get(
+  "/admin/festival-offer-exceptions",
+  protect,
+  adminOrMarketing,
+  validateFestivalOfferExceptions,
+  validateRequest,
+  asyncHandler(listFestivalOfferExceptions)
+);
+
+// @route   PATCH /products/festival-offer-setting  { productIds[], mode, percent? }
+// @desc    Set the Diwali offer for one or many products (the only write path)
+// @access  Private/Admin, Marketing head
+router.patch(
+  "/festival-offer-setting",
+  protect,
+  adminOrMarketingHead,
+  validateSetFestivalOfferSetting,
+  validateRequest,
+  asyncHandler(setFestivalOfferSetting)
 );
 
 // @route   PATCH /products/:id/seo-review  { status: todo|in_progress|done }

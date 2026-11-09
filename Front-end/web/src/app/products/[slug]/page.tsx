@@ -199,7 +199,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const festivalOfferCfg = await getFestivalOffer();
   const jsonLdOffer = product && product.productType !== 'variable' && isOfferLive(festivalOfferCfg)
     ? applyFestivalOffer(
-      { unitPrice: Number(product.price) },
+      { unitPrice: Number(product.price), setting: product.festivalOfferSetting },
       festivalOfferCfg!.tiers,
       festivalOfferCfg!.code,
     )

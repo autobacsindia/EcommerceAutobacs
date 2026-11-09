@@ -14,6 +14,7 @@ const renderWithClient = (ui: React.ReactElement) => {
 
 // Mock apiClient
 jest.mock('@/lib/api');
+jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { role: 'admin' } }) }));
 
 // Mock useRouter and useParams
 jest.mock('next/navigation', () => ({

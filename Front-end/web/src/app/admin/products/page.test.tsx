@@ -7,6 +7,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 
 // Mock dependencies
 jest.mock('@/lib/api');
+jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { role: 'admin' } }) }));
 
 // Mock next/navigation (the page reads the category filter from the URL).
 jest.mock('next/navigation', () => ({

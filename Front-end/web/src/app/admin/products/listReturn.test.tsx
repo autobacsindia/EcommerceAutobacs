@@ -18,6 +18,7 @@ jest.mock('next/navigation', () => ({
 }));
 const get = jest.fn();
 jest.mock('@/lib/api', () => ({ __esModule: true, default: { get: (...a: unknown[]) => get(...a), delete: jest.fn(), patch: jest.fn() } }));
+jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { role: 'admin' } }) }));
 jest.mock('@/lib/revalidateHome', () => ({ revalidateHome: jest.fn() }));
 jest.mock('@/components/admin/ExportProductsButton', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/admin/SeoScoreBadge', () => ({ __esModule: true, default: () => null }));

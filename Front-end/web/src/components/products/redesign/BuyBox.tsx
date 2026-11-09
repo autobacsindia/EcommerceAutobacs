@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useFestivalOfferPrice } from '@/components/festival/FestivalOfferContext';
 import FestivalOfferTag from '@/components/festival/FestivalOfferTag';
+import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
 import FestivalDealBadge from '@/components/festival/FestivalDealBadge';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -46,6 +47,7 @@ export interface ProductVariant {
 }
 
 interface BuyBoxProduct {
+  festivalOfferSetting?: FestivalOfferSetting | null;
   _id: string;
   name: string;
   price: number;
@@ -140,9 +142,10 @@ export default function BuyBox({
   const saleExpired = !isVariable && !!product.saleEndsAt && !saleLive && !!activeOriginal && activeOriginal > activePrice;
   const festivalOffer = useFestivalOfferPrice(
     needsSelection ? null : saleExpired ? activeOriginal : activePrice,
+    product.festivalOfferSetting,
   );
-  const rangeMinOffer = useFestivalOfferPrice(needsSelection ? priceMin : null);
-  const rangeMaxOffer = useFestivalOfferPrice(needsSelection ? priceMax : null);
+  const rangeMinOffer = useFestivalOfferPrice(needsSelection ? priceMin : null, product.festivalOfferSetting);
+  const rangeMaxOffer = useFestivalOfferPrice(needsSelection ? priceMax : null, product.festivalOfferSetting);
   const rangeMin = rangeMinOffer?.finalPrice ?? priceMin;
   const rangeMax = rangeMaxOffer?.finalPrice ?? priceMax;
   const outOfStock = activeStock === 'out';

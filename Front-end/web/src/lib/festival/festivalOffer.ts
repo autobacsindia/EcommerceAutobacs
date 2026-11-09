@@ -34,6 +34,12 @@ export interface FestivalOfferResult {
   discount: number;
 }
 
+/** A product's override; absent = Automatic (the tier ladder). Set in the admin. */
+export interface FestivalOfferSetting { mode: 'none' | 'custom'; percent?: number }
+
+export const FESTIVAL_CUSTOM_PERCENT_MIN = 1;
+export const FESTIVAL_CUSTOM_PERCENT_MAX = 30;
+
 const REVALIDATE_SECONDS = 300;
 
 const toPaise = (rupees: number) => Math.round((Number(rupees) || 0) * 100);
@@ -49,6 +55,23 @@ export function tierPercentForPaise(basePaise: number, tiers: FestivalOfferTier[
   return percent;
 }
 
+/** Whole numbers in the allowed range only — mirrors the server's isValidCustomPercent. */
+export function isValidCustomPercent(percent: unknown): percent is number {
+  return Number.isInteger(percent)
+    && (percent as number) >= FESTIVAL_CUSTOM_PERCENT_MIN
+    && (percent as number) <= FESTIVAL_CUSTOM_PERCENT_MAX;
+}
+
+/** Mirror of offerPercentForSetting: a setting that is present but invalid means no offer. */
+function offerPercentForSetting(
+  basePaise: number,
+  setting: FestivalOfferSetting | null | undefined,
+  tiers: FestivalOfferTier[],
+): number {
+  if (setting == null) return tierPercentForPaise(basePaise, tiers);
+  return setting.mode === 'custom' && isValidCustomPercent(setting.percent) ? setting.percent : 0;
+}
+
 /**
  * Mirror of the server's applyFestivalOffer: an EXTRA % on top of the current selling
  * price, tiered by that selling price, rounded down to whole rupees. The M.R.P. plays
@@ -56,14 +79,14 @@ export function tierPercentForPaise(basePaise: number, tiers: FestivalOfferTier[
  * applying it to a variable product's cheapest price gives its true "From" price.
  */
 export function applyFestivalOffer(
-  { unitPrice }: { unitPrice: number },
+  { unitPrice, setting = null }: { unitPrice: number; setting?: FestivalOfferSetting | null },
   tiers: FestivalOfferTier[],
   code = 'diwali',
 ): FestivalOfferResult | null {
   const basePaise = toPaise(unitPrice);
   if (!Number.isFinite(basePaise) || basePaise <= 0) return null;
 
-  const percent = tierPercentForPaise(basePaise, tiers);
+  const percent = offerPercentForSetting(basePaise, setting, tiers);
   if (percent <= 0) return null;
 
   const rawPaise = Math.floor((basePaise * (100 - percent)) / 100);

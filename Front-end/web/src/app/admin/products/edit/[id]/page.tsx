@@ -19,6 +19,8 @@ import RichTextEditor from '@/components/ui/RichTextEditor';
 import SeoScorePanel from '@/components/ui/SeoScorePanel';
 import SeoReviewControl from '@/components/admin/SeoReviewControl';
 import type { SeoReview } from '@/lib/seoReview';
+import FestivalOfferSettingPanel from '@/components/admin/FestivalOfferSettingPanel';
+import type { FestivalOfferSetting } from '@/lib/festival/festivalOffer';
 import SeoPanel, { EMPTY_SEO, toSeoFormValue, type SeoFormValue } from '@/components/admin/SeoPanel';
 import VariantsEditor, { serializeVariants, emptyVariant, type EditorVariant } from '@/components/admin/VariantsEditor';
 import CategoryMultiSelect, { type CategoryOption } from '@/components/admin/CategoryMultiSelect';
@@ -92,6 +94,7 @@ export default function EditProductPage() {
   // The list view this product was opened from — saving goes back there, not to page 1.
   const returnTo = safeProductsReturn(useSearchParams().get('returnTo'), panelBase);
   const productId = params.id as string;
+  const [festivalOfferSetting, setFestivalOfferSetting] = useState<FestivalOfferSetting | null>(null);
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -350,6 +353,7 @@ export default function EditProductPage() {
 
       // Hydrate SEO overrides (blank fields fall back to computed defaults)
       setSeo(toSeoFormValue(productData.seo));
+      setFestivalOfferSetting(productData.festivalOfferSetting ?? null);
       setShippingSize(shippingSizeToForm(productData.shippingSize));
 
       // Hydrate variable-product models (if any) so edits preserve variant _ids
@@ -1494,6 +1498,8 @@ export default function EditProductPage() {
               url: slug ? `https://autobacsindia.com/products/${slug}` : undefined,
             }}
           />
+
+          <FestivalOfferSettingPanel productId={productId} setting={festivalOfferSetting} />
         </div>
         
         <div className="mt-8 flex justify-end gap-4">

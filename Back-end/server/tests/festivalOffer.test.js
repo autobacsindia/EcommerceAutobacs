@@ -50,7 +50,7 @@ function extractCsrfFromSetCookie(setCookieHeader = []) {
 // ── Pure maths ───────────────────────────────────────────────────────────────
 describe('applyFestivalOffer — shared case table (same table the storefront runs)', () => {
   it.each(CASES.map((c) => [c.name, c]))('%s', (_name, c) => {
-    const out = applyFestivalOffer({ unitPrice: c.unitPrice, listPrice: c.listPrice });
+    const out = applyFestivalOffer({ unitPrice: c.unitPrice, listPrice: c.listPrice, setting: c.setting });
     if (c.expected === null) {
       expect(out).toBeNull();
     } else {
@@ -272,5 +272,17 @@ describe('Festival offer API', () => {
     const res = await agent.get(`${BASE}/festival-offer/admin`);
     expect(res.status).toBe(200);
     expect(res.body.offer).toMatchObject({ enabled: false, live: false });
+  });
+});
+
+describe('shopping feeds honour the per-product setting', () => {
+  const live = { startsAt: null, endsAt: null };
+  it('advertises the same price the checkout charges', () => {
+    expect(priceFields({ price: 12999 }, live, null).effectiveRupees).toBe(11699);
+    expect(priceFields({ price: 12999 }, live, { mode: 'custom', percent: 7 }).effectiveRupees).toBe(12089);
+    const none = priceFields({ price: 12999 }, live, { mode: 'none' });
+    expect(none.effectiveRupees).toBe(12999);
+    expect(none.salePrice).toBeNull();
+    expect(priceFields({ price: 12999 }, null, { mode: 'custom', percent: 7 }).effectiveRupees).toBe(12999);
   });
 });

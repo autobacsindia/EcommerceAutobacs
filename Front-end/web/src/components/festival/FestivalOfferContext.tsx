@@ -6,6 +6,7 @@ import {
   isOfferLive,
   msUntilOfferBoundary,
   type FestivalOfferResult,
+  type FestivalOfferSetting,
   type PublicFestivalOffer,
 } from '@/lib/festival/festivalOffer';
 
@@ -60,8 +61,11 @@ export function useFestivalOffer(): PublicFestivalOffer | null {
  * only — cart/checkout show the server quote instead. The M.R.P. plays no part: the
  * offer stacks on top of whatever the product currently sells for.
  */
-export function useFestivalOfferPrice(price: number | null | undefined): FestivalOfferResult | null {
+export function useFestivalOfferPrice(
+  price: number | null | undefined,
+  setting?: FestivalOfferSetting | null,
+): FestivalOfferResult | null {
   const offer = useFestivalOffer();
   if (!offer || typeof price !== 'number') return null;
-  return applyFestivalOffer({ unitPrice: price }, offer.tiers, offer.code);
+  return applyFestivalOffer({ unitPrice: price, setting }, offer.tiers, offer.code);
 }
