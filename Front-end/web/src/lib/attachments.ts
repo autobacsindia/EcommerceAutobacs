@@ -19,6 +19,8 @@ export const MAX_ATTACHMENTS_PER_RECORD = 50;
 
 /** What payment and parcel pickers take: a photo or a PDF. */
 export const PHOTO_OR_PDF = 'image/jpeg,image/png,image/webp,application/pdf';
+/** Proof for a change of "Sold by": also common documents. The server checks the bytes. */
+export const PROOF_FILES = `${PHOTO_OR_PDF},.docx,.xlsx,.txt,.csv`;
 export const PHOTO_ONLY = 'image/jpeg,image/png,image/webp';
 
 export const mb = (bytes: number) => `${Math.round(bytes / (1024 * 1024))} MB`;

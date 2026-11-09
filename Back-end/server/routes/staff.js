@@ -25,7 +25,7 @@ import {
   validateBankTransferId,
   validateBankTransferFile,
   validateBankTransferReject,
-  validateSetSeller,
+  validateSetSeller, validateCreditProofFile,
   validateOrderIdParam,
   validateSalesOrder,
   validateQuotationIdParam,
@@ -63,7 +63,7 @@ import pastSaleRoutes from './pastSales.js';
 import staffReturnRoutes from './staffReturns.js';
 import staffLeadRoutes from './staffLeads.js';
 import {
-  uploadProofPhotos, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPayDetailsQr,
+  uploadProofPhotos, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPayDetailsQr, uploadCreditProof,
 } from '../middleware/uploadMiddleware.js';
 import {
   listQueue,
@@ -125,7 +125,7 @@ import {
 import { requestPayment, cancelPart, getPaymentRequestPdf } from '../services/salesPaymentService.js';
 import { setPayDetails, readPayDetailsQr } from '../services/salesPayDetailsService.js';
 import { canSell } from '../config/staff.js';
-import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller } from '../services/orderAttributionService.js';
+import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller, getProofFile } from '../services/orderAttributionService.js';
 import { listPins, pinOrder, unpinOrder } from '../services/orderPinService.js';
 import {
   recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, transferFilterOptions, getBankTransfer,
@@ -428,9 +428,23 @@ router.get('/attribution/orders/:id', validateOrderIdParam, validateRequest, asy
   res.json({ success: true, order: await getWebsiteOrder(req.user, req.params.id) });
 }));
 
-// @route  PUT /staff/attribution/orders/:id — { salesUserId|null, expectedSalesUserId|null, note? }
-router.put('/attribution/orders/:id', validateSetSeller, validateRequest, asyncHandler(async (req, res) => {
-  res.json({ success: true, order: await setSeller(req.user, req.params.id, req.body, req) });
+// @route  PUT /staff/attribution/orders/:id — multipart: salesUserId, expectedSalesUserId ('' = no one), changeId, note?, proof files
+router.put('/attribution/orders/:id', concurrentUploadGuard, attachmentSizeGuard, uploadCreditProof, handleAttachmentError,
+  validateSetSeller, validateRequest, asyncHandler(async (req, res) => {
+    res.json({ success: true, order: await setSeller(req.user, req.params.id, req.body, req.files || [], req) });
+  }));
+
+// @route  GET /staff/attribution/orders/:id/proof/:fileId — one proof file (private)
+router.get('/attribution/orders/:id/proof/:fileId', validateCreditProofFile, validateRequest, asyncHandler(async (req, res) => {
+  const { buffer, contentType, name } = await getProofFile(req.user, req.params.id, req.params.fileId);
+  const inline = contentType === 'application/pdf' || contentType.startsWith('image/');
+  res.set({
+    'Content-Type': contentType,
+    'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename="${String(name).replace(/[^\w.-]+/g, '_')}"`,
+    'Cache-Control': 'private, no-store',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.send(buffer);
 }));
 
 // ── Bank transfers (scope enforced in bankTransferService) ──────────────────

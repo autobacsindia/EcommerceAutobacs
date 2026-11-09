@@ -11,6 +11,6 @@ export async function postForm<T>(endpoint: string, form: FormData, method: 'POS
   delete headers['Content-Type'];
   const res = await fetch(`/api/v1${endpoint}`, { method, body: form, headers, credentials: 'include' });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(body?.message || 'Upload failed'), { rawData: body });
+  if (!res.ok) throw Object.assign(new Error(body?.message || 'Upload failed'), { rawData: body, status: res.status });
   return body as T;
 }
