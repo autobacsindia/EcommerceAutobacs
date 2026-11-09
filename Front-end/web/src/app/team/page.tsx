@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, Landmark, Contact } from 'lucide-react';
+import { Users, PlusCircle, ReceiptText, FileText, BadgeCheck, PackageCheck, PackageSearch, PhoneCall, Wallet, Truck, Landmark, Contact, Megaphone } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MARKETING_AREAS } from './marketingAreas';
@@ -34,11 +34,13 @@ function shortcutsFor(team: string | undefined, isHead: boolean, canSell: boolea
   switch (team) {
     case 'sales': {
       // Everyone in GTM sees the leads sheet; the head and leads take leads from it.
-      const leads: Shortcut = { href: '/team/leads', title: 'Leads', text: 'People who almost bought or asked for help. Press Follow up to make one yours — everyone sees who has which lead.', icon: Contact };
-      // GTM executives and customer support: the leads sheet only, for now.
-      if (!canSell) return [leads];
+      const leads: Shortcut = { href: '/team/leads', title: 'Website leads', text: 'People who almost bought or asked for help. Press Follow up to make one yours — everyone sees who has which lead.', icon: Contact };
+      const metaLeads: Shortcut = { href: '/team/meta-leads', title: 'Meta leads', text: 'Enquiries from Facebook and Instagram ads, from the sales lead sheet. Updated every few minutes.', icon: Megaphone };
+      // GTM executives and customer support: the leads sheets only, for now.
+      if (!canSell) return [leads, metaLeads];
       const list: Shortcut[] = [
         leads,
+        metaLeads,
         { href: '/team/sales/new', title: 'New quotation', text: 'For a customer on the phone or WhatsApp: pick products or add custom items, give offer prices, share the quotation PDF.', icon: PlusCircle },
         { href: '/team/sales/quotations', title: 'Quotations', text: 'Edit, share or cancel a quotation — and when the client agrees, create the order and send the payment link (split if needed).', icon: FileText },
         { href: '/team/sales', title: isHead ? 'Team orders' : 'My orders', text: 'Payment, stock, the supplier\'s photo and tracking — and a button to send them to the customer.', icon: ReceiptText },

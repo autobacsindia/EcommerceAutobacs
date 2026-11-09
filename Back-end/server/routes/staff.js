@@ -62,6 +62,7 @@ import staffDepartureRoutes from './staffDepartures.js';
 import pastSaleRoutes from './pastSales.js';
 import staffReturnRoutes from './staffReturns.js';
 import staffLeadRoutes from './staffLeads.js';
+import staffMetaLeadRoutes from './staffMetaLeads.js';
 import {
   uploadProofPhotos, handleAttachmentError, attachmentSizeGuard, concurrentUploadGuard, uploadPaymentProof, uploadPayDetailsQr, uploadCreditProof,
 } from '../middleware/uploadMiddleware.js';
@@ -179,6 +180,8 @@ router.use('/returns', staffReturnRoutes);
 
 // The GTM leads sheet (routes/staffLeads.js) — see, follow up, release, reassign.
 router.use('/leads', staffLeadRoutes);
+// The Meta leads tab: rows from the sales lead sheet (routes/staffMetaLeads.js).
+router.use('/meta-leads', staffMetaLeadRoutes);
 
 // @route  GET /staff/me — the caller's team profile (null for an admin)
 router.get('/me', (req, res) => {

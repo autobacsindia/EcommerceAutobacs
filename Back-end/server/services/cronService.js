@@ -4,6 +4,7 @@ import importJobRepository from '../repositories/importJobRepository.js';
 import { runWordPressSync } from './wordpressSyncService.js';
 import { expireEndedSales } from './productSaleService.js';
 import { runFrequentSweeps, runDailySweeps } from './leadSweepService.js';
+import { runScheduledMetaLeadSync } from './metaLeadSync.js';
 import { reconcileStuckPayments, reconcileSalesLinks } from './paymentReconciliationService.js';
 import { recomputeSalesScores } from './salesScoreService.js';
 import { checkInboundLiveness, sweepSlaBreaches, requeueStuckInbound } from './supportHealthService.js';
@@ -58,6 +59,7 @@ class CronService {
     this.scheduleWordPressSync();
     this.scheduleSaleExpiry();
     this.scheduleLeadSweeps();
+    this.scheduleMetaLeadSync();
     this.schedulePaymentReconciliation();
     this.scheduleSalesScoreRefresh();
     this.scheduleSupportHealth();
@@ -276,6 +278,20 @@ class CronService {
     } catch (error) {
       console.error('[CronService] Failed to schedule sale-expiry sweep:', error.message);
     }
+  }
+
+  /** Sales lead sheet → Meta leads tab. Does nothing until its two settings exist. */
+  scheduleMetaLeadSync() {
+    const schedule = process.env.META_LEADS_SYNC_CRON || '*/5 * * * *';
+    if (!cron.validate(schedule)) {
+      console.error(`[CronService] Invalid META_LEADS_SYNC_CRON "${schedule}" — Meta leads sync NOT scheduled`);
+      return;
+    }
+    const task = cron.schedule(schedule, () =>
+      this.withDistributedLock('cron:lock:metaLeadSync', 240, () => runScheduledMetaLeadSync()),
+      { scheduled: true, timezone: process.env.WP_SYNC_TZ || 'Asia/Kolkata' }
+    );
+    this.scheduledTasks.push({ name: 'metaLeadSync', task, schedule, description: 'Sales lead Google Sheet into the Meta leads tab' });
   }
 
   /**
