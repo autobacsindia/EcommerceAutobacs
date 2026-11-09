@@ -150,4 +150,45 @@ describe('normalizeSeo → SeoSchema contract', () => {
       expect(normalizeSeo('{"metaTitle":"From multipart"}')).toEqual({ metaTitle: 'From multipart' });
     });
   });
+
+  describe('canonical guard', () => {
+    it.each([
+      ['legacy product on apex', 'https://autobacsindia.com/product/old-slug'],
+      ['legacy product on www', 'https://www.autobacsindia.com/product/old-slug'],
+      ['legacy category', 'https://autobacsindia.com/product-category/audio'],
+      ['legacy relative path', '/product/old-slug'],
+      ['bare legacy path', '/product'],
+      ['another website', 'https://competitor.example/products/x'],
+      ['protocol-relative address', '//competitor.example/products/x'],
+      ['lookalike host', 'https://autobacsindia.com.evil.example/products/x'],
+    ])('drops %s', (_label, canonical) => {
+      expect(normalizeSeo({ canonical }).canonical).toBeUndefined();
+    });
+
+    it.each([
+      ['own product page', 'https://www.autobacsindia.com/products/thar-kit'],
+      ['relative page', '/products/thar-kit'],
+      ['root article', 'https://www.autobacsindia.com/some-article'],
+      ['a path merely starting with "product"', '/productivity-tips'],
+    ])('keeps %s', (_label, canonical) => {
+      expect(normalizeSeo({ canonical }).canonical).toBe(canonical);
+    });
+
+    it('keeps an address on a configured frontend host', () => {
+      const before = process.env.FRONTEND_URLS;
+      process.env.FRONTEND_URLS = 'https://staging.example.test, not a url';
+      try {
+        expect(normalizeSeo({ canonical: 'https://staging.example.test/products/a' }).canonical)
+          .toBe('https://staging.example.test/products/a');
+      } finally {
+        if (before === undefined) delete process.env.FRONTEND_URLS;
+        else process.env.FRONTEND_URLS = before;
+      }
+    });
+
+    it('does not apply to ogImage', () => {
+      const ogImage = 'https://img.example.test/a.png';
+      expect(normalizeSeo({ ogImage }).ogImage).toBe(ogImage);
+    });
+  });
 });

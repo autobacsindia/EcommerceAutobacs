@@ -1,3 +1,4 @@
+import { articleSlugForApi } from '@/lib/articleSlug';
 import { cache } from 'react';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
@@ -27,11 +28,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 // call per request regardless of Next's fetch-memoization behaviour.
 const fetchBlogArticle = cache(async function fetchBlogArticle(slug: string) {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/media/articles/${slug}`, {
+    const res = await fetch(`${API_BASE}/api/v1/media/articles/${articleSlugForApi(slug)}`, {
       headers: internalApiHeaders(),
       // Tagged so an admin publish/edit/delete refreshes this page immediately
       // via the backend revalidator, instead of waiting out the 60s window.
-      next: { revalidate: 60, tags: [`blog:${slug}`] },
+      next: { revalidate: 60, tags: [`blog:${slug.toLowerCase()}`] },
     });
     if (!res.ok) return null;
     const data = await res.json();

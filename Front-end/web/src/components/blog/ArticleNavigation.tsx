@@ -1,4 +1,5 @@
 'use client';
+import { articleSlugForApi } from '@/lib/articleSlug';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -21,7 +22,7 @@ export default function ArticleNavigation({ slug, type }: Props) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/v1/media/articles/${slug}/adjacent`)
+    fetch(`/api/v1/media/articles/${articleSlugForApi(slug)}/adjacent`)
       .then(r => r.json())
       .then(data => {
         if (data.success) {
