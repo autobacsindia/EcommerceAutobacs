@@ -31,6 +31,7 @@
  * Procurement can never send customer refunds; sales can never approve or refund.
  */
 
+import { closeExtrasBestEffort } from './extraChargeEffects.js';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import * as Sentry from '@sentry/node';
@@ -172,7 +173,9 @@ export const syncOrderReturnedStatus = async (orderId, userId, note) => {
     if (!order) return false;
     const returnedByProduct = await returnRequestRepository.returnedQuantityByProduct(orderId);
     if (!coversEveryDeliveredLine(order, returnedByProduct)) return false;
-    return await orderRepository.markReturnedOnReturnApproval(orderId, userId, note);
+    const returned = await orderRepository.markReturnedOnReturnApproval(orderId, userId, note);
+    if (returned) await closeExtrasBestEffort(orderId, 'Order returned');
+    return returned;
   } catch (err) {
     const message =
       `[Returns] Order-status roll-up to 'returned' FAILED for order ${orderId}: `

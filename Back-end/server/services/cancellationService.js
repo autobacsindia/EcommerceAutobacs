@@ -36,6 +36,7 @@ import { applyCancellationRefundSideEffectsOnce } from './cancellationRefundSide
 import returnRequestRepository from '../repositories/returnRequestRepository.js';
 import orderStatusService from './orderStatusService.js';
 import { advanceBlockReason, withdrawWaitingSupplierPayments } from './supplierAdvanceGuard.js';
+import { closeExtrasBestEffort } from './extraChargeEffects.js';
 import razorpayService from './razorpayService.js';
 import { refundableForLines, remainingRefundable } from './refundMathService.js';
 import {
@@ -195,6 +196,8 @@ class CancellationService {
       await this._syncOrderStatus(updated, userId, payload.reason, payload.notes);
       // A supplier payment still waiting for accounts on an item now fully cancelled is withdrawn.
       await withdrawWaitingSupplierPayments(updated, `item cancelled (${payload.reason || 'no reason given'})`);
+      // The whole order just rolled up to cancelled: a paid extra charge is now owed back.
+      if (willBeFull) await closeExtrasBestEffort(updated._id, 'Order cancelled');
 
       return {
         success: true,

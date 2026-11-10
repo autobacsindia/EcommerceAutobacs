@@ -26,6 +26,7 @@ export type BankTransfer = {
   paidOn: string;
   note: string;
   status: BankTransferStatus;
+  extraChargeId?: string | null;
   statusLabel: string;
   recordedBy: string;
   recordedAt: string;
@@ -114,6 +115,7 @@ function TransferCard({ t, onOpen }: { t: BankTransfer; onOpen: (id: string) => 
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900">
             {t.orderNumber} · {rupees(t.amount)}
+            {t.extraChargeId && <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">Extra charge</span>}
           </p>
           <p className="text-sm text-gray-600">
             {t.customer.name || 'Customer'}{t.customer.city ? ` · ${t.customer.city}` : ''}

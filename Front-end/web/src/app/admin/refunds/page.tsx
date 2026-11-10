@@ -10,6 +10,7 @@ import { formatDateIST } from '@/lib/datetime';
 import OfflineRefundDialog, { type OfflineRefundSubmission } from '@/components/admin/OfflineRefundDialog';
 import { offlineMethodLabel, promptRevertReason } from '@/lib/offlineRefund';
 import { useListParams } from '@/lib/hooks/useListParams';
+import ExtraChargesList from '@/components/payments/extras/ExtraChargesList';
 import { ListClear, ListDateRange, ListSearch, ListSelect } from '@/components/panel/ListControls';
 
 interface Refund {
@@ -257,6 +258,11 @@ function AdminRefunds() {
   return (
     <div className="p-8">
       <h1 className="text-3xl font-bold mb-8">Refunds Management</h1>
+
+      <section aria-label="Extra charges to refund" className="mb-6">
+        <h2 className="mb-2 text-lg font-semibold">Extra charges to refund</h2>
+        <ExtraChargesList fixedTab="refund_due" orderBase="/admin/orders" />
+      </section>
 
       <div role="search" aria-label="Search and filter refunds" className="mb-6 space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
         <div className="flex flex-wrap items-center gap-2">

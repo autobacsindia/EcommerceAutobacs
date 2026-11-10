@@ -52,6 +52,7 @@ const mockOrderTrackingService = {
 };
 
 // Setup mocks
+jest.unstable_mockModule('../../../services/orderExtraChargeService.js', () => ({ forCustomer: async () => ({ extras: [], totals: { extrasPaid: 0, finalAmount: 0 } }), customerReceipt: async () => null }));
 jest.unstable_mockModule('../../../models/Order.js', () => ({ default: mockOrder }));
 jest.unstable_mockModule('../../../models/Cart.js', () => ({ default: mockCart }));
 jest.unstable_mockModule('../../../models/Product.js', () => ({ default: mockProduct }));

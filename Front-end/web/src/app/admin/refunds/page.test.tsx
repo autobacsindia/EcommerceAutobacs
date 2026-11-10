@@ -7,6 +7,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { addressBar } from '@/test-utils/addressBarMock';
 
 // Mock apiClient
+jest.mock('@/components/payments/extras/ExtraChargesList', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/lib/api');
 // The filters live in the page address.
 jest.mock('next/navigation', () => jest.requireActual('@/test-utils/addressBarMock').nextNavigation);

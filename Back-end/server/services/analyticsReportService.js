@@ -13,6 +13,8 @@ import Payment from '../models/Payment.js';
 import KarmaLedger from '../models/KarmaLedger.js';
 import CouponRedemption from '../models/CouponRedemption.js';
 import cacheService from './cacheService.js';
+import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
+import { mergeRevenueSeries } from '../utils/extraCharge.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
 import { STOCK_STATUS } from '../utils/stockStatus.js';
 // Statuses that count as a realised sale (money made) — shared with the admin stat
@@ -68,7 +70,9 @@ class AnalyticsReportService {
       { $match: { status: { $in: SALE_STATUSES }, createdAt: { $gte: from, $lt: to } } },
       { $group: { _id: null, revenue: { $sum: '$totalAmount' }, orders: { $sum: 1 } } },
     ]);
-    const revenue = row?.revenue || 0;
+    // Extra charges count on the day they were paid; they are not new orders.
+    const extras = await orderExtraChargeRepository.sumKept(from, to, QUERY_TIMEOUTS.aggregation);
+    const revenue = (row?.revenue || 0) + extras;
     const orders = row?.orders || 0;
     return { revenue: r2(revenue), orders, aov: orders ? r2(revenue / orders) : 0 };
   }
@@ -77,7 +81,7 @@ class AnalyticsReportService {
   async getSalesTrends(window) {
     return this.cached('sales', window, async () => {
       const unit = TRUNC_UNIT[window.granularity];
-      const [series, current, previous] = await Promise.all([
+      const [orderSeries, extraBuckets, current, previous] = await Promise.all([
         this.agg(Order, [
           {
             $match: {
@@ -105,9 +109,11 @@ class AnalyticsReportService {
             },
           },
         ]),
+        orderExtraChargeRepository.keptByBucket(window.from, window.to, unit, QUERY_TIMEOUTS.aggregation),
         this.revenueTotals(window.from, window.to),
         this.revenueTotals(window.prevFrom, window.prevTo),
       ]);
+      const series = mergeRevenueSeries(orderSeries, extraBuckets);
 
       return {
         granularity: window.granularity,

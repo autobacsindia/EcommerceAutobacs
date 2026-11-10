@@ -21,6 +21,7 @@ import { SALE_STATUSES, PENDING_FULFILLMENT_STATUSES } from '../utils/orderStatu
 import { currentFiscalYear } from '../utils/storeTime.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
 import cacheService from '../services/cacheService.js';
+import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
 
 const router = express.Router();
 
@@ -43,6 +44,7 @@ async function computeStats() {
     totalOrders,
     pendingOrders,
     revenueRows,
+    extraRevenue,
     totalProducts,
     totalUsers,
   ] = await Promise.all([
@@ -62,6 +64,8 @@ async function computeStats() {
       { $group: { _id: null, total: { $sum: '$totalAmount' } } },
     ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation }),
 
+    orderExtraChargeRepository.sumKept(fy.start, null, QUERY_TIMEOUTS.aggregation),
+
     Product.countDocuments({ isActive: true }).maxTimeMS(QUERY_TIMEOUTS.listing),
 
     User.countDocuments().maxTimeMS(QUERY_TIMEOUTS.listing),
@@ -71,7 +75,7 @@ async function computeStats() {
     totalOrders,
     pendingOrders,
     // Round to paise so float summation can't surface 1234.5600000000002.
-    totalRevenue: Math.round((revenueRows[0]?.total || 0) * 100) / 100,
+    totalRevenue: Math.round(((revenueRows[0]?.total || 0) + extraRevenue) * 100) / 100,
     totalProducts,
     totalUsers,
     // The window revenue covers, so the UI can label the tile honestly ("Revenue

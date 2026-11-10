@@ -20,6 +20,8 @@
  * this alert used to be noise — see maybeAlertWebhooksDown() below.
  */
 
+import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
+import { sweepExtrasOnClosedOrders } from './extraChargeEffects.js';
 import orderRepository from '../repositories/orderRepository.js';
 import razorpayService from './razorpayService.js';
 import { getRedisClient } from './redisClient.js';
@@ -236,6 +238,42 @@ export async function reconcileSalesLinks({ now = Date.now() } = {}) {
       Sentry.captureException(err, { extra: { orderId: String(order._id), linkId: order.paymentLinkId } });
     }
   }
+
+  // Extra charges on paid orders: the same replay, through the same routine as the webhook.
+  const extras = await orderExtraChargeRepository.model.find({ 'links.status': 'pending', links: { $elemMatch: { status: 'pending', createdAt: { $lt: settled } } } })
+    .sort({ _id: 1 }).limit(BATCH).select('_id links').lean();
+  for (const extra of extras) {
+    for (const link of extra.links) {
+      if (link.status !== 'pending' || new Date(link.createdAt) >= settled) continue;
+      try {
+        const { status, payments } = await razorpayService.fetchPaymentLinkCaptures(link.id);
+        for (const payment of payments) {
+          const r = await razorpayService.processExtraPayment(String(extra._id), link.id, payment);
+          if (r.paid) {
+            recovered += 1;
+            console.warn(`[Reconcile] Recovered extra charge | extra: ${extra._id} | link: ${link.id} — webhook was missed`);
+          }
+        }
+        if (payments.length === 0 && (status === 'expired' || status === 'cancelled')) {
+          await orderExtraChargeRepository.model.updateOne(
+            { _id: extra._id, links: { $elemMatch: { id: link.id, status: 'pending' } } },
+            { $set: { 'links.$.status': status } },
+          );
+          closed += 1;
+        }
+      } catch (err) {
+        failed += 1;
+        console.error(`[Reconcile] Extra charge link ${link.id} of ${extra._id}:`, err.message);
+        Sentry.captureException(err, { extra: { extraId: String(extra._id), linkId: link.id } });
+      }
+    }
+  }
+  // Backstop: a hook that failed when an order was cancelled or returned.
+  await sweepExtrasOnClosedOrders().catch((err) => {
+    failed += 1;
+    console.error('[Reconcile] Extra charges on closed orders:', err.message);
+    Sentry.captureException(err);
+  });
 
   if (recovered || failed || closed) {
     console.log(`[Reconcile] Sales links | recovered: ${recovered} | closed: ${closed} | failed: ${failed}`);

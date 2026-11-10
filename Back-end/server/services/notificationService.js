@@ -26,6 +26,7 @@ import paymentRequestRepository from '../repositories/paymentRequestRepository.j
 import orderRepository from '../repositories/orderRepository.js';
 import { STAFF_TEAMS } from '../config/staff.js';
 import { countPending as countPendingBankTransfers } from './bankTransferService.js';
+import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
 import { countDueForBell as countTasksDue } from './staffTaskService.js';
 import { countTrainingForBell } from './staffTrainingService.js';
 import { countLastDaysForBell } from './staffDepartureService.js';
@@ -53,11 +54,14 @@ export async function summaryFor(user) {
 
   const wantsPayments = isAdmin(user) || isAccounts(user);
   // One aggregate covers both payment queues; refunds are a separate table.
-  const [byStatus, refunds, transfers, tasksDue, returnItems, inboxUnread] = await Promise.all([
+  const [byStatus, refunds, transfers, extrasWaiting, extraRefundsDue, tasksDue, returnItems, inboxUnread] = await Promise.all([
     wantsPayments ? paymentRequestRepository.countByStatus() : Promise.resolve([]),
     isAdmin(user) || isAccounts(user) ? orderRepository.countPendingCancellationRefunds() : Promise.resolve(0),
     // A small collection (a handful of rows a week), so a count is cheap.
     wantsPayments ? countPendingBankTransfers() : Promise.resolve(0),
+    // Extra charges on paid orders waiting for Accounts: a few rows.
+    wantsPayments ? orderExtraChargeRepository.countAwaitingAccounts() : Promise.resolve(0),
+    isAdmin(user) ? orderExtraChargeRepository.countRefundsDue() : Promise.resolve(0),
     // One index range (staff_task_assignee): this person's open tasks due by today.
     countTasksDue(user),
     // Returns waiting on this person's team — the same queries as the return lists.
@@ -101,6 +105,23 @@ export async function summaryFor(user) {
       label: 'Bank transfers to check',
       count: transfers,
       href: isAdmin(user) ? '/admin/bank-transfers' : '/team/bank-transfers',
+    });
+  }
+
+  if (wantsPayments) {
+    items.push({
+      key: 'extra_charges_to_approve',
+      label: 'Extra charges to approve',
+      count: extrasWaiting,
+      href: isAdmin(user) ? '/admin/extra-charges' : '/team/extra-charges',
+    });
+  }
+  if (isAdmin(user) && extraRefundsDue > 0) {
+    items.push({
+      key: 'extra_charge_refunds_due',
+      label: 'Extra charges to refund',
+      count: extraRefundsDue,
+      href: '/admin/refunds',
     });
   }
 

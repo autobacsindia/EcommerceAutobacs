@@ -34,6 +34,7 @@ jest.mock('lucide-react', () => ({
 
 // The journey tracker fetches the team-workflow view itself and has its own
 // tests (components/orders/OrderJourney.test.tsx); here only its placement matters.
+jest.mock('@/components/payments/extras/OrderExtraCharges', () => ({ __esModule: true, default: () => null }));
 jest.mock('@/components/orders/AdminOrderJourney', () => ({
   __esModule: true,
   default: ({ orderId }: { orderId: string }) => <div data-testid="order-journey">{orderId}</div>,

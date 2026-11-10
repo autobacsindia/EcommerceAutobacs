@@ -16,6 +16,7 @@ import { displayEmail } from '@/lib/internalEmail';
 import ProductLink from '@/components/staff/ProductLink';
 import CopyId from '@/components/ui/CopyId';
 import ParcelEta from './ParcelEta';
+import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
 import OrderJourney from '@/components/orders/OrderJourney';
 import RaiseReturnButton from '@/components/staff/returns/RaiseReturnDialog';
 import FilePicker from '@/components/payments/FilePicker';
@@ -287,6 +288,8 @@ export default function WorkOrderPanel({ orderId }: { orderId: string }) {
       </div>
 
       <OrderOtherPayments order={o} requests={supplierPayments.data?.requests ?? []} />
+
+      <OrderExtraCharges orderId={o.id} />
 
       {o.canDispatchOwn && (
         <OwnStockForm key={`own-${o.lines.map((l) => `${l.itemId}:${l.stage}`).join('|')}`} order={o} onShipped={done} onError={setError} />

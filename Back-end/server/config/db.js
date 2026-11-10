@@ -592,6 +592,17 @@ export async function ensureCriticalIndexes() {
     );
     console.log('✓ Spin-to-Win indexes confirmed');
 
+    // Extra charges on paid orders (models/OrderExtraCharge.js has the reasons).
+    const extraCharges = db.collection('order_extra_charges');
+    await extraCharges.createIndex({ order: 1, sequence: 1 }, { unique: true, name: 'extra_charge_order_sequence', background: true });
+    await extraCharges.createIndex({ order: 1, clientKey: 1 }, { unique: true, name: 'extra_charge_order_client_key', background: true });
+    await extraCharges.createIndex({ status: 1, createdAt: -1, _id: -1 }, { name: 'extra_charge_status_recent', background: true });
+    await extraCharges.createIndex({ salesUser: 1, createdAt: -1, _id: -1 }, { name: 'extra_charge_seller_recent', background: true });
+    await extraCharges.createIndex({ status: 1, paidAt: -1 }, { name: 'extra_charge_status_paid_at', background: true });
+    await extraCharges.createIndex({ 'links.id': 1 }, { name: 'extra_charge_link_id', partialFilterExpression: { 'links.id': { $type: 'string' } }, background: true });
+    await extraCharges.createIndex({ 'links.status': 1, _id: 1 }, { name: 'extra_charge_link_pending', partialFilterExpression: { 'links.status': 'pending' }, background: true });
+    await extraCharges.createIndex({ 'refund.status': 1, createdAt: -1, _id: -1 }, { name: 'extra_charge_refund_status', partialFilterExpression: { 'refund.status': { $type: 'string' } }, background: true });
+
     // MONEY-CRITICAL: one real bank-transfer UTR pays one order (models/BankTransfer.js).
     // bankTransferService also checks before inserting; this unique index is what
     // decides when two people record the same UTR at the same moment. Partial on

@@ -44,6 +44,7 @@ import { GatewayOfferRows, PaymentStatusTag } from '@/components/orders/PaymentS
 import type { GatewayOffer } from '@/components/orders/PaymentSummary';
 import type { ItemFulfilmentState } from '@/lib/orderFulfilment';
 import { formatRupees } from '@/lib/formatRupees';
+import CustomerExtraCharges, { type CustomerExtra, type CustomerExtraTotals } from '@/components/orders/CustomerExtraCharges';
 import { r2ImgProps, retryWithoutSrcSet } from '@/lib/r2SrcSet';
 
 interface OrderDetail {
@@ -61,6 +62,8 @@ interface OrderDetail {
   paymentStatus?: string;
   /** A Razorpay offer at checkout: the customer paid less than totalAmount. */
   gatewayOffer?: GatewayOffer | null;
+  extraCharges?: CustomerExtra[];
+  extraChargeTotals?: CustomerExtraTotals;
   /** A quotation's % discount — the percent only; the amount is in `discount`. */
   salesDiscount?: { percent: number; amount: number } | null;
   shippingAddress: {
@@ -811,6 +814,7 @@ export default function OrderDetailPage() {
                 <span className="text-xl font-display font-bold text-gold">{formatRupees((order.totalAmount || 0), { exact: true })}</span>
               </div>
               <GatewayOfferRows offer={order.gatewayOffer} />
+              <CustomerExtraCharges orderId={order._id} extras={order.extraCharges} totals={order.extraChargeTotals} />
             </div>
           </div>
         </div>

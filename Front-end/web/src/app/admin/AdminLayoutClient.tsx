@@ -7,8 +7,7 @@ import { BookOpenCheck,
   BellRing, Briefcase, Building2, Car, ChartLine, CreditCard, Factory, FerrisWheel, FolderTree, Gift, Globe,
   GraduationCap, HandCoins, Handshake, History, Hourglass, IdCard, Images, Inbox, Landmark, LayoutDashboard, ListTodo, Megaphone,
   MessagesSquare, Package, ShoppingBag, Sparkles, SquarePen, Star, Tag, Target, TicketPercent, Timer, Undo2, UserMinus, UserRoundCog,
-  Users, Wallet, Zap,
-} from 'lucide-react';
+  Users, Wallet, Zap, Coins } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import PanelShell from '@/components/panel/PanelShell';
 import { useAuth } from '@/context/AuthContext';
@@ -123,6 +122,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { href: '/admin/payments', label: 'Payments', icon: CreditCard },
       { href: '/admin/suppliers', label: 'Suppliers', icon: Factory },
       { href: '/admin/bank-transfers', label: 'Bank transfers', icon: Landmark },
+      { href: '/admin/extra-charges', label: 'Extra charges', icon: Coins },
       { href: '/admin/workflows', label: 'Workflows', icon: Zap },
     ],
   },

@@ -43,6 +43,9 @@ const BankTransferSchema = new mongoose.Schema(
   {
     order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', required: true },
     orderNumber: { type: String },
+    // Set when this transfer pays one EXTRA charge (models/OrderExtraCharge.js) on an
+    // already-paid order: `amount` is then that extra's, and the order is not touched.
+    extraCharge: { type: mongoose.Schema.Types.ObjectId, ref: 'OrderExtraCharge', default: undefined },
     salesUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     salesUserName: { type: String },
     customer: { name: String, city: String },

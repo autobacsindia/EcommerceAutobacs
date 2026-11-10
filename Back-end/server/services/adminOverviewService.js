@@ -14,6 +14,7 @@ import AppError from '../utils/AppError.js';
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
 import auditLogRepository from '../repositories/auditLogRepository.js';
+import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
 import paymentRequestRepository from '../repositories/paymentRequestRepository.js';
 import consultationRepository from '../repositories/consultationRepository.js';
 import supportTicketRepository from '../repositories/supportTicketRepository.js';
@@ -91,7 +92,7 @@ export async function companyOverview(actor, now = Date.now()) {
 
   const [
     paidToday, unpaidSales, pendingRefunds, requestsByStatus, paidThisMonth, paidAbroadThisMonth,
-    newConsultations, openTickets, board, recentActions, actionsByUser, online,
+    newConsultations, openTickets, board, recentActions, actionsByUser, online, extrasToday,
   ] = await Promise.all([
     orderRepository.findPaidWorkflowOrdersSince(todayStart, 1000),
     orderRepository.findUnpaidSalesOrders(500),
@@ -105,13 +106,14 @@ export async function companyOverview(actor, now = Date.now()) {
     staffIds.length ? auditLogRepository.recentByUsers(staffIds, 60) : [],
     staffIds.length ? auditLogRepository.countByUserSince(staffIds, weekAgo) : [],
     onlineAmong(staffIds.map(idOf)).catch(() => new Set()),
+    orderExtraChargeRepository.sumKept(todayStart, null),
   ]);
 
   // ── Today ──
   const gtmToday = paidToday.filter((o) => o.salesUser);
   const today = {
     paidOrders: paidToday.length,
-    paidValue: round2(paidToday.reduce((s, o) => s + (o.totalAmount || 0), 0)),
+    paidValue: round2(paidToday.reduce((s, o) => s + (o.totalAmount || 0), 0) + extrasToday),
     gtmOrders: gtmToday.length,
     websiteOrders: paidToday.length - gtmToday.length,
     newConsultations,

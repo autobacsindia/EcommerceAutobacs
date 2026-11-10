@@ -9,6 +9,7 @@ import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import BankTransferForm from './BankTransferForm';
 import CustomerBankCard from './CustomerBankCard';
+import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
 import HoldControl from './HoldControl';
 import QuoteDiscountSummary from './QuoteDiscountSummary';
 import PaymentLinkCard from './PaymentLinkCard';
@@ -298,6 +299,10 @@ export default function SalesOrderPayment({ id, startWithDetails = false }: { id
           </ul>
         </section>
       )}
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 empty:hidden">
+        <OrderExtraCharges orderId={o.id} />
+      </div>
 
       <CustomerBankCard kind="order" id={o.id} />
 

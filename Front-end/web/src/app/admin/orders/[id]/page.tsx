@@ -30,6 +30,7 @@ import { usePanel } from '@/lib/usePanel';
 import { displayEmail } from '@/lib/internalEmail';
 import AdminOrderJourney from '@/components/orders/AdminOrderJourney';
 import OrderTypeTag from '@/components/orders/OrderTypeTag';
+import OrderExtraCharges from '@/components/payments/extras/OrderExtraCharges';
 
 /** What the gateway holds — and so the most a refund can send back. */
 const amountPaidOf = (o: { totalAmount: number; gatewayOffer?: GatewayOffer | null }) =>
@@ -522,6 +523,10 @@ function AdminOrderDetailPageInner() {
           it and when, refunds as a side branch. Read-only. */}
       <div className="mb-6">
         <AdminOrderJourney orderId={orderId} />
+      </div>
+
+      <div className="mb-6 rounded-lg bg-white p-4 shadow">
+        <OrderExtraCharges orderId={orderId} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

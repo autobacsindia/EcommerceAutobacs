@@ -1,3 +1,4 @@
+import * as extraCharges from '../services/orderExtraChargeService.js';
 import express from 'express';
 import { asyncHandler } from '../middleware/errorMiddleware.js';
 import { protect, staffOrAdmin } from '../middleware/authMiddleware.js';
@@ -25,6 +26,8 @@ import {
   validateBankTransferId,
   validateBankTransferFile,
   validateBankTransferReject,
+  validateExtraChargeId,
+  validateExtraChargeList,
   validateSetSeller, validateCreditProofFile,
   validateOrderIdParam,
   validateSalesOrder,
@@ -130,7 +133,7 @@ import { canSell } from '../config/staff.js';
 import { listSellers, listWebsiteOrders, getWebsiteOrder, setSeller, getProofFile } from '../services/orderAttributionService.js';
 import { listPins, pinOrder, unpinOrder } from '../services/orderPinService.js';
 import {
-  recordBankTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, transferFilterOptions, getBankTransfer, getBankTransferDetails,
+  recordBankTransfer, recordExtraChargeTransfer, confirmBankTransfer, rejectBankTransfer, listBankTransfers, transferFilterOptions, getBankTransfer, getBankTransferDetails,
   editBankTransfer, withdrawBankTransfer, getTransferFile,
 } from '../services/bankTransferService.js';
 
@@ -527,6 +530,65 @@ router.post('/bank-transfers/:id/confirm', validateBankTransferId, validateReque
 // @route  POST /staff/bank-transfers/:id/reject { note } — accounts, admin
 router.post('/bank-transfers/:id/reject', validateBankTransferReject, validateRequest, asyncHandler(async (req, res) => {
   res.json({ success: true, transfer: await rejectBankTransfer(req.user, req.params.id, req.body, req) });
+}));
+
+// ── Extra charges on paid orders (scope enforced in orderExtraChargeService) ─
+
+// @route  GET /staff/orders/:id/extra-charges — the order's extras and the server's sum
+router.get('/orders/:id/extra-charges', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await extraCharges.listForOrder(req.user, req.params.id)) });
+}));
+
+// @route  POST /staff/orders/:id/extra-charges { amount, reason, customerConfirmed, clientKey } — GTM
+router.post('/orders/:id/extra-charges', validateOrderIdParam, validateRequest, asyncHandler(async (req, res) => {
+  const { amount, reason, customerConfirmed, clientKey } = req.body;
+  res.status(201).json({ success: true, extra: await extraCharges.requestExtra(req.user, req.params.id, { amount, reason, customerConfirmed, clientKey }, req) });
+}));
+
+// @route  GET /staff/extra-charges?tab=awaiting_accounts|approved|paid|refund_due|closed&cursor=
+router.get('/extra-charges', validateExtraChargeList, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, ...(await extraCharges.listExtras(req.user, req.query)) });
+}));
+
+// @route  PUT /staff/extra-charges/:id { amount?, reason? } — until Accounts has decided
+router.put('/extra-charges/:id', validateExtraChargeId, validateRequest, asyncHandler(async (req, res) => {
+  const { amount, reason } = req.body;
+  res.json({ success: true, extra: await extraCharges.editExtra(req.user, req.params.id, { amount, reason }, req) });
+}));
+
+for (const [action, handler] of [
+  ['cancel', extraCharges.cancelExtra],
+  ['approve', extraCharges.approveExtra],
+  ['reject', extraCharges.rejectExtra],
+]) {
+  // @route  POST /staff/extra-charges/:id/cancel|approve|reject { note? }
+  router.post(`/extra-charges/:id/${action}`, validateExtraChargeId, validateRequest, asyncHandler(async (req, res) => {
+    res.json({ success: true, extra: await handler(req.user, req.params.id, { note: req.body.note }, req) });
+  }));
+}
+
+// @route  POST /staff/extra-charges/:id/payment-link — Razorpay link (SMS + email from Razorpay)
+router.post('/extra-charges/:id/payment-link', validateExtraChargeId, validateRequest, asyncHandler(async (req, res) => {
+  res.json({ success: true, extra: await extraCharges.sendPaymentLink(req.user, req.params.id, req) });
+}));
+
+// @route  POST /staff/extra-charges/:id/bank-transfer — multipart: amount, reference, paidOn, note?, proof
+router.post('/extra-charges/:id/bank-transfer', concurrentUploadGuard, attachmentSizeGuard, uploadPaymentProof, handleAttachmentError,
+  validateExtraChargeId, validateRequest, asyncHandler(async (req, res) => {
+    res.status(201).json({ success: true, transfer: await recordExtraChargeTransfer(req.user, req.params.id, req.body, req.files || [], req) });
+  }));
+
+// @route  POST /staff/extra-charges/:id/refund { method?, offlineMethod?, reference?, paidAt? } — admin
+router.post('/extra-charges/:id/refund', validateExtraChargeId, validateRequest, asyncHandler(async (req, res) => {
+  const { method, offlineMethod, reference, paidAt } = req.body;
+  res.json({ success: true, extra: await extraCharges.refundExtra(req.user, req.params.id, { method, offlineMethod, reference, paidAt }, req) });
+}));
+
+// @route  GET /staff/extra-charges/:id/receipt — the PDF, once paid
+router.get('/extra-charges/:id/receipt', validateExtraChargeId, validateRequest, asyncHandler(async (req, res) => {
+  const { pdf, filename } = await extraCharges.staffReceipt(req.user, req.params.id);
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'private, no-store' });
+  res.send(pdf);
 }));
 
 // ── Team workflow (scope enforced in teamWorkflowService) ───────────────────

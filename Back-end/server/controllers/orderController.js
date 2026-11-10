@@ -37,6 +37,7 @@ import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import * as Sentry from '@sentry/node';
 import { isSplitPaid, SPLIT_REFUND_MESSAGE } from '../utils/splitPayment.js';
+import { forCustomer as forCustomerExtras, customerReceipt as extraChargeReceiptFor } from '../services/orderExtraChargeService.js';
 import { pinnedIds, withoutPinned, inPinOrder } from '../services/orderPinService.js';
 
 /**
@@ -397,7 +398,28 @@ export const getOrderById = async (req, res) => {
     })
   };
 
+  // Extra charges live apart from the order's own snapshot. The customer sees only
+  // approved or paid ones; staff read theirs from /staff/orders/:id/extra-charges.
+  if (isOwner) {
+    // Display only: a failed read must not take the customer's whole order page down.
+    const { extras, totals } = await forCustomerExtras(order).catch((err) => {
+      console.error('[Order] Could not load extra charges:', err.message);
+      return { extras: [], totals: undefined };
+    });
+    normalizedOrder.extraCharges = extras;
+    normalizedOrder.extraChargeTotals = totals;
+  }
+
   res.json({ success: true, order: normalizedOrder });
+};
+
+// @desc    Download the receipt for one paid extra charge
+// @route   GET /orders/:id/extra-charges/:extraId/receipt
+// @access  Private (the order's customer)
+export const downloadExtraChargeReceipt = async (req, res) => {
+  const { pdf, filename } = await extraChargeReceiptFor(req.user, req.params.id, req.params.extraId);
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'private, no-store' });
+  res.send(pdf);
 };
 
 // @desc    Download the invoice PDF for an order (streamed, auth-gated)
