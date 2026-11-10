@@ -13,6 +13,10 @@ const MetaLeadSyncStateSchema = new mongoose.Schema(
     lastError: { type: String, default: '' },
     tabs: { type: [{ _id: false, name: String, rows: Number }], default: [] },
     summary: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // Each tab's column names, to notice a column being inserted or moved.
+    layouts: { type: [{ _id: false, tab: String, columns: [String], changedAt: Date }], default: [] },
+    // Tabs whose columns could not be understood, so their rows were not read.
+    skippedTabs: { type: [String], default: [] },
   },
   { timestamps: true },
 );

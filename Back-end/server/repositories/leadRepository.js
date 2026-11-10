@@ -167,6 +167,16 @@ class LeadRepository extends BaseRepository {
     ).lean();
   }
 
+  /** Website leads for these phones / e-mails: only enough to say "also a website lead". */
+  async findContactsIn({ phones, emails, excludeSource }) {
+    const or = [
+      ...(phones.length ? [{ phone: { $in: phones } }] : []),
+      ...(emails.length ? [{ email: { $in: emails } }] : []),
+    ];
+    if (!or.length) return [];
+    return Lead.find({ $or: or, primarySource: { $ne: excludeSource } }, { phone: 1, email: 1 }).limit(200).lean();
+  }
+
   /** Status counts for list tab badges. */
   async statusCounts(baseQuery = {}) {
     const rows = await Lead.aggregate([
