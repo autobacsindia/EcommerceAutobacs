@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LifeBuoy, MessageCircle, Phone, X } from 'lucide-react';
 import { capture } from '@/lib/analytics';
+import { isHelpBotSuppressed, OPEN_HELP_BOT_EVENT } from '@/components/help/helpBotVisibility';
 import { SITE_URL } from '@/lib/siteUrl';
 import { SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL, whatsappLink } from '@/lib/contactInfo';
 
@@ -61,8 +62,23 @@ export default function ContactFab() {
 
   return (
     <div
-      className={`fixed right-4 z-40 flex flex-col items-end gap-3 md:bottom-28 ${onProduct ? 'bottom-44' : 'bottom-24'}`}
+      className={`fixed right-4 z-40 flex flex-col items-end gap-3 md:bottom-28 ${onProduct ? 'bottom-24' : 'bottom-5'}`}
     >
+      {!isHelpBotSuppressed(pathname) && (
+        <button
+          type="button"
+          aria-label="Ask our help assistant"
+          title="Ask our help assistant"
+          onClick={() => {
+            capture('contact_click', { channel: 'assistant', path: pathname });
+            setOpen(false);
+            window.dispatchEvent(new Event(OPEN_HELP_BOT_EVENT));
+          }}
+          className={`${open ? 'flex' : 'hidden'} h-12 w-12 items-center justify-center rounded-full bg-[#2563eb] text-[#fff] md:hidden ${ring}`}
+        >
+          <MessageCircle className="h-5 w-5" />
+        </button>
+      )}
       <Link
         href="/contact"
         aria-label="Help and contact page"

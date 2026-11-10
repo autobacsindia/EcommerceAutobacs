@@ -1,6 +1,7 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import ContactFab from './ContactFab';
+import { OPEN_HELP_BOT_EVENT } from '@/components/help/helpBotVisibility';
 
 let pathname = '/';
 jest.mock('next/navigation', () => ({ usePathname: () => pathname }));
@@ -41,5 +42,24 @@ describe('ContactFab', () => {
     render(<ContactFab />);
     const href = decodeURIComponent(screen.getByLabelText(/whatsapp/i).getAttribute('href') || '');
     expect(href).not.toContain('/products/search');
+  });
+
+  it('puts the help assistant behind the one phone Contact button', () => {
+    pathname = '/cart';
+    const opened = jest.fn();
+    window.addEventListener(OPEN_HELP_BOT_EVENT, opened);
+    render(<ContactFab />);
+    fireEvent.click(screen.getByRole('button', { name: 'Contact us' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ask our help assistant' }));
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Contact us' })).toHaveAttribute('aria-expanded', 'false');
+    window.removeEventListener(OPEN_HELP_BOT_EVENT, opened);
+  });
+
+  it('offers no assistant on a page that has no help bot', () => {
+    pathname = '/login';
+    render(<ContactFab />);
+    fireEvent.click(screen.getByRole('button', { name: 'Contact us' }));
+    expect(screen.queryByRole('button', { name: 'Ask our help assistant' })).not.toBeInTheDocument();
   });
 });

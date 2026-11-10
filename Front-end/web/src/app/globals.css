@@ -680,3 +680,13 @@ html[data-festival] .st-h3::before {
   -webkit-mask: radial-gradient(circle, #000 0 16px, transparent 17px);
   mask: radial-gradient(circle, #000 0 16px, transparent 17px);
 }
+
+/* Touch screens: iPhones zoom the whole page when a field smaller than 16px gets
+   focus, and don't zoom back out. Larger display fields keep their own size. */
+@media (pointer: coarse) {
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color'], [class*='text-lg'], [class*='text-xl'], [class*='text-2xl'], [class*='text-3xl']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

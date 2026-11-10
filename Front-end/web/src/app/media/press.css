@@ -2,7 +2,6 @@
    AUTOBACS INDIA · /media · PRESS COVERAGE
    Ported from the supplied design. All rules scoped under #abi-press.
    ============================================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,900;1,9..144,500&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Space+Mono:wght@400;700&display=swap');
 
 #abi-press{
   --abi-board:#ffffff;
@@ -20,7 +19,7 @@
   margin-left:-50vw; margin-right:-50vw;
   margin-top:0; margin-bottom:0; padding:0; overflow:hidden;
   color:var(--abi-ink); background:var(--abi-board);
-  font-family:"Newsreader",Georgia,serif; font-size:17px; line-height:1.55;
+  font-family:Georgia,serif; font-size:17px; line-height:1.55;
   border-top:4px solid #111111;
 }
 #abi-press *{box-sizing:border-box;margin:0;padding:0}
@@ -29,20 +28,20 @@
 
 /* masthead */
 #abi-press .abi-masthead{max-width:1180px;margin:0 auto;padding:64px 28px 8px;text-align:center;border-bottom:3px double #111;padding-bottom:22px}
-#abi-press .abi-eyebrow{font-family:"Space Mono",monospace;font-size:12px;letter-spacing:.28em;
+#abi-press .abi-eyebrow{font-family:monospace;font-size:12px;letter-spacing:.28em;
   text-transform:uppercase;color:var(--abi-mono);display:flex;align-items:center;justify-content:center;gap:16px}
 #abi-press .abi-eyebrow::before,#abi-press .abi-eyebrow::after{content:"";height:1px;width:48px;background:var(--abi-rule)}
-#abi-press .abi-h1{font-family:"Fraunces",serif;font-weight:900;font-size:clamp(2.6rem,7vw,5rem);
+#abi-press .abi-h1{font-family:serif;font-weight:900;font-size:clamp(2.6rem,7vw,5rem);
   line-height:.96;letter-spacing:-.01em;margin:.34em 0 .12em;color:var(--abi-ink)}
 #abi-press .abi-h1 em{font-style:italic;color:var(--abi-accent);font-weight:600}
 #abi-press .abi-lede{max-width:640px;margin:.2em auto 0;color:var(--abi-ink-soft);
-  font-family:"Newsreader",Georgia,serif;font-size:1.18rem;line-height:1.5}
+  font-family:Georgia,serif;font-size:1.18rem;line-height:1.5}
 #abi-press .abi-featured{max-width:980px;margin:30px auto 0;padding:14px 22px;
   display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px 22px;
   border-top:1.5px solid #111;border-bottom:1.5px solid #111}
-#abi-press .abi-fi-label{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.24em;
+#abi-press .abi-fi-label{font-family:monospace;font-size:11px;letter-spacing:.24em;
   text-transform:uppercase;color:var(--abi-accent);margin-right:4px}
-#abi-press .abi-fi-name{font-family:"Fraunces",serif;font-weight:600;font-size:.98rem;color:var(--abi-ink);opacity:.82}
+#abi-press .abi-fi-name{font-family:serif;font-weight:600;font-size:.98rem;color:var(--abi-ink);opacity:.82}
 #abi-press .abi-dot{color:var(--abi-rule)}
 
 /* grid */
@@ -86,12 +85,12 @@
 #abi-press .abi-tape-right::before{right:24px;transform:rotate(6deg)}
 
 #abi-press .abi-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
-#abi-press .abi-pub{font-family:"Space Mono",monospace;font-weight:700;font-size:12.5px;
+#abi-press .abi-pub{font-family:monospace;font-weight:700;font-size:12.5px;
   letter-spacing:.14em;text-transform:uppercase;color:var(--abi-accent)}
-#abi-press .abi-date{font-family:"Space Mono",monospace;font-size:11.5px;letter-spacing:.12em;
+#abi-press .abi-date{font-family:monospace;font-size:11.5px;letter-spacing:.12em;
   text-transform:uppercase;color:var(--abi-mono);white-space:nowrap}
 #abi-press .abi-rule{display:block;height:1px;background:var(--abi-rule);margin:11px 0 14px}
-#abi-press .abi-title{display:block;font-family:"Fraunces",serif;font-weight:600;font-size:1.42rem;
+#abi-press .abi-title{display:block;font-family:serif;font-weight:600;font-size:1.42rem;
   line-height:1.16;letter-spacing:-.005em;margin:0 0 16px;color:var(--abi-ink)}
 #abi-press .abi-figure{display:block;position:relative;overflow:hidden;width:100%;aspect-ratio:3/3.7;
   background:#cabfa6;border:1px solid rgba(80,64,40,.18);box-shadow:inset 0 0 0 1px rgba(255,255,255,.4)}
@@ -100,10 +99,10 @@
   transition:transform .6s cubic-bezier(.2,.7,.2,1)}
 #abi-press .abi-clip:hover .abi-figure img,#abi-press .abi-clip:focus-visible .abi-figure img{transform:scale(1.06)}
 #abi-press .abi-figure-empty{display:flex;align-items:center;justify-content:center;width:100%;height:100%;
-  font-family:"Fraunces",serif;font-weight:600;font-size:1.1rem;color:#7c6a48;text-align:center;padding:12px}
+  font-family:serif;font-weight:600;font-size:1.1rem;color:#7c6a48;text-align:center;padding:12px}
 #abi-press .abi-excerpt{display:block;color:var(--abi-ink-soft);
-  font-family:"Newsreader",Georgia,serif;font-size:1.02rem;line-height:1.5;margin:16px 0 18px}
-#abi-press .abi-read{font-family:"Space Mono",monospace;font-weight:700;font-size:12px;
+  font-family:Georgia,serif;font-size:1.02rem;line-height:1.5;margin:16px 0 18px}
+#abi-press .abi-read{font-family:monospace;font-weight:700;font-size:12px;
   letter-spacing:.13em;text-transform:uppercase;color:var(--abi-ink);
   display:inline-block;padding-bottom:3px;border-bottom:1.5px solid var(--abi-accent)}
 #abi-press .abi-read span{display:inline-block;transition:transform .25s ease;margin-left:5px}
@@ -114,10 +113,10 @@
 /* footer */
 #abi-press .abi-foot{max-width:760px;margin:40px auto 0;padding:48px 28px 80px;text-align:center;border-top:1px solid #e0e0e0}
 #abi-press .abi-foot hr{border:0;border-top:2px solid #111;max-width:120px;margin:0 auto 30px}
-#abi-press .abi-foot h3{font-family:"Fraunces",serif;font-weight:600;
+#abi-press .abi-foot h3{font-family:serif;font-weight:600;
   font-size:clamp(1.5rem,4vw,2.1rem);margin:0 0 10px;letter-spacing:-.01em;color:var(--abi-ink)}
-#abi-press .abi-foot p{color:var(--abi-ink-soft);font-family:"Newsreader",Georgia,serif;margin:0 0 24px}
-#abi-press .abi-btn{display:inline-block;font-family:"Space Mono",monospace;font-weight:700;font-size:12.5px;
+#abi-press .abi-foot p{color:var(--abi-ink-soft);font-family:Georgia,serif;margin:0 0 24px}
+#abi-press .abi-btn{display:inline-block;font-family:monospace;font-weight:700;font-size:12.5px;
   letter-spacing:.14em;text-transform:uppercase;color:var(--abi-paper);background:var(--abi-accent);
   padding:14px 28px;border:1px solid var(--abi-accent-deep);box-shadow:0 10px 22px -12px rgba(124,40,20,.8);
   transition:transform .2s,background .2s}
@@ -130,7 +129,7 @@
 #abi-press .abi-ticker-wrap::after{right:0;background:linear-gradient(-90deg,#111111 40%,transparent)}
 #abi-press .abi-track{display:flex;width:max-content;animation:abiTick 32s linear infinite}
 @keyframes abiTick{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-#abi-press .abi-track span{font-family:"Space Mono",Courier,monospace;font-size:11px;letter-spacing:.18em;
+#abi-press .abi-track span{font-family:Courier,monospace;font-size:11px;letter-spacing:.18em;
   text-transform:uppercase;color:#bbbbbb;padding:0 24px;white-space:nowrap;display:inline-block}
 #abi-press .abi-bull{color:#a3381f;padding:0}
 
@@ -139,7 +138,7 @@
   animation:abiPulse 1.2s ease-in-out infinite}
 @keyframes abiPulse{0%,100%{opacity:1}50%{opacity:.55}}
 #abi-press .abi-empty{grid-column:1/-1;text-align:center;color:var(--abi-ink-soft);
-  font-family:"Newsreader",Georgia,serif;padding:40px 0}
+  font-family:Georgia,serif;padding:40px 0}
 
 @media(prefers-reduced-motion:reduce){
   #abi-press .abi-track{animation:none}
