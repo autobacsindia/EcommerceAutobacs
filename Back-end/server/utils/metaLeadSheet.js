@@ -64,15 +64,55 @@ export const cleanPhone = (raw) => String(raw ?? '').trim().replace(/^p:/i, '').
 
 const headerRowIndex = (values) => values.findIndex((r) => r.filter((c) => String(c ?? '').trim()).length >= 2);
 
-function labelsFor(headerRow, width) {
-  const seen = new Map();
+const META_ID = /^l:\d+$/i;
+/**
+ * The column holding Meta's lead ids, found by its values: on the live sheet
+ * someone typed over the "id" heading, and a staff column elsewhere is headed "id".
+ */
+function metaIdColumn(body, width) {
+  for (let i = 0; i < width; i += 1) {
+    const filled = body.map((r) => String(r[i] ?? '').trim()).filter(Boolean);
+    if (filled.length && filled.filter((v) => META_ID.test(v)).length / filled.length >= 0.9) return i;
+  }
+  return -1;
+}
+
+/*
+  Meta writes its columns up to `lead_status`; everything to the right is typed by
+  the sales team, whose headings are missing or wrong ("id", "name", "follow up 1",
+  blank). So those go by position: the first is the sales person, the rest are
+  follow-ups in order, and only a column headed exactly "status" is the status.
+  A tab without `lead_status` (the typed website tab) keeps its own headings.
+*/
+function labelsFor(headerRow, width, body) {
+  const heads = Array.from({ length: width }, (_, i) => String(headerRow[i] ?? '').trim());
+  const idCol = metaIdColumn(body, width);
+  const statusAt = heads.findIndex((h) => key(h) === 'lead_status');
+  const staffFrom = statusAt >= 0 ? statusAt + 1 : width;
   let blank = 0;
-  return Array.from({ length: width }, (_, i) => {
-    const raw = String(headerRow[i] ?? '').trim();
-    if (!raw) { blank += 1; return { label: `Follow-up ${blank}`, column: FOLLOW_UP_CORE[blank - 1] ?? null }; }
-    const n = (seen.get(raw) ?? 0) + 1;
-    seen.set(raw, n);
-    return { label: n > 1 ? `${raw} (${n})` : raw, column: n > 1 ? null : (COLUMN_OF.get(key(raw)) ?? null) };
+  let followUp = 0;
+  const raw = heads.map((h, i) => {
+    if (i === idCol) return { label: 'id', column: 'metaId' };
+    if (i >= staffFrom) {
+      if (key(h) === 'status') return { label: 'status', column: 'status' };
+      if (i === staffFrom) return { label: 'Sales person', column: 'salesPerson' };
+      followUp += 1;
+      return { label: `Follow-up ${followUp}`, column: FOLLOW_UP_CORE[followUp - 1] ?? null };
+    }
+    if (!h) { blank += 1; return { label: `Follow-up ${blank}`, column: FOLLOW_UP_CORE[blank - 1] ?? null }; }
+    const column = COLUMN_OF.get(key(h)) ?? null;
+    // An "id" heading over something that is not Meta's id must not become the key.
+    return { label: h, column: column === 'metaId' && idCol >= 0 ? null : column };
+  });
+  // One label per column, and one column per core field: the first one wins.
+  const seen = new Map();
+  const taken = new Set();
+  return raw.map(({ label, column }) => {
+    const n = (seen.get(label) ?? 0) + 1;
+    seen.set(label, n);
+    const own = column && !taken.has(column) ? column : null;
+    if (own) taken.add(own);
+    return { label: n > 1 ? `${label} (${n})` : label, column: own };
   });
 }
 
@@ -88,7 +128,7 @@ export function parseTab({ name, gid, values }, seenMetaIds = new Set()) {
 
   const body = values.slice(start + 1);
   const width = Math.max(values[start].length, ...body.map((r) => r.length));
-  const labels = labelsFor(values[start], width);
+  const labels = labelsFor(values[start], width, body);
   report.columns = labels.map((l) => l.label);
   const present = new Set(labels.map((l) => l.column));
   if (!['phone', 'metaId', 'name'].some((c) => present.has(c))) {
