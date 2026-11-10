@@ -75,6 +75,33 @@ describe('reading a tab', () => {
     expect(report).toMatchObject({ rowsWithData: 2, repeatedPhones: 1 });
   });
 
+  // The live "fortuner ironman" tab: Meta's id heading typed over with "27497",
+  // the sales person under a heading "id", follow-ups under no heading at all.
+  test("staff columns after lead_status go by position, and Meta's id is found by its values", () => {
+    const head = ['27497', 'created_time', 'form_name', 'full_name', 'phone_number', 'lead_status', 'id', '', '', ''];
+    const row = ['l:77', '2026-10-29T07:01:30-05:00', 'fortuner form', 'Ravi', 'p:+919876543210', 'CREATED', 'Nizam', 'responded', 'sent on whatsapp', 'call later'];
+    const { rows } = parseTab({ name: 'fortuner ironman', gid: 5, values: [head, row] });
+    expect(rows[0]).toMatchObject({ sheetKey: 'l:77', metaLeadId: 'l:77', name: 'Ravi', salesPerson: 'Nizam', followUp1: 'responded', followUp2: 'sent on whatsapp', status: '' });
+    expect(rows[0].fields.map((f) => f.label)).toEqual(['id', 'created_time', 'form_name', 'full_name', 'phone_number', 'lead_status', 'Sales person', 'Follow-up 1', 'Follow-up 2', 'Follow-up 3']);
+    expect(rows[0].fields.at(-1).value).toBe('call later');
+  });
+
+  // The live "Thar Ironman" tab: the sales person headed "name" (not the customer),
+  // a blank heading between follow-ups, and a "status" column at the end.
+  test('a staff "name" heading is the sales person, not the customer; "status" stays the status', () => {
+    const head = ['id', 'created_time', 'full_name', 'phone_number', 'lead_status', 'name', 'follow up 1', '', 'follow up 2', 'status'];
+    const row = ['l:5', '2026-10-29T07:01:30-05:00', 'Asha', 'p:+919876543211', 'CREATED', 'Nevin', 'didnt pick', 'whatsapp', '', 'converted'];
+    const { rows } = parseTab({ name: 'Thar Ironman', gid: 6, values: [head, row] });
+    expect(rows[0]).toMatchObject({ name: 'Asha', salesPerson: 'Nevin', followUp1: 'didnt pick', followUp2: 'whatsapp', status: 'converted' });
+    expect(new Set(rows[0].fields.map((f) => f.label)).size).toBe(head.length);
+  });
+
+  test('an "id" heading over text is never used as the key', () => {
+    const head = ['created_time', 'full_name', 'phone_number', 'id'];
+    const { rows } = parseTab({ name: 't', gid: 7, values: [head, ['2026-10-29T07:01:30-05:00', 'A', '9876543212', 'Nizam']] });
+    expect(rows[0]).toMatchObject({ metaLeadId: null, sheetKey: 'gid:7|phone:9876543212#1' });
+  });
+
   test('a tab whose columns mean nothing is reported, not guessed at', () => {
     const { rows, report } = parseTab({ name: 'notes', gid: 3, values: [['foo', 'bar'], ['1', '2']] });
     expect(rows).toEqual([]);
