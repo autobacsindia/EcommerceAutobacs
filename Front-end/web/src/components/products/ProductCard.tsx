@@ -61,7 +61,12 @@ export default function ProductCard({
             {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
           </div>
         )}
-        {product.originalPrice && product.originalPrice > product.price && <FestivalDealBadge />}
+        {product.originalPrice && product.originalPrice > product.price && (
+          <FestivalDealBadge
+            price={product.productType === 'variable' ? product.priceMin ?? product.price : product.price}
+            setting={product.festivalOfferSetting}
+          />
+        )}
         {product.isFeatured && product.stock !== 'out' && product.originalPrice && product.originalPrice <= product.price && (
           <div className="bg-gold text-white px-2 py-1 rounded text-xs font-semibold">Popular</div>
         )}

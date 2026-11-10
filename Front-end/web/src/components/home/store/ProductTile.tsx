@@ -45,7 +45,7 @@ export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: str
           <div className="st-deal-line">
             <span className="st-off">-{off}%</span>
             <span className="st-deal-label">{p.offerEndDate ? 'Limited time deal' : 'Deal'}</span>
-            <FestivalDealBadge />
+            <FestivalDealBadge price={p.variable ? null : p.price} setting={p.festivalOfferSetting} />
           </div>
         )}
         <div className="st-name">{p.name}</div>
@@ -62,7 +62,7 @@ export default function ProductTile({ p, badge }: { p: StoreProduct; badge?: str
             </span>
           )}
         </div>
-        <FestivalOfferTag offer={offer} formatMoney={exact} className="mt-1" />
+        <FestivalOfferTag offer={offer} formatMoney={exact} className="mt-1" mrp={off > 0 ? p.originalPrice : null} />
         {p.brand && <div className="st-brand">by {p.brand}</div>}
       </div>
     </Link>

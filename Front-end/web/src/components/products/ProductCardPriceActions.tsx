@@ -73,7 +73,7 @@ export default function ProductCardPriceActions({
         ) : (
           <p className="text-2xl font-display font-bold text-gold">{formatPrice(offer ? offer.finalPrice : displayPrice)}</p>
         )}
-        <FestivalOfferTag offer={offer} formatMoney={exact} className="mt-1" />
+        <FestivalOfferTag offer={offer} formatMoney={exact} mrp={!isVariable ? originalPrice : null} className="mt-1" />
       </div>
 
       {isVariable ? (

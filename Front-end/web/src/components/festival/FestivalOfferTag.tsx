@@ -1,4 +1,4 @@
-import type { FestivalOfferResult } from '@/lib/festival/festivalOffer';
+import { totalSavingFromMrp, type FestivalOfferResult } from '@/lib/festival/festivalOffer';
 
 /**
  * "🪔 Diwali offer −3% · Before Diwali ₹1,12,500 · You save ₹3,375" — the line every
@@ -15,6 +15,7 @@ export default function FestivalOfferTag({
   formatMoney,
   className = '',
   compact = false,
+  mrp = null,
 }: {
   offer: Pick<FestivalOfferResult, 'percent' | 'discount' | 'basePrice'> | null | undefined;
   /** Must keep paise (exact) — a rounded-up saving is a promise the cart then breaks. */
@@ -22,6 +23,11 @@ export default function FestivalOfferTag({
   className?: string;
   /** Badge only — for tight tiles. */
   compact?: boolean;
+  /**
+   * The M.R.P. shown struck through beside the price, when there is one. "You save" is
+   * then the whole saving against it (sale + Diwali), not just the Diwali part.
+   */
+  mrp?: number | null;
 }) {
   if (!offer) return null;
   return (
@@ -36,7 +42,7 @@ export default function FestivalOfferTag({
         <span className="font-normal text-ink-muted">
           Before Diwali <s>{formatMoney(offer.basePrice)}</s>
           {' · '}
-          <span className="font-semibold text-emerald-600">You save {formatMoney(offer.discount)}</span>
+          <span className="font-semibold text-emerald-600">You save {formatMoney(totalSavingFromMrp(offer, mrp))}</span>
         </span>
       )}
     </span>

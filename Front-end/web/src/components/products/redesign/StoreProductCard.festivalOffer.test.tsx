@@ -106,7 +106,8 @@ describe('StoreProductCard — Diwali offer (display mirror)', () => {
     const tag = screen.getByTestId('festival-offer-tag');
     expect(tag).toHaveTextContent('Diwali offer −3%');
     expect(tag).toHaveTextContent('Before Diwali ₹1,12,500');
-    expect(tag).toHaveTextContent('You save ₹3,375');
+    // The whole saving from M.R.P.: ₹1,40,625 − ₹1,09,125 (sale + Diwali), not the Diwali part alone.
+    expect(tag).toHaveTextContent('You save ₹31,500');
   });
 
   it('offer off → exactly today\'s view: M.R.P. + current price + −20% badge, no Diwali', () => {

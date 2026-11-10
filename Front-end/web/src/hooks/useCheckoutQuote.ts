@@ -107,6 +107,8 @@ export interface FestivalOfferQuoteLine {
   priceBeforeOffer: number;
   discount: number;
   finalPrice: number;
+  /** M.R.P. per unit when it is above the pre-Diwali price, else null. Display only. */
+  mrp?: number | null;
 }
 
 export interface QuoteItem { product: string; quantity: number; variantId?: string | null }

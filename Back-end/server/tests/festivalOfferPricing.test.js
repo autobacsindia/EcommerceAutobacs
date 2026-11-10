@@ -355,3 +355,25 @@ describe('per-product Diwali setting through the real money path', () => {
     expect(orderItems[0].price).toBe(12999);
   });
 });
+
+describe('quote line carries the M.R.P. for the "You save" display', () => {
+  it('gives the M.R.P. on a sale line and null otherwise; the charged price is unchanged', async () => {
+    await offerOn();
+    const sale = await seedProduct(75000, { originalPrice: 135680 });
+    const plain = await seedProduct(75000);
+    const q = await quoteFor([[sale], [plain]]);
+    expect(q.orderItems.map((i) => i.price)).toEqual([71250, 71250]);
+    expect(q.festivalOfferLines.map((l) => l.mrp)).toEqual([135680, null]);
+  });
+
+  it('the M.R.P. is not stored on the order', async () => {
+    await offerOn();
+    const user = await seedUser();
+    const p = await seedProduct(75000, { originalPrice: 135680 });
+    const order = await orderService.createOrder(user._id, [{ product: p._id, quantity: 1 }], ADDRESS, { shippingCost: 0, acceptTerms: true });
+    const stored = await Order.findById(order._id).lean();
+    expect(stored.items[0]).not.toHaveProperty('catalogMrp');
+    expect(stored.items[0].festivalOffer).not.toHaveProperty('mrp');
+    expect(stored.totalAmount).toBe(71250);
+  });
+});
