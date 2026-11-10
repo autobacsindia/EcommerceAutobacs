@@ -146,7 +146,7 @@ function ProductLifecycleFlow() {
                     <p className="text-gray-600 mb-4">{stage.description}</p>
                     
                     {/* Actions */}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {stage.actions.map((action, actionIndex) => (
                         <div key={actionIndex} className="flex items-center gap-2 text-sm text-gray-700">
                           <CheckCircle className="h-4 w-4 text-green-500" />

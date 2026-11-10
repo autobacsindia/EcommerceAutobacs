@@ -474,7 +474,7 @@ function AdminOrderDetailPageInner() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center gap-4 mb-8">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-8">
         <button 
           onClick={() => router.back()}
           className="p-2 rounded-lg hover:bg-gray-100"

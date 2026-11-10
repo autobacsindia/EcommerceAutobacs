@@ -7,7 +7,7 @@ import apiClient from '@/lib/api-client';
 import { staffKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST, formatIsoDateTimeIST } from '@/lib/datetime';
 import { errorMessage } from '@/components/staff/sales/types';
-import { metaLeadDate, type MetaLead, type MetaLeadDetail, type MetaLeadYou } from './metaLeadTypes';
+import { metaLeadDate, readableSheetLabel, readableSheetValue, type MetaLead, type MetaLeadDetail, type MetaLeadYou } from './metaLeadTypes';
 
 type TextField = 'name' | 'phone' | 'email' | 'product' | 'campaign' | 'salesPerson' | 'status' | 'followUp1' | 'followUp2';
 
@@ -32,14 +32,14 @@ function ReadOnlyDetails({ base }: { base: MetaLeadDetail }) {
   const rows = [
     { label: 'Date', value: metaLeadDate(base) },
     ...TEXT_FIELDS.map((f) => ({ label: f.label, value: base[f.key] })),
-    ...base.extras.map((x) => ({ label: x.label, value: x.value })),
+    ...base.extras.map((x) => ({ label: readableSheetLabel(x.label), value: readableSheetValue(x.value) })),
   ].filter((r) => r.value);
   return (
     <dl className="divide-y divide-gray-100">
       {rows.map((r) => (
         <div key={r.label} className="grid grid-cols-1 gap-0.5 py-2 sm:grid-cols-3 sm:gap-3">
-          <dt className="text-sm text-gray-500">{r.label}</dt>
-          <dd className="break-words text-sm font-medium text-gray-900 sm:col-span-2">{r.value}</dd>
+          <dt className="min-w-0 break-words text-sm text-gray-500">{r.label}</dt>
+          <dd className="min-w-0 break-words text-sm font-medium text-gray-900 sm:col-span-2">{r.value}</dd>
         </div>
       ))}
     </dl>
@@ -121,8 +121,8 @@ export default function MetaLeadPanel({ lead, onClose }: { lead: MetaLead; onClo
                 <fieldset className="space-y-3 border-t border-gray-200 pt-4">
                   <legend className="pr-2 text-sm font-semibold text-gray-900">Everything else from the sheet</legend>
                   {base.extras.map((x) => (
-                    <label key={x.label} className="block text-sm font-medium text-gray-800">
-                      {x.label}
+                    <label key={x.label} className="block break-words text-sm font-medium text-gray-800">
+                      {readableSheetLabel(x.label)}
                       <input type="text" maxLength={2000} disabled={x.readOnly} className={inputClass} value={extras[x.label] ?? x.value}
                         onChange={(e) => setExtras((c) => ({ ...c, [x.label]: e.target.value }))} />
                     </label>
