@@ -180,6 +180,9 @@ export default function StoreProductCard({
             src={firstImage}
             alt={product.name}
             priority={priority}
+            // Two across on a phone is 44% of the screen once gaps and page margins are
+            // out. Saying 50vw pushed a 2x phone to the next image size, twice the bytes.
+            sizes="(max-width: 640px) 45vw, (max-width: 1024px) 33vw, 25vw"
             className="h-full w-full object-contain mix-blend-multiply transition-transform duration-500 ease-lux group-hover:scale-[1.04]"
           />
         ) : (

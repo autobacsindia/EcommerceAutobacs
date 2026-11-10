@@ -10,11 +10,24 @@
  */
 import posthog from 'posthog-js';
 
-const ready = () => typeof window !== 'undefined' && !!process.env.NEXT_PUBLIC_POSTHOG_KEY && posthog.__loaded;
+const enabled = () => typeof window !== 'undefined' && !!process.env.NEXT_PUBLIC_POSTHOG_KEY;
+
+/** PostHog starts once the page has settled; anything earlier waits here, in order. */
+const MAX_WAITING = 50;
+const waiting: Array<() => void> = [];
+
+export const whenAnalyticsReady = (run: () => void) => {
+  if (!enabled()) return;
+  if (posthog.__loaded) run();
+  else if (waiting.length < MAX_WAITING) waiting.push(run);
+};
+
+export const flushWaitingAnalytics = () => {
+  while (waiting.length) waiting.shift()!();
+};
 
 export const capture = (event: string, props?: Record<string, unknown>) => {
-  if (!ready()) return;
-  posthog.capture(event, props);
+  whenAnalyticsReady(() => posthog.capture(event, props));
 };
 
 export interface ProductEventInput {
@@ -151,12 +164,10 @@ export const trackCampaignOfferViewed = (input: {
 
 /** Tie events to a user after login. */
 export const identifyUser = (user: { id: string; email?: string; name?: string }) => {
-  if (!ready()) return;
-  posthog.identify(user.id, { email: user.email, name: user.name });
+  whenAnalyticsReady(() => posthog.identify(user.id, { email: user.email, name: user.name }));
 };
 
 /** Clear identity on logout. */
 export const resetAnalytics = () => {
-  if (!ready()) return;
-  posthog.reset();
+  whenAnalyticsReady(() => posthog.reset());
 };
