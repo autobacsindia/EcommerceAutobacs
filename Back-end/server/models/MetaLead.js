@@ -101,5 +101,13 @@ const MetaLeadSchema = new mongoose.Schema(
 MetaLeadSchema.index({ sheetKey: 1 }, { unique: true });
 MetaLeadSchema.index({ sortAt: -1, _id: -1 }); // every tab, newest first
 MetaLeadSchema.index({ tab: 1, sortAt: -1, _id: -1 }); // one tab, newest first
+/*
+  Measured on 20,000 rows: Mine / a person, a rare status, and the "also enquired"
+  lookup each read all 20,000 per page; with these, 0-26. Not required for the page
+  to work, only for it to stay fast (autoIndex is off: build them after deploy).
+*/
+MetaLeadSchema.index({ followingUpBy: 1, sortAt: -1, _id: -1 }); // Unclaimed / Mine / a person
+MetaLeadSchema.index({ followUpStatus: 1, sortAt: -1, _id: -1 }); // by follow-up status
+MetaLeadSchema.index({ phoneKey: 1 }); // the same customer on another tab
 
 export default mongoose.model('MetaLead', MetaLeadSchema);
