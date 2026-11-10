@@ -20,6 +20,7 @@ jest.unstable_mockModule('../queue/queues.js', () => ({
 const dbHandler = await import('./db-handler.js');
 const { default: PaymentRequest } = await import('../models/PaymentRequest.js');
 const svc = await import('../services/paymentRequestService.js');
+const { default: repo } = await import('../repositories/paymentRequestRepository.js');
 const { afterClause, and, decodeCursor, encodeCursor, sortSpec } = await import('../utils/listQuery.js');
 
 const admin = { _id: new mongoose.Types.ObjectId(), role: 'admin' };
@@ -82,6 +83,44 @@ describe('Payments list sorts use an index (no in-memory sort, no scan)', () => 
       const p = await explainFor(filters, row);
       expect(p.sortsInMemory).toBe(false);
       expect(p.indexes).toContain(index);
+    }
+  });
+});
+
+describe('"Paid this month" from foreign accounts (admin overview)', () => {
+  const since = new Date(Date.UTC(2026, 0, 1));
+  const abroad = (n, foreignAmount) => ({
+    number: `PR-FX-${n}`, kind: 'expense', status: 'paid', team: 'procurement', requestedBy: new mongoose.Types.ObjectId(), requestedByName: 'x',
+    amount: 0, currency: 'THB', foreignAmount, category: 'import_purchase', payee: { name: 'x', method: 'bank' }, files: [], history: [],
+    payment: { paidAt: new Date(Date.UTC(2026, 5, 1)), fromAccount: { currency: 'THB', amount: foreignAmount, label: '' } },
+    createdAt: new Date(), updatedAt: new Date(),
+  });
+
+  // tests/setup.js empties every collection after each test: each one seeds its own rows.
+  const seed = () => PaymentRequest.collection.insertMany([abroad(1, 10000), abroad(2, 0.1), abroad(3, 0.2)]);
+
+  it('reads only the no-rupee rows (status + amount index), not every payment of the month', async () => {
+    await seed();
+    const ex = await PaymentRequest.aggregate([
+      { $match: { status: 'paid', amount: { $lte: 0 }, 'payment.paidAt': { $gte: since } } },
+    ]).hint('payment_request_status_amount').explain('executionStats');
+    const s = JSON.stringify(ex);
+    expect(s).toContain('payment_request_status_amount');
+    expect(Number(s.match(/"totalDocsExamined":(\d+)/)[1])).toBe(3);
+    // Summed in hundredths: 10000 + 0.1 + 0.2 is exactly 10000.3, no float drift.
+    expect(await repo.paidNoRupeesSince(since)).toEqual([{ currency: 'THB', amount: 10000.3 }]);
+  });
+
+  it('still answers (slower) if the index is missing on a cluster', async () => {
+    await seed();
+    await PaymentRequest.collection.dropIndex('payment_request_status_amount');
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(await repo.paidNoRupeesSince(since)).toEqual([{ currency: 'THB', amount: 10000.3 }]);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      await PaymentRequest.syncIndexes();
     }
   });
 });

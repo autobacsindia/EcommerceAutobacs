@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Link2, Loader2, Paperclip, Pencil, X } from 'lucide-react';
 import { formatDateTimeIST } from '@/lib/datetime';
 import {
-  actOn, amountText, bankCode, linkOrder, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
+  accountName, actOn, amountText, bankCode, linkOrder, type OrderMatch, billAmount, categoryName, errorMessage, fileHref, foreignBill, getRequest, money, paymentKeys, postForm, rupees, slipHref, STATUS_TONE, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { MAX_ATTACHMENTS, PHOTO_OR_PDF } from '@/lib/attachments';
 import EditPaymentRequest from './EditPaymentRequest';
@@ -106,8 +106,12 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
   const q = useQuery({ queryKey: paymentKeys.one(id), queryFn: () => getRequest(id) });
   const [note, setNote] = useState('');
   const [mode, setMode] = useState<null | 'decline' | 'hold' | 'pay' | 'edit' | 'editPayment'>(startEditing ? 'edit' : null);
-  // `rupees`: a foreign bill only — what the bank debited (empty = an older request's estimate stands).
-  const [pay, setPay] = useState({ method: 'razorpay', reference: '', at: toLocalInput(), rupees: '' });
+  // A foreign bill only:
+  //   `from` 'inr' — paid from the Indian rupee account: `rupees` is what the bank debited
+  //                  (empty = an older request's estimate stands);
+  //   `from` 'foreign' — paid from an account in the bill's currency (e.g. HR's Thai bank
+  //                  account): `sent` is the amount sent in that currency, `account` its name.
+  const [pay, setPay] = useState({ method: 'razorpay', reference: '', at: toLocalInput(), rupees: '', from: 'inr' as 'inr' | 'foreign', sent: '', account: '' });
   const [proof, setProof] = useState<File[]>([]);
   const [error, setError] = useState('');
 
@@ -124,7 +128,11 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
       form.append('method', pay.method);
       form.append('reference', pay.reference.trim());
       form.append('transactionAt', fromLocalInput(pay.at));
-      if (pay.rupees.trim()) form.append('rupees', pay.rupees.trim());
+      if (pay.from === 'foreign') {
+        form.append('paidFrom', 'foreign');
+        form.append('sentAmount', pay.sent.replace(/,/g, '').trim());
+        if (pay.account.trim()) form.append('accountLabel', pay.account.trim());
+      } else if (pay.rupees.trim()) form.append('rupees', pay.rupees.trim());
       if (note.trim()) form.append('note', note.trim());
       for (const f of proof) form.append('proof', f);
       return (await postForm<{ request: PaymentRequest }>(`/payment-requests/${id}/pay`, form)).request;
@@ -152,7 +160,9 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
             <div className="rounded-xl bg-gray-50 p-4">
               <p className="text-xs uppercase tracking-wide text-gray-500">{r.kind === 'supplier' ? (r.partLabel ? `Supplier payment — ${r.partLabel}` : 'Supplier payment') : `${categoryName(r)} expense`} · {r.teamLabel}</p>
               <p className="text-2xl font-bold text-gray-900">{amountText(r)}</p>
-              {r.rupeesPending
+              {r.paidFrom
+                ? <p className="text-sm text-gray-700">Paid from {accountName(r.paidFrom)} — no rupees debited.</p>
+                : r.rupeesPending
                 ? <p className="text-sm text-gray-700">Rupee amount: what the bank debits — recorded when paid.</p>
                 : foreignBill(r) && <p className="text-sm text-gray-700">Bill: {foreignBill(r)}</p>}
               <p className="text-sm text-gray-600">to {r.payee.name}</p>
@@ -198,6 +208,7 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
               <Row k="Pay by" v={r.payee.method === 'upi' ? `UPI · ${r.payee.upiId || 'scan their QR (attached)'}` : `Bank · ${r.payee.accountName}, A/c ${r.payee.accountNumber}, ${bankCode(r.payee)}${r.payee.bankName ? ` (${r.payee.bankName})` : ''}`} />
               <Row k="Payee phone" v={r.payee.phone} />
               {r.payment && <Row k="Paid" v={`${r.payment.method.toUpperCase()}${r.payment.reference ? ` · ref ${r.payment.reference}` : ''} · by ${r.payment.paidByName}`} />}
+              {r.paidFrom && <Row k="Paid from" v={`${accountName(r.paidFrom)} · ${money(r.paidFrom.amount, r.paidFrom.currency)} sent`} />}
               {r.payment && <Row k="Transaction" v={formatDateTimeIST(r.payment.transactionAt || r.payment.paidAt)} />}
               {r.payment && <Row k="Recorded" v={formatDateTimeIST(r.payment.paidAt)} />}
               {r.decisionNote && ['declined', 'on_hold'].includes(r.status) && <Row k={r.status === 'declined' ? 'Reason' : 'On hold'} v={r.decisionNote} />}
@@ -267,15 +278,40 @@ export default function PaymentRequestDetail({ id, onClose, startEditing = false
                 {mode === 'pay' && (
                   <div className="space-y-2">
                     {billAmount(r) ? (
-                      <p className="text-sm text-gray-700">Pay <strong>{billAmount(r)}</strong> to {r.payee.name}, then record it here with the rupees the bank debited.</p>
+                      <p className="text-sm text-gray-700">Pay <strong>{billAmount(r)}</strong> to {r.payee.name}, then record it here{pay.from === 'foreign' ? '.' : ' with the rupees the bank debited.'}</p>
                     ) : (
                       <p className="text-sm text-gray-700">Pay <strong>{rupees(r.amount)}</strong> to {r.payee.name} from the company Razorpay / bank, then record it here.</p>
                     )}
                     {billAmount(r) && (
+                      <fieldset className="rounded-lg border border-gray-200 p-2">
+                        <legend className="px-1 text-xs text-gray-600">Paid from</legend>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                          <label className="inline-flex items-center gap-1.5">
+                            <input type="radio" name="paid-from" checked={pay.from === 'inr'} onChange={() => setPay({ ...pay, from: 'inr' })} /> Indian rupee account (₹)
+                          </label>
+                          <label className="inline-flex items-center gap-1.5">
+                            <input type="radio" name="paid-from" checked={pay.from === 'foreign'} onChange={() => setPay({ ...pay, from: 'foreign', rupees: '' })} /> {r.currency} account (no rupees debited)
+                          </label>
+                        </div>
+                      </fieldset>
+                    )}
+                    {billAmount(r) && pay.from === 'inr' && (
                       <label className="block text-xs text-gray-600">Rupees debited by the bank (₹){r.rupeesPending ? '' : ` — leave empty to keep the estimate of ${rupees(r.amount)}`}
                         <input aria-label="Rupees debited" className={`${input} mt-1`} required={r.rupeesPending} inputMode="decimal" pattern="\d+(\.\d{1,2})?"
                           value={pay.rupees} onChange={(e) => setPay({ ...pay, rupees: e.target.value })} placeholder="From the bank statement, e.g. 56227" />
                       </label>
+                    )}
+                    {billAmount(r) && pay.from === 'foreign' && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className="block text-xs text-gray-600">Amount sent ({r.currency}) — must be the bill, {billAmount(r)}
+                          <input aria-label={`Amount sent in ${r.currency}`} className={`${input} mt-1`} required inputMode="decimal" pattern="[\d,]+(\.\d{1,2})?"
+                            value={pay.sent} onChange={(e) => setPay({ ...pay, sent: e.target.value })} placeholder={`e.g. ${r.foreignAmount ?? ''}`} />
+                        </label>
+                        <label className="block text-xs text-gray-600">Which account (optional)
+                          <input aria-label="Account paid from" className={`${input} mt-1`} maxLength={80}
+                            value={pay.account} onChange={(e) => setPay({ ...pay, account: e.target.value })} placeholder="e.g. HR's Thailand account" />
+                        </label>
+                      </div>
                     )}
                     <div className="grid gap-2 sm:grid-cols-2">
                       <select aria-label="Paid by" className={input} value={pay.method} onChange={(e) => setPay({ ...pay, method: e.target.value })}>

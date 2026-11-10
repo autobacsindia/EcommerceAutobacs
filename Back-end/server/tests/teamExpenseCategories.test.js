@@ -444,6 +444,110 @@ describe('Expense options per team, and foreign-currency bills', () => {
       expect(changed.body.request.history.at(-1).note).toMatch(/bill THB 10,000 @ ₹2\.45 → THB 12,000/);
     });
 
+    describe('paid from a foreign-currency account (e.g. HR\'s Thai bank account)', () => {
+      const abroad = (id, over = {}) => pay(id, { paidFrom: 'foreign', sentAmount: '22950', accountLabel: 'HR\'s Thailand account', ...over });
+
+      it('records the baht sent and the account — no rupees, and no rupees asked for', async () => {
+        const id = (await thb()).body.request.id;
+        await accounts.session.post(`/payment-requests/${id}/approve`);
+        const res = await abroad(id, { sentAmount: '22,950', note: 'Paid by HR' });
+        expect(res.status).toBe(200);
+        expect(res.body.request).toMatchObject({
+          status: 'paid', amount: 0, fxRate: null, currency: 'THB', foreignAmount: 22950, rupeesPending: false,
+          paidFrom: { currency: 'THB', amount: 22950, label: 'HR\'s Thailand account' },
+        });
+        expect(res.body.request.payment).toMatchObject({ method: 'bank', reference: 'UTR1' });
+        expect(res.body.request.history.at(-1).note).toMatch(/THB 22,950 sent from HR's Thailand account \(no rupees debited\) — Paid by HR/);
+        const saved = await PaymentRequest.findById(id).lean();
+        expect(saved.payment.fromAccount).toEqual({ currency: 'THB', amount: 22950, label: 'HR\'s Thailand account' });
+        const paidMsg = await ChatMessage.findOne({ text: /^💸 Paid/ }).lean();
+        expect(paidMsg.text).toMatch(/THB 22,950 \(paid from HR's Thailand account\)/);
+        expect(paidMsg.text).not.toMatch(/₹0/);
+      });
+
+      it('the amount sent must be the bill, exactly; a missing or bad amount is refused and nothing changes', async () => {
+        const id = (await thb()).body.request.id;
+        for (const sentAmount of ['', '0', '-5', 'abc', '22950.001', '22949.99', '23000', '2295']) {
+          expect([sentAmount, (await abroad(id, { sentAmount })).status]).toEqual([sentAmount, 400]);
+        }
+        expect((await abroad(id, { sentAmount: '1' })).body.message).toMatch(/This bill is THB 22,950/);
+        expect((await abroad(id, { sentAmount: '' })).body.message).toMatch(/Enter the THB amount sent/);
+        // Not a different currency, not rupees as well, not an unknown account kind.
+        expect((await abroad(id, { sentCurrency: 'USD' })).body.message).toMatch(/This bill is in THB/);
+        expect((await abroad(id, { rupees: '56227' })).status).toBe(400);
+        expect((await pay(id, { paidFrom: 'cash-box' })).status).toBe(400);
+        const saved = await PaymentRequest.findById(id).lean();
+        expect(saved.status).toBe('submitted');
+        expect(saved.payment?.fromAccount).toBeUndefined();
+        // Satang are fine when the bill has them.
+        const odd = (await thb({ foreignAmount: 1234.5 })).body.request.id;
+        expect((await abroad(odd, { sentAmount: '1234.50' })).body.request.paidFrom.amount).toBe(1234.5);
+      });
+
+      it('a rupee bill cannot be paid from a foreign account', async () => {
+        const id = (await expense(procurement.session, { category: 'forwarder_cha', amount: 1000 })).body.request.id;
+        const res = await abroad(id, { sentAmount: '1000' });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/This bill is in rupees/);
+      });
+
+      it('once only: a double click or retry is refused and records nothing twice', async () => {
+        const id = (await thb()).body.request.id;
+        const [a, b] = await Promise.all([abroad(id), abroad(id)]);
+        expect([a.status, b.status].sort()).toEqual([200, 409]);
+        expect((await abroad(id)).status).toBe(409);
+        expect((await pay(id, { rupees: '56227' })).status).toBe(409);
+        const saved = await PaymentRequest.findById(id).lean();
+        expect(saved.history.filter((h) => h.action === 'paid')).toHaveLength(1);
+        expect(saved.amount).toBe(0);
+      });
+
+      it('an older request with a rupee estimate drops the estimate (no rupees left the company) — logged', async () => {
+        const id = await rated();
+        const res = await abroad(id, { sentAmount: '10000' });
+        expect(res.body.request).toMatchObject({ amount: 0, fxRate: null, paidFrom: { amount: 10000 } });
+        expect(res.body.request.history.at(-1).note).toMatch(/earlier estimate of ₹24,500 is dropped/);
+      });
+
+      it('totals: rupees stay rupees, and the baht is listed beside them, never added in', async () => {
+        const inrId = (await expense(procurement.session, { category: 'forwarder_cha', amount: 1000 })).body.request.id;
+        const thbId = (await thb()).body.request.id;
+        const thb2 = (await thb({ foreignAmount: 0.1 + 0.2 })).body.request.id; // 0.3: no float drift in the sum
+        const debited = (await thb()).body.request.id;
+        expect((await pay(inrId)).status).toBe(200);
+        expect((await abroad(thbId)).status).toBe(200);
+        expect((await abroad(thb2, { sentAmount: '0.30' })).status).toBe(200);
+        expect((await pay(debited, { rupees: '56227' })).status).toBe(200);
+
+        const list = await admin.session.get('/payment-requests?status=paid');
+        expect(list.body.summary).toMatchObject({ count: 4, total: 57227, pending: 2, foreign: [{ currency: 'THB', amount: 22950.3 }] });
+        const paid = await paymentRequestRepository.paidSinceByTeam(new Date(Date.now() - 60000));
+        expect(paid).toEqual([{ _id: 'procurement', n: 4, amount: 57227 }]);
+        expect(await paymentRequestRepository.paidNoRupeesSince(new Date(Date.now() - 60000))).toEqual([{ currency: 'THB', amount: 22950.3 }]);
+      });
+
+      it('the record stays editable: UTR, time, account name — but there are no rupees to change', async () => {
+        const id = (await thb()).body.request.id;
+        await abroad(id);
+        const fixed = await admin.session.put(`/payment-requests/${id}/payment`, { reference: 'UTR2', accountLabel: 'Bangkok Bank (HR)' });
+        expect(fixed.status).toBe(200);
+        expect(fixed.body.request.paidFrom).toMatchObject({ label: 'Bangkok Bank (HR)', amount: 22950 });
+        expect(fixed.body.request.history.at(-1).note).toMatch(/reference UTR1 → UTR2, paid from HR's Thailand account → Bangkok Bank \(HR\)/);
+        const refused = await admin.session.put(`/payment-requests/${id}/payment`, { rupees: '56227' });
+        expect(refused.status).toBe(400);
+        expect(refused.body.message).toMatch(/no rupees were debited/);
+        expect((await PaymentRequest.findById(id).lean()).amount).toBe(0);
+      });
+
+      it('prints the receipt', async () => {
+        const id = (await thb()).body.request.id;
+        await abroad(id);
+        const receipt = await procurement.session.get(`/payment-requests/${id}/slip`);
+        expect(receipt.status).toBe(200);
+        expect(receipt.headers['content-type']).toMatch(/pdf/);
+      });
+    });
+
     it('prints the slip before and after payment, and an older rated request too', async () => {
       const id = (await thb()).body.request.id;
       for (const which of [id, await rated()]) {

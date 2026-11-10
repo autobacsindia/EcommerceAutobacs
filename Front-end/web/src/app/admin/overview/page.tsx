@@ -7,6 +7,7 @@ import apiClient from '@/lib/api-client';
 import { overviewKeys } from '@/hooks/queries/keys';
 import { formatDateTimeIST } from '@/lib/datetime';
 import { duration } from '@/lib/teamActivity';
+import { foreignTotals } from '@/components/payments/api';
 
 /**
  * Company overview — what every team is doing, on one page: today's numbers,
@@ -24,7 +25,11 @@ type Overview = {
     /** `pending`: foreign bills in `n` but not in `amount` — their rupees are known when paid. */
     awaitingApproval: { n: number; amount: number; pending?: number };
     toPay: { n: number; amount: number; pending?: number; onHold: number };
-    paidThisMonth: { n: number; amount: number; byTeam: { team: string; label: string; n: number; amount: number }[] };
+    paidThisMonth: {
+      n: number; amount: number; byTeam: { team: string; label: string; n: number; amount: number }[];
+      /** Paid from foreign-currency accounts: not rupees, so never in `amount`. */
+      foreign?: { currency: string; amount: number }[];
+    };
     itemRefundsToPay: number;
   };
   teams: { team: string; label: string; members: number; online: number; waiting: number; overdue: number; actionsThisWeek: number }[];
@@ -92,7 +97,11 @@ export default function CompanyOverviewPage() {
               <Tile label="Waiting for accounts to approve" value={data.money.awaitingApproval.n} sub={`${rupees(data.money.awaitingApproval.amount)}${foreignNote(data.money.awaitingApproval.pending)}`} href="/admin/payments" />
               <Tile label="Approved — for you to pay" value={data.money.toPay.n} sub={`${rupees(data.money.toPay.amount)}${foreignNote(data.money.toPay.pending)}${data.money.toPay.onHold ? ` · ${data.money.toPay.onHold} on hold` : ''}`} href="/admin/payments" />
               <Tile label="Item refunds to pay" value={data.money.itemRefundsToPay} sub="Approved by accounts, waiting for you" href="/admin/refunds" tone={data.money.itemRefundsToPay ? 'warn' : 'default'} />
-              <Tile label="Paid this month" value={rupees(data.money.paidThisMonth.amount)} sub={data.money.paidThisMonth.byTeam.map((t) => `${t.label} ${rupees(t.amount)}`).join(' · ') || 'Nothing yet'} href="/admin/payments" />
+              <Tile label="Paid this month" value={rupees(data.money.paidThisMonth.amount)}
+                sub={[
+                  data.money.paidThisMonth.byTeam.map((t) => `${t.label} ${rupees(t.amount)}`).join(' · ') || 'Nothing yet',
+                  data.money.paidThisMonth.foreign?.length ? `+ ${foreignTotals(data.money.paidThisMonth.foreign)} from foreign accounts (not in ₹)` : '',
+                ].filter(Boolean).join(' · ')} href="/admin/payments" />
             </div>
           </section>
 

@@ -164,6 +164,18 @@ const PaymentRequestSchema = new mongoose.Schema(
       paidByName: { type: String, default: '' },
       // Set when several requests to one payee were paid in one transfer.
       batch: { type: String, default: '' },
+      // Paid from a foreign-currency account (e.g. a Thai bank account): no rupees
+      // were debited, so `amount` stays 0 and the bill's own currency is what moved.
+      // `amount` here is what was sent, in `currency` (always the bill's currency).
+      // null on every rupee payment, old ones too.
+      fromAccount: {
+        type: new mongoose.Schema({
+          currency: { type: String, required: true, maxlength: 3 },
+          amount: { type: Number, required: true, min: 0.01 },
+          label: { type: String, default: '', maxlength: 80 },
+        }, { _id: false }),
+        default: undefined,
+      },
     },
 
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

@@ -4,6 +4,16 @@ import { readSummary, summaryPipeline } from '../utils/listQuery.js';
 
 /** Counts foreign bills not yet priced — every rupee request is ₹1 or more, so amount 0 means exactly that. */
 const PENDING_RUPEES = { $sum: { $cond: [{ $lte: ['$amount', 0] }, 1, 0] } };
+// Those same no-rupee rows, as { c: currency, p: hundredths } — summed per currency in
+// JS (integers, no float drift) so a list says "+ THB 10,000", never adds baht to rupees.
+const NO_RUPEE_UNITS = { $push: { $cond: [{ $lte: ['$amount', 0] }, { c: '$currency', p: { $round: [{ $multiply: [{ $ifNull: ['$foreignAmount', 0] }, 100] }, 0] } }, '$$REMOVE'] } };
+
+/** [{ c, p }] → [{ currency, amount }], biggest first. Rows without a currency (none should exist) are dropped. */
+export const sumByCurrency = (rows = []) => {
+  const by = new Map();
+  for (const { c, p } of rows) if (c && c !== 'INR' && p > 0) by.set(c, (by.get(c) || 0) + p);
+  return [...by].sort((a, b) => b[1] - a[1]).map(([currency, paise]) => ({ currency, amount: paise / 100 }));
+};
 
 /**
  * Payment requests (models/PaymentRequest.js). Data access only — who may do
@@ -39,10 +49,17 @@ const paymentRequestRepository = {
     const pipeline = summaryPipeline(query, cap, 'amount');
     // Foreign bills whose rupees are not known yet (amount 0): the total leaves
     // them out, so the list says how many it left out rather than look complete.
+    // Bounded: the pipeline reads at most cap + 1 rows, so the push is too.
     pipeline.at(-1).$group.pending = PENDING_RUPEES;
+    pipeline.at(-1).$group.noRupees = NO_RUPEE_UNITS;
     const [row] = await PaymentRequest.aggregate(pipeline).option({ maxTimeMS: 5000 });
     const summary = readSummary(row, cap, true);
-    return { ...summary, pending: summary.capped ? null : row?.pending || 0 };
+    return {
+      ...summary,
+      pending: summary.capped ? null : row?.pending || 0,
+      // Foreign amounts left out of the rupee total, per currency.
+      foreign: summary.capped ? null : sumByCurrency(row?.noRupees),
+    };
   },
 
   /** Supplier requests for an order that are not finished (served by payment_request_order). */
@@ -142,6 +159,33 @@ const paymentRequestRepository = {
     { $match: { status: 'paid', 'payment.paidAt': { $gte: since } } },
     { $group: { _id: '$team', n: { $sum: 1 }, amount: { $sum: '$amount' } } },
   ]),
+
+  /**
+   * Paid since a date with no rupees (paid from a foreign-currency account): the
+   * amounts per currency, in hundredths.
+   *
+   * Hinted onto payment_request_status_amount: { status: 'paid', amount ≤ 0 } is a
+   * tiny range there (only foreign-account payments, all time), and the date is
+   * checked on just those. Left to itself the planner picked payment_request_status_paid
+   * and read every payment of the month — measured on 100,000 requests: 41,675 rows,
+   * 43 ms; hinted: only the no-rupee rows.
+   */
+  paidNoRupeesSince: async (since) => {
+    const pipeline = [
+      { $match: { status: 'paid', amount: { $lte: 0 }, 'payment.paidAt': { $gte: since } } },
+      { $group: { _id: '$currency', p: { $sum: { $round: [{ $multiply: [{ $ifNull: ['$foreignAmount', 0] }, 100] }, 0] } } } },
+    ];
+    let rows;
+    try {
+      rows = await PaymentRequest.aggregate(pipeline).hint('payment_request_status_amount');
+    } catch (err) {
+      // The index missing on a cluster (prod builds no index on deploy): a slower
+      // read, never a broken overview. tests/indexDrift catches the drift itself.
+      console.warn('[PaymentRequest] paidNoRupeesSince without its index:', err.message);
+      rows = await PaymentRequest.aggregate(pipeline);
+    }
+    return sumByCurrency(rows.map((r) => ({ c: r._id, p: r.p })));
+  },
 
   /** Newest request events for the activity feed. */
   recent: (limit) => PaymentRequest.find({}).sort({ updatedAt: -1 }).limit(limit)

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Loader2, Paperclip } from 'lucide-react';
-import { billAmount, errorMessage, fileHref, postForm, rupees, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
+import { accountName, billAmount, errorMessage, fileHref, postForm, rupees, type PaymentRequest, toLocalInput, fromLocalInput } from './api';
 import FilePicker from './FilePicker';
 import { MAX_ATTACHMENTS, MAX_ATTACHMENTS_PER_RECORD, PHOTO_OR_PDF } from '@/lib/attachments';
 
@@ -22,8 +22,11 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
   const [reference, setReference] = useState(r.payment?.reference || '');
   const [at, setAt] = useState(toLocalInput(r.payment?.transactionAt || r.payment?.paidAt || new Date()));
   const [note, setNote] = useState('');
-  const foreign = Boolean(billAmount(r));
+  // Paid from a foreign account: no rupees exist to correct — its account name may be.
+  const abroad = r.paidFrom || null;
+  const foreign = Boolean(billAmount(r)) && !abroad;
   const [debit, setDebit] = useState(foreign ? String(r.amount) : '');
+  const [account, setAccount] = useState(abroad?.label || '');
   const [remove, setRemove] = useState<string[]>([]);
   const [add, setAdd] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -41,6 +44,7 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
     if (at) form.append('transactionAt', fromLocalInput(at));
     if (note.trim()) form.append('note', note.trim());
     if (foreign && debit.trim() && Number(debit) !== r.amount) form.append('rupees', debit.trim());
+    if (abroad && account.trim() !== abroad.label) form.append('accountLabel', account.trim());
     if (remove.length) form.append('removeFileIds', JSON.stringify(remove));
     for (const f of add) form.append('proof', f);
     setBusy(true);
@@ -71,6 +75,10 @@ export default function EditPaidPayment({ r, onDone, onCancel }: { r: PaymentReq
         {foreign && (
           <div className="sm:col-span-2"><label className={label} htmlFor="ep-rupees">Rupees debited (₹) — was {rupees(r.amount)}</label>
             <input id="ep-rupees" className={input} required inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={debit} onChange={(e) => setDebit(e.target.value)} /></div>
+        )}
+        {abroad && (
+          <div className="sm:col-span-2"><label className={label} htmlFor="ep-account">Paid from — {billAmount(r)} sent, no rupees debited</label>
+            <input id="ep-account" className={input} maxLength={80} value={account} onChange={(e) => setAccount(e.target.value)} placeholder={accountName(abroad)} /></div>
         )}
         <div className="sm:col-span-2"><label className={label} htmlFor="ep-at">Transaction date &amp; time</label>
           <input id="ep-at" type="datetime-local" className={input} max={toLocalInput()} value={at} onChange={(e) => setAt(e.target.value)} /></div>
