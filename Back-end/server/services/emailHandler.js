@@ -499,6 +499,14 @@ class EmailHandler {
     return this.sendEmail({ to, subject, text, html, attachments });
   }
 
+  /** The receipt for one paid extra charge. Provider-only: the caller loaded everything. */
+  async sendExtraChargeReceipt({ to, extra, order, user = null, attachments }) {
+    const { extraChargeReceiptEmail } = await import('../utils/emailTemplates.js');
+    const { companyInfo } = await import('../config/company.js');
+    const { subject, text, html } = extraChargeReceiptEmail({ extra, order, user, company: companyInfo });
+    return this.sendEmail({ to, subject, text, html, attachments });
+  }
+
   /**
    * Send a fulfillment status-change email (shipped / delivered / cancelled / refunded).
    * The order + user are pre-loaded by orderStatusEmailService, so this stays

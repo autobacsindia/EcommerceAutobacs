@@ -5,6 +5,7 @@
 
 import mongoose from 'mongoose';
 import { advanceBlockReason, withdrawWaitingSupplierPayments } from './supplierAdvanceGuard.js';
+import { closeExtrasBestEffort } from './extraChargeEffects.js';
 import { initialWorkflow } from '../utils/teamWorkflow.js';
 import orderRepository from '../repositories/orderRepository.js';
 import userRepository from '../repositories/userRepository.js';
@@ -394,6 +395,9 @@ class OrderStatusService {
       // Not inside a caller's transaction (it could still abort): those callers cancel
       // unpaid orders only, which never have a supplier payment.
       if (newStatus === 'cancelled' && !session) await withdrawWaitingSupplierPayments(order, `order cancelled (${reason || 'no reason given'})`);
+
+      // A paid extra charge goes on the Admin's refund list; an unpaid one is closed.
+      if (['cancelled', 'returned'].includes(newStatus) && !session) await closeExtrasBestEffort(order._id, `Order ${newStatus}`);
 
       return {
         success: true,

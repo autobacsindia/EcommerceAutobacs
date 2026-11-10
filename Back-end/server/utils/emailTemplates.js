@@ -543,6 +543,33 @@ Autobacs Security Team
  * @param {Object} [params.company] - Company info (name, email)
  * @returns {Object} - { subject, text, html }
  */
+export const extraChargeReceiptEmail = ({ extra, order, user = null, company = {} }) => {
+  const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const name = order.shippingAddress?.fullName || user?.name || 'there';
+  const companyName = company.name || 'Autobacs India';
+  const ref = extra.orderNumber || order.orderNumber || formatInvoiceNumber(order);
+  const subject = `Payment received — extra charge on order ${ref}`;
+  const text = `Hi ${name},
+
+We have received your payment of ${inr(extra.amount)} for the extra charge on order ${ref}.
+
+Reason: ${extra.reason}
+
+Your receipt is attached as a PDF.
+
+Thank you,
+${companyName}`;
+  const html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#222;">
+    <p>Hi ${esc(name)},</p>
+    <p>We have received your payment of <strong>${inr(extra.amount)}</strong> for the extra charge on order <strong>${esc(ref)}</strong>.</p>
+    <p><strong>Reason:</strong> ${esc(extra.reason)}</p>
+    <p>Your receipt is attached as a PDF.</p>
+    <p>Thank you,<br>${esc(companyName)}</p>
+  </div>`;
+  return { subject, text, html };
+};
+
 export const orderConfirmationEmail = ({ order, user = null, company = {} }) => {
   const inr = (n) =>
     `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

@@ -127,6 +127,11 @@ export const TEAM_HELP: TeamHelpSection[] = [
         links: [{ label: 'Quotations', href: '/team/sales/quotations' }],
       },
       {
+        question: 'The customer agreed to pay more on an order already paid. How do I add it?',
+        answer: 'Open the order and choose "Add extra charge". Type the amount including GST and the reason, and tick that the customer confirmed. The customer will see the reason. Accounts approves it, then send a Razorpay link or record the bank payment. The original order and its receipt do not change, and the extra gets its own receipt.',
+        links: [{ label: 'Extra charges', href: '/team/extra-charges' }],
+      },
+      {
         question: 'The customer already paid (bank transfer, GPay or UPI) and sent a receipt.',
         answer: 'Open the order and choose "Customer already paid — attach receipt". Type the UTR or UPI reference and attach the receipt: a screenshot or a PDF, up to 20 files. The order is paid only after accounts finds the money in the bank and confirms it; you can follow it under Bank transfers. (The "GPay / UPI QR" box is only for a picture of our own QR, which the customer scans to pay.)',
         links: [{ label: 'My orders', href: '/team/sales' }, { label: 'Bank transfers', href: '/team/bank-transfers' }],

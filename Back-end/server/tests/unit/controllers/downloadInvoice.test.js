@@ -8,6 +8,7 @@ const mockInvoiceSvc = {
   assignInvoiceNumber: jest.fn(async (o) => { o.invoiceNo = 59; return 59; }),
 };
 
+jest.unstable_mockModule('../../../services/orderExtraChargeService.js', () => ({ forCustomer: async () => ({ extras: [], totals: { extrasPaid: 0, finalAmount: 0 } }), customerReceipt: async () => null }));
 jest.unstable_mockModule('../../../repositories/orderRepository.js', () => ({ default: mockOrderRepo }));
 jest.unstable_mockModule('../../../services/invoiceService.js', () => ({
   generateInvoicePdf: mockInvoiceSvc.generateInvoicePdf,

@@ -18,6 +18,10 @@ import affiliateCommissionService from './affiliateCommissionService.js';
 import { resolvePaymentMethod, buildMethodDetails } from '../utils/paymentMethodDetails.js';
 import * as Sentry from '@sentry/node';
 import { isInternalEmail } from '../utils/customerContact.js';
+import userRepository from '../repositories/userRepository.js';
+import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
+import { afterExtraPaid } from './extraChargeEffects.js';
+import { isOrderClosed } from '../utils/extraCharge.js';
 
 /**
  * Ceiling on the optional EMI-plan lookup performed during a capture. Kept well inside
@@ -137,13 +141,14 @@ class RazorpayService {
    *   `notes.orderId` first, which never changes.
    * @returns {Promise<{id:string, shortUrl:string}>}
    */
-  async createPaymentLink(order, { name, email, phone } = {}, { attempt = 1, part = null } = {}) {
+  async createPaymentLink(order, { name, email, phone } = {}, { attempt = 1, part = null, extra = null } = {}) {
     // An internal `.invalid` address (phone-only customer, staff account) has no
     // mailbox — never hand it to Razorpay to email. The link then goes by SMS.
     if (isInternalEmail(email)) email = undefined;
     // A payment PART (quotation-first sales orders) charges its own amount; a
     // whole-order link charges the order total, exactly as before.
-    const amount = Math.round(((part ? part.amount : order.totalAmount) || 0) * 100); // paise
+    // An EXTRA charge on a paid order likewise charges only its own amount.
+    const amount = Math.round(((extra ? extra.amount : part ? part.amount : order.totalAmount) || 0) * 100); // paise
     if (!amount || amount < 100) {
       throw new Error('Payment link amount must be at least ₹1');
     }
@@ -158,11 +163,15 @@ class RazorpayService {
         amount,
         currency: 'INR',
         accept_partial: false,
-        description: part
+        description: extra
+          ? `Autobacs India — order ${order.orderNumber || order._id} (extra charge ${extra.sequence})`
+          : part
           ? `Autobacs India — order ${order.orderNumber || order._id} (payment ${part.index} of ${part.of})`
           : `Autobacs India — order ${order.orderNumber || order._id}`,
         // Unique per link (Razorpay rejects a repeated reference_id).
-        reference_id: part
+        reference_id: extra
+          ? `${order._id.toString()}-x${extra.sequence}-${extra.attempt}`
+          : part
           ? `${order._id.toString()}-p${part.ref}`
           : attempt > 1 ? `${order._id.toString()}-r${attempt}` : order._id.toString(),
         customer: {
@@ -173,7 +182,11 @@ class RazorpayService {
         notify: { sms: !!phone, email: !!email }, // Razorpay sends it
         reminder_enable: true,
         // How the webhook finds us; a part also carries which part it is.
-        notes: { orderId: order._id.toString(), ...(part ? { partRef: String(part.ref) } : {}) },
+        notes: {
+          orderId: order._id.toString(),
+          ...(part ? { partRef: String(part.ref) } : {}),
+          ...(extra ? { extraChargeId: extra.id } : {}),
+        },
         expire_by: Math.floor(Date.now() / 1000) + 48 * 60 * 60, // 48h
       });
 
@@ -574,6 +587,96 @@ class RazorpayService {
   }
 
   /**
+   * The one place an EXTRA charge paid online becomes paid — the verified
+   * payment_link.paid webhook and the reconciliation sweep both land here.
+   *
+   *   - settled only for EXACTLY the extra's own amount;
+   *   - one Payment row per gateway payment (unique gatewayPaymentId);
+   *   - extra, Payment and lifetime spend commit together, once;
+   *   - the Order is not touched: not its total, status, paid date or invoice.
+   *
+   * Paid after it was cancelled, or on an order closed meanwhile: the money is real,
+   * so it is recorded and goes straight on the Admin's refund list.
+   */
+  async processExtraPayment(extraId, linkId, paymentEntity) {
+    if (paymentEntity.currency !== 'INR') {
+      console.error(`[SECURITY] Currency mismatch! | Extra: ${extraId} | Got: ${paymentEntity.currency}`);
+      throw new Error('Currency mismatch');
+    }
+    paymentEntity = await this._enrichEmiPlan(paymentEntity);
+
+    const session = await mongoose.startSession();
+    let nowPaid = false;
+    try {
+      await session.withTransaction(async () => {
+        nowPaid = false;
+        const extra = await orderExtraChargeRepository.model.findById(extraId).session(session);
+        if (!extra) throw new Error('Extra charge not found');
+        const link = (extra.links || []).find((l) => l.id === linkId);
+        if (!link) throw new Error('Extra charge link not found');
+
+        const expected = Math.round(Number(extra.amount) * 100);
+        if (paymentEntity.amount !== expected) {
+          console.error(`[SECURITY] Amount mismatch on extra charge | Extra: ${extraId} | Expected: ${expected} paise | Got: ${paymentEntity.amount} paise`);
+          throw new Error('Amount mismatch');
+        }
+        if (extra.status === 'paid') {
+          if (extra.gatewayPaymentId !== paymentEntity.id) {
+            console.error(`[PAYMENT] Second capture ${paymentEntity.id} on paid extra ${extraId} — refund it in Razorpay`);
+          }
+          return;
+        }
+
+        let payment = await paymentRepository.findByGatewayPaymentId(paymentEntity.id, session);
+        if (!payment) {
+          payment = await paymentRepository.createPayment({
+            order: extra.order,
+            user: extra.user,
+            amount: extra.amount,
+            currency: 'INR',
+            paymentMethod: resolvePaymentMethod(paymentEntity),
+            methodDetails: buildMethodDetails(paymentEntity),
+            paymentGateway: 'razorpay',
+            gatewayOrderId: paymentEntity.order_id,
+            gatewayPaymentId: paymentEntity.id,
+            status: 'completed',
+            paymentDetails: { razorpay: paymentEntity, extraChargeLink: linkId },
+          }, session);
+        }
+
+        const order = await orderRepository.findById(extra.order, [], session);
+        const wasDead = ['cancelled', 'rejected'].includes(extra.status);
+        const now = new Date();
+        extra.status = 'paid';
+        extra.paidVia = 'razorpay';
+        extra.paidAt = now;
+        extra.gatewayPaymentId = paymentEntity.id;
+        extra.payment = payment._id;
+        link.status = 'paid';
+        extra.history.push({ at: now, byName: 'Razorpay', action: 'paid', note: paymentEntity.id });
+        if (wasDead || isOrderClosed(order)) {
+          console.error(`[PAYMENT] Extra ${extraId} paid after it or its order closed — on the Admin refund list`);
+          extra.refund = { status: 'due', dueReason: wasDead ? 'Paid after the extra was cancelled' : `Paid after the order was ${order.status}` };
+          extra.history.push({ at: now, action: 'refund_due', note: extra.refund.dueReason });
+        }
+        await extra.save({ session });
+        if (extra.user) await userRepository.incrementSpend(extra.user, { amountPaise: expected }, session);
+        nowPaid = true;
+      });
+    } catch (error) {
+      if (error?.code === 11000 || /writeconflict|duplicate key/i.test(error?.message || '')) {
+        const existing = await paymentRepository.findByGatewayPaymentId(paymentEntity.id);
+        if (existing) return { paid: false, alreadyProcessed: true };
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+    if (nowPaid) await afterExtraPaid(extraId);
+    return { paid: nowPaid, alreadyProcessed: !nowPaid };
+  }
+
+  /**
    * Everything that happens once an order is PAID, after the transaction commits:
    * invoice + admin + team alerts (queue), affiliate accrual, Meta CAPI Purchase.
    * Called exactly once per order — by processPaymentSuccess (one payment) or by
@@ -670,7 +773,7 @@ class RazorpayService {
    * @param {string} [opts.speed='normal'] - 'normal' (free) or 'optimum' (instant, fee).
    * @returns {Promise<{success: boolean, refundId: string, status: string, amount: number}>}
    */
-  async refundPayment(paymentId, amountPaise, { orderId, returnId, cancellationId, reason, speed = 'normal' } = {}) {
+  async refundPayment(paymentId, amountPaise, { orderId, returnId, cancellationId, extraChargeId, reason, speed = 'normal' } = {}) {
     if (!paymentId || !amountPaise) {
       throw new Error('paymentId and amount are required');
     }
@@ -696,6 +799,8 @@ class RazorpayService {
           // single summary field. Without this the webhook has nothing to route on and
           // a normal-speed refund never leaves `processing`.
           ...(cancellationId ? { cancellationId } : {}),
+          // An extra charge has its own refund record and its own payment.
+          ...(extraChargeId ? { extraChargeId } : {}),
           reason: reason || 'order_cancelled'
         }
       });
@@ -1013,6 +1118,9 @@ class RazorpayService {
     const paymentEntity = payload.payment.entity;
     const orderId = paymentEntity.notes?.orderId;
 
+    // An extra charge is never the order's own payment: payment_link.paid settles it.
+    if (paymentEntity.notes?.extraChargeId) return;
+
     // A payment made through a Payment Link carries no orderId on the payment
     // entity — the parallel `payment_link.paid` event resolves those. Ignore
     // gracefully (200) instead of throwing, so a link payment's payment.captured
@@ -1052,6 +1160,17 @@ class RazorpayService {
     const paymentEntity = payload.payment?.entity;
     if (!paymentEntity) {
       throw new Error('Missing payment entity in payment_link.paid');
+    }
+
+    // An EXTRA charge on an already-paid order: settled against its own amount, and
+    // kept away from everything below, which is about the order's own payment.
+    if (link?.id) {
+      const extra = await orderExtraChargeRepository.findByLinkId(link.id);
+      if (extra) {
+        console.log(`[Webhook] Processing extra charge ${extra._id} (link ${link.id})`);
+        await this.processExtraPayment(String(extra._id), link.id, paymentEntity);
+        return;
+      }
     }
 
     const orderId = link?.notes?.orderId || link?.reference_id || paymentEntity.notes?.orderId;
@@ -1169,6 +1288,11 @@ class RazorpayService {
       return this.applyCancellationRefundWebhook(refundId, cancellationId, refundEntity, finalStatus);
     }
 
+    const extraChargeId = refundEntity.notes?.extraChargeId;
+    if (extraChargeId) {
+      return this.applyExtraRefundWebhook(refundId, extraChargeId, refundEntity, finalStatus);
+    }
+
     let order = null;
     if (orderId) {
       order = await orderRepository.findById(orderId);
@@ -1245,6 +1369,31 @@ class RazorpayService {
             console.error(`[Queue] Failed to enqueue send-admin-refund-failed-alert for ${order._id}:`, err.message)
           );
       }
+    }
+  }
+
+  /**
+   * Apply a terminal refund webhook to an EXTRA charge. A conditional update on the
+   * record's state, so a replayed webhook — or one racing the Admin's request — is a no-op.
+   */
+  async applyExtraRefundWebhook(refundId, extraChargeId, refundEntity, finalStatus) {
+    const now = new Date();
+    const failedReason = refundEntity.error?.description || 'Refund failed at gateway';
+    const saved = await orderExtraChargeRepository.transition(
+      { _id: extraChargeId, 'refund.status': 'processing' },
+      {
+        $set: {
+          'refund.razorpayRefundId': refundId,
+          'refund.status': finalStatus,
+          ...(finalStatus === 'completed' ? { 'refund.completedAt': now } : { 'refund.failureReason': failedReason }),
+        },
+        $push: { history: { at: now, byName: 'Razorpay', action: finalStatus === 'completed' ? 'refunded' : 'refund_failed', note: finalStatus === 'completed' ? refundId : failedReason } },
+      },
+    );
+    if (!saved) return;
+    if (finalStatus === 'completed') {
+      const { completeExtraRefund } = await import('./orderExtraChargeService.js');
+      await completeExtraRefund(saved);
     }
   }
 

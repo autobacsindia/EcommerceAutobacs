@@ -40,7 +40,7 @@ import { Worker } from 'bullmq';
 import { hasChatUpdate, postBusinessUpdate, WORKFLOW_CHAT_JOB, RETURN_CHAT_JOB } from '../../services/chatBusinessUpdates.js';
 import { createConnection } from '../connection.js';
 import emailHandler from '../../services/emailHandler.js';
-import { emailOrderInvoice } from '../../services/invoiceService.js';
+import { emailOrderInvoice, emailExtraChargeReceipt } from '../../services/invoiceService.js';
 import { emailOrderStatusUpdate } from '../../services/orderStatusEmailService.js';
 import { emailAffiliateApproved, emailAffiliatePayoutSent } from '../../services/affiliateEmailService.js';
 import { emailReviewRequest } from '../../services/reviewRequestService.js';
@@ -79,6 +79,10 @@ const handlers = {
   'send-order-invoice': async (job) => {
     const { orderId } = job.data;
     await emailOrderInvoice(orderId);
+  },
+
+  'send-extra-charge-receipt': async (job) => {
+    await emailExtraChargeReceipt(job.data.extraId);
   },
 
   'send-order-status-email': async (job) => {

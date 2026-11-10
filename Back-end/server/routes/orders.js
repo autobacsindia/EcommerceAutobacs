@@ -37,6 +37,7 @@ import {
   createGuestOrder,
   createOfflineOrder,
   cancelOrder,
+  downloadExtraChargeReceipt,
   processRefund,
   refundAll,
   revertOfflineRefund,
@@ -97,6 +98,8 @@ router.get("/:id", protect, validateIdParam, asyncHandler(getOrderById));
 // @desc    Download the invoice PDF (owner or admin)
 // @access  Private
 router.get("/:id/invoice", protect, validateIdParam, asyncHandler(downloadInvoice));
+// @route   GET /orders/:id/extra-charges/:extraId/receipt — the customer's own
+router.get("/:id/extra-charges/:extraId/receipt", protect, validateIdParam, asyncHandler(downloadExtraChargeReceipt));
 
 // @route   POST /orders
 // @desc    Create new order from cart

@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import Product from '../models/Product.js';
 import contactRepository from '../repositories/contactRepository.js';
 import { QUERY_TIMEOUTS } from '../config/db.js';
+import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
 import { STOCK_STATUS } from '../utils/stockStatus.js';
 
 // Statuses that count as a realised sale (money made). Excludes pending, failed,
@@ -125,9 +126,13 @@ class DashboardAnalyticsService {
         }
       ]).option({ maxTimeMS: QUERY_TIMEOUTS.aggregation });
 
-      const todayData = todayRevenue[0] || { total: 0, count: 0 };
-      const weekData = weekRevenue[0] || { total: 0, count: 0 };
-      const monthData = monthRevenue[0] || { total: 0, count: 0 };
+      // Extra charges on earlier orders count on the day they were paid.
+      const [extraToday, extraWeek, extraMonth] = await Promise.all([startOfToday, startOfWeek, startOfMonth]
+        .map((from) => orderExtraChargeRepository.sumKept(from, null, QUERY_TIMEOUTS.aggregation)));
+      const withExtra = (row, extra) => ({ count: row?.count || 0, total: (row?.total || 0) + extra });
+      const todayData = withExtra(todayRevenue[0], extraToday);
+      const weekData = withExtra(weekRevenue[0], extraWeek);
+      const monthData = withExtra(monthRevenue[0], extraMonth);
 
       // Calculate average order value
       const averageOrderValue = todayData.count > 0 

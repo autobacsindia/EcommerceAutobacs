@@ -42,6 +42,10 @@ import { checkAttachments } from './storage/attachmentCheck.js';
 import { storeAll } from './storage/storeAll.js';
 import { MAX_ATTACHMENTS } from '../config/attachments.js';
 import { postSystemMessage } from './chatService.js';
+import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
+import { afterExtraPaid } from './extraChargeEffects.js';
+import { isOrderClosed, liveLink, sellsThisOrder } from '../utils/extraCharge.js';
+import { paidAtFor } from '../utils/orderListDate.js';
 import { orderNumber } from './invoiceService.js';
 import {
   and, amountOf, amountRange, isObjectId, istRange, keysetPage, plainQuery, searchClauses, searchWords,
@@ -147,11 +151,12 @@ export function shape(t, viewer) {
     customer: t.customer || { name: '', city: '' },
     salesPerson: t.salesUserName || '',
     amount: t.amount,
+    extraChargeId: idOf(t.extraCharge),
     reference: t.reference,
     paidOn: t.paidOn,
     note: t.note || '',
     status: t.status,
-    statusLabel: STATUS_LABELS[t.status],
+    statusLabel: t.extraCharge && t.status === 'confirmed' ? 'Confirmed — extra charge paid' : STATUS_LABELS[t.status],
     recordedBy: t.recordedByName || '',
     recordedAt: t.createdAt,
     reviewedBy: t.reviewedByName || '',
@@ -288,6 +293,96 @@ export async function recordBankTransfer(actor, orderId, input = {}, files = [],
   return shape(doc, actor);
 }
 
+/**
+ * A bank transfer for one approved EXTRA charge. The same checks and the same
+ * Accounts list as an order's transfer (one real UTR pays one thing), but the amount
+ * is the extra's and the Order is never touched.
+ */
+export async function recordExtraChargeTransfer(actor, extraId, input = {}, files = [], req) {
+  if (!mongoose.isValidObjectId(extraId)) throw fail('Extra charge not found.', 404);
+  const extra = await orderExtraChargeRepository.findById(extraId);
+  if (!extra) throw fail('Extra charge not found.', 404);
+  if (!sellsThisOrder(actor, extra.salesUser) && idOf(extra.requestedBy) !== idOf(actor?._id)) {
+    throw fail('Only the seller, the GTM head or the admin can record this.', 403);
+  }
+  if (extra.status !== 'approved') throw fail('Accounts must approve this extra charge first.', 409);
+  if (extra.bankTransferPendingAt) throw fail('A bank transfer is already waiting for Accounts on this extra.', 409);
+  if (!Number.isFinite(Number(input.amount)) || paise(input.amount) !== paise(extra.amount)) {
+    throw fail(`The transfer must be for the extra amount: ${inr(extra.amount)}.`, 400);
+  }
+  const { reference, referenceKey } = cleanReference(input.reference);
+  const paidOn = cleanPaidOn(input.paidOn);
+  const note = String(input.note || '').trim().slice(0, 500);
+  const checked = checkFiles(files);
+  const dup = await bankTransferRepository.findActiveByReference(referenceKey);
+  if (dup) throw fail(`This UTR is already recorded on order ${dup.orderNumber}.`, 409);
+
+  const claimed = await orderExtraChargeRepository.transition(
+    { _id: extra._id, status: 'approved', bankTransferPendingAt: { $exists: false } },
+    { $set: { bankTransferPendingAt: new Date() } },
+  );
+  if (!claimed) throw fail('This extra charge changed just now — refresh and try again.', 409);
+  const release = () => orderExtraChargeRepository.transition(
+    { _id: extra._id, status: 'approved' },
+    { $unset: { bankTransferPendingAt: '', transfer: '' } },
+  ).catch(() => {});
+
+  // No way left to pay online. If Razorpay will not cancel, the customer may have just paid.
+  const link = liveLink(extra);
+  if (link) {
+    try {
+      await razorpayService.cancelPaymentLink(link.id);
+    } catch (err) {
+      await release();
+      throw fail(`Could not cancel the payment link — it may have just been paid. Reload in a minute. (${err.message})`, 409);
+    }
+  }
+
+  let stored = [];
+  let doc;
+  const now = new Date();
+  try {
+    stored = await storeFiles(checked);
+    doc = await bankTransferRepository.create({
+      order: extra.order,
+      orderNumber: extra.orderNumber,
+      extraCharge: extra._id,
+      salesUser: extra.salesUser,
+      salesUserName: extra.salesUserName || '',
+      customer: extra.customer || {},
+      amount: extra.amount,
+      reference,
+      referenceKey,
+      paidOn,
+      note,
+      files: stored,
+      status: 'pending',
+      active: true,
+      recordedBy: actor._id,
+      recordedByName: actor.name || '',
+      history: [{ at: now, by: actor._id, byName: actor.name || '', action: 'recorded', note }],
+    });
+  } catch (err) {
+    await removeFiles(stored);
+    await release();
+    if (err?.code === 11000) throw fail('This UTR was just recorded on another order.', 409);
+    throw err;
+  }
+  await orderExtraChargeRepository.transition(
+    { _id: extra._id },
+    {
+      $set: { transfer: doc._id, 'links.$[l].status': 'cancelled' },
+      $push: { history: { at: now, by: actor._id, byName: actor.name || '', action: 'bank_recorded', note: reference } },
+    },
+    { arrayFilters: [{ 'l.status': 'pending' }] },
+  );
+  auditLogger.logAction(req, 'CREATE', 'BankTransfer', doc._id, { orderId: idOf(extra.order), extraChargeId: idOf(extra._id), amount: doc.amount, reference });
+  await tellChat(doc, 'recorded',
+    `🏦 ${doc.orderNumber} — extra charge of ${inr(doc.amount)} paid by bank transfer (UTR ${reference}), recorded by ${actor.name}. `
+    + 'Accounts: please check the bank and confirm or reject it.');
+  return shape(doc, actor);
+}
+
 /** Fix the UTR, the date paid or the note on a transfer accounts has not checked yet. */
 export async function editBankTransfer(actor, id, input = {}, req) {
   const t0 = await loadVisible(actor, id);
@@ -357,7 +452,7 @@ export async function withdrawBankTransfer(actor, id, { note } = {}, req) {
       t.active = false;
       t.history.push({ at: now, by: actor._id, byName: actor.name || '', action: 'withdrawn', note: reason });
       await t.save({ session });
-      await orderRepository.model.updateOne({ _id: t.order }, { $unset: { bankTransferPendingAt: '' } }, { session });
+      await clearPending(t, session);
       withdrawnHere = true;
     });
   } finally {
@@ -368,12 +463,57 @@ export async function withdrawBankTransfer(actor, id, { note } = {}, req) {
     auditLogger.logAction(req, 'UPDATE', 'BankTransfer', id, { change: 'withdrawn', orderId: idOf(t.order) });
     await tellChat(t, 'withdrawn',
       `↩️ ${t.orderNumber} — ${actor.name} withdrew the bank transfer of ${inr(t.amount)} (UTR ${t.reference})${reason ? `: ${reason}` : ''}. `
-      + 'Accounts: nothing to check. The order is unpaid again.');
+      + `Accounts: nothing to check. ${t.extraCharge ? 'The extra charge' : 'The order'} is unpaid again.`);
   }
   return shape(t, actor);
 }
 
 // ── Confirm / reject (accounts, admin) ──────────────────────────────────────
+
+/** A rejected or withdrawn transfer frees what it was holding: the order, or its extra. */
+function clearPending(t, session) {
+  if (t.extraCharge) {
+    return orderExtraChargeRepository.model.updateOne(
+      { _id: t.extraCharge, status: 'approved' },
+      { $unset: { bankTransferPendingAt: '', transfer: '' } },
+      { session },
+    );
+  }
+  return orderRepository.model.updateOne({ _id: t.order }, { $unset: { bankTransferPendingAt: '' } }, { session });
+}
+
+/**
+ * Inside confirmBankTransfer's transaction: this transfer pays one extra charge.
+ * Transfer, extra and lifetime spend commit together; the Order is not written.
+ */
+async function settleExtraTransfer(t, actor, session) {
+  const extra = await orderExtraChargeRepository.model.findById(t.extraCharge).session(session);
+  if (!extra) throw fail('Extra charge not found.', 404);
+  if (extra.status !== 'approved') throw fail('This extra charge is no longer waiting for payment — do not confirm. If this money is in the bank, it has to go back to the customer.', 409);
+  if (paise(extra.amount) !== paise(t.amount)) throw fail('The amount does not match the extra charge. Reject it, and GTM records it again.', 409);
+  const order = await orderRepository.findById(extra.order, [], session);
+  const now = new Date();
+  t.status = 'confirmed';
+  t.reviewedBy = actor._id;
+  t.reviewedByName = actor.name || '';
+  t.reviewedAt = now;
+  t.history.push({ at: now, by: actor._id, byName: actor.name || '', action: 'confirmed' });
+  await t.save({ session });
+
+  extra.status = 'paid';
+  extra.paidVia = 'bank_transfer';
+  // The owner's rule for every sale: the day the money reached the bank.
+  extra.paidAt = paidAtFor({ offlinePayment: { paidOn: t.paidOn } }, now);
+  extra.bankTransferPendingAt = undefined;
+  extra.history.push({ at: now, by: actor._id, byName: actor.name || '', action: 'paid', note: `Bank transfer ${t.reference}` });
+  if (isOrderClosed(order)) {
+    extra.refund = { status: 'due', dueReason: `Paid after the order was ${order.status}` };
+    extra.history.push({ at: now, action: 'refund_due', note: extra.refund.dueReason });
+  }
+  await extra.save({ session });
+  if (extra.user) await userRepository.incrementSpend(extra.user, { amountPaise: paise(extra.amount) }, session);
+  return idOf(extra._id);
+}
 
 export async function confirmBankTransfer(actor, id, req) {
   if (!mayVerify(actor)) throw fail('Only accounts and the admin confirm bank transfers.', 403);
@@ -381,6 +521,7 @@ export async function confirmBankTransfer(actor, id, req) {
 
   let confirmedHere = false;
   let orderId = null;
+  let extraId = null;
   const session = await mongoose.startSession();
   try {
     await session.withTransaction(async () => {
@@ -389,6 +530,11 @@ export async function confirmBankTransfer(actor, id, req) {
       if (!t) throw fail('Bank transfer not found.', 404);
       if (t.status === 'confirmed') return; // a second click: already done
       if (t.status !== 'pending') throw fail('This bank transfer was already rejected.', 409);
+      if (t.extraCharge) {
+        extraId = await settleExtraTransfer(t, actor, session);
+        confirmedHere = true;
+        return;
+      }
       const order = await orderRepository.findById(t.order, [], session);
       if (!order) throw fail('Order not found.', 404);
       orderId = idOf(order._id);
@@ -436,7 +582,11 @@ export async function confirmBankTransfer(actor, id, req) {
   }
 
   const t = await bankTransferRepository.findById(id);
-  if (confirmedHere) {
+  if (confirmedHere && extraId) {
+    // The order was paid long ago: none of the order-paid routine applies.
+    await afterExtraPaid(extraId);
+    auditLogger.logAction(req, 'UPDATE', 'BankTransfer', id, { change: 'confirmed', extraChargeId: extraId, amount: t.amount });
+  } else if (confirmedHere) {
     // Invoice, admin + team "paid order" alerts, affiliate, Meta — the one
     // post-payment routine every paid order goes through, once.
     razorpayService._afterOrderPaid(orderId);
@@ -470,7 +620,7 @@ export async function rejectBankTransfer(actor, id, { note } = {}, req) {
       t.reviewNote = reason;
       t.history.push({ at: now, by: actor._id, byName: actor.name || '', action: 'rejected', note: reason });
       await t.save({ session });
-      await orderRepository.model.updateOne({ _id: t.order }, { $unset: { bankTransferPendingAt: '' } }, { session });
+      await clearPending(t, session);
       rejectedHere = true;
     });
   } finally {
@@ -482,7 +632,7 @@ export async function rejectBankTransfer(actor, id, { note } = {}, req) {
     auditLogger.logAction(req, 'UPDATE', 'BankTransfer', id, { change: 'rejected', orderId: idOf(t.order) });
     await tellChat(t, 'rejected',
       `❌ ${t.orderNumber} — bank transfer of ${inr(t.amount)} (UTR ${t.reference}) rejected by ${actor.name}: ${reason}. `
-      + `${t.salesUserName || 'GTM'}: the order is unpaid again — check with the customer, then record it again or send a new payment link.`,
+      + `${t.salesUserName || 'GTM'}: ${t.extraCharge ? 'the extra charge is unpaid again' : 'the order is unpaid again'} — check with the customer, then record it again or send a new payment link.`,
       { mentionSeller: true });
   }
   return shape(t, actor);

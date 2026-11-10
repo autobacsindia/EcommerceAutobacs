@@ -20,6 +20,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { putPrivateAsset } from './storage/privateUploads.js';
 import orderRepository from '../repositories/orderRepository.js';
+import orderExtraChargeRepository from '../repositories/orderExtraChargeRepository.js';
 import emailHandler from './emailHandler.js';
 import { companyInfo } from '../config/company.js';
 import { statesMatch } from '../config/gstStates.js';
@@ -471,7 +472,7 @@ export const generateInvoicePdf = async (order, user = null) => {
       // comment says it is "for display only" — car accessories span 18% and 28%,
       // so every 28% line is understated. The label now says so.
       if (order.tax) sumRow(TAX_ROW_LABEL, rs(order.tax));
-      sumRow(
+      if (!order.extraChargeReceipt) sumRow(
         'Shipping Charges (Extra):',
         // The label already says "(Extra)"; the customer pays the courier on delivery.
         shippingExtra ? 'Paid on delivery' : rs(order.shippingCost),
@@ -480,7 +481,7 @@ export const generateInvoicePdf = async (order, user = null) => {
       doc.moveTo(sumLabelX, y).lineTo(RIGHT, y).strokeColor('#111').lineWidth(1).stroke();
       y += 6;
       sumRow(
-        shippingExtra ? 'Total (Excluding Shipping Charges):' : 'Total:',
+        shippingExtra && !order.extraChargeReceipt ? 'Total (Excluding Shipping Charges):' : 'Total:',
         rs(order.totalAmount),
         { big: true }
       );
@@ -492,7 +493,7 @@ export const generateInvoicePdf = async (order, user = null) => {
       }
 
       // ── Footer note ──────────────────────────────────────────────────────────
-      if (shippingExtra) {
+      if (shippingExtra && !order.extraChargeReceipt) {
         y += 16;
         doc.font(FONT_BOLD).fontSize(9).fillColor('#333')
           .text('* Note: ', LEFT, y, { continued: true })
@@ -596,6 +597,82 @@ export const uploadInvoicePdf = async (buffer, order) => {
   } catch (err) {
     console.error(`[Invoice] archival upload failed for ${invoiceNumber(order)}: ${err.message}`);
     return null;
+  }
+};
+
+/**
+ * The receipt for one paid EXTRA charge. A document of its own, with its own number
+ * from the same series: the original order's receipt is never reissued or changed.
+ * GST is inside the amount and shown with the same indicative label as any receipt.
+ */
+export const extraChargeReceiptView = (extra, order) => {
+  const base = typeof order.toObject === 'function' ? order.toObject() : order;
+  return {
+    ...base,
+    extraChargeReceipt: true,
+    invoiceNo: extra.receiptNo,
+    items: [{ name: `Extra charge ${extra.sequence}: ${extra.reason}`, quantity: 1, price: extra.amount }],
+    subtotal: extra.amount,
+    tax: Math.round((extra.amount - extra.amount / 1.18) * 100) / 100,
+    discount: 0,
+    couponDiscount: 0,
+    couponCode: null,
+    karmaDiscount: 0,
+    salesDiscount: undefined,
+    gatewayOffer: undefined,
+    spinReward: null,
+    shippingCost: 0,
+    totalAmount: extra.amount,
+    payment: extra.payment || undefined,
+  };
+};
+
+/** Issue the receipt number once (the first caller's stands). */
+const assignExtraReceiptNo = async (extra) => {
+  if (extra.receiptNo != null) return extra;
+  const no = await counterRepository.next('invoice');
+  const saved = await orderExtraChargeRepository.transition(
+    { _id: extra._id, receiptNo: { $exists: false } },
+    { $set: { receiptNo: no } },
+  );
+  return saved || orderExtraChargeRepository.findById(extra._id);
+};
+
+/** Renders a paid extra's receipt, for the email and for download. */
+export const buildExtraChargeReceipt = async (extraIn) => {
+  const extra = await assignExtraReceiptNo(extraIn);
+  const order = await orderRepository.findById(extra.order, [{ path: 'user', select: 'name email' }]);
+  if (!order) throw new Error(`Order ${extra.order} missing for extra charge ${extra._id}`);
+  const view = extraChargeReceiptView(extra, order);
+  const user = order.user && typeof order.user === 'object' ? order.user : null;
+  const pdf = await generateInvoicePdf(view, user);
+  return { pdf, filename: invoiceFileName(view), extra, order, user };
+};
+
+/** Called by the notifications worker on `send-extra-charge-receipt`. Sends once. */
+export const emailExtraChargeReceipt = async (extraId) => {
+  const extra = await orderExtraChargeRepository.findById(extraId);
+  if (!extra || extra.status !== 'paid') return { status: 'not-found' };
+  if (extra.receiptEmailedAt) return { status: 'skipped' };
+  const claimed = await orderExtraChargeRepository.transition(
+    { _id: extra._id, receiptEmailedAt: { $exists: false } },
+    { $set: { receiptEmailedAt: new Date() } },
+  );
+  if (!claimed) return { status: 'skipped' };
+  try {
+    const { pdf, filename, extra: withNumber, order, user } = await buildExtraChargeReceipt(claimed);
+    const to = user?.email || order.guestEmail;
+    if (!to) return { status: 'no-recipient' };
+    const result = await emailHandler.sendExtraChargeReceipt({
+      to, extra: withNumber, order, user,
+      attachments: [{ Name: filename, Content: pdf.toString('base64'), ContentType: 'application/pdf' }],
+    });
+    if (!result?.success) throw new Error(result?.error || 'unknown error');
+    return { status: 'sent' };
+  } catch (err) {
+    // Release the claim so the queue can retry rather than silently dropping it.
+    await orderExtraChargeRepository.transition({ _id: extra._id }, { $unset: { receiptEmailedAt: '' } }).catch(() => {});
+    throw err;
   }
 };
 

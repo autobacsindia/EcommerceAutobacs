@@ -168,6 +168,15 @@ export const validateBankTransferReject = [
   body('note').isString().trim().isLength({ min: 3, max: 500 }).withMessage('Say why (3–500 characters)'),
 ];
 
+export const validateExtraChargeId = [
+  param('id').custom(isObjectId).withMessage('Invalid extra charge id'),
+];
+
+export const validateExtraChargeList = [
+  query('tab').optional().isIn(['awaiting_accounts', 'approved', 'paid', 'refund_due', 'closed']),
+  query('cursor').optional().isString().isLength({ max: 500 }),
+];
+
 export const validateOrderIdParam = [
   param('id').custom(isObjectId).withMessage('Invalid order id'),
 ];
