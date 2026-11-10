@@ -102,6 +102,22 @@ export function applyFestivalOffer(
   };
 }
 
+/**
+ * "You save" for one unit: everything the buyer saves against the M.R.P. — the existing
+ * sale discount PLUS the Diwali discount. With no M.R.P. above the pre-Diwali price, it
+ * is just the Diwali discount. Display only, in paise so it matches the shown prices.
+ * Example: M.R.P. ₹1,35,680, before Diwali ₹75,000, Diwali 5% → ₹71,250 → saves ₹64,430.
+ */
+export function totalSavingFromMrp(
+  offer: Pick<FestivalOfferResult, 'basePrice' | 'discount'>,
+  mrp?: number | null,
+): number {
+  const basePaise = toPaise(offer.basePrice);
+  const finalPaise = basePaise - toPaise(offer.discount);
+  const mrpPaise = typeof mrp === 'number' ? toPaise(mrp) : 0;
+  return fromPaise((mrpPaise > basePaise ? mrpPaise : basePaise) - finalPaise);
+}
+
 /** Live at `now`? Start inclusive, end exclusive — the same rule as the backend. */
 export function isOfferLive(offer: PublicFestivalOffer | null, now: number = Date.now()): boolean {
   if (!offer) return false;

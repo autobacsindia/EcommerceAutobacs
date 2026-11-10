@@ -237,6 +237,10 @@ class PricingService {
         // Filled in by the product-tier ladder when one applies; 0 otherwise. This is
         // the figure refundMathService reads to refund a returned line at ITS OWN rate.
         discountPaise: 0,
+        // M.R.P. while the line is on a catalogue sale, for the quote's "You save" display
+        // only. Not persisted (orderService picks fields) and not named `listPrice`, which
+        // already means a sales-rep markdown on Order.items.
+        catalogMrp: onSale ? listPrice : null,
         // Festival offer snapshot, or null. Per unit, rupees. `basePrice` is the price
         // the % was taken from (= `priceBeforeOffer`, the selling price before Diwali).
         festivalOffer: offer
@@ -733,6 +737,7 @@ class PricingService {
           priceBeforeOffer: i.festivalOffer.priceBeforeOffer,
           discount: i.festivalOffer.discount,
           finalPrice: i.price,
+          mrp: i.catalogMrp,
         })),
       couponError,
       /*

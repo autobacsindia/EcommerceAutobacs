@@ -298,6 +298,7 @@ export default function StoreProductCard({
               offer={festivalOffer}
               formatMoney={(n) => formatPrice(n, { exact: true })}
               className="w-full text-[11px]"
+              mrp={onSale ? product.originalPrice : null}
             />
           </div>
           <button

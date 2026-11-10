@@ -782,6 +782,7 @@ function CheckoutPageContent() {
                     <FestivalOfferTag
                       offer={findFestivalOfferLine(reviewQuote, item.product._id, item.variantId)}
                       formatMoney={(n) => formatRupees(n, { exact: true })}
+                      mrp={findFestivalOfferLine(reviewQuote, item.product._id, item.variantId)?.mrp}
                       className="mt-1"
                     />
                   </div>

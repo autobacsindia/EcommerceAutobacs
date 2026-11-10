@@ -257,7 +257,10 @@ export default function BuyBox({
               -{discount}%
             </span>
             {/* Festival label on an existing sale only — visual, no price logic. */}
-            <FestivalDealBadge />
+            <FestivalDealBadge
+              price={needsSelection ? null : saleExpired ? activeOriginal : activePrice}
+              setting={product.festivalOfferSetting}
+            />
           </>
         )}
         {/* Diwali offer: %, the price before Diwali, the Diwali saving. */}
@@ -265,6 +268,7 @@ export default function BuyBox({
           offer={festivalOffer}
           formatMoney={(n) => formatPrice(n, { exact: true })}
           className="w-full text-[13px]"
+          mrp={onSale ? activeOriginal : null}
         />
         {needsSelection && rangeMinOffer && (
           <span className="w-full text-[13px] font-semibold text-[#b4231a] dark:text-[#ff8a7a]">

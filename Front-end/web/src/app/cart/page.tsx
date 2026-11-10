@@ -419,6 +419,7 @@ function CartPageContent() {
                             <FestivalOfferTag
                               offer={offerLine}
                               formatMoney={(n) => formatPrice(n, { exact: true })}
+                              mrp={offerLine?.mrp}
                               className="mt-1"
                             />
                             <CartLineDiscount
